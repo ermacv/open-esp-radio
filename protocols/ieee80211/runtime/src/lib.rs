@@ -55,6 +55,27 @@
 //! value nor queue capacity; the receiver may run on another thread.
 
 pub mod access_point;
+
+/// A producing port call's answer split into its input's state and the item
+/// it could not keep ([`Unkept`](oer_protocols_ieee80211_contracts_port::Unkept)),
+/// if any.
+pub(crate) fn answered<'id, T, I, R>(
+    answer: oer_protocols_ieee80211_contracts_port::PortAnswer<'id, T, I, R>,
+) -> (
+    oer_protocols_ieee80211_contracts_port::Input<I, R>,
+    Option<oer_protocols_ieee80211_contracts_port::Unkept<'id, T>>,
+)
+where
+    T: oer_protocols_ieee80211_contracts_port::PortTypes<'id>,
+{
+    match answer {
+        Ok(answer) => (
+            oer_protocols_ieee80211_contracts_port::Input::Accepted(answer),
+            None,
+        ),
+        Err(unkeeping) => (unkeeping.input, Some(unkeeping.unkept)),
+    }
+}
 pub mod datapath;
 pub mod egress;
 pub mod lifecycle;

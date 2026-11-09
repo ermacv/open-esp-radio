@@ -37,6 +37,9 @@ pub enum ApEnded {
     /// The port's capabilities do not serve the access point; the run
     /// never asked the radio to start.
     Unsupported(ApUnsupported),
+    /// A port call returned an item it could neither give the runner nor
+    /// keep; the runner made no port call after it.
+    Unkept,
 }
 
 /// How the access point ended, or how far its end came; `E` is the
@@ -115,6 +118,9 @@ pub(crate) trait Retiring {
     fn take_unrecycled(&mut self) -> Self::Unrecycled;
     /// Its port.
     fn port_mut(&mut self) -> &mut Self::Port;
+    /// The item a port call of the run could not keep, once, as the
+    /// release's caller holds it.
+    fn take_unkept(&mut self) -> Option<<Self::Port as Stopped>::Receipt>;
 }
 
 /// Stop the radio of an ended run unless the port confirmed its stop, then
@@ -125,7 +131,9 @@ pub(crate) trait Retiring {
 /// release ends, a release the MAC refused as still active is published as
 /// [`ApExitOf::ReleaseRefused`] and tried again. The owners end with the
 /// runner once the stop is confirmed and the release ended; a refused
-/// release's cleanup receipt goes back to the runner's caller with it.
+/// release's cleanup receipt goes back to the runner's caller with it, and
+/// so does an item a port call of the run could not keep, which no release
+/// follows.
 pub(crate) async fn retire<R: Retiring, E: Copy, F>(
     published: &Cell<Option<ApExitOf<E>>>,
     mut runner: R,
@@ -150,6 +158,13 @@ where
     // A unit the port refused stays here until the runner ends, after the
     // release.
     let unrecycled = runner.take_unrecycled();
+    // An item a port call of the run could not keep: no release follows
+    // it, and it goes back to the runner's caller with the refusal.
+    if let Some(unkept) = runner.take_unkept() {
+        drop(unrecycled);
+        let cause = crate::failure::ReleaseCause::Unkept;
+        return (ApExitOf::ReleaseRefused { ended, cause }, Some(unkept));
+    }
     let refused = |cause| published.set(Some(ApExitOf::ReleaseRefused { ended, cause }));
     // The cleanup's removal receipt: a refused release returns it to the
     // runner's caller with the refusal; after a release that succeeded it

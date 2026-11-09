@@ -26,6 +26,15 @@
 //! from actual submitted and returned owners, never from the expected
 //! identities.
 
+/// A port call's own answer; an item it could not keep is the case's
+/// violation `unkept` (the cases' sinks take what the port gives).
+pub(crate) fn answered<'id, T: oer_protocols_ieee80211_contracts_port::PortTypes<'id>, I, R, V>(
+    answer: oer_protocols_ieee80211_contracts_port::PortAnswer<'id, T, I, R>,
+    unkept: V,
+) -> Result<R, V> {
+    answer.map_err(|_| unkept)
+}
+
 pub mod access_point;
 pub mod arena;
 pub mod data_port;

@@ -187,3 +187,60 @@ fn owners_an_operation_stopped_on_hold_every_later_terminal_in_the_port_and_leav
         assert!(runner.homes.purposes[usize::from(index)].is_none());
     }));
 }
+
+/// A terminal the homes refuse that the port cannot keep comes back beside
+/// the service's answer: the turn ends on it in the homes' one place, no
+/// run starts while it is there, and it leaves once.
+#[test]
+fn an_item_the_port_cannot_keep_ends_the_turn_and_leaves_the_runner_once() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        let now = || oer_portable_time::Clock::now(&*counted.clock);
+        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        assert!(started.is_ok(), "the radio starts");
+        // A frame whose ticket has no purpose: its terminal finds no home.
+        let ticket = runner.homes.tickets.pop().unwrap();
+        let mut buffer = runner.homes.buffers.pop().unwrap();
+        let len = deauthentication(buffer.bytes_mut().unwrap());
+        let frame = ApFrame {
+            len,
+            kind: ApFrameKind::Management { peer: STATION },
+        };
+        let Ok(admitted) = runner.admit(ticket, buffer, frame, TxOperation::Data, None) else {
+            panic!("the frame is admitted");
+        };
+        assert!(matches!(
+            runner.port.submit(admitted, now(), &mut runner.homes),
+            Ok(Ok(()))
+        ));
+        air.unkeep_next(oer_protocols_ieee80211_testing_model::ModelUnkeep::AtDrain);
+        let mut halted = false;
+        for _ in 0..64 {
+            counted.clock.advance(Duration::from_millis(1)).unwrap();
+            air.clock_advanced();
+            let facts = Facts {
+                tx: Some(TxFacts::DUE),
+                ..Facts::default()
+            };
+            if let Err(halt) = runner.turn(now(), facts) {
+                assert!(matches!(halt, Halt::Unkept), "the turn ends on the item");
+                halted = true;
+                break;
+            }
+        }
+        assert!(halted, "the terminal came back unkept");
+        // No run starts while it is here.
+        assert!(matches!(
+            runner.run(&shared, &*counted.clock).await,
+            ApEnd::Unkept
+        ));
+        assert!(matches!(
+            runner.take_unkept(),
+            Some(oer_protocols_ieee80211_contracts_port::Unkept::Terminal(
+                LowerMacTerminal::TxCompleted(TxCompleted::Single(_))
+            ))
+        ));
+        assert!(runner.take_unkept().is_none(), "once");
+    }));
+}

@@ -505,6 +505,12 @@ struct Retained<'id, D: DatapathPort<'id>> {
     /// The unit whose recycle the port refused: the run ended on it, and
     /// no turn runs while it is kept, so no second refusal comes.
     unrecycled: Option<RecycleRefused<ActorRxBuffer<'id, D>>>,
+    /// The item a port call could neither give the actor nor keep: the run
+    /// ended on it, and no turn runs while it is kept, so no port call
+    /// gives a second one.
+    unkept: Option<oer_protocols_ieee80211_contracts_port::Unkept<'id, Ty<'id, D>>>,
+    /// The attempt a submission returned unaccepted beside an unkept item.
+    unaccepted: Option<<D::Port as DataPort<'id>>::Admitted>,
     link: Option<ActorLink<'id, D>>,
     returned: Option<Returned<'id, D>>,
     completed: Option<oer_protocols_ieee80211_contracts_port::PortCompleted<'id, D::Port>>,
@@ -574,6 +580,8 @@ where
             now: Instant::EPOCH,
             retained: Retained {
                 unrecycled: None,
+                unkept: None,
+                unaccepted: None,
                 link: None,
                 returned: None,
                 completed: None,
@@ -642,6 +650,8 @@ where
                 now: Instant::EPOCH,
                 retained: Retained {
                     unrecycled: None,
+                    unkept: None,
+                    unaccepted: None,
                     link: None,
                     returned: None,
                     completed: None,
@@ -679,6 +689,21 @@ where
     /// ([`ActorFault::Receive`]). The actor runs no turn while it keeps it.
     pub fn take_unrecycled(&mut self) -> Option<RecycleRefused<ActorRxBuffer<'id, D>>> {
         self.retained.unrecycled.take()
+    }
+
+    /// The item a port call could neither give the actor nor keep, once:
+    /// the run ended on it ([`ActorFault::Unkept`]), and the actor runs no
+    /// turn while it keeps it.
+    pub fn take_unkept(
+        &mut self,
+    ) -> Option<oer_protocols_ieee80211_contracts_port::Unkept<'id, Ty<'id, D>>> {
+        self.retained.unkept.take()
+    }
+
+    /// The attempt a submission returned unaccepted beside its unkept
+    /// item, once.
+    pub fn take_unaccepted(&mut self) -> Option<<D::Port as DataPort<'id>>::Admitted> {
+        self.retained.unaccepted.take()
     }
 
     /// The rate selection.
@@ -818,6 +843,11 @@ where
         // no turn takes or returns a unit meanwhile.
         if let Some(refused) = self.retained.unrecycled.as_ref() {
             return Poll::Ready(ActorEnd::Faulted(ActorFault::Receive(refused.fault)));
+        }
+        // So does an item a port call could not keep: no port call gives a
+        // second one meanwhile.
+        if self.retained.unkept.is_some() {
+            return Poll::Ready(ActorEnd::Faulted(ActorFault::Unkept));
         }
         let reposted = core::mem::take(&mut self.again);
         let fresh = self.collect_facts(cx);

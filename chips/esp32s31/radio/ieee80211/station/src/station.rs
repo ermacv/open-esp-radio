@@ -453,7 +453,7 @@ async fn lifecycles<W: Binding>(
     >,
     mailbox: &mut oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
     profile: Profile<W>,
-) -> (StationExit, Option<radio::Removal<W>>) {
+) -> (StationExit, Option<radio::Freed<W>>) {
     let ServiceRunner {
         config,
         connection,

@@ -1812,6 +1812,8 @@ pub struct ModelAir {
     /// The port's count refuses the next recycles, as a count that lost
     /// their units would.
     refuse_recycle: Cell<u8>,
+    /// Where the port's next call stops on an item its sink refused.
+    unkeep: Cell<Option<crate::data_port::ModelUnkeep>>,
     /// The next enable fails after the MAC began it, its stop not
     /// confirmed: the port answers `StartRefused::Unstopped` and stops.
     unstop_enable: Cell<bool>,
@@ -1895,6 +1897,7 @@ impl ModelAir {
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
             refuse_recycle: Default::default(),
+            unkeep: Cell::new(None),
             refuse_access_point: Default::default(),
             refuse_he_association: Default::default(),
             group_held: Default::default(),
@@ -2498,6 +2501,21 @@ impl ModelAir {
         self.refuse_recycle.set(count);
     }
 
+    /// Make the port's next call stop on the next item its sink refuses,
+    /// at `at`: the call returns it beside its input or answer.
+    pub fn unkeep_next(&self, at: crate::data_port::ModelUnkeep) {
+        self.unkeep.set(Some(at));
+    }
+
+    /// Whether the test asked for a stop at `at`: the request is spent.
+    pub(crate) fn take_unkeep(&self, at: crate::data_port::ModelUnkeep) -> bool {
+        let asked = self.unkeep.get() == Some(at);
+        if asked {
+            self.unkeep.set(None);
+        }
+        asked
+    }
+
     /// Whether this recycle is refused: one of the refusals asked for.
     pub(crate) fn take_recycle_refusal(&self) -> bool {
         let left = self.refuse_recycle.get();
@@ -2939,7 +2957,7 @@ pub use data_port::{
     MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAccessPointGroupInstall,
     ModelAccessPointPairwiseInstall, ModelAdmitted, ModelCommands, ModelGroupInstall, ModelInstall,
     ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
-    ModelPortObservation, ModelReinstallRefused,
+    ModelPortObservation, ModelReinstallRefused, ModelUnkeep,
 };
 
 /// The composition's initial software depth for each access category.

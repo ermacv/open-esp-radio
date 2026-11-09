@@ -7,7 +7,7 @@ use core::{
 };
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
-    DataPort, LowerMacTerminal, PortSink, PortTypes, Removed, TbttEvent,
+    DataPort, Input, LowerMacTerminal, PortSink, PortTypes, Removed, TbttEvent, Unkeeping, Unkept,
 };
 
 /// What one call of the stopped port's cleanup did: its result, and the
@@ -20,21 +20,66 @@ pub(crate) struct Cleaned<R> {
     pub removed: Option<R>,
 }
 
+/// What the stopped port's cleanup freed for its caller, whole: the
+/// removal receipt its sink kept, and an item the port could neither give
+/// that sink nor keep. Whoever holds it holds their owners; it ends with
+/// the retired installation after a release that succeeded.
+#[must_use = "what the cleanup freed holds owners"]
+pub struct Freed<'id, T: PortTypes<'id>> {
+    /// The removal receipt (a key slot and its permission).
+    pub removed: Option<Removed<'id, T>>,
+    /// The item the port could not keep.
+    pub unkept: Option<Unkept<'id, T>>,
+}
+
+impl<'id, T: PortTypes<'id>> Freed<'id, T> {
+    /// What was freed, when anything was.
+    fn of(removed: Option<Removed<'id, T>>, unkept: Option<Unkept<'id, T>>) -> Option<Self> {
+        if removed.is_none() && unkept.is_none() {
+            None
+        } else {
+            Some(Self { removed, unkept })
+        }
+    }
+
+    /// An item a run returned unkept, which no release follows.
+    pub(crate) fn unkept(unkept: Unkept<'id, T>) -> Self {
+        Self {
+            removed: None,
+            unkept: Some(unkept),
+        }
+    }
+}
+
 /// The stopped port's cleanup, once per call of its lifecycle owner, after
-/// a confirmed stop. A removal receipt it frees comes back whole to the
-/// caller ([`Cleaned::removed`]); nothing here calls it again.
-pub(crate) fn clean<'id, P>(port: &mut P) -> Cleaned<Removed<'id, P::Types>>
+/// a confirmed stop. What it frees comes back whole to the caller
+/// ([`Cleaned::removed`]); nothing here calls it again. An item the port
+/// could not keep refuses the cleanup ([`CleanupCause::Unkept`]): nothing
+/// is released after it.
+///
+/// [`CleanupCause::Unkept`]: crate::failure::CleanupCause::Unkept
+pub(crate) fn clean<'id, P>(port: &mut P) -> Cleaned<Freed<'id, P::Types>>
 where
     P: DataPort<'id, Fault = oer_chips_esp32s31_radio_ieee80211_backend::port::Fault>,
     P::Types: PortTypes<'id>,
 {
     let mut sink = Returning { removed: None };
-    let result = port
-        .clean_stopped(&mut sink)
-        .map_err(crate::failure::convert::cleanup);
+    let (answer, unkept) = match port.clean_stopped(&mut sink) {
+        Ok(answer) => (answer, None),
+        Err(Unkeeping { unkept, input }) => match input {
+            Input::Accepted(answer) => (answer, Some(unkept)),
+            Input::NotAccepted(never) => match never {},
+        },
+    };
+    let result = answer
+        .map_err(crate::failure::convert::cleanup)
+        .and_then(|()| match unkept {
+            Some(_) => Err(crate::failure::CleanupCause::Unkept),
+            None => Ok(()),
+        });
     Cleaned {
         result,
-        removed: sink.removed,
+        removed: Freed::of(sink.removed, unkept),
     }
 }
 

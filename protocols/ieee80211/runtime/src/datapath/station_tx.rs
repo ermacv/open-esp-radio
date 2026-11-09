@@ -179,7 +179,17 @@ where
             stage: &mut self.stage,
             grouped: false,
         };
-        let _refused = self.port.submit(admitted, self.now, &mut outbox);
-        Ok(())
+        // A refusal's terminal is in the outbox. No turn runs while an
+        // unkept item is kept: its place is empty here.
+        let (submitted, unkept) =
+            crate::answered(self.port.submit(admitted, self.now, &mut outbox));
+        let Some(unkept) = unkept else {
+            return Ok(());
+        };
+        self.retained.unkept = Some(unkept);
+        if let oer_protocols_ieee80211_contracts_port::Input::NotAccepted(attempt) = submitted {
+            self.retained.unaccepted = Some(attempt);
+        }
+        Err(ActorFault::Unkept)
     }
 }

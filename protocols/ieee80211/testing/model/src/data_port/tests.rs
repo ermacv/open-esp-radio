@@ -372,6 +372,7 @@ impl<'s> Harness<'s> {
                 &mut self.sink,
             )
             .unwrap()
+            .unwrap()
     }
 
     fn start(&mut self) {
@@ -383,7 +384,10 @@ impl<'s> Harness<'s> {
         command: PortCommand<'s, Types<'s>, ModelCaps>,
     ) -> CommandProgress<'s, Types<'s>, ModelCaps> {
         let now = self.clock.now();
-        self.port.command(command, now, &mut self.sink).unwrap()
+        self.port
+            .command(command, now, &mut self.sink)
+            .unwrap()
+            .unwrap()
     }
 
     fn recycle_received(&mut self) -> usize {
@@ -576,6 +580,7 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         let now = self.clock.now();
         self.port
             .submit(attempt, now, &mut self.sink)
+            .unwrap()
             .map_err(|_| cases::Violation::Refusal)
     }
     fn take_station(&mut self) -> Option<cases::StationSent> {
@@ -711,6 +716,7 @@ fn refusals_before_the_start_return_every_owner_unchanged() {
         let refused = harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .err()
             .unwrap();
         assert_eq!(refused, SubmitRefusal::NotEnabled);
@@ -802,11 +808,13 @@ fn no_data_port_call_wakes_its_caller() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness
             .port
             .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .unwrap()
             .unwrap();
         let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
             panic!("a delivered unit");
@@ -1225,6 +1233,7 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
         harness
             .port
             .submit(attempt, admitted, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         let lifetime = harness
@@ -1254,6 +1263,7 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         assert_eq!(
@@ -1283,6 +1293,7 @@ fn a_configuration_is_held_behind_a_published_station_mpdu_then_runs() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1398,8 +1409,10 @@ fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop
         };
         harness.advance(MODEL_HELD_COMMAND_BOUND);
         let now = harness.clock.now();
-        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) =
-            harness.port.command(install, now, &mut harness.sink)
+        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) = harness
+            .port
+            .command(install, now, &mut harness.sink)
+            .unwrap()
         else {
             panic!("an expired command comes back refused");
         };
@@ -1471,6 +1484,7 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1483,6 +1497,7 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
         let fault = harness
             .port
             .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .unwrap()
             .err()
             .unwrap();
         assert_eq!(
@@ -1520,6 +1535,7 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         let waker = harness.waker();
@@ -1606,6 +1622,7 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1658,6 +1675,7 @@ fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbe
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1709,6 +1727,7 @@ fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbe
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1737,6 +1756,7 @@ fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbe
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1757,12 +1777,14 @@ fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication(
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         let now = harness.clock.now();
         let fault = harness
             .port
             .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .unwrap()
             .err()
             .unwrap();
         assert!(matches!(

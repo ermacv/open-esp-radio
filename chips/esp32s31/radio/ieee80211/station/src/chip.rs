@@ -559,7 +559,7 @@ pub type StationExit = crate::station_end::StationExitOf<InitializationError>;
 #[must_use = "a refused release's receipt holds a key slot and its permission"]
 pub struct StationEnd<W: Binding> {
     pub exit: StationExit,
-    pub returned: Option<radio::Removal<W>>,
+    pub returned: Option<radio::Freed<W>>,
 }
 /// The station's link and receive end.
 pub type StationNetwork<W> = Network<'static, <W as Binding>::Notifies>;

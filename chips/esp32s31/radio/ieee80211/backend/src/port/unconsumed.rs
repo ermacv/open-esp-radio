@@ -38,6 +38,43 @@ pub(super) enum Item<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, 
     Received(ReceiveBuffer<'id, Id, D::Receive>, Esp32s31RxMeta),
 }
 
+/// The one place of a port call for an item it could neither give its sink
+/// nor keep: the call takes no owner while it holds one ([`halted`]) and
+/// returns it beside its answer.
+pub(super) type Unkept<'id, Id, D, const B: usize, O> = Option<Item<'id, Id, D, B, O>>;
+
+/// Whether a call stopped on an item it could not keep: it takes no further
+/// owner, and what it has not taken stays in its place.
+pub(super) const fn halted<
+    'id,
+    Id: SlotIdentity + 'id,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+>(
+    unkept: &Unkept<'id, Id, D, B, O>,
+) -> bool {
+    unkept.is_some()
+}
+
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    Item<'id, Id, D, B, O>
+{
+    /// The item as the contract returns it.
+    pub(super) fn into_unkept(
+        self,
+    ) -> oer_protocols_ieee80211_contracts_port::Unkept<'id, Types<Id, D, B, O>> {
+        match self {
+            Self::Terminal(terminal) => {
+                oer_protocols_ieee80211_contracts_port::Unkept::Terminal(terminal)
+            }
+            Self::Received(frame, meta) => {
+                oer_protocols_ieee80211_contracts_port::Unkept::Received(frame, meta)
+            }
+        }
+    }
+}
+
 /// A kept terminal with its sequence.
 type KeptTerminal<'id, Id, D, const B: usize, O> = (u8, Terminal<'id, Id, D, B, O>);
 /// A kept unit with its sequence.
@@ -70,10 +107,12 @@ pub(super) struct Store<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     units: [Option<KeptUnit<'id, Id, D, B>>; RX_HELD],
     /// How many items the store keeps: every kept item's sequence is below.
     count: u8,
-    /// A place the store found taken or missing: the token it names was
-    /// not unique, which no installation issues. The item that found it
-    /// could not be kept.
-    broken: bool,
+    /// An item a halted call could neither keep nor return, which the
+    /// producers' checks exclude: the next call returns it.
+    spilled: Option<Item<'id, Id, D, B, O>>,
+    /// How many of the next puts a test refuses, as a taken place does.
+    #[cfg(test)]
+    pub(super) refuse_keeps: usize,
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
@@ -91,7 +130,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             access_point_group: radio::Places::new(),
             units: [const { None }; RX_HELD],
             count: 0,
-            broken: false,
+            spilled: None,
+            #[cfg(test)]
+            refuse_keeps: 0,
         }
     }
 
@@ -100,20 +141,19 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.count == 0
     }
 
-    /// Whether a place was found taken or missing.
-    pub(super) const fn broken(&self) -> bool {
-        self.broken
-    }
-
     /// Keep `item` behind everything kept.
-    pub(super) fn keep(&mut self, item: Item<'id, Id, D, B, O>) {
+    ///
+    /// # Errors
+    ///
+    /// Its place holds an item, or every unit place does: `item`, whole.
+    pub(super) fn keep(
+        &mut self,
+        item: Item<'id, Id, D, B, O>,
+    ) -> Result<(), Item<'id, Id, D, B, O>> {
         let sequence = self.count;
-        match self.put(sequence, item) {
-            Ok(()) => self.count = self.count.saturating_add(1),
-            // Excluded by the token's uniqueness and the caller's held
-            // count: only the fault remains of the item.
-            Err(_item) => self.broken = true,
-        }
+        self.put(sequence, item)?;
+        self.count = self.count.saturating_add(1);
+        Ok(())
     }
 
     /// Put `item` at its own place with `sequence`.
@@ -126,6 +166,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         sequence: u8,
         item: Item<'id, Id, D, B, O>,
     ) -> Result<(), Item<'id, Id, D, B, O>> {
+        #[cfg(test)]
+        if let Some(left) = self.refuse_keeps.checked_sub(1) {
+            self.refuse_keeps = left;
+            return Err(item);
+        }
         match item {
             Item::Terminal(terminal) => self
                 .put_terminal((sequence, terminal))
@@ -285,17 +330,45 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     /// Give `item` to `sink` behind what the store keeps: kept when the
-    /// store keeps anything, or when the sink refuses it.
+    /// store keeps anything, or when the sink refuses it. An item the store
+    /// cannot keep goes to the call's one place `unkept`. A halted call
+    /// (`unkept` holds an item) makes no sink call: every producer checks
+    /// [`halted`] before it takes the owner an item carries, so an item
+    /// reaches a halted call only from an owner taken before the halt, and
+    /// it waits in its own place.
+    ///
+    /// A halted call whose store cannot keep `item` either, which the
+    /// producers' checks and each token's uniqueness exclude, holds it in
+    /// the store's spilled place: the next call returns it as its own
+    /// unkept item ([`Self::take_spilled`]) and takes nothing else.
     pub(super) fn deliver(
         &mut self,
         sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
+        unkept: &mut Unkept<'id, Id, D, B, O>,
         item: Item<'id, Id, D, B, O>,
     ) {
-        if !self.is_empty() {
-            self.keep(item);
-        } else if let Err(item) = offer_one(sink, item) {
-            self.keep(item);
+        let item = if unkept.is_none() && self.is_empty() {
+            match offer_one(sink, item) {
+                Ok(()) => return,
+                Err(item) => item,
+            }
+        } else {
+            item
+        };
+        match self.keep(item) {
+            Ok(()) => {}
+            Err(item) if unkept.is_none() => *unkept = Some(item),
+            Err(item) => {
+                if self.spilled.is_none() {
+                    self.spilled = Some(item);
+                }
+            }
         }
+    }
+
+    /// The item a halted call held in the spilled place, once.
+    pub(super) fn take_spilled(&mut self) -> Option<Item<'id, Id, D, B, O>> {
+        self.spilled.take()
     }
 
     /// Offer what the store keeps to `sink`, oldest first, until the sink

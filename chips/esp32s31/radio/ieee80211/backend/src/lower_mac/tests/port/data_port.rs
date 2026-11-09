@@ -247,6 +247,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                 now,
                 &mut self.outbox,
             )
+            .unwrap()
             .expect("service")
     }
 
@@ -255,7 +256,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let command = DataPortHarness::configure(self).expect("permission");
         let now = self.now();
         assert!(matches!(
-            self.port.command(command, now, &mut self.outbox),
+            self.port.command(command, now, &mut self.outbox).unwrap(),
             Ok(CommandProgress::Done)
         ));
         for _ in 0..8 {
@@ -561,6 +562,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
         let now = self.now();
         self.port
             .submit(attempt, now, &mut self.outbox)
+            .unwrap()
             .map_err(|_| cases::Violation::Refusal)
     }
     fn take_station(&mut self) -> Option<cases::StationSent> {
@@ -656,6 +658,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             match self
                 .port
                 .command(command, now, &mut self.outbox)
+                .unwrap()
                 .map_err(|failed| failed.fault())?
             {
                 CommandProgress::Held(held) => command = held,
@@ -712,6 +715,7 @@ fn no_data_port_call_wakes_its_caller() {
         fixture
             .port
             .submit(attempt, now, &mut fixture.outbox)
+            .unwrap()
             .ok()
             .expect("submitted");
         for _ in 0..4 {
@@ -733,14 +737,16 @@ fn no_data_port_call_wakes_its_caller() {
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox),
+                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox)
+                .unwrap(),
             Ok(CommandProgress::Done)
         ));
         let edca = SupportedEdca::new(EdcaParameterSet::STANDARD_DEFAULT).expect("EDCA");
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::SetEdca(edca), now, &mut fixture.outbox),
+                .command(PortCommand::SetEdca(edca), now, &mut fixture.outbox)
+                .unwrap(),
             Ok(CommandProgress::Done)
         ));
         let waker = fixture.waker();
@@ -900,7 +906,10 @@ fn a_refused_submission_and_command_return_their_owners_unchanged() {
     with_fixture(|fixture| {
         let attempt = fixture.station_mpdu().expect("attempt");
         let now = fixture.now();
-        let refused = fixture.port.submit(attempt, now, &mut fixture.outbox);
+        let refused = fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .unwrap();
         assert_eq!(refused, Err(SubmitRefusal::NotEnabled));
         // The attempt ended withdrawn at once: its terminal returns its
         // owners.
@@ -912,7 +921,8 @@ fn a_refused_submission_and_command_return_their_owners_unchanged() {
         let gate = fixture.gate.take().expect("gate");
         let refused = fixture
             .port
-            .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox);
+            .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox)
+            .unwrap();
         let Ok(CommandProgress::Refused(PortCommand::CloseGate(gate), CommandRefusal::NotEnabled)) =
             refused
         else {
@@ -925,6 +935,7 @@ fn a_refused_submission_and_command_return_their_owners_unchanged() {
         fixture
             .port
             .submit(attempt, now, &mut fixture.outbox)
+            .unwrap()
             .ok()
             .expect("submitted");
         assert!(matches!(
@@ -967,6 +978,7 @@ fn a_queued_mpdu_bounds_the_deadline_until_it_expires_behind_a_closed_gate() {
         fixture
             .port
             .submit(attempt, admitted, &mut fixture.outbox)
+            .unwrap()
             .ok()
             .expect("queued");
         let lifetime = EdcaParameterSet::STANDARD_DEFAULT
@@ -1015,10 +1027,15 @@ fn a_pairwise_removal_is_held_while_its_key_is_on_air_then_runs() {
         fixture
             .port
             .submit(attempt, now, &mut fixture.outbox)
+            .unwrap()
             .ok()
             .expect("published");
         let removal = PortCommand::RemovePairwise { association, key };
-        let removal = match fixture.port.command(removal, now, &mut fixture.outbox) {
+        let removal = match fixture
+            .port
+            .command(removal, now, &mut fixture.outbox)
+            .unwrap()
+        {
             Ok(CommandProgress::Held(removal)) => removal,
             _ => panic!("the removal waits for the published attempt"),
         };
@@ -1077,7 +1094,11 @@ fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_
                 .commands
                 .install_group(&association, permission, slot, key_id(1), group_key(1));
         let now = fixture.now();
-        let install = match fixture.port.command(install, now, &mut fixture.outbox) {
+        let install = match fixture
+            .port
+            .command(install, now, &mut fixture.outbox)
+            .unwrap()
+        {
             Ok(CommandProgress::Held(install)) => install,
             _ => panic!("the cut holds the installation"),
         };
@@ -1087,7 +1108,11 @@ fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_
         // The caller's turn registers its waker: the cut runs and holds.
         let _ = fixture.turn();
         let now = fixture.now();
-        let install = match fixture.port.command(install, now, &mut fixture.outbox) {
+        let install = match fixture
+            .port
+            .command(install, now, &mut fixture.outbox)
+            .unwrap()
+        {
             Ok(CommandProgress::Held(install)) => install,
             _ => panic!("the cut holds the installation"),
         };
@@ -1097,8 +1122,10 @@ fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_
         );
         fixture.advance(COMMAND_BOUND);
         let now = fixture.now();
-        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) =
-            fixture.port.command(install, now, &mut fixture.outbox)
+        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) = fixture
+            .port
+            .command(install, now, &mut fixture.outbox)
+            .unwrap()
         else {
             panic!("the expired installation comes back refused");
         };
@@ -1113,6 +1140,7 @@ fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
+                .unwrap()
                 .is_ok()
         );
         let _ = fixture.turn();
@@ -1227,7 +1255,13 @@ fn a_terminal_the_sink_refuses_is_kept_whole_and_offered_again_first_on_the_s31_
         let now = fixture.now();
         let first = fixture.station_mpdu().expect("attempt");
         let first_ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&first);
-        assert!(fixture.port.submit(first, now, &mut fixture.outbox).is_ok());
+        assert!(
+            fixture
+                .port
+                .submit(first, now, &mut fixture.outbox)
+                .unwrap()
+                .is_ok()
+        );
         refuse_one(fixture);
         assert!(fixture.outbox.terminals.is_empty(), "the terminal is kept");
         assert_eq!(fixture.port.fault(), None);
@@ -1246,6 +1280,7 @@ fn a_terminal_the_sink_refuses_is_kept_whole_and_offered_again_first_on_the_s31_
             fixture
                 .port
                 .submit(second, now, &mut fixture.outbox)
+                .unwrap()
                 .is_ok()
         );
         assert_eq!(completed_tickets(fixture), [first_ticket]);
@@ -1271,6 +1306,7 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
+                .unwrap()
                 .is_ok()
         );
         refuse_one(&mut fixture);

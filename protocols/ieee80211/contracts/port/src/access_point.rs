@@ -732,18 +732,28 @@ pub trait AccessPointPort<'id>:
 
     /// Run one access-point command, or hold it at its barrier.
     ///
+    /// The answer's failure is the backend's contract fault, with the
+    /// command when the port did not take its owners
+    /// ([`CommandFailed`](crate::CommandFailed)).
+    ///
     /// # Errors
     ///
-    /// The backend's contract fault, with the command when the port did
-    /// not take its owners ([`CommandFailed`](crate::CommandFailed)).
+    /// An item the call could neither give `sink` nor keep
+    /// ([`Unkeeping`](crate::Unkeeping)): found before the command was
+    /// accepted, the command comes back whole; after, the answer.
     fn access_point_command(
         &mut self,
         command: AccessPointCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<
-        AccessPointProgress<'id, Self::Types, Self::Caps>,
-        AccessPointCommandFailed<'id, Self>,
+    ) -> crate::PortAnswer<
+        'id,
+        Self::Types,
+        AccessPointCommand<'id, Self::Types, Self::Caps>,
+        Result<
+            AccessPointProgress<'id, Self::Types, Self::Caps>,
+            AccessPointCommandFailed<'id, Self>,
+        >,
     >;
 }
 

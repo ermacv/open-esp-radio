@@ -325,11 +325,11 @@ pub(crate) type Tokens<W> = port::StationTokens<'static, <W as Binding>::Id, Dev
 /// What the actor's task tells the station's task, in order, through the
 /// one-slot installation mailbox ([`crate::station_end::News`]).
 pub(crate) type News<W> =
-    crate::station_end::News<Commands<W>, Tokens<W>, Removal<W>, InitializationError>;
+    crate::station_end::News<Commands<W>, Tokens<W>, Freed<W>, InitializationError>;
 
-/// A removal receipt of the station's port: its slot and permission.
-pub type Removal<W> =
-    oer_protocols_ieee80211_contracts_port::Removed<'static, <Port<W> as DataPort<'static>>::Types>;
+/// What the station's port's cleanup freed: its removal receipt (a slot
+/// and its permission) and an item the port could not keep.
+pub type Freed<W> = crate::release::Freed<'static, <Port<W> as DataPort<'static>>::Types>;
 
 /// The datapath actor's static places and the queues between it and the
 /// station's lifecycle, all on hart 0's executor.
@@ -651,9 +651,9 @@ pub(crate) fn take_stopped<W: Binding>(port: &mut Port<W>) -> Option<StoppedRadi
 }
 
 impl<W: Binding> crate::release::Stopped for Port<W> {
-    type Receipt = Removal<W>;
+    type Receipt = Freed<W>;
     type Radio = StoppedRadio;
-    fn clean(&mut self) -> crate::release::Cleaned<Removal<W>> {
+    fn clean(&mut self) -> crate::release::Cleaned<Freed<W>> {
         crate::release::clean(self)
     }
     fn take_stopped(&mut self) -> Option<StoppedRadio> {

@@ -85,13 +85,14 @@ use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AccessPointCapabilities, AccessPointCommand, AccessPointCommands, AccessPointPort,
     AccessPointProgress, AccessPointReceive, AccessPointRefusal, Attempt, AttemptKey,
     BeaconAttempt, BeaconPermission, BeaconStamp, BeaconTimestamp, CommandFailed,
-    ConfigurePermission, Configured, ConnectionFrame, DataPort, Facts, GroupKeyId, InstalledGroup,
-    InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey, PhyRate, PortSink, PortTypes,
-    Protection, ReceiveAccounting, ReceiveFilter, RecycleRefused, Removed, RemovedKey, RetryPlan,
-    RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopUnconfirmed,
-    SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl, TbttEvent,
-    TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxFacts,
-    TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource, Unconsumed, UnconsumedRefused,
+    ConfigurePermission, Configured, ConnectionFrame, DataPort, Facts, GroupKeyId, Input,
+    InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey, PhyRate, PortSink,
+    PortTypes, Protection, ReceiveAccounting, ReceiveFilter, RecycleRefused, Removed, RemovedKey,
+    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd,
+    StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl,
+    TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool,
+    TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
+    Unconsumed, UnconsumedRefused,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
     ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
@@ -305,6 +306,12 @@ pub enum ApEnd<F> {
     /// in its place. The runner returns no unit more, its stop
     /// ([`ApRunner::finish_stop`]) included.
     Unrecycled(ReceiveAccounting),
+    /// A port call returned an item it could neither give the runner nor
+    /// keep: the item is in the runner ([`ApRunner::take_unkept`]), every
+    /// other owner in its place. The runner makes no port call that takes
+    /// owners while it holds it, its stop's watch included: a stop not yet
+    /// confirmed stays unconfirmed, the owners with the runner.
+    Unkept,
 }
 
 /// Why a step of the runner ended the run.
@@ -325,6 +332,9 @@ where
     /// The port refused a command, which the runner holds
     /// ([`ApRunner::take_returned`]).
     Refused(AccessPointRefusal),
+    /// A port call returned an item it could not keep, which the runner
+    /// holds ([`ApRunner::take_unkept`]).
+    Unkept,
 }
 
 impl<'id, P, C, F> From<Stray<'id, P, C>> for Halt<'id, P, C, F>
@@ -724,6 +734,12 @@ where
     /// The unit whose recycle the port refused. The first refusal ends the
     /// run and the runner returns no unit after it, so it is the only one.
     unrecycled: Option<RecycleRefused<<Ty<'id, P> as PortTypes<'id>>::RxBuffer>>,
+    /// The item a port call could neither give the homes nor keep. The
+    /// runner makes no port call that takes owners while it holds it, its
+    /// stop's watch included, so it is the only one.
+    unkept: Option<oer_protocols_ieee80211_contracts_port::Unkept<'id, Ty<'id, P>>>,
+    /// The attempt a submission returned unaccepted beside the unkept item.
+    unaccepted: Option<<P as DataPort<'id>>::Admitted>,
     /// The first break of the runner's contract a terminal showed: the run
     /// ends with it once the port's call returned.
     broken: Option<ApContract>,
@@ -1653,6 +1669,8 @@ where
                 kept: None,
                 stopped_on: None,
                 unrecycled: None,
+                unkept: None,
+                unaccepted: None,
                 broken: None,
                 begins: heapless::Deque::new(),
                 cut: heapless::Deque::new(),
@@ -1680,6 +1698,10 @@ where
         // A unit the port refused stays until its owner takes it: no run.
         if let Some(refused) = self.homes.unrecycled.as_ref() {
             return ApEnd::Unrecycled(refused.fault);
+        }
+        // Nor while an item a port call could not keep is here.
+        if self.homes.unkept.is_some() {
+            return ApEnd::Unkept;
         }
         // Nor while owners an operation stopped on are out.
         if let Some((contract, _)) = self.homes.stopped_on.as_ref().or(self.homes.kept.as_ref()) {
@@ -1811,6 +1833,11 @@ where
             // watched on by [`ApRunner::finish_stop`] if not confirmed.
             return ApEnd::Unrecycled(refused.fault);
         }
+        if self.homes.unkept.is_some() {
+            // The stop's watch found an item the port could not keep; no
+            // service follows it.
+            return ApEnd::Unkept;
+        }
         match watched {
             Ok(()) => ApEnd::Stopped,
             Err(unconfirmed) => ApEnd::StopUnconfirmed(unconfirmed),
@@ -1880,13 +1907,17 @@ where
                 served = Some(now);
                 self.homes.now = now;
                 // A fault of this service is the stop's to name: its answer
-                // below says it.
-                let _served = self.port.service_tx(
-                    facts.tx.unwrap_or(TxFacts::DUE),
-                    facts.tbtt,
-                    now,
-                    &mut self.homes,
-                );
+                // below says it. No service follows an item the port could
+                // not keep: the place stays the first one's.
+                if self.homes.unkept.is_none() {
+                    let (_served, unkept) = crate::answered(self.port.service_tx(
+                        facts.tx.unwrap_or(TxFacts::DUE),
+                        facts.tbtt,
+                        now,
+                        &mut self.homes,
+                    ));
+                    self.homes.unkept = unkept;
+                }
                 // The stop reads nothing a cut hands over: each unit goes
                 // back to its ring at once, until the port refuses one;
                 // after it, every unit stays in its place.
@@ -1997,7 +2028,22 @@ where
             }
             Halt::Refused(refusal) => ApEnd::Refused(refusal),
             Halt::Unrecycled(fault) => ApEnd::Unrecycled(fault),
+            Halt::Unkept => ApEnd::Unkept,
         }
+    }
+
+    /// The item a port call could neither give the runner nor keep, once
+    /// ([`ApEnd::Unkept`]).
+    pub fn take_unkept(
+        &mut self,
+    ) -> Option<oer_protocols_ieee80211_contracts_port::Unkept<'id, Ty<'id, P>>> {
+        self.homes.unkept.take()
+    }
+
+    /// The attempt a submission returned unaccepted beside its unkept
+    /// item, once.
+    pub fn take_unaccepted(&mut self) -> Option<<P as DataPort<'id>>::Admitted> {
+        self.homes.unaccepted.take()
     }
 
     /// The command the port gave back unrun (refused, or beside its
@@ -2059,13 +2105,19 @@ where
         self.homes.now = now;
         let due = self.port.deadline().is_some_and(|at| at <= now);
         if facts.tx.is_some() || facts.tbtt || due {
-            let served = self.port.service_tx(
+            // No turn runs while an unkept item is here: the place is empty.
+            let (served, unkept) = crate::answered(self.port.service_tx(
                 facts.tx.unwrap_or(TxFacts::DUE),
                 facts.tbtt,
                 now,
                 &mut self.homes,
-            );
-            if let Err(fault) = served {
+            ));
+            if unkept.is_some() {
+                // The port keeps its own fault; the run ends on the item.
+                self.homes.unkept = unkept;
+                return Err(Halt::Unkept);
+            }
+            if let Input::Accepted(Err(fault)) = served {
                 return Err(Halt::Faulted(fault));
             }
         }
@@ -2102,9 +2154,38 @@ where
                     None => return Ok(()),
                 },
             };
-            let progress = self
-                .port
-                .access_point_command(command, now, &mut self.homes);
+            let (progress, unkept) = crate::answered(self.port.access_point_command(
+                command,
+                now,
+                &mut self.homes,
+            ));
+            let progress = match progress {
+                Input::Accepted(progress) => progress,
+                Input::NotAccepted(command) => {
+                    // Found before the port accepted it: the command stays
+                    // with the runner, never issued again.
+                    self.homes.returned = Some(command);
+                    self.homes.unkept = unkept;
+                    return Err(Halt::Unkept);
+                }
+            };
+            if unkept.is_some() {
+                // The command's own answer goes to its home; the run ends
+                // on the item, and nothing behind it runs.
+                self.homes.unkept = unkept;
+                match progress {
+                    Ok(AccessPointProgress::Done) => {
+                        self.homes.taken = self.homes.taken.wrapping_add(1);
+                    }
+                    Err(CommandFailed::Taken(_)) => {}
+                    Ok(AccessPointProgress::Held(command)) => self.homes.held = Some(command),
+                    Ok(AccessPointProgress::Refused(command, _))
+                    | Err(CommandFailed::Returned { command, .. }) => {
+                        self.homes.returned = Some(command);
+                    }
+                }
+                return Err(Halt::Unkept);
+            }
             match progress {
                 Ok(AccessPointProgress::Done) => {
                     self.homes.taken = self.homes.taken.wrapping_add(1);
@@ -2518,7 +2599,16 @@ where
                     .get_or_insert(ApContract::UnknownTicket(index));
             }
         }
-        let _refused = self.port.submit(admitted, now, &mut self.homes);
+        // A refusal's terminal is in the homes. No step runs while an
+        // unkept item is here: the place is empty.
+        let (submitted, unkept) = crate::answered(self.port.submit(admitted, now, &mut self.homes));
+        if unkept.is_some() {
+            self.homes.unkept = unkept;
+            if let Input::NotAccepted(attempt) = submitted {
+                self.homes.unaccepted = Some(attempt);
+            }
+            return Err(Halt::Unkept);
+        }
         // A terminal of the call that showed a break ends the step here:
         // nothing more is submitted behind it.
         match self.homes.broken.take() {

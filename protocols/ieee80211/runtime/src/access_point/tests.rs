@@ -380,6 +380,7 @@ fn stopped<F: core::fmt::Debug>(end: ApEnd<F>) {
         ApEnd::Refused(refusal) => panic!("the port takes every command: {refusal:?}"),
         ApEnd::Unrecycled(fault) => panic!("the port takes every unit back: {fault:?}"),
         ApEnd::Unsupported(unsupported) => panic!("the model serves beacons: {unsupported:?}"),
+        ApEnd::Unkept => panic!("the homes keep every item"),
     }
 }
 

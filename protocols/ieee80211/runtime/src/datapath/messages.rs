@@ -357,6 +357,10 @@ pub enum ActorFault<F> {
     /// stays with the actor ([`Actor::take_unrecycled`]), which takes no
     /// unit more.
     Receive(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
+    /// A port call returned an item it could neither give the actor nor
+    /// keep: the item stays with the actor ([`Actor::take_unkept`]), which
+    /// makes no port call that takes owners while it keeps it.
+    Unkept,
 }
 
 /// A broken contract the actor names.

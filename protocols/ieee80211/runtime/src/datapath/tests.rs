@@ -2330,3 +2330,63 @@ fn freed_memory_goes_back_as_one_burst_with_one_wake() {
         });
     }
 }
+
+/// A terminal the full lifecycle refuses and the port cannot keep comes
+/// back beside the port's answer: the actor keeps it in its one place and
+/// ends, asks for no restart, runs no turn while it keeps it, and hands it
+/// out once.
+#[test]
+fn an_item_the_port_cannot_keep_ends_the_actor_and_comes_out_once() {
+    bench_then(
+        |bench| {
+            let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+            for _ in 0..RETURNS {
+                bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+            }
+            bench.send(ToActor::Start(supported()));
+            bench.connect(link(true, None));
+            bench
+                .air
+                .unkeep_next(oer_protocols_ieee80211_testing_model::ModelUnkeep::AtDrain);
+            let transmit = station_frame_under(bench, 0, false);
+            bench.send(ToActor::StationTx(transmit));
+            for _ in 0..4 {
+                if bench.end.is_some() {
+                    break;
+                }
+                bench.advance(1_000);
+                bench.settle();
+            }
+            assert_eq!(bench.data_sent().len(), 1);
+            assert_eq!(bench.end, Some(ActorEnd::Faulted(ActorFault::Unkept)));
+            let mut faulted = false;
+            while let Some(message) = bench.next() {
+                assert!(
+                    !matches!(message, FromActor::Recovering(_)),
+                    "an unkept item asks for no restart"
+                );
+                faulted |= matches!(message, FromActor::Faulted(ActorFault::Unkept));
+            }
+            assert!(faulted, "the lifecycle hears it");
+            // Nothing of it went to the lifecycle.
+            while let Some(returned) = bench.returns.try_receive() {
+                assert!(
+                    matches!(returned, Returned::Command { .. }),
+                    "the terminal does not come from the port"
+                );
+            }
+        },
+        |actor, rerun| {
+            assert_eq!(rerun, Poll::Ready(ActorEnd::Faulted(ActorFault::Unkept)));
+            assert!(matches!(
+                actor.take_unkept(),
+                Some(oer_protocols_ieee80211_contracts_port::Unkept::Terminal(
+                    LowerMacTerminal::TxCompleted(
+                        oer_protocols_ieee80211_contracts_port::TxCompleted::Single(_)
+                    )
+                ))
+            ));
+            assert!(actor.take_unkept().is_none(), "once");
+        },
+    );
+}

@@ -301,6 +301,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         let loan = self.loan;
         self.unconsumed.deliver(
             sink,
+            &mut self.unkept,
             unconsumed::Item::Terminal(
                 brand::OwnedTerminal::Configured(brand::OwnedConfigured::AccessPoint(
                     permission.into_owned(&loan),
@@ -328,6 +329,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             driver.withdraw(&mut env)
         };
         if !drained
+            || self.halted()
             || self.access_point_on_air()
             || core_views::configuring::<Id, D, B>(self.driver.core.view())
         {
@@ -350,7 +352,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         let stopping = self.stopping();
         {
             let (driver, device, mut env) = self.parts(sink);
-            let mut steps = Sink::default();
+            let mut steps = driver.completion_sink();
             // No attempt of the access point is published: its barrier in
             // the core passes at once.
             let done = core_views::advance_configuration::<Id, D, B>(
@@ -426,6 +428,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 identity.activity.set(identity.serial);
                 self.unconsumed.deliver(
                     sink,
+                    &mut self.unkept,
                     unconsumed::Item::Terminal(
                         brand::OwnedTerminal::PairwiseKeyInstalled(
                             brand::OwnedInstalledPairwise::new(identity.role, identity),
@@ -462,7 +465,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     .iter()
                     .flatten()
                     .any(|running| running.operation.payload().key == Some(identity));
-                if !drained || in_use {
+                if !drained || in_use || self.halted() {
                     return Ok(self.hold_access_point(
                         AccessPointCommand::RemovePairwise { association, key },
                         now,
@@ -491,6 +494,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 if let Some(terminal) = terminal {
                     self.unconsumed.deliver(
                         sink,
+                        &mut self.unkept,
                         unconsumed::Item::Terminal(
                             brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
                         ),
@@ -560,36 +564,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
-    AccessPointPort<'id> for Esp32s31Port<'id, Id, D, B, O>
+    Esp32s31Port<'id, Id, D, B, O>
 {
-    fn access_point_address(&self) -> IndividualAddress {
-        let [_, access_point] = self.addresses;
-        access_point
-    }
-
-    fn admit_access_point<'k, 'p>(
-        &self,
-        attempt: AccessPointSubmission<'k, 'p, 'id, Self>,
-    ) -> Self::Admitted {
-        attempt.into_parts(&self.loan)
-    }
-
-    fn admit_beacon<'k, 'p>(&self, beacon: BeaconSubmission<'k, 'p, 'id, Self>) -> Self::Admitted {
-        let BeaconParts {
-            mut attempt,
-            permission,
-            stamp: _,
-            deadline,
-        } = beacon.into_parts(&self.loan);
-        attempt.execution.beacon = Some((permission.into_owned(&self.loan), deadline));
-        attempt
-    }
-
-    fn access_point_command(
+    fn access_point_ran(
         &mut self,
         command: ApCmd<'id, Id, D, B, O>,
         now: Instant,
-        sink: &mut impl PortSink<'id, Self::Types>,
+        sink: &mut impl PortSink<'id, <Self as DataPort<'id>>::Types>,
     ) -> Result<ApProgress<'id, Id, D, B, O>, AccessPointCommandFailed<'id, Self>> {
         self.reoffer(sink);
         // A faulted port keeps no command: it comes back beside the fault.
@@ -632,5 +613,48 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         let progress = progress.map_err(|failed| failed.map_fault(|fault| self.record(fault)));
         self.recompute_deadline();
         progress
+    }
+}
+
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    AccessPointPort<'id> for Esp32s31Port<'id, Id, D, B, O>
+{
+    fn access_point_address(&self) -> IndividualAddress {
+        let [_, access_point] = self.addresses;
+        access_point
+    }
+
+    fn admit_access_point<'k, 'p>(
+        &self,
+        attempt: AccessPointSubmission<'k, 'p, 'id, Self>,
+    ) -> Self::Admitted {
+        attempt.into_parts(&self.loan)
+    }
+
+    fn admit_beacon<'k, 'p>(&self, beacon: BeaconSubmission<'k, 'p, 'id, Self>) -> Self::Admitted {
+        let BeaconParts {
+            mut attempt,
+            permission,
+            stamp: _,
+            deadline,
+        } = beacon.into_parts(&self.loan);
+        attempt.execution.beacon = Some((permission.into_owned(&self.loan), deadline));
+        attempt
+    }
+
+    fn access_point_command(
+        &mut self,
+        command: ApCmd<'id, Id, D, B, O>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        ApCmd<'id, Id, D, B, O>,
+        Result<ApProgress<'id, Id, D, B, O>, AccessPointCommandFailed<'id, Self>>,
+    > {
+        // Nothing is delivered before the command is accepted.
+        let ran = self.access_point_ran(command, now, sink);
+        self.answer(ran)
     }
 }

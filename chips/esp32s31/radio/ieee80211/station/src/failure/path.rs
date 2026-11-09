@@ -81,7 +81,6 @@ impl DiagnosticPath for BackendFault {
                 path.name(publish_step(step));
             }
             Self::RemovalMismatch => path.name("RemovalMismatch"),
-            Self::UnconsumedPlace => path.name("UnconsumedPlace"),
             Self::GroupKeyIdRange => path.name("GroupKeyIdRange"),
             Self::ConfigurationRefused => path.name("ConfigurationRefused"),
             Self::CompletionWithoutPending { queue } => {
@@ -159,6 +158,7 @@ fn cleanup_path(cause: CleanupCause, path: &mut DiagPath) {
             path.name("Held");
             fault.push_path(path);
         }
+        CleanupCause::Unkept => path.name("Unkept"),
     }
 }
 
@@ -473,6 +473,7 @@ impl DiagnosticPath for LifecycleFailure {
                 }
             }
             Self::Mailbox => path.name("Mailbox"),
+            Self::Unkept => path.name("Unkept"),
         }
     }
 }

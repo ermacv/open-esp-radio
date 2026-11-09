@@ -249,82 +249,97 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
         command: ModelAccessPointCommand<'id, Id, C, X>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<ModelAccessPointProgress<'id, Id, C, X>, AccessPointCommandFailed<'id, Self>> {
-        if self.air.take_access_point_fault() {
-            self.air.poison();
-        }
-        // A faulted port keeps no command: it comes back beside the fault.
-        if let Err(fault) = self.check(ModelPortCall::Command) {
-            return Err(CommandFailed::Returned { command, fault });
-        }
-        // A token of an earlier installation is refused for good, before
-        // the radio's own state is asked.
-        if let Some(issued) = self.stale_command(&command) {
-            return Ok(AccessPointProgress::Refused(
-                command,
-                AccessPointRefusal::StalePermission {
-                    issued,
-                    installation: self.installation.generation(),
-                },
-            ));
-        }
-        if self.radio != Radio::Running || self.air.take_access_point_refusal() {
-            return Ok(AccessPointProgress::Refused(
-                command,
-                AccessPointRefusal::NotEnabled,
-            ));
-        }
-        let air = self.air.clone();
-        let _turn = Turn::at(&air, now);
-        let kind = command.kind();
-        if self
-            .access_point_held_since
-            .is_none_or(|(held, _)| held != kind)
-        {
-            self.access_point_held_key = match &command {
-                AccessPointCommand::RemovePairwise { key, .. } => Some(HeldKey::of(&key.identity)),
-                AccessPointCommand::RemoveGroup { key, .. } => Some(HeldKey::of(&key.identity)),
-                _ => None,
-            };
-        }
-        let progress = self.run_access_point(command, now);
-        self.drain(sink);
-        if let Err(fault) = self.check(ModelPortCall::Command) {
-            return Err(match progress {
-                AccessPointProgress::Held(command) | AccessPointProgress::Refused(command, _) => {
-                    CommandFailed::Returned { command, fault }
-                }
-                AccessPointProgress::Done => CommandFailed::Taken(fault),
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        ModelAccessPointCommand<'id, Id, C, X>,
+        Result<ModelAccessPointProgress<'id, Id, C, X>, AccessPointCommandFailed<'id, Self>>,
+    > {
+        if let Some(unkept) = self.unkept_before_acceptance(sink) {
+            return Err(Unkeeping {
+                unkept,
+                input: Input::NotAccepted(command),
             });
         }
-        let progress = match progress {
-            AccessPointProgress::Held(command) => {
-                let since = match self.access_point_held_since {
-                    Some((held, since)) if held == kind => since,
-                    _ => now,
+        #[allow(clippy::redundant_closure_call, reason = "the call's own answer, then its unkept item")]
+        let answer = (|| -> Result<ModelAccessPointProgress<'id, Id, C, X>, AccessPointCommandFailed<'id, Self>> {
+            if self.air.take_access_point_fault() {
+                self.air.poison();
+            }
+            // A faulted port keeps no command: it comes back beside the fault.
+            if let Err(fault) = self.check(ModelPortCall::Command) {
+                return Err(CommandFailed::Returned { command, fault });
+            }
+            // A token of an earlier installation is refused for good, before
+            // the radio's own state is asked.
+            if let Some(issued) = self.stale_command(&command) {
+                return Ok(AccessPointProgress::Refused(
+                    command,
+                    AccessPointRefusal::StalePermission {
+                        issued,
+                        installation: self.installation.generation(),
+                    },
+                ));
+            }
+            if self.radio != Radio::Running || self.air.take_access_point_refusal() {
+                return Ok(AccessPointProgress::Refused(
+                    command,
+                    AccessPointRefusal::NotEnabled,
+                ));
+            }
+            let air = self.air.clone();
+            let _turn = Turn::at(&air, now);
+            let kind = command.kind();
+            if self
+                .access_point_held_since
+                .is_none_or(|(held, _)| held != kind)
+            {
+                self.access_point_held_key = match &command {
+                    AccessPointCommand::RemovePairwise { key, .. } => Some(HeldKey::of(&key.identity)),
+                    AccessPointCommand::RemoveGroup { key, .. } => Some(HeldKey::of(&key.identity)),
+                    _ => None,
                 };
-                if now.saturating_duration_since(since) >= MODEL_HELD_COMMAND_BOUND {
-                    // It did not run: what its hold began is undone.
-                    self.access_point_held_since = None;
-                    if let Some(key) = self.access_point_held_key.take() {
-                        key.restore();
+            }
+            let progress = self.run_access_point(command, now);
+            self.drain(sink);
+            if let Err(fault) = self.check(ModelPortCall::Command) {
+                return Err(match progress {
+                    AccessPointProgress::Held(command) | AccessPointProgress::Refused(command, _) => {
+                        CommandFailed::Returned { command, fault }
                     }
-                    self.refresh_deadline(now);
-                    return Ok(AccessPointProgress::Refused(
-                        command,
-                        AccessPointRefusal::Expired,
-                    ));
+                    AccessPointProgress::Done => CommandFailed::Taken(fault),
+                });
+            }
+            let progress = match progress {
+                AccessPointProgress::Held(command) => {
+                    let since = match self.access_point_held_since {
+                        Some((held, since)) if held == kind => since,
+                        _ => now,
+                    };
+                    if now.saturating_duration_since(since) >= MODEL_HELD_COMMAND_BOUND {
+                        // It did not run: what its hold began is undone.
+                        self.access_point_held_since = None;
+                        if let Some(key) = self.access_point_held_key.take() {
+                            key.restore();
+                        }
+                        self.refresh_deadline(now);
+                        return Ok(AccessPointProgress::Refused(
+                            command,
+                            AccessPointRefusal::Expired,
+                        ));
+                    }
+                    self.access_point_held_since = Some((kind, since));
+                    AccessPointProgress::Held(command)
                 }
-                self.access_point_held_since = Some((kind, since));
-                AccessPointProgress::Held(command)
-            }
-            done => {
-                self.access_point_held_since = None;
-                self.access_point_held_key = None;
-                done
-            }
-        };
-        self.refresh_deadline(now);
-        Ok(progress)
+                done => {
+                    self.access_point_held_since = None;
+                    self.access_point_held_key = None;
+                    done
+                }
+            };
+            self.refresh_deadline(now);
+            Ok(progress)
+        })();
+        self.answer(answer)
     }
 }

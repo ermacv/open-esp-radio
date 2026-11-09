@@ -768,6 +768,8 @@ pub use supply::{
 mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod release;
+#[cfg(target_arch = "riscv32")]
+pub use release::Freed;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod station_end;
 #[cfg(target_arch = "riscv32")]

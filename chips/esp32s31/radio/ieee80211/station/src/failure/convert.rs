@@ -35,7 +35,6 @@ pub(crate) fn backend_fault(
             step: publish_step(step),
         },
         Source::RemovalMismatch => BackendFault::RemovalMismatch,
-        Source::UnconsumedPlace => BackendFault::UnconsumedPlace,
         Source::GroupKeyIdRange => BackendFault::GroupKeyIdRange,
         Source::ConfigurationRefused => BackendFault::ConfigurationRefused,
         Source::CompletionWithoutPending { queue } => {
@@ -810,6 +809,7 @@ pub(crate) fn lifecycle(
         End::Faulted(ActorFault::Port(fault)) => LifecycleFailure::Port(backend_fault(fault)),
         End::Faulted(ActorFault::Contract(violation)) => LifecycleFailure::Actor(violation),
         End::Faulted(ActorFault::Receive(fault)) => LifecycleFailure::Receive(fault),
+        End::Faulted(ActorFault::Unkept) => LifecycleFailure::Unkept,
         End::Contract(violation) => LifecycleFailure::Contract(violation),
     })
 }
@@ -829,6 +829,7 @@ pub(crate) fn restart(
         }
         Failure::Fault(ActorFault::Contract(violation)) => Some(LifecycleFailure::Actor(violation)),
         Failure::Fault(ActorFault::Receive(fault)) => Some(LifecycleFailure::Receive(fault)),
+        Failure::Fault(ActorFault::Unkept) => Some(LifecycleFailure::Unkept),
         _ => None,
     }
 }

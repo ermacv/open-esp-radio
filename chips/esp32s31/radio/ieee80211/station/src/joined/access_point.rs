@@ -244,6 +244,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                 ApEnd::Contract(contract) => std::format!("contract: {contract:?}"),
                 ApEnd::Refused(refusal) => std::format!("refused: {refusal:?}"),
                 ApEnd::Unrecycled(fault) => std::format!("unrecycled: {fault:?}"),
+                ApEnd::Unkept => "unkept".into(),
                 ApEnd::Unsupported(unsupported) => {
                     // Every owner stays in the runner, none apart.
                     let whole = runner.take_kept().is_none()

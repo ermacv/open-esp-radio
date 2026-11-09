@@ -2,7 +2,7 @@
 //! lifecycle's messages and the radio's start, move and stop.
 
 use super::*;
-use oer_protocols_ieee80211_contracts_port::{PortCompleted, RecycleRefused};
+use oer_protocols_ieee80211_contracts_port::{Input, PortCompleted, RecycleRefused};
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckRefused;
 
 /// What [`Actor::collect`] found.
@@ -531,15 +531,28 @@ where
                 stage: &mut self.stage,
                 grouped: self.group.is_some(),
             };
-            let done = self
-                .port
-                .service_tx(
-                    facts.tx.unwrap_or(TxFacts::DUE),
-                    facts.tbtt,
-                    self.now,
-                    &mut outbox,
-                )
-                .map_err(ActorFault::Port)?;
+            // No turn runs while an unkept item is kept: its place is
+            // empty here.
+            let (served, unkept) = crate::answered(self.port.service_tx(
+                facts.tx.unwrap_or(TxFacts::DUE),
+                facts.tbtt,
+                self.now,
+                &mut outbox,
+            ));
+            let served = match served {
+                Input::Accepted(served) => served,
+                Input::NotAccepted(never) => match never {},
+            };
+            if let Some(unkept) = unkept {
+                // The run ends on it; the arena the call ended stays with
+                // the actor, and the port keeps its own fault.
+                self.retained.unkept = Some(unkept);
+                if let Ok(Some(done)) = served {
+                    self.retained.completed = Some(done);
+                }
+                return Err(ActorFault::Unkept);
+            }
+            let done = served.map_err(ActorFault::Port)?;
             self.staged(lifecycle, network)?;
             if let Some(done) = done {
                 self.finish_arena(done)?;
@@ -916,7 +929,32 @@ where
             stage: &mut self.stage,
             grouped: self.group.is_some(),
         };
-        let progress = match self.port.command(command, self.now, &mut outbox) {
+        // No turn runs while an unkept item is kept: its place is empty
+        // here.
+        let (answer, unkept) = crate::answered(self.port.command(command, self.now, &mut outbox));
+        let answer = match answer {
+            Input::Accepted(answer) => answer,
+            Input::NotAccepted(command) => {
+                // Found before the port accepted it: it goes back to the
+                // lifecycle as one the port did not take, with the group
+                // token, and the run ends on the unkept item.
+                self.retained.unkept = unkept;
+                let group = if self.stage.group_terminal.is_none() {
+                    self.group.take()
+                } else {
+                    None
+                };
+                let grouped = self.give_group(lifecycle, group)?;
+                self.give(lifecycle, Returned::Unrun { command, grouped })?;
+                return Err(ActorFault::Unkept);
+            }
+        };
+        if unkept.is_some() {
+            // The command's own answer is served below; the run then ends
+            // on the unkept item.
+            self.retained.unkept = unkept;
+        }
+        let progress = match answer {
             Ok(progress) => progress,
             Err(CommandFailed::Returned { command, fault }) => {
                 // The port did not take it: it goes back to the lifecycle
@@ -937,6 +975,9 @@ where
             CommandProgress::Done => {}
             CommandProgress::Held(command) => self.held = Some(HeldCommand { command }),
             CommandProgress::Refused(command, reason) => self.refuse(command, reason, lifecycle)?,
+        }
+        if self.retained.unkept.is_some() {
+            return Err(ActorFault::Unkept);
         }
         self.staged(lifecycle, network)
     }
@@ -1414,8 +1455,10 @@ where
         fault: Failed<'id, D>,
     ) {
         // A refused recycle is final: its unit stays kept, so no restart.
+        // So is an unkept item: it stays kept, and no port call follows.
         if !self.recovering
-            && !matches!(fault, ActorFault::Receive(_))
+            && !matches!(fault, ActorFault::Receive(_) | ActorFault::Unkept)
+            && self.retained.unkept.is_none()
             && self.port.recover_for_stop()
             && lifecycle
                 .from_actor

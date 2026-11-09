@@ -198,6 +198,69 @@ pub trait PortSink<'id, T: PortTypes<'id>> {
     ) -> Result<(), (T::RxBuffer, T::RxMeta)>;
 }
 
+/// A terminal or a received unit a port call could neither give its sink
+/// nor keep, whole: the call took no further owner after it, and what it
+/// had not taken stays in its place for a later call.
+pub enum Unkept<'id, T: PortTypes<'id>> {
+    /// A terminal, with every owner it carries.
+    Terminal(LowerMacTerminal<'id, T>),
+    /// A received unit and its metadata, still owed to a recycle.
+    Received(T::RxBuffer, T::RxMeta),
+}
+
+/// What became of a call's input beside an [`Unkept`].
+pub enum Input<I, R> {
+    /// The call found the unkept item before it accepted its input: the
+    /// input, whole, with every owner it carries.
+    NotAccepted(I),
+    /// The call had accepted its input: its own answer.
+    Accepted(R),
+}
+
+/// A port call that stopped on an [`Unkept`], and its input's state. A
+/// separate error from the port's `Copy` fault: the port records no fault
+/// for it.
+#[must_use = "an unkept item and an unaccepted input hold owners"]
+pub struct Unkeeping<'id, T: PortTypes<'id>, I, R> {
+    /// The item the call could not keep.
+    pub unkept: Unkept<'id, T>,
+    /// The call's input, whole, or its answer.
+    pub input: Input<I, R>,
+}
+
+/// Names the item, not its owners, which carry no `Debug`.
+impl<'id, T: PortTypes<'id>> core::fmt::Debug for Unkept<'id, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Terminal(_) => "Unkept::Terminal",
+            Self::Received(..) => "Unkept::Received",
+        })
+    }
+}
+
+/// Names the input's state, not its owners.
+impl<I, R> core::fmt::Debug for Input<I, R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::NotAccepted(_) => "Input::NotAccepted",
+            Self::Accepted(_) => "Input::Accepted",
+        })
+    }
+}
+
+impl<'id, T: PortTypes<'id>, I, R> core::fmt::Debug for Unkeeping<'id, T, I, R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Unkeeping")
+            .field("unkept", &self.unkept)
+            .field("input", &self.input)
+            .finish()
+    }
+}
+
+/// The answer of a producing port call with the input `I`: its own answer
+/// `R`, or the [`Unkept`] it stopped on beside its input.
+pub type PortAnswer<'id, T, I, R> = Result<R, Unkeeping<'id, T, I, R>>;
+
 /// What [`DataPort::take_unconsumed`] left with the port.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Unconsumed {
@@ -569,16 +632,24 @@ pub trait DataPort<'id> {
     /// terminals, expired queued ones end, the next queued ones publish.
     /// A published data arena's end returns here.
     ///
+    /// The answer is the backend's contract fault, or the arena's end.
+    ///
     /// # Errors
     ///
-    /// The backend's contract fault.
+    /// An item the call could neither give `sink` nor keep, beside its
+    /// answer ([`Unkeeping`]); nothing more was taken after it.
     fn service_tx(
         &mut self,
         tx: TxFacts,
         tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault>;
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        core::convert::Infallible,
+        Result<Option<PortCompleted<'id, Self>>, Self::Fault>,
+    >;
 
     /// Serve the published data arena alone on the completion events
     /// `tx`, for a caller that publishes the next arena before anything
@@ -605,18 +676,23 @@ pub trait DataPort<'id> {
     /// Queue an accepted station MPDU; it publishes when its queue is free,
     /// and its terminal returns its owners.
     ///
-    /// # Errors
-    ///
-    /// Why the port did not take the attempt: the radio does not run or
-    /// stops. The attempt ended at once, withdrawn and never published
+    /// The answer's refusal says why the port did not take the attempt: the
+    /// radio does not run or stops. The attempt ended at once, withdrawn
+    /// and never published
     /// ([`TxOutcome::Withdrawn`](crate::TxOutcome::Withdrawn)), and its
     /// terminal, with its context, ticket and fresh buffer, is in `sink`.
+    ///
+    /// # Errors
+    ///
+    /// An item the call could neither give `sink` nor keep ([`Unkeeping`]):
+    /// found before the attempt was accepted, the attempt comes back whole;
+    /// after, the answer.
     fn submit(
         &mut self,
         attempt: Self::Admitted,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<(), SubmitRefusal>;
+    ) -> PortAnswer<'id, Self::Types, Self::Admitted, Result<(), SubmitRefusal>>;
 
     /// One received unit, while the caller holds fewer than `room`.
     ///
@@ -695,16 +771,25 @@ pub trait DataPort<'id> {
 
     /// Run one command, or hold it at its barrier.
     ///
+    /// The answer's failure is the backend's contract fault, with the
+    /// command when the port did not take its owners ([`CommandFailed`]).
+    ///
     /// # Errors
     ///
-    /// The backend's contract fault, with the command when the port did
-    /// not take its owners ([`CommandFailed`]).
+    /// An item the call could neither give `sink` nor keep ([`Unkeeping`]):
+    /// found before the command was accepted, the command comes back whole;
+    /// after, the answer.
     fn command(
         &mut self,
         command: PortCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<CommandProgress<'id, Self::Types, Self::Caps>, PortCommandFailed<'id, Self>>;
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        PortCommand<'id, Self::Types, Self::Caps>,
+        Result<CommandProgress<'id, Self::Types, Self::Caps>, PortCommandFailed<'id, Self>>,
+    >;
 
     /// Start the stopped radio on `channel`, within the backend's command
     /// bound from the first call. A start that fails after the device began
@@ -752,13 +837,22 @@ pub trait DataPort<'id> {
     /// whose cleanup did not finish does not retire. Nothing calls it on
     /// its own: each call is the owner's.
     ///
+    /// The answer's refusal says why the cleanup did not finish
+    /// ([`CleanupRefused`]).
+    ///
     /// # Errors
     ///
-    /// Why the cleanup did not finish ([`CleanupRefused`]).
+    /// A freed terminal the call could neither give `sink` nor keep, beside
+    /// its answer ([`Unkeeping`]).
     fn clean_stopped(
         &mut self,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<(), CleanupRefused<Self::Fault>>;
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        core::convert::Infallible,
+        Result<(), CleanupRefused<Self::Fault>>,
+    >;
 
     /// Take back the fault the port last reported, so that a stop can run
     /// and return the owners it holds: whether it can. From then on the port

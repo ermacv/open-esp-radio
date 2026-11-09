@@ -12,6 +12,8 @@ use oer_portable_time_virtual::VirtualClock;
 struct TestRunner<'a, 'b> {
     port: TestPort<'a>,
     watched: &'b Cell<u8>,
+    /// The item a port call of the run could not keep.
+    unkept: Option<Receipt<'a>>,
 }
 
 impl<'a> Retiring for TestRunner<'a, '_> {
@@ -28,17 +30,25 @@ impl<'a> Retiring for TestRunner<'a, '_> {
     fn port_mut(&mut self) -> &mut TestPort<'a> {
         &mut self.port
     }
+    fn take_unkept(&mut self) -> Option<Receipt<'a>> {
+        self.unkept.take()
+    }
 }
 
 type Exit = ApExitOf<()>;
 
-fn retired<'a>(port: TestPort<'a>, stop: Stop) -> (Exit, Option<Receipt<'a>>, Option<Exit>, u8) {
+fn retired<'a>(
+    port: TestPort<'a>,
+    unkept: Option<Receipt<'a>>,
+    stop: Stop,
+) -> (Exit, Option<Receipt<'a>>, Option<Exit>, u8) {
     let clock = VirtualClock::<2>::new();
     let published = Cell::new(None);
     let watched = Cell::new(0);
     let runner = TestRunner {
         port,
         watched: &watched,
+        unkept,
     };
     let (exit, returned) = ready(retire(
         &published,
@@ -76,7 +86,7 @@ fn a_refused_release_returns_its_receipt_from_the_retire_to_the_runner_caller() 
             receipt: Some(Receipt(&ends)),
             stopped,
         };
-        let (exit, returned, _, watched) = retired(port, Stop::Confirmed);
+        let (exit, returned, _, watched) = retired(port, None, Stop::Confirmed);
         assert_eq!(
             exit,
             ApExitOf::ReleaseRefused {
@@ -100,7 +110,7 @@ fn a_release_that_succeeded_ends_its_receipt_in_the_retire() {
         receipt: Some(Receipt(&ends)),
         stopped: Some(Radio(Leaves::Left)),
     };
-    let (exit, returned, _, watched) = retired(port, Stop::Owed);
+    let (exit, returned, _, watched) = retired(port, None, Stop::Owed);
     assert_eq!(exit, ApExitOf::Ended(ApEnded::Stopped));
     assert_eq!(watched, 1, "an owed stop is watched first");
     assert!(returned.is_none());
@@ -119,7 +129,7 @@ fn an_unconfirmed_stop_is_published_then_watched_before_the_release() {
         cause: oer_protocols_ieee80211_contracts_port::StopCause::Deadline,
         observations: Default::default(),
     };
-    let (exit, returned, published, watched) = retired(port, Stop::Unconfirmed(observed));
+    let (exit, returned, published, watched) = retired(port, None, Stop::Unconfirmed(observed));
     assert_eq!(watched, 1);
     // The observation was published; a release refusal that is not
     // repeated is the exit, not a publication.
@@ -138,4 +148,28 @@ fn an_unconfirmed_stop_is_published_then_watched_before_the_release() {
         }
     );
     assert!(returned.is_some());
+}
+
+#[test]
+fn an_item_the_run_could_not_keep_skips_the_release_and_goes_back_to_the_caller() {
+    let cleanups = Cell::new(0);
+    let ends = Cell::new(0);
+    // The port's receipt would be freed by a cleanup, which does not run.
+    let port = TestPort {
+        cleanup: Ok(()),
+        receipt: Some(Receipt(&cleanups)),
+        stopped: Some(Radio(Leaves::Left)),
+    };
+    let (exit, returned, _, _) = retired(port, Some(Receipt(&ends)), Stop::Confirmed);
+    assert_eq!(
+        exit,
+        ApExitOf::ReleaseRefused {
+            ended: ApEnded::Stopped,
+            cause: ReleaseCause::Unkept
+        }
+    );
+    assert_eq!(ends.get(), 0, "the item is not ended");
+    assert!(returned.is_some(), "the caller holds the item");
+    drop(returned);
+    assert_eq!(ends.get(), 1);
 }

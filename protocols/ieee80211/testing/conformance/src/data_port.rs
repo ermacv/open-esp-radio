@@ -287,6 +287,8 @@ impl Case {
 /// What a case found wrong.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Violation {
+    /// A call returned an item it could neither give its sink nor keep.
+    Unkept,
     /// A call woke its caller's task.
     SelfWake,
     /// The port did not start or stop within the case's steps.
@@ -359,8 +361,11 @@ fn service<'id, H: DataPortHarness<'id>>(
     let now = harness.now();
     let (port, sink) = harness.parts();
     let facts = port.poll_facts(&mut Context::from_waker(&waker));
-    port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink)
-        .map_err(|_| Violation::Fault)
+    crate::answered(
+        port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink),
+        Violation::Unkept,
+    )?
+    .map_err(|_| Violation::Fault)
 }
 
 fn quiet_calls<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
@@ -372,8 +377,11 @@ fn quiet_calls<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Viol
     let mut cx = Context::from_waker(&waker);
     let facts = port.poll_facts(&mut cx);
     let _ = port.deadline();
-    port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink)
-        .map_err(|_| Violation::Fault)?;
+    crate::answered(
+        port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink),
+        Violation::Unkept,
+    )?
+    .map_err(|_| Violation::Fault)?;
     match port.receive(8, now).map_err(|_| Violation::Fault)? {
         RxPull::Unit { frame, .. } => {
             let _recycled = port.recycle(frame);
@@ -394,7 +402,9 @@ fn refusals<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violati
     let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    if port.submit(attempt, now, sink) != Err(SubmitRefusal::NotEnabled) {
+    if crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
+        != Err(SubmitRefusal::NotEnabled)
+    {
         return Err(Violation::Refusal);
     }
     // The refused attempt ended withdrawn at once: its terminal returns its
@@ -405,8 +415,7 @@ fn refusals<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violati
     let command = harness.configure().ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    match port
-        .command(command, now, sink)
+    match crate::answered(port.command(command, now, sink), Violation::Unkept)?
         .map_err(|_| Violation::Fault)?
     {
         CommandProgress::Refused(command, CommandRefusal::NotEnabled)
@@ -457,8 +466,7 @@ fn configure_barrier<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<()
     for _ in 0..2 {
         let now = harness.now();
         let (port, sink) = harness.parts();
-        command = match port
-            .command(command, now, sink)
+        command = match crate::answered(port.command(command, now, sink), Violation::Unkept)?
             .map_err(|_| Violation::Fault)?
         {
             CommandProgress::Held(command) => command,
@@ -477,8 +485,7 @@ fn configure_barrier<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<()
         if let Some(command) = held.take() {
             let now = harness.now();
             let (port, sink) = harness.parts();
-            match port
-                .command(command, now, sink)
+            match crate::answered(port.command(command, now, sink), Violation::Unkept)?
                 .map_err(|_| Violation::Fault)?
             {
                 CommandProgress::Held(command) => held = Some(command),
@@ -504,7 +511,7 @@ fn deadline<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violati
     let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    port.submit(attempt, now, sink)
+    crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
         .map_err(|_| Violation::Refusal)?;
     let _ = service(harness)?;
     let published = {

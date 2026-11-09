@@ -20,8 +20,6 @@ pub enum BackendFault {
     },
     /// A removal's rights were of another slot kind than the key it named.
     RemovalMismatch,
-    /// The port's store of refused terminals found a token's place taken.
-    UnconsumedPlace,
     /// A group command named a key index the access point's group has not.
     GroupKeyIdRange,
     /// The core refused a VIF configuration.
@@ -569,6 +567,10 @@ pub enum ReleaseCause {
     /// The stopped port's cleanup did not finish: the port keeps its
     /// owners and the radio, and nothing was released.
     Cleanup(CleanupCause),
+    /// A port call of the run returned an item it could neither give nor
+    /// keep: no release ran, and the item goes back to the runner's
+    /// caller.
+    Unkept,
 }
 /// Why the stopped port's cleanup ([`DataPort::clean_stopped`]) did not
 /// finish. Nothing calls it again on its own: the port stays stopped with
@@ -586,6 +588,10 @@ pub enum CleanupCause {
     /// The cleanup's one write was issued and the hardware still holds
     /// what it releases: a station group key's entry still reads valid.
     Held(BackendFault),
+    /// The cleanup returned an item it could neither give its caller's
+    /// sink nor keep: nothing is released, and the item goes back to the
+    /// runner's caller.
+    Unkept,
 }
 /// Why the station's lifecycle, or the datapath actor under it, ended
 /// with a cause the image records before it resets. A restart of the
@@ -613,6 +619,9 @@ pub enum LifecycleFailure {
     Reinstall(ReinstallCause),
     /// The datapath task's news came out of its order.
     Mailbox,
+    /// A port call returned an item it could neither give the actor nor
+    /// keep: it stays with the actor, which makes no port call after it.
+    Unkept,
 }
 /// Why the port did not reinstall after the station's restart.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

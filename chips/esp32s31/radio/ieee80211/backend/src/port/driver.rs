@@ -101,13 +101,13 @@ impl<Id: SlotIdentity, const B: usize> Sink<'_, Id, B> {
     /// core keeps every completion and receipt for a later offer.
     pub(super) fn refusing() -> Self {
         Self {
+            completed: heapless::Vec::new(),
             takes_completions: false,
-            ..Self::default()
+            tbtt: None,
         }
     }
-}
-impl<Id: SlotIdentity, const B: usize> Default for Sink<'_, Id, B> {
-    fn default() -> Self {
+    /// A sink that takes the core's completions.
+    const fn taking() -> Self {
         Self {
             completed: heapless::Vec::new(),
             takes_completions: true,
@@ -177,6 +177,9 @@ pub(super) trait DriverEnv<'id, Id: SlotIdentity, D: Device<B>, const B: usize, 
     /// Whether a diagnostic image rejects the next group replacement.
     #[cfg(oer_debug_control)]
     fn reject_group_replacement(&mut self) -> bool;
+    /// Whether the call stopped on an item it could not keep: no loop
+    /// takes a further owner.
+    fn halted(&self) -> bool;
 }
 
 /// The attempts one access category's queue holds. Every queued or
@@ -336,6 +339,10 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     pub(super) free: QueueHomes<'id, Id, B>,
     pub(super) queues: [heapless::Deque<Pending<'id, Id, D, B, O>, QUEUE_DEPTH>; 4],
     pub(super) running: [Option<Pending<'id, Id, D, B, O>>; 4],
+    /// Completions the core gave a call that halted before it brought them
+    /// home, newest first: the next collection takes them first, and no
+    /// sink takes the core's completions while any wait here.
+    uncollected: heapless::Vec<Completion<'id, Id, B>, 4>,
     /// The station's two data arenas over the A-MPDU chains, from
     /// preparation until retirement returns their chains and tickets.
     pub(super) arena: Option<DataArenas<'id, Id, B>>,
@@ -413,6 +420,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             free: QueueHomes::empty(),
             queues: [const { heapless::Deque::new() }; 4],
             running: [const { None }; 4],
+            uncollected: heapless::Vec::new(),
             arena: None,
             retained_group: None,
             barrier: None,
@@ -553,10 +561,13 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 continue;
             }
             // A selective barrier cannot return an owner past either a
-            // published head or an earlier unaffected queued owner.
-            while let Some(cause) = self.queues[index].front().and_then(|pending| {
-                global.or_else(|| self.withdrawal(pending.role(), pending.key()))
-            }) {
+            // published head or an earlier unaffected queued owner. A
+            // halted call withdraws no more: the rest stay queued.
+            while !env.halted()
+                && let Some(cause) = self.queues[index].front().and_then(|pending| {
+                    global.or_else(|| self.withdrawal(pending.role(), pending.key()))
+                })
+            {
                 let Some(queued) = self.queues[index].pop_front() else {
                     break;
                 };
@@ -597,6 +608,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         index: usize,
         now: Instant,
     ) {
+        // A halted call ends no beacon: it stays queued for the next call.
+        if env.halted() {
+            return;
+        }
         let Some(queue) = self.queues.get_mut(index) else {
             return;
         };
@@ -636,6 +651,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// Bring every completion of one service home, then answer the first
     /// fault: an owner a completion cannot return keeps its place with the
     /// fault, and the completions after it still go home.
+    ///
+    /// A halted call takes no further completion: the rest wait in the
+    /// driver ([`Self::completion_sink`]), and the next collection brings
+    /// them home first.
     pub(super) fn collect(
         &mut self,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
@@ -643,10 +662,28 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         stopping: bool,
     ) -> Result<(), Fault> {
         let mut first = None;
-        for completion in sink.completed.drain(..) {
+        while !env.halted()
+            && let Some(completion) = self.uncollected.pop()
+        {
             if let Err(fault) = self.complete(env, completion, stopping) {
                 first.get_or_insert(fault);
             }
+        }
+        // Newest first, so that the oldest leaves first.
+        let mut batch = core::mem::take(&mut sink.completed);
+        batch.reverse();
+        while !env.halted()
+            && let Some(completion) = batch.pop()
+        {
+            if let Err(fault) = self.complete(env, completion, stopping) {
+                first.get_or_insert(fault);
+            }
+        }
+        if !batch.is_empty() {
+            // The sink took completions, so none waited when it was made
+            // ([`Self::completion_sink`]), and the loop above took none
+            // since: the driver's list is empty here.
+            self.uncollected = batch;
         }
         if let Some(tbtt) = sink.tbtt.take() {
             env.tbtt(tbtt);
@@ -656,6 +693,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         }
         self.withdraw(env);
         Ok(())
+    }
+    /// How many completions a halted call left here.
+    #[cfg(test)]
+    pub(super) fn uncollected_for_test(&self) -> usize {
+        self.uncollected.len()
+    }
+    /// The sink of a core call: it takes the core's completions unless
+    /// completions a halted call left wait in the driver, which come home
+    /// first; the core keeps its own until then.
+    pub(super) fn completion_sink(&self) -> Sink<'id, Id, B> {
+        if self.uncollected.is_empty() {
+            Sink::taking()
+        } else {
+            Sink::refusing()
+        }
     }
     /// Bring one completion's owners home: its queue place, its ticket,
     /// its descriptor and the memory the descriptor held, then the attempt
@@ -834,7 +886,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if arena_ended || !self.arena_on_air() {
             // No arena to offer the edge: the MPDUs' settles are the core's
             // own.
-            let mut sink = Sink::default();
+            let mut sink = self.completion_sink();
             // What the service completed goes home even when a later queue
             // of the same service faulted; the service's fault comes first.
             let served = core_views::service::<Id, D, B>(
@@ -859,7 +911,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             events: crate::mac::irq::EVENT_TX_TIMEOUT,
         };
         let before = settling(self);
-        let mut sink = Sink::default();
+        let mut sink = self.completion_sink();
         let served =
             core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink);
         let collected = self.collect(env, &mut sink, stopping);
@@ -869,7 +921,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let (done, again) =
             self.service_arena(device, if settled { timeout } else { wake }, now)?;
         if again {
-            let mut sink = Sink::default();
+            let mut sink = self.completion_sink();
             let served = core_views::service::<Id, D, B>(
                 self.core.view(),
                 device.hardware()?,

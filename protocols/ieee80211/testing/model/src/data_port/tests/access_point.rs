@@ -225,6 +225,7 @@ pub(super) fn submit<'s>(harness: &mut Harness<'s>, attempt: Admitted<'s>) -> u8
     harness
         .port
         .submit(attempt, now, &mut harness.sink)
+        .unwrap()
         .ok()
         .unwrap();
     ticket

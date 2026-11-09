@@ -299,7 +299,7 @@ pub struct AccessPointRunner<W: Binding> {
 #[must_use = "a refused release's receipt holds a key slot and its permission"]
 pub struct AccessPointEnd<W: Binding> {
     pub exit: ApExit,
-    pub returned: Option<radio::Removal<W>>,
+    pub returned: Option<radio::Freed<W>>,
 }
 
 /// The access point's network device and its sending path.
@@ -412,7 +412,7 @@ impl<W: Binding> AccessPointRunner<W> {
         AccessPointEnd { exit, returned }
     }
 
-    async fn serve(self) -> (ApExit, Option<radio::Removal<W>>) {
+    async fn serve(self) -> (ApExit, Option<radio::Freed<W>>) {
         let Self {
             mut boot,
             start: slot,
@@ -646,6 +646,9 @@ impl<W: Binding> AccessPointRunner<W> {
             // The start's check refuses such a port before the radio
             // starts; a run that still ended here never asked it to start.
             ApEnd::Unsupported(cause) => (ApEnded::Unsupported(cause), Stop::Owed),
+            // The runner makes no port call after it: its stop is watched
+            // and confirmed only if it already was.
+            ApEnd::Unkept => (ApEnded::Unkept, Stop::Owed),
         };
         crate::access_point_end::retire(
             &slot.ended,
@@ -692,6 +695,9 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
     }
     fn port_mut(&mut self) -> &mut Port<W> {
         ApRunner::port_mut(self)
+    }
+    fn take_unkept(&mut self) -> Option<radio::Freed<W>> {
+        ApRunner::take_unkept(self).map(crate::release::Freed::unkept)
     }
 }
 

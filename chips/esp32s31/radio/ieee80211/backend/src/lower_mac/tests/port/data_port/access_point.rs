@@ -1021,7 +1021,7 @@ fn returned_access_point_command<Id: radio::SlotIdentity>(
         .ok_or(CaseViolation::Fixture)?;
     let now = AccessPointHarness::now(harness);
     let (port, sink) = AccessPointHarness::parts(harness);
-    let command = match port.access_point_command(configure, now, sink) {
+    let command = match port.access_point_command(configure, now, sink).unwrap() {
         Err(CommandFailed::Returned {
             command,
             fault: found,
