@@ -62,11 +62,11 @@ impl TxSupply<TxPacket> for WifiTx {
                 TxRefused::Lost
             })
     }
-    /// xarxa's egress keeps no airtime account: the cost is not read.
+    /// xarxa's egress keeps no airtime account: the end is not read.
     fn give(
         &mut self,
         memory: wifi::TxMemory,
-        _cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
+        _end: oer_protocols_ieee80211_contracts_port::TxEnd,
     ) {
         self.parked.give(self.publisher.slot(memory));
     }
