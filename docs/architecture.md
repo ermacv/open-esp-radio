@@ -1457,6 +1457,25 @@ attachment, lifecycle or retirement APIs. Bluetooth retains the concrete
 `ChipGate` for these paths; the additional typed register access stays on
 the existing HAL owner.
 
+### Switchable network-core diagnostics
+
+One narrow exception to zero-cost instrumentation exists: the network core's
+diagnostics in the product image (Queued egress with Lending reception), which
+are switched on, off and reset at runtime without a rebuild. It covers the
+agreed counters only: work done through readiness indices and full candidate
+collections; transmit-plan continuations and stop reasons; returns processed
+and credits restored; loans out and published but unprocessed returns at a
+`no_credit` refusal; and the time split of the core's main stages.
+
+- Diagnostics are off by default.
+- Off, the core reads no clock and updates no diagnostic counter; the cost
+  that remains (the enable check and any call it guards) is stated beside the
+  counters.
+- On, the work is bounded and never changes a decision of the core.
+- Shared code instantiated with the `()` sink or the `Noop` observer still
+  leaves no instrumentation code; the exception does not extend to it or to
+  any other subsystem.
+
 ## Tools
 
 - **Images.** Only `cargo fw` builds images (`tools/image`); it runs the
