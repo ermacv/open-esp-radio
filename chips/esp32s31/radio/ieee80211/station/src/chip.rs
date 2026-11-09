@@ -452,9 +452,6 @@ pub struct Storage<W: Binding> {
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) actor: radio::ActorStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
-    /// The removal receipt a refused release or reinstall returned with
-    /// its refusal: the composition keeps it here for good.
-    pub(crate) kept: Option<radio::Removal<W>>,
 }
 impl<W, N, A> Storage<W>
 where
@@ -474,7 +471,6 @@ where
             ),
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
-            kept: None,
             pool: static_cell::StaticCell::new(),
         }
     }
@@ -488,7 +484,6 @@ impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
             ),
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
-            kept: None,
             pool: static_cell::StaticCell::new(),
         }
     }
@@ -545,8 +540,6 @@ pub struct StationRunner<W: Binding> {
     pub(crate) news: oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
     /// Publishes the exit to Control once it is final.
     pub(crate) stop: crate::StopGuard<'static, StationExit>,
-    /// Where a refused release or reinstall keeps its cleanup's receipt.
-    pub(crate) kept: &'static mut Option<radio::Removal<W>>,
 }
 pub(crate) struct ServiceRunner<W: Binding> {
     pub(crate) config: Config,
@@ -577,6 +570,14 @@ pub enum StationExit {
     /// The station never started: its refusal, and how the owners it
     /// returned ended.
     Unavailable(crate::failure::Unavailable<InitializationError>),
+}
+/// How the station ended, and the removal receipt (a key slot and its
+/// permission) of the stopped port's cleanup that a refused release or
+/// reinstall returned with its refusal: the caller holds it from here.
+#[must_use = "a refused release's receipt holds a key slot and its permission"]
+pub struct StationEnd<W: Binding> {
+    pub exit: StationExit,
+    pub returned: Option<radio::Removal<W>>,
 }
 /// The station's link and receive end.
 pub type StationNetwork<W> = Network<'static, <W as Binding>::Notifies>;
@@ -709,7 +710,6 @@ pub fn station<W: Binding>(
                 actor,
                 news,
                 stop,
-                kept: &mut storage.kept,
             },
         },
     )
@@ -722,7 +722,7 @@ impl<W: Binding> Datapath<W> {
     }
 }
 impl<W: Binding> StationRunner<W> {
-    pub async fn run(self, profile: Profile<W>) -> StationExit {
+    pub async fn run(self, profile: Profile<W>) -> StationEnd<W> {
         service::serve(self, profile).await
     }
 }

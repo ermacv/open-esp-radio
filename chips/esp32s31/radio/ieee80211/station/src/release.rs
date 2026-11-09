@@ -70,18 +70,16 @@ impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Returning<'id, T> {
     }
 }
 
-/// Where a cleanup's removal receipt goes once the release or reinstall it
-/// came back with ended. A refusal keeps it for good in the composition's
-/// one place, which only the runner's single end reaches (`place` moves
-/// in); after a release that succeeded it ends with the retired
+/// The cleanup's removal receipt once the release or reinstall it came back
+/// with ended: a refusal returns it to the runner's caller with the
+/// refusal, whole; after a release that succeeded it ends with the retired
 /// installation's other tokens.
-pub(crate) fn settle<R>(place: &mut Option<R>, refused: bool, receipt: Option<R>) {
+pub(crate) fn returned<R>(refused: bool, receipt: Option<R>) -> Option<R> {
     if refused {
-        if let Some(receipt) = receipt {
-            *place = Some(receipt);
-        }
+        receipt
     } else {
         drop(receipt);
+        None
     }
 }
 
@@ -204,20 +202,17 @@ mod tests {
     }
 
     #[test]
-    fn a_refused_release_keeps_its_cleanup_receipt_in_the_composition() {
+    fn a_refused_release_returns_its_cleanup_receipt_to_the_caller() {
         let ended = Cell::new(0);
-        let mut place = None;
-        settle(&mut place, true, Some(Receipt(&ended)));
+        let kept = returned(true, Some(Receipt(&ended)));
         assert_eq!(ended.get(), 0, "the refusal ends nothing");
-        assert!(place.is_some(), "the composition holds the receipt");
+        assert!(kept.is_some(), "the caller holds the receipt");
         // A release that succeeded ends its receipt with the retired
         // installation.
         let succeeded = Cell::new(0);
-        let mut other = None;
-        settle(&mut other, false, Some(Receipt(&succeeded)));
+        assert!(returned(false, Some(Receipt(&succeeded))).is_none());
         assert_eq!(succeeded.get(), 1);
-        assert!(other.is_none());
-        drop(place);
+        drop(kept);
         assert_eq!(ended.get(), 1);
     }
 

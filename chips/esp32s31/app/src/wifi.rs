@@ -265,7 +265,8 @@ pub(crate) async fn datapath(datapath: Datapath) {
 /// the station stays inside the facade; a start the radio refused and a
 /// confirmed stop whose radio release failed keep their typed causes with
 /// the control; every other terminal exit records its typed cause and
-/// resets.
+/// resets. A removal receipt the refusal returned stays with this task
+/// ([`hold`]).
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
         runner,
@@ -276,7 +277,8 @@ pub(crate) async fn serve_station(start: StationStart) {
     } = start;
     let profile = wifi::Profile::new(&config, address, Callbacks(nonces), aes, STATION_SINK)
         .unwrap_or_else(|error| failure(error));
-    match observed!(Station, runner.run(profile)).await {
+    let ended = observed!(Station, runner.run(profile)).await;
+    match ended.exit {
         wifi::StationExit::Stopped => {}
         // The start's refusal and how its owners ended stay typed with the
         // control ([`Station::connect`] answers them): a refused start
@@ -295,6 +297,17 @@ pub(crate) async fn serve_station(start: StationStart) {
         // control ([`Station::stop`] answers it). A leave it posted is never
         // posted again: resetting would repeat nothing and prove nothing.
         wifi::StationExit::ReleaseFailed(_) => {}
+    }
+    hold(ended.returned).await;
+}
+
+/// Hold the removal receipt a refused release or reinstall returned (a key
+/// slot and its permission) for good: the task parks with it and never
+/// ends it. Without one the task ends.
+pub(crate) async fn hold<T>(returned: Option<T>) {
+    if let Some(receipt) = returned {
+        let _receipt = receipt;
+        core::future::pending::<()>().await;
     }
 }
 

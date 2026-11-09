@@ -192,9 +192,13 @@ pub(crate) async fn serve_access_point(start: ApStart) {
     let ip = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
     let stop = runner.stop_handle();
     let mut run = core::pin::pin!(runner.run());
-    if let Either::Second(_) = select(run.as_mut(), ip).await {
-        // The stack's end is in its status; the access point stops.
-        stop.request_stop();
-        run.await;
-    }
+    let ended = match select(run.as_mut(), ip).await {
+        Either::First(ended) => ended,
+        Either::Second(_) => {
+            // The stack's end is in its status; the access point stops.
+            stop.request_stop();
+            run.await
+        }
+    };
+    super::hold(ended.returned).await;
 }

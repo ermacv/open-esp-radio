@@ -352,8 +352,15 @@ pub struct AccessPointRunner<W: Binding> {
     template: &'static mut [u8; AP_BEACON_CAPACITY],
     shared: &'static ApShared,
     nonces: Nonces,
-    /// Where a refused release keeps its cleanup's receipt.
-    kept: &'static mut Option<radio::Removal<W>>,
+}
+
+/// How the access point ended, and the removal receipt (a key slot and its
+/// permission) of the stopped port's cleanup that a refused release
+/// returned with its refusal: the caller holds it from here.
+#[must_use = "a refused release's receipt holds a key slot and its permission"]
+pub struct AccessPointEnd<W: Binding> {
+    pub exit: ApExit,
+    pub returned: Option<radio::Removal<W>>,
 }
 
 /// The access point's network device and its sending path.
@@ -445,7 +452,6 @@ pub fn access_point<W: Binding, F>(
             template,
             shared,
             nonces: Nonces(nonces),
-            kept: &mut station.kept,
         },
     )
 }
@@ -460,14 +466,14 @@ impl<W: Binding> AccessPointRunner<W> {
     /// Wait for the start, run the access point until its stop, then
     /// release the radio. A stop before the start ends it at once, with no
     /// radio started.
-    pub async fn run(self) -> ApExit {
+    pub async fn run(self) -> AccessPointEnd<W> {
         let slot = self.start;
-        let exit = self.serve().await;
+        let (exit, returned) = self.serve().await;
         slot.ended.set(Some(exit));
-        exit
+        AccessPointEnd { exit, returned }
     }
 
-    async fn serve(self) -> ApExit {
+    async fn serve(self) -> (ApExit, Option<radio::Removal<W>>) {
         let Self {
             mut boot,
             start: slot,
@@ -476,24 +482,29 @@ impl<W: Binding> AccessPointRunner<W> {
             template,
             shared,
             mut nonces,
-            kept,
         } = self;
         let Some((config, settings)) = slot.take(shared).await else {
-            return ApExit::Ended(ApEnded::Stopped);
+            return (ApExit::Ended(ApEnded::Stopped), None);
         };
         boot.config = config;
         let Some(mut installations) = W::take_installations() else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Storage,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Storage,
+                )),
+                None,
+            );
         };
         // The PMK of the passphrase, a step at a time between the
         // executor's other work.
         let Ok(mut derivation) = PmkDerivation::new(&settings.passphrase, settings.ssid.as_bytes())
         else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Ssid,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Ssid,
+                )),
+                None,
+            );
         };
         let pmk = loop {
             if let Some(pmk) = derivation.step() {
@@ -502,9 +513,12 @@ impl<W: Binding> AccessPointRunner<W> {
             embassy_futures::yield_now().await;
         };
         let Some(gtk_bytes) = nonces.nonce() else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Storage,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Storage,
+                )),
+                None,
+            );
         };
         let mut gtk = [0; 16];
         for (octet, source) in gtk.iter_mut().zip(gtk_bytes) {
@@ -516,15 +530,21 @@ impl<W: Binding> AccessPointRunner<W> {
             oer_protocols_ieee80211_wire::address::IndividualAddress::for_interface(boot.ap)
                 .map(|address| address.get())
         else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Address,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Address,
+                )),
+                None,
+            );
         };
         let channel = config.supported;
         let Some(key_id) = GroupKeyId::new(GROUP_KEY_ID) else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Storage,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Storage,
+                )),
+                None,
+            );
         };
         let Ok(service) = AccessPointService::<Interface>::new(
             address,
@@ -535,9 +555,12 @@ impl<W: Binding> AccessPointRunner<W> {
             AccessPointInactiveTimeout::default(),
             peers.lend(),
         ) else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Storage,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Storage,
+                )),
+                None,
+            );
         };
         let wire_channel = channel.channel();
         let Ok(beacon) = ApBeacon::new(
@@ -551,30 +574,42 @@ impl<W: Binding> AccessPointRunner<W> {
             SequenceNumber::ZERO,
             ApSecurityPolicy::Wpa2Personal,
         ) else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Ssid,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Ssid,
+                )),
+                None,
+            );
         };
         let (Some(management_transmissions), Some(data_transmissions)) = (
             core::num::NonZeroU8::new(MANAGEMENT_TRANSMISSIONS),
             core::num::NonZeroU8::new(lmac::SHORT_RETRY_LIMIT),
         ) else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Tx,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Tx,
+                )),
+                None,
+            );
         };
         let Some(minted) = installations.first() else {
-            return ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Registration,
-            ));
+            return (
+                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
+                    InitializationError::Registration,
+                )),
+                None,
+            );
         };
         let (parts, driver) = match radio::install(boot, config, AP_BANK).await {
             Ok(installed) => installed,
             Err(refused) => {
                 // A started radio leaves before the refusal is told, its
                 // outcome told with it.
-                return ApExit::Unavailable(
-                    crate::release::refused(refused.cause, refused.owners).await,
+                return (
+                    ApExit::Unavailable(
+                        crate::release::refused(refused.cause, refused.owners).await,
+                    ),
+                    None,
                 );
             }
         };
@@ -587,8 +622,11 @@ impl<W: Binding> AccessPointRunner<W> {
             Err((parts, _minted)) => {
                 // The started radio leaves from the refused parts' device,
                 // which the port never started; its outcome is the cleanup.
-                return ApExit::Unavailable(
-                    radio::port_refused::<W>(InitializationError::Backend, parts.device).await,
+                return (
+                    ApExit::Unavailable(
+                        radio::port_refused::<W>(InitializationError::Backend, parts.device).await,
+                    ),
+                    None,
                 );
             }
         };
@@ -670,7 +708,7 @@ impl<W: Binding> AccessPointRunner<W> {
             // starts; a run that still ended here never asked it to start.
             ApEnd::Unsupported(cause) => (ApEnded::Unsupported(cause), Stop::Owed),
         };
-        retire::<W>(slot, runner, kept, ended, stop).await
+        retire::<W>(slot, runner, ended, stop).await
     }
 }
 
@@ -703,14 +741,13 @@ type ApRunnerOf<W> = ApRunner<
 /// release the MAC refused as still active is published as
 /// [`ApExit::ReleaseRefused`] and tried again. The owners end with the
 /// runner once the stop is confirmed and the release ended; a refused
-/// release's cleanup receipt stays in the composition's storage.
+/// release's cleanup receipt goes back to the runner's caller with it.
 async fn retire<W: Binding>(
     slot: &StartSlot,
     mut runner: ApRunnerOf<W>,
-    kept: &mut Option<radio::Removal<W>>,
     ended: ApEnded,
     stop: Stop,
-) -> ApExit {
+) -> (ApExit, Option<radio::Removal<W>>) {
     let unconfirmed = |observed| {
         slot.ended
             .set(Some(ApExit::StopUnconfirmed { ended, observed }))
@@ -730,13 +767,13 @@ async fn retire<W: Binding>(
         slot.ended
             .set(Some(ApExit::ReleaseRefused { ended, cause }))
     };
-    // The cleanup's removal receipt: a refused release keeps it in the
-    // composition's place for good; after a release that succeeded it ends
-    // with the retired installation.
+    // The cleanup's removal receipt: a refused release returns it to the
+    // runner's caller with the refusal; after a release that succeeded it
+    // ends with the retired installation.
     let (released, returned) = radio::release::<W>(runner.port_mut(), refused).await;
     drop(unrecycled);
-    crate::release::settle(kept, released.is_err(), returned);
-    match (ended, finished, released) {
+    let returned = crate::release::returned(released.is_err(), returned);
+    let exit = match (ended, finished, released) {
         // A refusal the stop found after another cause.
         (ended, Err(fault), released) if !matches!(ended, ApEnded::Unrecycled(_)) => {
             ApExit::Unrecycled {
@@ -747,7 +784,8 @@ async fn retire<W: Binding>(
         }
         (ended, _, Ok(())) => ApExit::Ended(ended),
         (ended, _, Err(cause)) => ApExit::ReleaseRefused { ended, cause },
-    }
+    };
+    (exit, returned)
 }
 
 const _: () = {

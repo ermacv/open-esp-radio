@@ -851,8 +851,8 @@ pub fn mac_counters() -> MacCounters {
 #[cfg(target_arch = "riscv32")]
 pub use chip::{
     Bell, Binding, Config, Datapath, DriverExecutor, Event, Events, InitializationError,
-    InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner,
-    Storage, station,
+    InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationEnd, StationExit,
+    StationRunner, Storage, station,
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.

@@ -348,7 +348,7 @@ pub(crate) enum News<W: Binding> {
 }
 
 /// A removal receipt of the station's port: its slot and permission.
-pub(crate) type Removal<W> =
+pub type Removal<W> =
     oer_protocols_ieee80211_contracts_port::Removed<'static, <Port<W> as DataPort<'static>>::Types>;
 
 /// The datapath actor's static places and the queues between it and the
