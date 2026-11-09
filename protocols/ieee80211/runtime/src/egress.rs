@@ -366,13 +366,21 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
             return Ok(None);
         };
         let key = reservation.key();
-        match best.into_iter().find(|best| best.key == key) {
-            Some(Best { work, .. }) => Ok(Some(self.hold(work, reservation))),
-            // The candidates were these accounts, so one of them holds the key.
-            None => match self.scheduler.cancel(reservation, &mut ()) {
-                Ok(()) => Ok(None),
-                Err((error, _)) => Err(error.into()),
-            },
+        // Taken by `pop`, not a consuming iterator: heapless's `IntoIter`
+        // drop slices its unread rest at a bound the compiler cannot prove.
+        // Each account stands once in `best`, so the order is free.
+        while let Some(Best {
+            key: account, work, ..
+        }) = best.pop()
+        {
+            if account == key {
+                return Ok(Some(self.hold(work, reservation)));
+            }
+        }
+        // The candidates were these accounts, so one of them holds the key.
+        match self.scheduler.cancel(reservation, &mut ()) {
+            Ok(()) => Ok(None),
+            Err((error, _)) => Err(error.into()),
         }
     }
 
