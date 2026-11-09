@@ -25,6 +25,10 @@ struct Account<K> {
     balance: i64,
     minimum: u32,
     retired: bool,
+    /// Its reservations not yet settled or cancelled, and their budgets:
+    /// a retired account goes when the count reaches zero.
+    outstanding: u32,
+    outstanding_micros: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -56,6 +60,9 @@ pub struct AirtimeReservation<'owner, K> {
     key: K,
     id: u64,
     budget: NonZeroU32,
+    /// Its place among the scheduler's reservations, which its end reads
+    /// directly; the id tells a later reservation of the place apart.
+    place: usize,
 }
 
 impl<'owner, K: Copy> AirtimeReservation<'owner, K> {
@@ -192,10 +199,35 @@ pub struct AirtimeStorage<K, const PEERS: usize, const RESERVATIONS: usize = 2> 
 
 struct State<K, const PEERS: usize, const RESERVATIONS: usize> {
     accounts: [Option<Account<K>>; PEERS],
+    /// Each reservation at its place.
     pending: [Option<Pending<K>>; RESERVATIONS],
+    /// The places ended reservations freed, the last freed at `freed - 1`:
+    /// the next reservation takes that one.
+    free: [usize; RESERVATIONS],
+    freed: usize,
+    /// No reservation held a place from here up yet.
+    unused: usize,
     quantum: NonZeroU32,
     cursor: usize,
     next_id: u64,
+}
+
+impl<K, const PEERS: usize, const RESERVATIONS: usize> State<K, PEERS, RESERVATIONS> {
+    /// The place the next reservation takes, without taking it.
+    fn vacant(&self) -> Option<usize> {
+        match self.freed.checked_sub(1) {
+            Some(top) => self.free.get(top).copied(),
+            None => (self.unused < RESERVATIONS).then_some(self.unused),
+        }
+    }
+
+    /// Take the place [`Self::vacant`] named.
+    fn occupy(&mut self) {
+        match self.freed.checked_sub(1) {
+            Some(top) => self.freed = top,
+            None => self.unused = self.unused.saturating_add(1),
+        }
+    }
 }
 
 impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
@@ -230,6 +262,9 @@ impl<K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             state: State {
                 accounts: [None; PEERS],
                 pending: [None; RESERVATIONS],
+                free: [0; RESERVATIONS],
+                freed: 0,
+                unused: 0,
                 quantum: quantum_micros,
                 cursor: 0,
                 next_id: 0,
@@ -273,11 +308,9 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
         events: &mut impl EventSink<AirtimeObservation<K>>,
     ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
-        let pending = self
+        let place = self
             .state
-            .pending
-            .iter_mut()
-            .find(|slot| slot.is_none())
+            .vacant()
             .ok_or(AirtimeError::ReservationCapacity)?;
         // Admission is transactional: this bounded copy owns no packets.
         let mut accounts = self.state.accounts;
@@ -304,6 +337,8 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
                     balance: 0,
                     minimum: candidate.minimum_micros.get(),
                     retired: false,
+                    outstanding: 0,
+                    outstanding_micros: 0,
                 });
             }
         }
@@ -357,23 +392,34 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             key: account.key,
             id,
             budget,
+            place,
         };
         account.balance = account
             .balance
             .checked_sub(i64::from(budget.get()))
             .ok_or(AirtimeError::ArithmeticOverflow)?;
+        // At most `RESERVATIONS` reservations of u32 budgets, which the
+        // storage's const bound keeps within both counts.
+        account.outstanding = account.outstanding.saturating_add(1);
+        account.outstanding_micros = account
+            .outstanding_micros
+            .saturating_add(u64::from(budget.get()));
         let observed = *account;
         // The cursor wraps at the bounded peer arena, rather than at usize::MAX.
         let cursor = selected
             .wrapping_add(1)
             .checked_rem(PEERS)
             .ok_or(AirtimeError::ArithmeticOverflow)?;
-        self.state.accounts = accounts;
+        let Some(pending) = self.state.pending.get_mut(place) else {
+            return Err(AirtimeError::ReservationCapacity);
+        };
         *pending = Some(Pending {
             id,
             key: observed.key,
             budget: budget.get(),
         });
+        self.state.occupy();
+        self.state.accounts = accounts;
         self.state.next_id = id;
         self.state.cursor = cursor;
         self.observe(observed, AirtimeAction::Granted, budget.get(), 0, events);
@@ -423,13 +469,25 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         if reservation.origin != self.origin {
             return Err((AirtimeError::WrongScheduler, reservation));
         }
-        let Some(slot) = self.state.pending.iter_mut().find(|slot| {
-            slot.as_ref().is_some_and(|p| {
-                p.id == reservation.id
-                    && p.budget == reservation.budget.get()
-                    && p.key == reservation.key
+        // Its own place, read directly: a later reservation there has
+        // another id.
+        let Some(slot) = self
+            .state
+            .pending
+            .get_mut(reservation.place)
+            .filter(|slot| {
+                slot.as_ref().is_some_and(|p| {
+                    p.id == reservation.id
+                        && p.budget == reservation.budget.get()
+                        && p.key == reservation.key
+                })
             })
-        }) else {
+        else {
+            return Err((AirtimeError::UnknownReservation, reservation));
+        };
+        // A held place is not among the freed ones, so they leave room for
+        // it; the check keeps a broken count from losing the place.
+        let Some(free) = self.state.free.get_mut(self.state.freed) else {
             return Err((AirtimeError::UnknownReservation, reservation));
         };
         let Some(account_slot) = self
@@ -454,16 +512,15 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         } else {
             balance
         };
+        account.outstanding = account.outstanding.saturating_sub(1);
+        account.outstanding_micros = account
+            .outstanding_micros
+            .saturating_sub(u64::from(reservation.budget.get()));
         let observed = *account;
         *slot = None;
-        if account.retired
-            && !self
-                .state
-                .pending
-                .iter()
-                .flatten()
-                .any(|p| p.key == account.key)
-        {
+        *free = reservation.place;
+        self.state.freed = self.state.freed.saturating_add(1);
+        if account.retired && account.outstanding == 0 {
             *account_slot = None;
         }
         self.observe(
@@ -492,13 +549,7 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             if let Some(account) = slot.as_mut()
                 && retired(account.key)
             {
-                if self
-                    .state
-                    .pending
-                    .iter()
-                    .flatten()
-                    .any(|p| p.key == account.key)
-                {
+                if account.outstanding != 0 {
                     account.retired = true;
                     account.minimum = 0;
                 } else {

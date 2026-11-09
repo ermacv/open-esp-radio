@@ -61,6 +61,9 @@ cancelled, while published work retains an affine completion owner until the
 caller supplies its modelled charge. Keys include the association generation,
 not a transport flow. Idle peers lose positive surplus but retain debt;
 retired accounts remain pinned until their outstanding work is settled.
+A reservation carries its place in the ledger, and an account counts its
+outstanding reservations, so reserving, settling, cancelling and retiring
+read one place each, with no pass over the reservations.
 `reserve`, `settle` and `cancel` report each successful transition as an
 `AirtimeObservation` to the caller's `EventSink`; the ledger holds no sink.
 The module accepts generic receipts and has no chip, ESP-NOW or packet-storage

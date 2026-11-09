@@ -193,7 +193,14 @@ only after the policy chose it and the port gave the room.
   `Completions`; the buffer is free again only when the port hands the end
   on to the policy (`TxBuffers::take_notice`). So no more frames are
   unsettled than there are buffers, which is the policy's reservation
-  bound (`NETWORK_BUFFERS`). The port asks for returned buffers whether or
+  bound (`NETWORK_BUFFERS`). A frame's ticket is its buffer's place among
+  the network's (`TxSlot::place`, below `NETWORK_BUFFERS`), and the policy
+  keeps each frame in flight at that place: an acceptance and an end read
+  one place, and a ticket given again before its end, or past the places,
+  is the policy's fault. The station returns ended frames' memory as one
+  burst with one wake at its end; a network turn hands the policy up to 64
+  notices before it publishes, so a Block Ack's ends that reached it settle
+  in that turn and the turn publishes again. The port asks for returned buffers whether or
   not it sends, so an idle network still settles. A frame lost with its
   buffer at publication settles as `RadioNotice::Lost` at its ceiling; that
   settles the account only and returns no memory. A new link epoch ends

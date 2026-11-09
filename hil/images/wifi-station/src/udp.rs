@@ -94,11 +94,13 @@ fn home(socket: &mut Socket, parked: &Parked, block: NetworkBlock) {
 /// as the network has works for the producer at once.
 const QUEUE: usize = 32;
 
-/// Names one datagram: its run's generation and its sequence.
+/// Names one datagram: its run's generation, its sequence and its place in
+/// the source, which its tag reads directly.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Tag {
     generation: u32,
     sequence: u64,
+    place: u8,
 }
 
 /// A datagram the sender handed over: what the producer writes, where.
@@ -107,15 +109,83 @@ struct Pending {
     header: Header,
     size: usize,
     peer: Peer,
-    /// The producer offered it, and has its answer to wait for.
-    offered: bool,
 }
 
-/// What the sender and the producer share: the run's datagrams, oldest
-/// first, until the network ends each. One whose end is not known
-/// ([`Outcome::Unknown`]) leaves too, and is never sent again.
+/// What the sender and the producer share: the run's datagrams, each at its
+/// place until the network ends it, and the places of those not offered
+/// yet, oldest first. One whose end is not known ([`Outcome::Unknown`])
+/// leaves too, and is never sent again. Every step reads one place.
 struct Datagrams {
-    pending: Vec<Pending, QUEUE>,
+    places: [Option<Pending>; QUEUE],
+    /// Places no datagram holds.
+    free: Vec<u8, QUEUE>,
+    /// Places of datagrams the producer has not offered, oldest first: an
+    /// offer refused for now goes back to the front.
+    unoffered: heapless::Deque<u8, QUEUE>,
+}
+
+impl Datagrams {
+    /// No datagram: every place free.
+    fn new() -> Self {
+        let mut datagrams = Self {
+            places: [None; QUEUE],
+            free: Vec::new(),
+            unoffered: heapless::Deque::new(),
+        };
+        datagrams.clear();
+        datagrams
+    }
+
+    fn clear(&mut self) {
+        for held in &mut self.places {
+            *held = None;
+        }
+        self.unoffered.clear();
+        self.free.clear();
+        for place in (0..QUEUE)
+            .rev()
+            .filter_map(|place| u8::try_from(place).ok())
+        {
+            // As many places as the vector holds.
+            let _held = self.free.push(place);
+        }
+    }
+
+    /// Keep `pending` at a free place, last among those to offer; whether
+    /// one was free.
+    fn push(&mut self, pending: Pending) -> bool {
+        let Some(place) = self.free.pop() else {
+            return false;
+        };
+        match self.places.get_mut(usize::from(place)) {
+            Some(held) => *held = Some(pending),
+            None => return false,
+        }
+        // A place is offered once at most, and there are QUEUE of them.
+        let _queued = self.unoffered.push_back(place);
+        true
+    }
+
+    /// The datagram `sequence` names at `place`.
+    fn at(&self, place: u8, sequence: u64) -> Option<&Pending> {
+        self.places
+            .get(usize::from(place))?
+            .as_ref()
+            .filter(|pending| pending.header.sequence == sequence)
+    }
+
+    /// The datagram at `place` leaves, if `sequence` names it, and its place
+    /// is free.
+    fn forget(&mut self, place: u8, sequence: u64) {
+        if self.at(place, sequence).is_none() {
+            return;
+        }
+        if let Some(held) = self.places.get_mut(usize::from(place)) {
+            *held = None;
+            // A place held a datagram, so the free places leave it room.
+            let _freed = self.free.push(place);
+        }
+    }
 }
 
 /// The load generator's source of datagrams, which the sender writes and the
@@ -179,7 +249,7 @@ impl Source {
     /// Begin a run: its datagrams are a new generation, and what an earlier
     /// run left is not sent.
     fn begin(&self) {
-        let _cleared = self.lend(|datagrams| datagrams.pending.clear());
+        let _cleared = self.lend(Datagrams::clear);
         self.generation.fetch_add(1, Ordering::AcqRel);
         // The network's open works of the earlier run are stale now, whatever
         // it waits for.
@@ -190,7 +260,7 @@ impl Source {
     /// Hand a datagram to the producer; whether there was room.
     fn push(&self, pending: Pending) -> bool {
         let taken = self
-            .lend(|datagrams| datagrams.pending.push(pending).is_ok())
+            .lend(|datagrams| datagrams.push(pending))
             .unwrap_or(false);
         // A datagram the network cannot declare yet is no reason to wake it:
         // what frees it comes in a turn of its own.
@@ -220,29 +290,24 @@ impl LoadProducer {
     /// The datagram of `tag` leaves, and its room is a sender's.
     fn forget(&self, tag: Tag) {
         if tag.generation == self.generation() {
-            let _lent = self.source.lend(|datagrams| {
-                datagrams
-                    .pending
-                    .retain(|pending| pending.header.sequence != tag.sequence);
-            });
+            let _lent = self
+                .source
+                .lend(|datagrams| datagrams.forget(tag.place, tag.sequence));
         }
         self.source.room.wake();
     }
 
-    /// The datagram of `tag`, in its run.
-    fn find(&self, tag: Tag, found: impl FnOnce(&mut Datagrams, usize)) -> bool {
+    /// The datagram of `tag`, in its run, at its place.
+    fn find<R>(&self, tag: Tag, found: impl FnOnce(&mut Datagrams, &Pending) -> R) -> Option<R> {
         if tag.generation != self.generation() {
-            return false;
+            return None;
         }
         self.source
             .lend(|datagrams| {
-                let at = datagrams
-                    .pending
-                    .iter()
-                    .position(|pending| pending.header.sequence == tag.sequence);
-                at.map(|at| found(datagrams, at)).is_some()
+                let pending = *datagrams.at(tag.place, tag.sequence)?;
+                Some(found(datagrams, &pending))
             })
-            .unwrap_or(false)
+            .flatten()
     }
 }
 
@@ -254,24 +319,22 @@ impl Produce for LoadProducer {
     }
 
     fn current(&self, tag: Tag) -> bool {
-        self.find(tag, |_, _| {})
+        self.find(tag, |_, _| ()).is_some()
     }
 
     fn offer(&mut self, _now: NetworkInstant) -> Result<Offer<Tag>, Next> {
         let generation = self.generation();
         self.source
             .lend(|datagrams| {
-                let pending = datagrams
-                    .pending
-                    .iter_mut()
-                    .find(|pending| !pending.offered)?;
-                pending.offered = true;
+                let place = datagrams.unoffered.pop_front()?;
+                let pending = datagrams.places.get(usize::from(place))?.as_ref()?;
                 Some(Offer {
                     remote: Remote::from(pending.peer),
                     length: pending.size,
                     tag: Tag {
                         generation,
                         sequence: pending.header.sequence,
+                        place,
                     },
                 })
             })
@@ -285,17 +348,13 @@ impl Produce for LoadProducer {
         work: Work<Tag>,
         data: &mut [u8],
     ) -> Result<(), Declined> {
-        let mut written = None;
-        let found = self.find(work.tag, |datagrams, at| {
-            written = datagrams
-                .pending
-                .get(at)
-                .map(|pending| pending.header.write_datagram(data).is_some());
+        let written = self.find(work.tag, |_, pending| {
+            pending.header.write_datagram(data).is_some()
         });
-        match (found, written) {
-            (true, Some(true)) => Ok(()),
-            (true, _) => Err(Declined::Unwritable),
-            (false, _) => Err(Declined::Stale),
+        match written {
+            Some(true) => Ok(()),
+            Some(false) => Err(Declined::Unwritable),
+            None => Err(Declined::Stale),
         }
     }
 
@@ -303,10 +362,9 @@ impl Produce for LoadProducer {
         match reason {
             // It waits for what it lacks, and is offered again.
             SendRefusal::NoPlace | SendRefusal::NeighborsFull | SendRefusal::NoAddress => {
-                let _found = self.find(tag, |datagrams, at| {
-                    if let Some(pending) = datagrams.pending.get_mut(at) {
-                        pending.offered = false;
-                    }
+                // Offered first again: it was the oldest not offered.
+                let _found = self.find(tag, |datagrams, _| {
+                    let _queued = datagrams.unoffered.push_front(tag.place);
                 });
             }
             SendRefusal::TooLong | SendRefusal::NoRoute | SendRefusal::Stale => self.forget(tag),
@@ -332,7 +390,7 @@ impl Produce for LoadProducer {
         let waiting = offers
             && self
                 .source
-                .lend(|datagrams| datagrams.pending.iter().any(|pending| !pending.offered))
+                .lend(|datagrams| !datagrams.unoffered.is_empty())
                 .unwrap_or(false);
         if moved || waiting {
             self.source.wake_network();
@@ -366,9 +424,7 @@ impl Network {
         socket: Socket,
         source: &'static Source,
     ) -> Self {
-        let _installed = source.datagrams.install(Datagrams {
-            pending: Vec::new(),
-        });
+        let _installed = source.datagrams.install(Datagrams::new());
         Self {
             end: network.end(),
             network,
@@ -780,12 +836,7 @@ impl Sending<'_> {
         if self.end.is_ended() || !(header::LENGTH..=wifi::BLOCK).contains(&size) {
             return Attempt::Lost;
         }
-        let pending = Pending {
-            header,
-            size,
-            peer,
-            offered: false,
-        };
+        let pending = Pending { header, size, peer };
         if self.source.push(pending) {
             Attempt::Taken
         } else {

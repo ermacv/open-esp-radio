@@ -72,8 +72,15 @@ pub enum RadioNotice<T, K> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AirtimeFault {
     Airtime(AirtimeError),
-    /// More frames in flight than reservations: an accepted frame has no place.
+    /// An accepted frame's ticket names no place below the reservations: the
+    /// port has more buffers than the policy reserves for. The frame settled
+    /// at once at its ceiling, or its reservation if that is more, as a frame
+    /// of unknown end does.
     NoPlace,
+    /// An accepted frame's ticket names a frame still in flight: the port
+    /// gave its buffer again before that frame's notice. The frame in flight
+    /// keeps its place; the new one settled at once as for [`Self::NoPlace`].
+    TicketInUse,
     /// A completion names no frame in flight.
     UnknownTicket,
 }
@@ -103,35 +110,32 @@ pub struct Held<'o, K> {
     ceiling: NonZeroU32,
 }
 
-/// A frame the port holds.
-enum Flight<'o, T, K> {
+/// A frame the port holds, at its ticket's place.
+enum Flight<'o, K> {
     /// Its reservation is open, for its completion to settle.
     Open {
-        ticket: T,
         flight: AirtimeInFlight<'o, K>,
         ceiling: NonZeroU32,
     },
     /// Its association left and its reservation settled at its ceiling: only
     /// its buffer's return is owed, which closes the ticket and charges
     /// nothing.
-    Closed { ticket: T },
-}
-
-impl<T, K> Flight<'_, T, K> {
-    const fn ticket(&self) -> &T {
-        match self {
-            Self::Open { ticket, .. } | Self::Closed { ticket } => ticket,
-        }
-    }
+    Closed,
 }
 
 /// Airtime between peers, turns between one peer's flows, and control first.
+///
+/// A ticket `T` names its frame's buffer: its place, below `RESERVATIONS`,
+/// which no other frame of the port has until that frame's notice. Each
+/// frame in flight is kept at its ticket's place, so accepting a frame and
+/// hearing of its end read that place alone.
 pub struct AirtimeEgress<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize> {
     scheduler: AirtimeScheduler<'o, A::Key, PEERS, RESERVATIONS>,
     air: A,
-    flights: [Option<Flight<'o, T, A::Key>>; RESERVATIONS],
+    flights: [Option<Flight<'o, A::Key>>; RESERVATIONS],
     /// Each peer's last served flow.
     flows: [Option<(A::Key, u8)>; PEERS],
+    ticket: core::marker::PhantomData<fn(T)>,
 }
 
 impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
@@ -143,6 +147,7 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
             air,
             flights: [const { None }; RESERVATIONS],
             flows: [const { None }; PEERS],
+            ticket: core::marker::PhantomData,
         }
     }
 
@@ -186,15 +191,10 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
             if !closes {
                 continue;
             }
-            let Some(Flight::Open {
-                ticket,
-                flight,
-                ceiling,
-            }) = slot.take()
-            else {
+            let Some(Flight::Open { flight, ceiling }) = slot.take() else {
                 continue;
             };
-            *slot = Some(Flight::Closed { ticket });
+            *slot = Some(Flight::Closed);
             let charged = ceiling.max(flight.reserved_micros());
             self.scheduler
                 .settle(flight.completed(()), charged, &mut ())
@@ -287,17 +287,6 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
         )
     }
 
-    /// Hold `flight` for its completion.
-    fn fly(&mut self, flight: Flight<'o, T, A::Key>) -> Result<(), AirtimeFault> {
-        let slot = self
-            .flights
-            .iter_mut()
-            .find(|slot| slot.is_none())
-            .ok_or(AirtimeFault::NoPlace)?;
-        *slot = Some(flight);
-        Ok(())
-    }
-
     /// Settle `flight` at `charged`.
     fn settle(
         &mut self,
@@ -318,7 +307,7 @@ fn turn(ready: &Ready, last: Option<u8>) -> (bool, u8) {
     (ready.class != Class::Control, distance)
 }
 
-impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
+impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIONS: usize>
     Egress<T, RadioNotice<T, A::Key>> for AirtimeEgress<'o, A, T, PEERS, RESERVATIONS>
 {
     type Reservation = Held<'o, A::Key>;
@@ -396,11 +385,22 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
         if let Some(flow) = flow {
             self.remember(reservation.key(), flow);
         }
-        self.fly(Flight::Open {
-            ticket,
-            flight: reservation.published(),
-            ceiling,
-        })
+        // The port took the frame: from here its reservation is published
+        // and only a settlement ends it, never a cancellation.
+        let flight = reservation.published();
+        let fault = match self.flights.get_mut(ticket.into()) {
+            Some(slot @ None) => {
+                *slot = Some(Flight::Open { flight, ceiling });
+                return Ok(());
+            }
+            Some(Some(_)) => AirtimeFault::TicketInUse,
+            None => AirtimeFault::NoPlace,
+        };
+        // No place keeps the frame for its end: it settles now as a frame of
+        // unknown end, and the fault names why.
+        let charged = ceiling.max(flight.reserved_micros());
+        self.settle(flight, charged)?;
+        Err(fault)
     }
 
     fn refused(&mut self, held: Held<'o, A::Key>) -> Result<(), AirtimeFault> {
@@ -427,16 +427,10 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
         };
         let flight = self
             .flights
-            .iter_mut()
-            .find(|slot| {
-                slot.as_ref()
-                    .is_some_and(|flight| *flight.ticket() == exchange.ticket)
-            })
+            .get_mut(exchange.ticket.into())
             .and_then(Option::take);
         match flight {
-            Some(Flight::Open {
-                flight, ceiling, ..
-            }) => {
+            Some(Flight::Open { flight, ceiling }) => {
                 let charged = exchange
                     .charged
                     .unwrap_or_else(|| ceiling.max(flight.reserved_micros()));
@@ -450,7 +444,7 @@ impl<'o, A: PeerAir, T: Eq, const PEERS: usize, const RESERVATIONS: usize>
                 Ok(())
             }
             // Settled when its association left: its return closes it.
-            Some(Flight::Closed { .. }) => Ok(()),
+            Some(Flight::Closed) => Ok(()),
             None => Err(AirtimeFault::UnknownTicket),
         }
     }

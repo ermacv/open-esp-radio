@@ -76,14 +76,20 @@ impl PeerAir for Air {
     }
 }
 
-type Policy<'o> = AirtimeEgress<'o, Air, u32, 4, 2>;
+type Policy<'o> = AirtimeEgress<'o, Air, u8, 4, 2>;
+
+/// The place of a test's `round`th frame, each ended before the next: the
+/// two places in turn.
+fn place(round: u32) -> u8 {
+    u8::try_from(round % 2).unwrap()
+}
 
 fn storage() -> AirtimeStorage<u8, 4, 2> {
     AirtimeStorage::new(micros(QUANTUM))
 }
 
 /// Choose, publish under `ticket` and complete at `charged`.
-fn exchange(policy: &mut Policy<'_>, ready: &[Work], ticket: u32, charged: u32) -> Work {
+fn exchange(policy: &mut Policy<'_>, ready: &[Work], ticket: u8, charged: u32) -> Work {
     let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
     policy.accepted(held, ticket).unwrap();
     let exchange = Exchange {
@@ -101,8 +107,8 @@ fn peers_at_one_cost_take_equal_turns() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0), data(2, 1)];
     let mut served = [0_u32; 3];
-    for ticket in 0..40 {
-        let work = exchange(&mut policy, &ready, ticket, COST);
+    for round in 0..40 {
+        let work = exchange(&mut policy, &ready, place(round), COST);
         served[usize::from(work.0.peer[5])] += 1;
     }
     assert_eq!(served[1], served[2]);
@@ -114,7 +120,8 @@ fn a_peer_that_costs_more_waits_longer() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0), data(2, 1)];
     let mut air = [0_u32; 3];
-    for ticket in 0..40 {
+    for round in 0..40 {
+        let ticket = place(round);
         let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
         let peer = work.0.peer[5];
         let charged = if peer == 2 { 4 * COST } else { COST };
@@ -136,7 +143,12 @@ fn a_peers_flows_take_turns_within_its_share() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0), data(1, 1), data(1, 2)];
     let flows: Vec<_> = (0..6)
-        .map(|ticket| exchange(&mut policy, &ready, ticket, COST).0.flow.unwrap())
+        .map(|round| {
+            exchange(&mut policy, &ready, place(round), COST)
+                .0
+                .flow
+                .unwrap()
+        })
         .collect();
     assert_eq!(flows, [0, 1, 2, 0, 1, 2]);
 }
@@ -147,8 +159,8 @@ fn many_flows_of_one_peer_earn_it_no_more_turns() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0), data(1, 1), data(1, 2), data(2, 3)];
     let mut served = [0_u32; 3];
-    for ticket in 0..40 {
-        let work = exchange(&mut policy, &ready, ticket, COST);
+    for round in 0..40 {
+        let work = exchange(&mut policy, &ready, place(round), COST);
         served[usize::from(work.0.peer[5])] += 1;
     }
     assert!(served[1].abs_diff(served[2]) <= 2, "{served:?}");
@@ -172,8 +184,11 @@ fn a_sleeping_peer_is_not_chosen_and_earns_nothing() {
     };
     let mut policy = Policy::new(&mut storage, air);
     let ready = [data(1, 0), data(2, 1)];
-    for ticket in 0..10 {
-        assert_eq!(exchange(&mut policy, &ready, ticket, COST).0.peer[5], 1);
+    for round in 0..10 {
+        assert_eq!(
+            exchange(&mut policy, &ready, place(round), COST).0.peer[5],
+            1
+        );
     }
     assert_eq!(
         policy.balance_micros(2),
@@ -181,7 +196,7 @@ fn a_sleeping_peer_is_not_chosen_and_earns_nothing() {
         "no credit, not even an account"
     );
     policy.air_mut().asleep.clear();
-    assert_eq!(exchange(&mut policy, &ready, 10, COST).0.peer[5], 2);
+    assert_eq!(exchange(&mut policy, &ready, 0, COST).0.peer[5], 2);
 }
 
 #[test]
@@ -241,9 +256,9 @@ fn an_unknown_cost_keeps_the_whole_reservation() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
     let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
-    policy.accepted(held, 7).unwrap();
+    policy.accepted(held, 1).unwrap();
     let unknown = Exchange {
-        ticket: 7,
+        ticket: 1,
         charged: None,
         rate: None,
     };
@@ -270,13 +285,13 @@ fn a_lost_frame_settles_its_reservation_at_the_ceiling_and_frees_its_place() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
     let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
-    policy.accepted(held, 7).unwrap();
-    policy.notice(RadioNotice::Lost(7)).unwrap();
+    policy.accepted(held, 1).unwrap();
+    policy.notice(RadioNotice::Lost(1)).unwrap();
     let left = i64::from(QUANTUM) - i64::from(CEILING);
     assert_eq!(policy.balance_micros(1), Some(left));
     assert_eq!(policy.in_flight(), 0, "nothing waits for its completion");
     assert_eq!(
-        policy.notice(RadioNotice::Lost(7)),
+        policy.notice(RadioNotice::Lost(1)),
         Err(AirtimeFault::UnknownTicket),
         "settled once"
     );
@@ -303,12 +318,12 @@ fn a_retired_peers_frame_settles_at_its_ceiling_and_its_return_closes_it() {
     let mut policy = Policy::new(&mut storage, Air::default());
     let ready = [data(1, 0)];
     let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
-    policy.accepted(held, 3).unwrap();
+    policy.accepted(held, 1).unwrap();
     policy.retire(1).unwrap();
     assert_eq!(policy.balance_micros(1), None, "the account ended with it");
     assert_eq!((policy.unsettled(), policy.in_flight()), (0, 1));
     let done = Exchange {
-        ticket: 3,
+        ticket: 1,
         charged: Some(micros(COST)),
         rate: None,
     };
@@ -319,8 +334,8 @@ fn a_retired_peers_frame_settles_at_its_ceiling_and_its_return_closes_it() {
 #[test]
 fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
     let mut storage = AirtimeStorage::<u8, 1, 2>::new(micros(QUANTUM));
-    let mut policy = AirtimeEgress::<'_, Air, u32, 1, 2>::new(&mut storage, Air::default());
-    let go = |policy: &mut AirtimeEgress<'_, Air, u32, 1, 2>, ready: &[Work], ticket| {
+    let mut policy = AirtimeEgress::<'_, Air, u8, 1, 2>::new(&mut storage, Air::default());
+    let go = |policy: &mut AirtimeEgress<'_, Air, u8, 1, 2>, ready: &[Work], ticket| {
         let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
         policy.accepted(held, ticket).unwrap();
         let done = Exchange {
@@ -335,7 +350,7 @@ fn a_retired_peer_leaves_room_for_the_next_peers_turns() {
     policy.retire(1).unwrap();
     let ready = [data(2, 0), data(2, 1)];
     let flows: Vec<_> = (1..5)
-        .map(|ticket| go(&mut policy, &ready, ticket))
+        .map(|round| go(&mut policy, &ready, place(round)))
         .collect();
     assert_eq!(flows, [0, 1, 0, 1]);
 }
@@ -347,7 +362,8 @@ fn an_unknown_cost_buys_no_air_when_the_estimate_is_low() {
     let ready = [data(1, 0), data(2, 1)];
     // Each exchange really costs its ceiling, four times the estimate.
     let mut actual = [0_u32; 3];
-    for ticket in 0..1000 {
+    for round in 0..1000 {
+        let ticket = place(round);
         let (work, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
         let peer = work.0.peer[5];
         actual[usize::from(peer)] += CEILING;
@@ -365,8 +381,8 @@ fn an_unknown_cost_buys_no_air_when_the_estimate_is_low() {
 #[test]
 fn a_peer_that_left_frees_its_account() {
     let mut storage = AirtimeStorage::<u8, 1, 2>::new(micros(QUANTUM));
-    let mut policy = AirtimeEgress::<'_, Air, u32, 1, 2>::new(&mut storage, Air::default());
-    let go = |policy: &mut AirtimeEgress<'_, Air, u32, 1, 2>, peer, ticket| {
+    let mut policy = AirtimeEgress::<'_, Air, u8, 1, 2>::new(&mut storage, Air::default());
+    let go = |policy: &mut AirtimeEgress<'_, Air, u8, 1, 2>, peer, ticket| {
         let ready = [data(peer, 0)];
         let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
         policy.accepted(held, ticket).unwrap();
@@ -398,11 +414,11 @@ fn late_completions_across_many_associations_never_exhaust_the_accounts() {
     const RESERVATIONS: usize = 8;
     let mut storage = AirtimeStorage::<u8, 2, RESERVATIONS>::new(micros(QUANTUM));
     let mut policy =
-        AirtimeEgress::<'_, Air, u32, 2, RESERVATIONS>::new(&mut storage, Air::default());
+        AirtimeEgress::<'_, Air, u8, 2, RESERVATIONS>::new(&mut storage, Air::default());
     for peer in 1..=5_u8 {
         let ready = [data(peer, 0)];
         let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
-        policy.accepted(held, u32::from(peer)).unwrap();
+        policy.accepted(held, peer).unwrap();
         policy.notice(RadioNotice::Left(peer)).unwrap();
     }
     assert_eq!(policy.unsettled(), 0);
@@ -426,13 +442,13 @@ fn a_late_return_after_its_account_closed_charges_nothing_twice() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
     let (_, held) = policy.choose([data(1, 0)].into_iter()).unwrap().unwrap();
-    policy.accepted(held, 7).unwrap();
+    policy.accepted(held, 0).unwrap();
     policy.notice(RadioNotice::Left(1)).unwrap();
     let (_, held) = policy.choose([data(2, 0)].into_iter()).unwrap().unwrap();
-    policy.accepted(held, 8).unwrap();
+    policy.accepted(held, 1).unwrap();
     let new_account = policy.balance_micros(2);
     let late = Exchange {
-        ticket: 7,
+        ticket: 0,
         charged: Some(micros(COST)),
         rate: None,
     };
@@ -499,7 +515,7 @@ impl Iterator for Yielded<'_> {
 fn a_choice_reads_each_ready_work_once_and_asks_its_candidate_once() {
     let mut storage = AirtimeStorage::<u8, 4, 64>::new(micros(QUANTUM));
     let mut policy =
-        AirtimeEgress::<'_, Counting, u32, 4, 64>::new(&mut storage, Counting::default());
+        AirtimeEgress::<'_, Counting, u8, 4, 64>::new(&mut storage, Counting::default());
     let ready: Vec<Work> = (0..32).map(|flow| data(1, flow)).collect();
     let yielded = core::cell::Cell::new(0);
     for ticket in 0..8 {
@@ -527,7 +543,12 @@ fn a_single_pass_serves_the_same_turns_and_control_first() {
     assert_eq!(first, control(1), "control first");
     let ready = [data(1, 0), data(1, 1), data(1, 2)];
     let flows: Vec<u8> = (1..7)
-        .map(|ticket| exchange(&mut policy, &ready, ticket, COST).0.flow.unwrap())
+        .map(|round| {
+            exchange(&mut policy, &ready, place(round), COST)
+                .0
+                .flow
+                .unwrap()
+        })
         .collect();
     assert_eq!(flows, [0, 1, 2, 0, 1, 2]);
 }
@@ -559,7 +580,7 @@ fn rate(mcs: u8) -> PhyRate {
 fn a_settled_frame_reports_its_rate_under_its_account() {
     let mut storage = storage();
     let mut policy = Policy::new(&mut storage, Air::default());
-    let send = |policy: &mut Policy<'_>, peer: u8, ticket: u32| {
+    let send = |policy: &mut Policy<'_>, peer: u8, ticket: u8| {
         let (_, held) = policy.choose([data(peer, 0)].into_iter()).unwrap().unwrap();
         policy.accepted(held, ticket).unwrap();
     };
@@ -579,16 +600,169 @@ fn a_settled_frame_reports_its_rate_under_its_account() {
             rate: None,
         }))
         .unwrap();
-    send(&mut policy, 2, 2);
-    policy.notice(RadioNotice::Lost(2)).unwrap();
-    send(&mut policy, 2, 3);
+    send(&mut policy, 2, 0);
+    policy.notice(RadioNotice::Lost(0)).unwrap();
+    send(&mut policy, 2, 1);
     policy.notice(RadioNotice::Left(2)).unwrap();
     policy
         .notice(RadioNotice::Ended(Exchange {
-            ticket: 3,
+            ticket: 1,
             charged: Some(micros(COST)),
             rate: Some(rate(1)),
         }))
         .unwrap();
     assert_eq!(policy.air().reports, [(1, rate(7))]);
+}
+
+/// A ticket that counts how often the policy reads its place and compares
+/// it: what a frame's acceptance and end cost, whatever else flies.
+#[derive(Clone, Copy)]
+struct Probe<'c> {
+    place: u8,
+    reads: &'c core::cell::Cell<usize>,
+}
+
+impl From<Probe<'_>> for usize {
+    fn from(probe: Probe<'_>) -> usize {
+        probe.reads.set(probe.reads.get() + 1);
+        usize::from(probe.place)
+    }
+}
+
+impl PartialEq for Probe<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.reads.set(self.reads.get() + 1);
+        self.place == other.place
+    }
+}
+
+impl Eq for Probe<'_> {}
+
+/// With every place of the station's 63 in flight, ending them in another
+/// order than they went: each acceptance and each end reads its ticket's
+/// place once and compares no other ticket.
+#[test]
+fn a_frame_reads_its_own_place_once_at_acceptance_and_once_at_its_end() {
+    const PLACES: usize = 63;
+    let mut storage = AirtimeStorage::<u8, 1, PLACES>::new(micros(QUANTUM));
+    let mut policy =
+        AirtimeEgress::<'_, Air, Probe<'_>, 1, PLACES>::new(&mut storage, Air::default());
+    let reads = core::cell::Cell::new(0);
+    let ticket = |place: usize| Probe {
+        place: u8::try_from(place).unwrap(),
+        reads: &reads,
+    };
+    let ready = [data(1, 0)];
+    for place in 0..PLACES {
+        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        reads.set(0);
+        policy.accepted(held, ticket(place)).unwrap();
+        assert_eq!(reads.get(), 1, "acceptance reads one place");
+    }
+    assert_eq!(policy.in_flight(), PLACES);
+    // The last first, then every other one down, then the rest.
+    let order = (0..PLACES)
+        .rev()
+        .step_by(2)
+        .chain((0..PLACES).rev().skip(1).step_by(2));
+    let mut ended = 0;
+    for place in order {
+        reads.set(0);
+        let done = Exchange {
+            ticket: ticket(place),
+            charged: Some(micros(COST)),
+            rate: None,
+        };
+        policy.notice(RadioNotice::Ended(done)).unwrap();
+        assert_eq!(reads.get(), 1, "an end reads one place");
+        ended += 1;
+    }
+    assert_eq!(ended, PLACES);
+    assert_eq!(policy.in_flight(), 0);
+}
+
+/// A port that gives a ticket again before its frame's notice, or one past
+/// the places, breaks the policy's contract: a fault, not a second frame at
+/// one place.
+#[test]
+fn a_ticket_given_twice_or_past_the_places_is_a_fault() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0)];
+    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    policy.accepted(held, 1).unwrap();
+    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    assert_eq!(policy.accepted(held, 1), Err(AirtimeFault::TicketInUse));
+    assert_eq!(policy.in_flight(), 1, "the first frame keeps its place");
+    // The refused place's frame was accepted and settled at once: its
+    // reservation is free again, the first frame's end still settles, and
+    // with both ended the association retires whole.
+    let (_, again) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    policy.refused(again).unwrap();
+    let first = Exchange {
+        ticket: 1,
+        charged: Some(micros(COST)),
+        rate: None,
+    };
+    policy.notice(RadioNotice::Ended(first)).unwrap();
+    assert_eq!((policy.in_flight(), policy.unsettled()), (0, 0));
+    policy.retire(1).unwrap();
+    assert_eq!(policy.balance_micros(1), None, "no reservation pins it");
+    let mut storage = self::storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+    assert_eq!(policy.accepted(held, 2), Err(AirtimeFault::NoPlace));
+    assert_eq!(
+        policy.balance_micros(1),
+        Some(i64::from(QUANTUM) - i64::from(CEILING)),
+        "settled at its ceiling, not refunded as unsent"
+    );
+    // Both reservations are free: two more frames fit.
+    for ticket in 0..2 {
+        let (_, held) = policy.choose(ready.iter().copied()).unwrap().unwrap();
+        policy.accepted(held, ticket).unwrap();
+    }
+}
+
+#[test]
+fn reviewer_ticket_collision_does_not_orphan_the_accepted_reservation() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let ready = [data(1, 0)];
+    let (_, first) = policy.choose(ready.into_iter()).unwrap().unwrap();
+    policy.accepted(first, 1).unwrap();
+    let (_, second) = policy.choose(ready.into_iter()).unwrap().unwrap();
+    assert_eq!(policy.accepted(second, 1), Err(AirtimeFault::TicketInUse));
+    // Complete the first physical return after its association leaves.
+    policy.notice(RadioNotice::Left(1)).unwrap();
+    policy
+        .notice(RadioNotice::Ended(Exchange {
+            ticket: 1,
+            charged: Some(micros(COST)),
+            rate: None,
+        }))
+        .unwrap();
+    assert_eq!(policy.in_flight(), 0);
+    assert_eq!(policy.unsettled(), 0);
+    assert_eq!(
+        policy.balance_micros(1),
+        None,
+        "the fault must not strand the second accepted frame's reservation"
+    );
+}
+
+#[test]
+fn reviewer_an_out_of_range_ticket_does_not_orphan_the_accepted_reservation() {
+    let mut storage = storage();
+    let mut policy = Policy::new(&mut storage, Air::default());
+    let (_, held) = policy.choose([data(1, 0)].into_iter()).unwrap().unwrap();
+    assert_eq!(policy.accepted(held, 2), Err(AirtimeFault::NoPlace));
+    policy.notice(RadioNotice::Left(1)).unwrap();
+    assert_eq!(policy.in_flight(), 0);
+    assert_eq!(policy.unsettled(), 0);
+    assert_eq!(
+        policy.balance_micros(1),
+        None,
+        "the fault must not strand the accepted frame's reservation"
+    );
 }

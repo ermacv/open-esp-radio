@@ -22,17 +22,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Wake, Waker};
 
 use embassy_futures::select::select;
+use oer_portable_events::EventSink;
 use oer_portable_memory::WakingSpscSender;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
 use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, RadioNotice};
-use oer_protocols_network_core::{Block, Interface, NetworkOwner, Outcome, Remote, claim};
+use oer_protocols_network_core::{
+    Block, Interface, NetEvent, NetworkOwner, Outcome, Remote, claim,
+};
 use oer_protocols_network_port::{Egress, FrameSource};
 use oer_protocols_network_runtime::{
-    Direct, EndCause, Ended, MemoryPolicy, Observer, Sent, Service, Socket, SocketLanes, StopLane,
+    Direct, EndCause, Ended, MemoryPolicy, Observer, PublishEnd, Sent, Service, ServiceEvent,
+    Socket, SocketLanes, StopLane,
 };
-use oer_protocols_network_testing_model::{Medium, PeerKey, PeerSpec, Spent};
+use oer_protocols_network_testing_model::{Medium, PeerKey, PeerSpec, Spent, Ticket};
 use oer_protocols_network_wire::ip::Dscp;
 
 const SIZE: usize = 1200;
@@ -72,8 +76,8 @@ const SECOND: u64 = 1_000_000;
 /// Passes before a scenario counts as spinning.
 const PASSES: u64 = 50_000_000;
 
-type Notice = RadioNotice<u32, PeerKey>;
-type Fair = AirtimeEgress<'static, Medium, u32, PEERS, HORIZON>;
+type Notice = RadioNotice<Ticket, PeerKey>;
+type Fair = AirtimeEgress<'static, Medium, Ticket, PEERS, HORIZON>;
 type Stopper = WakingSpscSender<'static, (), 1>;
 type Sock<B> = Socket<'static, 'static, B, SIZE, DEPTH, LANE, CREDITS>;
 type Owner<B, const N: usize> =
@@ -90,7 +94,7 @@ type Run<B, E, const N: usize> = Ended<
     LANE,
     Medium,
     E,
-    <E as Egress<u32, Notice>>::Fault,
+    <E as Egress<Ticket, Notice>>::Fault,
 >;
 
 fn peer(number: u8, micros_per_octet: u32) -> PeerSpec {
@@ -267,8 +271,52 @@ async fn flood<B>(
     }
 }
 
-struct Report<B: 'static, E: Egress<u32, Notice>, const N: usize> {
+/// What one turn of the service did, as its events and the medium tell it.
+#[derive(Clone, Copy, Debug, Default)]
+struct TurnCount {
+    /// Notices the turn handed the policy.
+    notices: u64,
+    /// Frames the port took in the turn.
+    accepted: u32,
+    /// The turn left notices untold and published nothing.
+    deferred: bool,
+}
+
+/// Counts each turn: the medium tells how many notices it handed on.
+struct Turns {
+    medium: Medium,
+    taken: u64,
+    turn: TurnCount,
+    turns: Rc<RefCell<Vec<TurnCount>>>,
+}
+
+impl EventSink<NetEvent> for Turns {
+    fn event(&mut self, _: NetEvent) {}
+}
+
+impl EventSink<ServiceEvent> for Turns {
+    fn event(&mut self, event: ServiceEvent) {
+        match event {
+            ServiceEvent::Accepted => self.turn.accepted += 1,
+            ServiceEvent::Published(PublishEnd::Deferred) => self.turn.deferred = true,
+            ServiceEvent::TurnEnded(_) => {
+                let taken = self.medium.notices_taken();
+                self.turn.notices = taken - self.taken;
+                self.taken = taken;
+                self.turns
+                    .borrow_mut()
+                    .push(core::mem::take(&mut self.turn));
+            }
+            _ => {}
+        }
+    }
+}
+
+struct Report<B: 'static, E: Egress<Ticket, Notice>, const N: usize> {
     ended: Run<B, E, N>,
+    /// Each turn of the service.
+    turns: Vec<TurnCount>,
+
     marks: Vec<Vec<Spent>>,
     /// Datagrams evicted, by the flow's port.
     evicted: BTreeMap<u16, u64>,
@@ -302,7 +350,7 @@ fn scenario<'s>(medium: &'s Medium, flows: &'s [Flow], script: Vec<(u64, At)>) -
 }
 
 impl Scenario<'_> {
-    fn run<B: 'static, E: Egress<u32, Notice> + 'static, const N: usize>(
+    fn run<B: 'static, E: Egress<Ticket, Notice> + 'static, const N: usize>(
         self,
         owner: Owner<B, N>,
         egress: E,
@@ -355,8 +403,14 @@ impl Scenario<'_> {
             tasks.push(Box::pin(flood(socket, *flow, &left, &evicted, clock)));
         }
         let keep = ended.clone();
+        let counted = Rc::new(RefCell::new(Vec::new()));
+        let mut events = Turns {
+            medium: medium.clone(),
+            taken: medium.notices_taken(),
+            turn: TurnCount::default(),
+            turns: counted.clone(),
+        };
         tasks.push(Box::pin(async move {
-            let mut events = ();
             match cancel_at {
                 Some(at) => {
                     let at = clock.now().as_micros() + at;
@@ -398,6 +452,7 @@ impl Scenario<'_> {
         let outstanding = ended.retired.pool.outstanding();
         Report {
             ended,
+            turns: counted.take(),
             marks: marks.take(),
             evicted: evicted.take(),
             outstanding,
@@ -899,4 +954,61 @@ fn a_cancelled_run_hands_every_owner_to_the_next_service() {
     assert!(air[0].abs_diff(air[1]) <= FAIR_TO, "{air:?}");
     land_all(&medium, &mut report);
     assert_eq!(report.ended.egress.in_flight(), 0);
+}
+
+/// One peer's frames go out in aggregates of 32, whose ends the medium
+/// tells at once, as a Block Ack does: each batch of ends settles in the
+/// turn that finds it, and that turn publishes again. No turn defers its
+/// publication for the rest of an aggregate's ends.
+#[test]
+fn each_block_ack_of_32_settles_in_one_turn_which_publishes_again() {
+    struct Net;
+    const AGGREGATE: usize = 32;
+    let peers = [peer(1, FAST)];
+    let medium = Medium::new(LOCAL, OUR_IP, AGGREGATE, &peers);
+    medium.batch(AGGREGATE);
+    let flows: Vec<Flow> = (0..4)
+        .map(|flow| Flow {
+            port: 5000 + flow,
+            to: peers[0].address,
+            group: (0, usize::MAX),
+            after: 0,
+        })
+        .collect();
+    let script = vec![(SECOND / 4, At::Stop)];
+    let storage = Box::leak(Box::new(AirtimeStorage::<PeerKey, PEERS, AGGREGATE>::new(
+        NonZeroU32::new(QUANTUM).unwrap(),
+    )));
+    let egress =
+        AirtimeEgress::<'static, Medium, Ticket, PEERS, AGGREGATE>::new(storage, medium.clone());
+    let report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium), egress);
+    assert_eq!(report.ended.cause, EndCause::Stopped);
+    let told: Vec<&TurnCount> = report
+        .turns
+        .iter()
+        .filter(|turn| turn.notices != 0)
+        .collect();
+    let whole = told
+        .iter()
+        .filter(|turn| turn.notices == AGGREGATE as u64)
+        .count();
+    let deferred = report.turns.iter().filter(|turn| turn.deferred).count();
+    let republished = told
+        .iter()
+        .filter(|turn| turn.notices == AGGREGATE as u64 && turn.accepted != 0)
+        .count();
+    let most = told.iter().map(|turn| turn.notices).max();
+    println!(
+        "turns {}, turns with notices {}, whole aggregates {whole}, deferred {deferred}, \
+         published in the aggregate's turn {republished}, most notices in a turn {most:?}, \
+         frames {}",
+        report.turns.len(),
+        told.len(),
+        medium.spent()[0].frames,
+    );
+    assert!(whole >= 4, "aggregates went whole: {told:?}");
+    assert_eq!(told.len(), whole, "every batch in one turn: {told:?}");
+    assert_eq!(deferred, 0, "no turn waits for the rest of an aggregate");
+    assert_eq!(republished, whole, "each such turn publishes again");
+    assert_eq!(report.outstanding, 0);
 }

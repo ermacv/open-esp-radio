@@ -50,3 +50,13 @@ fn a_frame_past_its_buffer_keeps_the_buffer() {
     };
     assert_eq!(slot.bytes_mut().len(), room);
 }
+
+#[test]
+fn each_network_buffer_has_its_own_place_below_the_network_s_count() {
+    let pool = pool();
+    let (_, slots) = NetworkTx::claim(pool).unwrap().into_parts();
+    let mut places: std::vec::Vec<u8> = slots.map(|slot| slot.place()).collect();
+    places.sort_unstable();
+    let every: std::vec::Vec<u8> = (0..u8::try_from(NETWORK_BUFFERS).unwrap()).collect();
+    assert_eq!(places, every);
+}
