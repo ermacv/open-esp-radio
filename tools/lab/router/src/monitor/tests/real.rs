@@ -87,7 +87,11 @@ fn pipe(clock: &ManualClock, script: Script) -> (Source, Writer, Arc<AtomicBool>
         let mut written = 0u64;
         for _ in 0..script.chunks {
             at.wait_then_write(CHUNK as u64);
-            if writer.write_all(&chunk).is_err() {
+            let sent = writer.write_all(&chunk).is_ok();
+            // The write is counted done only once its bytes are in the
+            // pipe (or it failed): no quiet moment before they are readable.
+            at.write_done();
+            if !sent {
                 return written;
             }
             written += CHUNK as u64;
@@ -96,15 +100,18 @@ fn pipe(clock: &ManualClock, script: Script) -> (Source, Writer, Arc<AtomicBool>
         let _ = signals.recv();
         if script.closes {
             at.wrote(TAIL.len() as u64);
-            at.signal_taken();
             if writer.write_all(TAIL).is_ok() {
                 written += TAIL.len() as u64;
             }
+            // The tail and the end are in the pipe before the signal
+            // counts as acted on: no quiet moment before they are readable.
+            drop(writer);
+            at.signal_taken();
         } else {
             at.signal_taken();
             let _ = signals.recv();
+            drop(writer);
         }
-        drop(writer);
         written
     });
     let dropped = Arc::new(AtomicBool::new(false));
