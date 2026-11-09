@@ -27,6 +27,8 @@ mod console_write;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 mod crc;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+mod shutdown;
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 mod verdict;
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {}

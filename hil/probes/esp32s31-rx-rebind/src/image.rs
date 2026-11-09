@@ -462,38 +462,85 @@ async fn capture(boot: Boot) {
     } = boot;
     let booted = usb::text(&mut console, b"REBIND boot\n").await;
     let outcome = run_direct(&mut console, mac_irq).await;
-    let parts: [&[u8]; 3] = match &outcome {
-        Err(reason) => [
-            reason.as_str().as_bytes(),
-            b"\nOER-RESULT: fail rx-rebind error",
-            b"\n",
-        ],
-        Ok(crate::verdict::Verdict::Pass) => [b"OER-RESULT: pass rx-rebind", b"", b"\n"],
-        Ok(crate::verdict::Verdict::Fail(kind)) => [
-            b"OER-RESULT: fail rx-rebind violation=",
-            kind.name().as_bytes(),
-            b"\n",
-        ],
-        Ok(crate::verdict::Verdict::Insufficient(shortfall)) => [
-            b"OER-RESULT: fail rx-rebind insufficient-experiment=",
-            shortfall.name().as_bytes(),
-            b"\n",
-        ],
-    };
-    let mut written = Ok(());
-    for part in parts {
-        if written.is_ok() {
-            written = usb::text(&mut console, part).await;
-        }
+    let mut line = heapless::String::<256>::new();
+    if result_line(&outcome, &mut line).is_err() {
+        line.clear();
+        let _ = line.push_str("OER-RESULT: fail rx-rebind report-overflow\n");
     }
+    let written = usb::text(&mut console, line.as_bytes()).await;
     // The console is this image's only output: a write it refuses has no
     // other place to be reported, and no other line replaces the verdict.
     let _ = (booted, written);
 }
+fn verdict_name(
+    verdict: &crate::verdict::Verdict,
+    line: &mut impl core::fmt::Write,
+) -> core::fmt::Result {
+    match verdict {
+        crate::verdict::Verdict::Pass => line.write_str("pass"),
+        crate::verdict::Verdict::Fail(kind) => write!(line, "violation-{}", kind.name()),
+        crate::verdict::Verdict::Insufficient(shortfall) => {
+            write!(line, "insufficient-{}", shortfall.name())
+        }
+    }
+}
+
+/// The run's one result line; a pass only for a decided pass.
+fn result_line(
+    outcome: &Result<
+        crate::shutdown::RunOutcome<oer_portable_diagnostics::Name<32>>,
+        oer_portable_diagnostics::Name<32>,
+    >,
+    line: &mut impl core::fmt::Write,
+) -> core::fmt::Result {
+    use crate::shutdown::RunOutcome;
+    use crate::verdict::Verdict;
+    match outcome {
+        Err(reason) => writeln!(
+            line,
+            "{}\nOER-RESULT: fail rx-rebind error",
+            reason.as_str()
+        ),
+        Ok(RunOutcome::Decided(Verdict::Pass)) => writeln!(line, "OER-RESULT: pass rx-rebind"),
+        Ok(RunOutcome::Decided(Verdict::Fail(kind))) => {
+            writeln!(line, "OER-RESULT: fail rx-rebind violation={}", kind.name())
+        }
+        Ok(RunOutcome::Decided(Verdict::Insufficient(shortfall))) => writeln!(
+            line,
+            "OER-RESULT: fail rx-rebind insufficient-experiment={}",
+            shortfall.name()
+        ),
+        Ok(RunOutcome::Failed {
+            cause,
+            mac,
+            dma,
+            finish,
+            verdict,
+        }) => {
+            write!(
+                line,
+                "OER-RESULT: fail rx-rebind cleanup cause={} mac={} dma={} finish={} verdict=",
+                cause.as_ref().map_or("none", |cause| cause.as_str()),
+                mac.name(),
+                dma.name(),
+                finish.as_ref().map_or("none", |finish| finish.as_str()),
+            )?;
+            match verdict {
+                Some(verdict) => verdict_name(verdict, line)?,
+                None => line.write_str("none")?,
+            }
+            line.write_str("\n")
+        }
+    }
+}
+
 async fn run_direct(
     console: &mut usb::Console,
     mut mac_irq: oer_chips_esp32s31_hal::system::owner::MacInterruptRegisters,
-) -> Result<crate::verdict::Verdict, oer_portable_diagnostics::Name<32>> {
+) -> Result<
+    crate::shutdown::RunOutcome<oer_portable_diagnostics::Name<32>>,
+    oer_portable_diagnostics::Name<32>,
+> {
     let deadline = EmbassyClock
         .now()
         .checked_add(Duration::from_secs(5))
@@ -546,45 +593,93 @@ async fn run_direct(
     let mut ring = stopped_ring
         .try_start(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-start"; 32))?;
+    // From here every path, the measurement's end, a fatal RAW right after
+    // the start or an experiment error, goes through the one shared cleanup
+    // (`shutdown`): no early return before both stops.
     let stale = mac_irq.mac_interrupt_raw();
-    if stale.fatal_assertion_raw().is_some() {
-        return Err(oer_portable_diagnostics::name!("initial-fatal"; 32));
-    }
-    mac_irq.acknowledge_mac_interrupt_raw(stale);
-    access.wifi_mac_hal().configure_open_promiscuous_receive();
-    mac_irq.mask_all_mac_interrupts();
-    let observation =
-        experiment::run(state, frame, storage, bank, &mut ring, access, &mut mac_irq).await;
-    access.wifi_mac_hal().request_channel_stop();
-    let deadline = EmbassyClock
-        .now()
-        .checked_add(Duration::from_millis(50))
-        .ok_or(oer_portable_diagnostics::name!("stop-deadline"; 32))?;
-    while access.wifi_mac_hal().channel_active_state() != 0 {
-        if EmbassyClock.now() >= deadline {
-            return Err(oer_portable_diagnostics::name!("mac-stop"; 32));
-        }
-        EmbassyClock
-            .wait_until(
-                EmbassyClock
-                    .now()
-                    .checked_add(Duration::from_millis(1))
-                    .ok_or(oer_portable_diagnostics::name!("stop-wait"; 32))?,
-            )
-            .await;
-    }
-    // The final sweep runs only on the stopped walker.
-    let _halted = ring
-        .try_stop(access.rx_dma())
-        .map_err(|_| oer_portable_diagnostics::name!("walker-stop"; 32))?;
-    let finished = experiment::finish(state, storage, bank);
+    let measured = if stale.fatal_assertion_raw().is_some() {
+        Err(oer_portable_diagnostics::name!("initial-fatal"; 32))
+    } else {
+        mac_irq.acknowledge_mac_interrupt_raw(stale);
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        mac_irq.mask_all_mac_interrupts();
+        experiment::run(state, frame, storage, bank, &mut ring, access, &mut mac_irq).await
+    };
+    let mut stop = ProbeStop {
+        access,
+        ring: Some(ring),
+        halted: None,
+    };
+    let (mac, dma) = crate::shutdown::shut_down(&mut stop).await;
+    // The final checks run only on a confirmed walker stop; otherwise the
+    // static ring, storage and spares stay held, never reused, whether or
+    // not the board is reset after the run.
+    let outcome = crate::shutdown::conclude(measured, mac, dma, || {
+        experiment::finish(state, storage, bank)
+            .map(|()| crate::verdict::decide(&experiment::observations(state)))
+    });
     experiment::dump(state, console).await?;
-    observation?;
-    finished?;
-    // The verdict is decided only now: after the walker stopped and the
-    // evidence was printed. The static backend, storage and spares retain
-    // every owner until the leased host reset; nothing reaches the network.
-    Ok(crate::verdict::decide(&experiment::observations(state)))
+    // The static backend, storage and spares retain every owner for the
+    // image's life; nothing reaches the network.
+    Ok(outcome)
+}
+
+/// The cleanup's port: the MAC channel, the clock for its bounded wait and
+/// the walker. A walker that does not read back as stopped stays here.
+struct ProbeStop<'a> {
+    access: &'a mut oer_chips_esp32s31_hal::system::owner::RadioAccess,
+    ring:
+        Option<oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingLive<'static, COUNT>>,
+    halted: Option<
+        oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingHalted<'static, COUNT>,
+    >,
+}
+
+impl crate::shutdown::StopPort for ProbeStop<'_> {
+    type Deadline = oer_portable_time::Instant;
+
+    fn request_mac_stop(&mut self) {
+        self.access.wifi_mac_hal().request_channel_stop();
+    }
+
+    fn mac_active(&mut self) -> bool {
+        self.access.wifi_mac_hal().channel_active_state() != 0
+    }
+
+    fn deadline(&mut self) -> Option<Self::Deadline> {
+        EmbassyClock
+            .now()
+            .checked_add(Duration::from_millis(crate::shutdown::MAC_STOP_MS))
+    }
+
+    fn passed(&mut self, deadline: &Self::Deadline) -> bool {
+        EmbassyClock.now() >= *deadline
+    }
+
+    async fn tick(&mut self) -> Result<(), ()> {
+        let at = EmbassyClock
+            .now()
+            .checked_add(Duration::from_millis(1))
+            .ok_or(())?;
+        EmbassyClock.wait_until(at).await;
+        Ok(())
+    }
+
+    fn stop_walker(&mut self) -> bool {
+        let Some(ring) = self.ring.take() else {
+            return self.halted.is_some();
+        };
+        match ring.try_stop(self.access.rx_dma()) {
+            Ok(halted) => {
+                self.halted = Some(halted);
+                true
+            }
+            Err((ring, _)) => {
+                self.ring = Some(ring);
+                false
+            }
+        }
+    }
 }
 
 oer_chips_family_platform_executor::time_driver!(Esp32s31);
