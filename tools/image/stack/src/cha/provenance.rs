@@ -93,9 +93,9 @@ impl FunctionPointerAudit<'_, '_> {
 /// in every site's candidate set. Empty sets do not prove an unreachable
 /// call. The existing type/executor assumption still applies to memory
 /// reconstructed through an erased pointer.
-/// The audit must use types prepared by `read_debug` with
-/// `DebugMetadata::TypedLocations` for its image. This resolver reads prepared
-/// metadata and instructions; it does not load or traverse DWARF.
+/// The audit must use types whose locations `read_locations` read for the
+/// `location_queries` of its image. This resolver reads prepared metadata
+/// and instructions; it does not load or traverse DWARF.
 pub fn typed_function_pointer_resolutions(
     audit: &FunctionPointerAudit<'_, '_>,
     keep: &mut Ledger<'_>,
@@ -109,7 +109,7 @@ pub fn typed_function_pointer_resolutions(
     if types.locations.is_none() {
         return Err(Error::new(
             ErrorCode::Incompatible,
-            "typed locations were not requested by read_debug",
+            "typed locations were not read (read_locations)",
         ));
     }
     let mut resolutions = Resolutions::new();

@@ -27,12 +27,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut control = || Ok(());
     let image = ImageFacts::new(&bytes, &[], &memory, &mut control)?;
     let mut keep = Ledger::new(&memory, &mut control)?;
-    let (dwarf, types) = read_debug(
-        &bytes,
-        DebugMetadata::TypedLocations,
-        &mut keep,
-        &mut control,
-    )?;
+    let (dwarf, mut types) = read_debug(&bytes, &mut keep, &mut control)?;
     let companion = companion
         .as_deref()
         .map(|bytes| ImageFacts::new(bytes, &[], &memory, &mut control))
@@ -46,6 +41,8 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         &mut keep,
         &mut control,
     )?;
+    let queries = location_queries(&image, &analysis, &mut keep, &mut control)?;
+    read_locations(&mut types, &queries, &mut keep, &mut control)?;
     let audit = audit_function_addresses(&image, &analysis, &types, &mut keep, &mut control)?;
     let global = function_pointer_resolutions(&audit, &mut keep, &mut control)?;
     let typed = typed_function_pointer_resolutions(&audit, &mut keep, &mut control)?;

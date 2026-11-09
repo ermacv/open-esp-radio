@@ -200,8 +200,8 @@ impl FunctionPointerAudit<'_, '_> {
 }
 
 /// Audit the existing structural index without revisiting ELF/DWARF or
-/// rebuilding their indexes. Optional local locations come from read_debug's
-/// common walk. Without them, code stores conservatively remain unknown.
+/// rebuilding their indexes. Optional local locations come from
+/// read_locations. Without them, code stores conservatively remain unknown.
 pub fn audit_function_addresses<'a, 'elf>(
     image: &'a ImageFacts<'elf>,
     analysis: &'a Analysis,
@@ -628,21 +628,95 @@ fn code_use(
     {
         unknown!(UnsupportedMaterialization, low.site);
     }
-    site = low.site + u32::from(second.length);
-    while let Some(bytes) = bytes_at(site) {
+    let end = lifetime(
+        code,
+        owner.address,
+        &incoming,
+        low.site + u32::from(second.length),
+        register,
+        &mut |store, control| {
+            let mut field =
+                locations.field(types, store.site, store.base, store.displacement, control)?;
+            if field.is_none() {
+                field =
+                    locations.field(types, store.next, store.base, store.displacement, control)?;
+            }
+            let Some(field) = field else {
+                return Ok(false);
+            };
+            keep.add(&mut proof.fields, field, control)?;
+            keep.push(
+                &mut proof.stores,
+                TypedStore {
+                    site: store.site,
+                    base: store.base,
+                    displacement: store.displacement,
+                    field,
+                },
+                control,
+            )?;
+            Ok(true)
+        },
+        control,
+    )?;
+    Ok(match end {
+        Lifetime::Redefined(site) if proof.fields.is_empty() => {
+            proof.stop(UnknownUse::NoStorage, site)
+        }
+        Lifetime::Redefined(_) => proof,
+        Lifetime::Unknown(reason, site) => proof.stop(reason, site),
+    })
+}
+
+/// How the straight-line lifetime of a materialized register ends.
+pub(super) enum Lifetime {
+    /// An instruction at this site redefines the register.
+    Redefined(u32),
+    /// The proof stops at this site.
+    Unknown(UnknownUse, u32),
+}
+
+/// A word store of the materialized register through another base: the
+/// storage fields are asked at its site and, failing that, at the next one.
+#[derive(Clone, Copy)]
+pub(super) struct LifetimeStore {
+    pub(super) site: u32,
+    pub(super) next: u32,
+    pub(super) base: u8,
+    pub(super) displacement: i32,
+}
+
+/// Walk the straight-line lifetime of `register` in `code` (entered at
+/// `address`) from `site`. Each word store of it through another base is
+/// offered to `store`, which refuses it with `false` (an unknown write); any
+/// other read escapes. An `incoming` site, an undecodable or non-base
+/// instruction, or control flow ends the proof. The location queries walk
+/// the same lifetime with no incoming site and every store accepted, so
+/// they reach every store this walk can reach.
+pub(super) fn lifetime(
+    code: &[u8],
+    address: u32,
+    incoming: &dyn Fn(u32) -> bool,
+    mut site: u32,
+    register: u8,
+    store: &mut dyn FnMut(LifetimeStore, &mut dyn RunControl) -> Result<bool>,
+    control: &mut dyn RunControl,
+) -> Result<Lifetime> {
+    while let Some(bytes) = code.get(site.wrapping_sub(address) as usize..) {
         if bytes.is_empty() {
             break;
         }
         control.checkpoint(1)?;
         if incoming(site) {
-            unknown!(IncomingPath, site);
+            return Ok(Lifetime::Unknown(UnknownUse::IncomingPath, site));
         }
         let Some(decoded) = RiscvDecoder.decode(bytes) else {
-            unknown!(IncompleteLifetime, site);
+            return Ok(Lifetime::Unknown(UnknownUse::IncompleteLifetime, site));
         };
         if !is_base_instruction(bytes) || decoded.flow != InstructionFlow::Next {
-            unknown!(ControlFlow, site);
+            return Ok(Lifetime::Unknown(UnknownUse::ControlFlow, site));
         }
+        let next = site.wrapping_add(u32::from(decoded.length));
         let op = RiscvDecoder.lift(bytes);
         if op.reads_register(register) {
             match op {
@@ -654,46 +728,25 @@ fn code_use(
                     source: Some(source),
                     ..
                 } if source == register && base != register => {
-                    let mut field = locations.field(types, site, base, displacement, control)?;
-                    if field.is_none() {
-                        field = locations.field(
-                            types,
-                            site + u32::from(decoded.length),
-                            base,
-                            displacement,
-                            control,
-                        )?;
-                    }
-                    let Some(field) = field else {
-                        unknown!(UnknownWrite, site);
+                    let offered = LifetimeStore {
+                        site,
+                        next,
+                        base,
+                        displacement,
                     };
-                    keep.add(&mut proof.fields, field, control)?;
-                    keep.push(
-                        &mut proof.stores,
-                        TypedStore {
-                            site,
-                            base,
-                            displacement,
-                            field,
-                        },
-                        control,
-                    )?;
+                    if !store(offered, control)? {
+                        return Ok(Lifetime::Unknown(UnknownUse::UnknownWrite, site));
+                    }
                 }
-                _ => {
-                    unknown!(EscapedValue, site);
-                }
+                _ => return Ok(Lifetime::Unknown(UnknownUse::EscapedValue, site)),
             }
         }
         if op.destination_register() == Some(register) {
-            return Ok(if proof.fields.is_empty() {
-                proof.stop(UnknownUse::NoStorage, site)
-            } else {
-                proof
-            });
+            return Ok(Lifetime::Redefined(site));
         }
-        site += u32::from(decoded.length);
+        site = next;
     }
-    unknown!(IncompleteLifetime, site);
+    Ok(Lifetime::Unknown(UnknownUse::IncompleteLifetime, site))
 }
 
 fn compatible(types: &TypeFacts, a: Field, b: Field) -> bool {

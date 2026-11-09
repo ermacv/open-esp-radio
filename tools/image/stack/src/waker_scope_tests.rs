@@ -1145,13 +1145,7 @@ fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
 fn tail_merged_waker_calls_of_two_endings_stay_one_unresolved_site() {
     let elf = compiled(MERGED_WAKES_PROGRAM);
     let analysis = analyze(&elf, &[], &[]).unwrap();
-    let (dwarf, types) = crate::read_debug(
-        &std::rc::Rc::from(elf.as_slice()),
-        DebugMetadata::TypedLocations,
-        &mut ledger(),
-        &mut || Ok(()),
-    )
-    .unwrap();
+    let (dwarf, types) = typed_debug(&elf);
     let start = analysis
         .functions
         .values()
