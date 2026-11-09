@@ -1279,7 +1279,6 @@ fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop
         else {
             panic!("an expired command comes back refused");
         };
-        assert!(harness.port.retained.is_empty(), "the caller has it");
         assert!(harness.sink.terminals.is_empty(), "it did not run");
         assert_eq!(harness.port.deadline(), None, "no held command's bound");
         // The port runs on: the same command runs once the air lets it.

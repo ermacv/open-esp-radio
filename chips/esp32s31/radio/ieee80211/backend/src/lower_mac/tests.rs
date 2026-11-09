@@ -89,6 +89,9 @@ struct Hardware {
     crypto_order: Vec<CryptoOperation>,
     cleared_keys: Vec<u8>,
     rx_block_acks: Vec<S31RxBlockAckAgreement>,
+    /// The banks refuse every agreement, as a readback that does not
+    /// match.
+    reject_rx_block_acks: bool,
     cleared_rx_block_acks: Vec<u8>,
     station_policy: Option<StationPolicy>,
     station_disabled: usize,
@@ -279,6 +282,9 @@ impl RxBlockAckHardware for Hardware {
         agreement: S31RxBlockAckAgreement,
     ) -> Result<(), S31RxBlockAckAgreementError> {
         let agreement = agreement.validate()?;
+        if self.reject_rx_block_acks {
+            return Err(S31RxBlockAckAgreementError::HardwareReadbackMismatch);
+        }
         self.rx_block_acks.push(agreement);
         Ok(())
     }

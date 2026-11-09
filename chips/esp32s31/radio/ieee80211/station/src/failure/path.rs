@@ -358,6 +358,19 @@ impl DiagnosticPath for LifecycleFailure {
                     }
                     Refused::Deadline => path.name("Deadline"),
                     Refused::Device => path.name("Device"),
+                    Refused::Unstopped { cause, stop } => {
+                        use oer_protocols_ieee80211_contracts_port::StartFailure as Failure;
+                        path.name("Unstopped");
+                        match cause {
+                            Failure::Retune(cause) => {
+                                path.name("Retune");
+                                cause.push_path(path);
+                            }
+                            Failure::Deadline => path.name("Deadline"),
+                            Failure::Device => path.name("Device"),
+                        }
+                        stop_unconfirmed(stop, path);
+                    }
                 }
             }
             Self::StopUnconfirmed(observed) => {

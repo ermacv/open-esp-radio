@@ -62,12 +62,21 @@ pub(crate) fn start_refused(
         oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
     >,
 ) -> oer_protocols_ieee80211_contracts_port::StartRefused<BackendFault> {
+    use oer_protocols_ieee80211_contracts_port::StartFailure as Failure;
     use oer_protocols_ieee80211_contracts_port::StartRefused as Source;
     match value {
         Source::Running => Source::Running,
         Source::Retune(cause) => Source::Retune(backend_fault(cause)),
         Source::Deadline => Source::Deadline,
         Source::Device => Source::Device,
+        Source::Unstopped { cause, stop } => Source::Unstopped {
+            cause: match cause {
+                Failure::Retune(cause) => Failure::Retune(backend_fault(cause)),
+                Failure::Deadline => Failure::Deadline,
+                Failure::Device => Failure::Device,
+            },
+            stop,
+        },
     }
 }
 

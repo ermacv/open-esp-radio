@@ -11,6 +11,7 @@ use oer_portable_time::Duration;
 use oer_protocols_ieee80211_contracts_port::arena::{
     AttemptEnd, FrameMask, PublishError, PublishRefused,
 };
+use oer_protocols_ieee80211_contracts_port::{CommandFailed, StartFailure, SupportedBlockAck};
 use oer_protocols_ieee80211_wire::phy::{
     FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
 };
@@ -1446,17 +1447,24 @@ fn a_started_device_whose_start_expires_stops_before_the_deadline_refusal() {
         );
         assert_eq!(fixture.observed.borrow().stops, stops + 1);
         // A rollback the device never confirms leaves the port stopping: the
-        // refusal names the device and the stop goes on with it.
+        // answer keeps the start's cause beside the stop's, and the stop
+        // goes on with it.
         fixture.observed.borrow_mut().hold_stop = true;
         assert!(fixture.poll_start_on(channel(6)).is_pending());
         fixture.advance(COMMAND_BOUND);
         // The rollback has its own bound from the start's.
         assert!(fixture.poll_start_on(channel(6)).is_pending());
         fixture.advance(COMMAND_BOUND);
-        assert_eq!(
+        assert!(matches!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Device))
-        );
+            Poll::Ready(Err(StartRefused::Unstopped {
+                cause: StartFailure::Deadline,
+                stop: StopUnconfirmed {
+                    cause: StopCause::Deadline,
+                    ..
+                },
+            }))
+        ));
         assert_eq!(
             fixture.poll_start_on(channel(6)),
             Poll::Ready(Err(StartRefused::Running)),
@@ -1471,6 +1479,124 @@ fn a_started_device_whose_start_expires_stops_before_the_deadline_refusal() {
         }
         fixture.stop();
         assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+    });
+}
+
+#[test]
+fn a_rollback_the_device_refuses_is_unstopped_with_the_start_cause_and_the_stop_goes_on() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.stop();
+        let cause = Fault::Receive(crate::rx::control::WifiRxCause::LineRefused);
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.begin_start = true;
+            observed.fail_start = Some(cause);
+            observed.hold_stop = true;
+        }
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.advance(COMMAND_BOUND);
+        assert!(matches!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Unstopped {
+                cause: StartFailure::Device,
+                stop: StopUnconfirmed {
+                    cause: StopCause::Deadline,
+                    ..
+                },
+            }))
+        ));
+        // No start runs before the stop confirms, and nothing retires.
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Running))
+        );
+        assert!(fixture.port.release().is_none());
+        assert_eq!(fixture.port.fault(), None);
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.hold_stop = false;
+            observed.begin_start = false;
+        }
+        fixture.stop();
+        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+    });
+}
+
+#[test]
+fn a_start_whose_block_ack_programming_fails_after_the_core_enabled_ends_unstopped_then_stops() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.stop();
+        // A receive agreement the stopped port applies at its next start.
+        let slot = fixture.block_acks.pop().expect("slot");
+        let agreement = SupportedBlockAck::<Caps>::new(
+            IndividualAddress::new(BSSID).expect("BSSID"),
+            oer_protocols_ieee80211_contracts_port::Tid::new(0).expect("TID"),
+            oer_protocols_ieee80211_wire::sequence::SequenceNumber::new(10).expect("sequence"),
+            8,
+        )
+        .expect("agreement");
+        let agreement = fixture.port.add_block_ack(slot, agreement);
+        fixture.observed.borrow_mut().reject_rx_block_acks = true;
+        let stops = fixture.observed.borrow().stops;
+        // The tune enabled the core before the banks refused the agreement:
+        // the refusal says the stop has not run yet.
+        assert!(matches!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Unstopped {
+                cause: StartFailure::Device,
+                stop: StopUnconfirmed {
+                    cause: StopCause::CoreEnabled,
+                    ..
+                },
+            }))
+        ));
+        assert_eq!(fixture.port.fault(), None, "a refused start is no fault");
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Running)),
+            "no start before the stop confirms"
+        );
+        assert!(fixture.port.release().is_none(), "the radio is not stopped");
+        // The ordinary stop disables the core in the next service and then
+        // stops the device.
+        fixture.stop();
+        assert_eq!(fixture.observed.borrow().stops, stops + 1);
+        fixture.observed.borrow_mut().reject_rx_block_acks = false;
+        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+        let slot = fixture.port.remove_block_ack(agreement);
+        fixture.block_acks.push(slot);
+    });
+}
+
+#[test]
+fn a_station_command_offered_to_a_faulted_port_comes_back_and_the_port_recovers() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let fault = Fault::Unpublished(crate::port::Unpublished::Key);
+        fixture.port.fault_for_test(fault);
+        let now = fixture.now();
+        let command = PortCommand::Configure {
+            permission: fixture.configure.take().expect("permission"),
+            receive: StationReceive::Off,
+        };
+        let Err(CommandFailed::Returned {
+            command: PortCommand::Configure { permission, .. },
+            fault: found,
+        }) = fixture.port.command(command, now, &mut fixture.outbox)
+        else {
+            panic!("the command comes back beside the fault");
+        };
+        assert_eq!(found, fault);
+        fixture.configure = Some(permission);
+        assert!(fixture.outbox.terminals.is_empty(), "it did not run");
+        // The port keeps no command: the fault yields to the stop.
+        assert!(fixture.port.recover_for_stop());
+        assert_eq!(fixture.port.fault(), None);
         fixture.stop();
     });
 }

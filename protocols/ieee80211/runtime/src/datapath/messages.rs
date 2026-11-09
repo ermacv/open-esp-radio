@@ -247,6 +247,17 @@ pub enum Returned<'id, D: DatapathPort<'id>> {
         /// Why.
         reason: CommandRefusal,
     },
+    /// A command the port gave back beside its fault: it did not take the
+    /// command's owners. A step of it may have begun with an unknown end,
+    /// so the lifecycle never issues it again; the fault's own message
+    /// ends or restarts the run.
+    Unrun {
+        /// The command, with its owners.
+        command: ActorCommand<'id, D>,
+        /// It was a group key change: the station's token waits in the
+        /// group queue.
+        grouped: bool,
+    },
     /// A station frame that did not go.
     Station {
         /// Its ticket.

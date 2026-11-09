@@ -565,6 +565,37 @@ fn a_unit_the_group_removal_cuts_is_read_and_recycled() {
 }
 
 #[test]
+fn a_command_the_faulted_port_gives_back_ends_the_run_faulted_with_the_command_returned() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        // The first command, the receive rules' configuration, meets the
+        // port's fault before the port takes it.
+        air.fault_next_access_point_command();
+        let script = async {
+            loop {
+                counted.idle(1).await;
+            }
+        };
+        let end = match select(Woken::new(runner.run(&shared, &counted)), script).await {
+            Either::First(end) => end,
+            Either::Second(()) => unreachable!(),
+        };
+        let ApEnd::Faulted(_) = end else {
+            panic!("the fault ends the run");
+        };
+        let Some(command) = runner.take_returned() else {
+            panic!("the command comes back beside the fault");
+        };
+        let oer_protocols_ieee80211_contracts_port::AccessPointCommand::Configure { .. } = command
+        else {
+            panic!("the configuration, with its permission");
+        };
+        assert!(runner.homes.held.is_none(), "nothing is issued again");
+    }));
+}
+
+#[test]
 fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let counted = Counted::new();
@@ -583,7 +614,7 @@ fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
         let ApEnd::Refused(refusal) = end else {
             panic!("a refusal ends the run");
         };
-        let Some(command) = runner.take_refused() else {
+        let Some(command) = runner.take_returned() else {
             panic!("the refused command comes back");
         };
         assert_eq!(
@@ -648,7 +679,7 @@ macro_rules! expired {
             refusal,
             oer_protocols_ieee80211_contracts_port::AccessPointRefusal::Expired
         );
-        let Some(command) = $runner.take_refused() else {
+        let Some(command) = $runner.take_returned() else {
             panic!("the expired command comes back");
         };
         assert_eq!(

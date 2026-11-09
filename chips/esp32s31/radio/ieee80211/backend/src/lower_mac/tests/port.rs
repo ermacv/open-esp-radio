@@ -85,6 +85,8 @@ struct Observed {
     fail_poll: Option<Fault>,
     /// Key writes the hardware rejects from the next register access on.
     reject_key_writes: usize,
+    /// The receive Block Ack banks refuse every agreement.
+    reject_rx_block_acks: bool,
     /// Frames on air with the material byte they are protected under (0
     /// for none). Capture decrypts each against the key table at once;
     /// a frame whose material is not installed is dropped.
@@ -307,6 +309,7 @@ impl Device<512> for TestDevice {
         }
         self.hardware.reject_key_writes +=
             core::mem::take(&mut self.observed.borrow_mut().reject_key_writes);
+        self.hardware.reject_rx_block_acks = self.observed.borrow().reject_rx_block_acks;
         Ok(&mut self.hardware)
     }
     fn next_deadline(&self) -> Option<Instant> {

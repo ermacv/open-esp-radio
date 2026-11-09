@@ -30,9 +30,10 @@ use oer_protocols_ieee80211_contracts_port::{
     TsfControl, first_stale,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AdmittedTxParts, CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts,
-    LendRefusal, LendRefused, PairwiseIssue, PortArena, PortCommand, PortCommands, PortCompleted,
-    PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartRefused,
+    AccessPointCommandFailed, AdmittedTxParts, CommandFailed, CommandKind, CommandProgress,
+    CommandRefusal, CommandTypes, DataPort, Facts, LendRefusal, LendRefused, PairwiseIssue,
+    PortArena, PortCommand, PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer,
+    PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartFailure, StartRefused,
     StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
@@ -476,8 +477,6 @@ pub struct ModelPort<
     access_point_held_since: Option<(AccessPointCommandKind, Instant)>,
     /// The access point's [`Self::held_key`].
     access_point_held_key: Option<HeldKey>,
-    retained: Vec<ModelCommand<'id, Id, C, X>>,
-    retained_access_point: Vec<ModelAccessPointCommand<'id, Id, C, X>>,
     fault: Option<ModelPortFault>,
 }
 
@@ -530,8 +529,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 held_key: None,
                 access_point_held_since: None,
                 access_point_held_key: None,
-                retained: Vec::new(),
-                retained_access_point: Vec::new(),
                 fault: None,
             },
             commands: ModelCommands { air, loan },
@@ -568,8 +565,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             installation,
             channel,
             addresses,
-            retained,
-            retained_access_point,
             ..
         } = self;
         match installations.remint(installation) {
@@ -578,8 +573,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 for key in driver.keys.drain(..) {
                     air.remove_key_material(&key);
                 }
-                drop(retained);
-                drop(retained_access_point);
                 Ok(Self::from_mint(
                     minted,
                     channel,
@@ -605,8 +598,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                         held_key: None,
                         access_point_held_since: None,
                         access_point_held_key: None,
-                        retained,
-                        retained_access_point,
                         fault: None,
                     },
                     ModelReinstallRefused::Receipt,
@@ -1651,10 +1642,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         command: PortCommand<'id, Self::Types, C>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<CommandProgress<'id, Self::Types, C>, ModelPortFault> {
+    ) -> Result<CommandProgress<'id, Self::Types, C>, PortCommandFailed<'id, Self>> {
+        // A faulted port keeps no command: it comes back beside the fault.
         if let Err(fault) = self.check(ModelPortCall::Command) {
-            self.retained.push(command);
-            return Err(fault);
+            return Err(CommandFailed::Returned { command, fault });
         }
         // A token of an earlier installation is refused for good, before
         // the radio's own state is asked.
@@ -1691,11 +1682,12 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let progress = self.run(command, now);
         self.drain(sink);
         if let Err(fault) = self.check(ModelPortCall::Command) {
-            if let CommandProgress::Held(command) | CommandProgress::Refused(command, _) = progress
-            {
-                self.retained.push(command);
-            }
-            return Err(fault);
+            return Err(match progress {
+                CommandProgress::Held(command) | CommandProgress::Refused(command, _) => {
+                    CommandFailed::Returned { command, fault }
+                }
+                CommandProgress::Done => CommandFailed::Taken(fault),
+            });
         }
         let progress = match progress {
             CommandProgress::Held(command) => {
@@ -1740,6 +1732,22 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal() {
             return Poll::Ready(Err(StartRefused::Device));
         }
+        if self.air.take_unstopped_enable() {
+            // The MAC began the start: its stop begins now and goes on in
+            // `poll_stop`.
+            self.air
+                .disables
+                .set(self.air.disables.get().saturating_add(1));
+            self.radio = Radio::Stopping { since: now };
+            self.refresh_deadline(now);
+            return Poll::Ready(Err(StartRefused::Unstopped {
+                cause: StartFailure::Device,
+                stop: StopUnconfirmed {
+                    cause: StopCause::Device,
+                    observations: self.stop_observations(),
+                },
+            }));
+        }
         self.channel = channel.channel();
         self.radio = Radio::Running;
         self.refresh_deadline(now);
@@ -1781,6 +1789,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if self.idle() && self.held.events.is_empty() && !self.air.stop_held.get() {
             self.held.draining.set(false);
             self.radio = Radio::Stopped;
+            self.air.stop_confirmed();
             // The stopped MAC receives for no interface and runs no TSF.
             self.air
                 .access_point

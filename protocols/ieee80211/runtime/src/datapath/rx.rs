@@ -172,7 +172,7 @@ where
                         pulled = pulled.saturating_add(1);
                         self.progressed = true;
                         D::received(frame.bytes(), &meta);
-                        if matches!(self.radio, Radio::Stopping { .. }) {
+                        if matches!(self.radio, Radio::Stopping { .. } | Radio::Unstopped) {
                             // A stopping radio's units go back unread.
                             self.port.recycle(frame);
                             report(&mut self.events, || {
@@ -214,7 +214,7 @@ where
     fn radio_receives(&self) -> bool {
         matches!(
             self.radio,
-            Radio::Running | Radio::Stopping { .. } | Radio::Retuning { .. }
+            Radio::Running | Radio::Stopping { .. } | Radio::Unstopped | Radio::Retuning { .. }
         )
     }
 

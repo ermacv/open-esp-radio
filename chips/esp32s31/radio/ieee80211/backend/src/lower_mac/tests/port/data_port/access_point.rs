@@ -6,6 +6,7 @@ use super::*;
 use crate::lower_mac::tests::{AccessPointObserved, PEER, queue_of};
 use oer_chips_esp32s31_hal::radio::ieee80211::registers::tx::MacLegacyTxProgram;
 use oer_chips_esp32s31_hal::types::MacInterface;
+use oer_protocols_ieee80211_contracts_port::{AccessPointCommand, CommandFailed};
 use oer_protocols_ieee80211_testing_conformance::access_point::{
     self as ap_cases, AccessPointHarness, End as CaseEnd, Ended as CaseEnded, Interface, Issued,
     Receive, Sent as CaseSent, Terminal as CaseTerminal, Violation as CaseViolation,
@@ -708,7 +709,7 @@ enum Check {
     ExpiredPairwiseRemoval,
     UnsupportedGroupKeyId,
     UnpublishableDuringStationConfigure,
-    RetainedAccessPointCommand,
+    ReturnedAccessPointCommand,
 }
 
 fn run_check(check: Check) -> Result<(), CaseViolation> {
@@ -746,7 +747,7 @@ fn run_check(check: Check) -> Result<(), CaseViolation> {
             Check::UnpublishableDuringStationConfigure => {
                 unpublishable_during_station_configure(&mut harness)
             }
-            Check::RetainedAccessPointCommand => retained_access_point_command(&mut harness),
+            Check::ReturnedAccessPointCommand => returned_access_point_command(&mut harness),
         }
     }))
 }
@@ -888,26 +889,41 @@ fn an_unpublishable_ap_frame_during_a_station_configuration_ends_withdrawn_with_
 }
 
 /// An access-point command offered to a port whose fault leaves every
-/// owner whole stays with the fault: the port no longer recovers for a
-/// stop, since no stop returns that command.
-fn retained_access_point_command<Id: radio::SlotIdentity>(
+/// owner whole comes back beside the fault: the port keeps no command, so
+/// it recovers for a stop, and the stop returns every owner.
+fn returned_access_point_command<Id: radio::SlotIdentity>(
     harness: &mut ApFixture<'_, '_, Id>,
 ) -> Result<(), CaseViolation> {
     ap_cases::start(harness)?;
     let fault = Fault::Unpublished(crate::port::Unpublished::Key);
     harness.f().port.fault_for_test(fault);
-    let configure = harness.configure(Issued::Current, Receive::Bss, None);
-    if ap_cases::run(harness, configure).err() != Some(CaseViolation::Fault) {
-        return Err(CaseViolation::Fault);
+    let configure = harness
+        .configure(Issued::Current, Receive::Bss, None)
+        .ok_or(CaseViolation::Fixture)?;
+    let now = AccessPointHarness::now(harness);
+    let (port, sink) = AccessPointHarness::parts(harness);
+    let command = match port.access_point_command(configure, now, sink) {
+        Err(CommandFailed::Returned {
+            command,
+            fault: found,
+        }) if found == fault => command,
+        _ => return Err(CaseViolation::Fault),
+    };
+    if !matches!(command, AccessPointCommand::Configure { .. }) {
+        return Err(CaseViolation::Owners);
     }
-    let port = &mut harness.f().port;
-    if port.recover_for_stop() || port.fault() != Some(fault) {
+    AccessPointHarness::restore(harness, command);
+    if !harness.f().port.recover_for_stop() || harness.f().port.fault().is_some() {
+        return Err(CaseViolation::Owners);
+    }
+    ap_cases::stop(harness)?;
+    if !harness.idle() {
         return Err(CaseViolation::Owners);
     }
     Ok(())
 }
 
 #[test]
-fn a_retained_access_point_command_keeps_the_fault_from_recovering() {
-    assert_eq!(run_check(Check::RetainedAccessPointCommand), Ok(()));
+fn an_access_point_command_offered_to_a_faulted_port_comes_back_and_the_port_recovers() {
+    assert_eq!(run_check(Check::ReturnedAccessPointCommand), Ok(()));
 }

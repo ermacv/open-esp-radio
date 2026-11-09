@@ -343,6 +343,26 @@ where
                     io,
                 );
             }
+            Returned::Unrun { command, grouped } => {
+                // The fault's own message ends or restarts the run: the
+                // command is never issued again, and its owners stay with
+                // the lifecycle beside the first a broken contract left.
+                if grouped {
+                    match actor.groups.try_receive() {
+                        // A token of the faulted installation: it ends with
+                        // the run's end or restart.
+                        Some(group) => drop(group),
+                        None => {
+                            self.inner
+                                .reject(Rejected::Command(command), LifecycleViolation::Missing);
+                            return;
+                        }
+                    }
+                }
+                if self.inner.rejected.is_none() {
+                    self.inner.rejected = Some(Rejected::Command(command));
+                }
+            }
             Returned::Station {
                 ticket,
                 buffer,

@@ -1769,7 +1769,14 @@ pub struct ModelAir {
     rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<u8>,
+    /// The next enable fails after the MAC began it, its stop not
+    /// confirmed: the port answers `StartRefused::Unstopped` and stops.
+    unstop_enable: Cell<bool>,
+    /// Stops the port confirmed.
+    confirmed_stops: Cell<u32>,
     refuse_access_point: Cell<u8>,
+    /// The next access-point command meets a poisoned air.
+    fault_access_point: Cell<bool>,
     group_held: Cell<bool>,
     /// The access point's configuration is held at its barrier.
     access_point_configure_held: Cell<bool>,
@@ -1847,6 +1854,9 @@ impl ModelAir {
             stream: Default::default(),
             recovery: Default::default(),
             disables: Default::default(),
+            unstop_enable: Cell::new(false),
+            fault_access_point: Cell::new(false),
+            confirmed_stops: Cell::new(0),
             edca: Default::default(),
             held: Default::default(),
             held_results: Default::default(),
@@ -2381,6 +2391,18 @@ impl ModelAir {
         self.refuse_access_point.set(count);
     }
 
+    /// Poison the air at the next access-point command, before the port
+    /// takes it: the command comes back beside the fault.
+    pub fn fault_next_access_point_command(&self) {
+        self.fault_access_point.set(true);
+    }
+
+    /// Whether this access-point command meets the poison
+    /// [`Self::fault_next_access_point_command`] asked for.
+    pub(crate) fn take_access_point_fault(&self) -> bool {
+        self.fault_access_point.replace(false)
+    }
+
     /// Whether this access-point command is refused: one of the refusals
     /// asked for.
     pub(crate) fn take_access_point_refusal(&self) -> bool {
@@ -2390,6 +2412,30 @@ impl ModelAir {
         }
         self.refuse_access_point.set(left.saturating_sub(1));
         true
+    }
+
+    /// Fail the next enable after the MAC began it: the port answers
+    /// `StartRefused::Unstopped` and its stop goes on, confirmed only once
+    /// the MAC is quiet ([`Self::hold_stop`] keeps it unconfirmed).
+    pub fn unstop_enable(&self) {
+        self.unstop_enable.set(true);
+    }
+
+    /// Whether this enable fails unstopped, as [`Self::unstop_enable`]
+    /// asked.
+    pub(crate) fn take_unstopped_enable(&self) -> bool {
+        self.unstop_enable.replace(false)
+    }
+
+    /// Stops the port confirmed.
+    pub fn confirmed_stops(&self) -> u32 {
+        self.confirmed_stops.get()
+    }
+
+    /// Count a stop the port confirmed.
+    pub(crate) fn stop_confirmed(&self) {
+        self.confirmed_stops
+            .set(self.confirmed_stops.get().saturating_add(1));
     }
 
     /// Refuse the next `count` enables.

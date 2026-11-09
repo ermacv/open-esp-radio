@@ -34,6 +34,70 @@ fn a_refused_first_start_ends_the_lifecycle_and_retires_the_actor_without_a_fram
     );
 }
 
+/// The radio's first start fails after the MAC began it, its stop not
+/// confirmed: the lifecycle's end goes on with the port's own stop, and the
+/// actor retires only once the port confirmed it.
+#[test]
+fn an_unstopped_first_start_ends_through_the_ports_stop_before_the_actor_retires() {
+    pair_with::<2>(
+        open,
+        |air| air.unstop_enable(),
+        std::vec![script(|world| {
+            Box::pin(async move {
+                world.settle().await;
+            })
+        })],
+        |ends, air| {
+            let completed = ends[0].lifecycle.as_ref().unwrap();
+            assert!(
+                matches!(
+                    completed.end,
+                    LifecycleEnd::StartRefused(
+                        oer_protocols_ieee80211_contracts_port::StartRefused::Unstopped { .. }
+                    )
+                ),
+                "{:?}",
+                completed.end
+            );
+            assert_eq!(ends[0].actor, Some(ActorEnd::Retired));
+            assert_eq!(
+                air.confirmed_stops(),
+                1,
+                "the port's stop confirmed before the retirement"
+            );
+        },
+    );
+}
+
+/// An unstopped start whose stop never confirms: the lifecycle ends with
+/// the unconfirmed stop and the actor does not retire over a radio that is
+/// not stopped.
+#[test]
+fn an_unstopped_start_whose_stop_never_confirms_ends_unconfirmed_without_a_retirement() {
+    pair_with::<2>(
+        open,
+        |air| {
+            air.unstop_enable();
+            air.hold_stop(true);
+        },
+        std::vec![script(|world| {
+            Box::pin(async move {
+                world.settle().await;
+            })
+        })],
+        |ends, air| {
+            let completed = ends[0].lifecycle.as_ref().unwrap();
+            assert!(
+                matches!(completed.end, LifecycleEnd::StopUnconfirmed(_)),
+                "{:?}",
+                completed.end
+            );
+            assert_ne!(ends[0].actor, Some(ActorEnd::Retired));
+            assert_eq!(air.confirmed_stops(), 0);
+        },
+    );
+}
+
 /// The port fails while the station scans: the actor ends on the port's
 /// fault, and the lifecycle ends with it, telling the application the
 /// connect's one terminal and one Disconnected notice.

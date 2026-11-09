@@ -30,7 +30,8 @@
 //! [`LendRefused`](crate::LendRefused), [`StartRefused`]) changed nothing
 //! and returns every owner. [`DataPort::Fault`] names a broken contract of
 //! the backend's own state; it keeps its observations, and the backend
-//! keeps the owners it holds.
+//! keeps the owners it holds. A command the port did not take comes back
+//! beside its fault ([`CommandFailed::Returned`]).
 //!
 //! # Rates
 //!
@@ -214,6 +215,67 @@ pub enum CommandRefusal {
     Expired,
 }
 
+/// Why [`DataPort::command`] or
+/// [`AccessPointPort::access_point_command`](crate::AccessPointPort::access_point_command)
+/// failed: the port's fault, and the command when the port did not take it.
+pub enum CommandFailed<C, F> {
+    /// The port did not take the command's owners: they come back whole
+    /// beside the fault, a port that faulted before the call included, so
+    /// the port keeps no command for its quarantine. A step of the command
+    /// may have begun before the fault, with an unknown end: the caller
+    /// never issues it again automatically.
+    Returned {
+        /// The command, with every owner.
+        command: C,
+        /// The port's fault.
+        fault: F,
+    },
+    /// The port took the command's owners before it faulted; they stay
+    /// with the port's quarantine.
+    Taken(F),
+}
+
+impl<C, F> CommandFailed<C, F> {
+    /// The port's fault.
+    pub const fn fault(&self) -> F
+    where
+        F: Copy,
+    {
+        match self {
+            Self::Returned { fault, .. } | Self::Taken(fault) => *fault,
+        }
+    }
+
+    /// The same failure with its fault mapped by `map`, the command kept
+    /// where it was.
+    pub fn map_fault<G>(self, map: impl FnOnce(F) -> G) -> CommandFailed<C, G> {
+        match self {
+            Self::Returned { command, fault } => CommandFailed::Returned {
+                command,
+                fault: map(fault),
+            },
+            Self::Taken(fault) => CommandFailed::Taken(map(fault)),
+        }
+    }
+}
+
+/// The fault, and whether the command came back; a command carries no
+/// `Debug` of its own.
+impl<C, F: core::fmt::Debug> core::fmt::Debug for CommandFailed<C, F> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Returned { fault, .. } => f.debug_tuple("Returned").field(fault).finish(),
+            Self::Taken(fault) => f.debug_tuple("Taken").field(fault).finish(),
+        }
+    }
+}
+
+/// A failed [`DataPort::command`] of the port `P`.
+pub type PortCommandFailed<'id, P> = CommandFailed<
+    PortCommand<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
+    <P as DataPort<'id>>::Fault,
+>;
+
 /// Why [`DataPort::submit`] refused an attempt.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SubmitRefusal {
@@ -233,12 +295,13 @@ pub enum SubmitRefusal {
     },
 }
 
-/// Why [`DataPort::poll_start`] did not start the radio. Nothing runs;
-/// the port stays stopped and can start again. `F` is the port's
-/// [`DataPort::Fault`], which names why the front end did not tune.
+/// Why [`DataPort::poll_start`] did not start the radio. `F` is the port's
+/// [`DataPort::Fault`], which names why the front end did not tune. Except
+/// for [`Self::Unstopped`], nothing runs: the port is stopped and can start
+/// again.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum StartRefused<F> {
-    /// The radio runs already.
+    /// The radio runs already, or its stop has not confirmed yet.
     Running,
     /// The radio front end did not tune the channel, for the port's cause.
     Retune(F),
@@ -246,6 +309,39 @@ pub enum StartRefused<F> {
     Deadline,
     /// The device refused the start.
     Device,
+    /// The start failed for `cause` after it began on the device or the
+    /// MAC, and the stop of what it began is not confirmed (`stop`): the
+    /// port is stopping, not stopped. [`DataPort::poll_stop`] goes on with
+    /// that stop, and the port refuses a start
+    /// ([`Self::Running`]) until the stop confirms.
+    Unstopped {
+        /// Why the start failed.
+        cause: StartFailure<F>,
+        /// What the stop of the begun start observed.
+        stop: StopUnconfirmed,
+    },
+}
+
+/// Why a start that began failed: the subset of [`StartRefused`] a start's
+/// own steps produce.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum StartFailure<F> {
+    /// The radio front end did not tune the channel, for the port's cause.
+    Retune(F),
+    /// The start did not end within the backend's command bound.
+    Deadline,
+    /// The device refused the start.
+    Device,
+}
+
+impl<F> From<StartFailure<F>> for StartRefused<F> {
+    fn from(failure: StartFailure<F>) -> Self {
+        match failure {
+            StartFailure::Retune(cause) => Self::Retune(cause),
+            StartFailure::Deadline => Self::Deadline,
+            StartFailure::Device => Self::Device,
+        }
+    }
 }
 
 /// The radio did not confirm its stop: the backend cannot prove the MAC,
@@ -266,6 +362,9 @@ pub enum StopCause {
     Deadline,
     /// The device refused or failed the stop.
     Device,
+    /// A failed start had enabled the MAC: the port's next service
+    /// disables it, and [`DataPort::poll_stop`] goes on from there.
+    CoreEnabled,
 }
 
 /// What a port held when its stop ended unconfirmed.
@@ -525,19 +624,22 @@ pub trait DataPort<'id> {
     ///
     /// # Errors
     ///
-    /// The backend's contract fault; the command's owners stay with it.
+    /// The backend's contract fault, with the command when the port did
+    /// not take its owners ([`CommandFailed`]).
     fn command(
         &mut self,
         command: PortCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<CommandProgress<'id, Self::Types, Self::Caps>, Self::Fault>;
+    ) -> Result<CommandProgress<'id, Self::Types, Self::Caps>, PortCommandFailed<'id, Self>>;
 
     /// Start the stopped radio on `channel`, within the backend's command
     /// bound from the first call. A start that fails after the device began
-    /// it stops what it began before it answers the refusal; a device that
-    /// does not confirm that stop leaves the port stopping, and
-    /// [`Self::poll_stop`] goes on with it.
+    /// it stops what it began before it answers the refusal; a stop that
+    /// does not confirm, and a start that enabled the MAC before it failed,
+    /// leave the port stopping: the answer is [`StartRefused::Unstopped`]
+    /// with the start's cause, and [`Self::poll_stop`] goes on with the
+    /// stop.
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,

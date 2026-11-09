@@ -650,6 +650,12 @@ pub enum AccessPointCommandKind {
     Configure,
 }
 
+/// A failed [`AccessPointPort::access_point_command`] of the port `P`.
+pub type AccessPointCommandFailed<'id, P> = crate::CommandFailed<
+    AccessPointCommand<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
+    <P as DataPort<'id>>::Fault,
+>;
+
 /// How far [`AccessPointPort::access_point_command`] took one command.
 pub enum AccessPointProgress<'id, T: AccessPointTypes<'id>, K: Ieee80211Capabilities> {
     /// The command ran; its terminal, if it has one, is in the sink.
@@ -728,13 +734,17 @@ pub trait AccessPointPort<'id>:
     ///
     /// # Errors
     ///
-    /// The backend's contract fault; the command's owners stay with it.
+    /// The backend's contract fault, with the command when the port did
+    /// not take its owners ([`CommandFailed`](crate::CommandFailed)).
     fn access_point_command(
         &mut self,
         command: AccessPointCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<AccessPointProgress<'id, Self::Types, Self::Caps>, Self::Fault>;
+    ) -> Result<
+        AccessPointProgress<'id, Self::Types, Self::Caps>,
+        AccessPointCommandFailed<'id, Self>,
+    >;
 }
 
 #[cfg(test)]

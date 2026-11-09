@@ -1130,28 +1130,28 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         device: &mut D,
         identity: RawKeyIdentity,
     ) -> Result<KeyRemoved<'id, CorePath<Id>>, Fault> {
-        let place = self
+        let index = self
             .keys
-            .iter_mut()
-            .find(|entry| entry.as_ref().is_some_and(|(key, _)| *key == identity))
+            .iter()
+            .position(|entry| entry.as_ref().is_some_and(|(key, _)| *key == identity))
             .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
-        let (_, installed) = place.take().ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
+        // The registers and the core's command view first: a removal they
+        // refuse leaves the installed key in its place.
+        let hardware = device.hardware()?;
+        let mut view = self
+            .core
+            .view()
+            .commands()
+            .ok_or(Fault::CoreViewUnavailable(CoreOp::Command))?;
+        let (_, installed) = self
+            .keys
+            .get_mut(index)
+            .and_then(Option::take)
+            .ok_or(Fault::KeySlotMissing(KeyOp::Remove))?;
         let mut sink = Sink::default();
         match installed {
-            Installed::Transmit(key) => {
-                idle_command!(self.core, |view| view.remove_checked_key(
-                    device.hardware()?,
-                    key,
-                    &mut sink
-                ))
-            }
-            Installed::Receive(key) => {
-                idle_command!(self.core, |view| view.remove_checked_key(
-                    device.hardware()?,
-                    key,
-                    &mut sink
-                ))
-            }
+            Installed::Transmit(key) => view.remove_checked_key(hardware, key, &mut sink),
+            Installed::Receive(key) => view.remove_checked_key(hardware, key, &mut sink),
         }
         if let Some(fault) = sink.fault() {
             return Err(fault);

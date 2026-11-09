@@ -118,6 +118,8 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
     station: Option<(Ticket<'id, Id>, Sent<'id, Id, TestDevice, 512, Draws>)>,
     /// The access point's tokens the installation minted.
     access_point: Option<access_point::ApResources<'id, Id>>,
+    /// The receive Block Ack slots.
+    block_acks: Vec<oer_protocols_ieee80211_contracts_port::PortBlockAckSlot<'id, Family<Id>>>,
 }
 
 fn supported(
@@ -188,6 +190,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                 group_permission: resources.access_point_group_permission,
                 beacon: resources.access_point_beacon,
             }),
+            block_acks: resources.block_acks.into_iter().collect(),
         }
     }
 
@@ -605,7 +608,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let mut command = command;
         for _ in 0..16 {
             let now = self.now();
-            match self.port.command(command, now, &mut self.outbox)? {
+            match self
+                .port
+                .command(command, now, &mut self.outbox)
+                .map_err(|failed| failed.fault())?
+            {
                 CommandProgress::Held(held) => command = held,
                 other => return Ok(other),
             }

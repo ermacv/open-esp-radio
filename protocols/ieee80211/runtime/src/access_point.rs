@@ -58,8 +58,9 @@
 //!
 //! Every end returns the runner with the port and every owner
 //! ([`ApEnd`]): a stop, a refused start, an unconfirmed stop, a port fault
-//! with its cause, a refused command (the command among the owners,
-//! [`ApRunner::take_refused`]) and a broken contract of the runner's own.
+//! with its cause (a command it did not take among the owners,
+//! [`ApRunner::take_returned`]), a refused command (the command among the
+//! owners too) and a broken contract of the runner's own.
 //! A run that ended before its stop was confirmed goes on with
 //! [`ApRunner::finish_stop`], which watches the stop on the port's facts and
 //! deadline, never asking for it again, and returns once the port
@@ -78,13 +79,13 @@ use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     AccessPoint, AccessPointCommand, AccessPointCommands, AccessPointPort, AccessPointProgress,
     AccessPointReceive, AccessPointRefusal, Attempt, AttemptKey, BeaconAttempt, BeaconPermission,
-    BeaconStamp, BeaconTimestamp, ConfigurePermission, Configured, ConnectionFrame, DataPort,
-    Facts, GroupKeyId, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey,
-    PhyRate, PortSink, PortTypes, Protection, ReceiveFilter, Removed, RemovedKey, RetryPlan,
-    RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopUnconfirmed,
-    SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl, TbttEvent,
-    TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxFacts,
-    TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
+    BeaconStamp, BeaconTimestamp, CommandFailed, ConfigurePermission, Configured, ConnectionFrame,
+    DataPort, Facts, GroupKeyId, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
+    NumberedKey, PhyRate, PortSink, PortTypes, Protection, ReceiveFilter, Removed, RemovedKey,
+    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd,
+    StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl,
+    TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool,
+    TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
     ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
@@ -251,7 +252,9 @@ pub enum ApEnd<F> {
     /// [`ApRunner::finish_stop`] watches the stop on until the port
     /// confirms it.
     StopUnconfirmed(StopUnconfirmed),
-    /// The port reported its named fault; every owner is in the runner.
+    /// The port reported its named fault; every owner is in the runner, a
+    /// command the port gave back beside it among them
+    /// ([`ApRunner::take_returned`]).
     Faulted(F),
     /// A terminal named an owner the runner did not send, or the engine
     /// refused one of the runner's own steps; every owner is in the runner,
@@ -259,7 +262,7 @@ pub enum ApEnd<F> {
     Contract(ApContract),
     /// The port refused one of the access point's commands for its
     /// refusal; every owner is in the runner, the refused command among
-    /// them ([`ApRunner::take_refused`]).
+    /// them ([`ApRunner::take_returned`]).
     Refused(AccessPointRefusal),
 }
 
@@ -268,7 +271,7 @@ enum Halt<F> {
     Faulted(F),
     Contract(ApContract),
     /// The port refused a command, which the runner holds
-    /// ([`ApRunner::take_refused`]).
+    /// ([`ApRunner::take_returned`]).
     Refused(AccessPointRefusal),
 }
 
@@ -568,8 +571,9 @@ where
     /// The command the port holds at its barrier: the next issue runs it
     /// again before any other.
     held: Option<Command<'id, P>>,
-    /// The command the port refused.
-    refused: Option<Command<'id, P>>,
+    /// The command the port gave back unrun: refused, or beside its
+    /// fault. The runner never issues it again.
+    returned: Option<Command<'id, P>>,
     /// Owners a terminal brought that have no home of the runner's: the
     /// port returned more than the runner lent it.
     kept: heapless::Deque<Kept<'id, P, C>, KEPT>,
@@ -1310,7 +1314,7 @@ where
                 scratch: [0; SCRATCH],
                 stop: false,
                 held: None,
-                refused: None,
+                returned: None,
                 kept: heapless::Deque::new(),
                 broken: None,
                 begins: heapless::Deque::new(),
@@ -1612,9 +1616,10 @@ where
         }
     }
 
-    /// The command the port refused, once.
-    pub fn take_refused(&mut self) -> Option<Command<'id, P>> {
-        self.homes.refused.take()
+    /// The command the port gave back unrun (refused, or beside its
+    /// fault), once.
+    pub fn take_returned(&mut self) -> Option<Command<'id, P>> {
+        self.homes.returned.take()
     }
 
     /// The next owner a terminal brought that had no home of the runner's.
@@ -1698,10 +1703,16 @@ where
                 Ok(AccessPointProgress::Refused(command, refusal)) => {
                     // The command and its owners stay with the runner,
                     // which returns them; nothing behind it runs.
-                    self.homes.refused = Some(command);
+                    self.homes.returned = Some(command);
                     return Err(Halt::Refused(refusal));
                 }
-                Err(fault) => return Err(Halt::Faulted(fault)),
+                Err(CommandFailed::Returned { command, fault }) => {
+                    // The port did not take it: it stays with the runner,
+                    // never issued again.
+                    self.homes.returned = Some(command);
+                    return Err(Halt::Faulted(fault));
+                }
+                Err(CommandFailed::Taken(fault)) => return Err(Halt::Faulted(fault)),
             }
         }
     }

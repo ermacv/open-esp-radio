@@ -77,9 +77,9 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
-    CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed, GateOpen,
-    Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, PortBlockAckSlot, PortCommand,
-    PortSingleOutcome, PortSink, PortTypes, RxBuffer, StartRefused, StopUnconfirmed,
+    CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed,
+    GateOpen, Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, PortBlockAckSlot,
+    PortCommand, PortSingleOutcome, PortSink, PortTypes, RxBuffer, StartRefused, StopUnconfirmed,
     SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool, TxFacts,
 };
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
@@ -258,6 +258,10 @@ pub type ActorLink<'id, D> = LinkHandover<'id, ActorEpochPath<'id, D>, ActorLink
 enum Radio<K> {
     /// Stopped, before its first start or after a refused start.
     Stopped,
+    /// A start failed after it began, and the port's stop of what it began
+    /// has not confirmed ([`StartRefused::Unstopped`]): the next stop goes
+    /// on with the port's, and no start runs before it confirms.
+    Unstopped,
     /// Starting on the channel.
     Starting(SupportedChannel<K>),
     /// Running.

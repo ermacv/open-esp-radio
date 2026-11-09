@@ -931,6 +931,32 @@ fn a_command_before_the_start_comes_back_refused() {
 }
 
 #[test]
+fn a_command_the_faulted_port_gives_back_returns_unrun_and_the_port_recovers() {
+    bench(|bench| {
+        bench.start();
+        bench.air.allow_recovery();
+        bench.air.poison();
+        // The command's call is the first to meet the fault: the port gives
+        // it back beside the fault, and keeps nothing a stop cannot return.
+        let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+        bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+        assert!(matches!(
+            bench.returned(),
+            Some(Returned::Unrun {
+                command: PortCommand::SetBssColor(_),
+                grouped: false,
+            })
+        ));
+        assert!(bench.end.is_none(), "the actor stays for the stop");
+        let mut recovering = false;
+        while let Some(message) = bench.next() {
+            recovering |= matches!(message, FromActor::Recovering(ActorFault::Port(_)));
+        }
+        assert!(recovering, "the port recovered for the stop");
+    });
+}
+
+#[test]
 fn a_port_fault_ends_the_actor_and_tells_the_lifecycle() {
     bench(|bench| {
         bench.start();

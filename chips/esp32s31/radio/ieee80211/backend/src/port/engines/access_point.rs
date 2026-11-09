@@ -17,15 +17,19 @@
 
 use super::*;
 use oer_protocols_ieee80211_contracts_port::{
-    AccessPointCapabilities, AccessPointCommand, AccessPointCommands, AccessPointPairwiseIssue,
-    AccessPointPort, AccessPointProgress, AccessPointReceive, AccessPointRefusal,
-    AccessPointServices, AccessPointSubmission, AccessPointTypes, BeaconParts, BeaconSubmission,
-    BeaconTimestamp, ConfigurePermission, SupportedTsfControl, TsfControl,
+    AccessPointCapabilities, AccessPointCommand, AccessPointCommandFailed, AccessPointCommands,
+    AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
+    AccessPointRefusal, AccessPointServices, AccessPointSubmission, AccessPointTypes, BeaconParts,
+    BeaconSubmission, BeaconTimestamp, CommandFailed, ConfigurePermission, SupportedTsfControl,
+    TsfControl,
 };
 
 /// An access-point command of the port's types.
 pub(super) type ApCmd<'id, Id, D, const B: usize, O> =
     AccessPointCommand<'id, Types<Id, D, B, O>, Esp32s31Caps<B>>;
+
+/// A failed access-point command of the S31 port.
+type ApCmdFailed<'id, Id, D, const B: usize, O> = CommandFailed<ApCmd<'id, Id, D, B, O>, Fault>;
 
 /// How far the port took an access-point command.
 type ApProgress<'id, Id, D, const B: usize, O> =
@@ -197,17 +201,6 @@ fn access_point_generations<
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     Esp32s31Port<'id, Id, D, B, O>
 {
-    /// Keep an access-point command with the quarantine.
-    fn retain_access_point(&mut self, command: ApCmd<'id, Id, D, B, O>) {
-        match self.retained_access_point {
-            None => self.retained_access_point = Some(command),
-            // A later command stays quarantined with the first.
-            Some(_) => {
-                let _quarantined = core::mem::ManuallyDrop::new(command);
-            }
-        }
-    }
-
     /// Hold an access-point configuration or pairwise removal at its
     /// barrier, or refuse it past its bound. A held command has not run, so
     /// its outcome is known: what its hold began is undone (the
@@ -218,7 +211,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         command: ApCmd<'id, Id, D, B, O>,
         now: Instant,
-    ) -> Result<ApProgress<'id, Id, D, B, O>, Fault> {
+    ) -> ApProgress<'id, Id, D, B, O> {
         let kind = command.kind();
         let since = *self.access_point_since.get_or_insert(now);
         if now.saturating_duration_since(since) >= COMMAND_BOUND {
@@ -243,13 +236,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 | AccessPointCommand::InstallGroup(_)
                 | AccessPointCommand::RemoveGroup { .. } => {}
             }
-            return Ok(AccessPointProgress::Refused(
-                command,
-                AccessPointRefusal::Expired,
-            ));
+            return AccessPointProgress::Refused(command, AccessPointRefusal::Expired);
         }
         self.access_point_holding = Some(kind);
-        Ok(AccessPointProgress::Held(command))
+        AccessPointProgress::Held(command)
     }
 
     /// Whether an attempt of the access point is published.
@@ -264,7 +254,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// Set what the access point receives once none of its attempts is on
     /// the air, then its TSF control: its queued attempts end withdrawn
     /// meanwhile. The station's configuration in the core's bank holds it
-    /// too: one interface configures at a time.
+    /// too: one interface configures at a time. The permission moves only
+    /// into its terminal: a fault before it returns the command.
+    #[allow(
+        clippy::result_large_err,
+        reason = "the failure returns the command by value, as a hold does"
+    )]
     fn configure_access_point<S>(
         &mut self,
         permission: ApConfigure<'id, Id, D, B>,
@@ -272,7 +267,53 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         tsf: Option<SupportedTsfControl<Esp32s31Caps<B>>>,
         now: Instant,
         sink: &mut S,
-    ) -> Result<ApProgress<'id, Id, D, B, O>, Fault>
+    ) -> Result<ApProgress<'id, Id, D, B, O>, ApCmdFailed<'id, Id, D, B, O>>
+    where
+        S: PortSink<'id, Types<Id, D, B, O>>,
+    {
+        match self.write_access_point_configuration(receive, tsf, sink) {
+            Ok(true) => {}
+            Ok(false) => {
+                return Ok(self.hold_access_point(
+                    AccessPointCommand::Configure {
+                        permission,
+                        receive,
+                        tsf,
+                    },
+                    now,
+                ));
+            }
+            Err(fault) => {
+                return Err(CommandFailed::Returned {
+                    command: AccessPointCommand::Configure {
+                        permission,
+                        receive,
+                        tsf,
+                    },
+                    fault,
+                });
+            }
+        }
+        self.access_point_holding = None;
+        self.access_point_since = None;
+        let loan = self.loan;
+        sink.terminal(
+            brand::OwnedTerminal::Configured(brand::OwnedConfigured::AccessPoint(
+                permission.into_owned(&loan),
+            ))
+            .lend(&loan),
+        );
+        Ok(AccessPointProgress::Done)
+    }
+
+    /// Write the access point's configuration and TSF control once its
+    /// barrier passed: whether it did.
+    fn write_access_point_configuration<S>(
+        &mut self,
+        receive: AccessPointReceive<Esp32s31Caps<B>>,
+        tsf: Option<SupportedTsfControl<Esp32s31Caps<B>>>,
+        sink: &mut S,
+    ) -> Result<bool, Fault>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
@@ -285,14 +326,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             || self.access_point_on_air()
             || core_views::configuring::<Id, D, B>(self.driver.core.view())
         {
-            return self.hold_access_point(
-                AccessPointCommand::Configure {
-                    permission,
-                    receive,
-                    tsf,
-                },
-                now,
-            );
+            return Ok(false);
         }
         let address = self.addresses[1].get();
         let filter = match receive {
@@ -336,25 +370,21 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             driver.access_point_configuring = false;
         }
-        self.access_point_holding = None;
-        self.access_point_since = None;
-        let loan = self.loan;
-        sink.terminal(
-            brand::OwnedTerminal::Configured(brand::OwnedConfigured::AccessPoint(
-                permission.into_owned(&loan),
-            ))
-            .lend(&loan),
-        );
-        Ok(AccessPointProgress::Done)
+        Ok(true)
     }
 
-    /// Run one access-point command of a running port.
+    /// Run one access-point command of a running port. A fault before the
+    /// command's owners moved into the port returns the command beside it.
+    #[allow(
+        clippy::result_large_err,
+        reason = "the failure returns the command by value, as a hold does"
+    )]
     fn run_access_point<S>(
         &mut self,
         command: ApCmd<'id, Id, D, B, O>,
         now: Instant,
         sink: &mut S,
-    ) -> Result<ApProgress<'id, Id, D, B, O>, Fault>
+    ) -> Result<ApProgress<'id, Id, D, B, O>, ApCmdFailed<'id, Id, D, B, O>>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
@@ -371,7 +401,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 issued: _,
             })) => {
                 self.driver
-                    .install(self.device, identity, installation, &material)?;
+                    .install(self.device, identity, installation, &material)
+                    .map_err(CommandFailed::Taken)?;
                 identity.activity.set(identity.serial);
                 sink.terminal(
                     brand::OwnedTerminal::PairwiseKeyInstalled(brand::OwnedInstalledPairwise::new(
@@ -392,10 +423,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     .barrier
                     .is_some_and(|barrier| barrier != identity)
                 {
-                    return self.hold_access_point(
+                    return Ok(self.hold_access_point(
                         AccessPointCommand::RemovePairwise { association, key },
                         now,
-                    );
+                    ));
                 }
                 identity.activity.set(0);
                 self.driver.barrier = Some(identity);
@@ -410,24 +441,26 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     .flatten()
                     .any(|running| running.operation.payload().key == Some(identity));
                 if !drained || in_use {
-                    return self.hold_access_point(
+                    return Ok(self.hold_access_point(
                         AccessPointCommand::RemovePairwise { association, key },
                         now,
-                    );
+                    ));
                 }
                 let removed = match self.driver.remove(self.device, identity) {
                     Ok(removed) => removed,
                     Err(fault) => {
-                        self.retain_access_point(AccessPointCommand::RemovePairwise {
-                            association,
-                            key,
+                        return Err(CommandFailed::Returned {
+                            command: AccessPointCommand::RemovePairwise { association, key },
+                            fault,
                         });
-                        return Err(fault);
                     }
                 };
                 let removal =
                     <AccessPoint as Role<'id, Id>>::removal(association).into_owned(&self.loan);
-                let terminal = self.driver.removed_terminal(removal, removed)?;
+                let terminal = self
+                    .driver
+                    .removed_terminal(removal, removed)
+                    .map_err(CommandFailed::Taken)?;
                 self.driver.barrier = None;
                 self.access_point_holding = None;
                 self.access_point_since = None;
@@ -441,27 +474,31 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     AccessPointCommand::RemoveGroup { key, .. } => Some(key.identity),
                     _ => None,
                 };
-                let step = self.group_mutation(
-                    group,
-                    Mutator::AccessPoint(kind),
-                    removal,
-                    removal,
-                    now,
-                    sink,
-                    |command, loan| match command {
-                        AccessPointCommand::InstallGroup(AccessPointGroupInstall(
-                            GroupInstall { command, .. },
-                        )) => Ok(command),
-                        AccessPointCommand::RemoveGroup { permission, key } => {
-                            Ok(GroupCommand::Remove {
-                                identity: <AccessPoint as Role<'id, Id>>::group_identity(key),
-                                removal: <AccessPoint as Role<'id, Id>>::remove_group(permission)
+                let step = self
+                    .group_mutation(
+                        group,
+                        Mutator::AccessPoint(kind),
+                        removal,
+                        removal,
+                        now,
+                        sink,
+                        |command, loan| match command {
+                            AccessPointCommand::InstallGroup(AccessPointGroupInstall(
+                                GroupInstall { command, .. },
+                            )) => Ok(command),
+                            AccessPointCommand::RemoveGroup { permission, key } => {
+                                Ok(GroupCommand::Remove {
+                                    identity: <AccessPoint as Role<'id, Id>>::group_identity(key),
+                                    removal: <AccessPoint as Role<'id, Id>>::remove_group(
+                                        permission,
+                                    )
                                     .into_owned(loan),
-                            })
-                        }
-                        other => Err(other),
-                    },
-                )?;
+                                })
+                            }
+                            other => Err(other),
+                        },
+                    )
+                    .map_err(CommandFailed::Taken)?;
                 match step {
                     GroupStep::Done => Ok(AccessPointProgress::Done),
                     GroupStep::Held(command) => Ok(AccessPointProgress::Held(command)),
@@ -470,8 +507,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         AccessPointRefusal::Expired,
                     )),
                     GroupStep::Failed(command, fault) => {
-                        self.retain_access_point(command);
-                        Err(self.record(fault))
+                        Err(CommandFailed::Returned { command, fault })
                     }
                 }
             }
@@ -510,10 +546,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         command: ApCmd<'id, Id, D, B, O>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<ApProgress<'id, Id, D, B, O>, Self::Fault> {
+    ) -> Result<ApProgress<'id, Id, D, B, O>, AccessPointCommandFailed<'id, Self>> {
+        // A faulted port keeps no command: it comes back beside the fault.
         if let Err(fault) = self.check() {
-            self.retain_access_point(command);
-            return Err(fault);
+            return Err(CommandFailed::Returned { command, fault });
         }
         self.now = now;
         // A token of an earlier installation is refused for good, before
@@ -548,7 +584,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             ));
         }
         let progress = self.run_access_point(command, now, sink);
-        let progress = progress.map_err(|fault| self.record(fault));
+        let progress = progress.map_err(|failed| failed.map_fault(|fault| self.record(fault)));
         self.recompute_deadline();
         progress
     }

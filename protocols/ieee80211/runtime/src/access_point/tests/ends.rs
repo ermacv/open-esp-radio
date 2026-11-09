@@ -67,7 +67,7 @@ fn an_unconfirmed_stop_that_the_port_confirms_later_returns_every_owner() {
         assert!(runner.homes.configure.is_some());
         assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
         assert!(runner.homes.association.is_some());
-        assert!(runner.take_kept().is_none() && runner.take_refused().is_none());
+        assert!(runner.take_kept().is_none() && runner.take_returned().is_none());
         // The port answers its stop confirmed from now on.
         let stopped = core::future::poll_fn(|cx| {
             let now = oer_portable_time::Clock::now(&*counted.clock);
@@ -106,6 +106,6 @@ fn the_terminals_of_one_call_each_bring_their_owners_home() {
         );
         assert!(runner.homes.purposes.iter().all(Option::is_none));
         assert!(runner.take_kept().is_none());
-        assert!(runner.homes.held.is_none() && runner.homes.refused.is_none());
+        assert!(runner.homes.held.is_none() && runner.homes.returned.is_none());
     }));
 }

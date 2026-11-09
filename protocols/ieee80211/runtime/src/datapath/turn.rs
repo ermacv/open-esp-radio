@@ -858,10 +858,23 @@ where
             stage: &mut self.stage,
             grouped: self.group.is_some(),
         };
-        let progress = self
-            .port
-            .command(command, self.now, &mut outbox)
-            .map_err(ActorFault::Port)?;
+        let progress = match self.port.command(command, self.now, &mut outbox) {
+            Ok(progress) => progress,
+            Err(CommandFailed::Returned { command, fault }) => {
+                // The port did not take it: it goes back to the lifecycle
+                // with the group token, never issued again, and the fault
+                // ends the run.
+                let group = if self.stage.group_terminal.is_none() {
+                    self.group.take()
+                } else {
+                    None
+                };
+                let grouped = self.give_group(lifecycle, group)?;
+                self.give(lifecycle, Returned::Unrun { command, grouped })?;
+                return Err(ActorFault::Port(fault));
+            }
+            Err(CommandFailed::Taken(fault)) => return Err(ActorFault::Port(fault)),
+        };
         match progress {
             CommandProgress::Done => {}
             CommandProgress::Held(command) => self.held = Some(HeldCommand { command }),
@@ -1037,7 +1050,7 @@ where
                     self.owed.started = Some(Ok(()));
                 }
                 Poll::Ready(Err(refused)) => {
-                    self.radio = Radio::Stopped;
+                    self.radio = after_refused_start(&refused);
                     self.owed.started = Some(Err(refused));
                 }
                 Poll::Pending => {}
@@ -1069,7 +1082,7 @@ where
                     self.owed.retuned = Some(Ok(()));
                 }
                 Poll::Ready(Err(refused)) => {
-                    self.radio = Radio::Stopped;
+                    self.radio = after_refused_start(&refused);
                     self.owed.retuned = Some(Err(RetuneFailed::Start(refused)));
                 }
                 Poll::Pending => {}
@@ -1122,7 +1135,7 @@ where
                     self.owed.stopped = Some(outcome);
                 }
             }
-            Radio::Stopped | Radio::Running | Radio::Halted => {}
+            Radio::Stopped | Radio::Unstopped | Radio::Running | Radio::Halted => {}
         }
         Ok(())
     }
@@ -1268,5 +1281,17 @@ where
         }
         let _told = lifecycle.from_actor.try_send(FromActor::Faulted(fault));
         self.end = Some(ActorEnd::Faulted(fault));
+    }
+}
+
+/// The radio after a refused start: stopped, or stopping still when the
+/// port's stop of the begun start has not confirmed.
+const fn after_refused_start<K, F>(refused: &StartRefused<F>) -> Radio<K> {
+    match refused {
+        StartRefused::Unstopped { .. } => Radio::Unstopped,
+        StartRefused::Running
+        | StartRefused::Retune(_)
+        | StartRefused::Deadline
+        | StartRefused::Device => Radio::Stopped,
     }
 }

@@ -249,10 +249,13 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
         command: ModelAccessPointCommand<'id, Id, C, X>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<ModelAccessPointProgress<'id, Id, C, X>, ModelPortFault> {
+    ) -> Result<ModelAccessPointProgress<'id, Id, C, X>, AccessPointCommandFailed<'id, Self>> {
+        if self.air.take_access_point_fault() {
+            self.air.poison();
+        }
+        // A faulted port keeps no command: it comes back beside the fault.
         if let Err(fault) = self.check(ModelPortCall::Command) {
-            self.retained_access_point.push(command);
-            return Err(fault);
+            return Err(CommandFailed::Returned { command, fault });
         }
         // A token of an earlier installation is refused for good, before
         // the radio's own state is asked.
@@ -287,12 +290,12 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
         let progress = self.run_access_point(command, now);
         self.drain(sink);
         if let Err(fault) = self.check(ModelPortCall::Command) {
-            if let AccessPointProgress::Held(command) | AccessPointProgress::Refused(command, _) =
-                progress
-            {
-                self.retained_access_point.push(command);
-            }
-            return Err(fault);
+            return Err(match progress {
+                AccessPointProgress::Held(command) | AccessPointProgress::Refused(command, _) => {
+                    CommandFailed::Returned { command, fault }
+                }
+                AccessPointProgress::Done => CommandFailed::Taken(fault),
+            });
         }
         let progress = match progress {
             AccessPointProgress::Held(command) => {

@@ -6,6 +6,7 @@
 //! station's next publications.
 use super::*;
 use oer_portable_time::Duration;
+use oer_protocols_ieee80211_contracts_port::CommandFailed;
 use oer_protocols_ieee80211_testing_conformance::group_keys::{
     self as group_cases, Event, Installation, Mutation, Timing,
 };
@@ -689,7 +690,7 @@ fn a_rejected_gtk_replacement_is_a_named_key_fault_without_a_success_terminal() 
             fixture
                 .port
                 .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox),
-            Err(found) if found == KEY_REJECTED
+            Err(CommandFailed::Returned { fault, .. }) if fault == KEY_REJECTED
         ));
         let waker = fixture.waker();
         assert!(matches!(
@@ -798,7 +799,10 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
             fixture
                 .port
                 .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox),
-            Err(Fault::ReceiveLost)
+            Err(CommandFailed::Returned {
+                fault: Fault::ReceiveLost,
+                ..
+            })
         ));
         let attempt = fixture.station_mpdu().expect("attempt");
         assert!(

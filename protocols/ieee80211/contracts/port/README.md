@@ -22,7 +22,14 @@ receive-configuration, gate or setting operation as one `PortCommand`
 (module `command`), which the actor hands to `DataPort::command` in order.
 A command whose barrier is not reached comes back `Held` and runs again on a
 later call; one the port cannot run in its state comes back refused with
-every owner. Installation commands come only from the backend's issuer
+every owner. A port fault returns the command beside it when the port did
+not take its owners (`CommandFailed::Returned`, a faulted port included,
+which keeps no command), or names that the port took them
+(`CommandFailed::Taken`); a returned command is never issued again
+automatically. A start that fails after it began on the device or the MAC,
+and whose stop is not confirmed, answers `StartRefused::Unstopped` with the
+start's cause and the stop's observation: the port is stopping, and
+`poll_stop` goes on with that stop before any start. Installation commands come only from the backend's issuer
 (`PortCommands`), which mints the identity the installed key will carry.
 Terminals, TBTTs and the units a group mutation's receive cut drained go to
 the turn's `PortSink`, in the order the port produced them; a data arena's
