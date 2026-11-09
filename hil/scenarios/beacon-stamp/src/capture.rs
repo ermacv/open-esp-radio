@@ -5,6 +5,8 @@
 //! 24..32 and the experiment's tag when it carries one. pcapng is not read:
 //! `editcap -F pcap` converts it.
 
+use crate::airtime::Phy;
+
 /// The experiment's tag element (the probe's `frames.rs`): identifier 0xdd,
 /// length 24, OUI 02:4f:45, "STMP".
 const TAG_HEAD: [u8; 9] = [0xdd, 24, 0x02, 0x4f, 0x45, b'S', b'T', b'M', b'P'];
@@ -13,6 +15,17 @@ const LINKTYPE_IEEE802_11_RADIOTAP: u32 = 127;
 /// Radiotap Flags (field 1): the frame ends with its FCS; the FCS failed.
 const FLAG_FCS_AT_END: u8 = 0x10;
 const FLAG_BAD_FCS: u8 = 0x40;
+
+/// The PHY a frame's radiotap header reports.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ObservedPhy {
+    /// No Rate or MCS field, or an MCS field without its bandwidth, index
+    /// or guard interval.
+    Missing,
+    /// A PHY the calibration does not use.
+    Unsupported,
+    Phy(Phy),
+}
 
 /// What a frame's tag says of it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,6 +49,8 @@ pub struct AirFrame {
     pub transmitter: Option<[u8; 6]>,
     /// The PSDU: the MPDU and its FCS, octets.
     pub psdu: u32,
+    /// The PHY its radiotap header reports.
+    pub phy: ObservedPhy,
     /// MPDU octets 24..32.
     pub stamp: Option<[u8; 8]>,
     pub tag: Option<Tag>,
@@ -73,15 +88,50 @@ fn u64_le(bytes: &[u8], at: usize) -> Option<u64> {
     Some(u64::from_le_bytes(raw))
 }
 
-/// The radiotap header's length, its TSFT and its Flags. Fields 0 (TSFT,
-/// eight octets aligned to eight) and 1 (Flags, one octet) are the first
-/// of the first presence word, so their place follows from the number of
-/// presence words alone (radiotap.org, "Alignment in Radiotap").
-fn radiotap(packet: &[u8]) -> Option<(usize, Option<u64>, u8)> {
+/// The radiotap fields 0..=19 of the first presence word: alignment and
+/// size (radiotap.org, "Defined fields"). Their places follow from this
+/// order alone: every field of the first word precedes any later word's.
+const FIELDS: [(usize, usize); 20] = [
+    (8, 8), // 0 TSFT
+    (1, 1), // 1 Flags
+    (1, 1), // 2 Rate, 500 kb/s
+    (2, 4), // 3 Channel
+    (2, 2), // 4 FHSS
+    (1, 1), // 5 dBm antenna signal
+    (1, 1), // 6 dBm antenna noise
+    (2, 2), // 7 Lock quality
+    (2, 2), // 8 TX attenuation
+    (2, 2), // 9 dB TX attenuation
+    (1, 1), // 10 dBm TX power
+    (1, 1), // 11 Antenna
+    (1, 1), // 12 dB antenna signal
+    (1, 1), // 13 dB antenna noise
+    (2, 2), // 14 RX flags
+    (2, 2), // 15 TX flags
+    (1, 1), // 16 RTS retries
+    (1, 1), // 17 data retries
+    (4, 8), // 18 XChannel
+    (1, 3), // 19 MCS: known, flags, index
+];
+
+/// What a radiotap header says of its frame.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct Radiotap {
+    length: usize,
+    tsft: Option<u64>,
+    flags: u8,
+    rate: Option<u8>,
+    mcs: Option<[u8; 3]>,
+}
+
+fn radiotap(packet: &[u8]) -> Option<Radiotap> {
     if *packet.first()? != 0 {
         return None;
     }
     let length = usize::from(u16_at(packet, 2, false)?);
+    if length > packet.len() {
+        return None;
+    }
     let present = u32_at(packet, 4, false)?;
     let mut words = 1usize;
     let mut last = present;
@@ -90,20 +140,73 @@ fn radiotap(packet: &[u8]) -> Option<(usize, Option<u64>, u8)> {
         words = words.checked_add(1)?;
     }
     let mut at = 4usize.checked_add(words.checked_mul(4)?)?;
-    let mut tsft = None;
-    if present & 1 != 0 {
-        at = at.checked_add(7)? & !7;
-        tsft = Some(u64_le(packet, at)?);
-        at = at.checked_add(8)?;
+    let mut header = Radiotap {
+        length,
+        ..Radiotap::default()
+    };
+    for (bit, (align, size)) in FIELDS.iter().enumerate() {
+        if present & (1 << bit) == 0 {
+            continue;
+        }
+        at = at.checked_add(align - 1)? / align * align;
+        let field = packet.get(at..at.checked_add(*size)?)?;
+        match bit {
+            0 => header.tsft = Some(u64_le(field, 0)?),
+            1 => header.flags = *field.first()?,
+            2 => header.rate = Some(*field.first()?),
+            19 => header.mcs = Some(field.try_into().ok()?),
+            _ => {}
+        }
+        at = at.checked_add(*size)?;
     }
-    let mut flags = 0;
-    if present & 2 != 0 {
-        flags = *packet.get(at)?;
+    Some(header)
+}
+
+/// The PHY a radiotap header describes, as mac80211 v6.18.26 writes it
+/// (`net/mac80211/rx.c`, `ieee80211_add_rx_radiotap_header`): the Rate
+/// field for a non-HT frame, the MCS field for HT. mac80211 marks the
+/// format and the FEC known only when they are greenfield or LDPC
+/// (rx.c 485-489): their absence means HT-mixed and BCC there. Anything
+/// else is not a PHY the calibration uses.
+fn observed_phy(header: &Radiotap) -> ObservedPhy {
+    const SHORT_PREAMBLE: u8 = 0x02;
+    const HAVE_BW: u8 = 0x01;
+    const HAVE_MCS: u8 = 0x02;
+    const HAVE_GI: u8 = 0x04;
+    const HAVE_FMT: u8 = 0x08;
+    const HAVE_FEC: u8 = 0x10;
+    match (header.mcs, header.rate) {
+        (Some([known, flags, index]), _) => {
+            let required = HAVE_BW | HAVE_MCS | HAVE_GI;
+            if known & required != required {
+                return ObservedPhy::Missing;
+            }
+            let greenfield = known & HAVE_FMT != 0 && flags & 0x08 != 0;
+            let ldpc = known & HAVE_FEC != 0 && flags & 0x10 != 0;
+            // 20 MHz, long GI, no STBC, mixed, BCC, MCS 0..=7.
+            if flags & 0x03 != 0
+                || flags & 0x04 != 0
+                || flags & 0x60 != 0
+                || greenfield
+                || ldpc
+                || index > 7
+            {
+                return ObservedPhy::Unsupported;
+            }
+            ObservedPhy::Phy(Phy::HtMixed { mcs: index })
+        }
+        (None, Some(rate)) => match rate {
+            2 | 4 | 11 | 22 => ObservedPhy::Phy(Phy::Dsss {
+                rate_kbps: u32::from(rate) * 500,
+                short: header.flags & SHORT_PREAMBLE != 0,
+            }),
+            12 | 18 | 24 | 36 | 48 | 72 | 96 | 108 => ObservedPhy::Phy(Phy::ErpOfdm {
+                rate_mbps: u32::from(rate) / 2,
+            }),
+            _ => ObservedPhy::Unsupported,
+        },
+        (None, None) => ObservedPhy::Missing,
     }
-    if length > packet.len() {
-        return None;
-    }
-    Some((length, tsft, flags))
 }
 
 fn tag(mpdu: &[u8], from: usize) -> Option<Tag> {
@@ -126,7 +229,7 @@ fn tag(mpdu: &[u8], from: usize) -> Option<Tag> {
 
 /// The frame of one radiotap record; `None` for a record too short to be
 /// an 802.11 header.
-fn frame(tsft: u64, mpdu: &[u8]) -> Option<AirFrame> {
+fn frame(tsft: u64, phy: ObservedPhy, mpdu: &[u8]) -> Option<AirFrame> {
     let frame_control = *mpdu.first()?;
     let receiver: [u8; 6] = mpdu.get(4..10)?.try_into().ok()?;
     let transmitter = mpdu.get(10..16).and_then(|octets| octets.try_into().ok());
@@ -140,6 +243,7 @@ fn frame(tsft: u64, mpdu: &[u8]) -> Option<AirFrame> {
         receiver,
         transmitter,
         psdu,
+        phy,
         stamp,
         tag: tag(mpdu, from),
     })
@@ -192,14 +296,15 @@ fn parse_with(bytes: &[u8], partial_tail: bool) -> Result<Capture, String> {
         };
         at = end;
         index = index.saturating_add(1);
-        let Some((length, tsft, flags)) = radiotap(packet) else {
+        let Some(header) = radiotap(packet) else {
             return Err(format!("record {index} has no valid radiotap header"));
         };
+        let (length, flags) = (header.length, header.flags);
         if flags & FLAG_BAD_FCS != 0 {
             capture.bad_fcs = capture.bad_fcs.saturating_add(1);
             continue;
         }
-        let Some(tsft) = tsft else {
+        let Some(tsft) = header.tsft else {
             capture.without_tsft = capture.without_tsft.saturating_add(1);
             continue;
         };
@@ -207,7 +312,7 @@ fn parse_with(bytes: &[u8], partial_tail: bool) -> Result<Capture, String> {
         if flags & FLAG_FCS_AT_END != 0 {
             mpdu = mpdu.get(..mpdu.len().saturating_sub(4)).unwrap_or_default();
         }
-        if let Some(frame) = frame(tsft, mpdu) {
+        if let Some(frame) = frame(tsft, observed_phy(&header), mpdu) {
             capture.frames.push(frame);
         }
     }
@@ -220,11 +325,34 @@ pub mod synthetic {
     /// One radiotap record: TSFT and Flags (FCS at end), the MPDU and a
     /// dummy FCS.
     pub fn record(tsft: u64, mpdu: &[u8]) -> Vec<u8> {
+        record_with(tsft, None, None, 0, mpdu)
+    }
+
+    /// A radiotap record with an optional Rate field (500 kb/s), an
+    /// optional MCS field (known, flags, index) and extra Flags bits.
+    pub fn record_with(
+        tsft: u64,
+        rate: Option<u8>,
+        mcs: Option<[u8; 3]>,
+        flags: u8,
+        mpdu: &[u8],
+    ) -> Vec<u8> {
+        let present = 0x3u32
+            | if rate.is_some() { 1 << 2 } else { 0 }
+            | if mcs.is_some() { 1 << 19 } else { 0 };
         let mut packet = vec![0, 0, 0, 0];
-        packet.extend_from_slice(&0x0000_0003u32.to_le_bytes());
+        packet.extend_from_slice(&present.to_le_bytes());
         packet.extend_from_slice(&tsft.to_le_bytes());
-        packet.push(0x10);
-        packet.extend_from_slice(&[0; 3]);
+        packet.push(0x10 | flags);
+        if let Some(rate) = rate {
+            packet.push(rate);
+        }
+        if let Some(mcs) = mcs {
+            packet.extend_from_slice(&mcs);
+        }
+        while packet.len() % 4 != 0 {
+            packet.push(0);
+        }
         let length = packet.len() as u16;
         packet[2..4].copy_from_slice(&length.to_le_bytes());
         packet.extend_from_slice(mpdu);
@@ -295,6 +423,70 @@ mod tests {
         assert_eq!(frame.transmitter, Some(TA));
         assert_eq!(frame.stamp, Some(0x1122_3344_5566_7788u64.to_le_bytes()));
         assert_eq!(frame.tag, Some(TAG));
+    }
+
+    #[test]
+    fn the_radiotap_rate_and_mcs_give_the_observed_phy() {
+        let mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
+        let phy = |record: Vec<u8>| parse(&synthetic::file(&[record])).unwrap().frames[0].phy;
+        assert_eq!(phy(synthetic::record(1, &mpdu)), ObservedPhy::Missing);
+        assert_eq!(
+            phy(synthetic::record_with(1, Some(2), None, 0, &mpdu)),
+            ObservedPhy::Phy(Phy::Dsss {
+                rate_kbps: 1000,
+                short: false
+            })
+        );
+        assert_eq!(
+            phy(synthetic::record_with(1, Some(22), None, 0x02, &mpdu)),
+            ObservedPhy::Phy(Phy::Dsss {
+                rate_kbps: 11000,
+                short: true
+            })
+        );
+        assert_eq!(
+            phy(synthetic::record_with(1, Some(12), None, 0, &mpdu)),
+            ObservedPhy::Phy(Phy::ErpOfdm { rate_mbps: 6 })
+        );
+        // mac80211's HT: bandwidth, index and GI known; mixed and BCC.
+        assert_eq!(
+            phy(synthetic::record_with(
+                1,
+                None,
+                Some([0x07, 0, 0]),
+                0,
+                &mpdu
+            )),
+            ObservedPhy::Phy(Phy::HtMixed { mcs: 0 })
+        );
+        // Without the GI known, or at 40 MHz, short GI, greenfield, LDPC.
+        assert_eq!(
+            phy(synthetic::record_with(
+                1,
+                None,
+                Some([0x03, 0, 0]),
+                0,
+                &mpdu
+            )),
+            ObservedPhy::Missing
+        );
+        for (known, flags) in [(0x07, 0x01), (0x07, 0x04), (0x0f, 0x08), (0x17, 0x10)] {
+            assert_eq!(
+                phy(synthetic::record_with(
+                    1,
+                    None,
+                    Some([known, flags, 0]),
+                    0,
+                    &mpdu
+                )),
+                ObservedPhy::Unsupported,
+                "{known:02x} {flags:02x}"
+            );
+        }
+        assert_eq!(
+            phy(synthetic::record_with(1, Some(5), None, 0, &mpdu)),
+            ObservedPhy::Unsupported
+        );
     }
 
     #[test]

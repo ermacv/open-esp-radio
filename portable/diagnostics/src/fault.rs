@@ -65,6 +65,9 @@ pub enum Domain {
     /// The beacon-stamp probe's retained fault: its own namespace, so a
     /// record another image left at the same place is never taken for its.
     BeaconStamp = 15,
+    /// The beacon-stamp ACK responder's retained fault, in a namespace of
+    /// its own.
+    AckResponder = 16,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

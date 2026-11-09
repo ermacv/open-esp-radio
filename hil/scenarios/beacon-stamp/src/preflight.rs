@@ -70,15 +70,17 @@ pub struct Preflight {
     pub frames: usize,
     pub pairs: usize,
     pub unanswered: usize,
+    pub unobserved: usize,
+    pub contradictory: usize,
     pub latch: latch::Outcome,
     pub evidence: latch::Evidence,
 }
 
 /// Whether the capture holds every calibration frame of the first boot.
-fn calibrated(bytes: &[u8]) -> Option<(Vec<latch::Pair>, usize)> {
+fn calibrated(bytes: &[u8]) -> Option<latch::Pairs> {
     let capture = capture::parse_prefix(bytes).ok()?;
-    let (pairs, unanswered) = latch::pairs(&capture, None);
-    (pairs.len() + unanswered >= latch::FRAMES).then_some((pairs, unanswered))
+    let found = latch::pairs(&capture, None);
+    (found.seen() >= latch::FRAMES).then_some(found)
 }
 
 /// Look at the capture until it is accepted or refused, within `WINDOW`;
@@ -99,7 +101,7 @@ pub fn wait<C, S: Sniffer<C>>(sniffer: &mut S) -> Result<Preflight> {
             Look::Wait => std::thread::sleep(POLL),
         }
     };
-    let (pairs, unanswered) = loop {
+    let found = loop {
         let bytes = sniffer.captured()?;
         if let Some(found) = calibrated(&bytes) {
             break found;
@@ -110,11 +112,13 @@ pub fn wait<C, S: Sniffer<C>>(sniffer: &mut S) -> Result<Preflight> {
         }
         std::thread::sleep(POLL);
     };
-    let (latch, evidence) = latch::decide(&pairs);
+    let (latch, evidence) = latch::decide(&found);
     Ok(Preflight {
         frames,
-        pairs: pairs.len(),
-        unanswered,
+        pairs: found.pairs.len(),
+        unanswered: found.unanswered,
+        unobserved: found.unobserved,
+        contradictory: found.contradictory,
         latch,
         evidence,
     })

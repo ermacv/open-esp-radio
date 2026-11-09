@@ -414,8 +414,13 @@ fn leased(
     )?;
     let preflight = preflight::wait::<Client, _>(monitor)?;
     let latch = format!(
-        "{:?} ({} pairs, {} unanswered, {:?})",
-        preflight.latch, preflight.pairs, preflight.unanswered, preflight.evidence
+        "{:?} ({} pairs, {} unanswered, {} without an observed PHY, {} contradictory, {:?})",
+        preflight.latch,
+        preflight.pairs,
+        preflight.unanswered,
+        preflight.unobserved,
+        preflight.contradictory,
+        preflight.evidence
     );
     eprintln!(
         "beacon-stamp: preflight accepted {} probe frames with TSFT; latch calibration: {latch}; \

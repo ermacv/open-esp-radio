@@ -139,6 +139,7 @@ fn simulate(model: Model) -> (Run, Capture) {
                     receiver: [0xff; 6],
                     transmitter: Some(AP),
                     psdu: 100,
+                    phy: crate::capture::ObservedPhy::Missing,
                     stamp: Some([0xa5; 8]),
                     tag: Some(Tag {
                         kind: b'x',
@@ -183,6 +184,7 @@ fn simulate(model: Model) -> (Run, Capture) {
                 receiver: [0xff; 6],
                 transmitter: Some(AP),
                 psdu: 100,
+                phy: crate::capture::ObservedPhy::Missing,
                 stamp: Some(value.to_le_bytes()),
                 tag: Some(Tag {
                     kind: kind.code(),
@@ -222,6 +224,7 @@ fn simulate(model: Model) -> (Run, Capture) {
         receiver: [0xff; 6],
         transmitter: Some([2, 0, 0, 0, 0, 9]),
         psdu: 100,
+        phy: crate::capture::ObservedPhy::Missing,
         stamp: Some([1; 8]),
         tag: None,
     });

@@ -60,7 +60,7 @@ fn record(claim: &Claim<'_>, kind: u32, cause: u32, pc: u32, mtval: u32, ra: u32
     };
     if let Ok(record) = Record::encode(
         class,
-        Domain::BeaconStamp,
+        Domain::AckResponder,
         kind,
         oer_portable_riscv::hart_id() as u32,
         PHASE.load(Ordering::Relaxed),
@@ -92,7 +92,7 @@ pub(crate) fn report_previous() {
         return;
     };
     let Ok([kind, phase, hart, cause, pc, tval, ra, mscratch]) =
-        view.decode::<[u32; 8]>(Domain::BeaconStamp)
+        view.decode::<[u32; 8]>(Domain::AckResponder)
     else {
         return;
     };
