@@ -17,6 +17,9 @@ pub(crate) fn backend_fault(
             oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Key => {
                 UnpublishedCause::Key
             }
+            oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Registers => {
+                UnpublishedCause::Registers
+            }
             oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Step(step) => {
                 UnpublishedCause::Step(publish_step(step))
             }

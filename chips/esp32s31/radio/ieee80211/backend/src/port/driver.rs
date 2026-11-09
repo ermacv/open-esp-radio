@@ -1091,14 +1091,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // Free a moment ago, in the same call: the slot lends its memory.
         let TxSlotAccess::Free(mut memory) = slot.access() else {
             // Excluded by the read just above. The descriptor keeps the
-            // memory out of every pool; the other owners go back.
+            // memory out of every pool; the other owners go back beside
+            // the fault.
             return Err(self.unadmit(
                 hardware,
                 env,
                 index,
                 (pending, admission),
                 None,
-                refused(PublishStep::DescriptorBusy),
+                Fault::DescriptorMissing { queue: at },
             ));
         };
         if !mpdu.published {
@@ -1251,10 +1252,32 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         oer_portable_trace_recorder::emit(&publication);
         Ok(())
     }
-    /// Put `pending` back at the head of its queue with `fault`: nothing of
-    /// it was published. A queue without room ends the attempt and answers
-    /// [`Fault::QueueFull`].
+    /// Put `pending` back at the head of its queue, every owner of it
+    /// back in its place: nothing of it was published. A refusal of the
+    /// registers or of a publication step is then
+    /// [`Fault::Unpublished`], which a stop recovers from and whose stop
+    /// withdraws the attempt; any other `fault` stays as it is. A queue
+    /// without room ends the attempt and answers [`Fault::QueueFull`].
     fn requeue(
+        &mut self,
+        env: &mut impl DriverEnv<'id, Id, D, B, O>,
+        index: usize,
+        pending: Pending<'id, Id, D, B, O>,
+        fault: Fault,
+    ) -> Fault {
+        let whole = match fault {
+            Fault::HardwareUnavailable => Some(Unpublished::Registers),
+            Fault::Publish { step, .. } => Some(Unpublished::Step(step)),
+            _ => None,
+        };
+        match whole {
+            Some(refusal) => self.back_to_queue(env, index, pending, refusal),
+            None => self.requeue_beside(env, index, pending, fault),
+        }
+    }
+    /// Put `pending` back at the head of its queue with `fault`, which an
+    /// owner kept elsewhere makes the port's to keep.
+    fn requeue_beside(
         &mut self,
         env: &mut impl DriverEnv<'id, Id, D, B, O>,
         index: usize,
@@ -1284,11 +1307,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             // descriptor stays out of every pool.
             let _home = self.home_descriptor(index, slot);
         }
-        let fault = match self.returned_ticket(hardware, index, pending.role(), admission, fault) {
-            Ok(()) => fault,
-            Err(cause) => cause,
-        };
-        self.requeue(env, index, pending, fault)
+        match self.returned_ticket(hardware, index, pending.role(), admission, fault) {
+            Ok(()) => self.requeue(env, index, pending, fault),
+            Err(cause) => self.requeue_beside(env, index, pending, cause),
+        }
     }
     /// A publication the core refused at its submission: the memory
     /// rejoins the buffer when the descriptor gives it up (otherwise it
@@ -1385,7 +1407,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if let Err(fault) =
             self.returned_ticket(hardware, index, pending.role(), admission, terminal)
         {
-            return Err(self.requeue(env, index, pending, fault));
+            return Err(self.requeue_beside(env, index, pending, fault));
         }
         self.finish(
             env,

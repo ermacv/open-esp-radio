@@ -1243,14 +1243,17 @@ fn a_port_without_its_registers_faults_without_publishing() {
         fixture.start();
         fixture.observed.borrow_mut().hardware_unavailable = true;
         fixture.submit_mpdu(Spec::open(1));
-        assert_eq!(fixture.port.fault(), Some(Fault::HardwareUnavailable));
+        let refused = Fault::Unpublished(crate::port::Unpublished::Registers);
+        assert_eq!(fixture.port.fault(), Some(refused));
         fixture.observed.borrow_mut().hardware_unavailable = false;
         let now = fixture.now();
+        // No retry under the recorded refusal, even with the registers
+        // back: only a stop recovers from it.
         assert!(matches!(
             fixture
                 .port
                 .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox),
-            Err(Fault::HardwareUnavailable)
+            Err(fault) if fault == refused
         ));
         assert!(
             fixture.events(access).is_empty(),

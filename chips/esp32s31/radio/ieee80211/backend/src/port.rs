@@ -453,6 +453,8 @@ pub enum Unpublished {
     Admission,
     /// The MPDU's key is not installed.
     Key,
+    /// The device's registers were held elsewhere at the publication.
+    Registers,
     /// A step of the publication refused; what it held went back.
     Step(PublishStep),
 }

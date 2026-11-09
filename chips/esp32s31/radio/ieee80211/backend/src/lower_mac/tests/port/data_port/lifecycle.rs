@@ -1777,10 +1777,14 @@ fn a_removal_the_registers_refuse_comes_back_and_leaves_the_key_installed() {
     });
 }
 
+/// Registers held elsewhere at a publication: every owner of the attempt
+/// goes back, the refusal recovers for a stop, and the stop ends the
+/// attempt once, withdrawn with its owners, through the port's real stop.
 #[test]
-fn a_publication_the_registers_refuse_keeps_its_attempt_in_its_queue() {
+fn a_publication_the_registers_refuse_ends_once_at_the_stop_with_its_owners() {
     with_fixture(|fixture| {
         fixture.start();
+        let tickets = fixture.port.admissions_for_test().0;
         fixture.observed.borrow_mut().hardware_unavailable = true;
         let attempt = fixture.station_mpdu().expect("attempt");
         let now = fixture.now();
@@ -1788,19 +1792,30 @@ fn a_publication_the_registers_refuse_keeps_its_attempt_in_its_queue() {
         let _served = fixture
             .port
             .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox);
-        assert_eq!(fixture.port.fault(), Some(Fault::HardwareUnavailable));
-        assert_eq!(fixture.take_completed(), 0, "no terminal");
-        let Poll::Ready(Err(unconfirmed)) = fixture.poll_stop_now() else {
-            panic!("a faulted port's stop is unconfirmed");
-        };
         assert_eq!(
-            (
-                unconfirmed.observations.queued,
-                unconfirmed.observations.published
-            ),
-            (1, 0),
-            "the attempt waits in its queue, never published"
+            fixture.port.fault(),
+            Some(Fault::Unpublished(crate::port::Unpublished::Registers))
         );
+        assert_eq!(fixture.take_completed(), 0, "no terminal yet");
+        assert_eq!(fixture.port.admissions_for_test().0, tickets, "ticket home");
+        // The registers come back; nothing publishes the attempt again.
+        fixture.observed.borrow_mut().hardware_unavailable = false;
+        let published = fixture.observed.borrow().publications;
+        let stops = fixture.observed.borrow().stops;
+        assert!(fixture.port.recover_for_stop(), "every owner is whole");
+        fixture.stop();
+        assert!(
+            fixture.observed.borrow().stops > stops,
+            "the device's own stop ran"
+        );
+        assert_eq!(fixture.observed.borrow().publications, published);
+        assert!(matches!(
+            last_outcome(fixture),
+            Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
+        ));
+        assert_eq!(fixture.take_completed(), 1, "exactly one terminal");
+        assert_eq!(fixture.port.admissions_for_test().0, tickets);
+        assert_eq!(fixture.port.fault(), None);
     });
 }
 

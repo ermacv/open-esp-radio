@@ -216,6 +216,7 @@ pub enum UnpublishedCause {
     CoreView,
     Admission,
     Key,
+    Registers,
     Step(PublishStep),
 }
 

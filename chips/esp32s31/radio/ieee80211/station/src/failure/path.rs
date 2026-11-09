@@ -35,6 +35,7 @@ impl DiagnosticPath for BackendFault {
                     UnpublishedCause::CoreView => "CoreView",
                     UnpublishedCause::Admission => "Admission",
                     UnpublishedCause::Key => "Key",
+                    UnpublishedCause::Registers => "Registers",
                     UnpublishedCause::Step(step) => publish_step(step),
                 });
             }
