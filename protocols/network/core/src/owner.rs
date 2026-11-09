@@ -341,12 +341,13 @@ impl<
         self.port.take_notice()
     }
 
-    /// Make `cx` the one the port wakes.
-    pub fn register_port(&mut self, cx: &mut Context<'_>)
+    /// Make `cx` the one the port wakes, and say whether the port has
+    /// something already ([`FrameSource::register`]).
+    pub fn register_port(&mut self, cx: &mut Context<'_>) -> bool
     where
         P: FrameSource,
     {
-        self.port.register(cx);
+        self.port.register(cx)
     }
 
     /// See [`Core::open`].

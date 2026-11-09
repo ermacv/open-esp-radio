@@ -623,7 +623,12 @@ pub struct Device<'c, L, const RX: usize, N: Notifies = SameHart> {
     receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
     copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
     link: &'c super::NetworkLink<N::NetworkWaker>,
-    observed: LinkSnapshot,
+    /// The publication last observed: the link and its association's rate,
+    /// which the network's egress reads too.
+    observed: (
+        LinkSnapshot,
+        Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
+    ),
 }
 impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
     /// The network end over the station's receive channels and `state`'s
@@ -637,7 +642,7 @@ impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
             receive,
             copied,
             link: state.network_link(),
-            observed: LinkSnapshot::DOWN,
+            observed: (LinkSnapshot::DOWN, None),
         }
     }
 
@@ -653,14 +658,16 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
     fn link(&self) -> LinkSnapshot {
         self.link.snapshot()
     }
+    /// Ready at a new publication of the link word: the link, or only its
+    /// association's rate, which the egress needs before it charges a frame.
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
         self.link.register(cx);
-        let link = self.link();
-        if link == self.observed {
+        let published = self.link.read();
+        if published == self.observed {
             Poll::Pending
         } else {
-            self.observed = link;
-            Poll::Ready(link)
+            self.observed = published;
+            Poll::Ready(published.0)
         }
     }
     fn receive_queue_len(&self) -> usize {

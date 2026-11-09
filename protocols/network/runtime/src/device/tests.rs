@@ -284,12 +284,17 @@ fn unreachable_fill(why: &'static str) -> impl FnOnce(&mut [u8]) -> Result<(), D
     move |_| panic!("{why}")
 }
 
-/// Whether registering wakes at once.
-fn wakes_at_once(port: &mut Port) -> bool {
+/// Whether registering says the port has something now. Registration
+/// reports it and never wakes the caller for it.
+fn ready_at_once(port: &mut Port) -> bool {
     let woken = std::sync::Arc::new(Woken::default());
     let waker = Waker::from(woken.clone());
-    port.register(&mut Context::from_waker(&waker));
-    woken.0.load(std::sync::atomic::Ordering::SeqCst)
+    let ready = port.register(&mut Context::from_waker(&waker));
+    assert!(
+        !woken.0.load(std::sync::atomic::Ordering::SeqCst),
+        "readiness is returned, not woken"
+    );
+    ready
 }
 
 #[derive(Default)]
@@ -419,14 +424,14 @@ fn a_failed_fill_comes_back_as_the_fill_s_and_keeps_the_buffer() {
     assert_eq!(port.buffers.free, 2);
     assert!(port.transmit.sent.is_empty());
     assert!(
-        !wakes_at_once(&mut port),
+        !ready_at_once(&mut port),
         "it waits for nothing of the port"
     );
 }
 
 #[test]
 fn an_idle_port_with_room_wakes_nobody() {
-    assert!(!wakes_at_once(&mut port()));
+    assert!(!ready_at_once(&mut port()));
 }
 
 /// The memory the device returned comes back at each registration, with no
@@ -435,7 +440,7 @@ fn an_idle_port_with_room_wakes_nobody() {
 fn an_idle_port_takes_back_the_memory_the_device_returned() {
     let mut port = port();
     port.transmit.returned = 3;
-    assert!(!wakes_at_once(&mut port));
+    assert!(!ready_at_once(&mut port));
     assert_eq!(port.transmit.taken_back, 3);
     assert!(port.transmit.sent.is_empty());
 }
@@ -445,23 +450,23 @@ fn room_wakes_only_a_frame_that_met_none() {
     let mut port = port();
     port.transmit.full = true;
     assert!(port.publish(4, octets).is_err());
-    assert!(!wakes_at_once(&mut port), "still no room");
+    assert!(!ready_at_once(&mut port), "still no room");
     assert_eq!(port.transmit.room_polls, 1, "it asked");
     port.transmit.full = false;
-    assert!(wakes_at_once(&mut port));
+    assert!(ready_at_once(&mut port));
     port.publish(4, octets).unwrap();
-    assert!(!wakes_at_once(&mut port), "that frame went");
+    assert!(!ready_at_once(&mut port), "that frame went");
 }
 
 #[test]
 fn a_received_frame_and_a_link_change_wake_at_once() {
     let mut port = port();
     port.device.incoming.push_back(lent(b"in"));
-    assert!(wakes_at_once(&mut port));
+    assert!(ready_at_once(&mut port));
     port.device.incoming.clear();
     port.device.link_changed = true;
-    assert!(wakes_at_once(&mut port));
-    assert!(!wakes_at_once(&mut port));
+    assert!(ready_at_once(&mut port));
+    assert!(!ready_at_once(&mut port));
 }
 
 #[test]
@@ -472,13 +477,13 @@ fn a_down_link_with_a_free_queue_wakes_nobody_until_it_changes() {
         port.publish(4, octets),
         Err(Unpublished::Port(PortRefusal::LinkDown))
     );
-    assert!(!wakes_at_once(&mut port), "room is not what it waits for");
+    assert!(!ready_at_once(&mut port), "room is not what it waits for");
     assert_eq!(
         port.transmit.room_polls, 1,
         "asked for returned memory only"
     );
     port.device.link_changed = true;
-    assert!(wakes_at_once(&mut port));
+    assert!(ready_at_once(&mut port));
 }
 
 #[test]
@@ -489,10 +494,10 @@ fn no_buffer_with_a_free_queue_wakes_nobody_until_one_is_free() {
         port.publish(4, octets),
         Err(Unpublished::Port(PortRefusal::NoRoom))
     );
-    assert!(!wakes_at_once(&mut port), "room is not what it waits for");
+    assert!(!ready_at_once(&mut port), "room is not what it waits for");
     assert_eq!(port.buffers.free_polls, 1, "it asked for a buffer");
     port.buffers.free = 1;
-    assert!(wakes_at_once(&mut port));
+    assert!(ready_at_once(&mut port));
 }
 
 #[test]
@@ -503,7 +508,7 @@ fn a_full_queue_is_watched_after_the_device_refused() {
         port.publish(4, octets),
         Err(Unpublished::Port(PortRefusal::NoRoom))
     );
-    assert!(wakes_at_once(&mut port));
+    assert!(ready_at_once(&mut port));
     assert_eq!(port.transmit.room_polls, 1);
 }
 
@@ -516,7 +521,7 @@ fn a_write_refused_for_room_watches_for_a_buffer() {
         Err(Unpublished::Port(PortRefusal::NoRoom))
     );
     port.buffers.free = 0;
-    assert!(!wakes_at_once(&mut port));
+    assert!(!ready_at_once(&mut port));
     assert_eq!(port.buffers.free_polls, 1);
 }
 
@@ -528,7 +533,7 @@ fn a_write_refused_for_the_link_waits_for_the_link() {
         port.publish(4, octets),
         Err(Unpublished::Port(PortRefusal::LinkDown))
     );
-    assert!(!wakes_at_once(&mut port));
+    assert!(!ready_at_once(&mut port));
     assert_eq!(
         (port.transmit.room_polls, port.buffers.free_polls),
         (1, 0),
@@ -551,7 +556,7 @@ fn a_bad_frame_waits_for_nothing() {
         port.publish(4, octets),
         Err(Unpublished::Port(PortRefusal::BadFrame))
     );
-    assert!(!wakes_at_once(&mut port));
+    assert!(!ready_at_once(&mut port));
 }
 
 /// The return path without a service: the port's owner gives back the
@@ -588,7 +593,7 @@ fn a_stop_gives_back_every_frame_and_takes_back_the_returned_memory() {
     port.transmit.full = false;
     port.give_back();
     assert!(
-        !wakes_at_once(&mut port),
+        !ready_at_once(&mut port),
         "the ended exchange leaves no frame waiting for room"
     );
     assert_eq!(returned.load(Ordering::SeqCst), 3);
@@ -642,12 +647,12 @@ fn a_buffer_frees_only_when_its_end_is_handed_on() {
 #[test]
 fn a_waiting_end_wakes_the_service() {
     let mut port = port();
-    assert!(!wakes_at_once(&mut port));
+    assert!(!ready_at_once(&mut port));
     let first = sent(&mut port);
     port.buffers.ended.push_back(first);
-    assert!(wakes_at_once(&mut port));
+    assert!(ready_at_once(&mut port));
     assert_eq!(port.take_notice(), Some(first));
-    assert!(!wakes_at_once(&mut port));
+    assert!(!ready_at_once(&mut port));
 }
 
 /// After its service ended, the port's give-back frees the buffers whose

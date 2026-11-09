@@ -87,9 +87,14 @@ pub trait FrameSource {
     /// A change of it wakes what [`Self::register`] registered.
     fn link(&self) -> LinkSnapshot;
 
-    /// Make `cx` the one a received frame, a notice or room to publish wakes,
-    /// at once if any came since the last look.
-    fn register(&mut self, cx: &mut Context<'_>);
+    /// Make `cx` the one the next received frame, notice, change of link or
+    /// room for a refused frame wakes, and return whether one is here
+    /// already: a frame or a notice not yet taken, a link changed since the
+    /// last registration, or room for the frame the port last refused. This
+    /// is the caller's readiness, checked after registering, so nothing that
+    /// comes between the two is missed. A `true` is not also a wake: `cx` is
+    /// woken for what comes after this call.
+    fn register(&mut self, cx: &mut Context<'_>) -> bool;
 }
 
 /// The buffer of a port that lends none: it cannot be.

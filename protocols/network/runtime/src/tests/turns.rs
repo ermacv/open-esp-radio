@@ -720,3 +720,42 @@ fn a_spent_publishing_budget_turns_again_unwoken() {
         "one turn spent its budget"
     );
 }
+
+/// More notices than a turn hands the policy: that turn publishes nothing
+/// and names its own next turn, which it takes after a yield, not after a
+/// wait.
+#[test]
+fn notices_past_a_turn_s_budget_turn_again_after_a_yield() {
+    brand!(Net);
+    let (mut service, _socket, wire, _stop) = flow::<Net>();
+    let clock: &VirtualClock = Box::leak(Box::new(VirtualClock::new()));
+    let mut seen = Seen::default();
+    {
+        let mut run = pin!(service.run(clock, &mut seen));
+        pass(&mut run);
+        wire.0.borrow_mut().ended.extend(0..65);
+        pass(&mut run);
+        pass(&mut run);
+    }
+    assert!(wire.0.borrow().ended.is_empty());
+    let deferred = seen
+        .0
+        .iter()
+        .position(|event| *event == ServiceEvent::Published(PublishEnd::Deferred))
+        .unwrap();
+    let after: Vec<_> = seen.0[deferred + 1..]
+        .iter()
+        .filter(|event| {
+            matches!(
+                event,
+                ServiceEvent::Yielded | ServiceEvent::Waited { .. } | ServiceEvent::TurnBegan
+            )
+        })
+        .take(2)
+        .collect();
+    assert_eq!(
+        after,
+        [&ServiceEvent::Yielded, &ServiceEvent::TurnBegan],
+        "the deferred turn yields and turns again"
+    );
+}

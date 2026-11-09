@@ -85,11 +85,14 @@ pub trait Produce {
     fn ended(&mut self, work: Work<Self::Tag>, outcome: Outcome);
 
     /// Make `cx` the one the source's next change wakes, as `interest`
-    /// names: with [`Interest::Offers`] new data too, and at once if some
-    /// came since [`Self::offer`] last answered [`Next`]; with
-    /// [`Interest::Changes`] only a move of [`Self::generation`] or an open or
-    /// held tag no longer [`Self::current`], never new data alone.
-    fn register(&mut self, cx: &mut Context<'_>, interest: Interest);
+    /// names: with [`Interest::Offers`] new data too; with
+    /// [`Interest::Changes`] only a move of [`Self::generation`] or an open
+    /// or held tag no longer [`Self::current`], never new data alone. Return
+    /// whether data waits that [`Self::offer`] has not handed out, looked at
+    /// after registering, so data that comes between the two is missed by
+    /// neither. The service reads [`Self::generation`] and
+    /// [`Self::current`] itself for the changes. A `true` is not also a wake.
+    fn register(&mut self, cx: &mut Context<'_>, interest: Interest) -> bool;
 }
 
 /// What a waiting service can act on, which its producer's wake is for.
@@ -329,8 +332,13 @@ pub(crate) mod sealed {
             events: &mut impl EventSink<ServiceEvent>,
         ) -> bool;
 
-        /// Register the producer for what the service can act on now.
-        fn register(&mut self, cx: &mut Context<'_>, events: &mut impl EventSink<ServiceEvent>);
+        /// Register the producer for what the service can act on now;
+        /// whether some is here already.
+        fn register(
+            &mut self,
+            cx: &mut Context<'_>,
+            events: &mut impl EventSink<ServiceEvent>,
+        ) -> bool;
 
         /// When the producer said it has more.
         fn deadline(&self) -> Option<Instant>;
@@ -442,7 +450,13 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     }
 
     #[inline(always)]
-    fn register(&mut self, _cx: &mut Context<'_>, _events: &mut impl EventSink<ServiceEvent>) {}
+    fn register(
+        &mut self,
+        _cx: &mut Context<'_>,
+        _events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
+        false
+    }
 
     #[inline(always)]
     fn deadline(&self) -> Option<Instant> {
@@ -624,9 +638,13 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         moved
     }
 
-    fn register(&mut self, cx: &mut Context<'_>, events: &mut impl EventSink<ServiceEvent>) {
+    fn register(
+        &mut self,
+        cx: &mut Context<'_>,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> bool {
         if self.socket.is_none() {
-            return;
+            return false;
         }
         // Held, or at the budget of open works, the service asks nothing at
         // its next turn: what frees it comes in a turn of its own.
@@ -636,7 +654,15 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             Interest::Offers
         };
         report(events, || ServiceEvent::Local(LocalEvent::Waits(interest)));
-        self.producer.register(cx, interest);
+        let data = self.producer.register(cx, interest);
+        // What the next turn acts on, read after registering: new data while
+        // it would ask, a new generation, or a hold gone stale.
+        let generation = self.producer.generation();
+        let stale = self
+            .hold
+            .as_ref()
+            .is_some_and(|hold| hold.generation != generation || !self.producer.current(hold.tag));
+        (interest == Interest::Offers && data) || generation != self.generation || stale
     }
 
     fn deadline(&self) -> Option<Instant> {

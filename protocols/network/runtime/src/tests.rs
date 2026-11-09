@@ -81,6 +81,8 @@ struct Wire {
     /// Ended frames, by ticket.
     ended: VecDeque<u32>,
     waker: Option<Waker>,
+    /// The last frame was refused for room.
+    refused: bool,
     /// How the port holds what it shows: lendable buffers, or its copies.
     holding: Option<Holding>,
     /// Buffers the port lent and has not got back.
@@ -150,6 +152,7 @@ impl FramePort for WirePort {
         fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
     ) -> Result<u32, Unpublished<bool, E>> {
         let mut wire = self.0.borrow_mut();
+        wire.refused = wire.full;
         if wire.full {
             return Err(Unpublished::Port(false));
         }
@@ -216,12 +219,10 @@ impl FrameSource for WirePort {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
+    fn register(&mut self, cx: &mut Context<'_>) -> bool {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
-        if !wire.incoming.is_empty() {
-            cx.waker().wake_by_ref();
-        }
+        !wire.incoming.is_empty() || !wire.ended.is_empty() || (wire.refused && !wire.full)
     }
 }
 
@@ -754,27 +755,6 @@ fn an_end_reaches_its_own_observer_when_its_tag_is_not_its_place() {
         assert_eq!(result_of(first).await, Sent::Ended(Outcome::Accepted));
         let sent = datagrams(&wire.0.borrow());
         assert_eq!(sent, [&b"first"[..], b"second", b"third"]);
-    });
-}
-
-/// More notices than a turn hands the policy, with a datagram behind them:
-/// that turn publishes nothing, and the next, which no wake starts, sends it.
-#[test]
-fn notices_past_a_turn_s_budget_leave_no_datagram_behind() {
-    brand!(Net);
-    // Broadcast: no neighbor, so no time wakes the service either.
-    let everyone = Remote {
-        address: [192, 0, 2, 255],
-        port: 7,
-    };
-    let _ended = run(bench::<Net>(), async |socket, wire| {
-        let block = fill(socket, b"behind").await;
-        socket.credit().await.unwrap();
-        // Ends with no wake, more than one turn hands the policy.
-        wire.0.borrow_mut().ended.extend(0..65);
-        let observer = socket.send(everyone, block).ok().unwrap();
-        assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
-        assert!(wire.0.borrow().ended.is_empty());
     });
 }
 

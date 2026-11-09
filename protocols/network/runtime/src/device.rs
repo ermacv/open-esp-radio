@@ -255,7 +255,7 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
         self.device.link()
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
+    fn register(&mut self, cx: &mut Context<'_>) -> bool {
         let received = self.device.poll_receive_ready(cx).is_ready();
         let link = self.device.poll_link(cx).is_ready();
         // The transmit half takes back the memory the device returned and
@@ -272,9 +272,7 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
             Waiting::Room => has_room,
             Waiting::Buffer => self.buffers.poll_free(cx).is_ready(),
         };
-        if received || link || room || ended {
-            cx.waker().wake_by_ref();
-        }
+        received || link || room || ended
     }
 }
 

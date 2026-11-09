@@ -102,12 +102,12 @@ pub enum ServiceEvent {
     /// What the turn, or the wait after it, did with its producer.
     Local(LocalEvent),
     /// The task gave its executor a turn before its next turn: the turn left
-    /// work no wake names, or a useful turn's wait found work at its first
-    /// look. Its poll ends here, the task woken again.
+    /// work no wake names, or the wait after it was over at its first poll.
+    /// Its poll ends here, the task woken again.
     Yielded,
-    /// A pass of the wait after a turn registered every wake, then looked.
-    /// With `ready`, a lane, a stop, a block for a waiting socket, or a wake
-    /// with no return to take had come, and a turn follows; without, the
+    /// A pass of the wait after a turn registered every source and read its
+    /// readiness. With `ready`, a lane, a stop, the port, the producer or a
+    /// block for a waiting socket had work, and a turn follows; without, the
     /// poll ends here unless the wait's deadline was already due.
     Waited { ready: bool },
     /// A pass of the wait took the returns it found as one batch, before

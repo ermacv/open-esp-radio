@@ -74,8 +74,6 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
 /// What a turn did.
 #[derive(Clone, Copy, Debug)]
 struct Turned {
-    /// Something moved.
-    moved: bool,
     /// It left work no wake names: a budget spent, notices untold, a block
     /// evicted, a producer's hold or budget freed, a refused publication of
     /// the address.
@@ -767,17 +765,18 @@ impl<
                 // takes it, once the executor had its turn.
                 report(events, || ServiceEvent::Yielded);
                 yield_now().await;
-            } else if self.wait(clock, events).await && turned.moved {
-                // Work was there at the wait's first look: a useful turn is
-                // never followed by another within the same poll.
+            } else if self.wait(clock, events).await {
+                // The wait was over at its first poll, by work or by a time
+                // already due: no turn follows another within the same poll,
+                // and a source that says it is ready for good cannot hold
+                // the executor.
                 report(events, || ServiceEvent::Yielded);
                 yield_now().await;
             }
         }
     }
 
-    /// One bounded pass over everything: whether anything moved, and whether
-    /// it left work for the next turn that no wake names. Every exit goes
+    /// One bounded pass over everything: whether it left work for the next turn that no wake names. Every exit goes
     /// through its one epilogue, which hands every known result to its
     /// client, so at an await each open work truly was not published.
     fn turn(
@@ -785,17 +784,16 @@ impl<
         now: Instant,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> Turned {
-        let mut moved = false;
         let mut again = false;
         report(events, || ServiceEvent::TurnBegan);
         self.local.turn_begins();
         self.owner.observe_link(now);
         self.owner.tick(now, events);
         for index in 0..SOCKETS {
-            moved |= self.commands(now, index, events);
+            self.commands(now, index, events);
         }
-        moved |= self.take_returns().any;
-        moved |= self.give_blocks();
+        self.take_returns();
+        self.give_blocks();
         let mut intake_full = true;
         for _ in 0..TURN_FRAMES {
             match self.owner.take_frame(now, events) {
@@ -807,7 +805,6 @@ impl<
                 Intake::Lent(datagram) => self.lend(datagram, events),
             }
             report(events, || ServiceEvent::FrameTaken);
-            moved = true;
         }
         seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
         again |= intake_full;
@@ -817,7 +814,6 @@ impl<
                 told_all = true;
                 break;
             };
-            moved = true;
             report(events, || ServiceEvent::Noticed);
             let answer = self.egress.notice(notice);
             self.note(answer);
@@ -829,9 +825,8 @@ impl<
             // Nothing more is offered or published: the epilogue delivers.
             report(events, || ServiceEvent::Published(PublishEnd::Fault));
         } else if told_all {
-            moved |= self.local.offers(now, &mut self.owner, events);
-            let (published, end) = self.publish(now, events);
-            moved |= published;
+            self.local.offers(now, &mut self.owner, events);
+            let end = self.publish(now, events);
             // More may be ready past the budget; a declining fill kept the
             // producer's flow out of the rest of this turn only.
             again |= end == PublishEnd::Budget || self.local.filtered().is_some();
@@ -840,24 +835,21 @@ impl<
             // may free what the choice needs. So publishing waits for the
             // next turn.
             report(events, || ServiceEvent::Published(PublishEnd::Deferred));
-            moved = true;
             again = true;
         }
         // Eviction ends commands too, so it comes before the delivery: the
         // epilogue's delivery is the turn's last step that can learn a result.
         if self.fault.is_none() && !self.owner.port_broken() {
             // An evicted block is granted by the next turn.
-            let evicted = self.relieve(now);
-            moved |= evicted;
-            again |= evicted;
+            again |= self.relieve(now);
         }
-        moved |= self.deliver(events);
+        self.deliver(events);
         // What the delivery freed may release the producer's hold or budget,
         // which no wake of its own names.
         again |= self.local.again(&self.owner);
         again |= self.publish_configuration();
         self.turn_ended(events);
-        Turned { moved, again }
+        Turned { again }
     }
 
     /// Hand a lent datagram to its socket, or say why not: its buffer then
@@ -1083,11 +1075,7 @@ impl<
     /// Publish what the policy chooses, until it or the port has no room. No
     /// await falls between a choice and its answer, so no cancellation can
     /// leave a reservation unanswered.
-    fn publish(
-        &mut self,
-        now: Instant,
-        events: &mut impl EventSink<ServiceEvent>,
-    ) -> (bool, PublishEnd) {
+    fn publish(&mut self, now: Instant, events: &mut impl EventSink<ServiceEvent>) -> PublishEnd {
         let mut moved = false;
         let mut end = PublishEnd::Budget;
         for _ in 0..TURN_FRAMES {
@@ -1163,17 +1151,18 @@ impl<
         if moved {
             self.owner.flush();
         }
-        (moved, end)
+        end
     }
 
     /// Wait for anything to do: the port, a lane, the producer, a stop or a
     /// time ends this. Returns do not: a pass that finds them takes them as
     /// one batch ([`Self::returns_of`]) and waits on, unless a block came
     /// home for a socket that waits for one. Each pass registers every source
-    /// first and then looks, so nothing that comes meanwhile is missed. A
-    /// pass woken with no return to take was woken by the port, the producer
-    /// or a time, which it cannot look at: that ends the wait. Whether work
-    /// was there at the first look.
+    /// and reads its readiness from that registration ([`FrameSource::register`],
+    /// [`Produce::register`](crate::Produce::register)), so what comes between
+    /// is missed by neither, and ordinary work is known apart from returns. A
+    /// pass with nothing ready waits on, whatever woke it. Whether the whole
+    /// wait, its time included, was over at its first poll.
     async fn wait<T: Timer>(
         &mut self,
         clock: &T,
@@ -1196,12 +1185,10 @@ impl<
             local,
             ..
         } = self;
-        let mut woken = false;
-        let mut at_once = false;
         let ready = poll_fn(|cx| {
             let mut ready = pin!(stop.ready()).poll(cx).is_ready();
-            owner.register_port(cx);
-            local.register(cx, events);
+            ready |= owner.register_port(cx);
+            ready |= local.register(cx, events);
             let mut returned = false;
             for bound in bound.iter_mut().flatten() {
                 ready |= bound.poll_lanes(cx);
@@ -1218,24 +1205,28 @@ impl<
                 report(events, || ServiceEvent::Returned { work: taken.work });
                 ready |= taken.work;
             }
-            // Woken with nothing here to take: by a source only a turn reads.
-            ready |= woken && !returned;
             report(events, || ServiceEvent::Waited { ready });
-            at_once |= ready && !woken;
-            woken = true;
             if ready {
                 Poll::Ready(())
             } else {
                 Poll::Pending
             }
         });
-        match deadline {
-            Some(deadline) => {
-                let _first = select(ready, clock.wait_until(deadline)).await;
+        let mut wait = pin!(async {
+            match deadline {
+                Some(deadline) => {
+                    let _first = select(ready, clock.wait_until(deadline)).await;
+                }
+                None => ready.await,
             }
-            None => ready.await,
-        }
-        at_once
+        });
+        let mut polls = 0_u32;
+        poll_fn(|cx| {
+            polls = polls.saturating_add(1);
+            wait.as_mut().poll(cx)
+        })
+        .await;
+        polls == 1
     }
 
     /// End: nothing more is published, every known result goes to its place,

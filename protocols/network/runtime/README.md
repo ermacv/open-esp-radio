@@ -124,17 +124,25 @@ declining fill that kept the producer's flow out of the rest of the turn, or a
 refused publication of the address. Then it yields and turns again. A useful
 turn is never followed by an empty one only to find nothing.
 
-Each pass of the wait registers every source, then looks: the stop, each
-lane, the port, the producer, the returns and the deadline. Whatever comes
-after the registration wakes the next pass. A pass that finds returns takes
-them and waits on, with no turn, unless they marked work. A pass woken with no
-return to take was woken by the port, the producer or a time, which only a turn
-reads, and a turn follows. A pass that takes returns registered the port and
-the producer first. Their registration wakes at once while they hold work, so
-a wake that came with a return is not lost to it. A wait that found work at its
-first look, after a useful turn, yields before the next turn, so one poll holds
-at most one useful turn. A return that comes between a pass's registration and
-its take wakes one more pass, which finds nothing and runs one turn.
+Each pass of the wait registers every source and reads its readiness from
+that registration, so whatever comes after a registration wakes the next pass,
+and ordinary work is known apart from returns:
+
+| Source | Ready when the pass registers |
+| --- | --- |
+| stop, each lane | a message waits; a blocked receive lane has room |
+| port (`FrameSource::register`) | its return value: a frame or a notice not yet taken, a link changed since the last registration, room for the frame it last refused |
+| producer (`Produce::register`) | with offers wanted, its return value (data `offer` has not handed out); always, a generation the service has not checked yet, or a hold no longer current, which the service reads itself |
+| returns | taken at once, as above: ready only if a block came home for a socket that waits for one |
+| time | the deadline (the core's, memory pressure's, the producer's) has come |
+
+A registration returns readiness; it does not wake the caller for it. A pass
+with nothing ready waits on, whatever woke it, so a return never swallows
+another source's wake, and a stray wake costs one pass and no turn. A wait that
+is over at its first poll, by a ready source or by a time already due, yields
+before the next turn, so one poll holds at most one turn after a wait. A source
+that says it is ready for good therefore costs a turn a poll, and it cannot
+hold the executor.
 
 ## Lending sockets
 
@@ -256,8 +264,9 @@ frames are unsettled than there are buffers. It shows a lent received frame as
 lendable and hands its buffer over when the reader keeps it; a frame the
 device copied stays the device's, with its copy's reason. Each
 registration asks the transmit half for the memory the device returned, so that
-memory comes home whether or not the service sends; only a refused frame waiting for
-room is woken by room. `give_back` ends the exchange before the port ends: it gives
+memory comes home whether or not the service sends. It returns whether a
+received frame, a link change, a notice or, for a refused frame only, the room
+or buffer that frame waits for is there. `give_back` ends the exchange before the port ends: it gives
 back every frame the device's queue holds and takes back the memory the device
 returned, as the device's queues outlive the port, and leaves no refused frame
 waiting, so a next service over the same port starts idle. `serve_returns` is the

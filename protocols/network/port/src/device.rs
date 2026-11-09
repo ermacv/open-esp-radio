@@ -215,6 +215,9 @@ pub struct TransmitRefused<F> {
 pub trait NetDevice {
     type RxFrame: ReceivedFrame;
     fn link(&self) -> LinkSnapshot;
+    /// Ready once what the device publishes with its link changed since the
+    /// last ready: the link, or what is published in the same word with it
+    /// (an association's rate), so the snapshot may be unchanged.
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot>;
     fn receive_queue_len(&self) -> usize;
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
