@@ -405,34 +405,37 @@ impl<'a> DecodedHeader<'a> {
 pub struct CheckedHeader {
     control: FrameControl,
     sequence_control: u16,
-    qos: Option<u16>,
-    /// Where the body starts.
-    header_length: u16,
-    /// The frame the header was decoded from: its first byte's address and
-    /// its length.
+    /// The QoS Control field, when [`Self::has_qos`].
+    qos: u16,
+    has_qos: bool,
+    /// Where the body starts: at most 36 octets.
+    header_length: u8,
+    /// The frame the header was decoded from: its length and its first
+    /// byte's address. Kept this small, it travels with its receive buffer.
+    length: u16,
     at: usize,
-    length: usize,
 }
 
 impl CheckedHeader {
     /// Decode `frame`'s header once; `None` as [`DecodedHeader::decode`].
     pub fn check(frame: &[u8]) -> Option<Self> {
         let header = DecodedHeader::decode(frame)?;
-        let header_length = u16::try_from(frame.len().checked_sub(header.body.len())?).ok()?;
+        let header_length = u8::try_from(frame.len().checked_sub(header.body.len())?).ok()?;
         Some(Self {
             control: header.control,
             sequence_control: header.sequence_control,
-            qos: header.qos,
+            qos: header.qos.unwrap_or(0),
+            has_qos: header.qos.is_some(),
             header_length,
+            length: u16::try_from(frame.len()).ok()?,
             at: frame.as_ptr().addr(),
-            length: frame.len(),
         })
     }
 
     /// The decoded header of `frame`, when it is the frame this was checked
     /// against.
     pub fn of<'a>(&self, frame: &'a [u8]) -> Option<DecodedHeader<'a>> {
-        if frame.as_ptr().addr() != self.at || frame.len() != self.length {
+        if frame.as_ptr().addr() != self.at || frame.len() != usize::from(self.length) {
             return None;
         }
         let address =
@@ -456,7 +459,7 @@ impl CheckedHeader {
             address3: address(16)?,
             sequence_control: self.sequence_control,
             address4,
-            qos: self.qos,
+            qos: self.qos(),
             ht_control,
             frame,
             body: frame.get(usize::from(self.header_length)..)?,
@@ -475,7 +478,7 @@ impl CheckedHeader {
 
     /// The decoded `qos` field.
     pub const fn qos(&self) -> Option<u16> {
-        self.qos
+        if self.has_qos { Some(self.qos) } else { None }
     }
 }
 
