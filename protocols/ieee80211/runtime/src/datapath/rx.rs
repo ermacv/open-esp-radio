@@ -414,7 +414,9 @@ where
         lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
     ) -> Result<(), Failed<'id, D>> {
         let free = usize::from(self.frames_out) < LIFECYCLE_FRAMES;
-        let closed = if !free {
+        let closed = if lifecycle.from_actor.is_closed() {
+            true
+        } else if !free {
             false
         } else if let Some(permit) = lifecycle.from_actor.try_reserve() {
             // The frame and what names it come back whole on a closed

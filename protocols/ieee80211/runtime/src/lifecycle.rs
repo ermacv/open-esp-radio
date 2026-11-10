@@ -513,6 +513,10 @@ struct Inner<'id, D: DatapathPort<'id>, X, T, O> {
     rejected: Option<Rejected<'id, D>>,
     /// What the actor's queues refused, and what followed it unsent.
     unsent: UnsentMessages<'id, D>,
+    /// A confirmed stop's end whose message to the actor was refused.
+    confirmed: Option<
+        LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>,
+    >,
     end: Option<
         LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>,
     >,
@@ -560,6 +564,12 @@ pub struct RetiredLifecycle<
     /// and in order ([`LifecycleViolation::QueueFull`],
     /// [`LifecycleViolation::ActorClosed`]).
     pub unsent: UnsentMessages<'id, D>,
+    /// The end the radio's confirmed stop told, when its message to the
+    /// actor was refused: the lifecycle ended on the refusal
+    /// ([`LifecycleCompleted::end`]), and what the stop confirmed is kept.
+    pub confirmed: Option<
+        LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>,
+    >,
     /// The events' sink.
     pub events: O,
 }
@@ -632,6 +642,7 @@ where
                 ending: None,
                 rejected: None,
                 unsent: heapless::Deque::new(),
+                confirmed: None,
                 end: None,
                 lesson: None,
                 stop: false,
@@ -746,6 +757,7 @@ where
                         ending: None,
                         rejected: None,
                         unsent: heapless::Deque::new(),
+                        confirmed: None,
                         end: None,
                         lesson: None,
                         stop: false,
@@ -814,6 +826,7 @@ where
             _ending,
             rejected,
             unsent,
+            confirmed,
             _end,
             _lesson,
             _stop,
@@ -841,6 +854,7 @@ where
                 ending,
                 rejected,
                 unsent,
+                confirmed,
                 end,
                 lesson,
                 stop,
@@ -872,6 +886,7 @@ where
                         tx_contexts: tx_contexts.read(),
                         rejected: rejected.read(),
                         unsent: unsent.read(),
+                        confirmed: confirmed.read(),
                         events: events.read(),
                     })
                 },
@@ -1257,6 +1272,7 @@ where
             events,
             rejected,
             unsent,
+            confirmed,
             ..
         } = inner;
         let (reason, arbiter_end) = Self::reasons(&end);
@@ -1290,6 +1306,7 @@ where
                 tx_contexts,
                 rejected,
                 unsent,
+                confirmed,
                 events,
             },
         }

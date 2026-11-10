@@ -280,8 +280,11 @@ where
             (Ending::Restart(failure), _) => (ToActor::Reinstall, LifecycleEnd::Restart(failure)),
         };
         self.inner.send(actor, message);
-        if self.inner.end.is_none() {
-            self.inner.end = Some(end);
+        // A refused message names the end; what the stop confirmed stays
+        // beside it.
+        match self.inner.end {
+            None => self.inner.end = Some(end),
+            Some(_) => self.inner.confirmed = Some(end),
         }
     }
 

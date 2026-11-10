@@ -257,13 +257,18 @@ its stop's service answers once (`DataPort::recover_for_stop`); a port
 that keeps one never confirms a stop, so its next unconfirmed answer ends
 the watch (`StopWatch::Faulted`) and the retire ends in `Stopping`
 (`ApExitOf::StopFaulted`: the cause, the last fault and the port's
-observation) with every owner. A stop confirmed before is not watched
-again. With the stop confirmed and items out no release runs
+observation) with every owner. A stop answer naming a device fault no
+port call answered first (`StopCause::Device`) ends the watch too, nothing
+asked back of the port (`StopWatch::DeviceFailed`), and the retire ends in
+`Stopping` (`ApExitOf::StopDeviceFailed`); a stop not confirmed yet (its
+deadline, a line mask not yet confirmed) is watched on. A stop confirmed
+before is not watched again. With the stop confirmed and items out no release runs
 (`Stopped`); a refusal the release does not repeat ends in `Releasing`.
 
-The application's `wifi::Station::installation_end` (both halves, once
-both tasks ended) and `wifi::AccessPoint::installation_end` hand that value
-over. No end of an installation resets the chip: every `StationExit` keeps
+The application's `wifi::Station::installation_half` (each half as it
+arrives, the lifecycle's first when both are there: the datapath's task may
+end only after the application served a lifecycle half whose news places
+are full) and `wifi::AccessPoint::installation_end` hand that value over. No end of an installation resets the chip: every `StationExit` keeps
 its typed cause with the control.
 
 Owners a failed step does not return stay quarantined in their static

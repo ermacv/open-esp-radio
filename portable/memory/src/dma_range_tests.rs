@@ -2,10 +2,10 @@
 
 use super::StableDmaRange;
 
-fn bind<T: ?Sized>(storage: &mut T, start: u32) -> Option<(&mut T, StableDmaRange<'_>)> {
+fn bind<T: ?Sized>(storage: &mut T, start: u32) -> Result<(&mut T, StableDmaRange<'_>), &mut T> {
     // SAFETY: the synthetic host address maps to this complete allocation.
     // No hardware accesses it; the returned borrow retains the storage.
-    unsafe { StableDmaRange::from_owner(storage, start) }.ok()
+    unsafe { StableDmaRange::from_owner(storage, start) }
 }
 
 #[test]
@@ -37,17 +37,15 @@ fn subranges_cannot_escape_or_widen_their_allocation() {
 
 #[test]
 fn empty_and_wrapping_allocations_have_no_range() {
-    assert!(bind(&mut [0_u8; 0], 100).is_none());
-    assert!(bind(&mut [0_u8; 16], u32::MAX - 15).is_none());
-    assert!(bind(&mut [0_u8; 16], u32::MAX - 16).is_some());
+    assert!(bind(&mut [0_u8; 0], 100).is_err());
+    assert!(bind(&mut [0_u8; 16], u32::MAX - 15).is_err());
+    assert!(bind(&mut [0_u8; 16], u32::MAX - 16).is_ok());
 }
 
 #[test]
 fn an_allocation_that_does_not_fit_comes_back_as_the_refusal() {
     let mut storage = [0_u8; 16];
-    // SAFETY: as `bind`: a synthetic host address, no hardware.
-    let refused = unsafe { StableDmaRange::from_owner(&mut storage, u32::MAX - 8) };
-    let Err(owner) = refused else {
+    let Err(owner) = bind(&mut storage, u32::MAX - 8) else {
         panic!("the extent does not fit");
     };
     owner[0] = 9;

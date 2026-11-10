@@ -3020,6 +3020,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 self.recompute_deadline();
                 Poll::Ready(Ok(()))
             }
+            // A mask the line's handler has not confirmed within its bound
+            // is a stop not confirmed yet: the handler may still serve it,
+            // and the next poll confirms then. Only another failure of the
+            // device's stop is its fault.
+            Poll::Ready(Err(Fault::Receive(crate::rx::control::WifiRxCause::LineRefused))) => {
+                unconfirmed(self, StopCause::Deadline)
+            }
             Poll::Ready(Err(_)) => unconfirmed(self, StopCause::Device),
             Poll::Pending if expired => unconfirmed(self, StopCause::Deadline),
             Poll::Pending => {

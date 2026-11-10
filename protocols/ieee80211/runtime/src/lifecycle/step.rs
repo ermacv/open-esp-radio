@@ -10,9 +10,11 @@ use oer_protocols_ieee80211_core_roles_sta::machine::{
     BlockAckReplyRefusal, RxBlockAckReply, StaAction, StaInput, StaNotice, StaTransmit,
 };
 
-/// The messages one action sends at most: a lent key, its frame and the
-/// key's recall.
-const ACTION_MESSAGES: usize = 3;
+/// The messages one unit of the lifecycle's work sends at most: a reply's
+/// place, then its action's keyed frame (a lent key, its frame and the
+/// key's recall). The actor's queue is checked for this room before each
+/// unit, and a refused unit's messages are kept in as many places.
+const ACTION_MESSAGES: usize = UNSENT;
 
 /// A station action's transmission on the port of `D`.
 type LifecycleTransmit<'id, D, const GROUPS: usize> =
@@ -60,7 +62,7 @@ where
         let now = self.inner.now;
         loop {
             let mut progress = false;
-            while self.inner.room(actor) && self.inner.end.is_none() && self.inner.ending.is_none()
+            while self.inner.end.is_none() && self.inner.ending.is_none() && self.inner.room(actor)
             {
                 let Some(ArbiterCell::Running(arbiter)) = self.inner.arbiter.as_mut() else {
                     break;
@@ -281,7 +283,7 @@ where
     /// The actor's reception closed: the lifecycle ends on it, unless a
     /// refusal named its end already.
     pub(super) fn closed(&mut self) {
-        if self.unsent.is_empty() {
+        if self.end.is_none() {
             self.end = Some(LifecycleEnd::Contract(LifecycleViolation::ActorClosed));
         }
     }
@@ -332,7 +334,11 @@ where
         }
     }
     /// Keep `message` unsent, in order. A unit sends at most [`UNSENT`]
-    /// messages between two looks at the end, so the store has a place.
+    /// messages between two looks at the end, and the actor's queue had
+    /// that room before it ([`Self::room`]), so the store has a place. A
+    /// unit that sent more broke that count: the end names it (the first
+    /// refusal's cause is kept beside it in the store's order), and the
+    /// message beyond the store is not kept.
     fn keep_unsent(&mut self, message: Unsent<'id, D>) {
         if self.unsent.push_back(message).is_err() {
             self.end = Some(LifecycleEnd::Contract(LifecycleViolation::UnsentOverflow));

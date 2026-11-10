@@ -808,6 +808,7 @@ async fn lifecycles<W: Binding>(
                             _contexts,
                             _rejected,
                             _unsent,
+                            _confirmed,
                             events,
                         ) = oer_portable_memory::unpack_placed!(
                             retired,
@@ -819,6 +820,7 @@ async fn lifecycles<W: Binding>(
                                 tx_contexts,
                                 rejected,
                                 unsent,
+                                confirmed,
                                 events
                             }
                         );

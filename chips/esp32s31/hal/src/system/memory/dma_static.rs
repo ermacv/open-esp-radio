@@ -111,9 +111,10 @@ impl<T: 'static> Placed<T> {
     /// projection, then `bind`'s binding computed from them. A refusal of
     /// the address, or of `bind`, returns the placement whole: the same
     /// allocation, which `bind` saw only through a borrow, and nothing was
-    /// published to hardware.
+    /// published to hardware. A refusal's cause is `Copy`, so it carries no
+    /// range proof of the allocation out beside the placement.
     #[allow(unsafe_code, reason = "the consumed Placed proves static DMA storage")]
-    pub(crate) fn bind_dma<S: crate::radio::ieee80211::dma::space::DmaSpace, R, E>(
+    pub(crate) fn bind_dma<S: crate::radio::ieee80211::dma::space::DmaSpace, R, E: Copy>(
         self,
         bind: impl FnOnce(
             &mut T,
