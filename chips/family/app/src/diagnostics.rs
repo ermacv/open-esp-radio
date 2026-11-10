@@ -11,7 +11,13 @@
 //! word, zeroing the counts when a reset was asked since, and counts only
 //! while on. A reading is settled only when the writer had applied the word
 //! it read, and a window is whole only between two settled readings of one
-//! word. So a switch
+//! word.
+//!
+//! The word's switch and reset counts never wrap: each stops at its end
+//! ([`MARKER_SWITCHES`], [`MARKER_RESETS`]), and from then the marker is
+//! spent. No window is whole again, one that starts later too, and a reset
+//! is refused ([`ResetRefused`]) rather than asked so that the writer could
+//! miss it. So no value the marker had while valid comes back. So a switch
 //! or a reset takes effect at the network's next turn. A reader takes each
 //! word on its own, on the network's executor between its polls, where each
 //! word, a 64-bit sum's halves too, is whole. No count reads a clock; the
@@ -150,37 +156,80 @@ pub struct NetworkDiagnostics {
 }
 
 impl NetworkDiagnostics {
-    /// Switches asked since boot, modulo 2^15.
+    /// Switches that changed the state since boot, up to
+    /// [`MARKER_SWITCHES`].
     #[must_use]
     pub const fn switches(&self) -> u32 {
         (self.marker & SWITCHES) >> 1
     }
 
-    /// Resets asked since boot, modulo 2^16.
+    /// Resets asked since boot, up to [`MARKER_RESETS`].
     #[must_use]
     pub const fn resets(&self) -> u32 {
         self.marker >> 16
     }
 
+    /// Whether the marker is spent: its switch or its reset count reached
+    /// its end, so it can no longer tell one change from another, and no
+    /// window is whole again, a window that starts after this too.
+    #[must_use]
+    pub const fn exhausted(&self) -> bool {
+        exhausted(self.marker)
+    }
+
     /// What was counted from `start` to this reading, if it stands for a
     /// whole window: on and settled at both readings, with the same control
     /// word, so no switch or reset was asked between them and none was
-    /// waiting for the writer. `None` otherwise: such a difference counts no
-    /// window. A window holds fewer than 2^15 switches.
-    #[must_use]
-    pub fn window(&self, start: &Self) -> Option<Counts> {
-        (self.on && self.settled && start.on && start.settled && self.marker == start.marker)
-            .then(|| self.counts.since(&start.counts))
+    /// waiting for the writer, and the marker not spent at either.
+    ///
+    /// # Errors
+    /// [`NoWindow`]: such a difference counts no window.
+    pub fn window(&self, start: &Self) -> Result<Counts, NoWindow> {
+        if self.exhausted() || start.exhausted() {
+            return Err(NoWindow::Exhausted);
+        }
+        if self.on && self.settled && start.on && start.settled && self.marker == start.marker {
+            Ok(self.counts.since(&start.counts))
+        } else {
+            Err(NoWindow::Changed)
+        }
     }
 }
 
+/// Why two readings count no window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NoWindow {
+    /// Off at an end, switched or reset between them, or a change not yet
+    /// applied by the writer at an end.
+    Changed,
+    /// The marker is spent ([`NetworkDiagnostics::exhausted`]).
+    Exhausted,
+}
+
+/// A reset was not asked: the marker's reset count is at its end, so the
+/// writer could not tell this reset from the last. The counts are as they
+/// were.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ResetRefused;
+
 /// The control word: bit 0 says on, bits 1 to 15 count the switches that
 /// changed it, bits 16 to 31 the resets asked for. One word, so a reading
-/// takes the state and its change count together.
+/// takes the state and its change count together. Neither count wraps: each
+/// stops at its end, and from then the marker is spent, so no value it had
+/// while valid comes back.
 const ON: u32 = 1;
 const SWITCH: u32 = 1 << 1;
 const SWITCHES: u32 = 0x7fff << 1;
 const RESET: u32 = 1 << 16;
+const RESETS: u32 = 0xffff << 16;
+
+/// The most switches and resets a marker counts; at either, it is spent.
+pub const MARKER_SWITCHES: u32 = SWITCHES >> 1;
+pub const MARKER_RESETS: u32 = RESETS >> 16;
+
+const fn exhausted(marker: u32) -> bool {
+    marker & SWITCHES == SWITCHES || marker & RESETS == RESETS
+}
 
 /// The diagnostics' counts, published word by word, and their switch.
 pub struct DiagnosticsCounter {
@@ -205,12 +254,17 @@ impl DiagnosticsCounter {
 
     /// Ask them on or off, from the network's next turn; whether they were
     /// asked on before. A switch that changes the state moves the switch
-    /// count in the same word.
+    /// count in the same word; at its end the count stays there, the marker
+    /// spent, and the state still switches.
     pub fn switch(&self, on: bool) -> bool {
         let changed = |control: u32| {
             let was_on = control & ON != 0;
             (was_on != on).then(|| {
-                let switches = control.wrapping_add(SWITCH) & SWITCHES;
+                let switches = if control & SWITCHES == SWITCHES {
+                    SWITCHES
+                } else {
+                    control.wrapping_add(SWITCH) & SWITCHES
+                };
                 (control & !(SWITCHES | ON)) | switches | u32::from(on)
             })
         };
@@ -223,8 +277,17 @@ impl DiagnosticsCounter {
     }
 
     /// Ask the counts zeroed, at the network's next turn, on or off.
-    pub fn reset(&self) {
-        self.control.fetch_add(RESET, Ordering::AcqRel);
+    ///
+    /// # Errors
+    /// [`ResetRefused`]: the marker's reset count is at its end; nothing
+    /// was asked.
+    pub fn reset(&self) -> Result<(), ResetRefused> {
+        self.control
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |control| {
+                (control & RESETS != RESETS).then(|| control.wrapping_add(RESET))
+            })
+            .map(|_| ())
+            .map_err(|_| ResetRefused)
     }
 
     /// The writer's check, at each turn and each pass that takes returns:
@@ -234,7 +297,7 @@ impl DiagnosticsCounter {
         let control = self.control.load(Ordering::Acquire);
         let applied = self.applied.load(Ordering::Relaxed);
         if control != applied {
-            if control & !(SWITCHES | ON) != applied & !(SWITCHES | ON) {
+            if control & RESETS != applied & RESETS {
                 for count in self.counts.iter().chain(self.halves.iter()) {
                     count.store(0, Ordering::Relaxed);
                 }

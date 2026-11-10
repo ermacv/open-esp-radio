@@ -593,9 +593,13 @@ pub fn diagnose_network(on: bool) -> bool {
 }
 
 /// Ask the network core's diagnostics zeroed, at the network's next turn.
+///
+/// # Errors
+/// [`diagnostics::ResetRefused`]: their marker's reset count is spent, and
+/// nothing was asked.
 #[cfg(feature = "network")]
-pub fn reset_network_diagnostics() {
-    crate::wifi::DIAGNOSTICS.reset();
+pub fn reset_network_diagnostics() -> Result<(), oer_chips_family_app::diagnostics::ResetRefused> {
+    crate::wifi::DIAGNOSTICS.reset()
 }
 
 /// The diagnostics' vocabulary.

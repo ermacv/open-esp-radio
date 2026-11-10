@@ -1190,10 +1190,24 @@ pub struct Diagnose {
     pub reset: bool,
 }
 
-/// The answer to [`Diagnose`]: whether they were asked on before.
+/// The answer to [`Diagnose`]: whether they were asked on before, and what
+/// became of the reset.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Diagnosed {
     pub was_on: bool,
+    pub reset: Reset,
+}
+
+/// What became of a [`Diagnose`]'s reset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Reset {
+    /// None was asked for.
+    NotAsked,
+    /// It was asked, for the network's next turn.
+    Asked,
+    /// It was refused: the diagnostics' marker has counted all the resets
+    /// it can, and the counts are as they were.
+    Refused,
 }
 
 /// What the network core's diagnostics counted within run `run`'s window.
@@ -1209,6 +1223,9 @@ pub enum DiagnosticsCollected {
     /// The diagnostics were off at an end of the window, or were switched or
     /// reset within it: they counted no whole window.
     NoWindow,
+    /// The diagnostics' marker has counted all the switches or resets it
+    /// can: no window is whole any more, until the image boots again.
+    Exhausted,
     /// The run's window or drain has not ended yet.
     Running,
     Refused(LoadError),

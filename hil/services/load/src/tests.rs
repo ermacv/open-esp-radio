@@ -875,9 +875,14 @@ fn the_diagnostics_requests_and_answers_round_trip_and_fit_one_response() {
         let encoded = postcard::to_slice(&request, &mut buffer).unwrap();
         assert_eq!(postcard::from_bytes::<Diagnose>(encoded).unwrap(), request);
     }
-    let answer = Diagnosed { was_on: true };
-    let encoded = postcard::to_slice(&answer, &mut buffer).unwrap();
-    assert_eq!(postcard::from_bytes::<Diagnosed>(encoded).unwrap(), answer);
+    for reset in [Reset::NotAsked, Reset::Asked, Reset::Refused] {
+        let answer = Diagnosed {
+            was_on: true,
+            reset,
+        };
+        let encoded = postcard::to_slice(&answer, &mut buffer).unwrap();
+        assert_eq!(postcard::from_bytes::<Diagnosed>(encoded).unwrap(), answer);
+    }
     let request = CollectDiagnostics { run: u32::MAX };
     let encoded = postcard::to_slice(&request, &mut buffer).unwrap();
     assert_eq!(
@@ -906,6 +911,7 @@ fn the_diagnostics_requests_and_answers_round_trip_and_fit_one_response() {
     for answer in [
         DiagnosticsCollected::Report(full),
         DiagnosticsCollected::NoWindow,
+        DiagnosticsCollected::Exhausted,
         DiagnosticsCollected::Running,
         DiagnosticsCollected::Refused(LoadError::UnknownRun),
     ] {

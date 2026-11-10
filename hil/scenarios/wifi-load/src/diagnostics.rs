@@ -78,6 +78,9 @@ pub fn window(collected: &DiagnosticsCollected) -> Value {
     let diagnostics = match collected {
         DiagnosticsCollected::Report(diagnostics) => diagnostics,
         DiagnosticsCollected::NoWindow => return json!({ "whole": false }),
+        DiagnosticsCollected::Exhausted => {
+            return json!({ "whole": false, "exhausted": true });
+        }
         other => return json!({ "whole": false, "answer": format!("{other:?}") }),
     };
     let NetworkDiagnostics {

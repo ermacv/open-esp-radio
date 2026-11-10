@@ -525,7 +525,8 @@ pub(crate) struct Turns {
     /// The network core's diagnostics at the window's start, and what they
     /// counted over the last closed window: none unless whole.
     diagnostics_start: oer::observe::diagnostics::NetworkDiagnostics,
-    diagnostics_window: Option<oer::observe::diagnostics::Counts>,
+    diagnostics_window:
+        Result<oer::observe::diagnostics::Counts, oer::observe::diagnostics::NoWindow>,
 }
 
 /// The one place of the turns.
@@ -539,7 +540,7 @@ pub(crate) static TURNS: static_cell::ConstStaticCell<Turns> =
         returns_start: RETURNS_NONE,
         returns_window: RETURNS_NONE,
         diagnostics_start: DIAGNOSTICS_NONE,
-        diagnostics_window: None,
+        diagnostics_window: Err(oer::observe::diagnostics::NoWindow::Changed),
     });
 
 #[cfg(target_arch = "riscv32")]
@@ -585,19 +586,25 @@ const _: () = {
 pub(crate) fn diagnose(
     diagnose: oer_hil_services_load::Diagnose,
 ) -> oer_hil_services_load::Diagnosed {
+    use oer_hil_services_load::{Diagnosed, Reset};
     let was_on = oer::observe::diagnose_network(diagnose.on);
-    if diagnose.reset {
-        oer::observe::reset_network_diagnostics();
-    }
-    oer_hil_services_load::Diagnosed { was_on }
+    let reset = match diagnose.reset {
+        false => Reset::NotAsked,
+        true => match oer::observe::reset_network_diagnostics() {
+            Ok(()) => Reset::Asked,
+            Err(oer::observe::diagnostics::ResetRefused) => Reset::Refused,
+        },
+    };
+    Diagnosed { was_on, reset }
 }
 
 /// What the network core's diagnostics counted over the last closed window.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn diagnostics_window(net: &Network) -> oer_hil_services_load::DiagnosticsCollected {
+    use oer::observe::diagnostics::NoWindow;
     use oer_hil_services_load::{DiagnosticsCollected, NetworkDiagnostics};
     match net.turns(|turns| Some(turns.diagnostics_window)) {
-        Some(Some(counts)) => DiagnosticsCollected::Report(NetworkDiagnostics {
+        Some(Ok(counts)) => DiagnosticsCollected::Report(NetworkDiagnostics {
             turns: counts.turns,
             collections: counts.collections,
             walked: counts.walked,
@@ -616,7 +623,8 @@ pub(crate) fn diagnostics_window(net: &Network) -> oer_hil_services_load::Diagno
             materialised: counts.materialised,
             stage_cycles: counts.stage_ticks,
         }),
-        Some(None) => DiagnosticsCollected::NoWindow,
+        Some(Err(NoWindow::Changed)) => DiagnosticsCollected::NoWindow,
+        Some(Err(NoWindow::Exhausted)) => DiagnosticsCollected::Exhausted,
         // The group gave no place of the turns: nothing was kept.
         None => DiagnosticsCollected::Refused(oer_hil_services_load::LoadError::UnknownRun),
     }
