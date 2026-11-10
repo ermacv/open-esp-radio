@@ -128,28 +128,20 @@ pub(crate) enum Frame<'a> {
     /// A stored datagram's: its data is copied into the slot after the
     /// headers and summed in the same pass, the UDP checksum last.
     Datagram {
-        /// The headers, the UDP checksum still zero.
-        headers: [u8; HEADERS],
-        udp: UdpHeader,
-        pseudo: [u8; 12],
+        headers: UdpHeaders,
         data: &'a [u8],
     },
     /// A declared work's: its producer fills the data in the slot, between
     /// the headers written before and the checksum written after.
     Produced {
-        /// The headers, the UDP checksum still zero.
-        headers: [u8; HEADERS],
-        udp: UdpHeader,
-        pseudo: [u8; 12],
+        headers: UdpHeaders,
         length: usize,
         work: WorkId,
     },
     /// The DHCP client's message, written in the slot after its headers,
     /// the UDP checksum last.
     Dhcp {
-        headers: [u8; HEADERS],
-        udp: UdpHeader,
-        pseudo: [u8; 12],
+        headers: UdpHeaders,
         message: Outgoing,
     },
     /// An echo reply: the request's identity and data under a new header.
@@ -200,13 +192,9 @@ impl Frame<'_> {
     pub(crate) fn length(&self) -> usize {
         match self {
             Self::Arp(frame) => frame.len(),
-            Self::Datagram { headers, data, .. } => headers.len().saturating_add(data.len()),
-            Self::Produced {
-                headers, length, ..
-            } => headers.len().saturating_add(*length),
-            Self::Dhcp {
-                headers, message, ..
-            } => headers.len().saturating_add(message.length()),
+            Self::Datagram { data, .. } => HEADERS.saturating_add(data.len()),
+            Self::Produced { length, .. } => HEADERS.saturating_add(*length),
+            Self::Dhcp { message, .. } => HEADERS.saturating_add(message.length()),
             Self::Echo {
                 headers,
                 reply,
@@ -232,37 +220,21 @@ impl Frame<'_> {
         let short = |_| FillFailed::SlotTooShort;
         match self {
             Self::Arp(frame) => Writer::new(slot).write(frame).map_err(short),
-            Self::Datagram {
-                headers,
-                udp,
-                pseudo,
-                data,
-            } => {
-                let (head, rest) = slot
-                    .split_at_mut_checked(HEADERS)
-                    .ok_or(FillFailed::SlotTooShort)?;
-                Writer::new(head).write(headers).map_err(short)?;
+            Self::Datagram { headers, data } => {
+                let (head, rest, sum) = headers.open(slot)?;
                 // One read of the stored data: its copy and its sum.
-                let sum = Checksum::new()
-                    .with(pseudo)
-                    .with(&udp.to_bytes())
+                let sum = sum
                     .copied(data, rest)
                     .map_err(|_| FillFailed::SlotTooShort)?;
-                checksum_last(head, udp, sum)
+                headers.close(head, sum)
             }
             Self::Produced {
                 headers,
-                udp,
-                pseudo,
                 length,
                 work,
             } => {
-                let (head, rest) = slot
-                    .split_at_mut_checked(HEADERS)
-                    .ok_or(FillFailed::SlotTooShort)?;
-                Writer::new(head).write(headers).map_err(short)?;
+                let (head, rest, sum) = headers.open(slot)?;
                 let data = rest.get_mut(..*length).ok_or(FillFailed::SlotTooShort)?;
-                let sum = Checksum::new().with(pseudo).with(&udp.to_bytes());
                 // One pass over the data: each octet is summed as it is
                 // written.
                 let mut payload = Payload::new(data, sum);
@@ -270,27 +242,15 @@ impl Frame<'_> {
                 let sum = payload
                     .finish()
                     .ok_or(FillFailed::Declined(Declined::Unwritable))?;
-                checksum_last(head, udp, sum)
+                headers.close(head, sum)
             }
-            Self::Dhcp {
-                headers,
-                udp,
-                pseudo,
-                message,
-            } => {
-                let (head, rest) = slot
-                    .split_at_mut_checked(HEADERS)
-                    .ok_or(FillFailed::SlotTooShort)?;
-                Writer::new(head).write(headers).map_err(short)?;
+            Self::Dhcp { headers, message } => {
+                let (head, rest, sum) = headers.open(slot)?;
                 let data = rest
                     .get_mut(..message.length())
                     .ok_or(FillFailed::SlotTooShort)?;
                 message.write(&mut Writer::new(data)).map_err(short)?;
-                let sum = Checksum::new()
-                    .with(pseudo)
-                    .with(&udp.to_bytes())
-                    .with(data);
-                checksum_last(head, udp, sum)
+                headers.close(head, sum.with(data))
             }
             Self::Echo {
                 headers,
@@ -308,14 +268,57 @@ impl Frame<'_> {
     }
 }
 
-/// Write `udp` with the checksum `sum` finishes into the headers at `head`,
-/// once the data it covers is in the slot.
-fn checksum_last(head: &mut [u8], udp: &UdpHeader, sum: Checksum) -> Result<(), FillFailed> {
-    let checksum = udp_field(sum.finish());
-    let field = head.get_mut(UDP_AT..).ok_or(FillFailed::SlotTooShort)?;
-    Writer::new(field)
-        .write(&UdpHeader { checksum, ..*udp }.to_bytes())
-        .map_err(|_| FillFailed::SlotTooShort)
+/// A UDP datagram's Ethernet, IPv4 and UDP headers, as their fields: each
+/// is written once, into the port's slot, when the frame is.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct UdpHeaders {
+    ethernet: EthernetHeader,
+    ip: Ipv4Fields,
+    /// Its checksum zero: the frame's write sums it.
+    udp: UdpHeader,
+}
+
+impl UdpHeaders {
+    /// Write the Ethernet and IPv4 headers at the front of `slot`: the
+    /// headers' region, whose UDP header [`Self::close`] writes last, the
+    /// data's region behind it, and the sum the UDP checksum starts from, of
+    /// its pseudo header and its header.
+    fn open<'s>(
+        &self,
+        slot: &'s mut [u8],
+    ) -> Result<(&'s mut [u8], &'s mut [u8], Checksum), FillFailed> {
+        let short = |_| FillFailed::SlotTooShort;
+        let (head, rest) = slot
+            .split_at_mut_checked(HEADERS)
+            .ok_or(FillFailed::SlotTooShort)?;
+        let mut writer = Writer::new(head);
+        self.ethernet.write(&mut writer).map_err(short)?;
+        writer.write(&self.ip.to_bytes()).map_err(short)?;
+        let pseudo = ipv4_pseudo_header(
+            self.ip.source,
+            self.ip.destination,
+            PROTOCOL_UDP,
+            self.udp.length,
+        );
+        let sum = Checksum::new().with(&pseudo).with(&self.udp.to_bytes());
+        Ok((head, rest, sum))
+    }
+
+    /// Write the UDP header into the headers' region `head`, with the
+    /// checksum `sum` finishes, once the data it covers is in the slot.
+    fn close(&self, head: &mut [u8], sum: Checksum) -> Result<(), FillFailed> {
+        let checksum = udp_field(sum.finish());
+        let field = head.get_mut(UDP_AT..).ok_or(FillFailed::SlotTooShort)?;
+        Writer::new(field)
+            .write(
+                &UdpHeader {
+                    checksum,
+                    ..self.udp
+                }
+                .to_bytes(),
+            )
+            .map_err(|_| FillFailed::SlotTooShort)
+    }
 }
 
 /// A socket. Its handle is not a copy: closing consumes it.
@@ -1975,28 +1978,27 @@ impl<
             length: udp_length,
             checksum: 0,
         };
-        let mut headers = [0; HEADERS];
-        let mut writer = Writer::new(&mut headers);
-        self.ip_headers(
-            peer,
-            message.source,
-            message.destination,
-            PROTOCOL_UDP,
-            usize::from(udp_length),
-            &mut writer,
-        )?;
-        writer.write(&udp.to_bytes()).ok()?;
-        Some(Frame::Dhcp {
-            headers,
+        let headers = UdpHeaders {
+            ethernet: EthernetHeader {
+                destination: peer,
+                source: self.interface.hardware(),
+                ether_type: EtherType::IPV4,
+            },
+            ip: Ipv4Fields {
+                services: BEST_EFFORT.field(),
+                total_length: u16::try_from(
+                    IPV4_HEADER_LEN.saturating_add(usize::from(udp_length)),
+                )
+                .ok()?,
+                identification: self.identification,
+                time_to_live: TIME_TO_LIVE,
+                protocol: PROTOCOL_UDP,
+                source: message.source,
+                destination: message.destination,
+            },
             udp,
-            pseudo: ipv4_pseudo_header(
-                message.source,
-                message.destination,
-                PROTOCOL_UDP,
-                udp_length,
-            ),
-            message,
-        })
+        };
+        Some(Frame::Dhcp { headers, message })
     }
 
     fn echo_frame(
@@ -2111,42 +2113,27 @@ impl<
             length: wire_length,
             checksum: 0,
         };
-        let pseudo = ipv4_pseudo_header(source, remote.address, PROTOCOL_UDP, wire_length);
-        let mut headers = [0; HEADERS];
-        let mut writer = Writer::new(&mut headers);
-        EthernetHeader {
-            destination: next_hop,
-            source: self.interface.hardware(),
-            ether_type: EtherType::IPV4,
-        }
-        .write(&mut writer)
-        .ok()?;
-        writer
-            .write(
-                &Ipv4Fields {
-                    services: open.dscp.field(),
-                    total_length: u16::try_from(IPV4_HEADER_LEN.saturating_add(udp_length)).ok()?,
-                    identification: self.identification,
-                    time_to_live: TIME_TO_LIVE,
-                    protocol: PROTOCOL_UDP,
-                    source,
-                    destination: remote.address,
-                }
-                .to_bytes(),
-            )
-            .ok()?;
-        writer.write(&udp.to_bytes()).ok()?;
-        Some(match data {
-            Some(data) => Frame::Datagram {
-                headers,
-                udp,
-                pseudo,
-                data,
+        let headers = UdpHeaders {
+            ethernet: EthernetHeader {
+                destination: next_hop,
+                source: self.interface.hardware(),
+                ether_type: EtherType::IPV4,
             },
+            ip: Ipv4Fields {
+                services: open.dscp.field(),
+                total_length: u16::try_from(IPV4_HEADER_LEN.saturating_add(udp_length)).ok()?,
+                identification: self.identification,
+                time_to_live: TIME_TO_LIVE,
+                protocol: PROTOCOL_UDP,
+                source,
+                destination: remote.address,
+            },
+            udp,
+        };
+        Some(match data {
+            Some(data) => Frame::Datagram { headers, data },
             None => Frame::Produced {
                 headers,
-                udp,
-                pseudo,
                 length,
                 work: WorkId { serial, place },
             },
