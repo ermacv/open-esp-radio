@@ -492,7 +492,7 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
         {
             return Ok(Next::Stop(PlanStop::Changed));
         }
-        let spent = plan.turns.first().is_none();
+        let spent = plan.turns.is_empty();
         if let Some(served) = plan.served() {
             if served.works != 0 && served.holders == 0 {
                 return Ok(Next::Stop(PlanStop::Grant));

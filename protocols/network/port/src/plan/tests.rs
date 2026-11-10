@@ -69,9 +69,11 @@ fn planned<const Q: usize>(works: &[Ready], mut turns: Turns<usize, Q>) -> (Vec<
     }
     let more = turns.more();
     let mut sent = Vec::new();
-    while let Some(index) = turns.take() {
-        sent.push(index);
+    // Empty exactly when a take finds nothing.
+    while !turns.is_empty() {
+        sent.push(turns.take().expect("a plan that is not empty holds a work"));
     }
+    assert!(turns.take().is_none(), "an empty plan holds no work");
     (sent, more)
 }
 
