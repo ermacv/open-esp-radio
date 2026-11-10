@@ -39,29 +39,76 @@ pub(crate) enum Lookup {
     Full,
 }
 
+/// The count of known-entry changes past which a finding never holds again.
+const EXHAUSTED: u32 = u32::MAX;
+
+/// What a look at the table found of an address, and while it holds: until
+/// its entry expires, as long as no known entry changed meanwhile.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Found {
+    pub(crate) hardware: [u8; 6],
+    known: u32,
+    expires: Instant,
+}
+
 /// The table.
 #[derive(Debug)]
 pub(crate) struct Neighbors<const N: usize> {
     entries: [Entry; N],
+    /// Moves with every write of a known entry and every replacement of one:
+    /// while it stands, the known entries are as they were. It never comes
+    /// back to a value it had: at [`EXHAUSTED`] it stops, and from then on
+    /// nothing found holds, so every frame looks again.
+    known: u32,
 }
 
 impl<const N: usize> Neighbors<N> {
     pub(crate) const fn new() -> Self {
         Self {
             entries: [Entry::Free; N],
+            known: 0,
         }
+    }
+
+    /// Forget every entry, as a new network's table: what was found in it
+    /// holds no more.
+    pub(crate) fn forget(&mut self) {
+        self.entries = [Entry::Free; N];
+        self.moved();
+    }
+
+    fn moved(&mut self) {
+        // Saturating, never wrapping: a count that came back would make an
+        // old finding hold again for an address now elsewhere.
+        self.known = self.known.saturating_add(1);
     }
 
     /// Where `address` is, while that is known.
     pub(crate) fn hardware(&self, now: Instant, address: [u8; 4]) -> Option<[u8; 6]> {
+        self.find(now, address).map(|found| found.hardware)
+    }
+
+    /// Where `address` is, while that is known, and while that holds.
+    pub(crate) fn find(&self, now: Instant, address: [u8; 4]) -> Option<Found> {
         self.entries.iter().find_map(|entry| match *entry {
             Entry::Known {
                 address: known,
                 hardware,
                 expires,
-            } if known == address && now < expires => Some(hardware),
+            } if known == address && now < expires => Some(Found {
+                hardware,
+                known: self.known,
+                expires,
+            }),
             _ => None,
         })
+    }
+
+    /// Whether `found` still holds at `now`: no known entry changed since,
+    /// and its entry has not expired. A look then would find the same. Once
+    /// the count is exhausted nothing holds.
+    pub(crate) fn holds_still(&self, found: &Found, now: Instant) -> bool {
+        self.known != EXHAUSTED && found.known == self.known && now < found.expires
     }
 
     /// Find `address`, or begin asking for it: in its own expired entry, a
@@ -109,7 +156,11 @@ impl<const N: usize> Neighbors<N> {
         else {
             return Lookup::Full;
         };
+        let replaced = matches!(entry, Entry::Known { .. });
         *entry = Self::asking(now, address, serial);
+        if replaced {
+            self.moved();
+        }
         Lookup::Asking
     }
 
@@ -168,6 +219,7 @@ impl<const N: usize> Neighbors<N> {
                 && now >= expires
             {
                 *entry = Self::asking(now, address, serial);
+                self.moved();
                 return true;
             }
         }
@@ -189,22 +241,23 @@ impl<const N: usize> Neighbors<N> {
             hardware,
             expires: now.saturating_add(LIFETIME),
         };
-        for entry in &mut self.entries {
-            match *entry {
-                Entry::Asking { address: held, .. } | Entry::Known { address: held, .. }
-                    if held == address =>
-                {
-                    *entry = known;
-                    return true;
-                }
-                _ => {}
+        let held = self.entries.iter_mut().find(|entry| match **entry {
+            Entry::Asking { address: held, .. } | Entry::Known { address: held, .. } => {
+                held == address
             }
-        }
-        if make && let Some(entry) = self.entries.iter_mut().find(|entry| **entry == Entry::Free) {
-            *entry = known;
-            return true;
-        }
-        false
+            Entry::Free => false,
+        });
+        let entry = match held {
+            Some(entry) => entry,
+            None if make => match self.entries.iter_mut().find(|entry| **entry == Entry::Free) {
+                Some(entry) => entry,
+                None => return false,
+            },
+            None => return false,
+        };
+        *entry = known;
+        self.moved();
+        true
     }
 
     /// The requests owed: each entry with its address and resolution.
@@ -294,5 +347,60 @@ impl<const N: usize> Neighbors<N> {
                 _ => None,
             })
             .min()
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::disallowed_macros,
+    clippy::unwrap_used,
+    reason = "tests assert on a table at its count's boundary"
+)]
+mod tests {
+    use super::*;
+
+    const PEER: [u8; 4] = [192, 0, 2, 2];
+    const FIRST: [u8; 6] = [2, 0, 0, 0, 0, 2];
+    const MOVED: [u8; 6] = [2, 0, 0, 0, 0, 3];
+
+    fn at(seconds: u64) -> Instant {
+        Instant::from_micros(seconds * 1_000_000)
+    }
+
+    /// A finding taken at a count of 0, then the count driven to its end
+    /// and the peer moved: with a wrapping count the move would bring it
+    /// back to 0 and the old finding would hold for the old station. It
+    /// does not: the move is seen, and a look finds the new station.
+    #[test]
+    fn a_finding_never_holds_again_once_the_count_is_exhausted() {
+        let mut table = Neighbors::<2>::new();
+        assert!(table.learn(at(0), PEER, FIRST, true));
+        table.known = 0;
+        let found = table.find(at(1), PEER).unwrap();
+        assert!(table.holds_still(&found, at(1)));
+        table.known = EXHAUSTED - 1;
+        assert!(table.learn(at(1), PEER, MOVED, true));
+        assert!(
+            table.learn(at(1), PEER, MOVED, true),
+            "a write past the end"
+        );
+        assert!(
+            !table.holds_still(&found, at(1)),
+            "the old station's finding holds no more"
+        );
+        assert_eq!(table.hardware(at(1), PEER), Some(MOVED));
+        assert_eq!(table.known, EXHAUSTED, "the count stays at its end");
+    }
+
+    /// At the end of the count a fresh finding holds neither: every frame
+    /// looks again, and a look is always right.
+    #[test]
+    fn at_the_end_of_the_count_nothing_found_holds() {
+        let mut table = Neighbors::<2>::new();
+        table.known = EXHAUSTED;
+        assert!(table.learn(at(0), PEER, FIRST, true));
+        let found = table.find(at(1), PEER).unwrap();
+        assert_eq!(found.hardware, FIRST);
+        assert!(!table.holds_still(&found, at(1)));
     }
 }

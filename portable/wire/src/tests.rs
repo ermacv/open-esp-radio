@@ -389,3 +389,34 @@ fn aligned_words_of_nothing_are_nothing() {
     let (head, words, tail) = crate::aligned_words(&[]);
     assert!(head.is_empty() && words.is_empty() && tail.is_empty());
 }
+
+#[test]
+fn aligned_words_to_write_land_on_every_octet_in_order() {
+    for start in 0..16 {
+        for end in start..=16 {
+            let mut storage = [0_u32; 4];
+            let bytes: &mut [u8] = bytemuck::cast_slice_mut(&mut storage);
+            let part = &mut bytes[start..end];
+            let length = part.len();
+            let (head, words, tail) = crate::aligned_words_mut(part);
+            assert!(head.len() < 4 && tail.len() < 4);
+            assert_eq!(head.len() + words.len() * 4 + tail.len(), length);
+            let mut next = 1_u8;
+            for byte in head.iter_mut() {
+                *byte = next;
+                next += 1;
+            }
+            for word in words.iter_mut() {
+                *word = u32::from_ne_bytes([next, next + 1, next + 2, next + 3]);
+                next += 4;
+            }
+            for byte in tail.iter_mut() {
+                *byte = next;
+                next += 1;
+            }
+            let written: Vec<u8> = bytemuck::cast_slice::<u32, u8>(&storage)[start..end].to_vec();
+            let expected: Vec<u8> = (1..=u8::try_from(length).unwrap()).collect();
+            assert_eq!(written, expected);
+        }
+    }
+}

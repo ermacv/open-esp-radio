@@ -37,6 +37,37 @@ impl Checksum {
         self
     }
 
+    /// Copy `source` to the start of `destination` and add it to the
+    /// sequence: the aligned words of `source`, all but at most three octets
+    /// at each edge, are read once, for their copy and their sum together;
+    /// the edge octets are copied and summed apart. The sum is that of [`Self::with`] over
+    /// `source`, a pending odd octet included, and `destination` holds
+    /// `source`'s octets; the rest of `destination` is untouched.
+    ///
+    /// # Errors
+    /// [`CopyShort`]: `destination` is shorter than `source`, and nothing
+    /// was written.
+    pub fn copied(mut self, source: &[u8], destination: &mut [u8]) -> Result<Self, CopyShort> {
+        let destination = destination.get_mut(..source.len()).ok_or(CopyShort)?;
+        let (head, words, tail) = oer_portable_wire::aligned_words(source);
+        let (head_out, rest) = destination
+            .split_at_mut_checked(head.len())
+            .ok_or(CopyShort)?;
+        copy(head, head_out);
+        self.octets(head);
+        let (words_out, tail_out) = rest
+            .split_at_mut_checked(rest.len().saturating_sub(tail.len()))
+            .ok_or(CopyShort)?;
+        match oer_portable_wire::aligned_words_mut(words_out) {
+            // Both sides at one offset in their words: whole words go.
+            ([], aligned, []) if aligned.len() == words.len() => self.store_words(words, aligned),
+            _ => self.copy_words(words, words_out)?,
+        }
+        copy(tail, tail_out);
+        self.octets(tail);
+        Ok(self)
+    }
+
     fn octets(&mut self, bytes: &[u8]) {
         for byte in bytes {
             match self.odd.take() {
@@ -64,6 +95,72 @@ impl Checksum {
         for word in rest {
             sum = add_carrying(sum, *word);
         }
+        self.add_words(sum);
+    }
+
+    /// [`Self::words`], each word also stored to the word of `destination`
+    /// at its place.
+    fn store_words(&mut self, words: &[u32], destination: &mut [u32]) {
+        let (mut first, mut second, mut third, mut fourth) = (0, 0, 0, 0);
+        let mut rest = words;
+        let mut out = destination;
+        while let Some(([a, b, c, d], next)) = rest.split_first_chunk::<4>() {
+            let Some((into, after)) = core::mem::take(&mut out).split_first_chunk_mut::<4>() else {
+                break;
+            };
+            *into = [*a, *b, *c, *d];
+            first = add_carrying(first, *a);
+            second = add_carrying(second, *b);
+            third = add_carrying(third, *c);
+            fourth = add_carrying(fourth, *d);
+            rest = next;
+            out = after;
+        }
+        let mut sum = add_carrying(add_carrying(first, second), add_carrying(third, fourth));
+        for (word, into) in rest.iter().zip(out) {
+            *into = *word;
+            sum = add_carrying(sum, *word);
+        }
+        self.add_words(sum);
+    }
+
+    /// [`Self::words`], each word also stored to `destination` in the
+    /// machine's order, which is the octets it was loaded from:
+    /// `destination` holds four octets a word, at any alignment.
+    fn copy_words(&mut self, words: &[u32], destination: &mut [u8]) -> Result<(), CopyShort> {
+        let (mut first, mut second, mut third, mut fourth) = (0, 0, 0, 0);
+        let mut rest = words;
+        let mut out = destination;
+        while let Some(([a, b, c, d], next)) = rest.split_first_chunk::<4>() {
+            let (into, after) = out.split_first_chunk_mut::<16>().ok_or(CopyShort)?;
+            let [a0, a1, a2, a3] = a.to_ne_bytes();
+            let [b0, b1, b2, b3] = b.to_ne_bytes();
+            let [c0, c1, c2, c3] = c.to_ne_bytes();
+            let [d0, d1, d2, d3] = d.to_ne_bytes();
+            *into = [
+                a0, a1, a2, a3, b0, b1, b2, b3, c0, c1, c2, c3, d0, d1, d2, d3,
+            ];
+            first = add_carrying(first, *a);
+            second = add_carrying(second, *b);
+            third = add_carrying(third, *c);
+            fourth = add_carrying(fourth, *d);
+            rest = next;
+            out = after;
+        }
+        let mut sum = add_carrying(add_carrying(first, second), add_carrying(third, fourth));
+        for word in rest {
+            let (into, after) = out.split_first_chunk_mut::<4>().ok_or(CopyShort)?;
+            *into = word.to_ne_bytes();
+            sum = add_carrying(sum, *word);
+            out = after;
+        }
+        self.add_words(sum);
+        Ok(())
+    }
+
+    /// Add `sum`, the one's complement sum of words loaded in the machine's
+    /// order.
+    fn add_words(&mut self, sum: u32) {
         let folded = (sum & 0xFFFF).wrapping_add(sum >> 16);
         let folded = (folded & 0xFFFF).wrapping_add(folded >> 16) as u16;
         let ordered = u16::from_be(folded);
@@ -97,6 +194,17 @@ impl Checksum {
     /// Whether a sequence that holds its own checksum field sums to all ones.
     pub fn verifies(self) -> bool {
         self.finish() == 0
+    }
+}
+
+/// The destination of a [`Checksum::copied`] does not hold its source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CopyShort;
+
+/// `source` into `destination`, of the same length, octet by octet.
+fn copy(source: &[u8], destination: &mut [u8]) {
+    for (to, from) in destination.iter_mut().zip(source) {
+        *to = *from;
     }
 }
 
@@ -302,6 +410,83 @@ mod tests {
         let field = Checksum::new().with(&pseudo).with(&datagram).finish();
         datagram[6..8].copy_from_slice(&udp_field(field).to_be_bytes());
         assert!(Checksum::new().with(&pseudo).with(&datagram).verifies());
+    }
+
+    /// A copy summed as it goes holds its source and sums as a sum of that
+    /// source alone: any length, odd ones too, at any alignment of either
+    /// side (both at one offset in their words, whole words go; else word
+    /// loads and octet stores), after a part that left an odd octet pending
+    /// or not, and leaves the rest of its destination as it was.
+    #[test]
+    fn a_copy_summed_as_it_goes_is_the_copy_and_the_sum() {
+        let bytes = octets(160);
+        let (mut together, mut apart) = (0, 0);
+        for before in [0, 1, 2, 3, 7] {
+            let prefix = &bytes[..before];
+            for start in 0..5 {
+                for length in (0..70).chain([127, 128, 129]) {
+                    let source = &bytes[start..start + length];
+                    for offset in 0..5 {
+                        let mut destination = vec![0xA5; offset + length + 3];
+                        if length >= 8 {
+                            let lined_up = source.as_ptr().align_offset(4)
+                                == destination[offset..].as_ptr().align_offset(4);
+                            if lined_up {
+                                together += 1;
+                            } else {
+                                apart += 1;
+                            }
+                        }
+                        let sum = Checksum::new()
+                            .with(prefix)
+                            .copied(source, &mut destination[offset..])
+                            .unwrap();
+                        let expected = Checksum::new().with(prefix).with(source);
+                        assert_eq!(sum, expected, "{before} {start} {length} {offset}");
+                        assert_eq!(sum.finish(), expected.finish());
+                        assert_eq!(&destination[offset..offset + length], source);
+                        assert!(destination[..offset].iter().all(|byte| *byte == 0xA5));
+                        assert!(
+                            destination[offset + length..]
+                                .iter()
+                                .all(|byte| *byte == 0xA5)
+                        );
+                        let mut reference_sum = prefix.to_vec();
+                        reference_sum.extend_from_slice(source);
+                        assert_eq!(sum.finish(), reference(&reference_sum));
+                    }
+                }
+            }
+        }
+        assert!(together > 0 && apart > 0, "both ways of storing words");
+    }
+
+    /// A destination too short for its source is refused untouched.
+    #[test]
+    fn a_copy_into_too_little_room_writes_nothing() {
+        let source = octets(9);
+        let mut destination = [0x5A; 8];
+        assert_eq!(
+            Checksum::new().copied(&source, &mut destination),
+            Err(CopyShort)
+        );
+        assert_eq!(destination, [0x5A; 8]);
+    }
+
+    /// A summed copy may be followed by more parts, as any part may.
+    #[test]
+    fn a_summed_copy_is_one_part_among_others() {
+        let bytes = octets(41);
+        let (head, rest) = bytes.split_at(5);
+        let (middle, tail) = rest.split_at(17);
+        let mut room = [0; 17];
+        let sum = Checksum::new()
+            .with(head)
+            .copied(middle, &mut room)
+            .unwrap()
+            .with(tail);
+        assert_eq!(sum.finish(), reference(&bytes));
+        assert_eq!(room, middle);
     }
 
     #[test]
