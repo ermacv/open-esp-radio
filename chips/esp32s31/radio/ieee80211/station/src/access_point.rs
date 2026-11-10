@@ -55,6 +55,27 @@ const _: () = {
 /// a measurement.
 pub const MANAGEMENT_TRANSMISSIONS: u8 = 4;
 
+/// [`MANAGEMENT_TRANSMISSIONS`], checked at compile time.
+const MANAGEMENT_TRANSMITTED: core::num::NonZeroU8 =
+    match core::num::NonZeroU8::new(MANAGEMENT_TRANSMISSIONS) {
+        Some(transmissions) => transmissions,
+        None => panic!("a management frame is transmitted at least once"),
+    };
+
+/// The transmissions of a data frame: the lower MAC's short retry limit,
+/// checked at compile time.
+const DATA_TRANSMITTED: core::num::NonZeroU8 =
+    match core::num::NonZeroU8::new(lmac::SHORT_RETRY_LIMIT) {
+        Some(transmissions) => transmissions,
+        None => panic!("a data frame is transmitted at least once"),
+    };
+
+/// The group key's KeyID, checked at compile time.
+const GROUP_KEY: GroupKeyId = match GroupKeyId::new(GROUP_KEY_ID) {
+    Some(key_id) => key_id,
+    None => panic!("the group key's KeyID is one of the group's"),
+};
+
 /// The BSS the access point serves.
 pub struct ApSettings {
     /// Its SSID.
@@ -317,12 +338,58 @@ pub enum AccessPointEnd<W: Binding> {
         exit: ApExit,
         inputs: radio::RefusedInstall<W>,
     },
-    /// A stage before the port's installation refused: its exit, and the
-    /// registry and the minted installation it had taken, whole.
+    /// A stage before the port's installation refused, or a stop came
+    /// before the start: its exit, the registry and the minted
+    /// installation it had taken, and every other input of the runner
+    /// ([`ApInputs`]), whole.
     NotInstalled {
         exit: ApExit,
         inputs: radio::NotInstalled<W>,
+        runner: ApInputs<W>,
     },
+}
+
+/// What the access point's runner was handed that a refusal before its
+/// port's installation did not take, whole: its boot, or what a refused
+/// install left of it once the radio left ([`radio::BootLeft`]), its
+/// network end, its nonces, the settings it was started with, and its
+/// peers' and beacon's storage, or the service and beacon built on them.
+#[must_use = "the inputs hold the radio's owners"]
+pub struct ApInputs<W: Binding> {
+    /// The boot, or what is left of it.
+    pub boot: radio::BootLeft<W>,
+    /// The runner's end to the network stack.
+    pub network: ApNetworkEnd<'static>,
+    /// The handshakes' nonce source.
+    pub nonces: Nonces,
+    /// The settings of the start, when one came.
+    pub settings: Option<ApSettings>,
+    /// The peers' storage, or the service built on it.
+    pub peers: ApPeers,
+    /// The beacon's storage, or the beacon built on it.
+    pub template: ApTemplate,
+}
+
+/// The access point's peers' storage, as a refusal left it.
+pub enum ApPeers {
+    /// The storage: nothing was built on it.
+    Storage(&'static mut AccessPointPeerStorage),
+    /// The service built on it.
+    Service(AccessPointService<'static, Interface>),
+    /// The service's construction refused and kept its loan of the
+    /// storage: no owner is in it.
+    Lent,
+}
+
+/// The access point's beacon storage, as a refusal left it.
+pub enum ApTemplate {
+    /// The storage: nothing was built on it.
+    Storage(&'static mut [u8; AP_BEACON_CAPACITY]),
+    /// The beacon built on it.
+    Beacon(ApBeacon<'static>),
+    /// The beacon's construction refused and kept its loan of the storage:
+    /// no owner is in it.
+    Lent,
 }
 
 impl<W: Binding> AccessPointEnd<W> {
@@ -469,23 +536,80 @@ impl<W: Binding> AccessPointRunner<W> {
             shared,
             mut nonces,
         } = self;
+        // A refusal before the port's installation returns every input.
+        macro_rules! refuse {
+            ($exit:expr, $installations:expr, $minted:expr, $boot:expr, $settings:expr, $peers:expr, $template:expr) => {
+                return AccessPointEnd::NotInstalled {
+                    exit: $exit,
+                    inputs: radio::NotInstalled::<W> {
+                        installations: $installations,
+                        minted: $minted,
+                    },
+                    runner: ApInputs {
+                        boot: $boot,
+                        network,
+                        nonces,
+                        settings: $settings,
+                        peers: $peers,
+                        template: $template,
+                    },
+                }
+            };
+        }
+        let took_nothing =
+            |cause| ApExit::Unavailable(crate::failure::Unavailable::took_nothing(cause));
         let Some((config, settings)) = slot.take(shared).await else {
-            return AccessPointEnd::Ended(ApExit::Ended(ApEnded::Stopped));
+            refuse!(
+                ApExit::Ended(ApEnded::Stopped),
+                None,
+                None,
+                radio::BootLeft::Boot(boot),
+                None,
+                ApPeers::Storage(peers),
+                ApTemplate::Storage(template)
+            );
         };
         boot.config = config;
         let Some(installations) = W::take_installations() else {
-            return AccessPointEnd::Ended(ApExit::Unavailable(
-                crate::failure::Unavailable::took_nothing(InitializationError::Storage),
-            ));
+            refuse!(
+                took_nothing(InitializationError::Storage),
+                None,
+                None,
+                radio::BootLeft::Boot(boot),
+                Some(settings),
+                ApPeers::Storage(peers),
+                ApTemplate::Storage(template)
+            );
+        };
+        let (installations, minted) = match crate::station_end::first_installation(
+            installations,
+            radio::Installations::<W>::first,
+        ) {
+            Ok(first) => first,
+            Err(refused) => {
+                refuse!(
+                    took_nothing(InitializationError::Registration),
+                    refused.installations,
+                    refused.minted,
+                    radio::BootLeft::Boot(boot),
+                    Some(settings),
+                    ApPeers::Storage(peers),
+                    ApTemplate::Storage(template)
+                );
+            }
         };
         // The PMK of the passphrase, a step at a time between the
         // executor's other work.
         let Ok(mut derivation) = PmkDerivation::new(&settings.passphrase, settings.ssid.as_bytes())
         else {
-            return not_installed(
+            refuse!(
+                took_nothing(InitializationError::Ssid),
                 Some(installations),
-                None,
-                crate::failure::Unavailable::took_nothing(InitializationError::Ssid),
+                Some(minted),
+                radio::BootLeft::Boot(boot),
+                Some(settings),
+                ApPeers::Storage(peers),
+                ApTemplate::Storage(template)
             );
         };
         let pmk = loop {
@@ -495,10 +619,14 @@ impl<W: Binding> AccessPointRunner<W> {
             embassy_futures::yield_now().await;
         };
         let Some(gtk_bytes) = nonces.nonce() else {
-            return not_installed(
+            refuse!(
+                took_nothing(InitializationError::Storage),
                 Some(installations),
-                None,
-                crate::failure::Unavailable::took_nothing(InitializationError::Storage),
+                Some(minted),
+                radio::BootLeft::Boot(boot),
+                Some(settings),
+                ApPeers::Storage(peers),
+                ApTemplate::Storage(template)
             );
         };
         let mut gtk = [0; 16];
@@ -511,33 +639,34 @@ impl<W: Binding> AccessPointRunner<W> {
             oer_protocols_ieee80211_wire::address::IndividualAddress::for_interface(boot.ap)
                 .map(|address| address.get())
         else {
-            return not_installed(
+            refuse!(
+                took_nothing(InitializationError::Address),
                 Some(installations),
-                None,
-                crate::failure::Unavailable::took_nothing(InitializationError::Address),
+                Some(minted),
+                radio::BootLeft::Boot(boot),
+                Some(settings),
+                ApPeers::Storage(peers),
+                ApTemplate::Storage(template)
             );
         };
         let channel = config.supported;
-        let Some(key_id) = GroupKeyId::new(GROUP_KEY_ID) else {
-            return not_installed(
-                Some(installations),
-                None,
-                crate::failure::Unavailable::took_nothing(InitializationError::Storage),
-            );
-        };
         let Ok(service) = AccessPointService::<Interface>::new(
             address,
             pmk,
-            RsnGtk::new(key_id, true, &gtk),
+            RsnGtk::new(GROUP_KEY, true, &gtk),
             1,
             settings.client_limit,
             AccessPointInactiveTimeout::default(),
             peers.lend(),
         ) else {
-            return not_installed(
+            refuse!(
+                took_nothing(InitializationError::Storage),
                 Some(installations),
-                None,
-                crate::failure::Unavailable::took_nothing(InitializationError::Storage),
+                Some(minted),
+                radio::BootLeft::Boot(boot),
+                Some(settings),
+                ApPeers::Lent,
+                ApTemplate::Storage(template)
             );
         };
         let wire_channel = channel.channel();
@@ -552,43 +681,32 @@ impl<W: Binding> AccessPointRunner<W> {
             SequenceNumber::ZERO,
             ApSecurityPolicy::Wpa2Personal,
         ) else {
-            return not_installed(
+            refuse!(
+                took_nothing(InitializationError::Ssid),
                 Some(installations),
-                None,
-                crate::failure::Unavailable::took_nothing(InitializationError::Ssid),
+                Some(minted),
+                radio::BootLeft::Boot(boot),
+                Some(settings),
+                ApPeers::Service(service),
+                ApTemplate::Lent
             );
-        };
-        let (Some(management_transmissions), Some(data_transmissions)) = (
-            core::num::NonZeroU8::new(MANAGEMENT_TRANSMISSIONS),
-            core::num::NonZeroU8::new(lmac::SHORT_RETRY_LIMIT),
-        ) else {
-            return not_installed(
-                Some(installations),
-                None,
-                crate::failure::Unavailable::took_nothing(InitializationError::Tx),
-            );
-        };
-        let (installations, minted) = match crate::station_end::first_installation(
-            installations,
-            radio::Installations::<W>::first,
-        ) {
-            Ok(first) => first,
-            Err(inputs) => {
-                return AccessPointEnd::NotInstalled {
-                    exit: ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                        InitializationError::Registration,
-                    )),
-                    inputs,
-                };
-            }
         };
         let (parts, driver) = match radio::install(boot, config, AP_BANK).await {
             Ok(installed) => installed,
             Err(refused) => {
                 // A started radio leaves before the refusal is told, its
-                // outcome told with it.
-                let unavailable = crate::release::refused(refused.cause, refused.owners).await;
-                return not_installed(Some(installations), Some(minted), unavailable);
+                // outcome told with it; every other owner comes back.
+                let (unavailable, left) =
+                    crate::release::refused(refused.cause, refused.owners).await;
+                refuse!(
+                    ApExit::Unavailable(unavailable),
+                    Some(installations),
+                    Some(minted),
+                    left,
+                    Some(settings),
+                    ApPeers::Service(service),
+                    ApTemplate::Beacon(beacon)
+                );
             }
         };
         let PortInstallation {
@@ -650,12 +768,12 @@ impl<W: Binding> AccessPointRunner<W> {
             group_permission: resources.access_point_group_permission,
             beacon: resources.access_point_beacon,
         };
-        let engine = ApEngine::new(service, beacon, ADVERTISEMENT, wire_channel, key_id);
+        let engine = ApEngine::new(service, beacon, ADVERTISEMENT, wire_channel, GROUP_KEY);
         let policy = ApPolicy {
             // The BSS's lowest basic rate, the archive's beacon rate.
             management_rate: PhyRate::Legacy(LegacyRate::Dsss1M),
-            management_transmissions,
-            data_transmissions,
+            management_transmissions: MANAGEMENT_TRANSMITTED,
+            data_transmissions: DATA_TRANSMITTED,
             packet_numbers: ccmp::TX_PACKET_NUMBER_STEP,
             group_generation: 1,
         };
@@ -709,22 +827,6 @@ impl<W: Binding> AccessPointRunner<W> {
             Retired::Completed(exit) => AccessPointEnd::Ended(exit),
             Retired::Unfinished(unfinished) => AccessPointEnd::Unfinished(unfinished),
         }
-    }
-}
-
-/// The end of an access point whose stage before the port's installation
-/// refused: the registry and the minted installation it had taken, whole.
-fn not_installed<W: Binding>(
-    installations: Option<radio::Installations<W>>,
-    minted: Option<radio::MintedOf<W>>,
-    unavailable: crate::failure::Unavailable<InitializationError>,
-) -> AccessPointEnd<W> {
-    AccessPointEnd::NotInstalled {
-        exit: ApExit::Unavailable(unavailable),
-        inputs: radio::NotInstalled::<W> {
-            installations,
-            minted,
-        },
     }
 }
 

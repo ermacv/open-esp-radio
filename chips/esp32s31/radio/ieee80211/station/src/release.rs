@@ -171,23 +171,26 @@ impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Returning<'id, T> {
     }
 }
 
-/// The owners a refused start returned, which end through [`Retire::retire`].
+/// The owners a refused start returned: a member of the radio system
+/// leaves it through [`Retire::retire`], and the others come back.
 pub(crate) trait Retire {
-    /// End the owners: a member of the radio system leaves it.
-    ///
-    /// # Errors
-    ///
-    /// The cause a posted leave ended with.
-    fn retire(self) -> impl Future<Output = Result<(), crate::failure::ReleaseCause>>;
+    /// What comes back after the leave: every owner it did not take.
+    type Left;
+    /// A member of the radio system leaves it; every other owner comes
+    /// back beside the leave's outcome (the cause a posted leave ended
+    /// with).
+    fn retire(self)
+    -> impl Future<Output = (Result<(), crate::failure::ReleaseCause>, Self::Left)>;
 }
 
-/// End the owners a start's refusal for `cause` returned, keeping both
-/// outcomes.
-pub(crate) async fn refused<C, O: Retire>(cause: C, owners: O) -> crate::failure::Unavailable<C> {
-    crate::failure::Unavailable {
-        cause,
-        cleanup: owners.retire().await,
-    }
+/// The owners a start's refusal for `cause` returned: the radio's leave,
+/// both outcomes kept, and every owner the leave did not take.
+pub(crate) async fn refused<C, O: Retire>(
+    cause: C,
+    owners: O,
+) -> (crate::failure::Unavailable<C>, O::Left) {
+    let (cleanup, left) = owners.retire().await;
+    (crate::failure::Unavailable { cause, cleanup }, left)
 }
 
 /// What one release of a stopped radio `R` did.
@@ -339,33 +342,58 @@ mod tests {
         assert_eq!(attempts.get(), 1);
     }
 
-    /// Owners whose end the test names.
-    struct Owners<'a>(Result<(), crate::failure::ReleaseCause>, &'a Cell<u8>);
+    /// Owners whose end the test names: a member that leaves (its leave's
+    /// outcome and a count of leaves) and another owner, which comes back.
+    struct Owners<'a>(
+        Result<(), crate::failure::ReleaseCause>,
+        &'a Cell<u8>,
+        Kept<'a>,
+    );
 
-    impl Retire for Owners<'_> {
-        async fn retire(self) -> Result<(), crate::failure::ReleaseCause> {
-            self.1.set(self.1.get() + 1);
-            self.0
+    /// An owner the leave does not take: each drop counts once.
+    struct Kept<'a>(&'a Cell<u8>);
+
+    impl Drop for Kept<'_> {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+
+    impl<'a> Retire for Owners<'a> {
+        type Left = Kept<'a>;
+        async fn retire(self) -> (Result<(), crate::failure::ReleaseCause>, Kept<'a>) {
+            let Self(left, leaves, kept) = self;
+            leaves.set(leaves.get() + 1);
+            (left, kept)
         }
     }
 
     #[test]
-    fn a_refused_start_keeps_its_cause_and_its_failed_cleanup() {
-        let ends = Cell::new(0_u8);
+    fn a_refused_start_keeps_its_cause_and_its_failed_cleanup_and_returns_the_other_owners() {
+        let (ends, kept) = (Cell::new(0_u8), Cell::new(0_u8));
         let cleanup = Err(crate::failure::ReleaseCause::LeaveUnanswered([1, 2, 3, 4]));
-        let mut ended = core::pin::pin!(refused("storage", Owners(cleanup, &ends)));
+        let mut ended = core::pin::pin!(refused("storage", Owners(cleanup, &ends, Kept(&kept))));
+        let Poll::Ready((unavailable, left)) = poll_now(ended.as_mut()) else {
+            panic!("the leave of the test answers at once");
+        };
         assert_eq!(
-            poll_now(ended.as_mut()),
-            Poll::Ready(crate::failure::Unavailable {
+            unavailable,
+            crate::failure::Unavailable {
                 cause: "storage",
                 cleanup,
-            })
+            }
         );
-        assert_eq!(ends.get(), 1, "the owners end once");
-        let mut ended = core::pin::pin!(refused("radio", Owners(Ok(()), &ends)));
+        assert_eq!(ends.get(), 1, "the member left once");
+        assert_eq!(kept.get(), 0, "the other owner comes back");
+        drop(left);
+        assert_eq!(kept.get(), 1, "and ends with its holder");
+        let mut ended = core::pin::pin!(refused("radio", Owners(Ok(()), &ends, Kept(&kept))));
+        let Poll::Ready((unavailable, _left)) = poll_now(ended.as_mut()) else {
+            panic!("the leave of the test answers at once");
+        };
         assert_eq!(
-            poll_now(ended.as_mut()),
-            Poll::Ready(crate::failure::Unavailable::took_nothing("radio"))
+            unavailable,
+            crate::failure::Unavailable::took_nothing("radio")
         );
     }
 

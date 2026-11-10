@@ -111,24 +111,31 @@ impl<W: Binding> DriverStorage<W> {
         }
     }
 }
-pub(crate) struct Boot<W: Binding> {
-    pub cell: MembershipCell<Wifi>,
-    pub wifi: WifiPartition,
-    pub delay_random: u32,
-    pub station: [u8; 6],
-    pub ap: [u8; 6],
-    pub bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
-    pub bell: irq::Bell<W::Wifi, W::DriverEntry>,
-    pub config: Config,
-    pub entropy: u32,
-    pub interrupts: &'static Interrupts,
-    pub mac: &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<DriverExecutor>,
+/// What a Wi-Fi role's task is handed to start its radio and install its
+/// port: the radio's membership cell and partition, its interrupt binding
+/// and bell, the addresses and configuration, the interrupt signals, the
+/// receive and transmit DMA places and the driver's storage. A refusal
+/// before the port's installation returns it whole.
+#[must_use = "the boot holds the radio's peripherals, its interrupt binding and DMA places"]
+pub struct Boot<W: Binding> {
+    pub(crate) cell: MembershipCell<Wifi>,
+    pub(crate) wifi: WifiPartition,
+    pub(crate) delay_random: u32,
+    pub(crate) station: [u8; 6],
+    pub(crate) ap: [u8; 6],
+    pub(crate) bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
+    pub(crate) bell: irq::Bell<W::Wifi, W::DriverEntry>,
+    pub(crate) config: Config,
+    pub(crate) entropy: u32,
+    pub(crate) interrupts: &'static Interrupts,
+    pub(crate) mac:
+        &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<DriverExecutor>,
     /// The MAC's receive facts, which wake the station's task.
-    pub receive:
+    pub(crate) receive:
         &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<DriverExecutor>,
-    pub power:
+    pub(crate) power:
         &'static oer_chips_family_platform_interrupt_table::signal::IrqSignal<DriverExecutor>,
-    pub rx: oer_chips_esp32s31_hal::system::memory::dma_static::Placed<
+    pub(crate) rx: oer_chips_esp32s31_hal::system::memory::dma_static::Placed<
         oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxStatic<
             N,
             B,
@@ -138,12 +145,12 @@ pub(crate) struct Boot<W: Binding> {
         >,
     >,
     /// The transmit pool, pinned: the port holds its first buffers.
-    pub pool: &'static TxPool<TX>,
-    pub descriptors:
+    pub(crate) pool: &'static TxPool<TX>,
+    pub(crate) descriptors:
         [oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxDescriptor>; 5],
-    pub chains:
+    pub(crate) chains:
         [oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxChain>; 2],
-    pub storage: &'static mut DriverStorage<W>,
+    pub(crate) storage: &'static mut DriverStorage<W>,
 }
 pub struct Platform {
     power: Option<PhyTxTargetPowerProfile>,
@@ -386,6 +393,20 @@ pub struct UnfinishedDatapath<W: Binding> {
     pub installations: Installations<W>,
 }
 
+/// What a station's datapath task was handed that a refusal before its
+/// port's installation did not take, whole: its boot, or what a refused
+/// install left of it once the radio left ([`BootLeft`]), and its ends of
+/// the queues to the lifecycle and to the network stack.
+#[must_use = "the inputs hold the radio's owners and the owners in transit"]
+pub struct DatapathInputs<W: Binding> {
+    /// The boot, or what is left of it.
+    pub boot: BootLeft<W>,
+    /// The actor's ends of the queues to the lifecycle.
+    pub queues: ActorQueues<W>,
+    /// The actor's ends to the network stack.
+    pub network: NetworkSide<W>,
+}
+
 /// The datapath half of a station's installation that retired: the proof
 /// of that installation's retire, and the actor's ends of the queues to
 /// the lifecycle when an owner was still in transit in them once the
@@ -412,12 +433,20 @@ pub enum DatapathEnd<W: Binding> {
     /// owner still in transit to the actor comes back beside it.
     Retired(RetiredDatapath<W>),
     /// No installation came up before the port was handed anything: the
-    /// registry and the minted installation it had taken, whole; the
-    /// station's task holds the refusal and how the owners it returned
-    /// ended.
-    NotInstalled(NotInstalled<W>),
-    /// The port refused its installation: every input it was handed, whole.
-    Refused(RefusedInstall<W>),
+    /// registry and the minted installation it had taken, and every other
+    /// input of the task, whole; the station's task holds the refusal and
+    /// how the radio's leave ended.
+    NotInstalled {
+        refused: NotInstalled<W>,
+        inputs: DatapathInputs<W>,
+    },
+    /// The port refused its installation: every input it was handed, and
+    /// the task's ends of its queues, whole.
+    Refused {
+        refused: RefusedInstall<W>,
+        queues: ActorQueues<W>,
+        network: NetworkSide<W>,
+    },
     /// The installation did not retire: everything it held.
     Unfinished(UnfinishedDatapath<W>),
 }
@@ -581,6 +610,18 @@ pub(crate) async fn drive<W: Binding>(
         mut mailbox,
         mut abandoned,
     } = places;
+    // A refusal before the port's installation returns every input.
+    let not_installed = |installations, minted, boot, queues, network| DatapathEnd::NotInstalled {
+        refused: NotInstalled::<W> {
+            installations,
+            minted,
+        },
+        inputs: DatapathInputs {
+            boot,
+            queues,
+            network,
+        },
+    };
     let Some(installations) = W::take_installations() else {
         post(
             &mut mailbox,
@@ -589,10 +630,7 @@ pub(crate) async fn drive<W: Binding>(
             )),
         )
         .await;
-        return DatapathEnd::NotInstalled(NotInstalled::<W> {
-            installations: None,
-            minted: None,
-        });
+        return not_installed(None, None, BootLeft::Boot(boot), lifecycle, network);
     };
     let (mut installations, minted) =
         match crate::station_end::first_installation(installations, Installations::<W>::first) {
@@ -605,7 +643,17 @@ pub(crate) async fn drive<W: Binding>(
                     )),
                 )
                 .await;
-                return DatapathEnd::NotInstalled(refused);
+                let NotInstalled::<W> {
+                    installations,
+                    minted,
+                } = refused;
+                return not_installed(
+                    installations,
+                    minted,
+                    BootLeft::Boot(boot),
+                    lifecycle,
+                    network,
+                );
             }
         };
     let config = boot.config;
@@ -614,12 +662,9 @@ pub(crate) async fn drive<W: Binding>(
         Err(refused) => {
             // A started radio leaves before the refusal is told, its
             // outcome told with it.
-            let unavailable = crate::release::refused(refused.cause, refused.owners).await;
+            let (unavailable, left) = crate::release::refused(refused.cause, refused.owners).await;
             post(&mut mailbox, News::Unavailable(unavailable)).await;
-            return DatapathEnd::NotInstalled(NotInstalled::<W> {
-                installations: Some(installations),
-                minted: Some(minted),
-            });
+            return not_installed(Some(installations), Some(minted), left, lifecycle, network);
         }
     };
     let PortInstallation {
@@ -632,12 +677,16 @@ pub(crate) async fn drive<W: Binding>(
             let unavailable =
                 port_refused::<W>(InitializationError::Backend, &mut *parts.device).await;
             post(&mut mailbox, News::Unavailable(unavailable)).await;
-            return DatapathEnd::Refused(RefusedInstall {
-                parts,
-                minted,
-                driver,
-                installations,
-            });
+            return DatapathEnd::Refused {
+                refused: RefusedInstall {
+                    parts,
+                    minted,
+                    driver,
+                    installations,
+                },
+                queues: lifecycle,
+                network,
+            };
         }
     };
     let (block_acks, tokens) = resources.into_station();
@@ -970,26 +1019,80 @@ pub(crate) enum Acquired<W: Binding> {
     },
 }
 
+/// What a refused install left of its boot once a member of the radio
+/// system left it, by how far the install came: every owner the leave did
+/// not take, for the application. None runs hardware: nothing was
+/// published to the MAC or its DMA.
+#[must_use = "what the refused install left holds the radio's owners"]
+pub enum BootLeft<W: Binding> {
+    /// The boot, whole: nothing was taken.
+    Boot(Boot<W>),
+    /// The port's storage did not take its parts before the radio started:
+    /// the radio's partition and cell, its interrupt binding and bell.
+    Unstarted {
+        cell: MembershipCell<Wifi>,
+        wifi: WifiPartition,
+        bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
+        bell: irq::Bell<W::Wifi, W::DriverEntry>,
+    },
+    /// The radio's join or track was never answered, or its join refused:
+    /// the prepared parts; the membership cell and partition went with the
+    /// request, or the cell with the refused join.
+    Prepared {
+        prepared: Prepared<W>,
+        cell: Option<MembershipCell<Wifi>>,
+    },
+    /// The radio's track failed and its member left: the prepared parts,
+    /// and the membership cell when the leave was answered.
+    Left {
+        prepared: Prepared<W>,
+        cell: Option<MembershipCell<Wifi>>,
+    },
+    /// The radio started and the transmitter did not go idle: the
+    /// started radio left as a release does, and the transmitter comes
+    /// back.
+    Started {
+        transmitter: OrdinaryTxOwner<
+            'static,
+            <Device<W> as port::Device<TX>>::Power,
+            Entropy,
+            EmbassyClock,
+            TX,
+        >,
+    },
+}
+
 impl<W: Binding> crate::release::Retire for Acquired<W> {
-    /// End what the refused install left. A member of the radio system
-    /// leaves it: a started radio as [`release`] does, a refusal of its MAC
-    /// tried again; a member whose track failed through its cell, the
-    /// leave never posted again. The other owners end here, no hardware of
-    /// theirs running: nothing was published to the MAC or its DMA.
-    async fn retire(self) -> Result<(), crate::failure::ReleaseCause> {
+    type Left = BootLeft<W>;
+    /// A member of the radio system leaves it: a started radio as
+    /// [`release`] does, a refusal of its MAC tried again; a member whose
+    /// track failed through its cell, the leave never posted again. Every
+    /// other owner comes back ([`BootLeft`]).
+    async fn retire(self) -> (Result<(), crate::failure::ReleaseCause>, BootLeft<W>) {
         use oer_chips_esp32s31_radio_ieee80211_backend::startup::RadioStartFailure;
         match self {
-            Self::Boot(_boot) => Ok(()),
+            Self::Boot(boot) => (Ok(()), BootLeft::Boot(boot)),
             Self::Unstarted {
-                cell: _cell,
-                wifi: _wifi,
-                bound: _bound,
-                bell: _bell,
-            } => Ok(()),
-            Self::Unanswered(prepared) => {
-                prepared.end();
-                Ok(())
-            }
+                cell,
+                wifi,
+                bound,
+                bell,
+            } => (
+                Ok(()),
+                BootLeft::Unstarted {
+                    cell,
+                    wifi,
+                    bound,
+                    bell,
+                },
+            ),
+            Self::Unanswered(prepared) => (
+                Ok(()),
+                BootLeft::Prepared {
+                    prepared,
+                    cell: None,
+                },
+            ),
             Self::NotStarted {
                 cell,
                 failure,
@@ -997,31 +1100,36 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
             } => match failure {
                 // The partition came back at the stage the join reached:
                 // the client never became a member.
-                RadioStartFailure::Join { .. } => {
-                    prepared.end();
-                    Ok(())
-                }
+                RadioStartFailure::Join { .. } => (
+                    Ok(()),
+                    BootLeft::Prepared {
+                        prepared,
+                        cell: Some(cell),
+                    },
+                ),
                 RadioStartFailure::Track { failed, .. } => {
-                    prepared.end();
                     let (member, wifi) = failed.returned;
-                    match cell
+                    let (left, cell) = match cell
                         .leave(
                             oer_chips_esp32s31_radio_client::Leaving::Untracked(member),
                             oer_chips_esp32s31_radio_client::wifi::WifiLeave { wifi },
                         )
                         .await
                     {
-                        Ok((_cell, left)) => crate::failure::convert::released(left.domain),
-                        Err(reason) => Err(crate::failure::ReleaseCause::LeaveUnanswered(
-                            reason.observations(),
-                        )),
-                    }
+                        Ok((cell, left)) => {
+                            (crate::failure::convert::released(left.domain), Some(cell))
+                        }
+                        Err(reason) => (
+                            Err(crate::failure::ReleaseCause::LeaveUnanswered(
+                                reason.observations(),
+                            )),
+                            None,
+                        ),
+                    };
+                    (left, BootLeft::Left { prepared, cell })
                 }
             },
-            Self::Started {
-                radio,
-                transmitter: _transmitter,
-            } => {
+            Self::Started { radio, transmitter } => (
                 crate::release::until_left(
                     &EmbassyClock,
                     RELEASE_RETRY,
@@ -1029,26 +1137,17 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
                     StoppedRadio::release,
                     |_| {},
                 )
-                .await
-            }
+                .await,
+                BootLeft::Started { transmitter },
+            ),
         }
     }
 }
 
-impl<W: Binding> Prepared<W> {
-    /// End the prepared parts: the receive path was bound but never
-    /// started, and the interrupt binding and bell served no radio.
-    fn end(self) {
-        let Self {
-            bound: _bound,
-            bell: _bell,
-            rx: _rx,
-        } = self;
-    }
-}
-
-/// The port's parts an install prepared before the radio started.
-pub(crate) struct Prepared<W: Binding> {
+/// The port's parts an install prepared before the radio started: the
+/// interrupt binding and bell, and the bound receive path, never started.
+#[must_use = "the prepared parts hold the interrupt binding and the receive DMA path"]
+pub struct Prepared<W: Binding> {
     bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
     bell: irq::Bell<W::Wifi, W::DriverEntry>,
     rx: oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxParts<

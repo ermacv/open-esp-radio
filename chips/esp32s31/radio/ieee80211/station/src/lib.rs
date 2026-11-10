@@ -866,8 +866,8 @@ pub use chip::{
 };
 #[cfg(target_arch = "riscv32")]
 pub use radio::{
-    ActorQueues, DatapathEnd, LifecycleQueues, NetworkSide, NotInstalled, RetiredDatapath,
-    UnfinishedDatapath, UnfinishedStationOf,
+    ActorQueues, Boot, BootLeft, DatapathEnd, DatapathInputs, LifecycleQueues, NetworkSide,
+    NotInstalled, Prepared, RetiredDatapath, UnfinishedDatapath, UnfinishedStationOf,
 };
 #[cfg(target_arch = "riscv32")]
 pub use station::{
