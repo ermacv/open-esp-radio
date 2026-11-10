@@ -86,11 +86,20 @@ enum Work {
 }
 
 /// Work that is ready, before any frame of it exists: what a scheduler needs
-/// to choose it.
+/// to choose it. Its grant sends to the station address the core found, so
+/// what a scheduler reads cannot be changed:
+///
+/// ```compile_fail,E0616
+/// # use oer_protocols_network_core::Demand;
+/// fn retarget<B>(demand: &mut Demand<B>) {
+///     demand.ready.peer = [0x02; 6];
+/// }
+/// ```
 #[derive(Debug, Eq, PartialEq)]
 pub struct Demand<B> {
-    /// What a scheduler may know of it.
-    pub ready: Ready,
+    /// What a scheduler may know of it, as the core found it: read only, for
+    /// its grant names the station address in it.
+    ready: Ready,
     work: Work,
     brand: Tag<B>,
 }
@@ -102,6 +111,11 @@ impl<B> Candidate for Demand<B> {
 }
 
 impl<B> Demand<B> {
+    /// What a scheduler may know of it.
+    pub const fn ready(&self) -> &Ready {
+        &self.ready
+    }
+
     /// Choose this work.
     pub const fn grant(self) -> Grant<B> {
         Grant {

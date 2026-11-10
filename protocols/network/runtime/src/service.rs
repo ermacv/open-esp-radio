@@ -1344,7 +1344,7 @@ impl<
                     let (owner, steps) = (&self.owner, tally.steps());
                     let ready = || {
                         owner.demands(now, steps).filter(move |demand| {
-                            filtered.is_none_or(|flow| demand.ready.flow != Some(flow))
+                            filtered.is_none_or(|flow| demand.ready().flow != Some(flow))
                         })
                     };
                     match self.egress.plan(ready, &mut plan) {
