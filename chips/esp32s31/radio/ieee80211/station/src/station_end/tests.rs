@@ -471,3 +471,19 @@ fn an_unfinished_half_moves_home_and_frees_its_place() {
         "the half ends once, with its holder"
     );
 }
+
+/// An actor that ended on its fault instead of the retire or reinstall the
+/// lifecycle asked for tells it: a lifecycle waiting for the release or the
+/// reinstall ends with the fault, and its half goes out.
+#[test]
+fn a_faulted_actor_ends_the_lifecycles_wait() {
+    let failure = LifecycleFailure::Unkept;
+    assert_eq!(
+        installed(TestNews::Faulted(failure)),
+        Err(StationExitOf::Failed(failure))
+    );
+    assert_eq!(
+        release_settled(Some(TestNews::Faulted(failure)), None),
+        (StationExitOf::Failed(failure), LifecycleHalf::Unfinished)
+    );
+}

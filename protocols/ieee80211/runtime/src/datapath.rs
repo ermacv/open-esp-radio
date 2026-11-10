@@ -531,6 +531,9 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     end: Option<ActorEnd<<D::Port as DataPort<'id>>::Fault>>,
     /// A fault asked for a restart: the next one ends the run.
     recovering: bool,
+    /// The last stop or retune's stop ended unconfirmed: the halted radio
+    /// may still hold what it ran, until a start begins.
+    stop_unconfirmed: bool,
 }
 
 /// Owners a broken contract leaves with the actor.
@@ -624,6 +627,7 @@ where
             },
             end: None,
             recovering: false,
+            stop_unconfirmed: false,
         }
     }
 
@@ -694,6 +698,7 @@ where
                 },
                 end: None,
                 recovering: false,
+            stop_unconfirmed: false,
             })
         })
     }
@@ -713,8 +718,16 @@ where
 
     /// How far the radio came, read when the run ended: an end on a fault
     /// during a stop reports [`RadioPhase::Stopping`], not a running radio.
+    ///
+    /// A halted radio whose stop ended unconfirmed, and a running one whose
+    /// port is recovering for a stop the lifecycle was asked for, read
+    /// [`RadioPhase::Stopping`].
     pub const fn radio_phase(&self) -> RadioPhase {
-        self.radio.phase()
+        match self.radio {
+            Radio::Halted if self.stop_unconfirmed => RadioPhase::Stopping,
+            _ if self.recovering => RadioPhase::Stopping,
+            _ => self.radio.phase(),
+        }
     }
 
     /// The port, for its owner once the run retired it: the actor no
@@ -807,6 +820,7 @@ where
         self.radio = Radio::Stopped;
         self.end = None;
         self.recovering = false;
+        self.stop_unconfirmed = false;
         // A stop that stopped the network ended with its installation: the
         // next stop asks the network of the next installation again.
         self.network_stopping = NetworkStopping::NotAsked;

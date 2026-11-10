@@ -674,10 +674,14 @@ pub(crate) async fn drive<W: Binding>(
             // installation comes back with every owner the actor holds.
             // Its phase is the radio's when the fault ended the run: a fault
             // during a stop leaves it stopping.
+            // The lifecycle may wait for this task's news after a retire or
+            // a reinstall it asked for: the fault is told, so it ends too.
             ActorEnd::Faulted(fault) => {
+                let failure = crate::failure::convert::actor_fault(fault);
+                post(&mut mailbox, News::Faulted(failure)).await;
                 return DatapathEnd::Unfinished(ended_running(
                     actor,
-                    DatapathCause::Faulted(crate::failure::convert::actor_fault(fault)),
+                    DatapathCause::Faulted(failure),
                 ));
             }
         }

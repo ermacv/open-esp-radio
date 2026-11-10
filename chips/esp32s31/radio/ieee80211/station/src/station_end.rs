@@ -131,6 +131,9 @@ pub(crate) enum News<C, K, E> {
     Unavailable(Unavailable<E>),
     /// The port did not reinstall after the station's restart.
     Reinstall(ReinstallCause),
+    /// The actor ended on its fault instead of the retire or reinstall
+    /// the lifecycle asked for: its installation comes back unfinished.
+    Faulted(LifecycleFailure),
     /// The radio's release after the lifecycle retired the port, and
     /// whether the last stop's network participant was lost.
     Released {
@@ -236,6 +239,7 @@ pub(crate) fn installed<C, K, E>(news: News<C, K, E>) -> Result<(C, K), StationE
         News::Installed(commands, tokens) => Ok((commands, tokens)),
         News::Unavailable(error) => Err(StationExitOf::Unavailable(error)),
         News::Reinstall(cause) => Err(StationExitOf::Failed(LifecycleFailure::Reinstall(cause))),
+        News::Faulted(failure) => Err(StationExitOf::Failed(failure)),
         News::Released { .. } => Err(StationExitOf::Failed(LifecycleFailure::Mailbox)),
     }
 }
@@ -279,6 +283,7 @@ pub(crate) fn ended<C, K, E>(news: News<C, K, E>) -> StationExitOf<E> {
             result,
             network_lost,
         } => released_exit(result, network_lost),
+        News::Faulted(failure) => StationExitOf::Failed(failure),
         News::Reinstall(_) | News::Installed(..) | News::Unavailable(_) => {
             StationExitOf::Failed(LifecycleFailure::Mailbox)
         }

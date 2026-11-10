@@ -733,6 +733,7 @@ where
             ToActor::Start(channel) => match self.radio {
                 Radio::Stopped | Radio::Halted => {
                     self.radio = Radio::Starting(channel);
+                    self.stop_unconfirmed = false;
                     self.drive_radio(cx)?;
                 }
                 _ => self.owed.started = Some(Err(StartRefused::Running)),
@@ -1222,6 +1223,7 @@ where
                 }
                 Poll::Ready(Err(unconfirmed)) => {
                     self.radio = Radio::Halted;
+                    self.stop_unconfirmed = true;
                     self.owed.retuned = Some(Err(RetuneFailed::Stop(unconfirmed)));
                 }
                 Poll::Pending => {}
@@ -1277,6 +1279,7 @@ where
                 };
                 if let Some(outcome) = outcome {
                     self.radio = Radio::Halted;
+                    self.stop_unconfirmed = matches!(outcome, StopOutcome::Unconfirmed(_));
                     self.owed.stopped = Some(outcome);
                 }
             }

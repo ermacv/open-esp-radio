@@ -2331,6 +2331,44 @@ fn freed_memory_goes_back_as_one_burst_with_one_wake() {
     }
 }
 
+/// A stop that ends unconfirmed halts the radio: the actor's phase reads
+/// the stop, not a confirmed stop, until a start begins.
+#[test]
+fn an_unconfirmed_stop_reads_the_stopping_phase() {
+    bench_then(
+        |bench| {
+            bench.start();
+            bench.connect(link(true, None));
+            bench
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, true);
+            bench.send_msdu(msdu(0, &[1; 8]));
+            bench.settle();
+            let deadline = bench.clock.inner.now();
+            bench.send(ToActor::Stop {
+                deadline,
+                network: NetworkEnd::Stays,
+            });
+            let mut unconfirmed = false;
+            for _ in 0..4 {
+                bench.advance(1);
+                bench.settle();
+                while let Some(message) = bench.next() {
+                    unconfirmed |=
+                        matches!(message, FromActor::Stopped(StopOutcome::Unconfirmed(_)));
+                }
+                if unconfirmed {
+                    break;
+                }
+            }
+            assert!(unconfirmed, "the stop ends unconfirmed");
+        },
+        |actor, _| {
+            assert_eq!(actor.radio_phase(), RadioPhase::Stopping);
+        },
+    );
+}
+
 /// An item the port cannot keep, found while a stop the lifecycle asked
 /// for waits on a published MPDU: the actor ends on it, and its radio
 /// reads the stop, not a running radio.
