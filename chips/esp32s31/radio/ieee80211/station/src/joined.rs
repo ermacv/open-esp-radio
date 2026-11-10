@@ -479,7 +479,8 @@ impl TxBuffers for Buffers {
             .pop()
             .ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
         let written = match slot.bytes_mut().get_mut(..length) {
-            Some(bytes) => fill(bytes).map_err(Unpublished::Fill),
+            Some(bytes) => fill(&mut oer_protocols_network_port::Slot::new(bytes, None))
+                .map_err(Unpublished::Fill),
             None => Err(Unpublished::Port(PortRefusal::BadFrame)),
         };
         match written {
