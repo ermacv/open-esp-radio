@@ -332,11 +332,13 @@ pub enum AccessPointEnd<W: Binding> {
     /// the items a port call could not keep, the cleanup's receipt, its
     /// exit as the cause, and its phase.
     Unfinished(UnfinishedAccessPointOf<W>),
-    /// The port refused its installation: its exit, and every input the
-    /// port was handed, whole.
+    /// The port refused its installation: its exit, every input the port
+    /// was handed, and every other input of the runner, whole (its boot is
+    /// in the port's parts).
     Refused {
         exit: ApExit,
         inputs: radio::RefusedInstall<W>,
+        runner: ApInputs<W>,
     },
     /// A stage before the port's installation refused, or a stop came
     /// before the start: its exit, the registry and the minted
@@ -356,8 +358,9 @@ pub enum AccessPointEnd<W: Binding> {
 /// peers' and beacon's storage, or the service and beacon built on them.
 #[must_use = "the inputs hold the radio's owners"]
 pub struct ApInputs<W: Binding> {
-    /// The boot, or what is left of it.
-    pub boot: radio::BootLeft<W>,
+    /// The boot, or what is left of it; `None` once the port's parts hold
+    /// it ([`AccessPointEnd::Refused`]).
+    pub boot: Option<radio::BootLeft<W>>,
     /// The runner's end to the network stack.
     pub network: ApNetworkEnd<'static>,
     /// The handshakes' nonce source.
@@ -546,7 +549,7 @@ impl<W: Binding> AccessPointRunner<W> {
                         minted: $minted,
                     },
                     runner: ApInputs {
-                        boot: $boot,
+                        boot: Some($boot),
                         network,
                         nonces,
                         settings: $settings,
@@ -729,6 +732,14 @@ impl<W: Binding> AccessPointRunner<W> {
                         minted,
                         driver,
                         installations,
+                    },
+                    runner: ApInputs {
+                        boot: None,
+                        network,
+                        nonces,
+                        settings: Some(settings),
+                        peers: ApPeers::Service(service),
+                        template: ApTemplate::Beacon(beacon),
                     },
                 };
             }

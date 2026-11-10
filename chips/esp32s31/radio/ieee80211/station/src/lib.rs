@@ -461,7 +461,7 @@ impl Drop for StartGuard<'_> {
 /// The station's stop request to the network side and its answer. The two
 /// sides may run on different harts: the flags are atomic, and each side
 /// waits on its own notify (`N`'s wakers).
-struct NetworkStopState<N: Notifies> {
+pub struct NetworkStopState<N: Notifies> {
     requested: AtomicBool,
     stopped: AtomicBool,
     lost: AtomicBool,

@@ -408,16 +408,19 @@ pub struct DatapathInputs<W: Binding> {
 }
 
 /// The datapath half of a station's installation that retired: the proof
-/// of that installation's retire, and the actor's ends of the queues to
-/// the lifecycle when an owner was still in transit in them once the
+/// of that installation's retire, the actor's ends of the queues to the
+/// lifecycle when an owner was still in transit in them once the
 /// lifecycle had stopped producing (`None`: they were empty and ended with
-/// the installation).
+/// the installation), and the actor's ends to the network stack, with
+/// whatever the network sent that the actor did not take.
 #[must_use = "the proof finishes the lifecycle's half; the queues hold owners in transit"]
 pub struct RetiredDatapath<W: Binding> {
     /// The proof of the retire.
     pub proof: crate::station_end::DatapathRetired<<W as Binding>::Id>,
     /// The actor's ends of the queues, when they held owners.
     pub in_transit: Option<ActorQueues<W>>,
+    /// The actor's ends to the network stack.
+    pub network: NetworkSide<W>,
 }
 
 /// How the datapath actor's task ended.
@@ -809,6 +812,7 @@ pub(crate) async fn drive<W: Binding>(
                     Ok(proof) => DatapathEnd::Retired(RetiredDatapath {
                         proof,
                         in_transit: crate::station_end::in_transit(lifecycle),
+                        network,
                     }),
                     Err(unfinished) => left(unfinished, lifecycle, network, installations),
                 };
@@ -1006,8 +1010,10 @@ pub(crate) enum Acquired<W: Binding> {
         prepared: Prepared<W>,
     },
     /// The radio started and the transmitter did not go idle: the started
-    /// radio, for its release, and the transmitter.
+    /// radio, for its release, the transmitter (which holds the first
+    /// descriptor) and the other prepared parts.
     Started {
+        prepared: Prepared<W>,
         radio: StoppedRadio,
         transmitter: OrdinaryTxOwner<
             'static,
@@ -1024,6 +1030,10 @@ pub(crate) enum Acquired<W: Binding> {
 /// not take, for the application. None runs hardware: nothing was
 /// published to the MAC or its DMA.
 #[must_use = "what the refused install left holds the radio's owners"]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "no-alloc refusal returns each owner by value, as the install's refusal does"
+)]
 pub enum BootLeft<W: Binding> {
     /// The boot, whole: nothing was taken.
     Boot(Boot<W>),
@@ -1049,9 +1059,10 @@ pub enum BootLeft<W: Binding> {
         cell: Option<MembershipCell<Wifi>>,
     },
     /// The radio started and the transmitter did not go idle: the
-    /// started radio left as a release does, and the transmitter comes
-    /// back.
+    /// started radio left as a release does, and the transmitter (with the
+    /// first descriptor) and the other prepared parts come back.
     Started {
+        prepared: Prepared<W>,
         transmitter: OrdinaryTxOwner<
             'static,
             <Device<W> as port::Device<TX>>::Power,
@@ -1129,7 +1140,11 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
                     (left, BootLeft::Left { prepared, cell })
                 }
             },
-            Self::Started { radio, transmitter } => (
+            Self::Started {
+                radio,
+                transmitter,
+                prepared,
+            } => (
                 crate::release::until_left(
                     &EmbassyClock,
                     RELEASE_RETRY,
@@ -1138,16 +1153,27 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
                     |_| {},
                 )
                 .await,
-                BootLeft::Started { transmitter },
+                BootLeft::Started {
+                    prepared,
+                    transmitter,
+                },
             ),
         }
     }
 }
 
 /// The port's parts an install prepared before the radio started: the
-/// interrupt binding and bell, and the bound receive path, never started.
-#[must_use = "the prepared parts hold the interrupt binding and the receive DMA path"]
+/// interrupt binding and bell, the bound receive path, never started, the
+/// device's and the shared storage's places, the transmit descriptors
+/// (the first one unless the transmitter holds it) and the lent units'
+/// notifies.
+#[must_use = "the prepared parts hold the interrupt binding and the DMA places"]
 pub struct Prepared<W: Binding> {
+    device: &'static mut core::mem::MaybeUninit<Device<W>>,
+    first: Option<Pin<&'static mut TxSlot<TX>>>,
+    descriptors: TxDescriptors<TX>,
+    lent: Lent<W>,
+    shared: &'static mut core::mem::MaybeUninit<PortSharedStorage<TX, Lent<W>>>,
     bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
     bell: irq::Bell<W::Wifi, W::DriverEntry>,
     rx: oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxParts<
@@ -1322,7 +1348,19 @@ pub(crate) async fn install<W: Binding>(
             // its, and nothing of the radio comes back to be released.
             return Err(InstallRefused {
                 cause: InitializationError::Request(quarantine.reason),
-                owners: Acquired::Unanswered(Prepared { bound, bell, rx }),
+                owners: Acquired::Unanswered(Prepared {
+                    bound,
+                    bell,
+                    rx,
+                    device,
+                    first: Some(first),
+                    descriptors: TxDescriptors {
+                        single,
+                        chains: chained,
+                    },
+                    lent,
+                    shared,
+                }),
             });
         }
     };
@@ -1334,7 +1372,19 @@ pub(crate) async fn install<W: Binding>(
                 owners: Acquired::NotStarted {
                     cell,
                     failure,
-                    prepared: Prepared { bound, bell, rx },
+                    prepared: Prepared {
+                        bound,
+                        bell,
+                        rx,
+                        device,
+                        first: Some(first),
+                        descriptors: TxDescriptors {
+                            single,
+                            chains: chained,
+                        },
+                        lent,
+                        shared,
+                    },
                 },
             });
         }
@@ -1356,6 +1406,19 @@ pub(crate) async fn install<W: Binding>(
                 owners: Acquired::Started {
                     radio: StoppedRadio { stopped, cell },
                     transmitter,
+                    prepared: Prepared {
+                        bound,
+                        bell,
+                        rx,
+                        device,
+                        first: None,
+                        descriptors: TxDescriptors {
+                            single,
+                            chains: chained,
+                        },
+                        lent,
+                        shared,
+                    },
                 },
             });
         }

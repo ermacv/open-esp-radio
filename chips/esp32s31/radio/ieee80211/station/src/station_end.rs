@@ -255,10 +255,13 @@ pub(crate) fn first_installation<R, M>(
 }
 
 /// Run the actor's `run` until it ends or the lifecycle abandons it
-/// (`abandoned`). An abandon drops the run first, so the actor produces
-/// nothing more into the queues between them, and only then tells the
-/// lifecycle (`mailbox`, [`News::Abandoned`]), which waits for it before
-/// its own ends go out ([`UnfinishedLifecycleOf::abandoned`]).
+/// (`abandoned`). The abandon is looked for before each poll of the run,
+/// its first included: once it is queued, no run makes progress, so after
+/// it the actor's task posts at most the one installation's news of a
+/// reinstall already past its run. An abandon drops the run first, so the
+/// actor produces nothing more into the queues between them, and only then
+/// tells the lifecycle (`mailbox`, [`News::Abandoned`]), which waits for it
+/// before its own ends go out ([`UnfinishedLifecycleOf::abandoned`]).
 ///
 /// # Errors
 ///
@@ -277,9 +280,10 @@ pub(crate) async fn run_until_abandoned<F: Future, C, K, E, B>(
                 abandoned.ready().await;
             }
         };
-        match embassy_futures::select::select(run, abandon).await {
-            embassy_futures::select::Either::First(end) => return Ok(end),
-            embassy_futures::select::Either::Second(failure) => failure,
+        // The first future is polled first.
+        match embassy_futures::select::select(abandon, run).await {
+            embassy_futures::select::Either::First(failure) => failure,
+            embassy_futures::select::Either::Second(end) => return Ok(end),
         }
     };
     // The run is dropped here: the news follows its last poll.
@@ -297,11 +301,6 @@ pub enum LateEnd<E> {
     /// Its run stopped on the lifecycle's abandon: its half is the
     /// datapath's unfinished installation.
     Abandoned,
-    /// A second news of an installation came before any news that ends the
-    /// actor's task: the mailbox's order broke, and nothing confirms that
-    /// the actor's run stopped. Both installations' commands and tokens
-    /// are in the half ([`UnfinishedLifecycleOf::take_installed`]).
-    OutOfOrder,
 }
 
 /// The station lifecycle's half of an installation that did not retire,
@@ -319,9 +318,26 @@ pub struct UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// The news that ended the actor's task, once read.
     late: Option<LateEnd<E>>,
     /// The commands, tokens and installation a news of an installation
-    /// carried, kept in their order: the second only after the mailbox's
-    /// order broke ([`LateEnd::OutOfOrder`]).
-    installed: [Option<(C, K, InstallationOf<B>)>; 2],
+    /// carried, kept in their order ([`INSTALLED`]).
+    installed: [Option<Installed<C, K, B>>; INSTALLED],
+}
+
+/// The places for installations' news a lifecycle half keeps. At most two
+/// come before the actor task's end after an abandon: one already in the
+/// mailbox when the lifecycle abandons, and one of a reinstall past its run
+/// ([`run_until_abandoned`] looks for the abandon before each poll of the
+/// run). The third keeps one past that bound, which the actor's task does
+/// not post, so the end is read with a place still free.
+pub const INSTALLED: usize = 3;
+
+/// How a read of the actor task's news went.
+enum Read {
+    /// One news was read.
+    Read,
+    /// The mailbox is empty.
+    Empty,
+    /// Every place for installations' news is full: nothing was read.
+    Full,
 }
 
 /// What a finished lifecycle half hands back: how the actor's task ended
@@ -335,8 +351,12 @@ pub struct FinishedLifecycleOf<Q, C, K, E, B> {
     /// The lifecycle's ends of the queues to the actor.
     pub queues: Q,
     /// What a news of an installation carried, in order.
-    pub installed: [Option<(C, K, InstallationOf<B>)>; 2],
+    pub installed: [Option<Installed<C, K, B>>; INSTALLED],
 }
+
+/// What a news of an installation carried: its commands, its tokens and
+/// which installation it is.
+pub type Installed<C, K, B> = (C, K, InstallationOf<B>);
 
 /// A proof of another installation, refused by a lifecycle half: both come
 /// back unchanged, nothing finished or consumed.
@@ -363,7 +383,7 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
             installation,
             mailbox,
             late: None,
-            installed: [None, None],
+            installed: [None, None, None],
         }
     }
 
@@ -372,9 +392,14 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// returned only once the actor's task told that it ended (its run
     /// stopped: [`News::Abandoned`], or the news it ended on first). A
     /// news of an installation before it does not end the wait: its
-    /// commands and tokens are kept in the half, and the wait goes on.
-    /// Only then do the lifecycle's ends of the queues go out, so no
-    /// producer runs while they are collected.
+    /// commands and tokens are kept in the half, and the wait goes on;
+    /// nothing but the end of the actor's task ends it. Only then do the
+    /// lifecycle's ends of the queues go out, so no producer runs while
+    /// they are collected.
+    ///
+    /// With every place for installations' news full ([`INSTALLED`]), a
+    /// further news would stay in the mailbox, unread, and the wait would
+    /// go on for good rather than end unconfirmed.
     pub(crate) async fn abandoned(
         mut self,
         failure: LifecycleFailure,
@@ -382,34 +407,33 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     ) -> Self {
         abandon.ready().await.send(failure);
         while self.late.is_none() {
-            match self.mailbox.try_receive() {
-                Some(news) => self.read(news),
-                None => self.mailbox.ready().await,
+            match self.read_one() {
+                Read::Read => {}
+                Read::Empty => self.mailbox.ready().await,
+                Read::Full => core::future::pending::<()>().await,
             }
         }
         self
     }
 
-    /// Read one news of the actor's task: a news of an installation is
-    /// kept and read on; any other one ends the task.
-    fn read(&mut self, news: News<C, K, E, B>) {
+    /// Read the next news of the actor's task, when there is room for it:
+    /// a news of an installation is kept; any other one ends the task.
+    fn read_one(&mut self) -> Read {
+        let Some(place) = self.installed.iter_mut().find(|place| place.is_none()) else {
+            return Read::Full;
+        };
+        let Some(news) = self.mailbox.try_receive() else {
+            return Read::Empty;
+        };
         self.late = match news {
             News::Installed(commands, tokens, installation) => {
-                let kept = Some((commands, tokens, installation));
-                match &mut self.installed {
-                    [first @ None, _] => {
-                        *first = kept;
-                        return;
-                    }
-                    [Some(_), second] => {
-                        *second = kept;
-                        Some(LateEnd::OutOfOrder)
-                    }
-                }
+                *place = Some((commands, tokens, installation));
+                return Read::Read;
             }
             News::Abandoned => Some(LateEnd::Abandoned),
             news => Some(LateEnd::Ended(ended(news))),
         };
+        Read::Read
     }
 
     /// The retired lifecycle.
@@ -433,19 +457,14 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// that ends it. A news of an installation is kept
     /// ([`Self::take_installed`]) and the next one read.
     pub fn late_end(&mut self) -> Option<LateEnd<E>> {
-        while self.late.is_none()
-            && let Some(news) = self.mailbox.try_receive()
-        {
-            self.read(news);
-        }
+        while self.late.is_none() && matches!(self.read_one(), Read::Read) {}
         self.late
     }
 
     /// The commands, tokens and installation a news of an installation
     /// carried, each once, in order.
-    pub fn take_installed(&mut self) -> Option<(C, K, InstallationOf<B>)> {
-        let [first, second] = &mut self.installed;
-        first.take().or_else(|| second.take())
+    pub fn take_installed(&mut self) -> Option<Installed<C, K, B>> {
+        self.installed.iter_mut().find_map(Option::take)
     }
 
     /// Finish the half of an installation whose datapath half retired: the

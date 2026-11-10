@@ -179,8 +179,13 @@ what the refused install left of it once a started radio left
 (`DatapathEnd::NotInstalled`, `DatapathInputs`) or the access point's
 network end, nonces, settings and its peers' and beacon storage or the
 service and beacon built on them (`AccessPointEnd::NotInstalled`,
-`ApInputs`). Owners a refused step inside the install consumed (a receive
-path that did not bind, a descriptor that did not pin) end there.
+`ApInputs`; after a port's refusal too, beside `RefusedInstall`). A
+refused install returns the prepared parts (`Prepared`: interrupt binding,
+bell, receive path, transmit descriptors, the device's and shared
+storage's places) from the radio's start on; owners a refused step inside
+the parts' preparation consumed (a receive path that did not bind, a
+descriptor that did not pin, a place already taken) end there. A completed
+retire returns the datapath's network ends (`RetiredDatapath::network`).
 
 The station's installation has two halves, and an unfinished one returns
 both. The datapath task returns `DatapathEnd` (`Retired`, `NotInstalled`,
@@ -205,8 +210,8 @@ actor tells the actor's task once and waits for a news that ends the
 actor's task (`News::Abandoned`, or the fault, release or refused
 reinstall it ended on first); a news of an installation before it is no
 such confirmation: its commands and tokens are kept in the half and the
-wait goes on (a second one breaks the mailbox's order: `LateEnd::OutOfOrder`,
-both kept). Only then do its ends go out, so no producer runs while either
+wait goes on (at most two come before the end, as the actor's run is not
+polled once the abandon is queued; `INSTALLED` places keep them). Only then do its ends go out, so no producer runs while either
 half collects its queues, and each owner in transit is in its queue once,
 in order. The half's operations read its queues (`queues`), its events'
 sink (`events`), the retired station (`station`), its places (`places`)

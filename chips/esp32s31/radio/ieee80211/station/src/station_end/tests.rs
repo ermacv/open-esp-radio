@@ -588,7 +588,9 @@ fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
     while let Some(item) = in_transit.try_receive() {
         assert!(received.push(item).is_ok());
     }
-    assert_eq!(received, [0, 1, 2, 3], "in order, each once");
+    // Three polls before the abandon; the run is not polled once it is
+    // queued.
+    assert_eq!(received, [0, 1, 2], "in order, each once");
     assert_eq!(half.late_end(), Some(LateEnd::Abandoned));
 }
 
@@ -633,11 +635,11 @@ fn a_queued_installation_does_not_end_the_abandons_wait() {
     assert!(half.take_installed().is_none(), "once");
 }
 
-/// A second news of an installation before any end breaks the mailbox's
-/// order: the wait ends on it, named, and both installations' owners are
-/// kept in the half.
+/// Two news of installations before the end (one already in the mailbox,
+/// one of a reinstall past its run) do not end the wait either: both are
+/// kept, in order, and only the end of the actor's task ends it.
 #[test]
-fn a_second_installation_news_is_out_of_order_and_both_are_kept() {
+fn two_installation_news_are_kept_and_only_the_end_ends_the_wait() {
     use oer_portable_memory::WakingSpscQueue;
     let mut abandon_place = WakingSpscQueue::<LifecycleFailure, 1>::new();
     let (mut abandon_end, _abandoned) = abandon_place.split();
@@ -656,13 +658,49 @@ fn a_second_installation_news_is_out_of_order_and_both_are_kept() {
             .try_send(News::Installed(3, 4, installation(2)))
             .is_ok()
     );
+    assert!(
+        poll_once(wait.as_mut()).is_pending(),
+        "a second installation's news confirms nothing"
+    );
+    assert!(mailbox.try_send(News::Abandoned).is_ok());
     let Poll::Ready(mut half) = poll_once(wait.as_mut()) else {
-        panic!("a broken order ends the wait");
+        panic!("the actor's end confirms the stop");
     };
-    assert_eq!(half.late_end(), Some(LateEnd::OutOfOrder));
+    assert_eq!(half.late_end(), Some(LateEnd::Abandoned));
     assert!(matches!(half.take_installed(), Some((1, 2, _))));
     assert!(matches!(half.take_installed(), Some((3, 4, _))));
     assert!(half.take_installed().is_none());
+}
+
+/// An abandon already queued stops the actor's run before its first poll:
+/// it produces nothing, so no further reinstall's news can follow.
+#[test]
+fn a_queued_abandon_stops_the_run_before_it_is_polled() {
+    use oer_portable_memory::WakingSpscQueue;
+    let mut transit = WakingSpscQueue::<u8, 8>::new();
+    let (to_lifecycle, in_transit) = transit.split();
+    let mut abandon_place = WakingSpscQueue::<LifecycleFailure, 1>::new();
+    let (abandon_end, mut abandoned) = abandon_place.split();
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mut mailbox, news) = mailbox_place.split();
+    let alive = Cell::new(true);
+    assert!(abandon_end.try_send(LifecycleFailure::Mailbox).is_ok());
+    let producer = Producer {
+        queue: &to_lifecycle,
+        next: 0,
+        alive: &alive,
+    };
+    let mut datapath = pin!(run_until_abandoned(producer, &mut abandoned, &mut mailbox));
+    assert_eq!(
+        poll_once(datapath.as_mut()),
+        Poll::Ready(Err(LifecycleFailure::Mailbox))
+    );
+    assert!(!alive.get());
+    assert!(
+        in_transit.try_receive().is_none(),
+        "the run was never polled"
+    );
+    assert!(matches!(news.try_receive(), Some(News::Abandoned)));
 }
 
 /// The owner's case B: the proof that installation 0 retired does not

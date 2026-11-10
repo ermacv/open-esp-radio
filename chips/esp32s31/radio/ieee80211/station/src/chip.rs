@@ -264,7 +264,7 @@ impl Config {
 /// The image's callbacks and the engine the station unwraps EAPOL-Key data
 /// with in its step: the AES accelerator, each block waited for on its
 /// `STATE` flag.
-pub(crate) struct CoreCallbacks<C> {
+pub struct CoreCallbacks<C> {
     callbacks: C,
     aes: oer_chips_esp32s31_platform_runtime::crypto::AesEngine,
 }

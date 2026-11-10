@@ -279,31 +279,61 @@ pub struct StationInstallationEnd {
     pub in_transit: Option<wifi::LifecycleQueues<binding::Binding>>,
 }
 
+/// What finishing a late retire hands back: the finished lifecycle half,
+/// and the datapath half's ends of the queues (when they held owners) and
+/// to the network stack.
+#[must_use = "a finished late retire returns the owners still in transit"]
+pub struct LateRetireFinished {
+    /// The lifecycle's half, finished.
+    pub lifecycle: wifi::FinishedLifecycle<binding::Binding>,
+    /// The actor's ends of the queues to the lifecycle, when they held
+    /// owners.
+    pub in_transit: Option<wifi::ActorQueues<binding::Binding>>,
+    /// The actor's ends to the network stack.
+    pub network: wifi::NetworkSide<binding::Binding>,
+}
+
 impl StationInstallationEnd {
     /// Finish an installation whose datapath half retired after its
     /// lifecycle stopped waiting for the release (the stop's drain passed
     /// first): the lifecycle's half ends with the retired installation and
     /// no release runs again. The actual end of the actor's task, beside
-    /// the exit the station's task returned, and the owners still in
-    /// transit to the lifecycle. Any other end comes back unchanged.
+    /// the exit the station's task returned, the owners still in transit
+    /// and the datapath's network ends come back. Any other end, and a
+    /// proof of another installation, comes back unchanged.
     #[allow(
         clippy::result_large_err,
         reason = "an end this does not finish comes back whole, by value"
     )]
-    pub fn finish_late_retire(self) -> Result<wifi::FinishedLifecycle<binding::Binding>, Self> {
+    pub fn finish_late_retire(self) -> Result<LateRetireFinished, Self> {
         match self {
             Self {
-                datapath: wifi::DatapathEnd::Retired(wifi::RetiredDatapath { proof, in_transit }),
+                datapath:
+                    wifi::DatapathEnd::Retired(wifi::RetiredDatapath {
+                        proof,
+                        in_transit,
+                        network,
+                    }),
                 lifecycle: Some(half),
-                in_transit: lifecycle_in_transit,
-            } => half.finish(proof).map_err(|foreign| Self {
-                datapath: wifi::DatapathEnd::Retired(wifi::RetiredDatapath {
-                    proof: foreign.proof,
+                // A half that went out holds the lifecycle's queues: none
+                // are in transit beside it.
+                in_transit: None,
+            } => match half.finish(proof) {
+                Ok(lifecycle) => Ok(LateRetireFinished {
+                    lifecycle,
                     in_transit,
+                    network,
                 }),
-                lifecycle: Some(foreign.half),
-                in_transit: lifecycle_in_transit,
-            }),
+                Err(foreign) => Err(Self {
+                    datapath: wifi::DatapathEnd::Retired(wifi::RetiredDatapath {
+                        proof: foreign.proof,
+                        in_transit,
+                        network,
+                    }),
+                    lifecycle: Some(foreign.half),
+                    in_transit: None,
+                }),
+            },
             other => Err(other),
         }
     }
