@@ -2163,6 +2163,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 }
 
+/// A producing call refused before it accepted its input `I`: the item
+/// an earlier call left, beside that input.
+type Refusal<'id, Id, D, const B: usize, O, I, R> = Unkeeping<'id, Types<Id, D, B, O>, I, R>;
+
 /// What [`Esp32s31Port::assemble`] builds an installation from.
 struct Assembly<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     device: &'static mut D,
@@ -2202,7 +2206,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         clippy::result_large_err,
         reason = "the refusal returns the item and the input whole, by value"
     )]
-    fn accepting<I, R>(&mut self, input: I) -> Result<I, Unkeeping<'id, Types<Id, D, B, O>, I, R>> {
+    fn accepting<I, R>(&mut self, input: I) -> Result<I, Refusal<'id, Id, D, B, O, I, R>> {
         match self.unconsumed.take_spilled() {
             Some(item) => Err(Unkeeping {
                 unkept: item.into_unkept(),

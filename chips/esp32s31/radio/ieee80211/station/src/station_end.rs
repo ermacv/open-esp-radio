@@ -129,7 +129,8 @@ pub(crate) enum News<C, K, E> {
 /// installation's, and the actor runs on.
 #[allow(
     clippy::type_complexity,
-    reason = "the running actor and its news, or the news and the unfinished installation"
+    clippy::result_large_err,
+    reason = "the running actor and its news, or the news and the unfinished installation, by value"
 )]
 pub(crate) fn reinstalled<A: Installation, C, K, E>(
     mut actor: A,
