@@ -186,6 +186,13 @@ impl std::io::Write for BoardConsole {
 }
 
 impl BoardConsole {
+    /// Reset the chip behind this console into its image over its USB
+    /// Serial/JTAG, the console's input drained just before the reset edge.
+    /// A failure may come after the edge: the image may have started.
+    pub fn reset_into_image(&mut self) -> std::io::Result<()> {
+        reset::reset_usb_serial_jtag(&mut self.port)
+    }
+
     /// The open port.
     pub fn into_port(self) -> Port {
         self.port
@@ -322,6 +329,7 @@ impl ProfiledBoard {
                     Transport::Usb {
                         port: &port,
                         espflash_chip: &self.espflash_chip,
+                        hold: false,
                     },
                     by,
                 )?
@@ -337,6 +345,41 @@ impl ProfiledBoard {
         };
         self.start(written.pending_start())?;
         written.started()
+    }
+
+    /// Write `bundle`, known as `image`, over USB like [`Self::flash`], but
+    /// leave the chip in its ROM loader: the caller starts it, by the
+    /// console's own reset ([`Self::open_console_from_reset`]), and confirms
+    /// the start ([`crate::image::Written::started`]).
+    pub fn write_held<'a>(
+        &'a self,
+        store: &'a Store,
+        bundle: &oer_tools_image_bundle::ImageBundle,
+        image: &str,
+        by: &str,
+    ) -> crate::stand::Result<crate::image::Written<'a>> {
+        let reference = &self.reference;
+        if bundle.chip != reference.chip {
+            return Err(format!(
+                "board `{}` is an {}; the bundle is an {} image",
+                reference.id, reference.chip, bundle.chip
+            )
+            .into());
+        }
+        let port = self.flashable_port()?;
+        let written = crate::image::write(
+            store,
+            self.mac(),
+            bundle,
+            image,
+            Transport::Usb {
+                port: &port,
+                espflash_chip: &self.espflash_chip,
+                hold: true,
+            },
+            by,
+        )?;
+        Ok(written)
     }
 
     /// Start the image a write left as `start` needs: nothing after the
@@ -441,9 +484,9 @@ impl ProfiledBoard {
     /// Open the board's console and reset it into its image over its USB
     /// Serial/JTAG, which discards what the port held before.
     pub fn open_console_from_reset(&self) -> crate::stand::Result<BoardConsole> {
-        let mut port = self.open_console()?.into_port();
-        reset::reset_usb_serial_jtag(&mut port)?;
-        Ok(BoardConsole { port })
+        let mut console = self.open_console()?;
+        console.reset_into_image()?;
+        Ok(console)
     }
 
     /// Power the board off and on, watching it leave USB and return, then
