@@ -58,11 +58,11 @@ fn a_declared_work_holds_a_place_and_no_block() {
         let work = stack.declare(at(0), &socket, broadcast(), 100).unwrap();
         assert_eq!(stack.pool().free(), BLOCKS, "no block");
         let demand = stack.poll_demand(at(0)).unwrap();
-        assert_eq!(demand.ready.class, Class::Data);
-        assert_eq!(demand.ready.length, 14 + 20 + 8 + 100);
-        assert_eq!(demand.ready.flow, Some(socket.flow()));
-        assert_eq!(demand.ready.dscp, dscp);
-        assert_eq!(demand.ready.peer, [0xFF; 6]);
+        assert_eq!(demand.ready().class, Class::Data);
+        assert_eq!(demand.ready().length, 14 + 20 + 8 + 100);
+        assert_eq!(demand.ready().flow, Some(socket.flow()));
+        assert_eq!(demand.ready().dscp, dscp);
+        assert_eq!(demand.ready().peer, [0xFF; 6]);
         assert!(
             stack.queued().next().is_none(),
             "nothing to evict: no block"
@@ -319,7 +319,7 @@ fn a_declared_work_waits_for_its_neighbor_without_a_slot() {
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let work = stack.declare(at(0), &socket, peer(), 8).unwrap();
         let demand = stack.poll_demand(at(0)).unwrap();
-        assert_eq!(demand.ready.class, Class::Control, "its neighbor first");
+        assert_eq!(demand.ready().class, Class::Control, "its neighbor first");
         let calls = Cell::new(0);
         stack
             .transmit(at(0), demand.grant(), writes(&calls), &())
@@ -376,7 +376,7 @@ fn a_declining_fill_ends_its_work_declined_and_passes_the_turn() {
         assert!(!stack.port_broken());
         let next = stack.poll_demand(at(0)).unwrap();
         assert_eq!(
-            next.ready.flow,
+            next.ready().flow,
             Some(channel.flow()),
             "the other socket goes first"
         );
