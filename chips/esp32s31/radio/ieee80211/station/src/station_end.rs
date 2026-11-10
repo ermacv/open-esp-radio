@@ -344,7 +344,8 @@ pub struct UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// The news that ended the actor's task, once read.
     late: Option<LateEnd<E>>,
     /// The commands, tokens and installation a news of an installation
-    /// carried, kept in their order ([`INSTALLED`]).
+    /// carried, kept in their order ([`INSTALLED`]): the kept ones fill the
+    /// places from the first on, the oldest first.
     installed: [Option<Installed<C, K, B>>; INSTALLED],
 }
 
@@ -376,7 +377,8 @@ pub struct FinishedLifecycleOf<Q, C, K, E, B> {
     pub late: Option<LateEnd<E>>,
     /// The lifecycle's ends of the queues to the actor.
     pub queues: Q,
-    /// What a news of an installation carried, in order.
+    /// What a news of an installation carried, in order: the kept ones
+    /// fill the places from the first on, the oldest first.
     pub installed: [Option<Installed<C, K, B>>; INSTALLED],
 }
 
@@ -548,7 +550,18 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// carried, each once, in order. The installation the actor's task
     /// runs on ([`Self::installation`]) stays.
     pub fn take_installed(&mut self) -> Option<Installed<C, K, B>> {
-        self.installed.iter_mut().find_map(Option::take)
+        // The kept news fill the places from the first on, in their order
+        // ([`Self::read_one`] keeps the next one in the first free place):
+        // the first is the oldest, and every later one moves one place
+        // forward, so the next read keeps its news behind them.
+        let [first, rest @ ..] = &mut self.installed;
+        let taken = first.take()?;
+        let mut previous = first;
+        for place in rest {
+            *previous = place.take();
+            previous = place;
+        }
+        Some(taken)
     }
 
     /// Finish the half of an installation whose datapath half retired: the

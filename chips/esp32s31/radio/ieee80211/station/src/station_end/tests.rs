@@ -1106,3 +1106,50 @@ fn a_read_refused_reinstall_is_the_late_end() {
         )))
     );
 }
+
+/// The owner's counterexample: the kept news of installations come out in
+/// the order they were read, a news read after one was taken included:
+/// after 1, 2, 3, taking 1 and reading 4, the next are 2, 3, 4, and a
+/// finish returns what was not taken in that order.
+#[test]
+fn kept_installations_come_out_in_their_order_after_a_take_and_a_later_read() {
+    use oer_portable_memory::WakingSpscQueue;
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mailbox, news) = mailbox_place.split();
+    let mut half = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
+    for next in 1..=3_u8 {
+        assert!(
+            mailbox
+                .try_send(News::Installed(next, next, installation(u32::from(next))))
+                .is_ok()
+        );
+        let _read = half.late_end();
+    }
+    assert_eq!(half.late_end(), LateRead::Full);
+    assert!(matches!(half.take_installed(), Some((1, 1, _))));
+    assert!(
+        mailbox
+            .try_send(News::Installed(4, 4, installation(4)))
+            .is_ok()
+    );
+    assert_eq!(half.late_end(), LateRead::Full, "4 takes the free place");
+    assert!(
+        matches!(half.take_installed(), Some((2, 2, _))),
+        "2 before 4"
+    );
+    // The rest comes back in order with the finished half.
+    assert!(mailbox.try_send(News::Abandoned).is_ok());
+    assert_eq!(half.late_end(), LateRead::Ended(LateEnd::Abandoned));
+    let ends = Ends::default();
+    let (_, proof) = retired_of(actor(&ends, Ok(()), Ok(Radio(Leaves::Left)), false), 4);
+    let Ok(proof) = proof else {
+        panic!("installation 4 retired");
+    };
+    let Ok(finished) = half.finish(proof) else {
+        panic!("confirmed, on its current installation's proof");
+    };
+    let order = finished
+        .installed
+        .map(|kept| kept.map_or(0, |(commands, _, _)| commands));
+    assert_eq!(order, [3, 4, 0]);
+}
