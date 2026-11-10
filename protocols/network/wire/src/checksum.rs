@@ -38,8 +38,9 @@ impl Checksum {
     }
 
     /// Copy `source` to the start of `destination` and add it to the
-    /// sequence, in one pass: each octet is read from `source` once, for its
-    /// copy and its sum together. The sum is that of [`Self::with`] over
+    /// sequence: the aligned words of `source`, all but at most three octets
+    /// at each edge, are read once, for their copy and their sum together;
+    /// the edge octets are copied and summed apart. The sum is that of [`Self::with`] over
     /// `source`, a pending odd octet included, and `destination` holds
     /// `source`'s octets; the rest of `destination` is untouched.
     ///

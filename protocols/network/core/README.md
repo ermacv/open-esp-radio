@@ -32,7 +32,7 @@ check it again while they hold:
 
 | Carried | Holds while | Otherwise |
 | --- | --- | --- |
-| the next hop's station address (datagrams, echo replies) | no known neighbor entry was written or replaced since (the table counts each such change) and the entry's expiry is still ahead | the table is asked again; another station, or none, is `Unsent::Stale` |
+| the next hop's station address (datagrams, echo replies) | no known neighbor entry was written or replaced since (the table counts each such change; the count never comes back to a value it had, and once it reaches its end nothing found holds) and the entry's expiry is still ahead | the table is asked again; another station, or none, is `Unsent::Stale` |
 | the work's place and serial, the station address it was chosen for | the place still runs that serial | `Unsent::Stale` |
 
 What the work is (its socket, its remote, its data) is read from its place
@@ -40,9 +40,10 @@ at the frame, and the address it goes from from the interface at that time,
 as before; the DHCP client's messages and ARP frames are checked anew, as
 control work is rare. A frame's headers are written into the slot first.
 A stored datagram's data is then copied from its block into the slot and
-summed in the same pass (`Checksum::copied`), so the block's octets are read
-once on their way out, as whole words where block and slot lie at one offset
-in their words; a producer's data is written by the producer into the slot
+summed with it (`Checksum::copied`): the block's aligned words, all but at
+most three octets at each edge, are read once for their copy and their sum
+together, stored as whole words where block and slot lie at one offset in
+their words, and the edge octets are copied and summed apart; a producer's data is written by the producer into the slot
 itself and summed there. The UDP checksum goes into the headers last. No
 owner changes: the block stays the core's until the port's answer, and the
 slot stays the port's.
