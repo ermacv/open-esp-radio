@@ -476,24 +476,33 @@ static MEMORY: ConstStaticCell<Memory> = ConstStaticCell::new(Memory {
 });
 static STOP: ConstStaticCell<StopLane> = ConstStaticCell::new(StopLane::new());
 
-/// The transmit buffers no frame holds, shared by the supply, which takes
-/// back what the station gave back, and the port, which writes them. Both run
-/// in the network's task, so a lend is never refused for another's.
+/// The transmit buffers no frame holds, and the ends of the frames the
+/// station gave back, in one cell: the supply, which takes back what the
+/// station gave back, and the port, which writes the buffers and hands the
+/// ends on, both run in the network's task, so a lend is never refused for
+/// another's, and one lend serves each step.
 struct FreeSlots {
-    slots: ClaimCell<heapless::Vec<wifi::TxSlot, { wifi::NETWORK_BUFFERS }>>,
+    state: ClaimCell<SlotState>,
+    freed: AtomicWaker,
+}
+
+/// What [`FreeSlots`] holds.
+struct SlotState {
+    slots: heapless::Vec<wifi::TxSlot, { wifi::NETWORK_BUFFERS }>,
     /// What the station gave back, each with its frame's end, until the port
     /// hands the end on: only then is the buffer free again.
-    ended: ClaimCell<Completions<wifi::TxSlot, TxTicket, { wifi::NETWORK_BUFFERS }>>,
-    freed: AtomicWaker,
+    ended: Completions<wifi::TxSlot, TxTicket, { wifi::NETWORK_BUFFERS }>,
 }
 
 impl FreeSlots {
     fn any(&self) -> bool {
-        self.slots.lend(|slots| !slots.is_empty()).unwrap_or(false)
+        self.state
+            .lend(|state| !state.slots.is_empty())
+            .unwrap_or(false)
     }
 
     fn take(&self) -> Option<wifi::TxSlot> {
-        self.slots.lend(heapless::Vec::pop).ok().flatten()
+        self.state.lend(|state| state.slots.pop()).ok().flatten()
     }
 
     /// The station gave `slot` back, its frame ended so (`end`): it waits
@@ -502,55 +511,56 @@ impl FreeSlots {
         let ticket = slot.place();
         let mut slot = Some(slot);
         // Only the network's task lends this, so a lend is never refused.
-        let refused = self
-            .ended
-            .lend(|ended| {
-                let slot = slot.take()?;
-                ended.returned(slot, ticket, end).err()
-            })
-            .ok()
-            .flatten();
         // One end a buffer, and this holds an end for every buffer: no end
         // is refused. Were one, its buffer would be free again at once.
-        if let Some(slot) = refused {
-            self.give(slot);
-        }
+        let _held = self.state.lend(|state| {
+            let refused = slot
+                .take()
+                .and_then(|slot| state.ended.returned(slot, ticket, end).err());
+            if let Some(slot) = refused {
+                let _more_than_the_pool_holds = state.slots.push(slot);
+            }
+        });
         self.freed.wake();
     }
 
     /// The station took the frame of `ticket` and lost its buffer.
     fn lost(&self, ticket: TxTicket) {
-        let _held = self.ended.lend(|ended| ended.lost(ticket));
+        let _held = self.state.lend(|state| state.ended.lost(ticket));
         self.freed.wake();
     }
 
     /// The next end for the egress policy, the link now `link`: its buffer is
-    /// free again from here.
+    /// free again from here, in the same lend.
     fn take_notice(&self, link: oer_protocols_network_port::LinkSnapshot) -> Option<TxNotice> {
-        let (notice, slot) = self
-            .ended
-            .lend(|ended| ended.take_notice(link))
+        let notice = self
+            .state
+            .lend(|state| {
+                let (notice, slot) = state.ended.take_notice(link)?;
+                if let Some(slot) = slot {
+                    let _more_than_the_pool_holds = state.slots.push(slot);
+                }
+                Some(notice)
+            })
             .ok()
             .flatten()?;
-        if let Some(slot) = slot {
-            self.give(slot);
-        }
+        self.freed.wake();
         Some(notice)
     }
 
     /// Whether an end waits for the port.
     fn notice_waiting(&self, link: oer_protocols_network_port::LinkSnapshot) -> bool {
-        self.ended
-            .lend(|ended| ended.waiting(link))
+        self.state
+            .lend(|state| state.ended.waiting(link))
             .unwrap_or(false)
     }
 
     /// A slot a refusal here drops goes back to the station's pool.
     fn give(&self, slot: wifi::TxSlot) {
         let mut slot = Some(slot);
-        let _held = self.slots.lend(|slots| {
+        let _held = self.state.lend(|state| {
             if let Some(slot) = slot.take() {
-                let _more_than_the_pool_holds = slots.push(slot);
+                let _more_than_the_pool_holds = state.slots.push(slot);
             }
         });
         self.freed.wake();
@@ -558,8 +568,7 @@ impl FreeSlots {
 }
 
 static FREE: FreeSlots = FreeSlots {
-    slots: ClaimCell::new(),
-    ended: ClaimCell::new(),
+    state: ClaimCell::new(),
     freed: AtomicWaker::new(),
 };
 
@@ -604,9 +613,11 @@ impl wifi::NetworkTxSupply for WifiTx {
             // The vector holds every buffer the network does.
             let _more_than_the_pool_holds = free.push(slot);
         }
-        // One station's start per boot: a second keeps the first's list.
-        let _installed = FREE.slots.install(free);
-        let _ends = FREE.ended.install(Completions::new());
+        // One station's start per boot: a second keeps the first's state.
+        let _installed = FREE.state.install(SlotState {
+            slots: free,
+            ended: Completions::new(),
+        });
         Self { publisher }
     }
 }
