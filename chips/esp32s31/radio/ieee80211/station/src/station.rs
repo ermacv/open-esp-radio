@@ -800,7 +800,16 @@ async fn lifecycles<W: Binding>(
                         // configuration and the events' sink back; this
                         // installation's other owners end with it, and
                         // its place is free.
-                        let (station, _places, _arbiter, _issuer, _contexts, _rejected, events) = oer_portable_memory::unpack_placed!(
+                        let (
+                            station,
+                            _places,
+                            _arbiter,
+                            _issuer,
+                            _contexts,
+                            _rejected,
+                            _unsent,
+                            events,
+                        ) = oer_portable_memory::unpack_placed!(
                             retired,
                             RetiredLifecycle {
                                 station,
@@ -809,6 +818,7 @@ async fn lifecycles<W: Binding>(
                                 issuer,
                                 tx_contexts,
                                 rejected,
+                                unsent,
                                 events
                             }
                         );
