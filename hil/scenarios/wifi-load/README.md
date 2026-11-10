@@ -25,7 +25,8 @@ overload. Level 0 means no pacing, in every direction the case has: the host
 sends RX load, and the image sends TX load, one datagram after another as
 fast as the socket takes them until the window ends (the datagram burst does
 not apply). A refused host send is counted in `host_send_failed` and the next
-datagram follows at once; the window ends the run at its deadline. An
+datagram follows at once. Once the window's deadline has passed no new send
+starts; a send already started may finish after it. An
 unpaced level has no offered rate: its `offered_mbps` and `offered_total_mbps`
 are `null`, and its name reads `<case> unpaced`. A level above 0 is paced at
 that total, half each way for `rx-tx`. `OER_WIFI_LOAD_WIDTH=he20` asks the router for its HE20 station
