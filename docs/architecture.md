@@ -1465,7 +1465,13 @@ are switched on, off and reset at runtime without a rebuild. It covers the
 agreed counters only: work done through readiness indices and full candidate
 collections; transmit-plan continuations and stop reasons; returns processed
 and credits restored; loans out and published but unprocessed returns at a
-`no_credit` refusal; and the time split of the core's main stages.
+`no_credit` refusal; materialised frames; and the time split of the core's
+main stages. The counters, where each is counted and the cost while off are
+in [the runtime's README](../protocols/network/runtime/README.md#diagnostics).
+The S31 application's network service always carries them, with their one
+writer, the network's task; an observing image (`oer::observe`) switches,
+resets and reads them, as the `hil-wifi-station` image does for its load
+service.
 
 - Diagnostics are off by default.
 - Off, the core reads no clock and updates no diagnostic counter; the cost

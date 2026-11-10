@@ -31,7 +31,7 @@ fn a_lendable_datagram_stays_in_the_port_s_buffer_under_a_loan() {
         let free = stack.pool().free();
         arrives(stack, b"lent", Holding::Lendable);
         let mut dropped = Dropped::default();
-        let Intake::Lent(lent) = stack.take_frame(at(0), &mut dropped) else {
+        let Intake::Lent(lent) = stack.take_frame(at(0), &mut dropped, &()) else {
             panic!("a lendable datagram is lent");
         };
         assert_eq!(lent.flow, socket.flow());
@@ -63,11 +63,11 @@ fn a_socket_at_its_credit_drops_with_no_credit_and_the_port_keeps_the_buffer() {
         arrives(stack, b"first", Holding::Lendable);
         arrives(stack, b"second", Holding::Lendable);
         let mut dropped = Dropped::default();
-        let Intake::Lent(first) = stack.take_frame(at(0), &mut dropped) else {
+        let Intake::Lent(first) = stack.take_frame(at(0), &mut dropped, &()) else {
             panic!("the credit takes one");
         };
         assert!(matches!(
-            stack.take_frame(at(0), &mut dropped),
+            stack.take_frame(at(0), &mut dropped, &()),
             Intake::Read
         ));
         assert_eq!(dropped.0, [NetEvent::NotLent(NotLent::NoCredit)]);
@@ -80,7 +80,7 @@ fn a_socket_at_its_credit_drops_with_no_credit_and_the_port_keeps_the_buffer() {
         stack.pool().loans().give_back(first.loan);
         arrives(stack, b"third", Holding::Lendable);
         assert!(matches!(
-            stack.take_frame(at(0), &mut dropped),
+            stack.take_frame(at(0), &mut dropped, &()),
             Intake::Lent(_)
         ));
     });
@@ -96,14 +96,14 @@ fn a_pressure_copy_is_dropped_and_a_format_copy_goes_into_the_socket_s_group() {
         arrives(stack, b"pressed", Holding::Copied(CopyReason::Pressure));
         let mut dropped = Dropped::default();
         assert!(matches!(
-            stack.take_frame(at(0), &mut dropped),
+            stack.take_frame(at(0), &mut dropped, &()),
             Intake::Read
         ));
         assert_eq!(dropped.0, [NetEvent::PressureCopy]);
         assert_eq!(stack.pool().free(), free);
         arrives(stack, b"formed", Holding::Copied(CopyReason::Format));
         assert!(matches!(
-            stack.take_frame(at(0), &mut dropped),
+            stack.take_frame(at(0), &mut dropped, &()),
             Intake::Read
         ));
         assert_eq!(dropped.0, [NetEvent::PressureCopy], "a format copy is kept");
@@ -124,7 +124,7 @@ fn a_copying_socket_copies_a_lendable_frame_without_a_loan() {
         arrives(stack, b"copied", Holding::Lendable);
         let mut dropped = Dropped::default();
         assert!(matches!(
-            stack.take_frame(at(0), &mut dropped),
+            stack.take_frame(at(0), &mut dropped, &()),
             Intake::Read
         ));
         let datagram = stack.receive(&socket).unwrap().unwrap();
@@ -148,7 +148,7 @@ fn a_credit_the_account_cannot_hold_refuses_the_socket_and_changes_nothing() {
         arrives(stack, b"copied", Holding::Lendable);
         let mut dropped = Dropped::default();
         assert!(matches!(
-            stack.take_frame(at(0), &mut dropped),
+            stack.take_frame(at(0), &mut dropped, &()),
             Intake::Read
         ));
         assert!(stack.receive(&socket).unwrap().is_some());
@@ -163,7 +163,7 @@ fn a_close_takes_the_credit_back_and_a_held_loan_counts_until_it_returns() {
         let socket = stack.open_lending(PORT, best_effort(), group, 2).unwrap();
         arrives(stack, b"held", Holding::Lendable);
         let mut dropped = Dropped::default();
-        let Intake::Lent(held) = stack.take_frame(at(0), &mut dropped) else {
+        let Intake::Lent(held) = stack.take_frame(at(0), &mut dropped, &()) else {
             panic!("lent");
         };
         let _closing = stack.close(socket).unwrap();
@@ -197,7 +197,7 @@ fn a_port_that_keeps_no_buffer_ends_the_loan_at_once() {
         arrives(stack, b"kept", Holding::Lendable);
         let mut dropped = Dropped::default();
         assert!(matches!(
-            stack.take_frame(at(0), &mut dropped),
+            stack.take_frame(at(0), &mut dropped, &()),
             Intake::Read
         ));
         assert!(stack.pool().loans().released());

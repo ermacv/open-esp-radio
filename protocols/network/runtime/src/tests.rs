@@ -3134,6 +3134,7 @@ mod lending;
 mod local;
 mod paced;
 mod plan;
+mod probe;
 mod reserve;
 mod turns;
 

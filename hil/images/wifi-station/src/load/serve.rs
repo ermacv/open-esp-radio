@@ -28,11 +28,11 @@ use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
-    Addba, AddbaCollected, Collected, Counters, CountersCollected, Hart1Collected, Hart1Window,
-    Link, LinkCollected, Load, LoadError, Mac, MacCollected, NetworkCollected, PartsCollected,
-    Positions, PositionsCollected, ProfileCollected, Report, Request, SamplesCollected, Sent,
-    Stall, StallCollected, StallMac, StallMacCollected, Start, Started, Tracking,
-    TrackingCollected, Transmit,
+    Addba, AddbaCollected, Collected, Counters, CountersCollected, Diagnosed, DiagnosticsCollected,
+    Hart1Collected, Hart1Window, Link, LinkCollected, Load, LoadError, Mac, MacCollected,
+    NetworkCollected, PartsCollected, Positions, PositionsCollected, ProfileCollected, Report,
+    Request, SamplesCollected, Sent, Stall, StallCollected, StallMac, StallMacCollected, Start,
+    Started, Tracking, TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
@@ -80,6 +80,8 @@ pub(crate) enum Answer {
     Stall(StallCollected),
     StallMac(StallMacCollected),
     Network(NetworkCollected),
+    Diagnosed(Diagnosed),
+    Diagnostics(DiagnosticsCollected),
     Addba(AddbaCollected),
     Profile(ProfileCollected),
     Samples(SamplesCollected),
@@ -105,6 +107,8 @@ impl Answer {
             Self::Stall(stall) => answer(identity, &stall),
             Self::StallMac(mac) => answer(identity, &mac),
             Self::Network(network) => answer(identity, &network),
+            Self::Diagnosed(diagnosed) => answer(identity, &diagnosed),
+            Self::Diagnostics(diagnostics) => answer(identity, &diagnostics),
             Self::Addba(addba) => answer(identity, &addba),
             Self::Profile(profile) => answer(identity, &profile),
             Self::Samples(samples) => answer(identity, &samples),
@@ -158,6 +162,7 @@ pub(crate) async fn serve(
             }
             Action::Answer(decided) => decided_answer(decided),
             Action::Cpu => Answer::Cpu(cpu_load().await),
+            Action::Diagnose(diagnose) => Answer::Diagnosed(udp::diagnose(diagnose)),
             Action::Kept(kind) => match &kept {
                 Some((_, ended)) => {
                     kept_answer(ended, kind, identity, net, &mut hart0, &mut hart1).await
@@ -194,6 +199,7 @@ async fn kept_answer(
         // The kept run's window, which the network holds until the next one
         // closes.
         Kept::Network => Answer::Network(NetworkCollected::Report(udp::network_window(net))),
+        Kept::Diagnostics => Answer::Diagnostics(udp::diagnostics_window(net)),
         Kept::Addba => Answer::Addba(AddbaCollected::Report(ended.addba)),
         Kept::Profile { page } => Answer::Profile(udp::profile_page(net, page)),
         Kept::Samples { from, hart } => match ended.sampled.get(usize::from(hart)) {
@@ -251,6 +257,7 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::Running(Kept::Stall) => Answer::Stall(StallCollected::Running),
         Decided::Running(Kept::StallMac) => Answer::StallMac(StallMacCollected::Running),
         Decided::Running(Kept::Network) => Answer::Network(NetworkCollected::Running),
+        Decided::Running(Kept::Diagnostics) => Answer::Diagnostics(DiagnosticsCollected::Running),
         Decided::Running(Kept::Addba) => Answer::Addba(AddbaCollected::Running),
         Decided::Running(Kept::Profile { .. }) => Answer::Profile(ProfileCollected::Running),
         Decided::Running(Kept::Samples { .. }) => Answer::Samples(SamplesCollected::Running),
@@ -273,6 +280,9 @@ fn decided_answer(decided: Decided) -> Answer {
             Answer::StallMac(StallMacCollected::Refused(unknown))
         }
         Decided::UnknownRun(Kept::Network) => Answer::Network(NetworkCollected::Refused(unknown)),
+        Decided::UnknownRun(Kept::Diagnostics) => {
+            Answer::Diagnostics(DiagnosticsCollected::Refused(unknown))
+        }
         Decided::UnknownRun(Kept::Addba) => Answer::Addba(AddbaCollected::Refused(unknown)),
         Decided::UnknownRun(Kept::Profile { .. }) => {
             Answer::Profile(ProfileCollected::Refused(unknown))
@@ -392,6 +402,7 @@ async fn run(
                         // A running server starts nothing and keeps no report.
                         Action::Start(_) => Answer::Started(Started::Refused(LoadError::Busy)),
                         Action::Kept(kind) => decided_answer(Decided::Running(kind)),
+                        Action::Diagnose(diagnose) => Answer::Diagnosed(udp::diagnose(diagnose)),
                     };
                     requests.send(answer).await;
                 }

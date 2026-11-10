@@ -58,6 +58,38 @@ fn lending<B: 'static>(
     WirePort,
     oer_portable_memory::WakingSpscSender<'static, (), 1>,
 ) {
+    lending_diagnosed(buffers, reserve, ())
+}
+
+/// As [`lending`], the service counting into `diagnostics`.
+#[allow(clippy::type_complexity)]
+fn lending_diagnosed<B: 'static, D: crate::Diagnostics>(
+    buffers: usize,
+    reserve: usize,
+    diagnostics: D,
+) -> (
+    crate::Service<
+        'static,
+        'static,
+        B,
+        SIZE,
+        2,
+        CREDITS,
+        RECEIVED,
+        2,
+        BLOCKS,
+        DEPTH,
+        RECEIVED,
+        WirePort,
+        Direct,
+        (),
+        D,
+    >,
+    TestSocket<B>,
+    Lending<B>,
+    WirePort,
+    oer_portable_memory::WakingSpscSender<'static, (), 1>,
+) {
     let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
     let (mut pool, brand) = claim::<B, SIZE, BLOCKS>(memory).unwrap();
     pool.loans().pool(buffers, reserve).unwrap();
@@ -70,7 +102,8 @@ fn lending<B: 'static>(
     }
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let mut service =
+        Service::new(owner, Direct, MemoryPolicy::KEEP, stopping).with_diagnostics(diagnostics);
     let copying = service
         .bind(COPYING, Dscp::default(), Group::shared(), storage::<B>())
         .ok()
@@ -484,3 +517,5 @@ fn a_run_cancelled_after_a_return_keeps_what_it_took() {
     drop(lending);
     ended.collect();
 }
+
+mod diagnostics;

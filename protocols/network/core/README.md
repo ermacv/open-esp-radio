@@ -48,6 +48,17 @@ itself and summed there. The UDP checksum goes into the headers last. No
 owner changes: the block stays the core's until the port's answer, and the
 slot stays the port's.
 
+## Counting the core's steps
+
+`demands`, `next_end`, `transmit` and `take_frame` take a `Count`, which
+hears the running places a readiness walk visits, each end told, each frame
+built whole in the port's slot and each lending refusal for want of credit
+with the loans then out: the core's part of the service's switchable
+diagnostics (the runtime's README, "Diagnostics"). `()` counts nothing and
+leaves no code; an enabled count is asked `Count::on` at each point, and
+only counts. The core reads no clock for it, and nothing it decides reads a
+count.
+
 ## Work records
 
 Each work of a socket has one record, its command place: the data source (a

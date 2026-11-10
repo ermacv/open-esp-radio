@@ -11,10 +11,13 @@
 //! receive path last moved by boundary, with its radio owner's snapshot at
 //! the window's end ([`stall`]).
 //! With `OER_WIFI_LOAD_PROFILE_US` each level also samples where the
-//! image's hart spends its window ([`profile`]).
+//! image's hart spends its window ([`profile`]), and with
+//! `OER_WIFI_LOAD_DIAGNOSTICS=on` it records the network core's switchable
+//! diagnostics over its window ([`diagnostics`]).
 #![forbid(unsafe_code)]
 
 mod addba;
+mod diagnostics;
 mod link;
 mod ping;
 mod profile;
@@ -34,13 +37,14 @@ use std::{
 
 use oer_hil_services_load::{
     Addba, AddbaCollected, CacheGeometry, CacheLevel, Collect, CollectAddba, CollectCounters,
-    CollectHart1, CollectLink, CollectMac, CollectNetwork, CollectParts, CollectPositions,
-    CollectProfile, CollectStall, CollectStallMac, CollectTracking, Collected, Counters,
-    CountersCollected, DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected,
-    Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns,
-    PROFILE_PAGES, PartWindow, PartsCollected, Positions, PositionsCollected, ProfileCollected,
-    Report, Stall, StallCollected, StallMac, StallMacCollected, Start, Started, TUNE_KNOBS,
-    TUNE_UNSET, Tracking, TrackingCollected, Transmit,
+    CollectDiagnostics, CollectHart1, CollectLink, CollectMac, CollectNetwork, CollectParts,
+    CollectPositions, CollectProfile, CollectStall, CollectStallMac, CollectTracking, Collected,
+    Counters, CountersCollected, DataBus, Diagnose, DiagnosticsCollected, Hart1Collected,
+    Hart1Window, InstructionBus, Link, LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac,
+    MacCollected, NetworkCollected, NetworkTurns, PROFILE_PAGES, PartWindow, PartsCollected,
+    Positions, PositionsCollected, ProfileCollected, Report, Stall, StallCollected, StallMac,
+    StallMacCollected, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected,
+    Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Join, Joined, Leave, Left, ScanVisit,
@@ -1463,6 +1467,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
     } = *path;
     let (mode, each_bps, probing) = (offer.mode, offer.each_bps, offer.probing);
     let profile = profile::requested()?;
+    let diagnosing = diagnostics::requested().map_err(Failure::Incomplete)?;
     let run = run_id();
     let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
         .map_err(|error| Failure::Incomplete(format!("the host socket: {error}")))?;
@@ -1472,6 +1477,16 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         .map(|local| local.port())
         .unwrap_or(0);
     let before = link::read(cx, station);
+    if diagnosing {
+        // From the image's next network turn, well before its window opens.
+        let _was_on: oer_hil_services_load::Diagnosed = cx.call(
+            Diagnose {
+                on: true,
+                reset: false,
+            },
+            CALL,
+        )?;
+    }
     let since = Instant::now();
     let transmit = (mode != Mode::Rx).then(|| Transmit {
         peer: host.octets(),
@@ -1536,6 +1551,19 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
     let after = link::read(cx, station);
     let span = since.elapsed();
     let ended = collect(cx, run)?;
+    let diagnosed = if diagnosing {
+        let collected: DiagnosticsCollected = cx.call(CollectDiagnostics { run }, CALL)?;
+        let _was_on: oer_hil_services_load::Diagnosed = cx.call(
+            Diagnose {
+                on: false,
+                reset: false,
+            },
+            CALL,
+        )?;
+        Some(collected)
+    } else {
+        None
+    };
     // Hart 0's samples, which a sampled run always has, and hart 1's,
     // where the image samples hart 1.
     let samples = match profile {
@@ -1567,6 +1595,13 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         let profile = profile_measurement(name, &ended);
         object.insert("turn_profile".to_owned(), profile);
         object.insert("addba".to_owned(), addba_measurement(name, &ended));
+        if let Some(diagnosed) = &diagnosed {
+            println!("  diagnostics {name}: {}", diagnostics::summary(diagnosed));
+            object.insert(
+                "network_diagnostics".to_owned(),
+                diagnostics::window(diagnosed),
+            );
+        }
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
         let elf = profile::elf(IMAGE);

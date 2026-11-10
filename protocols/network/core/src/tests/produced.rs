@@ -42,7 +42,7 @@ fn produce_next<B>(
     fill: impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined>,
 ) -> Result<(), Unsent<&'static str>> {
     let demand = stack.poll_demand(now).unwrap();
-    stack.transmit(now, demand.grant(), fill)
+    stack.transmit(now, demand.grant(), fill, &())
 }
 
 #[test]
@@ -164,7 +164,7 @@ fn a_declared_work_waits_for_its_neighbor_without_a_slot() {
         assert_eq!(demand.ready.class, Class::Control, "its neighbor first");
         let calls = Cell::new(0);
         stack
-            .transmit(at(0), demand.grant(), writes(&calls))
+            .transmit(at(0), demand.grant(), writes(&calls), &())
             .unwrap();
         assert_eq!(calls.get(), 0, "an ARP request fills no data");
         assert!(stack.poll_demand(at(0)).is_none(), "no slot during ARP");
@@ -222,7 +222,9 @@ fn a_declining_fill_ends_its_work_declined_and_passes_the_turn() {
             Some(channel.flow()),
             "the other socket goes first"
         );
-        stack.transmit(at(0), next.grant(), unproduced).unwrap();
+        stack
+            .transmit(at(0), next.grant(), unproduced, &())
+            .unwrap();
         assert_eq!(finished(stack.take_result(other)), Outcome::Accepted);
         produce_next(stack, at(0), writes(&calls)).unwrap();
         assert_eq!(finished(stack.take_result(second)), Outcome::Accepted);
@@ -306,7 +308,7 @@ fn a_close_ends_declared_work_and_its_stale_grant_fills_nothing() {
         let close = stack.close(socket).unwrap();
         let calls = Cell::new(0);
         assert_eq!(
-            stack.transmit(at(0), stale, writes(&calls)),
+            stack.transmit(at(0), stale, writes(&calls), &()),
             Err(Unsent::Stale)
         );
         assert_eq!(calls.get(), 0, "no fill");
@@ -425,7 +427,9 @@ fn the_neighbor_counter_moves_on_every_release_of_protection() {
         let work = stack.declare(at(2), &socket, far, 8).unwrap();
         let mut now = at(2);
         while let Some(demand) = stack.poll_demand(now) {
-            stack.transmit(now, demand.grant(), unproduced).unwrap();
+            stack
+                .transmit(now, demand.grant(), unproduced, &())
+                .unwrap();
             now = stack.poll_deadline().unwrap();
             stack.tick(now, &mut ());
         }

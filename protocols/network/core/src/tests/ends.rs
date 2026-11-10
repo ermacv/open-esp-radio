@@ -16,7 +16,9 @@ fn wide<B: 'static>(test: impl FnOnce(&mut Wide<B>)) {
     let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
     stack.input(at(0), &request, &mut ());
     let reply = stack.poll_demand(at(0)).unwrap();
-    stack.transmit(at(0), reply.grant(), unproduced).unwrap();
+    stack
+        .transmit(at(0), reply.grant(), unproduced, &())
+        .unwrap();
     stack.port_mut().sent.clear();
     test(&mut stack);
 }
@@ -25,7 +27,7 @@ fn told<B, P: FramePort, const S: usize, const C: usize>(
     stack: &mut NetworkOwner<'static, B, SIZE, S, C, 2, 2, BLOCKS, P>,
     ends: &Ends<B>,
 ) -> Vec<WorkId> {
-    core::iter::from_fn(|| stack.next_end(ends)).collect()
+    core::iter::from_fn(|| stack.next_end(ends, &())).collect()
 }
 
 fn send_wide<B: core::fmt::Debug>(
@@ -39,7 +41,9 @@ fn send_wide<B: core::fmt::Debug>(
 
 fn transmit_next<B>(stack: &mut Wide<B>) {
     let demand = stack.poll_demand(at(1)).unwrap();
-    stack.transmit(at(1), demand.grant(), unproduced).unwrap();
+    stack
+        .transmit(at(1), demand.grant(), unproduced, &())
+        .unwrap();
 }
 
 #[test]
@@ -77,7 +81,10 @@ fn an_end_met_again_is_not_told_again() {
         let queued = stack.queued().next().unwrap();
         assert!(stack.evict(queued, Eviction::MemoryPressure));
         // Its grant and its socket's close meet an end already.
-        assert_eq!(stack.transmit(at(1), stale, unproduced), Err(Unsent::Stale));
+        assert_eq!(
+            stack.transmit(at(1), stale, unproduced, &()),
+            Err(Unsent::Stale)
+        );
         assert!(stack.queued().next().is_none());
         let close = stack.close(socket).unwrap();
         assert_eq!(told(stack, &ends), [command.work(), close.work()]);
@@ -140,7 +147,7 @@ fn the_ends_of_a_closed_socket_tell_nothing_of_the_next_in_its_place() {
         let first = stack.open(5000, best_effort()).unwrap();
         let old = first.ends();
         let close = stack.close(first).unwrap();
-        assert_eq!(core::iter::from_fn(|| stack.next_end(&old)).count(), 1);
+        assert_eq!(core::iter::from_fn(|| stack.next_end(&old, &())).count(), 1);
         assert_eq!(finished(stack.take_result(close)), Outcome::SocketClosed);
         let second = stack.open(5001, best_effort()).unwrap();
         let block = stack.pool().take().unwrap();
@@ -150,9 +157,11 @@ fn the_ends_of_a_closed_socket_tell_nothing_of_the_next_in_its_place() {
         };
         let command = stack.send(at(0), &second, broadcast, block).unwrap();
         let demand = stack.poll_demand(at(0)).unwrap();
-        stack.transmit(at(0), demand.grant(), unproduced).unwrap();
-        assert_eq!(stack.next_end(&old), None, "another socket's end");
-        assert_eq!(stack.next_end(&second.ends()), Some(command.work()));
+        stack
+            .transmit(at(0), demand.grant(), unproduced, &())
+            .unwrap();
+        assert_eq!(stack.next_end(&old, &()), None, "another socket's end");
+        assert_eq!(stack.next_end(&second.ends(), &()), Some(command.work()));
     });
 }
 
@@ -169,7 +178,7 @@ fn running_work_is_offered_in_the_order_it_was_accepted() {
         let third = send_wide(stack, &socket, b"third");
         assert_eq!(third.work().place(), 0);
         let order: Vec<_> = stack
-            .demands(at(1))
+            .demands(at(1), &())
             .map(|demand| demand.ready.length)
             .collect();
         assert_eq!(order, [14 + 20 + 8 + 6, 14 + 20 + 8 + 5]);
@@ -215,7 +224,7 @@ fn acceptance_order_is_no_send_order_a_ready_datagram_goes_before_one_waiting_fo
         // The ARP request for the unknown neighbor, then the ready datagram:
         // the earlier one is not ready, so it is not offered.
         let order: Vec<_> = stack
-            .demands(at(1))
+            .demands(at(1), &())
             .map(|demand| demand.ready.class)
             .collect();
         assert_eq!(order, [Class::Control, Class::Data]);

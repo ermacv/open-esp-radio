@@ -51,6 +51,11 @@ impl Returns {
         self.back.swap(0, Ordering::AcqRel)
     }
 
+    /// The buffers back whose loans are not yet taken, as published now.
+    fn published(&self) -> u32 {
+        self.back.load(Ordering::Acquire)
+    }
+
     /// Whether a return waits; `cx` hears the next.
     pub(crate) fn poll(&self, cx: &Context<'_>) -> bool {
         self.waker.register(cx.waker());
@@ -200,6 +205,12 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
     /// Give back to `account` the loans whose buffers came back; whether any.
     pub(crate) fn collect(&mut self, account: &mut Loans<B, GROUPS>) -> bool {
         give_back(self.returns, &mut self.loans, account)
+    }
+
+    /// The buffers back with their port whose loans are not yet given back
+    /// to the account, as published now.
+    pub(crate) fn unreturned(&self) -> u32 {
+        self.returns.published()
     }
 
     /// Whether a return waits; `cx` hears the next.

@@ -129,6 +129,7 @@
 
 mod block;
 mod dhcp;
+mod diagnostics;
 mod echo;
 mod interface;
 mod loans;
@@ -142,6 +143,7 @@ pub use block::{
     GroupsFull, Pool, claim,
 };
 pub use dhcp::{DNS_SERVERS, DhcpDrop, DhcpState, Lease, LeaseFault, Servers};
+pub use diagnostics::Count;
 pub use echo::{ECHOES, IcmpDrop, RATE as ECHO_RATE};
 pub use interface::{Interface, InterfaceError, Ipv4};
 pub use loans::{Loan, Loans, LoansRefused, NotLent};

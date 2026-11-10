@@ -23,6 +23,7 @@ use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN,
 
 use crate::block::{Block, CoreBrand, Group, Pool, Tag};
 use crate::dhcp::{Change, Client, Destination, DhcpDrop, DhcpState, Lease, Outgoing};
+use crate::diagnostics::{Count, counted};
 use crate::echo::{Echoes, IcmpDrop, Owed};
 use crate::interface::{
     Addressing, BROADCAST, BROADCAST_HARDWARE, Interface, Ipv4, UNSPECIFIED, is_unicast,
@@ -1159,9 +1160,10 @@ impl<
     /// whoever holds its [`CommandId`] ([`CommandId::work`] is the same
     /// value), so a told end is no right to anything. A socket reopened in
     /// the same place is another, and the ends of an earlier one tell it
-    /// nothing.
-    pub fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId> {
+    /// nothing. `count` hears each end told ([`Count::told`]).
+    pub fn next_end<C: Count + ?Sized>(&mut self, ends: &Ends<B>, count: &C) -> Option<WorkId> {
         let (place, serial) = self.socket_mut(ends.index, ends.serial)?.places.tell()?;
+        counted(count, Count::told);
         Some(WorkId { serial, place })
     }
 
@@ -1715,8 +1717,14 @@ impl<
 
     /// Every piece of work ready now, with no frame built: control first,
     /// then datagrams from the socket whose turn it is. A scheduler chooses
-    /// among these; a direct interface takes [`Self::poll_demand`].
-    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<B>> + Clone + '_ {
+    /// among these; a direct interface takes [`Self::poll_demand`]. `count`
+    /// hears each running place the walk of the sockets' running chains
+    /// visits ([`Count::walked`]), ready or not, on every pass a caller makes.
+    pub fn demands<'s, C: Count + ?Sized>(
+        &'s self,
+        now: Instant,
+        count: &'s C,
+    ) -> impl Iterator<Item = Demand<B>> + Clone + 's {
         let brand = self.brand;
         let replies = self.replies.iter().map(move |reply| Demand {
             ready: Ready {
@@ -1790,6 +1798,7 @@ impl<
             .filter_map(|index| Some((index, self.sockets.get(index)?)))
             .flat_map(move |(index, socket)| {
                 socket.places.running().filter_map(move |(number, place)| {
+                    counted(count, Count::walked);
                     self.datagram_demand(now, index, socket, number, place)
                 })
             });
@@ -1851,7 +1860,7 @@ impl<
     /// The next ready work, and the next socket's turn. A direct interface
     /// grants this at once; a port's refusal leaves it ready.
     pub fn poll_demand(&self, now: Instant) -> Option<Demand<B>> {
-        self.demands(now).next()
+        self.demands(now, &()).next()
     }
 
     /// The granted work as a frame, while it still is that work: another
