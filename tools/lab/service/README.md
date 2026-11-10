@@ -107,7 +107,10 @@ the air, shared at least.
   JTAG and power) is not reset: it is ready at once. A release that
   answers without an unavailable resource does not confirm a reset.
 
-  Operations: write and start an image (journaled), reset (through a path,
+  Operations: write and start an image (journaled); write an image held in
+  its ROM loader and start it by its console's reset, streaming that console
+  from before the reset until the client cancels (`FlashConsole`: one reset,
+  the board's port held from the write on); reset (through a path,
   or the first reset the stand file lists), the console as a duplex stream,
   a watched power cycle and its proof of power loss, where a board is
   attached and what it carries, and the detection of every attached board's
@@ -116,7 +119,8 @@ the air, shared at least.
   none: a reset and a watched cycle through its hub port's power, its console
   without a reset and its description, which names why the others are
   refused. A write, an RTS, JTAG or download reset, the first listed reset,
-  a console opened by a reset and the proof of power loss need the profile.
+  a console opened by a reset, a write into the console and the proof of
+  power loss need the profile.
 - **Hub ports.** A port is switched off and on only under a lease of
   `hub-port:LOCATION:PORT`. The service runs `uhubctl` for every report.
 - **The router.** It is a resource when the stand file names a `[router]`.

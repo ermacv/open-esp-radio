@@ -322,6 +322,7 @@ impl ProfiledBoard {
                     Transport::Usb {
                         port: &port,
                         espflash_chip: &self.espflash_chip,
+                        hold: false,
                     },
                     by,
                 )?
@@ -337,6 +338,48 @@ impl ProfiledBoard {
         };
         self.start(written.pending_start())?;
         written.started()
+    }
+
+    /// Write `bundle`, known as `image`, over USB like [`Self::flash`], but
+    /// leave the chip in its ROM loader, then open the board's console and
+    /// start the image by the console's own reset
+    /// ([`Self::open_console_from_reset`]): one reset, its console held from
+    /// before it. The console's first bytes are what the port still held
+    /// just before the reset (its input is drained right before the reset
+    /// edge, but bytes in flight may arrive after the drain), then the ROM
+    /// banner of the start on, while the chip's USB Serial/JTAG stays
+    /// enumerated across that reset; a chip whose port re-enumerates on it
+    /// loses what it prints until the port returns.
+    pub fn flash_into_console(
+        &self,
+        store: &Store,
+        bundle: &oer_tools_image_bundle::ImageBundle,
+        image: &str,
+        by: &str,
+    ) -> crate::stand::Result<(Receipt, BoardConsole)> {
+        let reference = &self.reference;
+        if bundle.chip != reference.chip {
+            return Err(format!(
+                "board `{}` is an {}; the bundle is an {} image",
+                reference.id, reference.chip, bundle.chip
+            )
+            .into());
+        }
+        let port = self.flashable_port()?;
+        let written = crate::image::write(
+            store,
+            self.mac(),
+            bundle,
+            image,
+            Transport::Usb {
+                port: &port,
+                espflash_chip: &self.espflash_chip,
+                hold: true,
+            },
+            by,
+        )?;
+        let console = self.open_console_from_reset()?;
+        Ok((written.started()?, console))
     }
 
     /// Start the image a write left as `start` needs: nothing after the
