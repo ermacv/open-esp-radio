@@ -195,9 +195,10 @@ pub struct Ended<
     E,
     F,
     R = (),
+    T = (),
 > {
     pub cause: EndCause,
-    pub retired: Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P>,
+    pub retired: Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P, T>,
     /// The policy and its account, in-flight work included.
     pub egress: E,
     /// What ended the policy, with [`EndCause::Egress`].
@@ -228,7 +229,8 @@ impl<
     E,
     F,
     R,
-> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, F, R>
+    T,
+> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, F, R, T>
 {
     /// With no service to come, close the way home for good: what it accepted
     /// comes to the pool, and a later `give` is refused.
@@ -377,10 +379,10 @@ pub struct Service<
     const LANE: usize,
     P: FramePort + FrameSource,
     E: Egress<P::Ticket, P::Notice>,
-    L = (),
+    L: Producers<B, CREDITS> = (),
     D = (),
 > {
-    owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+    owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, L::Tag>,
     egress: E,
     /// What ended the policy.
     fault: Option<E::Fault>,
@@ -474,7 +476,7 @@ impl<
     /// after every outcome its producer hears, or when it is dropped, with
     /// nothing called.
     pub const fn with_producer(
-        owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, Q::Tag>,
         egress: E,
         memory: MemoryPolicy,
         stop: WakingSpscReceiver<'a, (), 1>,
@@ -553,11 +555,11 @@ impl<
     const LANE: usize,
     P: FramePort + FrameSource,
     E: Egress<P::Ticket, P::Notice>,
-    L,
+    L: Producers<B, CREDITS>,
 > Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E, L>
 {
     const fn build(
-        owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, L::Tag>,
         egress: E,
         memory: MemoryPolicy,
         stop: WakingSpscReceiver<'a, (), 1>,
@@ -755,7 +757,18 @@ impl<
     /// `tally` is on, a batch that took something counts, with the blocks it
     /// brought home and the loans it gave back.
     fn returns_of(
-        owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        owner: &mut NetworkOwner<
+            'm,
+            B,
+            SIZE,
+            SOCKETS,
+            CREDITS,
+            RECEIVED,
+            NEIGHBORS,
+            BLOCKS,
+            P,
+            L::Tag,
+        >,
         bound: &mut [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>; SOCKETS],
         returns: Option<&ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
         adopted: &mut [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
@@ -1379,16 +1392,21 @@ impl<
             }
             planned = planned.saturating_add(1);
             let local = &mut self.local;
-            let fill = |work, data: &mut Payload<'_>| local.fill(now, work, data);
+            let fill = |work, tag, data: &mut Payload<'_>| local.fill(now, work, tag, data);
             match self
                 .owner
                 .transmit(now, demand.grant(), fill, tally.steps())
             {
-                Ok(ticket) => {
+                Ok(transmitted) => {
                     moved = true;
                     report(events, || ServiceEvent::Accepted);
-                    let answer = self.egress.accepted(reservation, ticket);
+                    let answer = self.egress.accepted(reservation, transmitted.ticket);
                     self.note(answer);
+                    // The frame's physical end stays the egress's ticket; the
+                    // datagram's one outcome is its producer's now.
+                    if let Some((work, tag)) = transmitted.ended {
+                        self.local.accepted(work, tag);
+                    }
                 }
                 // Every other answer ends the plan or the publishing: rare,
                 // and apart from the frames' own path.
@@ -1557,10 +1575,28 @@ impl<
     /// each socket gets the request lane, with what the service never saw, and
     /// every owner comes back. Its owner calls this after [`Self::run`] ended
     /// or was cancelled.
+    #[allow(
+        clippy::type_complexity,
+        reason = "the service's end hands on each owner it held"
+    )]
     pub fn retire(
         self,
-    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, E::Fault, L::Returned>
-    {
+    ) -> Ended<
+        'a,
+        'm,
+        B,
+        SIZE,
+        SOCKETS,
+        CREDITS,
+        BLOCKS,
+        DEPTH,
+        LANE,
+        P,
+        E,
+        E::Fault,
+        L::Returned,
+        L::Tag,
+    > {
         let cause = self.ended.unwrap_or(EndCause::Stopped);
         let mut this = self;
         // The lease leaves with the core: the watch ends here, as it would
@@ -1650,10 +1686,11 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         const NEIGHBORS: usize,
         const BLOCKS: usize,
         P: FramePort,
+        T: Copy,
     >(
         &mut self,
         inbound: Inbound<'a, 'm, B, SIZE, DEPTH, LANE>,
-        owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, T>,
     ) {
         let this = &*self;
         drain_requests(&this.end.requests, owner.pool(), |tag| {
@@ -1674,9 +1711,10 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         const NEIGHBORS: usize,
         const BLOCKS: usize,
         P: FramePort,
+        T: Copy,
     >(
         &mut self,
-        owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, T>,
         count: &impl Count,
     ) -> bool {
         let mut moved = false;
@@ -1750,9 +1788,9 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
 
     /// The core retired: write what it decided into the places, say so, and
     /// hand on the lanes the service stops reading.
-    fn finish<const SOCKETS: usize, const BLOCKS: usize, P>(
+    fn finish<const SOCKETS: usize, const BLOCKS: usize, P, T: Copy>(
         self,
-        retired: &mut Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P>,
+        retired: &mut Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P, T>,
     ) -> LateSocket<'a, 'm, B, SIZE, DEPTH, LANE> {
         let Self {
             end,

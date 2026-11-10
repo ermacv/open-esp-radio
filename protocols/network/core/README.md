@@ -66,8 +66,10 @@ count.
 
 Each work of a socket has one record, its command place: the data source (a
 block, or a producer's declared length), the generation (the command's
-serial, which never returns) and the state (free, sending, declared,
-finished). Nothing else in the core holds the work. Each place but the
+serial, which never returns), the state (free, sending, declared,
+finished) and, for a declared work, its producer's tag (`T`, `()` for a core
+without a producer). Nothing else in the core, or in its producer, holds the
+work. Each place but the
 close's is on exactly one of three chains while it is free, running or
 ended and not yet told, and on none once its end was told and its result
 waits for its holder. The chain follows the state, and only a state
@@ -77,11 +79,13 @@ without walking every place:
 | Transition | Chain change |
 | --- | --- |
 | `send` or `declare` accepts work | free (or a never-used place) → running, at its tail |
+| commit of a declared work whose frame was written | running → free: its outcome, `Accepted`, and its tag come back from `transmit` |
 | commit, reject, decline, withdraw, eviction, close, `Unreachable`, `Readdressed` | running → ended, at its tail; an unobserved work frees instead |
 | `next_end` tells an end | ended → none: the result stays in the place |
+| `next_declared_end` tells a declared work's end | ended → free: its outcome and tag come back once; another work's end on the way is told and stays |
 | `take_result`, or `drop_observer` of a finished work | ended or none → free |
 | `close` | the close's place → ended, after every running end it caused |
-| `retire` | every place → `RetiredResults`, a running one as `Retired` |
+| `retire` | every place → `RetiredResults`, a running one as `Retired`, a declared one with its tag (`take_declared`) |
 
 So a place is never on two chains, and an end is told once: only a running
 work goes to the ended chain. A chain holds places, not owners. `demands`, the
@@ -98,13 +102,18 @@ close. A socket opened again in the same core slot has another serial, so an
 earlier socket's `Ends` tells none of its ends.
 
 A local producer's work is declared, not sent: `declare` takes a command place
-with `send`'s refusals and no block, and `open_local` gives the producer a
-send-only socket, whose port's datagrams are dropped before any block
+with `send`'s refusals and no block, keeps the producer's tag in it and returns
+the work's `WorkId`, and `open_local` gives the producer a send-only socket, whose port's datagrams are dropped before any block
 (`NetEvent::SendOnly`). Its frame's headers go into the port's slot first, then
-`transmit`'s `produce` fills the data there, and the UDP checksum, summed over
-that data in the slot, goes last. A producer that declines (`Declined`) ends the
-work `Outcome::Declined`, which also passes the turn to the next socket, and a
-`withdraw` ends it so before any port saw it. A declared work is never queued
+`transmit`'s `produce` fills the data there, given the tag from the place, and
+the UDP checksum, summed over that data in the slot, goes last. A frame the port
+took with its data written ends its declared work `Accepted` in that call:
+`Transmitted::ended` gives the work and its tag, the place is free, and no end
+of it is told later; the frame's own life after the port (its ticket, its air
+reservation and settlement) is the egress's. A producer that declines
+(`Declined`) ends the work `Outcome::Declined`, which also passes the turn to
+the next socket, and `withdraw_declared` ends every work whose tag the producer
+no longer keeps so before any port saw it. A declared work is never queued
 for eviction: it holds no block. `neighbors_changed` counts whatever may have
 freed a neighbor entry for a new send: an ARP answer, an entry asked again past
 its life, a resolution given up or refused, and every end of work that held a

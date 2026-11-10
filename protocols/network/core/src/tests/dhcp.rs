@@ -1362,7 +1362,7 @@ fn an_echo_s_end_releases_the_neighbors_wait_counter() {
             port: 7,
         };
         assert_eq!(
-            stack.declare(now, &socket, next, 16).err(),
+            stack.declare(now, &socket, next, 16, 1).err(),
             Some(SendRefusal::NeighborsFull)
         );
         let seen = stack.neighbors_changed();
@@ -1376,7 +1376,7 @@ fn an_echo_s_end_releases_the_neighbors_wait_counter() {
             seen,
             "a held producer learns that a neighbor can be used"
         );
-        assert!(stack.declare(now, &socket, next, 16).is_ok());
+        assert!(stack.declare(now, &socket, next, 16, 2).is_ok());
     });
 }
 
@@ -1416,7 +1416,7 @@ fn a_cached_neighbor_data_does_not_hold_takes_the_reserve_like_any_other() {
             );
         }
         let socket = stack.open_local(6000, best_effort()).unwrap();
-        let _first = stack.declare(now, &socket, peer(), 16).unwrap();
+        let _first = stack.declare(now, &socket, peer(), 16, 3).unwrap();
         let second = stack.declare(
             now,
             &socket,
@@ -1425,10 +1425,11 @@ fn a_cached_neighbor_data_does_not_hold_takes_the_reserve_like_any_other() {
                 port: 7,
             },
             16,
+            4,
         );
         assert_eq!(second.err(), Some(SendRefusal::NeighborsFull));
         // The entry data holds stays its own, expired too.
-        assert!(stack.declare(secs(100), &socket, peer(), 16).is_ok());
+        assert!(stack.declare(secs(100), &socket, peer(), 16, 5).is_ok());
     });
 }
 
@@ -1446,7 +1447,7 @@ fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
             );
         }
         let socket = stack.open_local(6000, best_effort()).unwrap();
-        let _first = stack.declare(now, &socket, peer(), 16).unwrap();
+        let _first = stack.declare(now, &socket, peer(), 16, 6).unwrap();
         let _second = stack.declare(
             now,
             &socket,
@@ -1455,6 +1456,7 @@ fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
                 port: 7,
             },
             16,
+            7,
         );
         stack.tick(secs(500), &mut ());
         assert_eq!(stack.configuration().dhcp, Some(DhcpState::Renewing));

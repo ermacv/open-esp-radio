@@ -750,11 +750,11 @@ fn no_place_asks_nothing_until_a_place_frees() {
         script.calls_from(4),
         [
             Call::Filled(tag(0, 0)),
-            Call::Filled(tag(0, 1)),
             Call::Ended(tag(0, 0), Outcome::Accepted),
+            Call::Filled(tag(0, 1)),
             Call::Ended(tag(0, 1), Outcome::Accepted),
         ],
-        "the places free at the turn's end"
+        "each place frees as its port takes its frame"
     );
     assert!(poll(&mut run, cx).is_pending());
     assert_eq!(
@@ -1106,6 +1106,57 @@ fn a_new_generation_ends_old_works_and_its_offers_go_in_the_same_turn() {
     }
 }
 
+/// An accepted work's one outcome is given as its port takes its frame: a
+/// new generation after it withdraws only the work still declared, and the
+/// accepted ones are never told again.
+#[test]
+fn an_accepted_work_ends_once_and_a_new_generation_withdraws_only_open_work() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        line,
+        script,
+        clock,
+        ..
+    } = direct::<Net>();
+    script.push(tag(0, 0), broadcast(), 16);
+    script.push(tag(0, 1), broadcast(), 16);
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let (count, waker) = counter();
+    settle(&mut run, &count, &waker);
+    assert_eq!(
+        script.calls(),
+        [
+            Call::Offered(tag(0, 0)),
+            Call::Offered(tag(0, 1)),
+            Call::Filled(tag(0, 0)),
+            Call::Ended(tag(0, 0), Outcome::Accepted),
+            Call::Filled(tag(0, 1)),
+            Call::Ended(tag(0, 1), Outcome::Accepted),
+        ]
+    );
+    line.open(true);
+    script.push(tag(0, 2), broadcast(), 16);
+    script.wake();
+    settle(&mut run, &count, &waker);
+    assert_eq!(script.calls_from(6), [Call::Offered(tag(0, 2))]);
+    {
+        // A new generation takes the source's data, the open work's too.
+        let mut source = script.0.borrow_mut();
+        source.generation = 1;
+        source.held.clear();
+    }
+    script.wake();
+    let cx = &mut Context::from_waker(&waker);
+    assert!(poll(&mut run, cx).is_pending());
+    assert_eq!(
+        script.calls_from(7),
+        [Call::Ended(tag(0, 2), Outcome::Declined)],
+        "only the work still declared"
+    );
+}
+
 /// A work no longer current when its slot comes is declined by its
 /// producer's fill, which finds the data gone and writes nothing, though the
 /// generation did not change: no frame goes.
@@ -1365,8 +1416,8 @@ fn a_cancelled_run_keeps_declared_work_and_a_new_run_fills_each_once() {
         script.calls_from(2),
         [
             Call::Filled(tag(0, 0)),
-            Call::Filled(tag(0, 1)),
             Call::Ended(tag(0, 0), Outcome::Accepted),
+            Call::Filled(tag(0, 1)),
             Call::Ended(tag(0, 1), Outcome::Accepted),
         ]
     );

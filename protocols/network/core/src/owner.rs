@@ -13,7 +13,7 @@ use crate::interface::Interface;
 use crate::loans::{Loan, NotLent};
 use crate::machine::{
     CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Ends, Eviction,
-    FillFailed, Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal,
+    FillFailed, Grant, NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults, SendRefusal,
     SendRefused, SocketId, StaleSocket, WorkId,
 };
 use crate::payload::Payload;
@@ -28,12 +28,22 @@ pub struct Retired<
     const CREDITS: usize,
     const BLOCKS: usize,
     P,
+    T = (),
 > {
     /// Its results, whenever their observers come.
-    pub results: RetiredResults<B, SOCKETS, CREDITS>,
+    pub results: RetiredResults<B, SOCKETS, CREDITS, T>,
     pub pool: Pool<'m, B, SIZE, BLOCKS>,
     pub brand: CoreBrand<B>,
     pub port: P,
+}
+
+/// A frame the port took: its ticket, and the declared work it ended, with
+/// its producer tag, for that work's producer.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Transmitted<K, T> {
+    pub ticket: K,
+    /// The declared work that ended `Accepted` with this frame.
+    pub ended: Option<(WorkId, T)>,
 }
 
 /// What a look for a received frame found.
@@ -130,8 +140,9 @@ pub struct NetworkOwner<
     const NEIGHBORS: usize,
     const BLOCKS: usize,
     P,
+    T = (),
 > {
-    core: Core<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS>,
+    core: Core<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, T>,
     pool: Pool<'m, B, SIZE, BLOCKS>,
     port: P,
     /// The port contradicted itself: nothing is published until it is
@@ -149,7 +160,8 @@ impl<
     const NEIGHBORS: usize,
     const BLOCKS: usize,
     P: FramePort,
-> NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>
+    T: Copy,
+> NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, T>
 {
     pub fn new(
         brand: CoreBrand<B>,
@@ -172,7 +184,9 @@ impl<
     /// record, and a port's answer that contradicts it is the port's fault,
     /// whatever the fill's error. `count` hears the frame once it was
     /// written whole in the port's slot ([`Count::materialised`]), whatever
-    /// the port answers.
+    /// the port answers. A declared work the port took ends `Accepted` in
+    /// this call and comes back in [`Transmitted::ended`] with its tag: its
+    /// producer's one outcome, which no later end tells again.
     ///
     /// # Errors
     /// [`Unsent`].
@@ -180,9 +194,9 @@ impl<
         &mut self,
         now: Instant,
         grant: Grant<B>,
-        produce: impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined>,
+        produce: impl FnOnce(WorkId, T, &mut Payload<'_>) -> Result<(), Declined>,
         count: &C,
-    ) -> Result<P::Ticket, Unsent<P::Refusal>> {
+    ) -> Result<Transmitted<P::Ticket, T>, Unsent<P::Refusal>> {
         if self.broken {
             return Err(Unsent::PortContract);
         }
@@ -202,9 +216,9 @@ impl<
         match published {
             Ok(ticket) => {
                 let written = filled == Filled::Wrote;
-                self.core.commit(now, grant, written, &mut self.pool);
+                let ended = self.core.commit(now, grant, written, &mut self.pool);
                 if written {
-                    Ok(ticket)
+                    Ok(Transmitted { ticket, ended })
                 } else {
                     self.broken = true;
                     Err(Unsent::PortContract)
@@ -399,13 +413,27 @@ impl<
         socket: &SocketId<B>,
         remote: Remote,
         length: usize,
-    ) -> Result<CommandId<B>, SendRefusal> {
-        self.core.declare(now, socket, remote, length)
+        tag: T,
+    ) -> Result<WorkId, SendRefusal> {
+        self.core.declare(now, socket, remote, length, tag)
     }
 
-    /// See [`Core::withdraw`].
-    pub fn withdraw(&mut self, command: &CommandId<B>) -> bool {
-        self.core.withdraw(command)
+    /// See [`Core::withdraw_declared`].
+    pub fn withdraw_declared(
+        &mut self,
+        socket: &SocketId<B>,
+        keep: impl FnMut(&T) -> bool,
+    ) -> usize {
+        self.core.withdraw_declared(socket, keep)
+    }
+
+    /// See [`Core::next_declared_end`].
+    pub fn next_declared_end<C: Count + ?Sized>(
+        &mut self,
+        ends: &Ends<B>,
+        count: &C,
+    ) -> Option<(WorkId, T, Outcome)> {
+        self.core.next_declared_end(ends, count)
     }
 
     /// See [`Core::neighbors_changed`].
@@ -517,7 +545,7 @@ impl<
 
     /// End the core: results, pool, the next core's brand and the port all
     /// come back. See [`Core::retire`].
-    pub fn retire(self) -> Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P> {
+    pub fn retire(self) -> Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P, T> {
         let Self {
             core,
             mut pool,
