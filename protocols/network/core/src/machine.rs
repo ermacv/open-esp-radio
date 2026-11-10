@@ -29,7 +29,7 @@ use crate::interface::{
     Addressing, BROADCAST, BROADCAST_HARDWARE, Interface, Ipv4, UNSPECIFIED, is_unicast,
 };
 use crate::loans::{LoansRefused, NotLent};
-use crate::neighbor::{Found, Lookup, Neighbors};
+use crate::neighbor::{Holds, Lookup, Neighbors};
 use crate::payload::Payload;
 use crate::places::{Declared, Place, Places, Run, Sending};
 
@@ -68,23 +68,19 @@ enum Work {
         socket: u8,
         place: u8,
         serial: u64,
-        /// The station address it was chosen for: another is other work.
-        peer: [u8; 6],
-        /// What its demand found of the next hop, and while that holds:
-        /// none for a broadcast.
-        found: Option<Found>,
+        /// While what its demand found of the next hop holds: none for a
+        /// broadcast. The station address found goes with the grant.
+        found: Option<Holds>,
     },
     /// The DHCP client's owed message.
     Dhcp {
         serial: u64,
-        peer: [u8; 6],
     },
     /// An echo reply owed.
     Echo {
         serial: u64,
-        peer: [u8; 6],
         /// As a datagram's.
-        found: Found,
+        found: Holds,
     },
 }
 
@@ -109,6 +105,7 @@ impl<B> Demand<B> {
     pub const fn grant(self) -> Grant<B> {
         Grant {
             work: self.work,
+            peer: self.ready.peer,
             brand: self.brand,
         }
     }
@@ -118,6 +115,8 @@ impl<B> Demand<B> {
 #[derive(Debug, Eq, PartialEq)]
 pub struct Grant<B> {
     work: Work,
+    /// The station address it was chosen for: another is other work.
+    peer: [u8; 6],
     brand: Tag<B>,
 }
 
@@ -1799,7 +1798,7 @@ impl<
                     flow: None,
                     dscp: BEST_EFFORT,
                 },
-                work: Work::Dhcp { serial, peer },
+                work: Work::Dhcp { serial },
                 brand,
             });
         let echoes = self.echoes.iter().filter_map(move |owed| {
@@ -1815,8 +1814,7 @@ impl<
                 },
                 work: Work::Echo {
                     serial: owed.serial,
-                    peer,
-                    found,
+                    found: found.holds(),
                 },
                 brand,
             })
@@ -1878,8 +1876,7 @@ impl<
                 socket: u8::try_from(index).ok()?,
                 place: number,
                 serial: place.serial(),
-                peer,
-                found,
+                found: found.map(|found| found.holds()),
             },
             brand: self.brand,
         })
@@ -1917,15 +1914,10 @@ impl<
                 socket,
                 place,
                 serial,
-                peer,
                 found,
-            } => self.datagram_frame(now, socket, place, serial, (peer, found)),
-            Work::Dhcp { serial, peer } => self.dhcp_frame(now, serial, peer),
-            Work::Echo {
-                serial,
-                peer,
-                found,
-            } => self.echo_frame(now, serial, peer, &found),
+            } => self.datagram_frame(now, socket, place, serial, (grant.peer, found)),
+            Work::Dhcp { serial } => self.dhcp_frame(now, serial, grant.peer),
+            Work::Echo { serial, found } => self.echo_frame(now, serial, grant.peer, &found),
         }
     }
 
@@ -2006,10 +1998,10 @@ impl<
         now: Instant,
         serial: u64,
         peer: [u8; 6],
-        found: &Found,
+        found: &Holds,
     ) -> Option<Frame<'_>> {
         let owed = self.echoes.get(serial)?;
-        if self.next_hop(now, Some(owed.hop), Some(found))? != peer {
+        if self.next_hop(now, Some(owed.hop), Some(found), peer)? != peer {
             return None;
         }
         let request = Echo::parse(owed.block.octets()).ok()?;
@@ -2063,13 +2055,15 @@ impl<
         &self,
         now: Instant,
         hop: Option<[u8; 4]>,
-        found: Option<&Found>,
+        found: Option<&Holds>,
+        peer: [u8; 6],
     ) -> Option<[u8; 6]> {
         let Some(hop) = hop else {
             return Some(BROADCAST_HARDWARE);
         };
         match found {
-            Some(found) if self.neighbors.holds_still(found, now) => Some(found.hardware),
+            // What was found holds: it found `peer`.
+            Some(found) if self.neighbors.holds_still(found, now) => Some(peer),
             _ => self.neighbors.hardware(now, hop),
         }
     }
@@ -2080,7 +2074,7 @@ impl<
         socket: u8,
         place: u8,
         serial: u64,
-        (peer, found): ([u8; 6], Option<Found>),
+        (peer, found): ([u8; 6], Option<Holds>),
     ) -> Option<Frame<'_>> {
         // No frame leaves from an address past its lease's end.
         let source = self.usable(now)?.address();
@@ -2097,7 +2091,7 @@ impl<
             Run::Declared(declared) => (declared.remote, declared.hop, None, declared.length),
             Run::Free | Run::Finished(_) => return None,
         };
-        let next_hop = self.next_hop(now, hop, found.as_ref())?;
+        let next_hop = self.next_hop(now, hop, found.as_ref(), peer)?;
         if next_hop != peer {
             return None;
         }

@@ -51,6 +51,24 @@ pub(crate) struct Found {
     expires: Instant,
 }
 
+/// While what a look found holds: its station address goes apart, with
+/// the work it was found for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct Holds {
+    known: u32,
+    expires: Instant,
+}
+
+impl Found {
+    /// While it holds.
+    pub(crate) const fn holds(&self) -> Holds {
+        Holds {
+            known: self.known,
+            expires: self.expires,
+        }
+    }
+}
+
 /// The table.
 #[derive(Debug)]
 pub(crate) struct Neighbors<const N: usize> {
@@ -104,11 +122,12 @@ impl<const N: usize> Neighbors<N> {
         })
     }
 
-    /// Whether `found` still holds at `now`: no known entry changed since,
-    /// and its entry has not expired. A look then would find the same. Once
+    /// Whether a look that found `holds` still holds at `now`: no known
+    /// entry changed since, and its entry has not expired. A look then would
+    /// find the same. Once
     /// the count is exhausted nothing holds.
-    pub(crate) fn holds_still(&self, found: &Found, now: Instant) -> bool {
-        self.known != EXHAUSTED && found.known == self.known && now < found.expires
+    pub(crate) fn holds_still(&self, holds: &Holds, now: Instant) -> bool {
+        self.known != EXHAUSTED && holds.known == self.known && now < holds.expires
     }
 
     /// Find `address`, or begin asking for it: in its own expired entry, a
@@ -403,7 +422,7 @@ mod tests {
         assert!(table.learn(at(0), PEER, FIRST, true));
         table.known = 0;
         let found = table.find(at(1), PEER).unwrap();
-        assert!(table.holds_still(&found, at(1)));
+        assert!(table.holds_still(&found.holds(), at(1)));
         table.known = EXHAUSTED - 1;
         assert!(table.learn(at(1), PEER, MOVED, true));
         assert!(
@@ -411,7 +430,7 @@ mod tests {
             "a write past the end"
         );
         assert!(
-            !table.holds_still(&found, at(1)),
+            !table.holds_still(&found.holds(), at(1)),
             "the old station's finding holds no more"
         );
         assert_eq!(table.hardware(at(1), PEER), Some(MOVED));
@@ -427,6 +446,6 @@ mod tests {
         assert!(table.learn(at(0), PEER, FIRST, true));
         let found = table.find(at(1), PEER).unwrap();
         assert_eq!(found.hardware, FIRST);
-        assert!(!table.holds_still(&found, at(1)));
+        assert!(!table.holds_still(&found.holds(), at(1)));
     }
 }
