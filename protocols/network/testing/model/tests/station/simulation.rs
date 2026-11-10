@@ -40,7 +40,7 @@ use std::task::{Context, Poll, Wake, Waker};
 
 use embassy_futures::select::{Either3, select, select3};
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
+use oer_portable_memory::{ClosingSpscQueue, WakingSlotQueue, WakingSpscQueue};
 use oer_portable_time::{Clock, Duration, Instant, Timer};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::TxEstimate;
@@ -1002,14 +1002,14 @@ async fn run<'s, T: 'static>(
     let mut lifecycle = Some(lifecycle);
 
     // The queues between the lifecycle and the actor.
-    let mut to_queue = WakingSpscQueue::<ToActor<'s, P<'s>>, TO>::new();
-    let mut parcel_queue = WakingSpscQueue::<Parcel<'s, P<'s>>, PARCELS>::new();
-    let mut from_queue = WakingSpscQueue::<FromActor<'s, P<'s>>, FROM>::new();
-    let mut return_queue = WakingSpscQueue::<Returned<'s, P<'s>>, RETURNS>::new();
-    let mut link_queue = WakingSpscQueue::<ActorLink<'s, P<'s>>, 1>::new();
-    let mut group_queue = WakingSpscQueue::<GroupPending<'s, ActorEpochPath<'s, P<'s>>>, 1>::new();
+    let mut to_queue = ClosingSpscQueue::<ToActor<'s, P<'s>>, TO>::new();
+    let mut parcel_queue = ClosingSpscQueue::<Parcel<'s, P<'s>>, PARCELS>::new();
+    let mut from_queue = ClosingSpscQueue::<FromActor<'s, P<'s>>, FROM>::new();
+    let mut return_queue = ClosingSpscQueue::<Returned<'s, P<'s>>, RETURNS>::new();
+    let mut link_queue = ClosingSpscQueue::<ActorLink<'s, P<'s>>, 1>::new();
+    let mut group_queue = ClosingSpscQueue::<GroupPending<'s, ActorEpochPath<'s, P<'s>>>, 1>::new();
     let mut link_return_queue =
-        WakingSpscQueue::<oer_protocols_ieee80211_core_roles_sta::link::LinkReturn, 1>::new();
+        ClosingSpscQueue::<oer_protocols_ieee80211_core_roles_sta::link::LinkReturn, 1>::new();
     let (to_actor, to_actor_end) = to_queue.split();
     let (parcels, parcels_end) = parcel_queue.split();
     let (from_actor_end, from_actor) = from_queue.split();

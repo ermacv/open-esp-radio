@@ -73,7 +73,8 @@ use oer_chips_family_platform_interrupt_table::signal::host::{Deferred, deferred
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_events::EventSink;
 use oer_portable_memory::{
-    HandlerCell, WakingSlotQueue, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender,
+    ClosingSpscQueue, ClosingSpscReceiver, ClosingSpscSender, HandlerCell, WakingSlotQueue,
+    WakingSpscQueue, WakingSpscSender,
 };
 use oer_portable_sync::PriorityWaker;
 use oer_portable_time::{Clock, Duration, Instant, Timer};
@@ -739,10 +740,10 @@ struct Bench<'b, 's, T: 'static> {
     stage: &'static RxStagePool<Q, B>,
     actor: Task<'b>,
     service: Task<'b>,
-    to_actor: WakingSpscSender<'b, ToActor<'s, P<'s>>, TO>,
-    from_actor: WakingSpscReceiver<'b, FromActor<'s, P<'s>>, FROM>,
-    returns: WakingSpscReceiver<'b, Returned<'s, P<'s>>, RETURNS>,
-    link: WakingSpscSender<'b, ActorLink<'s, P<'s>>, 1>,
+    to_actor: ClosingSpscSender<'b, ToActor<'s, P<'s>>, TO>,
+    from_actor: ClosingSpscReceiver<'b, FromActor<'s, P<'s>>, FROM>,
+    returns: ClosingSpscReceiver<'b, Returned<'s, P<'s>>, RETURNS>,
+    link: oer_portable_memory::ClosingSpscSender<'b, ActorLink<'s, P<'s>>, 1>,
     socket: Option<NetSocket<T>>,
     runner: runtime::RunnerControl<'static, runtime::SameHart>,
     free: Rc<Free>,
@@ -1040,14 +1041,14 @@ fn joined_with<T: 'static>(
             block_ack_storage.view(),
             Quiet,
         );
-        let mut to_queue = WakingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
-        let mut parcel_queue = WakingSpscQueue::<Parcel<'_, P<'_>>, PARCELS>::new();
-        let mut from_queue = WakingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
-        let mut return_queue = WakingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
-        let mut link_queue = WakingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+        let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+        let mut parcel_queue = ClosingSpscQueue::<Parcel<'_, P<'_>>, PARCELS>::new();
+        let mut from_queue = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+        let mut return_queue = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+        let mut link_queue = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
         let mut group_queue =
-            WakingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
-        let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
+            ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+        let mut link_return_queue = ClosingSpscQueue::<LinkReturn, 1>::new();
         let (to_actor, to_actor_end) = to_queue.split();
         let (_parcels, parcels_end) = parcel_queue.split();
         let (from_actor_end, from_actor) = from_queue.split();

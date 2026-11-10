@@ -71,7 +71,7 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use oer_portable_events::report;
-use oer_portable_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{ClosingSpscReceiver, ClosingSpscSender, WakingSpscReceiver};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     CommandKind, CommandRefusal, KeyTypes, PoolMpdu, PortCommands, PortTypes, StartRefused,
@@ -160,19 +160,19 @@ pub struct ActorEnds<
     const RETURNS: usize,
 > {
     /// The lifecycle's messages.
-    pub to_actor: WakingSpscSender<'c, ToActor<'id, D>, TO>,
+    pub to_actor: ClosingSpscSender<'c, ToActor<'id, D>, TO>,
     /// The lifecycle's large messages.
-    pub parcels: WakingSpscSender<'c, Parcel<'id, D>, PARCELS>,
+    pub parcels: ClosingSpscSender<'c, Parcel<'id, D>, PARCELS>,
     /// The actor's messages.
-    pub from_actor: WakingSpscReceiver<'c, FromActor<'id, D>, FROM>,
+    pub from_actor: ClosingSpscReceiver<'c, FromActor<'id, D>, FROM>,
     /// The owners the actor gives back, each announced in `from_actor`.
-    pub returns: WakingSpscReceiver<'c, Returned<'id, D>, RETURNS>,
+    pub returns: ClosingSpscReceiver<'c, Returned<'id, D>, RETURNS>,
     /// The station's group tokens, back with their change's end.
-    pub groups: WakingSpscReceiver<'c, GroupPending<'id, ActorEpochPath<'id, D>>, 1>,
+    pub groups: ClosingSpscReceiver<'c, GroupPending<'id, ActorEpochPath<'id, D>>, 1>,
     /// The link the station hands over.
-    pub link: WakingSpscSender<'c, ActorLink<'id, D>, 1>,
+    pub link: ClosingSpscSender<'c, ActorLink<'id, D>, 1>,
     /// The link the actor gives back.
-    pub link_return: WakingSpscReceiver<'c, LinkReturn, 1>,
+    pub link_return: ClosingSpscReceiver<'c, LinkReturn, 1>,
 }
 
 /// The lifecycle's ends to the application.

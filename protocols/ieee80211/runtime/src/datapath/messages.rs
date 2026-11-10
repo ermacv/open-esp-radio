@@ -439,19 +439,19 @@ pub struct LifecycleEnds<
     const RETURNS: usize,
 > {
     /// The lifecycle's messages.
-    pub to_actor: WakingSpscReceiver<'c, ToActor<'id, D>, TO>,
+    pub to_actor: ClosingSpscReceiver<'c, ToActor<'id, D>, TO>,
     /// The lifecycle's large messages, each announced in `to_actor`.
-    pub parcels: WakingSpscReceiver<'c, Parcel<'id, D>, PARCELS>,
+    pub parcels: ClosingSpscReceiver<'c, Parcel<'id, D>, PARCELS>,
     /// The actor's messages.
-    pub from_actor: WakingSpscSender<'c, FromActor<'id, D>, FROM>,
+    pub from_actor: ClosingSpscSender<'c, FromActor<'id, D>, FROM>,
     /// The owners the actor gives back.
-    pub returns: WakingSpscSender<'c, Returned<'id, D>, RETURNS>,
+    pub returns: ClosingSpscSender<'c, Returned<'id, D>, RETURNS>,
     /// The station's group tokens, back with their change's end.
-    pub groups: WakingSpscSender<'c, GroupPending<'id, ActorEpochPath<'id, D>>, 1>,
+    pub groups: ClosingSpscSender<'c, GroupPending<'id, ActorEpochPath<'id, D>>, 1>,
     /// The link the station hands over.
-    pub link: WakingSpscReceiver<'c, ActorLink<'id, D>, 1>,
+    pub link: ClosingSpscReceiver<'c, ActorLink<'id, D>, 1>,
     /// The link the actor gives back.
-    pub link_return: WakingSpscSender<'c, LinkReturn, 1>,
+    pub link_return: ClosingSpscSender<'c, LinkReturn, 1>,
 }
 
 /// The actor's ends to the network stack.

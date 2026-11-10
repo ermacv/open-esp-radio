@@ -80,7 +80,10 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use oer_portable_events::{EventSink, report};
-use oer_portable_memory::{SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{
+    ClosingSpscClosed, ClosingSpscReceiver, ClosingSpscSender, SlotReceiver, SlotSender,
+    WakingSpscSender,
+};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed,

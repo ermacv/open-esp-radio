@@ -389,7 +389,7 @@ where
                     self.frames_out = self.frames_out.saturating_add(1);
                     return Ok(());
                 }
-                Err(refused) => refused.0,
+                Err(refused) => refused.into_inner(),
             }
         } else {
             message

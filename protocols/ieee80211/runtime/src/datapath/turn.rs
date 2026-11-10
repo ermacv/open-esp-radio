@@ -40,8 +40,8 @@ pub(super) type Failed<'id, D> = ActorFault<PortFault<'id, D>>;
 /// lifecycle's room ([`Stage::refused`]) before it sleeps.
 pub(super) struct Outbox<'a, 'c, 'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize>
 {
-    pub(super) from_actor: &'a mut WakingSpscSender<'c, FromActor<'id, D>, FROM>,
-    pub(super) returns: &'a mut WakingSpscSender<'c, Returned<'id, D>, RETURNS>,
+    pub(super) from_actor: &'a mut ClosingSpscSender<'c, FromActor<'id, D>, FROM>,
+    pub(super) returns: &'a mut ClosingSpscSender<'c, Returned<'id, D>, RETURNS>,
     pub(super) stage: &'a mut Stage<'id, D>,
     /// A group change's terminal is owed.
     pub(super) grouped: bool,
@@ -61,14 +61,16 @@ fn is_group<'id, T: PortTypes<'id>>(terminal: &LowerMacTerminal<'id, T>) -> bool
 
 /// Send `returned` and its announcement, when both queues have room.
 pub(super) fn give_back<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize>(
-    from_actor: &WakingSpscSender<'_, FromActor<'id, D>, FROM>,
-    returns: &WakingSpscSender<'_, Returned<'id, D>, RETURNS>,
+    from_actor: &ClosingSpscSender<'_, FromActor<'id, D>, FROM>,
+    returns: &ClosingSpscSender<'_, Returned<'id, D>, RETURNS>,
     returned: Returned<'id, D>,
 ) -> Result<(), Returned<'id, D>> {
     if from_actor.free_capacity() == 0 {
         return Err(returned);
     }
-    returns.try_send(returned).map_err(|refused| refused.0)?;
+    returns
+        .try_send(returned)
+        .map_err(|refused| refused.into_inner())?;
     // The announcement's room was checked; the one sender sends.
     from_actor
         .try_send(FromActor::Returned)
@@ -95,11 +97,20 @@ impl<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize> PortSin
             return Err(terminal);
         };
         D::terminal(&terminal);
-        cell.send(Returned::Terminal {
-            terminal,
-            grouped: false,
-        });
-        announce.send(FromActor::Returned);
+        // A closed reception has no lifecycle to hand it to: the port keeps
+        // it, whole.
+        if let Err(ClosingSpscClosed(terminal)) =
+            cell.send_with(terminal, |terminal| Returned::Terminal {
+                terminal,
+                grouped: false,
+            })
+        {
+            self.stage.refused = true;
+            return Err(terminal);
+        }
+        // The announcement carries no owner: a closed reception has no
+        // reader for it, and the owner it announces stays in its queue.
+        let _announced = announce.send(FromActor::Returned);
         Ok(())
     }
 
@@ -606,7 +617,7 @@ where
             return Ok(false);
         };
         lifecycle.groups.try_send(group).map_err(|refused| {
-            self.retained.group = Some(refused.0);
+            self.retained.group = Some(refused.into_inner());
             ActorFault::Contract(ActorViolation::OutboxFull)
         })?;
         Ok(true)
@@ -1037,7 +1048,7 @@ where
             self.pairwise = Some(key);
         }
         if let Err(refused) = lifecycle.link_return.try_send(link) {
-            self.retained.link_return = Some(refused.0);
+            self.retained.link_return = Some(refused.into_inner());
             return Err(ActorFault::Contract(ActorViolation::LinkReturn));
         }
         self.owed.link_returned = true;
@@ -1345,7 +1356,7 @@ where
         if let Some(started) = self.owed.started.take()
             && let Err(refused) = from.try_send(FromActor::Started(started))
         {
-            self.owed.started = match refused.0 {
+            self.owed.started = match refused.into_inner() {
                 FromActor::Started(started) => Some(started),
                 _ => None,
             };
@@ -1353,7 +1364,7 @@ where
         if let Some(retuned) = self.owed.retuned.take()
             && let Err(refused) = from.try_send(FromActor::Retuned(retuned))
         {
-            self.owed.retuned = match refused.0 {
+            self.owed.retuned = match refused.into_inner() {
                 FromActor::Retuned(retuned) => Some(retuned),
                 _ => None,
             };
@@ -1369,7 +1380,7 @@ where
         if let Some(key) = self.owed.pairwise.take()
             && let Err(refused) = from.try_send(FromActor::PairwiseReturned(key))
         {
-            self.owed.pairwise = match refused.0 {
+            self.owed.pairwise = match refused.into_inner() {
                 FromActor::PairwiseReturned(key) => Some(key),
                 _ => None,
             };
@@ -1377,7 +1388,7 @@ where
         if let Some(gate) = self.owed.gate.take()
             && let Err(refused) = from.try_send(FromActor::GateOpened(gate))
         {
-            self.owed.gate = match refused.0 {
+            self.owed.gate = match refused.into_inner() {
                 FromActor::GateOpened(gate) => Some(gate),
                 _ => None,
             };
@@ -1385,7 +1396,7 @@ where
         if let Some(stopped) = self.owed.stopped.take()
             && let Err(refused) = from.try_send(FromActor::Stopped(stopped))
         {
-            self.owed.stopped = match refused.0 {
+            self.owed.stopped = match refused.into_inner() {
                 FromActor::Stopped(stopped) => Some(stopped),
                 _ => None,
             };
@@ -1399,7 +1410,7 @@ where
         // Facts only take the places the bounded producers do not keep.
         let reserve = LIFECYCLE_FRAMES.saturating_add(RETURNS);
         let room =
-            |from: &WakingSpscSender<'_, FromActor<'id, D>, FROM>| from.free_capacity() > reserve;
+            |from: &ClosingSpscSender<'_, FromActor<'id, D>, FROM>| from.free_capacity() > reserve;
         if let Some(event) = self.owed.tbtt
             && room(from)
             && from.try_send(FromActor::Tbtt(event)).is_ok()

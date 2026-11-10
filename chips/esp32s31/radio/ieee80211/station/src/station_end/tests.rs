@@ -833,9 +833,13 @@ fn a_late_retire_finishes_the_lifecycles_half_without_a_second_release() {
 }
 
 /// One side's queue of the test.
-struct Side<'q, 'a>(oer_portable_memory::WakingSpscReceiver<'q, Receipt<'a>, 4>);
+struct Side<'q, 'a>(oer_portable_memory::ClosingSpscReceiver<'q, Receipt<'a>, 4>);
 
 impl InTransit for Side<'_, '_> {
+    async fn close(&mut self) {
+        self.0.close().await;
+    }
+
     fn holds(&self) -> bool {
         !self.0.is_empty()
     }
@@ -846,21 +850,21 @@ impl InTransit for Side<'_, '_> {
 /// comes back whole, each owner once, in order.
 #[test]
 fn a_completed_retire_returns_the_owners_still_in_transit() {
-    use oer_portable_memory::WakingSpscQueue;
+    use oer_portable_memory::ClosingSpscQueue;
     let ends = Ends::default();
-    let mut empty = WakingSpscQueue::<Receipt<'_>, 4>::new();
+    let mut empty = ClosingSpscQueue::<Receipt<'_>, 4>::new();
     let (_producer, receiver) = empty.split();
     assert!(
-        in_transit(Side(receiver)).is_none(),
+        ready(in_transit(Side(receiver))).is_none(),
         "nothing is in transit"
     );
-    let mut place = WakingSpscQueue::<Receipt<'_>, 4>::new();
+    let mut place = ClosingSpscQueue::<Receipt<'_>, 4>::new();
     let (producer, receiver) = place.split();
     assert!(producer.try_send(Receipt(&ends.receipt)).is_ok());
     assert!(producer.try_send(Receipt(&ends.other)).is_ok());
     // The producer stops here.
     let _stopped = producer;
-    let Some(Side(left)) = in_transit(Side(receiver)) else {
+    let Some(Side(left)) = ready(in_transit(Side(receiver))) else {
         panic!("the owners in transit come back");
     };
     assert_eq!(ends.all(), [0; 4], "nothing ended on the way");
@@ -869,6 +873,35 @@ fn a_completed_retire_returns_the_owners_still_in_transit() {
     drop(left.try_receive());
     assert_eq!(ends.all(), [1, 1, 0, 0], "each once");
     assert!(left.try_receive().is_none());
+}
+
+/// The owner's counterexample: a queue after its receiver ended. A
+/// completed retire found the queue empty and its receiver ended with the
+/// installation; the other half still holds the sender. A send, or a
+/// permit it took before the check, returns its owner whole: nothing is
+/// published where nobody receives.
+#[test]
+fn a_send_after_the_receiver_ended_returns_its_owner_whole() {
+    use oer_portable_memory::{ClosingSpscClosed, ClosingSpscQueue, ClosingSpscSendError};
+    let ends = Ends::default();
+    let mut place = ClosingSpscQueue::<Receipt<'_>, 4>::new();
+    let (mut producer, receiver) = place.split();
+    let permit = producer.try_reserve().expect("room");
+    assert!(
+        ready(in_transit(Side(receiver))).is_none(),
+        "nothing is in transit: the receiver ends"
+    );
+    let Err(ClosingSpscClosed(late)) = permit.send(Receipt(&ends.receipt)) else {
+        panic!("a permit taken before the check publishes nothing after it");
+    };
+    assert_eq!(ends.all(), [0; 4], "the owner came back, not ended");
+    drop(late);
+    let Err(ClosingSpscSendError::Closed(late)) = producer.try_send(Receipt(&ends.other)) else {
+        panic!("a send after the check publishes nothing");
+    };
+    assert_eq!(ends.all(), [1, 0, 0, 0], "the owner came back, not ended");
+    drop(late);
+    assert_eq!(ends.all(), [1, 1, 0, 0], "each once, by its holder");
 }
 
 /// More installations' news than the actor's task posts before its end

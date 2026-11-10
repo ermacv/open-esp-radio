@@ -360,5 +360,11 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'
     }
 }
 
+mod closing;
+pub use closing::{
+    ClosingSpscClosed, ClosingSpscQueue, ClosingSpscReceiver, ClosingSpscSendError,
+    ClosingSpscSendPermit, ClosingSpscSender,
+};
+
 #[cfg(test)]
 mod tests;

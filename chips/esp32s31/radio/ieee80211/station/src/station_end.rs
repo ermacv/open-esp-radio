@@ -517,17 +517,25 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     }
 }
 /// One side's ends of the queues between the actor and the station's
-/// lifecycle: whether an owner is still in transit to that side.
+/// lifecycle: closing what this side receives, and whether an owner is
+/// still in transit to it.
 pub(crate) trait InTransit {
+    /// Close the reception of every queue this side receives from: once it
+    /// completed, no send is in progress into them and none publishes
+    /// after it; a later send or permit gets its owner back whole.
+    async fn close(&mut self);
     /// Whether a queue this side receives from holds an owner.
     fn holds(&self) -> bool;
 }
 
-/// `queues` of a completed retire, once their producers stopped: `None`
+/// `queues` of a completed retire, once their producers stopped: their
+/// reception is closed first, so the check that follows is final. `None`
 /// when no owner is in transit in them to this side, so they end empty
 /// with the retired installation; otherwise the queues, whole, with every
-/// owner in them, each once, in order.
-pub(crate) fn in_transit<Q: InTransit>(queues: Q) -> Option<Q> {
+/// owner in them, each once, in order. Either way a send into them later
+/// returns its owner whole.
+pub(crate) async fn in_transit<Q: InTransit>(mut queues: Q) -> Option<Q> {
+    queues.close().await;
     queues.holds().then_some(queues)
 }
 
@@ -538,6 +546,13 @@ impl<'id, D, const TO: usize, const FROM: usize, const RETURNS: usize> InTransit
 where
     D: oer_protocols_ieee80211_runtime::datapath::DatapathPort<'id>,
 {
+    async fn close(&mut self) {
+        self.from_actor.close().await;
+        self.returns.close().await;
+        self.groups.close().await;
+        self.link_return.close().await;
+    }
+
     fn holds(&self) -> bool {
         !(self.from_actor.is_empty()
             && self.returns.is_empty()
@@ -552,6 +567,12 @@ impl<'id, D, const TO: usize, const FROM: usize, const RETURNS: usize> InTransit
 where
     D: oer_protocols_ieee80211_runtime::datapath::DatapathPort<'id>,
 {
+    async fn close(&mut self) {
+        self.to_actor.close().await;
+        self.parcels.close().await;
+        self.link.close().await;
+    }
+
     fn holds(&self) -> bool {
         !(self.to_actor.is_empty() && self.parcels.is_empty() && self.link.is_empty())
     }

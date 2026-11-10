@@ -45,7 +45,9 @@ use oer_chips_esp32s31_radio_phy::{PhyConfig, PhyTxTargetPowerProfile};
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_embassy_time::EmbassyClock;
 use oer_portable_events::EventSink;
-use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{
+    ClosingSpscQueue, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender,
+};
 use oer_portable_time::Duration;
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::*;
@@ -481,13 +483,13 @@ pub type Freed<W> = crate::release::Freed<'static, <Port<W> as DataPort<'static>
 pub(crate) struct ActorStorage<W: Binding> {
     actor: oer_portable_memory::StaticPlace<ActorOf<W>>,
     receive: oer_portable_memory::StaticPlace<RxBlockAcks<W>>,
-    to_actor: WakingSpscQueue<ToActor<'static, ActorPort<W>>, TO>,
-    parcels: WakingSpscQueue<Parcel<'static, ActorPort<W>>, PARCELS>,
-    from_actor: WakingSpscQueue<FromActor<'static, ActorPort<W>>, FROM>,
-    returns: WakingSpscQueue<Returned<'static, ActorPort<W>>, RETURNS>,
-    groups: WakingSpscQueue<GroupPending<'static, ActorEpochPath<'static, ActorPort<W>>>, 1>,
-    link: WakingSpscQueue<ActorLink<'static, ActorPort<W>>, 1>,
-    link_return: WakingSpscQueue<LinkReturn, 1>,
+    to_actor: ClosingSpscQueue<ToActor<'static, ActorPort<W>>, TO>,
+    parcels: ClosingSpscQueue<Parcel<'static, ActorPort<W>>, PARCELS>,
+    from_actor: ClosingSpscQueue<FromActor<'static, ActorPort<W>>, FROM>,
+    returns: ClosingSpscQueue<Returned<'static, ActorPort<W>>, RETURNS>,
+    groups: ClosingSpscQueue<GroupPending<'static, ActorEpochPath<'static, ActorPort<W>>>, 1>,
+    link: ClosingSpscQueue<ActorLink<'static, ActorPort<W>>, 1>,
+    link_return: ClosingSpscQueue<LinkReturn, 1>,
     mailbox: WakingSpscQueue<News<W>, 1>,
     abandon: WakingSpscQueue<crate::failure::LifecycleFailure, 1>,
 }
@@ -496,13 +498,13 @@ impl<W: Binding> ActorStorage<W> {
         Self {
             actor: oer_portable_memory::StaticPlace::new(),
             receive: oer_portable_memory::StaticPlace::new(),
-            to_actor: WakingSpscQueue::new(),
-            parcels: WakingSpscQueue::new(),
-            from_actor: WakingSpscQueue::new(),
-            returns: WakingSpscQueue::new(),
-            groups: WakingSpscQueue::new(),
-            link: WakingSpscQueue::new(),
-            link_return: WakingSpscQueue::new(),
+            to_actor: ClosingSpscQueue::new(),
+            parcels: ClosingSpscQueue::new(),
+            from_actor: ClosingSpscQueue::new(),
+            returns: ClosingSpscQueue::new(),
+            groups: ClosingSpscQueue::new(),
+            link: ClosingSpscQueue::new(),
+            link_return: ClosingSpscQueue::new(),
             mailbox: WakingSpscQueue::new(),
             abandon: WakingSpscQueue::new(),
         }
@@ -811,7 +813,7 @@ pub(crate) async fn drive<W: Binding>(
                     // comes back.
                     Ok(proof) => DatapathEnd::Retired(RetiredDatapath {
                         proof,
-                        in_transit: crate::station_end::in_transit(lifecycle),
+                        in_transit: crate::station_end::in_transit(lifecycle).await,
                         network,
                     }),
                     Err(unfinished) => left(unfinished, lifecycle, network, installations),

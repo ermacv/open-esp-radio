@@ -280,7 +280,7 @@ where
         message: ToActor<'id, D>,
     ) {
         if let Err(refused) = actor.to_actor.try_send(message) {
-            let _quarantined = core::mem::ManuallyDrop::new(refused.0);
+            let _quarantined = core::mem::ManuallyDrop::new(refused.into_inner());
             self.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
         }
     }
@@ -362,7 +362,7 @@ where
                         let keyed = handover.numbers().key().is_some();
                         let epoch = handover.epoch().sequence();
                         if let Err(refused) = actor.link.try_send(handover) {
-                            let _quarantined = core::mem::ManuallyDrop::new(refused.0);
+                            let _quarantined = core::mem::ManuallyDrop::new(refused.into_inner());
                             self.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
                             return Follow::Nothing;
                         }
@@ -579,7 +579,7 @@ where
             StaAction::Associated(peer) => {
                 // The rates start from what the association made known.
                 if let Err(refused) = actor.parcels.try_send(Parcel::Associated(peer)) {
-                    let _quarantined = core::mem::ManuallyDrop::new(refused.0);
+                    let _quarantined = core::mem::ManuallyDrop::new(refused.into_inner());
                     self.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
                     return Follow::Nothing;
                 }
@@ -605,7 +605,7 @@ where
                 crate::station::ControlTerminal::GroupChange,
             ));
         if let Err(refused) = actor.parcels.try_send(Parcel::Group { command, pending }) {
-            let _quarantined = core::mem::ManuallyDrop::new(refused.0);
+            let _quarantined = core::mem::ManuallyDrop::new(refused.into_inner());
             self.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
             return;
         }

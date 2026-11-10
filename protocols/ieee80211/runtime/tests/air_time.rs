@@ -38,8 +38,8 @@ use std::sync::Arc;
 use std::vec::Vec;
 
 use oer_portable_memory::{
-    SlotReceiver, SlotSender, WakingSlotQueue, WakingSpscQueue, WakingSpscReceiver,
-    WakingSpscSender,
+    ClosingSpscQueue, ClosingSpscReceiver, ClosingSpscSender, SlotReceiver, SlotSender,
+    WakingSlotQueue, WakingSpscQueue, WakingSpscReceiver,
 };
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
@@ -411,10 +411,10 @@ struct Bench<'b, 's, const HELD: u8> {
     run: Run<'b>,
     counter: Arc<Counter>,
     end: Option<ActorEnd<ModelPortFault>>,
-    to_actor: WakingSpscSender<'b, ToActor<'s, P<'s, HELD>>, TO>,
-    from_actor: WakingSpscReceiver<'b, FromActor<'s, P<'s, HELD>>, FROM>,
-    returns: WakingSpscReceiver<'b, Returned<'s, P<'s, HELD>>, RETURNS>,
-    link: WakingSpscSender<'b, ActorLink<'s, P<'s, HELD>>, 1>,
+    to_actor: ClosingSpscSender<'b, ToActor<'s, P<'s, HELD>>, TO>,
+    from_actor: ClosingSpscReceiver<'b, FromActor<'s, P<'s, HELD>>, FROM>,
+    returns: ClosingSpscReceiver<'b, Returned<'s, P<'s, HELD>>, RETURNS>,
+    link: ClosingSpscSender<'b, ActorLink<'s, P<'s, HELD>>, 1>,
     transmit: SlotSender<'b, Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>,
     returned: SlotReceiver<
         'b,
@@ -701,19 +701,19 @@ fn run<const HELD: u8>(inputs: Inputs) -> Outcome {
             storage.view(),
             (),
         );
-        let mut to_queue = WakingSpscQueue::<ToActor<'_, P<'_, HELD>>, TO>::new();
-        let mut parcel_queue = WakingSpscQueue::<Parcel<'_, P<'_, HELD>>, PARCELS>::new();
-        let mut from_queue = WakingSpscQueue::<FromActor<'_, P<'_, HELD>>, FROM>::new();
-        let mut return_queue = WakingSpscQueue::<Returned<'_, P<'_, HELD>>, RETURNS>::new();
-        let mut link_queue = WakingSpscQueue::<ActorLink<'_, P<'_, HELD>>, 1>::new();
-        let mut group_queue = WakingSpscQueue::<
+        let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_, HELD>>, TO>::new();
+        let mut parcel_queue = ClosingSpscQueue::<Parcel<'_, P<'_, HELD>>, PARCELS>::new();
+        let mut from_queue = ClosingSpscQueue::<FromActor<'_, P<'_, HELD>>, FROM>::new();
+        let mut return_queue = ClosingSpscQueue::<Returned<'_, P<'_, HELD>>, RETURNS>::new();
+        let mut link_queue = ClosingSpscQueue::<ActorLink<'_, P<'_, HELD>>, 1>::new();
+        let mut group_queue = ClosingSpscQueue::<
             GroupPending<
                 '_,
                 oer_protocols_ieee80211_runtime::datapath::ActorEpochPath<'_, P<'_, HELD>>,
             >,
             1,
         >::new();
-        let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
+        let mut link_return_queue = ClosingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue =
             WakingSlotQueue::<Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>::new();
         let mut returned_queue = WakingSlotQueue::<

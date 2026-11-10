@@ -856,7 +856,7 @@ async fn lifecycles<W: Binding>(
                 StationEnd {
                     exit,
                     lifecycle: None,
-                    in_transit: crate::station_end::in_transit(actor),
+                    in_transit: crate::station_end::in_transit(actor).await,
                 }
             }
             LifecycleHalf::Unfinished => StationEnd {

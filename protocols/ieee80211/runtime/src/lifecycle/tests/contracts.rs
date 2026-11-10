@@ -39,14 +39,14 @@ fn alone(first: First, check: impl for<'s> FnOnce(Completed<'s>, Vec<Returned<'s
             resources,
         } = install;
         let (parts, _storage, spare) = lifecycle_spare::<2>(open(), resources, commands);
-        let mut to_queue = WakingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
-        let mut parcel_queue = WakingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
-        let mut from_queue = WakingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
-        let mut return_queue = WakingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
-        let mut link_queue = WakingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+        let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+        let mut parcel_queue = ClosingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
+        let mut from_queue = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+        let mut return_queue = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+        let mut link_queue = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
         let mut group_queue =
-            WakingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
-        let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
+            ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+        let mut link_return_queue = ClosingSpscQueue::<LinkReturn, 1>::new();
         let mut command_queue =
             WakingSpscQueue::<crate::station::ServiceCommand<ModelCaps24>, COMMANDS>::new();
         let (to_actor, to_actor_end) = to_queue.split();
