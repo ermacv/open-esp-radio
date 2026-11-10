@@ -1252,7 +1252,8 @@ impl<W: Binding> crate::prepare::Steps for PrepareSteps<W> {
     type SharedIn = &'static StaticCell<PortSharedStorage<TX, Lent<W>>>;
     type Shared = &'static mut core::mem::MaybeUninit<PortSharedStorage<TX, Lent<W>>>;
 
-    fn bind(&mut self, (rx, signals): Self::RxIn) -> Result<Self::Rx, InitializationError> {
+    fn bind(&mut self, (rx, signals): Self::RxIn) -> PrepareResult<Self::Rx, Self::RxIn> {
+        // A placement that does not bind is consumed by the bind.
         let (rx, _, _) = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxArena::<
             N,
             B,
@@ -1260,40 +1261,85 @@ impl<W: Binding> crate::prepare::Steps for PrepareSteps<W> {
             Q,
             DriverExecutor,
         >::bind(rx, signals)
-        .map_err(|_| InitializationError::Rx)?;
+        .map_err(|_| consumed(InitializationError::Rx))?;
         Ok(rx)
     }
 
-    fn device(&mut self, device: Self::DeviceIn) -> Result<Self::Device, InitializationError> {
-        device.try_uninit().ok_or(InitializationError::Storage)
+    fn device(&mut self, device: Self::DeviceIn) -> PrepareResult<Self::Device, Self::DeviceIn> {
+        device
+            .try_uninit()
+            .ok_or_else(|| whole(InitializationError::Storage, device))
     }
 
-    fn slot(&mut self, (dma, slot): Self::SlotIn) -> Result<Self::Slot, InitializationError> {
-        let place = slot.try_uninit().ok_or(InitializationError::Storage)?;
-        let dma = TxDmaStorage::pin::<ChipDma, _>(dma).map_err(|_| InitializationError::Tx)?;
+    fn slot(&mut self, (dma, slot): Self::SlotIn) -> PrepareResult<Self::Slot, Self::SlotIn> {
+        // The place first: a place already taken returns the descriptor
+        // untouched; a descriptor that does not pin is consumed by the pin.
+        let Some(place) = slot.try_uninit() else {
+            return Err(whole(InitializationError::Storage, (dma, slot)));
+        };
+        let dma =
+            TxDmaStorage::pin::<ChipDma, _>(dma).map_err(|_| consumed(InitializationError::Tx))?;
         Ok(Pin::new(&mut *place.write(TxSlot::from_dma(dma))))
     }
 
     fn chain(
         &mut self,
         (dma, metadata, retention): Self::ChainIn,
-    ) -> Result<Self::Chain, InitializationError> {
-        let metadata = metadata.try_uninit().ok_or(InitializationError::Storage)?;
-        let retention = retention.try_uninit().ok_or(InitializationError::Storage)?;
-        let metadata = metadata.write(HtAmpduTxStorage::new());
-        let retention = retention.write(RetainedAmpduDmaStorage::new());
-        let resources =
-            HtAmpduTxResources::pin_static(metadata, dma).map_err(|_| InitializationError::Tx)?;
+    ) -> PrepareResult<Self::Chain, Self::ChainIn> {
+        // Both places first: a place already taken returns the chain's
+        // placement untouched; one that does not pin is consumed by the pin.
+        let Some(metadata_place) = metadata.try_uninit() else {
+            return Err(whole(
+                InitializationError::Storage,
+                (dma, metadata, retention),
+            ));
+        };
+        let Some(retention_place) = retention.try_uninit() else {
+            return Err(whole(
+                InitializationError::Storage,
+                (dma, metadata, retention),
+            ));
+        };
+        let metadata = metadata_place.write(HtAmpduTxStorage::new());
+        let retention = retention_place.write(RetainedAmpduDmaStorage::new());
+        let resources = HtAmpduTxResources::pin_static(metadata, dma)
+            .map_err(|_| consumed(InitializationError::Tx))?;
         Ok(RetainedDmaAmpduTx::new(resources, retention))
     }
 
-    fn lent(&mut self, lent: Self::LentIn) -> Result<Self::Lent, InitializationError> {
-        lent.take().ok_or(InitializationError::Storage)
+    fn lent(&mut self, lent: Self::LentIn) -> PrepareResult<Self::Lent, Self::LentIn> {
+        match lent.take() {
+            Some(taken) => Ok(taken),
+            None => Err(whole(InitializationError::Storage, lent)),
+        }
     }
 
-    fn shared(&mut self, shared: Self::SharedIn) -> Result<Self::Shared, InitializationError> {
-        shared.try_uninit().ok_or(InitializationError::Storage)
+    fn shared(&mut self, shared: Self::SharedIn) -> PrepareResult<Self::Shared, Self::SharedIn> {
+        shared
+            .try_uninit()
+            .ok_or_else(|| whole(InitializationError::Storage, shared))
     }
+}
+
+/// What one of the chip's preparation steps gives.
+type PrepareResult<O, I> = crate::prepare::StepResult<O, InitializationError, I>;
+
+/// A step that refused before it took anything of `input`.
+const fn whole<I>(
+    cause: InitializationError,
+    input: I,
+) -> crate::prepare::StepRefused<InitializationError, I> {
+    crate::prepare::StepRefused {
+        cause,
+        input: Some(input),
+    }
+}
+
+/// A step whose primitive consumed its input as it refused.
+const fn consumed<I>(
+    cause: InitializationError,
+) -> crate::prepare::StepRefused<InitializationError, I> {
+    crate::prepare::StepRefused { cause, input: None }
 }
 
 /// Start the radio and assemble the port's parts: the port holds the first

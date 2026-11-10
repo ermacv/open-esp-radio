@@ -401,11 +401,11 @@ pub enum ProofRefusal {
     Unread,
 }
 
-/// A proof refused by a lifecycle half: both come back unchanged, nothing
-/// finished or consumed.
+/// A proof refused by a lifecycle half: both come back, nothing finished;
+/// the half keeps the news it read before refusing, every owner with it.
 #[must_use = "the refused finish returns the half and the proof whole"]
 pub struct RefusedProof<H, B> {
-    /// The half, unchanged.
+    /// The half, with the news it read.
     pub half: H,
     /// The proof, unchanged.
     pub proof: DatapathRetired<B>,
@@ -560,7 +560,8 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     ///
     /// # Errors
     ///
-    /// The half and the proof come back unchanged, nothing ended, when the
+    /// The half (with the news read into it, every owner kept) and the
+    /// proof come back, nothing ended, when the
     /// places for installations' news are full and the end is unread
     /// ([`ProofRefusal::Unread`]), or when the proof names another
     /// installation than the one the actor's task runs on now
@@ -803,17 +804,18 @@ pub(crate) fn release_settled<C, K, E: Copy, B>(
     news: Option<News<C, K, E, B>>,
     failure: Option<LifecycleFailure>,
 ) -> (StationExitOf<E>, LifecycleHalf, Option<LateEnd<E>>) {
+    // Only a release's or a fault's news is the actor task's end; any other
+    // news here is out of order, read as a broken mailbox, and confirms no
+    // end of that task.
+    let ends = matches!(news, Some(News::Released { .. } | News::Faulted(_)));
     let told = news.map(ended);
+    let late = told.filter(|_| ends).map(LateEnd::Ended);
     let exit = told.unwrap_or(StationExitOf::ReleaseFailed(ReleaseCause::Deadline));
     let half = match exit {
         StationExitOf::Stopped | StationExitOf::StoppedNetworkLost => LifecycleHalf::Retired,
         _ => LifecycleHalf::Unfinished,
     };
-    (
-        failure.map_or(exit, StationExitOf::Failed),
-        half,
-        told.map(LateEnd::Ended),
-    )
+    (failure.map_or(exit, StationExitOf::Failed), half, late)
 }
 
 /// The exit the actor task's last news gives.

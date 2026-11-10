@@ -1837,6 +1837,8 @@ pub struct ModelAir {
     stream: Cell<ModelStream>,
     /// The port may take a poison back for a stop.
     recovery: Cell<bool>,
+    /// How often the port asked to take a poison back.
+    recovery_asks: Cell<u32>,
     disables: Cell<u32>,
     /// The EDCA set each interface's attempts contend with, by role.
     edca: Cell<ModelEdca>,
@@ -1908,6 +1910,7 @@ impl ModelAir {
             group_writes: Default::default(),
             stream: Default::default(),
             recovery: Default::default(),
+            recovery_asks: Cell::new(0),
             disables: Default::default(),
             unstop_enable: Cell::new(false),
             fault_access_point: Cell::new(false),
@@ -2554,6 +2557,11 @@ impl ModelAir {
         self.stream.set(ModelStream::Ended);
     }
 
+    /// How often the port asked to take a poison back.
+    pub fn recovery_asks(&self) -> u32 {
+        self.recovery_asks.get()
+    }
+
     /// Let the port take a poison back for a stop.
     pub fn allow_recovery(&self) {
         self.recovery.set(true);
@@ -2561,6 +2569,8 @@ impl ModelAir {
 
     /// Take a poison back, when the port may.
     pub(crate) fn recover(&self) -> bool {
+        self.recovery_asks
+            .set(self.recovery_asks.get().saturating_add(1));
         let allowed = self.recovery.get();
         if allowed {
             self.stream.set(ModelStream::Running);

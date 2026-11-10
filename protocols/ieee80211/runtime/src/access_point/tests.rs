@@ -722,6 +722,7 @@ fn a_fault_first_seen_in_the_stops_watch_is_taken_back_once_or_kept() {
                 ),
                 "the watch's service met the fault: {seen:?}"
             );
+            assert_eq!(air.recovery_asks(), 1, "the port is asked once");
             if recovers {
                 assert_eq!(watched, Ok(super::StopWatch::Confirmed));
                 assert!(!runner.homes.fault_kept, "taken back");

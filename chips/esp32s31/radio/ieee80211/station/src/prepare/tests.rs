@@ -26,18 +26,29 @@ impl Drop for Owner<'_> {
 /// input consumed; the step numbered `refuse` refuses.
 struct TestSteps<'a> {
     refuse: u8,
+    /// Whether the refused step took nothing of its input.
+    untouched: bool,
     taken: u8,
     ended: &'a RefCell<Vec<u8>>,
 }
 
 impl<'a> TestSteps<'a> {
-    fn run(&mut self, input: Owner<'a>) -> Result<Owner<'a>, Refusal> {
+    fn run(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         let at = self.taken;
         self.taken += 1;
+        if at == self.refuse && self.untouched {
+            return Err(StepRefused {
+                cause: Refusal,
+                input: Some(input),
+            });
+        }
         let name = input.0;
         drop(input);
         if at == self.refuse {
-            return Err(Refusal);
+            return Err(StepRefused {
+                cause: Refusal,
+                input: None,
+            });
         }
         Ok(Owner(name + 100, self.ended))
     }
@@ -57,22 +68,22 @@ impl<'a> Steps for TestSteps<'a> {
     type Lent = Owner<'a>;
     type SharedIn = Owner<'a>;
     type Shared = Owner<'a>;
-    fn bind(&mut self, input: Owner<'a>) -> Result<Owner<'a>, Refusal> {
+    fn bind(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         self.run(input)
     }
-    fn device(&mut self, input: Owner<'a>) -> Result<Owner<'a>, Refusal> {
+    fn device(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         self.run(input)
     }
-    fn slot(&mut self, input: Owner<'a>) -> Result<Owner<'a>, Refusal> {
+    fn slot(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         self.run(input)
     }
-    fn chain(&mut self, input: Owner<'a>) -> Result<Owner<'a>, Refusal> {
+    fn chain(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         self.run(input)
     }
-    fn lent(&mut self, input: Owner<'a>) -> Result<Owner<'a>, Refusal> {
+    fn lent(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         self.run(input)
     }
-    fn shared(&mut self, input: Owner<'a>) -> Result<Owner<'a>, Refusal> {
+    fn shared(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         self.run(input)
     }
 }
@@ -123,29 +134,35 @@ const fn step_of(at: u8) -> Step {
 /// on the way.
 #[test]
 fn a_refusal_at_each_step_returns_the_reached_parts_and_the_remaining_inputs() {
-    for refuse in 0..STEPS {
-        let ended = RefCell::new(Vec::new());
-        let mut steps = TestSteps {
-            refuse,
-            taken: 0,
-            ended: &ended,
-        };
-        let inputs = inputs(&ended);
-        let Err(refused) = prepare(&mut steps, inputs) else {
-            panic!("step {refuse} refuses");
-        };
-        assert_eq!(refused.cause, Refusal);
-        assert_eq!(refused.step, step_of(refuse));
-        assert_eq!(steps.taken, refuse + 1, "no step runs after the refusal");
-        // Each step's input ended as it made its part; the refused one's
-        // too, and nothing else.
-        assert_eq!(*ended.borrow(), (0..=refuse).collect::<Vec<_>>());
-        let expected_reached: Vec<_> = (0..STEPS)
-            .map(|at| (at < refuse).then_some(at + 100))
-            .collect();
-        assert_eq!(names(&refused.reached), expected_reached, "at {refuse}");
-        let expected_remaining: Vec<_> = (0..STEPS).map(|at| (at > refuse).then_some(at)).collect();
-        assert_eq!(names(&refused.remaining), expected_remaining, "at {refuse}");
+    for untouched in [false, true] {
+        for refuse in 0..STEPS {
+            let ended = RefCell::new(Vec::new());
+            let mut steps = TestSteps {
+                refuse,
+                untouched,
+                taken: 0,
+                ended: &ended,
+            };
+            let inputs = inputs(&ended);
+            let Err(refused) = prepare(&mut steps, inputs) else {
+                panic!("step {refuse} refuses");
+            };
+            assert_eq!(refused.cause, Refusal);
+            assert_eq!(refused.step, step_of(refuse));
+            assert_eq!(steps.taken, refuse + 1, "no step runs after the refusal");
+            // Each step's input ended as it made its part; the refused
+            // one's too unless it took nothing of it, and nothing else.
+            let last = if untouched { refuse } else { refuse + 1 };
+            assert_eq!(*ended.borrow(), (0..last).collect::<Vec<_>>());
+            let expected_reached: Vec<_> = (0..STEPS)
+                .map(|at| (at < refuse).then_some(at + 100))
+                .collect();
+            assert_eq!(names(&refused.reached), expected_reached, "at {refuse}");
+            let expected_remaining: Vec<_> = (0..STEPS)
+                .map(|at| (at > refuse || (untouched && at == refuse)).then_some(at))
+                .collect();
+            assert_eq!(names(&refused.remaining), expected_remaining, "at {refuse}");
+        }
     }
 }
 
@@ -155,6 +172,7 @@ fn a_preparation_no_step_refuses_makes_every_part() {
     let ended = RefCell::new(Vec::new());
     let mut steps = TestSteps {
         refuse: STEPS,
+        untouched: false,
         taken: 0,
         ended: &ended,
     };

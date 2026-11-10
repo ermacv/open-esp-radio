@@ -33,18 +33,38 @@ pub trait Steps {
     type SharedIn;
     type Shared;
     /// Bind the receive path.
-    fn bind(&mut self, input: Self::RxIn) -> Result<Self::Rx, Self::Error>;
+    fn bind(&mut self, input: Self::RxIn) -> StepResult<Self::Rx, Self::Error, Self::RxIn>;
     /// Take the device's place.
-    fn device(&mut self, input: Self::DeviceIn) -> Result<Self::Device, Self::Error>;
+    fn device(
+        &mut self,
+        input: Self::DeviceIn,
+    ) -> StepResult<Self::Device, Self::Error, Self::DeviceIn>;
     /// Pin one transmit descriptor into its slot.
-    fn slot(&mut self, input: Self::SlotIn) -> Result<Self::Slot, Self::Error>;
+    fn slot(&mut self, input: Self::SlotIn) -> StepResult<Self::Slot, Self::Error, Self::SlotIn>;
     /// Make one aggregate chain.
-    fn chain(&mut self, input: Self::ChainIn) -> Result<Self::Chain, Self::Error>;
+    fn chain(
+        &mut self,
+        input: Self::ChainIn,
+    ) -> StepResult<Self::Chain, Self::Error, Self::ChainIn>;
     /// Take the lent units' notifies.
-    fn lent(&mut self, input: Self::LentIn) -> Result<Self::Lent, Self::Error>;
+    fn lent(&mut self, input: Self::LentIn) -> StepResult<Self::Lent, Self::Error, Self::LentIn>;
     /// Take the shared storage's place.
-    fn shared(&mut self, input: Self::SharedIn) -> Result<Self::Shared, Self::Error>;
+    fn shared(
+        &mut self,
+        input: Self::SharedIn,
+    ) -> StepResult<Self::Shared, Self::Error, Self::SharedIn>;
 }
+
+/// Why one step refused: its cause, and its input when the step took
+/// nothing of it (a step that consumed part of it per its primitive's
+/// contract returns `None`).
+pub struct StepRefused<E, I> {
+    pub cause: E,
+    pub input: Option<I>,
+}
+
+/// What one step gives: its part, or its refusal.
+pub type StepResult<O, E, I> = Result<O, StepRefused<E, I>>;
 
 /// The step a preparation refused at.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -123,8 +143,8 @@ pub type RemainingOf<S> = Stage<
 >;
 
 /// A refused preparation: why, at which step, the parts the steps before it
-/// reached and the inputs no step took. The refused step's own input
-/// followed its contract.
+/// reached and the inputs no step took, the refused step's own among them
+/// when it took nothing of it.
 #[must_use = "a refused preparation returns the parts it reached and the inputs it did not take"]
 pub struct PreparationRefused<S: Steps> {
     pub cause: S::Error,
@@ -160,65 +180,67 @@ pub(crate) fn prepare<S: Steps>(
     // Run one step; on its refusal, the parts named reached and the inputs
     // named remaining go out.
     macro_rules! step {
-        ($call:expr, $step:expr;
+        ($call:expr, $step:expr; back $b:ident $([$bi:literal])?;
          reached [$($r:ident $([$ri:literal])? => $rv:expr),*];
          remaining [$($m:ident $([$mi:literal])? => $mv:expr),*]) => {
             match $call {
                 Ok(part) => part,
-                Err(cause) => {
+                Err(StepRefused { cause, input }) => {
                     #[allow(unused_mut, reason = "a step with nothing before it reaches nothing")]
                     let mut reached = ReachedOf::<S>::none();
                     $( reached.$r $([$ri])? = Some($rv); )*
                     #[allow(unused_mut, reason = "the last step leaves no input")]
                     let mut remaining = RemainingOf::<S>::none();
                     $( remaining.$m $([$mi])? = Some($mv); )*
+                    // The refused step's input, when it took nothing of it.
+                    remaining.$b $([$bi])? = input;
                     return Err(PreparationRefused { cause, step: $step, reached, remaining });
                 }
             }
         };
     }
-    let rx = step!(steps.bind(rx), Step::Bind;
+    let rx = step!(steps.bind(rx), Step::Bind; back rx;
         reached [];
         remaining [device => device, slots[0] => s0, slots[1] => s1, slots[2] => s2,
             slots[3] => s3, slots[4] => s4, chains[0] => c0, chains[1] => c1,
             lent => lent, shared => shared]);
-    let device = step!(steps.device(device), Step::Device;
+    let device = step!(steps.device(device), Step::Device; back device;
         reached [rx => rx];
         remaining [slots[0] => s0, slots[1] => s1, slots[2] => s2, slots[3] => s3,
             slots[4] => s4, chains[0] => c0, chains[1] => c1, lent => lent, shared => shared]);
-    let p0 = step!(steps.slot(s0), Step::Slot(0);
+    let p0 = step!(steps.slot(s0), Step::Slot(0); back slots[0];
         reached [rx => rx, device => device];
         remaining [slots[1] => s1, slots[2] => s2, slots[3] => s3, slots[4] => s4,
             chains[0] => c0, chains[1] => c1, lent => lent, shared => shared]);
-    let p1 = step!(steps.slot(s1), Step::Slot(1);
+    let p1 = step!(steps.slot(s1), Step::Slot(1); back slots[1];
         reached [rx => rx, device => device, slots[0] => p0];
         remaining [slots[2] => s2, slots[3] => s3, slots[4] => s4,
             chains[0] => c0, chains[1] => c1, lent => lent, shared => shared]);
-    let p2 = step!(steps.slot(s2), Step::Slot(2);
+    let p2 = step!(steps.slot(s2), Step::Slot(2); back slots[2];
         reached [rx => rx, device => device, slots[0] => p0, slots[1] => p1];
         remaining [slots[3] => s3, slots[4] => s4,
             chains[0] => c0, chains[1] => c1, lent => lent, shared => shared]);
-    let p3 = step!(steps.slot(s3), Step::Slot(3);
+    let p3 = step!(steps.slot(s3), Step::Slot(3); back slots[3];
         reached [rx => rx, device => device, slots[0] => p0, slots[1] => p1, slots[2] => p2];
         remaining [slots[4] => s4, chains[0] => c0, chains[1] => c1, lent => lent,
             shared => shared]);
-    let p4 = step!(steps.slot(s4), Step::Slot(4);
+    let p4 = step!(steps.slot(s4), Step::Slot(4); back slots[4];
         reached [rx => rx, device => device, slots[0] => p0, slots[1] => p1, slots[2] => p2,
             slots[3] => p3];
         remaining [chains[0] => c0, chains[1] => c1, lent => lent, shared => shared]);
-    let k0 = step!(steps.chain(c0), Step::Chain(0);
+    let k0 = step!(steps.chain(c0), Step::Chain(0); back chains[0];
         reached [rx => rx, device => device, slots[0] => p0, slots[1] => p1, slots[2] => p2,
             slots[3] => p3, slots[4] => p4];
         remaining [chains[1] => c1, lent => lent, shared => shared]);
-    let k1 = step!(steps.chain(c1), Step::Chain(1);
+    let k1 = step!(steps.chain(c1), Step::Chain(1); back chains[1];
         reached [rx => rx, device => device, slots[0] => p0, slots[1] => p1, slots[2] => p2,
             slots[3] => p3, slots[4] => p4, chains[0] => k0];
         remaining [lent => lent, shared => shared]);
-    let lent = step!(steps.lent(lent), Step::Lent;
+    let lent = step!(steps.lent(lent), Step::Lent; back lent;
         reached [rx => rx, device => device, slots[0] => p0, slots[1] => p1, slots[2] => p2,
             slots[3] => p3, slots[4] => p4, chains[0] => k0, chains[1] => k1];
         remaining [shared => shared]);
-    let shared = step!(steps.shared(shared), Step::Shared;
+    let shared = step!(steps.shared(shared), Step::Shared; back shared;
         reached [rx => rx, device => device, slots[0] => p0, slots[1] => p1, slots[2] => p2,
             slots[3] => p3, slots[4] => p4, chains[0] => k0, chains[1] => k1, lent => lent];
         remaining []);

@@ -498,6 +498,14 @@ fn a_settled_release_keeps_the_end_its_news_told() {
     let refused = LifecycleFailure::StartRefused(StartRefused::Deadline);
     assert_eq!(release_settled(held(), Some(refused)).2, told);
     assert_eq!(release_settled::<u8, u8, (), TestId>(None, None).2, None);
+    // A news out of order confirms no end of the actor's task.
+    for news in [
+        TestNews::Installed(1, 1, installation(1)),
+        TestNews::Reinstall(ReinstallCause::Epochs),
+        TestNews::Abandoned,
+    ] {
+        assert_eq!(release_settled(Some(news), None).2, None);
+    }
 }
 
 /// The lifecycle's half leaves its place before the place is reused: moved

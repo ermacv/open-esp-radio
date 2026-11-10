@@ -253,7 +253,10 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify>
     /// Close the reception: from the mark on, no publication starts, and
     /// this ends once a publication already in progress ended (its end
     /// wakes the wait). Then what the queue holds is all it ever will hold,
-    /// and every later send or permit refuses its value whole.
+    /// and every later send or permit refuses its value whole. A producer
+    /// waiting for room ([`ClosingSpscSender::ready`]) is not woken by the
+    /// close: it hears of it once a receive frees a cell. Close against a
+    /// producer that stopped.
     pub async fn close(&mut self) {
         self.state.fetch_or(CLOSED, Ordering::SeqCst);
         let (state, consumer) = (self.state, self.receiver.consumer);
