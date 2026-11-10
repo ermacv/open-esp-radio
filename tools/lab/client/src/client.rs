@@ -799,4 +799,55 @@ mod tests {
         assert!(matches!(queue.next(), Event::Lost(1)));
         assert!(matches!(queue.next(), Event::Finished(Err(_))));
     }
+
+    /// A service of protocol 2, the one before `Reply::Ready`: it refuses
+    /// another version at the hello, as that service does, and records
+    /// every frame the client sent until the connection ended.
+    fn old_service(stream: UnixStream) -> std::thread::JoinHandle<Vec<Request>> {
+        std::thread::spawn(move || {
+            let mut stream = stream;
+            let mut received = Vec::new();
+            while let Ok(Some(Frame::Message(json))) = Frame::read(&mut stream) {
+                let request: Request = serde_json::from_slice(&json).unwrap();
+                if let Request::Hello { protocol, .. } = &request {
+                    let reply = if *protocol == 2 {
+                        Reply::Welcome { protocol: 2 }
+                    } else {
+                        Reply::Refused {
+                            reason: format!(
+                                "this client speaks protocol {protocol}, the installed service \
+                                 2: update the client or reinstall the service (`cargo stand \
+                                 install`)"
+                            ),
+                        }
+                    };
+                    let refused = matches!(reply, Reply::Refused { .. });
+                    Frame::message(&reply).unwrap().write(&mut stream).unwrap();
+                    received.push(request);
+                    if refused {
+                        break;
+                    }
+                } else {
+                    received.push(request);
+                }
+            }
+            received
+        })
+    }
+
+    #[test]
+    fn this_client_is_refused_by_a_service_of_protocol_2_before_any_operation() {
+        assert_eq!(PROTOCOL, 3);
+        let (client_end, service_end) = UnixStream::pair().unwrap();
+        let service = old_service(service_end);
+        let error = Client::connect(client_end, "beacon-stamp").err().unwrap();
+        assert!(
+            error.contains("protocol 3") && error.contains("cargo stand install"),
+            "{error}"
+        );
+        // The hello was the only request: no lease, no operation.
+        let received = service.join().unwrap();
+        assert_eq!(received.len(), 1);
+        assert!(matches!(received[0], Request::Hello { protocol: 3, .. }));
+    }
 }

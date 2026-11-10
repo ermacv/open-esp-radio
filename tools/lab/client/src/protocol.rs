@@ -25,8 +25,10 @@ use serde::{Deserialize, Serialize};
 
 pub mod station_link;
 
-/// The protocol version; another one is refused.
-pub const PROTOCOL: u32 = 2;
+/// The protocol version; another one is refused at the hello, before any
+/// operation. Version 3 adds [`Reply::Ready`], which a version 2 client
+/// cannot parse and a version 2 service never sends.
+pub const PROTOCOL: u32 = 3;
 /// The token a command runs under: its client joins the lease the token
 /// belongs to, for no more than the token allows, instead of queueing.
 pub const LEASE_ENV: &str = "OER_LAB_LEASE";
