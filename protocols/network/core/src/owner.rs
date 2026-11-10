@@ -200,7 +200,11 @@ impl<
         if self.broken {
             return Err(Unsent::PortContract);
         }
-        let frame = self.core.frame(now, &grant).ok_or(Unsent::Stale)?;
+        // Matched in place: the frame is built where it is written from,
+        // not moved into a result first.
+        let Some(frame) = self.core.frame(now, &grant) else {
+            return Err(Unsent::Stale);
+        };
         let mut filled = Filled::Never;
         let published = self.port.publish(frame.length(), |slot| {
             let result = frame.write(slot, produce);
