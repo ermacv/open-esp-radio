@@ -26,6 +26,8 @@ heapless = "0.9.3"
 serde_json = "1.0"
 
 [dev-dependencies]
+oer-portable-time = { path = "../../../portable/time" }
+oer-portable-time-virtual = { path = "../../../portable/time-virtual" }
 tempfile = "=3.27.0"
 
 [lints]
