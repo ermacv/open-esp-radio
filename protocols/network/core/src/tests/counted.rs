@@ -112,7 +112,7 @@ fn a_readiness_walk_counts_every_running_place_it_visits() {
         let counter = Counter::on();
         let ready: Vec<_> = stack
             .demands(at(1), &counter)
-            .map(|demand| demand.ready.class)
+            .map(|demand| demand.ready().class)
             .collect();
         assert_eq!(
             ready,
@@ -127,7 +127,7 @@ fn a_readiness_walk_counts_every_running_place_it_visits() {
         // A walk that stops early visits only what it reached.
         let _first_data = stack
             .demands(at(1), &counter)
-            .find(|demand| demand.ready.class == Class::Data);
+            .find(|demand| demand.ready().class == Class::Data);
         assert_eq!(
             counter.walked.get(),
             14,
@@ -182,7 +182,7 @@ fn script<B: core::fmt::Debug>(counter: &Counter, stack: &mut Wide<B>) -> Vec<st
     for _ in 0..4 {
         let demands: Vec<_> = stack
             .demands(at(1), counter)
-            .map(|demand| demand.ready)
+            .map(|demand| *demand.ready())
             .collect();
         seen.push(std::format!("{demands:?}"));
         let demand = stack.demands(at(1), counter).next().unwrap();

@@ -9,7 +9,7 @@ use super::*;
 fn listed<B>(stack: &Stack<B>, now: Instant) -> Vec<Class> {
     stack
         .demands(now, &())
-        .map(|demand| demand.ready.class)
+        .map(|demand| demand.ready().class)
         .collect()
 }
 
