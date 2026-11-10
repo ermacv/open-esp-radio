@@ -603,6 +603,35 @@ mod tests {
     }
 
     #[test]
+    fn the_routers_own_mldv2_report_in_a_radiotap_capture_refuses_it() {
+        // Lease #1317's first record, as captured: an Ethernet-framed MLDv2
+        // report (ff02::16, ICMPv6 143) the router's kernel sent on its
+        // monitor, under link type 127. It is no radiotap header, so the
+        // capture is refused, complete or live, never read around it.
+        const RECORD: &str = "ffffffffffffbefce7aebbd386dd600000000024000100000000000000000000000000000000ff0200000000000000000000000000163a000502000001008f006e8a0000000104000000ff020000000000000000000000000002";
+        let packet: Vec<u8> = (0..RECORD.len())
+            .step_by(2)
+            .map(|at| u8::from_str_radix(&RECORD[at..at + 2], 16).unwrap())
+            .collect();
+        assert_eq!(packet.len(), 90);
+        let mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
+        let (whole, live) = both_ways(packet.clone());
+        assert!(
+            whole
+                .unwrap_err()
+                .contains("record 1: radiotap version is not 0")
+        );
+        assert!(live.unwrap_err().contains("radiotap version is not 0"));
+        // Behind valid frames too.
+        let file = synthetic::file(&[synthetic::record(3, &mpdu), packet]);
+        assert!(
+            parse(&file)
+                .unwrap_err()
+                .contains("record 2: radiotap version is not 0")
+        );
+    }
+
+    #[test]
     fn a_field_the_presence_words_do_not_declare_is_absent() {
         // TSFT and Flags only: no Rate and no MCS, accepted with no PHY.
         let mpdu = synthetic::mpdu(0x80, TA, 1, TAG);
