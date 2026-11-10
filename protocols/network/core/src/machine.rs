@@ -2436,7 +2436,11 @@ impl<
         let mut index = 0;
         let mut results = [const { [Kept::NONE; CREDITS] }; SOCKETS];
         let mut closes = [Kept::NONE; SOCKETS];
+        let mut generations = [0_u64; SOCKETS];
         for mut socket in sockets {
+            if let Some(slot) = generations.get_mut(index) {
+                *slot = socket.serial;
+            }
             while let Some(datagram) = socket.received.pop_front() {
                 pool.give(datagram.block);
                 received_dropped = received_dropped.saturating_add(1);
@@ -2472,6 +2476,7 @@ impl<
             RetiredResults {
                 results,
                 closes,
+                generations,
                 received_dropped,
                 brand,
             },
@@ -2512,6 +2517,9 @@ impl<T> Kept<T> {
 pub struct RetiredResults<B, const SOCKETS: usize, const CREDITS: usize, T = ()> {
     results: [[Kept<T>; CREDITS]; SOCKETS],
     closes: [Kept<T>; SOCKETS],
+    /// Each slot's socket as the core retired it: a socket's results are
+    /// its own only, not those of another socket in the same slot.
+    generations: [u64; SOCKETS],
     /// Received datagrams nobody read, which went back to the pool.
     pub received_dropped: u32,
     brand: Tag<B>,
@@ -2521,13 +2529,18 @@ impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
     RetiredResults<B, SOCKETS, CREDITS, T>
 {
     /// Every declared work of `socket`'s with a result, in its places'
-    /// order, each once: its work, its producer tag and its outcome.
+    /// order, each once: its work, its producer tag and its outcome. A
+    /// socket this core did not hold in its slot at retirement, an earlier
+    /// core's among them, has none.
     pub fn take_declared(
         &mut self,
         socket: &SocketId<B>,
     ) -> impl Iterator<Item = (WorkId, T, Outcome)> + '_ {
+        let index = usize::from(socket.index);
+        let own = self.generations.get(index) == Some(&socket.serial);
         self.results
-            .get_mut(usize::from(socket.index))
+            .get_mut(index)
+            .filter(|_| own)
             .into_iter()
             .flatten()
             .zip(0_u8..)

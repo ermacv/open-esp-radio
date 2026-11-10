@@ -552,6 +552,39 @@ fn a_retired_core_keeps_only_the_works_no_publication_ended() {
     assert_eq!(results, [(open, 41, Outcome::Retired)]);
 }
 
+/// A retired core's results are its own sockets': a socket an earlier core
+/// held in the same slot takes none of them, and the socket that holds the
+/// slot takes its own, once.
+#[test]
+fn a_retired_socket_takes_no_result_of_a_later_socket_in_its_slot() {
+    brand!(Net);
+    let (pool, brand) = claimed::<Net>();
+    let mut first: Stack<Net> =
+        NetworkOwner::new(brand, interface(OUR_IP, 24, None), pool, Port::default());
+    let old = first.open_local(6000, best_effort()).unwrap();
+    let _old_work = first.declare(at(0), &old, broadcast(), 8, 50).unwrap();
+    let mut retired = first.retire();
+    assert_eq!(retired.results.take_declared(&old).count(), 1);
+    let mut next: Stack<Net> = NetworkOwner::new(
+        retired.brand,
+        interface(OUR_IP, 24, None),
+        retired.pool,
+        retired.port,
+    );
+    let socket = next.open_local(6000, best_effort()).unwrap();
+    assert_eq!(socket.flow(), old.flow(), "the same slot");
+    let work = next.declare(at(0), &socket, broadcast(), 8, 51).unwrap();
+    let mut retired = next.retire();
+    assert_eq!(
+        retired.results.take_declared(&old).count(),
+        0,
+        "an earlier socket of the slot takes nothing"
+    );
+    let results: Vec<_> = retired.results.take_declared(&socket).collect();
+    assert_eq!(results, [(work, 51, Outcome::Retired)], "its own, kept");
+    assert_eq!(retired.results.take_declared(&socket).count(), 0, "once");
+}
+
 #[test]
 fn two_open_works_never_share_an_identity() {
     world!(|stack| {
