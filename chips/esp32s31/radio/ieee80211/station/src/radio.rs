@@ -992,12 +992,14 @@ pub(crate) enum Acquired<W: Binding> {
     /// taken.
     Boot(Boot<W>),
     /// The port's storage did not take its parts before the radio started:
-    /// the radio's partition and cell, its interrupt binding and bell.
+    /// the radio's partition and cell, its interrupt binding and bell, and
+    /// the driver state's place.
     Unstarted {
         cell: MembershipCell<Wifi>,
         wifi: WifiPartition,
         bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
         bell: irq::Bell<W::Wifi, W::DriverEntry>,
+        driver: &'static mut PortDriverOf<W>,
     },
     /// The radio's join or track was never answered: its cell and
     /// partition went with the request; the radio system keeps its seat.
@@ -1038,12 +1040,14 @@ pub enum BootLeft<W: Binding> {
     /// The boot, whole: nothing was taken.
     Boot(Boot<W>),
     /// The port's storage did not take its parts before the radio started:
-    /// the radio's partition and cell, its interrupt binding and bell.
+    /// the radio's partition and cell, its interrupt binding and bell, and
+    /// the driver state's place.
     Unstarted {
         cell: MembershipCell<Wifi>,
         wifi: WifiPartition,
         bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
         bell: irq::Bell<W::Wifi, W::DriverEntry>,
+        driver: &'static mut PortDriverOf<W>,
     },
     /// The radio's join or track was never answered, or its join refused:
     /// the prepared parts; the membership cell and partition went with the
@@ -1088,6 +1092,7 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
                 wifi,
                 bound,
                 bell,
+                driver,
             } => (
                 Ok(()),
                 BootLeft::Unstarted {
@@ -1095,6 +1100,7 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
                     wifi,
                     bound,
                     bell,
+                    driver,
                 },
             ),
             Self::Unanswered(prepared) => (
@@ -1165,8 +1171,8 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
 /// The port's parts an install prepared before the radio started: the
 /// interrupt binding and bell, the bound receive path, never started, the
 /// device's and the shared storage's places, the transmit descriptors
-/// (the first one unless the transmitter holds it) and the lent units'
-/// notifies.
+/// (the first one unless the transmitter holds it), the lent units'
+/// notifies and the driver state's place.
 #[must_use = "the prepared parts hold the interrupt binding and the DMA places"]
 pub struct Prepared<W: Binding> {
     device: &'static mut core::mem::MaybeUninit<Device<W>>,
@@ -1174,6 +1180,7 @@ pub struct Prepared<W: Binding> {
     descriptors: TxDescriptors<TX>,
     lent: Lent<W>,
     shared: &'static mut core::mem::MaybeUninit<PortSharedStorage<TX, Lent<W>>>,
+    driver: &'static mut PortDriverOf<W>,
     bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
     bell: irq::Bell<W::Wifi, W::DriverEntry>,
     rx: oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxParts<
@@ -1336,6 +1343,7 @@ pub(crate) async fn install<W: Binding>(
                     wifi,
                     bound,
                     bell,
+                    driver,
                 },
             });
         }
@@ -1360,6 +1368,7 @@ pub(crate) async fn install<W: Binding>(
                     },
                     lent,
                     shared,
+                    driver,
                 }),
             });
         }
@@ -1384,6 +1393,7 @@ pub(crate) async fn install<W: Binding>(
                         },
                         lent,
                         shared,
+                        driver,
                     },
                 },
             });
@@ -1418,6 +1428,7 @@ pub(crate) async fn install<W: Binding>(
                         },
                         lent,
                         shared,
+                        driver,
                     },
                 },
             });

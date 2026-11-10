@@ -869,3 +869,49 @@ fn a_completed_retire_returns_the_owners_still_in_transit() {
     assert_eq!(ends.all(), [1, 1, 0, 0], "each once");
     assert!(left.try_receive().is_none());
 }
+
+/// More installations' news than the actor's task posts before its end
+/// (two) break the bound: once every place is full the wait ends on that
+/// named end, reads nothing more, and every kept news comes back in order.
+#[test]
+fn installation_news_past_the_bound_end_the_wait_named() {
+    use oer_portable_memory::WakingSpscQueue;
+    let mut abandon_place = WakingSpscQueue::<LifecycleFailure, 1>::new();
+    let (mut abandon_end, _abandoned) = abandon_place.split();
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mailbox, news) = mailbox_place.split();
+    let half = UnfinishedLifecycleOf::new((), (), installation(0), news);
+    let mut wait = pin!(half.abandoned(LifecycleFailure::Mailbox, &mut abandon_end));
+    let mut ended = None;
+    for next in 0..INSTALLED as u8 {
+        assert!(
+            mailbox
+                .try_send(News::Installed(next, next, installation(1)))
+                .is_ok()
+        );
+        match poll_once(wait.as_mut()) {
+            Poll::Ready(half) => {
+                assert_eq!(
+                    usize::from(next) + 1,
+                    INSTALLED,
+                    "only once every place is full"
+                );
+                ended = Some(half);
+            }
+            Poll::Pending => assert!(usize::from(next) + 1 < INSTALLED),
+        }
+    }
+    let Some(mut half) = ended else {
+        panic!("the broken bound ends the wait");
+    };
+    assert!(mailbox.try_send(News::Abandoned).is_ok());
+    assert_eq!(
+        half.late_end(),
+        Some(LateEnd::Unbounded),
+        "nothing more is read"
+    );
+    for next in 0..INSTALLED as u8 {
+        assert!(matches!(half.take_installed(), Some((n, _, _)) if n == next));
+    }
+    assert!(half.take_installed().is_none());
+}

@@ -301,6 +301,11 @@ pub enum LateEnd<E> {
     /// Its run stopped on the lifecycle's abandon: its half is the
     /// datapath's unfinished installation.
     Abandoned,
+    /// More installations' news came than the actor's task posts before
+    /// its end ([`INSTALLED`]): a broken bound, named. Nothing confirms
+    /// that its run stopped; the news past the bound stays in the mailbox,
+    /// unread, with its owners.
+    Unbounded,
 }
 
 /// The station lifecycle's half of an installation that did not retire,
@@ -397,9 +402,9 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// lifecycle's ends of the queues go out, so no producer runs while
     /// they are collected.
     ///
-    /// With every place for installations' news full ([`INSTALLED`]), a
-    /// further news would stay in the mailbox, unread, and the wait would
-    /// go on for good rather than end unconfirmed.
+    /// With every place for installations' news full ([`INSTALLED`]) the
+    /// bound broke: the wait ends on that named end
+    /// ([`LateEnd::Unbounded`]), the next news left in the mailbox.
     pub(crate) async fn abandoned(
         mut self,
         failure: LifecycleFailure,
@@ -410,7 +415,7 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
             match self.read_one() {
                 Read::Read => {}
                 Read::Empty => self.mailbox.ready().await,
-                Read::Full => core::future::pending::<()>().await,
+                Read::Full => self.late = Some(LateEnd::Unbounded),
             }
         }
         self

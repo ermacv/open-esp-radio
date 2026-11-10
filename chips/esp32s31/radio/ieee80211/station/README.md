@@ -211,7 +211,8 @@ actor's task (`News::Abandoned`, or the fault, release or refused
 reinstall it ended on first); a news of an installation before it is no
 such confirmation: its commands and tokens are kept in the half and the
 wait goes on (at most two come before the end, as the actor's run is not
-polled once the abandon is queued; `INSTALLED` places keep them). Only then do its ends go out, so no producer runs while either
+polled once the abandon is queued; `INSTALLED` places keep them, and a news past
+that bound ends the wait named, `LateEnd::Unbounded`). Only then do its ends go out, so no producer runs while either
 half collects its queues, and each owner in transit is in its queue once,
 in order. The half's operations read its queues (`queues`), its events'
 sink (`events`), the retired station (`station`), its places (`places`)
