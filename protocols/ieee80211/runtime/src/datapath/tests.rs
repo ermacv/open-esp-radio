@@ -679,6 +679,30 @@ fn received_data_reaches_the_network_without_the_lifecycle() {
     });
 }
 
+/// A data frame too short for its MAC header has no decoded header: the
+/// link takes none of it, the network gets nothing, and the frame goes to
+/// the station whole, once.
+#[test]
+fn a_frame_whose_header_does_not_decode_goes_to_the_station_whole() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        let whole = data_from_ap(1, &[9, 9, 9, 9]);
+        let short = &whole[..20];
+        bench.air.receive(short, meta());
+        bench.settle();
+        assert!(
+            bench.receive.try_receive().is_none(),
+            "nothing for the network"
+        );
+        let Some(FromActor::Received { frame, .. }) = bench.next() else {
+            panic!("the station's frame");
+        };
+        assert_eq!(frame.bytes(), short);
+        assert!(bench.next().is_none(), "once");
+    });
+}
+
 #[test]
 fn a_turn_s_received_data_wakes_a_waiting_network() {
     struct Woken(AtomicUsize);
