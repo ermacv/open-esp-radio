@@ -1056,13 +1056,6 @@ impl Sending<'_> {
     /// As [`Self::try_send`], once the producer has room; whether it took it.
     /// The network's end ends the wait too: the end flag wakes it.
     pub(crate) async fn send(&mut self, size: usize, peer: Peer, header: Header) -> bool {
-        // With room, the datagram goes at once: a wait is set up, and its
-        // wakers registered, only when there is none.
-        match self.try_send(size, peer, header) {
-            Attempt::Taken => return true,
-            Attempt::Lost => return false,
-            Attempt::NoRoom => {}
-        }
         let end = self.end;
         let room = poll_fn(|cx| {
             self.source.room.register(cx.waker());
