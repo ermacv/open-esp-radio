@@ -465,12 +465,20 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
                 funded = true;
                 continue;
             }
-            match least
-                .checked_sub(*balance)
-                .and_then(|needed| needed.checked_sub(1))
-                .and_then(|needed| needed.checked_div(quantum))
-                .and_then(|rounds| rounds.checked_add(1))
-            {
+            // The rounds that fund it: one when a quantum covers what it
+            // lacks, as it does for every frame after a grant took its whole
+            // balance; only a larger lack divides.
+            let required = least.checked_sub(*balance).and_then(|needed| {
+                if needed <= quantum {
+                    Some(1)
+                } else {
+                    needed
+                        .checked_sub(1)
+                        .and_then(|needed| needed.checked_div(quantum))
+                        .and_then(|rounds| rounds.checked_add(1))
+                }
+            });
+            match required {
                 Some(required) => {
                     rounds = Some(rounds.map_or(required, |old| old.min(required)));
                 }
