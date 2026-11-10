@@ -547,8 +547,8 @@ const DIAGNOSTICS_NONE: oer::observe::diagnostics::NetworkDiagnostics = {
     use oer::observe::diagnostics::*;
     NetworkDiagnostics {
         on: false,
-        switches: 0,
-        resets: 0,
+        marker: 0,
+        settled: false,
         counts: Counts {
             turns: 0,
             collections: 0,

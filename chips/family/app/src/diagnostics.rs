@@ -3,11 +3,15 @@
 //! a reader had them on, switched on, off and reset at runtime.
 //!
 //! The switch's side ([`DiagnosticsCounter::switch`],
-//! [`DiagnosticsCounter::reset`]) only writes a control word. The network's
-//! task is the counts' one writer: at each turn, and at each pass of its wait
-//! that takes returns, it asks [`DiagnosticsCounter::check`], one load of the
-//! control word and one of the reset it last applied; it zeroes the counts
-//! there when a reset was asked since, and counts only while on. So a switch
+//! [`DiagnosticsCounter::reset`]) only writes one control word, which holds
+//! the state and the count of its changes together. The network's task is
+//! the counts' one writer: at each turn, and at each pass of its wait that
+//! takes returns, it asks [`DiagnosticsCounter::check`], one load of the
+//! control word and one of the word it last applied; it applies a changed
+//! word, zeroing the counts when a reset was asked since, and counts only
+//! while on. A reading is settled only when the writer had applied the word
+//! it read, and a window is whole only between two settled readings of one
+//! word. So a switch
 //! or a reset takes effect at the network's next turn. A reader takes each
 //! word on its own, on the network's executor between its polls, where each
 //! word, a 64-bit sum's halves too, is whole. No count reads a clock; the
@@ -134,38 +138,55 @@ impl Counts {
 pub struct NetworkDiagnostics {
     /// Whether they were asked to be on.
     pub on: bool,
-    /// How often they were switched, on or off, since boot.
-    pub switches: u32,
-    /// The resets the writer has applied since boot: the counts are what
-    /// it counted since the last of them.
-    pub resets: u32,
+    /// The control word at the reading: whether on, and how many switches
+    /// and resets were asked before it ([`Self::switches`],
+    /// [`Self::resets`]). Every change moves it.
+    pub marker: u32,
+    /// Whether the writer had applied that control word: no switch or reset
+    /// was waiting for its next turn.
+    pub settled: bool,
+    /// What the writer counted since the last reset it applied.
     pub counts: Counts,
 }
 
 impl NetworkDiagnostics {
+    /// Switches asked since boot, modulo 2^15.
+    #[must_use]
+    pub const fn switches(&self) -> u32 {
+        (self.marker & SWITCHES) >> 1
+    }
+
+    /// Resets asked since boot, modulo 2^16.
+    #[must_use]
+    pub const fn resets(&self) -> u32 {
+        self.marker >> 16
+    }
+
     /// What was counted from `start` to this reading, if it stands for a
-    /// whole window: on at both readings, neither switched nor reset
-    /// between them. `None` otherwise: such a difference counts no window.
+    /// whole window: on and settled at both readings, with the same control
+    /// word, so no switch or reset was asked between them and none was
+    /// waiting for the writer. `None` otherwise: such a difference counts no
+    /// window. A window holds fewer than 2^15 switches.
     #[must_use]
     pub fn window(&self, start: &Self) -> Option<Counts> {
-        (self.on && start.on && self.switches == start.switches && self.resets == start.resets)
+        (self.on && self.settled && start.on && start.settled && self.marker == start.marker)
             .then(|| self.counts.since(&start.counts))
     }
 }
 
-/// The control word's bit that says on; the bits above count the resets
-/// asked for.
+/// The control word: bit 0 says on, bits 1 to 15 count the switches that
+/// changed it, bits 16 to 31 the resets asked for. One word, so a reading
+/// takes the state and its change count together.
 const ON: u32 = 1;
-const RESET: u32 = 2;
+const SWITCH: u32 = 1 << 1;
+const SWITCHES: u32 = 0x7fff << 1;
+const RESET: u32 = 1 << 16;
 
 /// The diagnostics' counts, published word by word, and their switch.
 pub struct DiagnosticsCounter {
-    /// [`ON`], and the resets asked for above it; the switch's side writes
-    /// it.
+    /// The control word; the switch's side writes it.
     control: AtomicU32,
-    /// Switches that changed it.
-    switches: AtomicU32,
-    /// The reset count the writer last applied.
+    /// The control word the writer last applied.
     applied: AtomicU32,
     counts: [AtomicU32; COUNTS],
     /// Each stage's sum as its low and its high half.
@@ -176,7 +197,6 @@ impl DiagnosticsCounter {
     pub const fn new() -> Self {
         Self {
             control: AtomicU32::new(0),
-            switches: AtomicU32::new(0),
             applied: AtomicU32::new(0),
             counts: [const { AtomicU32::new(0) }; COUNTS],
             halves: [const { AtomicU32::new(0) }; 2 * STAGES],
@@ -184,18 +204,22 @@ impl DiagnosticsCounter {
     }
 
     /// Ask them on or off, from the network's next turn; whether they were
-    /// asked on before.
+    /// asked on before. A switch that changes the state moves the switch
+    /// count in the same word.
     pub fn switch(&self, on: bool) -> bool {
-        let was = if on {
-            self.control.fetch_or(ON, Ordering::AcqRel)
-        } else {
-            self.control.fetch_and(!ON, Ordering::AcqRel)
+        let changed = |control: u32| {
+            let was_on = control & ON != 0;
+            (was_on != on).then(|| {
+                let switches = control.wrapping_add(SWITCH) & SWITCHES;
+                (control & !(SWITCHES | ON)) | switches | u32::from(on)
+            })
         };
-        let was_on = was & ON != 0;
-        if was_on != on {
-            self.switches.fetch_add(1, Ordering::AcqRel);
+        match self
+            .control
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, changed)
+        {
+            Ok(was) | Err(was) => was & ON != 0,
         }
-        was_on
     }
 
     /// Ask the counts zeroed, at the network's next turn, on or off.
@@ -204,15 +228,18 @@ impl DiagnosticsCounter {
     }
 
     /// The writer's check, at each turn and each pass that takes returns:
-    /// apply a reset asked since the last, and say whether to count.
+    /// apply the control word, zeroing the counts if a reset was asked since
+    /// the last, and say whether to count.
     pub fn check(&self) -> bool {
         let control = self.control.load(Ordering::Acquire);
-        let asked = control >> 1;
-        if asked != self.applied.load(Ordering::Relaxed) {
-            for count in self.counts.iter().chain(self.halves.iter()) {
-                count.store(0, Ordering::Relaxed);
+        let applied = self.applied.load(Ordering::Relaxed);
+        if control != applied {
+            if control & !(SWITCHES | ON) != applied & !(SWITCHES | ON) {
+                for count in self.counts.iter().chain(self.halves.iter()) {
+                    count.store(0, Ordering::Relaxed);
+                }
             }
-            self.applied.store(asked, Ordering::Release);
+            self.applied.store(control, Ordering::Release);
         }
         control & ON != 0
     }
@@ -250,10 +277,15 @@ impl DiagnosticsCounter {
             u64::from(load(low.and_then(|low| self.halves.get(low))))
                 | (u64::from(load(high.and_then(|high| self.halves.get(high)))) << 32)
         };
+        // The control word on both sides of the applied one: a change
+        // between them leaves the reading unsettled.
+        let before = self.control.load(Ordering::Acquire);
+        let applied = self.applied.load(Ordering::Acquire);
+        let after = self.control.load(Ordering::Acquire);
         NetworkDiagnostics {
-            on: self.control.load(Ordering::Acquire) & ON != 0,
-            switches: self.switches.load(Ordering::Acquire),
-            resets: self.applied.load(Ordering::Acquire),
+            on: before & ON != 0,
+            marker: before,
+            settled: before == applied && applied == after,
             counts: Counts::from_words(
                 core::array::from_fn(|index| load(self.counts.get(index))),
                 core::array::from_fn(stage),

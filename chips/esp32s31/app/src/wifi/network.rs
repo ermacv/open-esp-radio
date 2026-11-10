@@ -226,12 +226,25 @@ type NetService<P, M> = Service<
     Port,
     <M as TransmitMode>::Egress,
     Producer<'static, Brand, P, CREDITS>,
-    NetworkDiagnosis,
+    Diagnosis,
 >;
 
+/// The service's switchable diagnostics: an observing image's (`observe`),
+/// off until it switches them on; in any other image `()`, which leaves no
+/// code.
+#[cfg(feature = "observe")]
+type Diagnosis = NetworkDiagnosis;
+#[cfg(not(feature = "observe"))]
+type Diagnosis = ();
+#[cfg(feature = "observe")]
+const DIAGNOSIS: Diagnosis = NetworkDiagnosis(());
+#[cfg(not(feature = "observe"))]
+const DIAGNOSIS: Diagnosis = ();
+
 /// The network core's switchable diagnostics (docs/architecture.md,
-/// "Switchable network-core diagnostics"), off until an observing image
-/// switches them on (`observe`); the network's task is their one writer.
+/// "Switchable network-core diagnostics"), off until the observing image
+/// switches them on; the network's task is their one writer.
+#[cfg(feature = "observe")]
 pub(crate) static DIAGNOSTICS: oer_chips_family_app::diagnostics::DiagnosticsCounter =
     oer_chips_family_app::diagnostics::DiagnosticsCounter::new();
 
@@ -239,9 +252,11 @@ pub(crate) static DIAGNOSTICS: oer_chips_family_app::diagnostics::DiagnosticsCou
 /// network hart's cycle counter, read only while they are on. Only this
 /// module makes one; its type is named by the service's, which the receive
 /// modes' sealed binds reach.
+#[cfg(feature = "observe")]
 #[doc(hidden)]
 pub struct NetworkDiagnosis(());
 
+#[cfg(feature = "observe")]
 impl oer_protocols_network_runtime::Diagnostics for NetworkDiagnosis {
     fn on(&mut self) -> bool {
         DIAGNOSTICS.check()
@@ -296,6 +311,7 @@ impl oer_protocols_network_runtime::Diagnostics for NetworkDiagnosis {
 }
 
 // The library counts the service's stages as the service names them.
+#[cfg(feature = "observe")]
 const _: () = {
     if oer_protocols_network_runtime::STAGES != oer_chips_family_app::diagnostics::STAGES {
         panic!("the diagnostics' stages are the service's");
@@ -779,7 +795,7 @@ impl<P: Produce + 'static, M: TransmitMode, R: ReceiveMode> Network<P, M, R> {
                 producer,
                 end,
             )
-            .with_diagnostics(NetworkDiagnosis(())),
+            .with_diagnostics(DIAGNOSIS),
         );
         running
             .bind_local(ports.sending, Dscp::default())

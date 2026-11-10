@@ -1460,6 +1460,49 @@ impl Offer {
 /// access point's view of the station is read before the run and after its
 /// drain. Returns the ping's echoes, empty without one.
 fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes, Failure> {
+    if !diagnostics::requested().map_err(Failure::Incomplete)? {
+        return measured_level(cx, path, offer, false);
+    }
+    let mut switch = LevelSwitch {
+        cx,
+        name: &offer.name,
+    };
+    diagnostics::around(&mut switch, |switch| {
+        measured_level(switch.cx, path, offer, true)
+    })
+}
+
+/// The diagnostics' switch of one level, over its context.
+struct LevelSwitch<'c, 'a> {
+    cx: &'c mut Cx<'a>,
+    name: &'c str,
+}
+
+impl diagnostics::Switch for LevelSwitch<'_, '_> {
+    fn switch(&mut self, on: bool) -> Result<(), Failure> {
+        // Through the context: after a request of unknown outcome it sends
+        // nothing more, and this fails.
+        let _was_on: oer_hil_services_load::Diagnosed =
+            self.cx.call(Diagnose { on, reset: false }, CALL)?;
+        Ok(())
+    }
+
+    fn record(&mut self, off: &Result<(), Failure>) {
+        self.cx.measure(
+            format!("{} diagnostics off", self.name),
+            diagnostics::switched_off(off),
+        );
+    }
+}
+
+/// [`level`]'s run and record; `diagnosing` when its diagnostics are on, to
+/// collect them after the window.
+fn measured_level(
+    cx: &mut Cx<'_>,
+    path: &Path,
+    offer: &Offer,
+    diagnosing: bool,
+) -> Result<traffic::Echoes, Failure> {
     let Path {
         device,
         ref station,
@@ -1467,7 +1510,6 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
     } = *path;
     let (mode, each_bps, probing) = (offer.mode, offer.each_bps, offer.probing);
     let profile = profile::requested()?;
-    let diagnosing = diagnostics::requested().map_err(Failure::Incomplete)?;
     let run = run_id();
     let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
         .map_err(|error| Failure::Incomplete(format!("the host socket: {error}")))?;
@@ -1477,16 +1519,6 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         .map(|local| local.port())
         .unwrap_or(0);
     let before = link::read(cx, station);
-    if diagnosing {
-        // From the image's next network turn, well before its window opens.
-        let _was_on: oer_hil_services_load::Diagnosed = cx.call(
-            Diagnose {
-                on: true,
-                reset: false,
-            },
-            CALL,
-        )?;
-    }
     let since = Instant::now();
     let transmit = (mode != Mode::Rx).then(|| Transmit {
         peer: host.octets(),
@@ -1553,13 +1585,6 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
     let ended = collect(cx, run)?;
     let diagnosed = if diagnosing {
         let collected: DiagnosticsCollected = cx.call(CollectDiagnostics { run }, CALL)?;
-        let _was_on: oer_hil_services_load::Diagnosed = cx.call(
-            Diagnose {
-                on: false,
-                reset: false,
-            },
-            CALL,
-        )?;
         Some(collected)
     } else {
         None

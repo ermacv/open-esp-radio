@@ -339,7 +339,8 @@ only these:
 
 Off, a turn reads no clock and updates no counter. What it still costs is
 the enable check, one `Diagnostics::on` call per turn and per pass that
-takes returns (the S31 application's: two atomic loads and a compare), and
+takes returns (an observing S31 image's: two atomic loads and a compare;
+every other image has `()` and pays nothing), and
 at each point above a test of that answer, held in the turn's tally: six
 stage ends, one per collection, plan step and stop, one per return batch
 and per received frame, and in the core one per running place a walk
