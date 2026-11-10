@@ -1080,7 +1080,7 @@ impl<
     ) -> Result<CommandId<B>, SendRefused<'m, B, SIZE>> {
         let length = block.octets().len();
         match self.admit(now, socket, remote, length) {
-            Ok(admitted) => Ok(self.place(socket, admitted, None, |hop| {
+            Ok(admitted) => Ok(self.place(socket, admitted, |hop| {
                 Run::Sending(Sending {
                     remote,
                     block,
@@ -1111,11 +1111,12 @@ impl<
         tag: T,
     ) -> Result<WorkId, SendRefusal> {
         let admitted = self.admit(now, socket, remote, length)?;
-        let command = self.place(socket, admitted, Some(tag), |hop| {
+        let command = self.place(socket, admitted, |hop| {
             Run::Declared(Declared {
                 remote,
                 length,
                 hop,
+                tag,
             })
         });
         Ok(command.work())
@@ -1159,8 +1160,7 @@ impl<
         &mut self,
         socket: &SocketId<B>,
         admitted: Admitted,
-        tag: Option<T>,
-        run: impl FnOnce(Option<[u8; 4]>) -> Run<'m, B, SIZE>,
+        run: impl FnOnce(Option<[u8; 4]>) -> Run<'m, B, SIZE, T>,
     ) -> CommandId<B> {
         let serial = self.next_serial();
         // `admit` found this place free in this open socket, and nothing ran
@@ -1168,7 +1168,7 @@ impl<
         if let Some(open) = self.socket_mut(socket.index, socket.serial) {
             let _started = open
                 .places
-                .start(admitted.number, serial, run(admitted.hop), tag);
+                .start(admitted.number, serial, run(admitted.hop));
         }
         CommandId {
             socket: socket.index,
@@ -1963,7 +1963,7 @@ impl<
         let (hop, length) = match place.run() {
             Run::Sending(sending) => (sending.hop, sending.block.octets().len()),
             Run::Declared(declared) => (declared.hop, declared.length),
-            Run::Free | Run::Finished(_) => return None,
+            Run::Free | Run::Finished(_) | Run::Ended { .. } => return None,
         };
         let found = match hop {
             Some(hop) => Some(self.neighbors.find(now, hop)?),
@@ -2201,7 +2201,7 @@ impl<
                 sending.block.octets().len(),
             ),
             Run::Declared(declared) => (declared.remote, declared.hop, None, declared.length),
-            Run::Free | Run::Finished(_) => return None,
+            Run::Free | Run::Finished(_) | Run::Ended { .. } => return None,
         };
         let tag = entry.tag().copied();
         let next_hop = self.next_hop(now, hop, found.as_ref(), peer)?;
@@ -2448,14 +2448,15 @@ impl<
             let (places, close) = socket.places.into_places();
             let close = Kept::of(close);
             let kept = places.map(|place| {
-                let (place_serial, observed, run, tag) = place.into_parts();
+                let (place_serial, observed, run) = place.into_parts();
+                let tag = run.tag().copied();
                 let outcome = match run {
                     Run::Sending(sending) => {
                         pool.give(sending.block);
                         Some(Outcome::Retired)
                     }
                     Run::Declared(_) => Some(Outcome::Retired),
-                    Run::Finished(outcome) => Some(outcome),
+                    Run::Finished(outcome) | Run::Ended { outcome, .. } => Some(outcome),
                     Run::Free => None,
                 };
                 Kept {
@@ -2502,7 +2503,7 @@ impl<T> Kept<T> {
 
     fn of<B, const SIZE: usize>(place: Place<'_, B, SIZE, T>) -> Self {
         match place.into_parts() {
-            (serial, true, Run::Finished(outcome), _) => Self {
+            (serial, true, Run::Finished(outcome)) => Self {
                 serial,
                 outcome: Some(outcome),
                 tag: None,
