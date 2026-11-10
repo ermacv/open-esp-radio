@@ -123,6 +123,17 @@ pub fn view_normalized_rx_frame<'frame>(
     segment: &RxSegment<'frame>,
     config: RxIngressConfig,
 ) -> Result<NormalizedRxFrame<'frame>, RxError> {
+    view_normalized_rx_frame_with_layout(segment, config).map(|(frame, _)| frame)
+}
+
+/// [`view_normalized_rx_frame`], with the first segment's layout it read:
+/// a later view of the same segment, a CCMP one, takes it instead of reading
+/// the geometry again.
+#[inline(always)]
+pub fn view_normalized_rx_frame_with_layout<'frame>(
+    segment: &RxSegment<'frame>,
+    config: RxIngressConfig,
+) -> Result<(NormalizedRxFrame<'frame>, RxFirstSegmentLayout), RxError> {
     if !segment.descriptor_word0.rx_done() {
         return Err(RxError::Chain);
     }
@@ -135,14 +146,17 @@ pub fn view_normalized_rx_frame<'frame>(
         .map_or(first.frame, |(mpdu, _)| mpdu);
     let prefix = WifiRxControlPrefix::new(first.prefix);
     let metadata = normalized_metadata(prefix);
-    Ok(NormalizedRxFrame {
-        mpdu,
-        mpdu_offset: first.layout.frame_offset,
-        metadata,
-        rssi_dbm: rssi_dbm(prefix),
-        logical_length: first.layout.expected_frame_length,
-        stamp: Some(prefix.timestamp().value()),
-    })
+    Ok((
+        NormalizedRxFrame {
+            mpdu,
+            mpdu_offset: first.layout.frame_offset,
+            metadata,
+            rssi_dbm: rssi_dbm(prefix),
+            logical_length: first.layout.expected_frame_length,
+            stamp: Some(prefix.timestamp().value()),
+        },
+        first.layout,
+    ))
 }
 
 /// The bytes the hardware wrote into `segment`'s buffer, when its

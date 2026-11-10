@@ -1,7 +1,7 @@
 //! The protocol port's RX boundary, distinct from the raw monitor view.
 use crate::mac::rx::{
-    NormalizedRxFrame, RxError, RxIngressConfig, RxSegment, view_ccmp_data,
-    view_ccmp_data_fragment, view_normalized_rx_frame,
+    NormalizedRxFrame, RxError, RxIngressConfig, RxSegment, view_ccmp_data_in,
+    view_normalized_rx_frame_with_layout,
 };
 use oer_protocols_ieee80211_contracts_port::{RxCryptoStatus, RxEvidence};
 use oer_protocols_ieee80211_wire::{
@@ -16,7 +16,8 @@ pub(super) fn normalize(
     segment: RxSegment<'_>,
     config: RxIngressConfig,
 ) -> Result<NormalizedRxFrame<'_>, RxError> {
-    let mut frame = view_normalized_rx_frame(&segment, config)?;
+    // One read of the segment's geometry: the CCMP view takes its layout.
+    let (mut frame, layout) = view_normalized_rx_frame_with_layout(&segment, config)?;
     let control =
         FrameControlFields::from_bytes(*frame.mpdu.first_chunk::<2>().ok_or(RxError::Bounds)?);
     if control.kind() == FrameType::Data && control.protected() {
@@ -28,11 +29,8 @@ pub(super) fn normalize(
                 .try_into()
                 .map_err(|_| RxError::Bounds)?,
         );
-        let data = if control.more_fragments() || sequence.fragment() != 0 {
-            view_ccmp_data_fragment(&segment, config)?
-        } else {
-            view_ccmp_data(&segment, config)?
-        };
+        let fragmented = control.more_fragments() || sequence.fragment() != 0;
+        let data = view_ccmp_data_in(&segment, config, layout, fragmented)?;
         frame.mpdu = data
             .mpdu
             .get(..data.frame.mic_offset)
@@ -46,6 +44,7 @@ pub(super) fn normalize(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mac::rx::view_normalized_rx_frame;
     use oer_chips_esp32s31_hal::radio::ieee80211::dma::descriptor::rx_landed_word;
     use oer_protocols_ieee80211_wire::{
         ap::ApProtectedDataFrame,

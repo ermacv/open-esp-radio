@@ -1071,6 +1071,28 @@ pub fn view_ccmp_data<'frame>(
 }}
 
 oer_chips_esp32s31_hal::place_rx_hot_path! {
+/// [`view_ccmp_data`] or [`view_ccmp_data_fragment`], as the frame's own
+/// fragmentation names, over `layout`, the segment's layout a normalized
+/// view of it read already ([`view_normalized_rx_frame_with_layout`]): the
+/// same checks and refusals, in the same order, without reading the
+/// geometry again.
+#[inline(never)]
+pub fn view_ccmp_data_in<'frame>(
+    segment: &RxSegment<'frame>,
+    config: RxIngressConfig,
+    layout: RxFirstSegmentLayout,
+    fragmented: bool,
+) -> Result<RxCcmpDataView<'frame>, RxError> {
+    let admission = if fragmented {
+        CcmpFragmentAdmission::Fragmented
+    } else {
+        CcmpFragmentAdmission::Unfragmented
+    };
+    ccmp_admitted(segment, config)?;
+    ccmp_view_of(segment, layout, admission)
+}}
+
+oer_chips_esp32s31_hal::place_rx_hot_path! {
 /// Validate and borrow one fragmented CCMP MPDU after hardware MIC success.
 ///
 /// This is deliberately distinct from [`view_ccmp_data`]: callers cannot
@@ -1097,6 +1119,15 @@ fn view_ccmp_data_with_fragment_admission<'frame>(
     config: RxIngressConfig,
     fragment_admission: CcmpFragmentAdmission,
 ) -> Result<RxCcmpDataView<'frame>, RxError> {
+    ccmp_admitted(segment, config)?;
+    let layout = first_segment_layout(segment, config)?;
+    ccmp_view_of(segment, layout, fragment_admission)
+}}
+
+/// What a CCMP view takes before the segment's geometry: a valid
+/// configuration and a completed, valid segment.
+#[inline(always)]
+fn ccmp_admitted(segment: &RxSegment<'_>, config: RxIngressConfig) -> Result<(), RxError> {
     if config.ring_entry_limit == 0
         || config.flags & !INGRESS_VALID_FLAGS != 0
         || !segment_valid(segment)
@@ -1104,7 +1135,17 @@ fn view_ccmp_data_with_fragment_admission<'frame>(
     {
         return Err(RxError::Invalid);
     }
-    let layout = first_segment_layout(segment, config)?;
+    Ok(())
+}
+
+oer_chips_esp32s31_hal::place_rx_hot_path! {
+/// The CCMP view of `segment` over its first segment's `layout`.
+#[inline(always)]
+fn ccmp_view_of<'frame>(
+    segment: &RxSegment<'frame>,
+    layout: RxFirstSegmentLayout,
+    fragment_admission: CcmpFragmentAdmission,
+) -> Result<RxCcmpDataView<'frame>, RxError> {
     let consumed_trailer_length = layout.frame_shortfall;
     if consumed_trailer_length > CCMP_MIC_SIZE {
         return Err(RxError::Bounds);
@@ -1236,7 +1277,7 @@ pub mod sig_b;
 use prefix::segment_valid;
 pub use prefix::{
     decode_normalized_rx_metadata, decode_rx_local_timestamp, decode_rx_phy_info,
-    first_segment_layout, view_normalized_rx_frame,
+    first_segment_layout, view_normalized_rx_frame, view_normalized_rx_frame_with_layout,
 };
 
 impl NormalizedRxFrame<'_> {
