@@ -28,7 +28,7 @@ use crate::interface::{
     Addressing, BROADCAST, BROADCAST_HARDWARE, Interface, Ipv4, UNSPECIFIED, is_unicast,
 };
 use crate::loans::{LoansRefused, NotLent};
-use crate::neighbor::{Lookup, Neighbors};
+use crate::neighbor::{Found, Lookup, Neighbors};
 use crate::places::{Declared, Place, Places, Run, Sending};
 
 /// RFC 1122, 3.2.1.7: a default time to live large enough for the Internet.
@@ -68,6 +68,9 @@ enum Work {
         serial: u64,
         /// The station address it was chosen for: another is other work.
         peer: [u8; 6],
+        /// What its demand found of the next hop, and while that holds:
+        /// none for a broadcast.
+        found: Option<Found>,
     },
     /// The DHCP client's owed message.
     Dhcp {
@@ -78,6 +81,8 @@ enum Work {
     Echo {
         serial: u64,
         peer: [u8; 6],
+        /// As a datagram's.
+        found: Found,
     },
 }
 
@@ -118,8 +123,13 @@ pub struct Grant<B> {
 #[derive(Debug)]
 pub(crate) enum Frame<'a> {
     Arp([u8; ARP_FRAME]),
+    /// A stored datagram's: its data is copied into the slot after the
+    /// headers and summed in the same pass, the UDP checksum last.
     Datagram {
+        /// The headers, the UDP checksum still zero.
         headers: [u8; HEADERS],
+        udp: UdpHeader,
+        pseudo: [u8; 12],
         data: &'a [u8],
     },
     /// A declared work's: its producer fills the data in the slot, between
@@ -188,7 +198,7 @@ impl Frame<'_> {
     pub(crate) fn length(&self) -> usize {
         match self {
             Self::Arp(frame) => frame.len(),
-            Self::Datagram { headers, data } => headers.len().saturating_add(data.len()),
+            Self::Datagram { headers, data, .. } => headers.len().saturating_add(data.len()),
             Self::Produced {
                 headers, length, ..
             } => headers.len().saturating_add(*length),
@@ -217,12 +227,23 @@ impl Frame<'_> {
         let short = |_| FillFailed::SlotTooShort;
         match self {
             Self::Arp(frame) => Writer::new(slot).write(frame).map_err(short),
-            Self::Datagram { headers, data } => {
-                let mut writer = Writer::new(slot);
-                writer
-                    .write(headers)
-                    .and_then(|()| writer.write(data))
-                    .map_err(short)
+            Self::Datagram {
+                headers,
+                udp,
+                pseudo,
+                data,
+            } => {
+                let (head, rest) = slot
+                    .split_at_mut_checked(HEADERS)
+                    .ok_or(FillFailed::SlotTooShort)?;
+                Writer::new(head).write(headers).map_err(short)?;
+                // One read of the stored data: its copy and its sum.
+                let sum = Checksum::new()
+                    .with(pseudo)
+                    .with(&udp.to_bytes())
+                    .copied(data, rest)
+                    .map_err(|_| FillFailed::SlotTooShort)?;
+                checksum_last(head, udp, sum)
             }
             Self::Produced {
                 headers,
@@ -237,17 +258,11 @@ impl Frame<'_> {
                 Writer::new(head).write(headers).map_err(short)?;
                 let data = rest.get_mut(..*length).ok_or(FillFailed::SlotTooShort)?;
                 produce(*work, data).map_err(FillFailed::Declined)?;
-                let checksum = udp_field(
-                    Checksum::new()
-                        .with(pseudo)
-                        .with(&udp.to_bytes())
-                        .with(data)
-                        .finish(),
-                );
-                let field = head.get_mut(UDP_AT..).ok_or(FillFailed::SlotTooShort)?;
-                Writer::new(field)
-                    .write(&UdpHeader { checksum, ..*udp }.to_bytes())
-                    .map_err(short)
+                let sum = Checksum::new()
+                    .with(pseudo)
+                    .with(&udp.to_bytes())
+                    .with(data);
+                checksum_last(head, udp, sum)
             }
             Self::Dhcp {
                 headers,
@@ -263,17 +278,11 @@ impl Frame<'_> {
                     .get_mut(..message.length())
                     .ok_or(FillFailed::SlotTooShort)?;
                 message.write(&mut Writer::new(data)).map_err(short)?;
-                let checksum = udp_field(
-                    Checksum::new()
-                        .with(pseudo)
-                        .with(&udp.to_bytes())
-                        .with(data)
-                        .finish(),
-                );
-                let field = head.get_mut(UDP_AT..).ok_or(FillFailed::SlotTooShort)?;
-                Writer::new(field)
-                    .write(&UdpHeader { checksum, ..*udp }.to_bytes())
-                    .map_err(short)
+                let sum = Checksum::new()
+                    .with(pseudo)
+                    .with(&udp.to_bytes())
+                    .with(data);
+                checksum_last(head, udp, sum)
             }
             Self::Echo {
                 headers,
@@ -289,6 +298,16 @@ impl Frame<'_> {
             }
         }
     }
+}
+
+/// Write `udp` with the checksum `sum` finishes into the headers at `head`,
+/// once the data it covers is in the slot.
+fn checksum_last(head: &mut [u8], udp: &UdpHeader, sum: Checksum) -> Result<(), FillFailed> {
+    let checksum = udp_field(sum.finish());
+    let field = head.get_mut(UDP_AT..).ok_or(FillFailed::SlotTooShort)?;
+    Writer::new(field)
+        .write(&UdpHeader { checksum, ..*udp }.to_bytes())
+        .map_err(|_| FillFailed::SlotTooShort)
 }
 
 /// A socket. Its handle is not a copy: closing consumes it.
@@ -784,7 +803,7 @@ impl<
             pool.give(owed.block);
             report(events, || NetEvent::Icmp(IcmpDrop::Readdressed));
         });
-        self.neighbors = Neighbors::new();
+        self.neighbors.forget();
         self.replies.clear();
         self.neighbors_moved();
     }
@@ -1748,7 +1767,8 @@ impl<
                 brand,
             });
         let echoes = self.echoes.iter().filter_map(move |owed| {
-            let peer = self.neighbors.hardware(now, owed.hop)?;
+            let found = self.neighbors.find(now, owed.hop)?;
+            let peer = found.hardware;
             Some(Demand {
                 ready: Ready {
                     class: Class::Control,
@@ -1760,6 +1780,7 @@ impl<
                 work: Work::Echo {
                     serial: owed.serial,
                     peer,
+                    found,
                 },
                 brand,
             })
@@ -1803,10 +1824,11 @@ impl<
             Run::Declared(declared) => (declared.hop, declared.length),
             Run::Free | Run::Finished(_) => return None,
         };
-        let peer = match hop {
-            Some(hop) => self.neighbors.hardware(now, hop)?,
-            None => BROADCAST_HARDWARE,
+        let found = match hop {
+            Some(hop) => Some(self.neighbors.find(now, hop)?),
+            None => None,
         };
+        let peer = found.map_or(BROADCAST_HARDWARE, |found| found.hardware);
         Some(Demand {
             ready: Ready {
                 class: Class::Data,
@@ -1820,6 +1842,7 @@ impl<
                 place: number,
                 serial: place.serial(),
                 peer,
+                found,
             },
             brand: self.brand,
         })
@@ -1858,9 +1881,14 @@ impl<
                 place,
                 serial,
                 peer,
-            } => self.datagram_frame(now, socket, place, serial, peer),
+                found,
+            } => self.datagram_frame(now, socket, place, serial, (peer, found)),
             Work::Dhcp { serial, peer } => self.dhcp_frame(now, serial, peer),
-            Work::Echo { serial, peer } => self.echo_frame(now, serial, peer),
+            Work::Echo {
+                serial,
+                peer,
+                found,
+            } => self.echo_frame(now, serial, peer, &found),
         }
     }
 
@@ -1937,9 +1965,15 @@ impl<
         })
     }
 
-    fn echo_frame(&self, now: Instant, serial: u64, peer: [u8; 6]) -> Option<Frame<'_>> {
+    fn echo_frame(
+        &self,
+        now: Instant,
+        serial: u64,
+        peer: [u8; 6],
+        found: &Found,
+    ) -> Option<Frame<'_>> {
         let owed = self.echoes.get(serial)?;
-        if self.neighbors.hardware(now, owed.hop)? != peer {
+        if self.next_hop(now, Some(owed.hop), Some(found))? != peer {
             return None;
         }
         let request = Echo::parse(owed.block.octets()).ok()?;
@@ -1987,13 +2021,30 @@ impl<
         Some(Frame::Arp(frame))
     }
 
+    /// The station address of `hop`, none for a broadcast: what the demand
+    /// `found` while that holds, else a new look at the table.
+    fn next_hop(
+        &self,
+        now: Instant,
+        hop: Option<[u8; 4]>,
+        found: Option<&Found>,
+    ) -> Option<[u8; 6]> {
+        let Some(hop) = hop else {
+            return Some(BROADCAST_HARDWARE);
+        };
+        match found {
+            Some(found) if self.neighbors.holds_still(found, now) => Some(found.hardware),
+            _ => self.neighbors.hardware(now, hop),
+        }
+    }
+
     fn datagram_frame(
         &self,
         now: Instant,
         socket: u8,
         place: u8,
         serial: u64,
-        peer: [u8; 6],
+        (peer, found): ([u8; 6], Option<Found>),
     ) -> Option<Frame<'_>> {
         // No frame leaves from an address past its lease's end.
         let source = self.usable(now)?.address();
@@ -2010,16 +2061,15 @@ impl<
             Run::Declared(declared) => (declared.remote, declared.hop, None, declared.length),
             Run::Free | Run::Finished(_) => return None,
         };
-        let next_hop = match hop {
-            Some(hop) => self.neighbors.hardware(now, hop)?,
-            None => BROADCAST_HARDWARE,
-        };
+        let next_hop = self.next_hop(now, hop, found.as_ref())?;
         if next_hop != peer {
             return None;
         }
         let udp_length = UDP_HEADER_LEN.saturating_add(length);
         let wire_length = u16::try_from(udp_length).ok()?;
-        let unfilled = UdpHeader {
+        // The checksum is summed over the data in the slot: a block's as it
+        // is copied there, a producer's once it is written.
+        let udp = UdpHeader {
             ports: Ports {
                 source: source_port,
                 destination: remote.port,
@@ -2028,20 +2078,6 @@ impl<
             checksum: 0,
         };
         let pseudo = ipv4_pseudo_header(source, remote.address, PROTOCOL_UDP, wire_length);
-        // A block's data is here to sum; a producer's is summed in the slot.
-        let udp = match data {
-            Some(data) => UdpHeader {
-                checksum: udp_field(
-                    Checksum::new()
-                        .with(&pseudo)
-                        .with(&unfilled.to_bytes())
-                        .with(data)
-                        .finish(),
-                ),
-                ..unfilled
-            },
-            None => unfilled,
-        };
         let mut headers = [0; HEADERS];
         let mut writer = Writer::new(&mut headers);
         EthernetHeader {
@@ -2067,7 +2103,12 @@ impl<
             .ok()?;
         writer.write(&udp.to_bytes()).ok()?;
         Some(match data {
-            Some(data) => Frame::Datagram { headers, data },
+            Some(data) => Frame::Datagram {
+                headers,
+                udp,
+                pseudo,
+                data,
+            },
             None => Frame::Produced {
                 headers,
                 udp,

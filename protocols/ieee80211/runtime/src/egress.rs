@@ -12,14 +12,20 @@ use core::num::NonZeroU32;
 pub use oer_protocols_ieee80211_contracts_port::PhyRate;
 use oer_protocols_ieee80211_core_upper_mac::airtime::{
     AirtimeCandidate, AirtimeError, AirtimeInFlight, AirtimeReservation, AirtimeScheduler,
-    AirtimeStorage,
+    AirtimeStorage, Reserved,
 };
-use oer_protocols_network_port::{Candidate, Class, Egress, Ready};
+use oer_protocols_network_port::{Candidate, Egress, Next, PlanStop, QUANTUM, Ready, Turns};
 
 /// What the radio knows of the peers.
 pub trait PeerAir {
     /// An association: a peer with its generation, never a flow.
     type Key: Copy + Eq;
+    /// What [`Self::candidate`] and [`Self::ceiling`] read besides the work:
+    /// their answers stand while it is the same.
+    type View: Copy + Eq;
+
+    /// The view now.
+    fn view(&self) -> Self::View;
 
     /// The account `ready` spends and its least useful grant, or `None` while
     /// this work may not go: its peer sleeps or has left.
@@ -91,16 +97,109 @@ impl From<AirtimeError> for AirtimeFault {
     }
 }
 
-/// What one pass over the ready work keeps of one account.
-struct Best<K, C> {
+/// What a plan keeps of one account of the ready work.
+#[derive(Clone, Copy, Debug)]
+struct Account<K> {
     key: K,
     /// The largest least grant among its works.
     minimum: NonZeroU32,
-    /// Its last served flow, and its work next in turn after it.
-    last: Option<u8>,
-    order: (bool, u8),
-    work: C,
+    /// Its works whose least grant is that largest.
+    holders: usize,
+    /// Its works.
+    works: usize,
 }
+
+impl<K: Copy> Account<K> {
+    fn new(candidate: AirtimeCandidate<K>) -> Self {
+        Self {
+            key: candidate.key,
+            minimum: candidate.minimum_micros,
+            holders: 1,
+            works: 1,
+        }
+    }
+
+    fn count(&mut self, least: NonZeroU32) {
+        self.works = self.works.saturating_add(1);
+        match least.cmp(&self.minimum) {
+            core::cmp::Ordering::Greater => {
+                self.minimum = least;
+                self.holders = 1;
+            }
+            core::cmp::Ordering::Equal => self.holders = self.holders.saturating_add(1),
+            core::cmp::Ordering::Less => {}
+        }
+    }
+
+    /// One of its works went, whose least grant was `least`.
+    fn sent(&mut self, least: NonZeroU32) {
+        self.works = self.works.saturating_sub(1);
+        if least == self.minimum {
+            self.holders = self.holders.saturating_sub(1);
+        }
+    }
+
+    fn candidate(&self) -> Option<AirtimeCandidate<K>> {
+        (self.works != 0).then_some(AirtimeCandidate {
+            key: self.key,
+            minimum_micros: self.minimum,
+        })
+    }
+}
+
+/// One collection of the ready work: each account's candidate, as a choice
+/// gives the scheduler, and the turns of the account the scheduler serves
+/// first, which the next frames take while that holds.
+pub struct Plan<C, V, K, const PEERS: usize> {
+    /// The air's view when the plan was collected.
+    view: V,
+    accounts: heapless::Vec<Account<K>, PEERS>,
+    /// An account past `PEERS`: with it the scheduler cannot hold them all,
+    /// and says so as it would over the whole list.
+    extra: Option<Account<K>>,
+    /// The account whose turns the plan holds.
+    account: Option<K>,
+    /// Its works, with their least grants.
+    turns: Turns<(C, NonZeroU32), QUANTUM>,
+    /// Its last served flow, once the plan's frames before are accepted.
+    last: Option<u8>,
+}
+
+impl<C, V, K: Copy + Eq, const PEERS: usize> Plan<C, V, K, PEERS> {
+    fn count(&mut self, candidate: AirtimeCandidate<K>) {
+        let least = candidate.minimum_micros;
+        if let Some(account) = self
+            .accounts
+            .iter_mut()
+            .chain(&mut self.extra)
+            .find(|account| account.key == candidate.key)
+        {
+            account.count(least);
+            return;
+        }
+        if let Err(account) = self.accounts.push(Account::new(candidate))
+            && self.extra.is_none()
+        {
+            self.extra = Some(account);
+        }
+    }
+
+    fn candidates(&self) -> impl Iterator<Item = AirtimeCandidate<K>> + '_ {
+        self.accounts
+            .iter()
+            .chain(&self.extra)
+            .filter_map(Account::candidate)
+    }
+
+    fn served(&mut self) -> Option<&mut Account<K>> {
+        let key = self.account?;
+        self.accounts.iter_mut().find(|account| account.key == key)
+    }
+}
+
+/// For a test: a work and the reservation it was chosen under.
+#[cfg(test)]
+pub(crate) type Chosen<'o, C, K> = (C, Held<'o, K>);
 
 /// A choice until the port answers it.
 #[derive(Debug)]
@@ -229,43 +328,22 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
         }
     }
 
-    /// The work of `key` next in turn: control first, then the flow after the
-    /// last served one.
-    fn pick<C: Candidate>(&self, ready: impl Iterator<Item = C>, key: A::Key) -> Option<C> {
-        let last = self.last_flow(key);
-        ready
-            .filter(|work| {
-                self.air
-                    .candidate(work.ready())
-                    .is_some_and(|candidate| candidate.key == key)
-            })
-            .min_by_key(|work| turn(work.ready(), last))
-    }
-
-    /// Choose over `ready` read twice, the whole list given to the scheduler:
-    /// for more accounts than one pass keeps, whose answer the scheduler
-    /// gives.
-    #[cold]
-    fn choose_over<C: Candidate>(
+    /// For a test: the first frame of a fresh plan over `ready`, as one
+    /// choice.
+    #[cfg(test)]
+    #[allow(clippy::panic, reason = "a fresh plan that stops fails the test")]
+    pub(crate) fn first_choice<C: Candidate>(
         &mut self,
         ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Option<(C, Held<'o, A::Key>)>, AirtimeFault> {
-        let air = &self.air;
-        let candidates = ready.clone().filter_map(|work| air.candidate(work.ready()));
-        let reservation = match self.scheduler.reserve(candidates, &mut ()) {
-            Ok(reservation) => reservation,
-            Err(AirtimeError::ReservationCapacity) => None,
-            Err(error) => return Err(error.into()),
-        };
-        let Some(reservation) = reservation else {
-            return Ok(None);
-        };
-        match self.pick(ready, reservation.key()) {
-            Some(work) => Ok(Some(self.hold(work, reservation))),
-            None => match self.scheduler.cancel(reservation, &mut ()) {
-                Ok(()) => Ok(None),
-                Err((error, _)) => Err(error.into()),
-            },
+    ) -> Result<Option<Chosen<'o, C, A::Key>>, AirtimeFault>
+    where
+        T: Copy + Into<usize>,
+    {
+        let mut plan = <Self as Egress<T, RadioNotice<T, A::Key>>>::plan(self, ready)?;
+        match <Self as Egress<T, RadioNotice<T, A::Key>>>::next(self, &mut plan)? {
+            Next::Send(work, held) => Ok(Some((work, held))),
+            Next::Idle => Ok(None),
+            Next::Stop(stop) => panic!("a fresh plan stopped: {stop:?}"),
         }
     }
 
@@ -300,88 +378,131 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
     }
 }
 
-/// How far `ready` stands from its turn after flow `last`.
-fn turn(ready: &Ready, last: Option<u8>) -> (bool, u8) {
-    let flow = ready.flow.unwrap_or(0);
-    let distance = last.map_or(flow, |last| flow.wrapping_sub(last).wrapping_sub(1));
-    (ready.class != Class::Control, distance)
-}
-
 impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIONS: usize>
     Egress<T, RadioNotice<T, A::Key>> for AirtimeEgress<'o, A, T, PEERS, RESERVATIONS>
 {
     type Reservation = Held<'o, A::Key>;
     type Fault = AirtimeFault;
 
-    /// One pass over `ready`: each work's candidate once, kept per account
-    /// as its largest least grant and its work next in turn, which is what
-    /// the scheduler and the pick read of all of them. More accounts than
-    /// `PEERS` cannot all be served; the scheduler names that from the whole
-    /// list, read once more.
-    fn choose<C: Candidate>(
+    type Plan<C: Candidate> = Plan<C, A::View, A::Key, PEERS>;
+
+    /// One pass over `ready`: each work's candidate once, counted to its
+    /// account as its largest least grant, and the first account's works in
+    /// their turns. When the scheduler would serve another account first, a
+    /// second pass takes that one's turns. More accounts than `PEERS` cannot
+    /// all be served: the plan keeps one more, for the scheduler to say so.
+    fn plan<C: Candidate>(
         &mut self,
         ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Option<(C, Self::Reservation)>, AirtimeFault> {
-        let mut best: heapless::Vec<Best<A::Key, C>, PEERS> = heapless::Vec::new();
+    ) -> Result<Self::Plan<C>, AirtimeFault> {
+        let mut plan = Plan {
+            view: self.air.view(),
+            accounts: heapless::Vec::new(),
+            extra: None,
+            account: None,
+            turns: Turns::after(None),
+            last: None,
+        };
         for work in ready.clone() {
             let Some(candidate) = self.air.candidate(work.ready()) else {
                 continue;
             };
-            match best.iter_mut().find(|best| best.key == candidate.key) {
-                Some(best) => {
-                    best.minimum = best.minimum.max(candidate.minimum_micros);
-                    let order = turn(work.ready(), best.last);
-                    // The first of equal turns, as the list gave them.
-                    if order < best.order {
-                        best.order = order;
-                        best.work = work;
-                    }
-                }
+            plan.count(candidate);
+            let account = match plan.account {
+                Some(account) => account,
                 None => {
-                    let last = self.last_flow(candidate.key);
-                    let entry = Best {
-                        key: candidate.key,
-                        minimum: candidate.minimum_micros,
-                        last,
-                        order: turn(work.ready(), last),
-                        work,
-                    };
-                    if best.push(entry).is_err() {
-                        return self.choose_over(ready);
-                    }
+                    plan.account = Some(candidate.key);
+                    plan.turns = Turns::after(self.last_flow(candidate.key));
+                    candidate.key
+                }
+            };
+            if account == candidate.key {
+                let described = *work.ready();
+                plan.turns
+                    .offer(&described, (work, candidate.minimum_micros));
+            }
+        }
+        // One account is the only one a grant can go to. Otherwise a look
+        // at the scheduler names the first, or what it refuses, which the
+        // plan's first step meets again.
+        if plan.accounts.len() > 1
+            && let Ok(Some(first)) = self.scheduler.selects(plan.candidates())
+            && plan.account != Some(first)
+        {
+            plan.account = Some(first);
+            plan.turns = Turns::after(self.last_flow(first));
+            for work in ready {
+                if let Some(candidate) = self.air.candidate(work.ready())
+                    && candidate.key == first
+                {
+                    let described = *work.ready();
+                    plan.turns
+                        .offer(&described, (work, candidate.minimum_micros));
                 }
             }
         }
-        let candidates = best.iter().map(|best| AirtimeCandidate {
-            key: best.key,
-            minimum_micros: best.minimum,
-        });
-        let reservation = match self.scheduler.reserve(candidates, &mut ()) {
-            Ok(reservation) => reservation,
+        plan.last = plan.account.and_then(|account| self.last_flow(account));
+        Ok(plan)
+    }
+
+    /// The next frame of the plan's account, reserved as a choice over the
+    /// same ready work would reserve it: the scheduler is asked over every
+    /// account's candidate, and grants only if it serves the plan's account.
+    /// The plan stops, reserving nothing, when the air's view moved, when
+    /// the account's last served flow is not the plan's last frame's, when
+    /// its largest least grant went and the plan does not hold the next,
+    /// when its turns are spent with more of its work ready, or when the
+    /// scheduler would serve another account.
+    fn next<C: Candidate>(
+        &mut self,
+        plan: &mut Self::Plan<C>,
+    ) -> Result<Next<C, Self::Reservation>, AirtimeFault> {
+        if self.air.view() != plan.view {
+            return Ok(Next::Stop(PlanStop::Changed));
+        }
+        let account = plan.account;
+        if let Some(key) = account
+            && self.last_flow(key) != plan.last
+        {
+            return Ok(Next::Stop(PlanStop::Changed));
+        }
+        let spent = plan.turns.first().is_none();
+        if let Some(served) = plan.served() {
+            if served.works != 0 && served.holders == 0 {
+                return Ok(Next::Stop(PlanStop::Grant));
+            }
+            if served.works != 0 && spent {
+                return Ok(Next::Stop(PlanStop::Spent));
+            }
+        }
+        let reserved =
+            self.scheduler
+                .reserve_for(|key| Some(key) == account, plan.candidates(), &mut ());
+        let reservation = match reserved {
+            Ok(Reserved::This(reservation)) => reservation,
             // A frame's completion makes room, and it wakes the service.
-            Err(AirtimeError::ReservationCapacity) => None,
+            Ok(Reserved::Nothing) | Err(AirtimeError::ReservationCapacity) => {
+                return Ok(Next::Idle);
+            }
+            Ok(Reserved::Other(_)) => return Ok(Next::Stop(PlanStop::Account)),
             Err(error) => return Err(error.into()),
         };
-        let Some(reservation) = reservation else {
-            return Ok(None);
+        // The scheduler granted the plan's account, a candidate only while
+        // it has works, which its turns hold until they are spent.
+        let Some((work, least)) = plan.turns.take() else {
+            return match self.scheduler.cancel(reservation, &mut ()) {
+                Ok(()) => Ok(Next::Stop(PlanStop::Spent)),
+                Err((error, _)) => Err(error.into()),
+            };
         };
-        let key = reservation.key();
-        // Taken by `pop`, not a consuming iterator: heapless's `IntoIter`
-        // drop slices its unread rest at a bound the compiler cannot prove.
-        // Each account stands once in `best`, so the order is free.
-        while let Some(Best {
-            key: account, work, ..
-        }) = best.pop()
-        {
-            if account == key {
-                return Ok(Some(self.hold(work, reservation)));
-            }
+        if let Some(served) = plan.served() {
+            served.sent(least);
         }
-        // The candidates were these accounts, so one of them holds the key.
-        match self.scheduler.cancel(reservation, &mut ()) {
-            Ok(()) => Ok(None),
-            Err((error, _)) => Err(error.into()),
+        if let Some(flow) = work.ready().flow {
+            plan.last = Some(flow);
         }
+        let (work, held) = self.hold(work, reservation);
+        Ok(Next::Send(work, held))
     }
 
     fn accepted(&mut self, held: Held<'o, A::Key>, ticket: T) -> Result<(), AirtimeFault> {

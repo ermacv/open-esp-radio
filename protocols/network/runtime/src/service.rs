@@ -14,7 +14,9 @@ use oer_protocols_network_core::{
     CommandId, CommandState, Ends, Eviction, Group, GroupsFull, Intake, LentDatagram, LoansRefused,
     NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId, Unsent,
 };
-use oer_protocols_network_port::{Candidate, Egress, FramePort, FrameSource};
+use oer_protocols_network_port::{
+    Candidate, Egress, FramePort, FrameSource, Next, PlanStop, QUANTUM, Turns,
+};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::local::{LocalEnd, LocalRefused, Produce, Producer, Producers};
@@ -39,19 +41,38 @@ pub(crate) const TURN_FRAMES: usize = 8;
 pub(crate) const TURN_NOTICES: usize = 64;
 
 /// The egress with no policy: the first ready work goes, no account is kept and
-/// a completion says nothing.
+/// a completion says nothing. Its plan is the list's own turns: control first,
+/// then the sockets in turn from the one whose turn it is, one datagram each,
+/// which is what the core's list gives first after each frame it takes.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Direct;
 
 impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
     type Reservation = ();
     type Fault = Infallible;
+    type Plan<C: Candidate> = Turns<C, QUANTUM>;
 
-    fn choose<C: Candidate>(
+    fn plan<C: Candidate>(
         &mut self,
-        mut ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Option<(C, ())>, Infallible> {
-        Ok(ready.next().map(|work| (work, ())))
+        ready: impl Iterator<Item = C> + Clone,
+    ) -> Result<Turns<C, QUANTUM>, Infallible> {
+        let mut turns = Turns::listed();
+        for work in ready {
+            let described = *work.ready();
+            turns.offer(&described, work);
+        }
+        Ok(turns)
+    }
+
+    fn next<C: Candidate>(
+        &mut self,
+        plan: &mut Turns<C, QUANTUM>,
+    ) -> Result<Next<C, ()>, Infallible> {
+        Ok(match plan.take() {
+            Some(work) => Next::Send(work, ()),
+            None if plan.more() => Next::Stop(PlanStop::Spent),
+            None => Next::Idle,
+        })
     }
 
     fn accepted(&mut self, (): (), _ticket: Ticket) -> Result<(), Infallible> {
@@ -1072,31 +1093,61 @@ impl<
         }
     }
 
-    /// Publish what the policy chooses, until it or the port has no room. No
-    /// await falls between a choice and its answer, so no cancellation can
-    /// leave a reservation unanswered.
+    /// Publish what the policy chooses, until it or the port has no room, or
+    /// the turn's budget of frames is spent. The ready work is collected once
+    /// into the policy's plan, and each frame after takes the plan's next:
+    /// a plan goes on only after its last frame was accepted. Any other answer
+    /// drops it, and a final one or a decline lets a new collection choose,
+    /// as a stop of the plan does; a refusal of the port ends publishing. At
+    /// most one collection a frame of the budget, so a plan that stops at once
+    /// cannot hold the turn. No await falls between a choice and its answer,
+    /// so no cancellation can leave a reservation unanswered, and the plan
+    /// ends with publishing: it reserved nothing beyond its frames.
     fn publish(&mut self, now: Instant, events: &mut impl EventSink<ServiceEvent>) -> PublishEnd {
         let mut moved = false;
-        let mut end = PublishEnd::Budget;
-        for _ in 0..TURN_FRAMES {
-            // After a declining fill, the producer's flow sits out the turn.
-            let filtered = self.local.filtered();
-            let ready = self
-                .owner
-                .demands(now)
-                .filter(move |demand| filtered.is_none_or(|flow| demand.ready.flow != Some(flow)));
-            let chosen = match self.egress.choose(ready) {
-                Ok(chosen) => chosen,
-                Err(fault) => {
-                    self.note(Err(fault));
-                    end = PublishEnd::Fault;
-                    break;
+        let mut frames = 0_usize;
+        let mut collections = 0_usize;
+        let mut plan = None;
+        let end = loop {
+            if frames == TURN_FRAMES {
+                break PublishEnd::Budget;
+            }
+            let current = match &mut plan {
+                Some(current) => current,
+                None => {
+                    if collections == TURN_FRAMES {
+                        break PublishEnd::Budget;
+                    }
+                    collections = collections.saturating_add(1);
+                    // After a declining fill, the producer's flow sits out
+                    // the turn.
+                    let filtered = self.local.filtered();
+                    let ready = self.owner.demands(now).filter(move |demand| {
+                        filtered.is_none_or(|flow| demand.ready.flow != Some(flow))
+                    });
+                    match self.egress.plan(ready) {
+                        Ok(collected) => plan.insert(collected),
+                        Err(fault) => {
+                            self.note(Err(fault));
+                            break PublishEnd::Fault;
+                        }
+                    }
                 }
             };
-            let Some((demand, reservation)) = chosen else {
-                end = PublishEnd::Chose;
-                break;
+            let (demand, reservation) = match self.egress.next(current) {
+                Ok(Next::Send(demand, reservation)) => (demand, reservation),
+                Ok(Next::Idle) => break PublishEnd::Chose,
+                // Nothing was reserved: a new collection chooses.
+                Ok(Next::Stop(_)) => {
+                    plan = None;
+                    continue;
+                }
+                Err(fault) => {
+                    self.note(Err(fault));
+                    break PublishEnd::Fault;
+                }
             };
+            frames = frames.saturating_add(1);
             let local = &mut self.local;
             let fill = |work, data: &mut [u8]| local.fill(now, work, data);
             match self.owner.transmit(now, demand.grant(), fill) {
@@ -1106,8 +1157,11 @@ impl<
                     let answer = self.egress.accepted(reservation, ticket);
                     self.note(answer);
                 }
+                // The work ended or is other work: the plan's turns after it
+                // are not the choice's.
                 Err(Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort) => {
                     moved = true;
+                    plan = None;
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
                 }
@@ -1115,6 +1169,7 @@ impl<
                 // the rest of it, so its declines never stop another's work.
                 Err(Unsent::Declined) => {
                     moved = true;
+                    plan = None;
                     report(events, || ServiceEvent::Local(LocalEvent::Declined));
                     self.local.declined();
                     let answer = self.egress.refused(reservation);
@@ -1126,27 +1181,23 @@ impl<
                     moved = true;
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
-                    end = PublishEnd::Fault;
-                    break;
+                    break PublishEnd::Fault;
                 }
                 Err(Unsent::Port(_)) => {
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
-                    end = PublishEnd::Refused;
-                    break;
+                    break PublishEnd::Refused;
                 }
                 Err(Unsent::PortContract) => {
                     let answer = self.egress.unknown(reservation);
                     self.note(answer);
-                    end = PublishEnd::Fault;
-                    break;
+                    break PublishEnd::Fault;
                 }
             }
             if self.fault.is_some() {
-                end = PublishEnd::Fault;
-                break;
+                break PublishEnd::Fault;
             }
-        }
+        };
         report(events, || ServiceEvent::Published(end));
         if moved {
             self.owner.flush();

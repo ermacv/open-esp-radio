@@ -503,7 +503,10 @@ pub enum RouterOperation {
     },
     /// Capture `channel`, one the stand file's `[router]` allows, on a
     /// monitor interface the operation creates on the idle AP radio, until
-    /// the operation stops. The output is the pcap stream alone (radiotap
+    /// the operation stops, IPv6 off on it and only received packets
+    /// captured (`tcpdump -Q in`: what the host's own stack sends through
+    /// it is left out; copies mac80211 delivers of transmitted frames may
+    /// stay). The output is the pcap stream alone (radiotap
     /// headers, link type 127); an output the client does not take ends
     /// the capture. Once `tcpdump` listens the client hears `Ready`, apart
     /// from the bytes; a capture that never listens ends without it. Every

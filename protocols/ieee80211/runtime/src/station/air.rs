@@ -65,6 +65,16 @@ impl<'a, N, C> StationAir<'a, N, C> {
 
 impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
     type Key = StationKey;
+    /// The link's word as published, its state, epoch and slowest rate, and
+    /// the last reported rate: all a candidate reads besides the frame.
+    type View = (
+        (LinkSnapshot, Option<PhyRate>),
+        Option<(StationKey, PhyRate)>,
+    );
+
+    fn view(&self) -> Self::View {
+        (self.link.read(), self.last)
+    }
 
     /// While the link is up, its association's account, with the frame's
     /// least useful grant at the rate resolved for it. A live link carries

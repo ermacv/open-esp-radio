@@ -118,6 +118,8 @@ struct State {
     /// A peer fell asleep or woke since the last registration: what the
     /// policy may choose changed, as a link change would.
     changed: bool,
+    /// Moves with every change of a peer's sleep or association.
+    version: u64,
 }
 
 impl State {
@@ -333,6 +335,7 @@ impl Medium {
             taken: 0,
             waker: None,
             changed: false,
+            version: 0,
         })))
     }
 
@@ -380,6 +383,7 @@ impl Medium {
         if let Some(peer) = state.peers.get_mut(peer) {
             peer.asleep = asleep;
         }
+        state.version = state.version.wrapping_add(1);
         state.changed = true;
         state.wake();
     }
@@ -392,6 +396,7 @@ impl Medium {
         if let Some(peer) = state.peers.get_mut(peer) {
             let key = (number, peer.generation);
             peer.generation = peer.generation.wrapping_add(1);
+            state.version = state.version.wrapping_add(1);
             state.notices.push_back(RadioNotice::Left(key));
         }
         state.wake();
@@ -522,6 +527,13 @@ impl FrameSource for Medium {
 
 impl PeerAir for Medium {
     type Key = PeerKey;
+    /// Moves whenever a peer falls asleep, wakes or leaves: what a candidate
+    /// reads besides the frame.
+    type View = u64;
+
+    fn view(&self) -> u64 {
+        self.0.borrow().version
+    }
 
     fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<PeerKey>> {
         let state = self.0.borrow();

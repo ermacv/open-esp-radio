@@ -393,3 +393,72 @@ fn an_account_counts_its_outstanding_reservations_and_goes_with_the_last() {
     assert_eq!(seen.0.last(), Some(&(0, 0)));
     assert_eq!(scheduler.balance_micros(1), None, "gone with its last");
 }
+
+/// A look at the next grant changes nothing, and a reservation for another
+/// key than the one it would grant changes nothing either: the grant that
+/// follows is the one a plain reservation would have made, round credit and
+/// cursor alike.
+#[test]
+fn a_look_or_an_unwanted_grant_changes_nothing() {
+    let eligible = [candidate(1, 1500), candidate(2, 700)];
+    let mut looked = AirtimeStorage::<_, 2>::new(us(1000));
+    let mut plain = AirtimeStorage::<_, 2>::new(us(1000));
+    let mut looked = looked.scheduler();
+    let mut plain = plain.scheduler();
+    for _ in 0..6 {
+        let key = looked.selects(eligible).unwrap().unwrap();
+        assert_eq!(
+            looked.selects(eligible),
+            Ok(Some(key)),
+            "a look is no grant"
+        );
+        assert_eq!(
+            looked.reserve_for(|wanted| wanted != key, eligible, &mut ()),
+            Ok(Reserved::Other(key)),
+            "an unwanted grant is told, not made"
+        );
+        let Reserved::This(mine) = looked
+            .reserve_for(|wanted| wanted == key, eligible, &mut ())
+            .unwrap()
+        else {
+            panic!("the wanted key is granted");
+        };
+        let theirs = plain.reserve(eligible, &mut ()).unwrap().unwrap();
+        assert_eq!(
+            (mine.key(), mine.budget_micros()),
+            (theirs.key(), theirs.budget_micros())
+        );
+        for key in [1, 2] {
+            assert_eq!(looked.balance_micros(key), plain.balance_micros(key));
+        }
+        looked
+            .settle(mine.published().completed(()), us(900), &mut ())
+            .unwrap();
+        plain
+            .settle(theirs.published().completed(()), us(900), &mut ())
+            .unwrap();
+    }
+}
+
+/// With nothing to grant, `reserve_for` leaves the accounts as `reserve`
+/// does: an idle account loses its surplus either way.
+#[test]
+fn reserve_for_with_nothing_to_grant_is_reserve() {
+    let mut storage = AirtimeStorage::<_, 2>::new(us(1000));
+    let mut scheduler = storage.scheduler();
+    let first = scheduler
+        .reserve([candidate(1, 100)], &mut ())
+        .unwrap()
+        .unwrap();
+    scheduler
+        .settle(first.published().completed(()), us(100), &mut ())
+        .unwrap();
+    assert_eq!(scheduler.balance_micros(1), Some(900));
+    assert_eq!(scheduler.selects([]), Ok(None));
+    assert_eq!(scheduler.balance_micros(1), Some(900), "a look keeps it");
+    assert_eq!(
+        scheduler.reserve_for(|_| true, [], &mut ()),
+        Ok(Reserved::Nothing)
+    );
+    assert_eq!(scheduler.balance_micros(1), Some(0), "idle loses surplus");
+}

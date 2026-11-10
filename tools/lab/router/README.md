@@ -470,13 +470,22 @@ writes one category's limits into `aql_txq_limit` and confirms them by
 reading back, and restores every category to mac80211's defaults. AQL holds
 frames in mac80211's queue and never drops one.
 `monitor::capture` creates the monitor interface `oercap0` on the AP
-radio's PHY, on one channel, and streams `tcpdump -y IEEE802_11_RADIO -w -`
-into a sink until it cancels; once `tcpdump` says it listens (its stderr's
-`tcpdump: listening on …` line) the sink hears the readiness, before the
-stream's bytes after it. It refuses before any change when an
+radio's PHY, still down; turns IPv6 off on it alone through its own
+`/proc/sys/net/ipv6/conf/oercap0/disable_ipv6` and reads that back, so
+the kernel sends nothing of its own on it; brings it up on one channel;
+and streams `tcpdump -Q in -y IEEE802_11_RADIO -w -` into a sink until it
+cancels. Once `tcpdump` says it listens (its stderr's `tcpdump: listening
+on …` line) the sink hears the readiness, before the stream's bytes after
+it; a direction `tcpdump` cannot set ends it before that line. `-Q in`
+makes libpcap drop what the Linux packet socket marks `PACKET_OUTGOING`
+(the host stack's own transmissions through the interface); it does not
+remove every copy of a transmitted frame, since mac80211 delivers a
+radio's transmitted frames to its monitors with their TX status as
+received packets. A pcap records no direction, so the capture cannot
+show which of its frames the router sent. It refuses before any change when an
 interface of that name exists anywhere on the router or the radio's PHY
 has any interface: it takes over nothing it did not create. From the
-creation on, every ending (a failed creation, start or readiness, a
+creation on, every ending (a failed creation, IPv6 change, bring-up, start or readiness, a
 cancellation, a refused write, the process's own end) stops the process
 by its PID; drains its stream to the end within 10 s (into the sink after
 a cancellation, so the pcap's tail is kept; otherwise discarding and

@@ -20,6 +20,7 @@
 
 mod device;
 mod frame;
+mod plan;
 pub use device::{
     CopyReason, EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot,
     NetDevice, NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused,
@@ -30,6 +31,7 @@ pub use frame::{
     Candidate, Class, Egress, FramePort, FrameSource, Holding, Keep, NeverHeld, Ready, Taken,
     Unpublished,
 };
+pub use plan::{Next, PlanStop, QUANTUM, Turns};
 
 /// Opaque identity of one logical network endpoint sharing a physical radio.
 ///
