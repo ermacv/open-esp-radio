@@ -179,7 +179,7 @@ fn running_work_is_offered_in_the_order_it_was_accepted() {
         assert_eq!(third.work().place(), 0);
         let order: Vec<_> = stack
             .demands(at(1), &())
-            .map(|demand| demand.ready.length)
+            .map(|demand| demand.ready().length)
             .collect();
         assert_eq!(order, [14 + 20 + 8 + 6, 14 + 20 + 8 + 5]);
         transmit_next(stack);
@@ -225,7 +225,7 @@ fn acceptance_order_is_no_send_order_a_ready_datagram_goes_before_one_waiting_fo
         // the earlier one is not ready, so it is not offered.
         let order: Vec<_> = stack
             .demands(at(1), &())
-            .map(|demand| demand.ready.class)
+            .map(|demand| demand.ready().class)
             .collect();
         assert_eq!(order, [Class::Control, Class::Data]);
         transmit_next(stack);
