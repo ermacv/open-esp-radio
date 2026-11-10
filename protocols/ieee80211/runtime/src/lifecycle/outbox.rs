@@ -60,9 +60,20 @@ pub(super) enum Sending<'id, D: DatapathPort<'id>> {
     Open(UnitRight),
     /// A unit holds the right.
     Held,
-    /// A unit's message was refused: its remainder, whole and in order.
-    /// The right went with it, so no unit follows.
-    Refused(Outbox<'id, D>),
+    /// A unit's message was refused: its remainder, whole and in order,
+    /// with the refusal's cause. The right went with it, so no unit
+    /// follows.
+    Refused(UnsentUnit<'id, D>),
+}
+
+/// A refused unit: why its message was refused, and that message with every
+/// later one of the unit, whole and in order.
+pub struct UnsentUnit<'id, D: DatapathPort<'id>> {
+    /// The refusal's own cause, kept even when another end was named
+    /// before it.
+    pub cause: LifecycleViolation,
+    /// What the unit did not send.
+    pub outbox: Outbox<'id, D>,
 }
 
 impl<'id, D: DatapathPort<'id>> Sending<'id, D> {
@@ -82,14 +93,18 @@ impl<'id, D: DatapathPort<'id>> Sending<'id, D> {
         }
     }
     /// A refused unit's remainder, which takes the unit's right with it.
-    pub(super) fn refused(right: UnitRight, outbox: Outbox<'id, D>) -> Self {
+    pub(super) fn refused(
+        right: UnitRight,
+        outbox: Outbox<'id, D>,
+        cause: LifecycleViolation,
+    ) -> Self {
         let UnitRight(()) = right;
-        Self::Refused(outbox)
+        Self::Refused(UnsentUnit { cause, outbox })
     }
-    /// The refused unit's remainder, when one was refused.
-    pub(super) fn into_unsent(self) -> Option<Outbox<'id, D>> {
+    /// The refused unit, when one was refused.
+    pub(super) fn into_unsent(self) -> Option<UnsentUnit<'id, D>> {
         match self {
-            Self::Refused(outbox) => Some(outbox),
+            Self::Refused(unit) => Some(unit),
             Self::Open(_) | Self::Held => None,
         }
     }

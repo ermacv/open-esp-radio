@@ -1344,9 +1344,9 @@ fn stop_answers<'id, Id: radio::SlotIdentity + 'id>(
 
 /// A line mask the line's handler has not confirmed within its bound is a
 /// stop not confirmed yet, never a fault of the device: the stop's answer
-/// is `Deadline`, the one stop the first call asked for goes on, and the
-/// handler's later confirmation completes it at the next poll, without the
-/// stop asked again. No time passes: the device's own answers drive it.
+/// is `Deadline`, the port stays in the stop the first call began, and the
+/// device's later confirmation completes it at the next poll. No time
+/// passes: the device's own answers drive it.
 #[test]
 fn a_late_line_mask_is_a_stop_not_confirmed_yet_that_its_later_confirmation_completes() {
     with_installations(|mut fixture, _| {
@@ -1360,11 +1360,7 @@ fn a_late_line_mask_is_a_stop_not_confirmed_yet_that_its_later_confirmation_comp
         };
         assert_eq!(late.cause, StopCause::Deadline, "not a device fault");
         assert_eq!(fixture.now(), began, "no time passed");
-        assert_eq!(
-            fixture.observed.borrow().stops,
-            1,
-            "the device stopped once, on the first request"
-        );
+        assert_eq!(fixture.observed.borrow().stops, 1, "the device stopped");
         assert_eq!(fixture.port.fault(), None);
         assert_eq!(
             fixture.poll_stop_now(),

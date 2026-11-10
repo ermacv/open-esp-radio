@@ -243,7 +243,8 @@ pub(crate) enum Retired<R: Retiring, E> {
 /// a port that keeps a fault it could not take back ends the watch, and
 /// the retire ends unfinished in [`Phase::Stopping`]
 /// ([`ApExitOf::StopFaulted`]); so does a stop answer naming a device
-/// fault no port call answered first ([`ApExitOf::StopDeviceFailed`]). A
+/// fault while the port keeps none, by that fault
+/// ([`ApExitOf::StopDeviceFailed`]). A
 /// stop confirmed before is never watched again.
 /// With the stop confirmed and items out, no release runs
 /// ([`Phase::Stopped`]); otherwise a release the MAC refused as still

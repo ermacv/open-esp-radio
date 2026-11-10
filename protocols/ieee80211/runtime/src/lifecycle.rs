@@ -65,7 +65,7 @@ mod outbox;
 mod step;
 
 use outbox::{Messages, Sending, UnitRight};
-pub use outbox::{Outbox, UNSENT, Unsent};
+pub use outbox::{Outbox, UNSENT, Unsent, UnsentUnit};
 
 #[cfg(test)]
 mod tests;
@@ -541,11 +541,11 @@ pub struct RetiredLifecycle<
     pub tx_contexts: T,
     /// The first owner a broken contract left.
     pub rejected: Option<Rejected<'id, D>>,
-    /// The unit whose message the actor's queues refused: that message and
-    /// the unit's later ones, whole and in order
-    /// ([`LifecycleViolation::QueueFull`],
-    /// [`LifecycleViolation::ActorClosed`]).
-    pub unsent: Option<Outbox<'id, D>>,
+    /// The unit whose message the actor's queues refused: the refusal's
+    /// cause ([`LifecycleViolation::QueueFull`],
+    /// [`LifecycleViolation::ActorClosed`]), and that message with the
+    /// unit's later ones, whole and in order.
+    pub unsent: Option<UnsentUnit<'id, D>>,
     /// The end the radio's confirmed stop told, when its message to the
     /// actor was refused: the lifecycle ended on the refusal
     /// ([`LifecycleCompleted::end`]), and what the stop confirmed is kept.

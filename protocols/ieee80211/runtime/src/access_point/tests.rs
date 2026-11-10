@@ -754,7 +754,7 @@ fn a_fault_first_seen_in_the_stops_watch_is_taken_back_once_or_kept() {
     }
 }
 
-/// The owner's counterexample: a device fault the stop's own answer names
+/// A device fault the stop's own answer names
 /// first (the port poisoned before the watch, no service answering it)
 /// ends the watch named by that very fault, not by the last one a port
 /// call answered (none here), with the port's observations and every owner

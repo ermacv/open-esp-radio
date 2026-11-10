@@ -266,7 +266,11 @@ fn a_closed_actor_reception_ends_the_lifecycle_named_and_keeps_its_message() {
             completed.end,
             LifecycleEnd::Contract(LifecycleViolation::ActorClosed)
         );
-        let mut unsent = completed.retired.unsent.expect("the refused unit is kept");
+        let UnsentUnit {
+            cause,
+            outbox: mut unsent,
+        } = completed.retired.unsent.expect("the refused unit is kept");
+        assert_eq!(cause, LifecycleViolation::ActorClosed);
         assert!(matches!(
             unsent.pop_front(),
             Some(Unsent::ToActor(ToActor::Start(_)))
@@ -365,9 +369,17 @@ fn a_unit_refused_part_way_keeps_its_remainder_in_order_and_no_unit_follows() {
         sent.as_slice(),
         [ToActor::Release, ToActor::Connect]
     ));
-    let mut sending = Sending::refused(right, outbox);
+    let mut sending = Sending::refused(right, outbox, LifecycleViolation::QueueFull);
     assert!(sending.take().is_none(), "no unit follows a refused one");
-    let mut kept = sending.into_unsent().expect("the remainder");
+    let UnsentUnit {
+        cause,
+        outbox: mut kept,
+    } = sending.into_unsent().expect("the remainder");
+    assert_eq!(
+        cause,
+        LifecycleViolation::QueueFull,
+        "the refusal's own cause"
+    );
     assert!(matches!(
         kept.pop_front(),
         Some(Unsent::ToActor(ToActor::Disconnect))

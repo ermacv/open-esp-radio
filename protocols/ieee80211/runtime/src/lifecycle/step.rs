@@ -339,8 +339,8 @@ where
     /// Send a unit's `outbox` in order under its `right`, and give the
     /// right back once all went. A refusal keeps the refused message and
     /// every later one in the outbox, which the lifecycle keeps with the
-    /// right ([`RetiredLifecycle::unsent`]); the refusal names the end
-    /// unless one was named before.
+    /// right with the refusal's cause ([`RetiredLifecycle::unsent`]); the
+    /// refusal also names the end unless one was named before.
     pub(super) fn flush<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         actor: &ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
@@ -359,7 +359,7 @@ where
         outbox: Outbox<'id, D>,
         violation: LifecycleViolation,
     ) {
-        self.sending = Sending::refused(right, outbox);
+        self.sending = Sending::refused(right, outbox, violation);
         if self.end.is_none() {
             self.end = Some(LifecycleEnd::Contract(violation));
         }
