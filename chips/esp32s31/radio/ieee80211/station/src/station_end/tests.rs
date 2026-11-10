@@ -550,7 +550,7 @@ fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
     let mut abandon_place = WakingSpscQueue::<LifecycleFailure, 1>::new();
     let (mut abandon_end, mut abandoned) = abandon_place.split();
     let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
-    let (mut mailbox, mut news) = mailbox_place.split();
+    let (mut mailbox, news) = mailbox_place.split();
     let alive = Cell::new(true);
     let producer = Producer {
         queue: &to_lifecycle,
@@ -858,7 +858,8 @@ fn a_completed_retire_returns_the_owners_still_in_transit() {
     let (producer, receiver) = place.split();
     assert!(producer.try_send(Receipt(&ends.receipt)).is_ok());
     assert!(producer.try_send(Receipt(&ends.other)).is_ok());
-    drop(producer);
+    // The producer stops here.
+    let _stopped = producer;
     let Some(Side(left)) = in_transit(Side(receiver)) else {
         panic!("the owners in transit come back");
     };

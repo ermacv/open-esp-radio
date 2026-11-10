@@ -1174,6 +1174,10 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
 /// (the first one unless the transmitter holds it), the lent units'
 /// notifies and the driver state's place.
 #[must_use = "the prepared parts hold the interrupt binding and the DMA places"]
+#[allow(
+    dead_code,
+    reason = "the parts go back whole to the application, which holds them; none is read here"
+)]
 pub struct Prepared<W: Binding> {
     device: &'static mut core::mem::MaybeUninit<Device<W>>,
     first: Option<Pin<&'static mut TxSlot<TX>>>,

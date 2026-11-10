@@ -338,7 +338,7 @@ pub const INSTALLED: usize = 3;
 /// How a read of the actor task's news went.
 enum Read {
     /// One news was read.
-    Read,
+    Taken,
     /// The mailbox is empty.
     Empty,
     /// Every place for installations' news is full: nothing was read.
@@ -362,6 +362,11 @@ pub struct FinishedLifecycleOf<Q, C, K, E, B> {
 /// What a news of an installation carried: its commands, its tokens and
 /// which installation it is.
 pub type Installed<C, K, B> = (C, K, InstallationOf<B>);
+
+/// How a lifecycle half `H`'s finish ended: the finished half, or the half
+/// and a proof of another installation, unchanged.
+pub type Finished<H, Q, C, K, E, B> =
+    Result<FinishedLifecycleOf<Q, C, K, E, B>, ForeignProof<H, B>>;
 
 /// A proof of another installation, refused by a lifecycle half: both come
 /// back unchanged, nothing finished or consumed.
@@ -413,7 +418,7 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
         abandon.ready().await.send(failure);
         while self.late.is_none() {
             match self.read_one() {
-                Read::Read => {}
+                Read::Taken => {}
                 Read::Empty => self.mailbox.ready().await,
                 Read::Full => self.late = Some(LateEnd::Unbounded),
             }
@@ -433,12 +438,12 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
         self.late = match news {
             News::Installed(commands, tokens, installation) => {
                 *place = Some((commands, tokens, installation));
-                return Read::Read;
+                return Read::Taken;
             }
             News::Abandoned => Some(LateEnd::Abandoned),
             news => Some(LateEnd::Ended(ended(news))),
         };
-        Read::Read
+        Read::Taken
     }
 
     /// The retired lifecycle.
@@ -462,7 +467,7 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// that ends it. A news of an installation is kept
     /// ([`Self::take_installed`]) and the next one read.
     pub fn late_end(&mut self) -> Option<LateEnd<E>> {
-        while self.late.is_none() && matches!(self.read_one(), Read::Read) {}
+        while self.late.is_none() && matches!(self.read_one(), Read::Taken) {}
         self.late
     }
 
@@ -487,10 +492,7 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
         clippy::result_large_err,
         reason = "a refused finish returns the half and the proof whole, by value"
     )]
-    pub fn finish(
-        mut self,
-        retired: DatapathRetired<B>,
-    ) -> Result<FinishedLifecycleOf<Q, C, K, E, B>, ForeignProof<Self, B>> {
+    pub fn finish(mut self, retired: DatapathRetired<B>) -> Finished<Self, Q, C, K, E, B> {
         if retired.installation != self.installation {
             return Err(ForeignProof {
                 half: self,
