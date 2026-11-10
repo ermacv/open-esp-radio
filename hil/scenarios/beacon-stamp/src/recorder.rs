@@ -196,6 +196,28 @@ pub struct Recorder<C: Cancel + Send + 'static> {
     worker: Option<JoinHandle<()>>,
 }
 
+/// One complete line of the stream: a reset line after the edge is the
+/// next boot, counted over the whole stream; any other line goes to the
+/// waits, marked as the current boot's when it follows the edge and its
+/// one reset line.
+fn handle_line(
+    text: String,
+    edge: bool,
+    resets: &mut u32,
+    recording: &Mutex<Recording>,
+    send: &mpsc::Sender<Message>,
+) {
+    if edge && oer_tools_lab_model::rom::is_reset_line(text.trim()) {
+        *resets = resets.saturating_add(1);
+        let counted = *resets;
+        observe(recording, |recording| recording.resets = counted);
+        let _ = send.send(Message::Boot(counted));
+    } else {
+        let current = edge && *resets == 1;
+        let _ = send.send(Message::Line { text, current });
+    }
+}
+
 fn observe(observed: &Mutex<Recording>, update: impl FnOnce(&mut Recording)) {
     update(&mut observed.lock().unwrap_or_else(PoisonError::into_inner));
 }
@@ -252,14 +274,7 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
                             if byte == b'\n' {
                                 let text = String::from_utf8_lossy(&line).trim_end().to_owned();
                                 line.clear();
-                                if edge && oer_tools_lab_model::rom::is_reset_line(text.trim()) {
-                                    resets = resets.saturating_add(1);
-                                    observe(&recording, |recording| recording.resets = resets);
-                                    let _ = send.send(Message::Boot(resets));
-                                } else {
-                                    let current = edge && resets == 1;
-                                    let _ = send.send(Message::Line { text, current });
-                                }
+                                handle_line(text, edge, &mut resets, &recording, &send);
                             } else {
                                 line.push(byte);
                             }
@@ -273,10 +288,11 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
                         observe(&recording, |recording| recording.edge = true);
                     }
                     Event::Finished(result) => {
+                        // The last fragment, without its newline, is a line
+                        // like any other: a reset line there is a boot too.
                         if recorded && !line.is_empty() {
                             let text = String::from_utf8_lossy(&line).trim_end().to_owned();
-                            let current = edge && resets == 1;
-                            let _ = send.send(Message::Line { text, current });
+                            handle_line(text, edge, &mut resets, &recording, &send);
                         }
                         observe(&recording, |recording| match result {
                             Err(error) if error == SERVICE_GONE => {
@@ -960,5 +976,30 @@ mod tests {
         let unclean = clean.unwrap_err();
         assert!(unclean.contains("responder: lost: 3 bytes"), "{unclean}");
         assert!(!unclean.contains("preflight"), "{unclean}");
+    }
+
+    #[test]
+    fn the_owners_unterminated_second_reset_line_at_the_end_is_a_reboot() {
+        let file = File::default();
+        let (recorder, events, _cancels) = record(&file);
+        // The boot, its pass, then a second reset line the stream ends on,
+        // without its newline.
+        feed(
+            &events,
+            vec![
+                Event::Ready,
+                output(&format!("{ROM}OER-RESULT: pass beacon-stamp\n")),
+                output("rst:0x17 (CHIP_USB_UART_RESET),boot:0x58 (SPI_FAST_FLASH_BOOT)"),
+            ],
+            Ok(serde_json::Value::Null),
+        );
+        // The pass read before stays a fact of its own.
+        assert_eq!(recorder.result(Duration::MAX), Ok(ProbeResult::Pass));
+        let mut consoles = Consoles::new();
+        consoles.add("measurement", "m.log".into(), recorder);
+        let (record, clean) = consoles.finish_all();
+        assert_eq!(record["measurement"]["resets"], 2);
+        assert!(clean.unwrap_err().contains("rebooted: 2 reset lines"));
+        assert!(file.text().ends_with("boot:0x58 (SPI_FAST_FLASH_BOOT)"));
     }
 }
