@@ -144,6 +144,10 @@ pub trait Host {
 
 /// Where the pcap stream goes, and whether its reader cancelled.
 pub trait Sink {
+    /// The process listens: from now on the stream is the capture asked
+    /// for. Called once, before the stream's first write after the
+    /// readiness; never for a capture that did not become ready.
+    fn ready(&mut self);
     /// Take all of `bytes`; an error stops the capture.
     fn write(&mut self, bytes: &[u8]) -> Result<()>;
     fn cancelled(&self) -> bool;
@@ -383,6 +387,7 @@ pub fn capture<H: Host, S: Sink, C: Clock>(
             teardown.describe()
         ));
     }
+    sink.ready();
     let mut bytes = 0u64;
     let ended = loop {
         if sink.cancelled() {
@@ -426,6 +431,15 @@ pub fn capture<H: Host, S: Sink, C: Clock>(
             teardown.describe()
         )),
     }
+}
+
+/// Whether a trimmed stderr line of `tcpdump` says it listens: tcpdump
+/// 4.99 writes `tcpdump: listening on <interface>, link-type …` (its
+/// program name first); the bare form is accepted too.
+fn announces_listening(line: &str) -> bool {
+    line.strip_prefix("tcpdump: ")
+        .unwrap_or(line)
+        .starts_with("listening on ")
 }
 
 /// Read a listing: the radio's PHY name, its index, then `iw dev`.
@@ -543,6 +557,17 @@ pub mod ssh {
         diagnostics: Diagnostics,
     }
 
+    /// One line of the capture's stderr: the shell's PID line names the
+    /// process; tcpdump's listening line is its readiness.
+    pub(super) fn observe(line: &str, pid: &Mutex<Option<u32>>, announce: &mpsc::SyncSender<()>) {
+        let line = line.trim();
+        if let Some(number) = line.strip_prefix("oer-capture-pid ") {
+            *pid.lock().unwrap_or_else(PoisonError::into_inner) = number.trim().parse().ok();
+        } else if super::announces_listening(line) {
+            let _ = announce.try_send(());
+        }
+    }
+
     impl SshProcess {
         fn start(ssh: Ssh, script: &str) -> Result<Self> {
             let mut child = ssh.start(script)?;
@@ -552,15 +577,7 @@ pub mod ssh {
             let pid = Arc::new(Mutex::new(None));
             let (announce, ready) = mpsc::sync_channel(1);
             let seen = pid.clone();
-            let stderr = StderrReader::spawn(stderr, move |line| {
-                let line = line.trim();
-                if let Some(number) = line.strip_prefix("oer-capture-pid ") {
-                    *seen.lock().unwrap_or_else(PoisonError::into_inner) =
-                        number.trim().parse().ok();
-                } else if line.starts_with("listening on ") {
-                    let _ = announce.try_send(());
-                }
-            });
+            let stderr = StderrReader::spawn(stderr, move |line| observe(line, &seen, &announce));
             Ok(Self {
                 ssh,
                 child,

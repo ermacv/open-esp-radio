@@ -277,11 +277,16 @@ impl Host for PipeHost {
 struct Sink {
     bytes: Vec<u8>,
     writes: usize,
+    readied: usize,
     cancel_after: Option<usize>,
     fail_at: Option<usize>,
 }
 
 impl super::super::Sink for Sink {
+    fn ready(&mut self) {
+        self.readied += 1;
+    }
+
     fn write(&mut self, bytes: &[u8]) -> Result<()> {
         self.writes += 1;
         if self.fail_at == Some(self.writes) {
@@ -429,6 +434,7 @@ fn sink() -> Sink {
     Sink {
         bytes: Vec::new(),
         writes: 0,
+        readied: 0,
         cancel_after: None,
         fail_at: None,
     }

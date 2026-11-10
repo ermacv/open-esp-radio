@@ -471,7 +471,9 @@ reading back, and restores every category to mac80211's defaults. AQL holds
 frames in mac80211's queue and never drops one.
 `monitor::capture` creates the monitor interface `oercap0` on the AP
 radio's PHY, on one channel, and streams `tcpdump -y IEEE802_11_RADIO -w -`
-into a sink until it cancels. It refuses before any change when an
+into a sink until it cancels; once `tcpdump` says it listens (its stderr's
+`tcpdump: listening on …` line) the sink hears the readiness, before the
+stream's bytes after it. It refuses before any change when an
 interface of that name exists anywhere on the router or the radio's PHY
 has any interface: it takes over nothing it did not create. From the
 creation on, every ending (a failed creation, start or readiness, a

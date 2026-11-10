@@ -231,12 +231,18 @@ pub(crate) fn run(
 }
 
 /// The capture's stream: the operation's output, which refuses what its
-/// client does not take; the operation's stop is the cancellation.
+/// client does not take, and its readiness (`Reply::Ready`); the
+/// operation's stop is the cancellation.
 struct Capture<'a> {
     io: &'a OperationIo,
 }
 
 impl monitor::Sink for Capture<'_> {
+    /// The capture listens: the client hears it apart from the pcap bytes.
+    fn ready(&mut self) {
+        self.io.output.ready();
+    }
+
     fn write(&mut self, bytes: &[u8]) -> Result<()> {
         self.io.output.try_write(bytes)
     }

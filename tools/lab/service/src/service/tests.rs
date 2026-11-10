@@ -470,6 +470,7 @@ fn a_slow_reader_loses_output_visibly_and_never_holds_the_operation() {
                         break;
                     }
                     Event::Finished(result) => panic!("finished before a loss: {result:?}"),
+                    Event::Ready => panic!("this operation has no readiness"),
                 }
             }
             assert_eq!(received, BURST);
@@ -487,6 +488,7 @@ fn a_slow_reader_loses_output_visibly_and_never_holds_the_operation() {
                 reports += 1;
             }
             Event::Finished(result) => finished = Some(result),
+            Event::Ready => panic!("this operation has no readiness"),
         }
     }
     assert_eq!(finished, Some(Ok(serde_json::json!("episodes"))));
@@ -1122,4 +1124,31 @@ fn a_whole_write_is_refused_for_a_gone_or_slow_client_and_counted_lost() {
     assert!(gone.contains("gone"), "{gone}");
     // Nobody reads any more: nothing more is lost to a reader.
     assert_eq!(*lock(&lost), (OUTPUT_BUDGET - OUTPUT_BUDGET / 4) as u64);
+}
+
+#[test]
+fn a_readiness_follows_the_output_queued_before_it_and_is_never_dropped() {
+    let outbox = Outbox::new();
+    let output = Output {
+        outbox: outbox.clone(),
+        operation: 9,
+        lost: Arc::new(Mutex::new(0)),
+    };
+    assert_eq!(output.try_write(b"pcap"), Ok(()));
+    // The output budget full: a readiness still goes, after the bytes.
+    let full = vec![0u8; OUTPUT_BUDGET];
+    assert!(output.try_write(&full).is_err());
+    output.ready();
+    let frames: Vec<Frame> = lock(&outbox.queue).frames.drain(..).collect();
+    // "pcap", the half of the refused write that fit, then the readiness.
+    assert_eq!(frames.len(), 3);
+    assert!(matches!(&frames[0], Frame::Data { operation: 9, bytes } if bytes == b"pcap"));
+    assert!(
+        matches!(&frames[1], Frame::Data { operation: 9, bytes } if bytes.len() == OUTPUT_BUDGET / 2)
+    );
+    let Frame::Message(json) = &frames[2] else {
+        panic!("the readiness is no message");
+    };
+    let reply: Reply = serde_json::from_slice(json).unwrap();
+    assert!(matches!(reply, Reply::Ready { id: 9 }), "{reply:?}");
 }
