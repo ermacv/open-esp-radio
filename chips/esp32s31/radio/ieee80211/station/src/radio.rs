@@ -568,7 +568,7 @@ pub(crate) async fn drive<W: Binding>(
         resources,
     } = match Port::<W>::install(parts, minted, driver) {
         Ok(installation) => installation,
-        Err((mut parts, minted, driver)) => {
+        Err((parts, minted, driver)) => {
             let unavailable =
                 port_refused::<W>(InitializationError::Backend, &mut *parts.device).await;
             post(&mut mailbox, News::Unavailable(unavailable)).await;

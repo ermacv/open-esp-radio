@@ -558,6 +558,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// size or bank it does not take, a busy descriptor, a driver that holds
     /// work, a lost receive buffer or a transmit allocation still out.
     #[inline(never)]
+    #[allow(
+        clippy::result_large_err,
+        reason = "the refusal returns every input by value, unchanged"
+    )]
     pub fn install(
         parts: PortParts<D, B, O>,
         minted: Minted<Id, InstallationPools>,

@@ -566,7 +566,7 @@ impl<W: Binding> AccessPointRunner<W> {
             resources,
         } = match Port::<W>::install(parts, minted, driver) {
             Ok(installation) => installation,
-            Err((mut parts, minted, driver)) => {
+            Err((parts, minted, driver)) => {
                 // The started radio leaves from the refused parts' device,
                 // which the port never started; its outcome is the cleanup,
                 // and every input comes back.

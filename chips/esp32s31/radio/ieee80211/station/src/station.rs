@@ -301,7 +301,7 @@ type CompletedOf<W> = LifecycleCompleted<
 >;
 /// The retired lifecycle of `W`: the station, its places, the arbiter, the
 /// issuer, the contexts, a rejected owner and the events' sink.
-pub type RetiredOf<W> = RetiredLifecycle<
+pub(crate) type RetiredOf<W> = RetiredLifecycle<
     'static,
     radio::ActorPort<W>,
     crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
@@ -316,7 +316,13 @@ pub type RetiredOf<W> = RetiredLifecycle<
 /// application. The place the lifecycle ran in is free once the half left
 /// it; the half stays here for good.
 #[must_use = "the lifecycle's half holds the station's owners of the installation"]
-pub struct UnfinishedLifecycle<W: Binding>(pub Placed<'static, RetiredOf<W>>);
+pub struct UnfinishedLifecycle<W: Binding>(
+    #[allow(
+        dead_code,
+        reason = "held for its owners: the application keeps it, and dropping it ends them"
+    )]
+    Placed<'static, RetiredOf<W>>,
+);
 
 /// How the station's lifecycle task ended: its exit, which Control keeps,
 /// and the lifecycle's half of an installation that did not retire. Its

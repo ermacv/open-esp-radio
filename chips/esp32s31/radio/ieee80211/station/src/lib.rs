@@ -867,7 +867,7 @@ pub use chip::{
 #[cfg(target_arch = "riscv32")]
 pub use radio::{DatapathEnd, UnfinishedStationOf};
 #[cfg(target_arch = "riscv32")]
-pub use station::{RetiredOf, StationEnd, UnfinishedLifecycle};
+pub use station::{StationEnd, UnfinishedLifecycle};
 #[cfg(any(test, target_arch = "riscv32"))]
 pub use station_end::{DatapathCause, UnfinishedStation};
 
