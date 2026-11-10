@@ -1367,7 +1367,7 @@ fn an_echo_s_end_releases_the_neighbors_wait_counter() {
         );
         let seen = stack.neighbors_changed();
         let demand = stack.poll_demand(now).unwrap();
-        assert_eq!(demand.ready.class, Class::Control);
+        assert_eq!(demand.ready().class, Class::Control);
         stack
             .transmit(now, demand.grant(), unproduced, &())
             .unwrap();
@@ -1460,7 +1460,9 @@ fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
         assert_eq!(stack.configuration().dhcp, Some(DhcpState::Renewing));
         let ready: Vec<_> = stack.demands(secs(500), &()).collect();
         assert!(
-            ready.iter().any(|work| work.ready.class == Class::Control),
+            ready
+                .iter()
+                .any(|work| work.ready().class == Class::Control),
             "T1 owes a renewal or its server's ARP: {ready:?}"
         );
     });
