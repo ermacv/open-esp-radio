@@ -340,6 +340,10 @@ pub type UnfinishedStationOf<W> = crate::station_end::UnfinishedStation<
 >;
 
 /// How the datapath actor's task ended.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "no-alloc end returns every owner by value, as the install's refusal does"
+)]
 #[must_use = "an unfinished installation holds the actor, its port and their owners"]
 pub enum DatapathEnd<W: Binding> {
     /// The installation retired: its radio's stop was confirmed and the

@@ -91,10 +91,9 @@ fn retired_with<'a, 'b>(runner: TestRunner<'a, 'b>, ended: ApEnded, stop: Stop) 
         Duration::from_millis(1),
         leave,
     ));
-    let exit = retired.exit();
-    let unfinished = match retired {
-        Retired::Completed(_) => None,
-        Retired::Unfinished(unfinished) => Some(unfinished),
+    let (exit, unfinished) = match retired {
+        Retired::Completed(exit) => (exit, None),
+        Retired::Unfinished(unfinished) => (unfinished.cause, Some(unfinished)),
     };
     Left {
         exit,

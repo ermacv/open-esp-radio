@@ -177,16 +177,6 @@ pub(crate) enum Retired<R: Retiring, E> {
     Unfinished(UnfinishedAccessPoint<R, R::Unkept, <R::Port as Stopped>::Receipt, E>),
 }
 
-impl<R: Retiring, E: Copy> Retired<R, E> {
-    /// The exit this retire ended with.
-    pub(crate) fn exit(&self) -> ApExitOf<E> {
-        match self {
-            Self::Completed(exit) => *exit,
-            Self::Unfinished(unfinished) => unfinished.cause,
-        }
-    }
-}
-
 /// Stop the radio of an ended run unless the port confirmed its stop, then
 /// release it ([`crate::release::release`] through `leave`, every `retry`
 /// after a refusal that posted nothing).

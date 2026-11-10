@@ -299,6 +299,10 @@ pub struct AccessPointRunner<W: Binding> {
 /// How the access point ended: a completed retire (or a run that never
 /// installed), or an installation that did not retire, whole, which the
 /// caller holds from here.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "no-alloc end returns every owner by value, as the install's refusal does"
+)]
 #[must_use = "an unfinished installation holds the runner, its port and their owners"]
 pub enum AccessPointEnd<W: Binding> {
     /// Its exit; nothing of it is left.
