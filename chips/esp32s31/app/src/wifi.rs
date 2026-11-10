@@ -267,6 +267,28 @@ pub struct StationInstallationEnd {
     pub lifecycle: Option<StationLifecycleEnd>,
 }
 
+impl StationInstallationEnd {
+    /// Finish an installation whose datapath half retired after its
+    /// lifecycle stopped waiting for the release (the stop's drain passed
+    /// first): the lifecycle's half ends with the retired installation and
+    /// no release runs again. The actual end of the actor's task, beside
+    /// the exit the station's task returned. Any other end comes back
+    /// unchanged.
+    #[allow(
+        clippy::result_large_err,
+        reason = "an end this does not finish comes back whole, by value"
+    )]
+    pub fn finish_late_retire(self) -> Result<Option<wifi::StationExit>, Self> {
+        match self {
+            Self {
+                datapath: wifi::DatapathEnd::Retired(retired),
+                lifecycle: Some(half),
+            } => Ok(half.finish(retired)),
+            other => Err(other),
+        }
+    }
+}
+
 /// Where an ended task leaves its installation for the application: one
 /// place, written once by the task and read once by the application's
 /// handle.

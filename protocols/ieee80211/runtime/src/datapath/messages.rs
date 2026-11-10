@@ -223,7 +223,9 @@ pub enum FromActor<'id, D: DatapathPort<'id>> {
     /// The actor ended on a broken contract; it keeps every owner it held.
     Faulted(ActorFault<<D::Port as DataPort<'id>>::Fault>),
     /// A broken contract the actor survives: it serves a stop, and the
-    /// station restarts.
+    /// station restarts. Never after the lifecycle's retire or reinstall:
+    /// the lifecycle ended then, so the fault ends the run
+    /// ([`Self::Faulted`]).
     Recovering(ActorFault<<D::Port as DataPort<'id>>::Fault>),
 }
 

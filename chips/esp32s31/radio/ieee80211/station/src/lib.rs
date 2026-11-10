@@ -865,11 +865,16 @@ pub use chip::{
     Storage, station,
 };
 #[cfg(target_arch = "riscv32")]
-pub use radio::{DatapathEnd, UnfinishedStationOf};
+pub use radio::{
+    ActorQueues, DatapathEnd, LifecycleQueues, NotInstalled, UnfinishedDatapath,
+    UnfinishedStationOf,
+};
 #[cfg(target_arch = "riscv32")]
 pub use station::{StationEnd, UnfinishedLifecycle};
 #[cfg(any(test, target_arch = "riscv32"))]
-pub use station_end::{DatapathCause, UnfinishedStation};
+pub use station_end::{
+    DatapathCause, DatapathRetired, NotInstalledOf, UnfinishedLifecycleOf, UnfinishedStation,
+};
 
 /// Bind the facade's backing to this image's concrete interrupt entries.
 /// The image declares callbacks, collectors and terminal policy.

@@ -140,6 +140,175 @@ pub(crate) enum News<C, K, E> {
         result: Result<(), ReleaseCause>,
         network_lost: bool,
     },
+    /// The actor's run stopped on the lifecycle's abandon: it produces
+    /// nothing more into the queues between them.
+    Abandoned,
+}
+
+/// The proof that a station installation's datapath half retired: its
+/// radio's release completed and every owner of that half ended. Only
+/// [`retired`] makes it, once per completed release; it lets the
+/// lifecycle's half finish without a release of its own
+/// ([`UnfinishedLifecycleOf::finish`]).
+#[must_use = "the proof finishes the lifecycle's half of the retired installation"]
+pub struct DatapathRetired(());
+
+impl core::fmt::Debug for DatapathRetired {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("DatapathRetired")
+    }
+}
+
+/// What a station installation's first stage did not take, returned whole:
+/// the installation registry, once it was taken, and the minted
+/// installation, once one was minted. A refused stage hands back every
+/// input it was given.
+#[must_use = "a refusal before installation returns the registry and the minted installation"]
+pub struct NotInstalledOf<R, M> {
+    /// The installation registry.
+    pub installations: Option<R>,
+    /// The minted installation.
+    pub minted: Option<M>,
+}
+
+/// The first installation of `installations`, minted by `first`, or the
+/// registry back whole when it mints none.
+#[allow(
+    clippy::result_large_err,
+    reason = "the refusal returns the registry by value"
+)]
+pub(crate) fn first_installation<R, M>(
+    mut installations: R,
+    first: impl FnOnce(&mut R) -> Option<M>,
+) -> Result<(R, M), NotInstalledOf<R, M>> {
+    match first(&mut installations) {
+        Some(minted) => Ok((installations, minted)),
+        None => Err(NotInstalledOf {
+            installations: Some(installations),
+            minted: None,
+        }),
+    }
+}
+
+/// Run the actor's `run` until it ends or the lifecycle abandons it
+/// (`abandoned`). An abandon drops the run first, so the actor produces
+/// nothing more into the queues between them, and only then tells the
+/// lifecycle (`mailbox`, [`News::Abandoned`]), which waits for it before
+/// its own ends go out ([`abandon`]).
+///
+/// # Errors
+///
+/// The lifecycle's failure, once the run stopped and the news was posted.
+pub(crate) async fn run_until_abandoned<F: Future, C, K, E>(
+    run: F,
+    abandoned: &mut oer_portable_memory::WakingSpscReceiver<'_, LifecycleFailure, 1>,
+    mailbox: &mut oer_portable_memory::WakingSpscSender<'_, News<C, K, E>, 1>,
+) -> Result<F::Output, LifecycleFailure> {
+    let failure = {
+        let abandon = async {
+            loop {
+                if let Some(failure) = abandoned.try_receive() {
+                    return failure;
+                }
+                abandoned.ready().await;
+            }
+        };
+        match embassy_futures::select::select(run, abandon).await {
+            embassy_futures::select::Either::First(end) => return Ok(end),
+            embassy_futures::select::Either::Second(failure) => failure,
+        }
+    };
+    // The run is dropped here: the news follows its last poll.
+    mailbox.ready().await.send(News::Abandoned);
+    Err(failure)
+}
+
+/// Tell the actor's task once that the lifecycle ended on `failure` without
+/// retiring it, and wait until its run stopped: its next news is in
+/// `mailbox` ([`News::Abandoned`], or the fault it ended on first), left
+/// there for the lifecycle's half. Only then do the lifecycle's ends of the
+/// queues go out, so no producer runs while they are collected.
+pub(crate) async fn abandon<C, K, E>(
+    failure: LifecycleFailure,
+    abandon: &mut oer_portable_memory::WakingSpscSender<'_, LifecycleFailure, 1>,
+    mailbox: &mut oer_portable_memory::WakingSpscReceiver<'_, News<C, K, E>, 1>,
+) {
+    abandon.ready().await.send(failure);
+    while mailbox.is_empty() {
+        mailbox.ready().await;
+    }
+}
+
+/// The station lifecycle's half of an installation that did not retire,
+/// whole: its retired lifecycle `R`, its ends `Q` of the queues to the
+/// actor with every owner in transit in them, in order, and the actor
+/// task's news that came after the lifecycle stopped waiting for it.
+#[must_use = "the lifecycle's half holds the station's owners of the installation"]
+pub struct UnfinishedLifecycleOf<'a, R, Q, C, K, E> {
+    retired: R,
+    queues: Q,
+    mailbox: oer_portable_memory::WakingSpscReceiver<'a, News<C, K, E>, 1>,
+    /// The late news's exit, once read.
+    late: Option<StationExitOf<E>>,
+    /// An installation's commands and tokens a late news carried, kept.
+    installed: Option<(C, K)>,
+}
+
+impl<'a, R, Q, C, K, E: Copy> UnfinishedLifecycleOf<'a, R, Q, C, K, E> {
+    /// The half of `retired`, with the lifecycle's `queues` and `mailbox`.
+    pub(crate) const fn new(
+        retired: R,
+        queues: Q,
+        mailbox: oer_portable_memory::WakingSpscReceiver<'a, News<C, K, E>, 1>,
+    ) -> Self {
+        Self {
+            retired,
+            queues,
+            mailbox,
+            late: None,
+            installed: None,
+        }
+    }
+
+    /// The retired lifecycle.
+    pub(crate) fn retired_mut(&mut self) -> &mut R {
+        &mut self.retired
+    }
+
+    /// The lifecycle's ends of the queues to the actor: the owners in
+    /// transit in them, each once, in order.
+    pub fn queues(&mut self) -> &mut Q {
+        &mut self.queues
+    }
+
+    /// How the actor's task ended after the lifecycle stopped waiting for
+    /// it (a release past the drain's deadline, the stop after an
+    /// abandon), read once from its news and kept: `None` while it has
+    /// told nothing. A news of an installation is out of order
+    /// ([`LifecycleFailure::Mailbox`]); its owners stay in the half.
+    pub fn late_end(&mut self) -> Option<StationExitOf<E>> {
+        if self.late.is_none() {
+            self.late = self.mailbox.try_receive().map(|news| match news {
+                News::Installed(commands, tokens) => {
+                    self.installed = Some((commands, tokens));
+                    StationExitOf::Failed(LifecycleFailure::Mailbox)
+                }
+                news => ended(news),
+            });
+        }
+        self.late
+    }
+
+    /// Finish the half of an installation whose datapath half retired: its
+    /// owners end with the retired installation, as after a completed
+    /// retire, and no release runs again (the datapath half's release
+    /// was the installation's one). The actual end of the actor's task is
+    /// returned ([`Self::late_end`]), beside the exit the lifecycle's task
+    /// returned.
+    pub fn finish(mut self, retired: DatapathRetired) -> Option<StationExitOf<E>> {
+        let DatapathRetired(()) = retired;
+        self.late_end()
+    }
 }
 
 /// A restart of `actor`'s installation: the stopped port's cleanup first (a
@@ -184,15 +353,16 @@ pub(crate) fn reinstalled<A: Installation, C, K, E>(
 /// ([`ReleaseCause::Unkept`], [`Phase::Stopped`]); otherwise the port's
 /// cleanup and its radio's release run ([`crate::release::release`]). Only
 /// a release that succeeded retires the installation: the actor and the
-/// cleanup's receipt end with it. A refusal leaves it unfinished, whole,
-/// in [`Phase::Releasing`].
+/// cleanup's receipt end with it, and the proof of it is returned
+/// ([`DatapathRetired`]). A refusal leaves it unfinished, whole, in
+/// [`Phase::Releasing`].
 pub(crate) async fn retired<A: Installation, C, K, E, F>(
     mut actor: A,
     network_lost: bool,
     timer: &impl Timer,
     retry: Duration,
     leave: impl FnMut(<A::Port as Stopped>::Radio) -> F,
-) -> (News<C, K, E>, Option<UnfinishedOf<A>>)
+) -> (News<C, K, E>, Result<DatapathRetired, UnfinishedOf<A>>)
 where
     F: Future<Output = Leave<<A::Port as Stopped>::Radio, ReleaseCause>>,
 {
@@ -205,7 +375,7 @@ where
                 result: Err(cause),
                 network_lost,
             },
-            Some(left),
+            Err(left),
         );
     }
     let (result, returned) =
@@ -214,9 +384,9 @@ where
         Ok(()) => {
             drop(returned);
             drop(actor);
-            None
+            Ok(DatapathRetired(()))
         }
-        Err(cause) => Some(unfinished(
+        Err(cause) => Err(unfinished(
             actor,
             returned,
             DatapathCause::Release(cause),
@@ -240,7 +410,9 @@ pub(crate) fn installed<C, K, E>(news: News<C, K, E>) -> Result<(C, K), StationE
         News::Unavailable(error) => Err(StationExitOf::Unavailable(error)),
         News::Reinstall(cause) => Err(StationExitOf::Failed(LifecycleFailure::Reinstall(cause))),
         News::Faulted(failure) => Err(StationExitOf::Failed(failure)),
-        News::Released { .. } => Err(StationExitOf::Failed(LifecycleFailure::Mailbox)),
+        News::Released { .. } | News::Abandoned => {
+            Err(StationExitOf::Failed(LifecycleFailure::Mailbox))
+        }
     }
 }
 
@@ -284,7 +456,7 @@ pub(crate) fn ended<C, K, E>(news: News<C, K, E>) -> StationExitOf<E> {
             network_lost,
         } => released_exit(result, network_lost),
         News::Faulted(failure) => StationExitOf::Failed(failure),
-        News::Reinstall(_) | News::Installed(..) | News::Unavailable(_) => {
+        News::Reinstall(_) | News::Installed(..) | News::Unavailable(_) | News::Abandoned => {
             StationExitOf::Failed(LifecycleFailure::Mailbox)
         }
     }

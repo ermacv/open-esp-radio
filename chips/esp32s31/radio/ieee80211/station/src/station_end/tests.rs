@@ -147,7 +147,12 @@ fn actor<'a>(
 }
 
 /// The actor task's end of the retired `actor`, as it calls it.
-fn retired_of(actor: TestActor<'_>) -> (TestNews, Option<UnfinishedOf<TestActor<'_>>>) {
+fn retired_of(
+    actor: TestActor<'_>,
+) -> (
+    TestNews,
+    Result<DatapathRetired, UnfinishedOf<TestActor<'_>>>,
+) {
     let clock = VirtualClock::<2>::new();
     ready(retired(
         actor,
@@ -183,7 +188,7 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
         let (news, left) = retired_of(actor(&ends, cleanup, stopped, false));
         assert_eq!(ended(news), StationExitOf::ReleaseFailed(cause));
         assert_eq!(ends.all(), [0; 4], "the refusal ends nothing");
-        let Some(left) = left else {
+        let Err(left) = left else {
             panic!("a refused release leaves the installation unfinished");
         };
         assert_eq!(left.cause, DatapathCause::Release(cause));
@@ -199,7 +204,7 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
 fn a_release_that_succeeded_retires_the_whole_installation() {
     let ends = Ends::default();
     let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), false));
-    assert!(left.is_none(), "a completed retire");
+    assert!(left.is_ok(), "a completed retire");
     assert_eq!(ended(news), StationExitOf::Stopped);
     assert_eq!(ends.all(), [1, 1, 0, 0]);
 }
@@ -212,7 +217,7 @@ fn an_item_the_actor_could_not_keep_skips_the_release_and_comes_back_whole() {
         ended(news),
         StationExitOf::ReleaseFailed(ReleaseCause::Unkept)
     );
-    let Some(mut left) = left else {
+    let Err(mut left) = left else {
         panic!("the item leaves the installation unfinished");
     };
     assert_eq!(left.phase, Phase::Stopped);
@@ -485,5 +490,154 @@ fn a_faulted_actor_ends_the_lifecycles_wait() {
     assert_eq!(
         release_settled(Some(TestNews::Faulted(failure)), None),
         (StationExitOf::Failed(failure), LifecycleHalf::Unfinished)
+    );
+}
+
+/// The actor's run of the test: each poll sends the next number into the
+/// queue to the lifecycle; `alive` reads whether it still runs.
+struct Producer<'q, 'a> {
+    queue: &'q oer_portable_memory::WakingSpscSender<'a, u8, 8>,
+    next: u8,
+    alive: &'q Cell<bool>,
+}
+
+impl Future for Producer<'_, '_> {
+    type Output = ();
+    fn poll(mut self: core::pin::Pin<&mut Self>, _: &mut Context<'_>) -> Poll<()> {
+        let next = self.next;
+        if self.queue.try_send(next).is_ok() {
+            self.next = next.wrapping_add(1);
+        }
+        Poll::Pending
+    }
+}
+
+impl Drop for Producer<'_, '_> {
+    fn drop(&mut self) {
+        self.alive.set(false);
+    }
+}
+
+/// Poll `future` once with a waker that does nothing.
+fn poll_once<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
+    future.poll(&mut Context::from_waker(core::task::Waker::noop()))
+}
+
+/// A lifecycle that abandons the actor: the actor's run stops before the
+/// lifecycle's ends go out, so every owner in transit is in the queues, in
+/// the order it was sent, each once, and nothing follows it; the actor's
+/// news that it stopped stays in the mailbox for the lifecycle's half.
+#[test]
+fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
+    use oer_portable_memory::WakingSpscQueue;
+    let failure = LifecycleFailure::Contract(
+        oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation::Missing,
+    );
+    let mut transit = WakingSpscQueue::<u8, 8>::new();
+    let (to_lifecycle, mut in_transit) = transit.split();
+    let mut abandon_place = WakingSpscQueue::<LifecycleFailure, 1>::new();
+    let (mut abandon_end, mut abandoned) = abandon_place.split();
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mut mailbox, mut news) = mailbox_place.split();
+    let alive = Cell::new(true);
+    let producer = Producer {
+        queue: &to_lifecycle,
+        next: 0,
+        alive: &alive,
+    };
+    let ended = {
+        let mut datapath = pin!(run_until_abandoned(producer, &mut abandoned, &mut mailbox));
+        for _ in 0..3 {
+            assert!(poll_once(datapath.as_mut()).is_pending());
+        }
+        let lifecycle = async {
+            abandon(failure, &mut abandon_end, &mut news).await;
+            // The lifecycle's ends go out here.
+            alive.get()
+        };
+        let mut both = pin!(embassy_futures::join::join(lifecycle, datapath.as_mut()));
+        let mut ended = None;
+        for _ in 0..4 {
+            if let Poll::Ready(both) = poll_once(both.as_mut()) {
+                ended = Some(both);
+                break;
+            }
+        }
+        ended
+    };
+    let Some((producing, run)) = ended else {
+        panic!("both sides end");
+    };
+    assert!(!producing, "the actor stopped before the ends went out");
+    assert_eq!(run, Err(failure));
+    let mut received = heapless::Vec::<u8, 8>::new();
+    while let Some(item) = in_transit.try_receive() {
+        assert!(received.push(item).is_ok());
+    }
+    assert_eq!(received, [0, 1, 2, 3], "in order, each once");
+    assert!(matches!(news.try_receive(), Some(News::Abandoned)));
+}
+
+/// A registry that mints no first installation comes back whole.
+#[test]
+fn a_registry_that_mints_nothing_comes_back_whole() {
+    let ends = Ends::default();
+    let Err(refused) = first_installation(Receipt(&ends.other), |_| None::<u8>) else {
+        panic!("nothing was minted");
+    };
+    assert!(refused.minted.is_none());
+    assert!(refused.installations.is_some(), "the registry is returned");
+    assert_eq!(ends.all(), [0; 4]);
+    drop(refused);
+    assert_eq!(ends.all(), [0, 1, 0, 0], "ended once, by its holder");
+    let ends = Ends::default();
+    let Ok((registry, minted)) = first_installation(Receipt(&ends.other), |_| Some(7u8)) else {
+        panic!("one was minted");
+    };
+    assert_eq!(minted, 7);
+    drop(registry);
+    assert_eq!(ends.all(), [0, 1, 0, 0]);
+}
+
+/// The datapath half retired after the lifecycle's drain deadline passed:
+/// the lifecycle's exit keeps the deadline, the half reads the actual end
+/// of the actor's task (kept once read), hands out its owners in transit,
+/// and finishes on the datapath's proof of its retire, with no release of
+/// its own (it holds none to run).
+#[test]
+fn a_late_retire_finishes_the_lifecycles_half_without_a_second_release() {
+    use oer_portable_memory::WakingSpscQueue;
+    let (exit, half) = release_settled::<u8, u8, ()>(None, None);
+    assert_eq!(exit, StationExitOf::ReleaseFailed(ReleaseCause::Deadline));
+    assert_eq!(half, LifecycleHalf::Unfinished);
+    let datapath = Ends::default();
+    let (late, proof) = retired_of(actor(&datapath, Ok(()), Some(Radio(Leaves::Left)), false));
+    let Ok(proof) = proof else {
+        panic!("the release completed");
+    };
+    assert_eq!(datapath.all(), [1, 1, 0, 0], "the datapath half ended");
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mailbox, news) = mailbox_place.split();
+    assert!(mailbox.try_send(late).is_ok());
+    let mut transit = WakingSpscQueue::<u8, 8>::new();
+    let (to_lifecycle, in_transit) = transit.split();
+    assert!(to_lifecycle.try_send(9).is_ok());
+    let lifecycle = Ends::default();
+    let mut half = UnfinishedLifecycleOf::new(Receipt(&lifecycle.other), in_transit, news);
+    assert_eq!(half.queues().try_receive(), Some(9), "the owner in transit");
+    assert_eq!(half.queues().try_receive(), None, "once");
+    assert!(half.retired_mut().0.get() == 0);
+    assert_eq!(half.late_end(), Some(StationExitOf::Stopped));
+    assert_eq!(
+        half.late_end(),
+        Some(StationExitOf::Stopped),
+        "kept once read"
+    );
+    assert_eq!(lifecycle.all(), [0; 4]);
+    assert_eq!(half.finish(proof), Some(StationExitOf::Stopped));
+    assert_eq!(
+        lifecycle.all(),
+        [0, 1, 0, 0],
+        "the lifecycle's half ended once"
     );
 }

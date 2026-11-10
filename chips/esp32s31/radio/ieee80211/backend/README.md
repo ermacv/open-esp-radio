@@ -467,18 +467,25 @@ them; after a confirmed stop only `take_unconsumed` offers them. Nothing
 the port keeps makes its deadline due or raises a fact, and a port that
 keeps one does not retire. An item the store cannot keep (a taken or
 missing place: a token that was not unique) goes to the call's one unkept
-place and comes back beside the call's answer (`Unkeeping`). Each producing
-call has one right to fill that place (`unconsumed::Vacancy`, created once
-per call, neither `Clone` nor `Copy`), and every producer obtains it before
-it takes the owner an item carries (through `DriverEnv::vacancy` in the
-driver's steps); a given or kept item gives the right back, a held one ends
-it there. Without the right the owner stays where it is: queued withdrawals
+place and comes back beside the call's answer (`Unkeeping`). The place has
+one right to fill it (`unconsumed::Vacancy`, neither `Clone` nor `Copy`):
+the first is made with the empty place, and a later one only by the
+`settle` that took a held item out beside an answer; no call makes one of
+its own. Every producer obtains it before it takes the owner an item
+carries (through `DriverEnv::vacancy` in the driver's steps); a given or
+kept item gives the right back, a held one ends it there. A submission
+without the right takes nothing of its attempt and returns it whole
+(`SubmitHalt::NotAccepted`). Without the right the owner stays where it is: queued withdrawals
 and a late beacon stay queued, completions the core already gave wait in
 the driver and come home first at the next call (no sink takes the core's
 completions meanwhile), after the first refusal the rest of a batch stays
 in the driver, waiting removals, the configuration and gate terminals, a
 key command (held) and the receive cut wait for the next call. A second
-item of one call never reaches a delivery, so none is dropped.
+item of one call never reaches a delivery, so none is dropped. The stopped
+port's cleanup (`clean_stopped`) first brings home the completions the
+driver still keeps, under the same right and without a hardware call; a
+refused one comes back beside the cleanup and the rest stay in the
+driver.
 
 A station group key mutation and an access point's are commands of their
 own role (`StationGroupCommand`, `AccessPointGroupCommand`). A step of

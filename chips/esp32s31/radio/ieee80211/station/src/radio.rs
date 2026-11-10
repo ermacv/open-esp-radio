@@ -352,6 +352,35 @@ pub type UnfinishedStationOf<W> = crate::station_end::UnfinishedStation<
     Freed<W>,
 >;
 
+/// The actor's ends of the queues between it and the station's lifecycle,
+/// with every owner the lifecycle sent and the actor had not taken.
+pub type ActorQueues<W> = LifecycleEnds<'static, 'static, ActorPort<W>, TO, FROM, RETURNS>;
+
+/// The lifecycle's ends of the queues between it and the actor, with every
+/// owner the actor sent and the lifecycle had not taken.
+pub type LifecycleQueues<W> = ActorEnds<'static, 'static, ActorPort<W>, TO, FROM, RETURNS>;
+
+/// What a station installation's first stage did not take: the registry
+/// once taken, the minted installation once minted.
+pub type NotInstalled<W> = crate::station_end::NotInstalledOf<Installations<W>, MintedOf<W>>;
+
+/// One minted installation of `W`'s port.
+pub type MintedOf<W> = oer_protocols_radio_port::Minted<<W as Binding>::Id, InstallationPools>;
+
+/// The datapath half of a station's installation that did not retire,
+/// whole: the installation (actor, port, items, receipt, cause, phase),
+/// the actor's ends of the queues to the lifecycle with every owner in
+/// transit in them, and the installation registry.
+#[must_use = "an unfinished installation holds the actor, its port and their owners"]
+pub struct UnfinishedDatapath<W: Binding> {
+    /// The installation, whole.
+    pub installation: UnfinishedStationOf<W>,
+    /// The actor's ends of the queues, its run stopped.
+    pub queues: ActorQueues<W>,
+    /// The installation registry.
+    pub installations: Installations<W>,
+}
+
 /// How the datapath actor's task ended.
 #[allow(
     clippy::large_enum_variant,
@@ -360,16 +389,18 @@ pub type UnfinishedStationOf<W> = crate::station_end::UnfinishedStation<
 #[must_use = "an unfinished installation holds the actor, its port and their owners"]
 pub enum DatapathEnd<W: Binding> {
     /// The installation retired: its radio's stop was confirmed and the
-    /// radio released, every owner ended with it.
-    Retired,
+    /// radio released, every owner ended with it. The proof finishes the
+    /// lifecycle's half when that half did not wait for the release.
+    Retired(crate::station_end::DatapathRetired),
     /// No installation came up before the port was handed anything: the
+    /// registry and the minted installation it had taken, whole; the
     /// station's task holds the refusal and how the owners it returned
     /// ended.
-    NotInstalled,
+    NotInstalled(NotInstalled<W>),
     /// The port refused its installation: every input it was handed, whole.
     Refused(RefusedInstall<W>),
     /// The installation did not retire: everything it held.
-    Unfinished(UnfinishedStationOf<W>),
+    Unfinished(UnfinishedDatapath<W>),
 }
 
 impl<W: Binding> crate::station_end::Installation for PlacedActor<W> {
@@ -531,7 +562,7 @@ pub(crate) async fn drive<W: Binding>(
         mut mailbox,
         mut abandoned,
     } = places;
-    let Some(mut installations) = W::take_installations() else {
+    let Some(installations) = W::take_installations() else {
         post(
             &mut mailbox,
             News::Unavailable(crate::failure::Unavailable::took_nothing(
@@ -539,18 +570,25 @@ pub(crate) async fn drive<W: Binding>(
             )),
         )
         .await;
-        return DatapathEnd::NotInstalled;
+        return DatapathEnd::NotInstalled(NotInstalled::<W> {
+            installations: None,
+            minted: None,
+        });
     };
-    let Some(minted) = installations.first() else {
-        post(
-            &mut mailbox,
-            News::Unavailable(crate::failure::Unavailable::took_nothing(
-                InitializationError::Registration,
-            )),
-        )
-        .await;
-        return DatapathEnd::NotInstalled;
-    };
+    let (mut installations, minted) =
+        match crate::station_end::first_installation(installations, Installations::<W>::first) {
+            Ok(first) => first,
+            Err(refused) => {
+                post(
+                    &mut mailbox,
+                    News::Unavailable(crate::failure::Unavailable::took_nothing(
+                        InitializationError::Registration,
+                    )),
+                )
+                .await;
+                return DatapathEnd::NotInstalled(refused);
+            }
+        };
     let config = boot.config;
     let (parts, driver) = match install(boot, config, crate::supply::PORT_BUFFERS).await {
         Ok(installed) => installed,
@@ -559,7 +597,10 @@ pub(crate) async fn drive<W: Binding>(
             // outcome told with it.
             let unavailable = crate::release::refused(refused.cause, refused.owners).await;
             post(&mut mailbox, News::Unavailable(unavailable)).await;
-            return DatapathEnd::NotInstalled;
+            return DatapathEnd::NotInstalled(NotInstalled::<W> {
+                installations: Some(installations),
+                minted: Some(minted),
+            });
         }
     };
     let PortInstallation {
@@ -600,19 +641,31 @@ pub(crate) async fn drive<W: Binding>(
     );
     post(&mut mailbox, News::Installed(commands, tokens)).await;
     let mut epoch = FIRST_TSF_EPOCH;
+    // Every end that did not retire returns the installation with the
+    // actor's ends of the queues (its run stopped) and the registry.
+    let left = |installation, queues, installations| {
+        DatapathEnd::Unfinished(UnfinishedDatapath {
+            installation,
+            queues,
+            installations,
+        })
+    };
     loop {
         // The run stops between its polls when the lifecycle ended without
         // retiring it: every poll of the run is synchronous over the actor,
-        // which keeps its state, its port and every owner.
+        // which keeps its state, its port and every owner. The lifecycle
+        // hears that it stopped before its own ends go out.
         let run = actor.run(&mut lifecycle, &mut network, &EmbassyClock);
-        let either = embassy_futures::select::select(run, abandoned_by(&mut abandoned)).await;
-        let end = match either {
-            embassy_futures::select::Either::First(end) => end,
-            embassy_futures::select::Either::Second(failure) => {
-                return DatapathEnd::Unfinished(ended_running(
-                    actor,
-                    DatapathCause::Lifecycle(failure),
-                ));
+        let end = match crate::station_end::run_until_abandoned(run, &mut abandoned, &mut mailbox)
+            .await
+        {
+            Ok(end) => end,
+            Err(failure) => {
+                return left(
+                    ended_running(actor, DatapathCause::Lifecycle(failure)),
+                    lifecycle,
+                    installations,
+                );
             }
         };
         match end {
@@ -620,12 +673,16 @@ pub(crate) async fn drive<W: Binding>(
                 let Some(next) = epoch.checked_add(1) else {
                     let cause = crate::failure::ReinstallCause::Epochs;
                     post(&mut mailbox, News::Reinstall(cause)).await;
-                    return DatapathEnd::Unfinished(unfinished(
-                        actor,
-                        None,
-                        DatapathCause::Reinstall(cause),
-                        Phase::Reinstalling,
-                    ));
+                    return left(
+                        unfinished(
+                            actor,
+                            None,
+                            DatapathCause::Reinstall(cause),
+                            Phase::Reinstalling,
+                        ),
+                        lifecycle,
+                        installations,
+                    );
                 };
                 // The stopped port's cleanup first: a port it did not
                 // finish keeps its owners and does not reinstall.
@@ -646,9 +703,9 @@ pub(crate) async fn drive<W: Binding>(
                         actor = running;
                         epoch = next;
                     }
-                    Err((news, left)) => {
+                    Err((news, unfinished)) => {
                         post(&mut mailbox, news).await;
-                        return DatapathEnd::Unfinished(left);
+                        return left(unfinished, lifecycle, installations);
                     }
                 }
             }
@@ -656,7 +713,7 @@ pub(crate) async fn drive<W: Binding>(
                 // Read before the release: the loss of the last stop's
                 // network participant, which the runner's exit records.
                 let network_lost = actor.network_lost();
-                let (news, left) = crate::station_end::retired(
+                let (news, retired) = crate::station_end::retired(
                     actor,
                     network_lost,
                     &EmbassyClock,
@@ -665,9 +722,9 @@ pub(crate) async fn drive<W: Binding>(
                 )
                 .await;
                 post(&mut mailbox, news).await;
-                return match left {
-                    Some(left) => DatapathEnd::Unfinished(left),
-                    None => DatapathEnd::Retired,
+                return match retired {
+                    Ok(retired) => DatapathEnd::Retired(retired),
+                    Err(unfinished) => left(unfinished, lifecycle, installations),
                 };
             }
             // The lifecycle hears the fault and ends with it; the
@@ -679,24 +736,13 @@ pub(crate) async fn drive<W: Binding>(
             ActorEnd::Faulted(fault) => {
                 let failure = crate::failure::convert::actor_fault(fault);
                 post(&mut mailbox, News::Faulted(failure)).await;
-                return DatapathEnd::Unfinished(ended_running(
-                    actor,
-                    DatapathCause::Faulted(failure),
-                ));
+                return left(
+                    ended_running(actor, DatapathCause::Faulted(failure)),
+                    lifecycle,
+                    installations,
+                );
             }
         }
-    }
-}
-
-/// The lifecycle's failure once it ended without retiring the actor.
-async fn abandoned_by(
-    abandoned: &mut WakingSpscReceiver<'static, crate::failure::LifecycleFailure, 1>,
-) -> crate::failure::LifecycleFailure {
-    loop {
-        if let Some(failure) = abandoned.try_receive() {
-            return failure;
-        }
-        abandoned.ready().await;
     }
 }
 

@@ -163,11 +163,18 @@ every input it was given (`Esp32s31Port::install`'s `InstallRefused`: the
 parts, the minted installation, the driver's place): the station's
 datapath task returns them as `DatapathEnd::Refused(RefusedInstall<W>)`
 and the access point's as `AccessPointEnd::Refused`, after the started
-radio left from the device.
+radio left from the device. A stage before it that refused (no first
+installation minted, the radio's start refused, an access point's
+settings) returns the registry and the minted installation it had taken
+(`DatapathEnd::NotInstalled`, `AccessPointEnd::NotInstalled`:
+`NotInstalledOf`); a started radio leaves first, as before.
 
 The station's installation has two halves, and an unfinished one returns
 both. The datapath task returns `DatapathEnd` (`Retired`, `NotInstalled`,
-`Refused`, or `Unfinished(UnfinishedStationOf<W>)`, cause `DatapathCause`): a fault of
+`Refused`, or `Unfinished(UnfinishedDatapath<W>)`: the installation
+(`UnfinishedStationOf<W>`, cause `DatapathCause`), the actor's ends of
+the queues to the lifecycle (`ActorQueues`) with every owner in transit
+in them, and the installation registry): a fault of
 the actor or the lifecycle's end without retiring it (`Lifecycle`: a stop
 or retune that proved nothing, a broken contract), each in the phase the
 actor's radio read (`Actor::radio_phase`: a stop asked for and not
@@ -177,7 +184,25 @@ its retire (`Stopped`, no release), a refused release (`Releasing`). The
 station's task returns `StationEnd`: its `StationExit` and, unless the
 radio's release or the restart's reinstall completed, its lifecycle's half
 (`UnfinishedLifecycle`: the retired station, places, arbiter, issuer and
-contexts). That half stays in the place its lifecycle ran in until the
+contexts, the lifecycle's ends of the queues (`LifecycleQueues`) with
+every owner in transit in them, and the actor task's news after the
+lifecycle stopped waiting). A lifecycle that ends without retiring the
+actor tells the actor's task once and waits until its run stopped
+(`News::Abandoned`); only then do its ends go out, so no producer runs
+while either half collects its queues, and each owner in transit is in
+its queue once, in order. The half's operations read its queues
+(`queues`), its events' sink (`events`) and the actor task's late end
+(`late_end`, kept once read), and finish it once the datapath half
+retired (`finish`, on `DatapathRetired`, which only a completed release
+makes): a release that completed after the stop's drain passed keeps both
+actual outcomes (the lifecycle's exit and the late end) and the half
+ends without a second release (the application's
+`StationInstallationEnd::finish_late_retire`). A fault the actor would
+recover from after the lifecycle's retire or reinstall ends the actor
+instead (no recovery is told to a lifecycle that ended): its news ends
+the lifecycle's wait, both halves go out with the fault and the phase
+the radio read, and nothing asks for the retire or the reinstall again.
+That half stays in the place its lifecycle ran in until the
 actor's task told how the end settled; only a completed release or
 reinstall ends it and frees the place for the next installation, and any
 other end moves it whole to its own home (`Placed::move_to`), so the place
