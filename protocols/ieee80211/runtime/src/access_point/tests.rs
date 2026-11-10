@@ -667,6 +667,86 @@ fn a_fault_the_port_keeps_ends_the_stops_watch_unconfirmed_with_every_owner() {
     }
 }
 
+/// A fault that first appears inside the stop's watch (the run ended on a
+/// refusal, with no fault): the port is asked to take it back once, per
+/// the `recover_for_stop` contract. A port that takes it back confirms its
+/// stop with every owner; one that refuses keeps it, and the watch ends
+/// unconfirmed on the port's next answer, naming that fault, with every
+/// owner in the runner.
+#[test]
+fn a_fault_first_seen_in_the_stops_watch_is_taken_back_once_or_kept() {
+    for recovers in [true, false] {
+        embassy_futures::block_on(with_local_slot(async |claim| {
+            let counted = Counted::new();
+            fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+            air.refuse_access_point_commands(1);
+            let idle = async {
+                loop {
+                    counted.idle(1).await;
+                }
+            };
+            let end = match select(Woken::new(runner.run(&shared, &counted)), idle).await {
+                Either::First(end) => end,
+                Either::Second(()) => unreachable!(),
+            };
+            assert!(matches!(end, ApEnd::Refused(_)), "no fault ends the run");
+            assert!(runner.homes.fault.is_none() && !runner.homes.faulted);
+            // The stop is underway, held on the air, when the fault first
+            // appears: the watch's next service meets it.
+            air.hold_stop(true);
+            let observed = Cell::new(0_u32);
+            let finish = runner.finish_stop(&counted, |_| observed.set(observed.get() + 1));
+            let script = async {
+                counted.idle(1).await;
+                air.poison();
+                if recovers {
+                    air.allow_recovery();
+                }
+                for _ in 0..256 {
+                    counted.advance(&air, Duration::from_millis(1)).await;
+                    if recovers {
+                        air.hold_stop(false);
+                    }
+                }
+            };
+            let watched = match select(Woken::new(finish), script).await {
+                Either::First(watched) => watched,
+                Either::Second(()) => panic!("the stop's watch never ends"),
+            };
+            let seen = runner.homes.fault;
+            // The port's fault, as the watch's service answered it.
+            assert!(
+                matches!(
+                    seen,
+                    Some(oer_protocols_ieee80211_testing_model::ModelPortFault::Quarantined { .. })
+                ),
+                "the watch's service met the fault: {seen:?}"
+            );
+            if recovers {
+                assert_eq!(watched, Ok(super::StopWatch::Confirmed));
+                assert!(!runner.homes.fault_kept, "taken back");
+            } else {
+                let Ok(super::StopWatch::Faulted { fault, .. }) = watched else {
+                    panic!("a kept fault ends the watch unconfirmed: {watched:?}");
+                };
+                assert_eq!(fault, seen, "the watch's fault is named");
+                assert!(runner.homes.fault_kept);
+            }
+            assert!(runner.take_returned().is_some(), "the refused command");
+            assert_eq!(
+                runner.homes.tickets.len(),
+                oer_protocols_ieee80211_testing_model::MODEL_TICKETS
+            );
+            assert_eq!(
+                runner.homes.buffers.len(),
+                oer_protocols_ieee80211_testing_model::MODEL_LARGE_BUFFERS
+            );
+            assert!(runner.homes.beacon.is_some());
+            assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
+        }));
+    }
+}
+
 #[test]
 fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
     embassy_futures::block_on(with_local_slot(async |claim| {
