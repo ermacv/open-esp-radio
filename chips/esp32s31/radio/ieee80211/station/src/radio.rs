@@ -919,18 +919,19 @@ pub(crate) fn he_power(
 ///
 /// # Errors
 ///
-/// The port has not confirmed its stop, or it did and it or its device
-/// still holds owners (it is not retirable, or the device holds a live or
-/// failed radio frontier): nothing was taken.
+/// The port has not confirmed its stop; or it did and still holds owners
+/// (it is not retirable); or it released them and its device holds a live
+/// or failed radio frontier: nothing was taken
+/// ([`crate::release::stopped_radio`]).
 pub(crate) fn take_stopped<W: Binding>(
     port: &mut Port<W>,
 ) -> Result<StoppedRadio, crate::release::Unreleased> {
-    use crate::release::Unreleased;
-    if !port.stop_confirmed() {
-        return Err(Unreleased::StopUnconfirmed);
-    }
-    let device = port.release().ok_or(Unreleased::Held)?;
-    let (stopped, cell) = device.0.take_stopped().ok_or(Unreleased::Held)?;
+    let confirmed = port.stop_confirmed();
+    let (stopped, cell) = crate::release::stopped_radio(
+        confirmed,
+        || port.release(),
+        |device| device.0.take_stopped(),
+    )?;
     Ok(StoppedRadio { stopped, cell })
 }
 

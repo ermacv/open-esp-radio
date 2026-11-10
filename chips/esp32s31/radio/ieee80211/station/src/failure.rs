@@ -558,10 +558,13 @@ pub enum ReleaseCause {
     /// and the port keeps the radio and every owner.
     StopUnconfirmed,
     /// The port confirmed its radio's stop and still holds owners (admitted
-    /// work, a received unit, an item a sink refused, a removal waiting, a
-    /// live or failed radio frontier of its device): nothing was released,
-    /// and the port keeps the radio and those owners.
+    /// work, a received unit, an item a sink refused, a removal waiting):
+    /// nothing was released, and the port keeps the radio and those owners.
     Held,
+    /// The port confirmed its radio's stop and released its installations,
+    /// but its device has not paused its radio frontier (live or failed):
+    /// the device keeps the radio and its owners.
+    FrontierHeld,
     /// The MAC or its RX walker was still active; nothing was posted.
     StillActive(MaintenanceError),
     /// The radio actor never answered the leave request.

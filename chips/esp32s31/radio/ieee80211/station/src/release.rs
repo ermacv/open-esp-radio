@@ -99,8 +99,11 @@ pub(crate) trait Stopped {
 pub(crate) enum Unreleased {
     /// Its radio's stop is not confirmed.
     StopUnconfirmed,
-    /// Its radio's stop is confirmed and it still holds owners.
+    /// Its radio's stop is confirmed and the port still holds owners.
     Held,
+    /// Its radio's stop is confirmed and the port released its
+    /// installations, but its device has not paused its radio frontier.
+    FrontierHeld,
 }
 
 impl From<Unreleased> for crate::failure::ReleaseCause {
@@ -108,8 +111,30 @@ impl From<Unreleased> for crate::failure::ReleaseCause {
         match unreleased {
             Unreleased::StopUnconfirmed => Self::StopUnconfirmed,
             Unreleased::Held => Self::Held,
+            Unreleased::FrontierHeld => Self::FrontierHeld,
         }
     }
+}
+
+/// The stopped radio of a port, taken in order: its confirmed stop
+/// (`stop_confirmed`), then its release of every installation (`release`,
+/// the port's holds), then its device's paused frontier (`frontier`).
+/// Each step that gives up nothing names what holds, the fact of a
+/// confirmed stop kept apart from the port's and the device's holds.
+///
+/// # Errors
+///
+/// [`Unreleased`]: the first step that gave up nothing; nothing was taken.
+pub(crate) fn stopped_radio<D, R>(
+    stop_confirmed: bool,
+    release: impl FnOnce() -> Option<D>,
+    frontier: impl FnOnce(D) -> Option<R>,
+) -> Result<R, Unreleased> {
+    if !stop_confirmed {
+        return Err(Unreleased::StopUnconfirmed);
+    }
+    let device = release().ok_or(Unreleased::Held)?;
+    frontier(device).ok_or(Unreleased::FrontierHeld)
 }
 
 /// Run the stopped port's cleanup once, then release the retired port's
@@ -267,6 +292,44 @@ pub(crate) async fn within<A>(
 #[allow(clippy::unwrap_used, clippy::panic, reason = "test assertions")]
 mod tests {
     use super::*;
+
+    /// Each step of taking a stopped radio names what holds: no confirmed
+    /// stop, the port's holds, or a device that has not paused its
+    /// frontier. A stopped port whose device holds its frontier never reads
+    /// as the port holding owners, and a later step never runs before an
+    /// earlier one gave up its part.
+    #[test]
+    fn a_stopped_radio_names_the_step_that_holds() {
+        use core::cell::Cell;
+        let released = Cell::new(0);
+        let release = |gives: bool| {
+            let released = &released;
+            move || {
+                released.set(released.get() + 1);
+                gives.then_some(7u8)
+            }
+        };
+        assert_eq!(
+            stopped_radio(false, release(true), |_| Some(())),
+            Err(Unreleased::StopUnconfirmed)
+        );
+        assert_eq!(released.get(), 0, "no release before a confirmed stop");
+        assert_eq!(
+            stopped_radio(true, release(false), |_| -> Option<()> {
+                panic!("no frontier before the port's release")
+            }),
+            Err(Unreleased::Held)
+        );
+        assert_eq!(
+            stopped_radio(true, release(true), |_| None::<()>),
+            Err(Unreleased::FrontierHeld)
+        );
+        assert_eq!(
+            crate::failure::ReleaseCause::from(Unreleased::FrontierHeld),
+            crate::failure::ReleaseCause::FrontierHeld
+        );
+        assert_eq!(stopped_radio(true, release(true), Some), Ok(7));
+    }
     use core::cell::Cell;
     use oer_portable_time::{Clock as _, Duration};
     use oer_portable_time_virtual::VirtualClock;

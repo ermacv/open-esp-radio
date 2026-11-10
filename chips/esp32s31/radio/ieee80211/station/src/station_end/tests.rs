@@ -185,6 +185,12 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
         ),
         // A confirmed stop whose port still holds owners.
         (Ok(()), Err(Unreleased::Held), ReleaseCause::Held),
+        // A confirmed stop whose device has not paused its frontier.
+        (
+            Ok(()),
+            Err(Unreleased::FrontierHeld),
+            ReleaseCause::FrontierHeld,
+        ),
         // A posted leave that ended.
         (
             Ok(()),
