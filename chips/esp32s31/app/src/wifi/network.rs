@@ -226,7 +226,97 @@ type NetService<P, M> = Service<
     Port,
     <M as TransmitMode>::Egress,
     Producer<'static, Brand, P, CREDITS>,
+    Diagnosis,
 >;
+
+/// The service's switchable diagnostics: an observing image's (`observe`),
+/// off until it switches them on; in any other image `()`, which leaves no
+/// code.
+#[cfg(feature = "observe")]
+type Diagnosis = NetworkDiagnosis;
+#[cfg(not(feature = "observe"))]
+type Diagnosis = ();
+#[cfg(feature = "observe")]
+const DIAGNOSIS: Diagnosis = NetworkDiagnosis(());
+#[cfg(not(feature = "observe"))]
+const DIAGNOSIS: Diagnosis = ();
+
+/// The network core's switchable diagnostics (docs/architecture.md,
+/// "Switchable network-core diagnostics"), off until the observing image
+/// switches them on; the network's task is their one writer.
+#[cfg(feature = "observe")]
+pub(crate) static DIAGNOSTICS: oer_chips_family_app::diagnostics::DiagnosticsCounter =
+    oer_chips_family_app::diagnostics::DiagnosticsCounter::new();
+
+/// The service's diagnostics: [`DIAGNOSTICS`]'s writer. Its clock is the
+/// network hart's cycle counter, read only while they are on. Only this
+/// module makes one; its type is named by the service's, which the receive
+/// modes' sealed binds reach.
+#[cfg(feature = "observe")]
+#[doc(hidden)]
+pub struct NetworkDiagnosis(());
+
+#[cfg(feature = "observe")]
+impl oer_protocols_network_runtime::Diagnostics for NetworkDiagnosis {
+    fn on(&mut self) -> bool {
+        DIAGNOSTICS.check()
+    }
+
+    fn clock(&mut self) -> u64 {
+        oer_portable_riscv::cycle64()
+    }
+
+    // Out of the service's turn, as its sink is: it runs only while on.
+    #[inline(never)]
+    fn add(&mut self, counted: &oer_protocols_network_runtime::Diagnosis) {
+        let oer_protocols_network_runtime::Diagnosis {
+            turns,
+            collections,
+            walked,
+            told,
+            continued,
+            stopped_spent,
+            stopped_changed,
+            stopped_grant,
+            stopped_account,
+            return_batches,
+            blocks_returned,
+            credits_restored,
+            no_credit,
+            no_credit_loans,
+            no_credit_unreturned,
+            materialised,
+            stage_ticks,
+        } = *counted;
+        DIAGNOSTICS.add(&oer_chips_family_app::diagnostics::Counts {
+            turns,
+            collections,
+            walked,
+            told,
+            continued,
+            stopped_spent,
+            stopped_changed,
+            stopped_grant,
+            stopped_account,
+            return_batches,
+            blocks_returned,
+            credits_restored,
+            no_credit,
+            no_credit_loans,
+            no_credit_unreturned,
+            materialised,
+            stage_ticks,
+        });
+    }
+}
+
+// The library counts the service's stages as the service names them.
+#[cfg(feature = "observe")]
+const _: () = {
+    if oer_protocols_network_runtime::STAGES != oer_chips_family_app::diagnostics::STAGES {
+        panic!("the diagnostics' stages are the service's");
+    }
+};
 type Lanes = SocketLanes<'static, 'static, Brand, BLOCK, DEPTH, LANE, CREDITS>;
 type LendingLanes = oer_protocols_network_runtime::LendingLanes<
     'static,
@@ -696,14 +786,17 @@ impl<P: Produce + 'static, M: TransmitMode, R: ReceiveMode> Network<P, M, R> {
         let link = network.link_source();
         let port = DevicePort::new(network, transmit, WifiBuffers { link });
         let owner = NetworkOwner::new(brand, interface, pool, port);
-        let running = service.insert(Service::with_producer(
-            owner,
-            M::egress(egress, link),
-            MemoryPolicy::KEEP,
-            stopping,
-            producer,
-            end,
-        ));
+        let running = service.insert(
+            Service::with_producer(
+                owner,
+                M::egress(egress, link),
+                MemoryPolicy::KEEP,
+                stopping,
+                producer,
+                end,
+            )
+            .with_diagnostics(DIAGNOSIS),
+        );
         running
             .bind_local(ports.sending, Dscp::default())
             .map_err(NetworkError::Local)?;

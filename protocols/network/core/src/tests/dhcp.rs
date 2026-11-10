@@ -102,7 +102,9 @@ fn turn<B>(stack: &mut Stack<B>, now: Instant, events: &mut Dropped) -> Vec<Vec<
         let Some(demand) = stack.poll_demand(now) else {
             break;
         };
-        stack.transmit(now, demand.grant(), unproduced).unwrap();
+        stack
+            .transmit(now, demand.grant(), unproduced, &())
+            .unwrap();
     }
     stack.port().sent[before..].to_vec()
 }
@@ -533,7 +535,11 @@ fn refused_turn<B>(stack: &mut Stack<B>, now: Instant) -> usize {
     stack.tick(now, &mut Dropped::default());
     let mut refused = 0;
     while let Some(demand) = stack.poll_demand(now) {
-        assert!(stack.transmit(now, demand.grant(), unproduced).is_err());
+        assert!(
+            stack
+                .transmit(now, demand.grant(), unproduced, &())
+                .is_err()
+        );
         refused += 1;
         assert!(refused < 16, "a refusal is offered again at once");
     }
@@ -1362,7 +1368,9 @@ fn an_echo_s_end_releases_the_neighbors_wait_counter() {
         let seen = stack.neighbors_changed();
         let demand = stack.poll_demand(now).unwrap();
         assert_eq!(demand.ready.class, Class::Control);
-        stack.transmit(now, demand.grant(), unproduced).unwrap();
+        stack
+            .transmit(now, demand.grant(), unproduced, &())
+            .unwrap();
         assert_ne!(
             stack.neighbors_changed(),
             seen,
@@ -1384,7 +1392,11 @@ fn an_echo_refused_for_good_releases_the_neighbors_wait_counter() {
         let seen = stack.neighbors_changed();
         stack.port_mut().rejects = true;
         let demand = stack.poll_demand(now).unwrap();
-        assert!(stack.transmit(now, demand.grant(), unproduced).is_err());
+        assert!(
+            stack
+                .transmit(now, demand.grant(), unproduced, &())
+                .is_err()
+        );
         assert_ne!(stack.neighbors_changed(), seen);
         assert_eq!(stack.poll_demand(now), None);
     });
@@ -1446,7 +1458,7 @@ fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
         );
         stack.tick(secs(500), &mut ());
         assert_eq!(stack.configuration().dhcp, Some(DhcpState::Renewing));
-        let ready: Vec<_> = stack.demands(secs(500)).collect();
+        let ready: Vec<_> = stack.demands(secs(500), &()).collect();
         assert!(
             ready.iter().any(|work| work.ready.class == Class::Control),
             "T1 owes a renewal or its server's ARP: {ready:?}"

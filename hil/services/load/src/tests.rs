@@ -606,9 +606,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_sixteen_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_eighteen_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 32);
+    assert_eq!(keys.len(), 36);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
@@ -854,6 +854,71 @@ fn a_network_request_round_trips() {
         let encoded = postcard::to_slice(&answer, &mut buffer).unwrap();
         assert_eq!(
             postcard::from_bytes::<NetworkCollected>(encoded).unwrap(),
+            answer
+        );
+    }
+}
+
+#[test]
+fn the_diagnostics_requests_and_answers_round_trip_and_fit_one_response() {
+    let mut buffer = [0; 512];
+    for request in [
+        Diagnose {
+            on: true,
+            reset: false,
+        },
+        Diagnose {
+            on: false,
+            reset: true,
+        },
+    ] {
+        let encoded = postcard::to_slice(&request, &mut buffer).unwrap();
+        assert_eq!(postcard::from_bytes::<Diagnose>(encoded).unwrap(), request);
+    }
+    for reset in [Reset::NotAsked, Reset::Asked, Reset::Refused] {
+        let answer = Diagnosed {
+            was_on: true,
+            reset,
+        };
+        let encoded = postcard::to_slice(&answer, &mut buffer).unwrap();
+        assert_eq!(postcard::from_bytes::<Diagnosed>(encoded).unwrap(), answer);
+    }
+    let request = CollectDiagnostics { run: u32::MAX };
+    let encoded = postcard::to_slice(&request, &mut buffer).unwrap();
+    assert_eq!(
+        postcard::from_bytes::<CollectDiagnostics>(encoded).unwrap(),
+        request
+    );
+    let full = NetworkDiagnostics {
+        turns: u32::MAX,
+        collections: u32::MAX,
+        walked: u32::MAX,
+        told: u32::MAX,
+        continued: u32::MAX,
+        stopped_spent: u32::MAX,
+        stopped_changed: u32::MAX,
+        stopped_grant: u32::MAX,
+        stopped_account: u32::MAX,
+        return_batches: u32::MAX,
+        blocks_returned: u32::MAX,
+        credits_restored: u32::MAX,
+        no_credit: u32::MAX,
+        no_credit_loans: u32::MAX,
+        no_credit_unreturned: u32::MAX,
+        materialised: u32::MAX,
+        stage_cycles: [u64::MAX; DIAGNOSTIC_STAGES],
+    };
+    for answer in [
+        DiagnosticsCollected::Report(full),
+        DiagnosticsCollected::NoWindow,
+        DiagnosticsCollected::Exhausted,
+        DiagnosticsCollected::Running,
+        DiagnosticsCollected::Refused(LoadError::UnknownRun),
+    ] {
+        let encoded = postcard::to_slice(&answer, &mut buffer).unwrap();
+        assert!(encoded.len() <= 512, "{}", encoded.len());
+        assert_eq!(
+            postcard::from_bytes::<DiagnosticsCollected>(encoded).unwrap(),
             answer
         );
     }

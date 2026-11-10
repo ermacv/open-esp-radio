@@ -309,6 +309,44 @@ core, and gives every block in the lanes to the pool; observers still read their
 results. A socket dropped after a stop gives the same to `LateSocket::collect`. A
 block in the application's own hands stays there, for the pool's holder.
 
+## Diagnostics
+
+`Service::with_diagnostics` gives the service an image's `Diagnostics`, the
+one exception to zero-cost instrumentation (docs/architecture.md,
+"Switchable network-core diagnostics"); `()`, the default, is none, and its
+points leave no code. Each turn, and each pass of the wait that takes
+returns, asks `Diagnostics::on` once. While on, the turn counts into its own
+`Diagnosis` on the task's stack, reads the diagnostics' clock at its start
+and at each stage's end, and hands the whole count to `Diagnostics::add` at
+its end; the core counts its own steps into it through `Count`
+(oer-protocols-network-core). Nothing the service, the policy or the core
+decides reads a count, so the same events decide the same with them on or
+off; a switch takes effect at the next turn. These are the counters, and
+only these:
+
+| Counter | Counted where |
+| --- | --- |
+| `turns` | each turn counted, the stages' time is theirs |
+| `collections` | each full candidate collection: `demands` into `Egress::plan` in publishing |
+| `walked` | each running place a collection's walk of the sockets' running chains visits, ready or not, on every pass a policy makes (`Core::demands`) |
+| `told` | each end an ended chain tells (`Core::next_end`), the sockets' in the delivery and the producer's |
+| `continued` | each `Next::Send` of a plan after its first: a frame with no collection |
+| `stopped_spent`, `stopped_changed`, `stopped_grant`, `stopped_account` | each `Next::Stop`, by its `PlanStop` |
+| `return_batches`, `blocks_returned`, `credits_restored` | each return batch that took something (`returns_of`, in a turn or a pass of the wait), the blocks it brought home and the receive loans it gave back to the pool's account |
+| `no_credit`, `no_credit_loans`, `no_credit_unreturned` | each `NotLent::NoCredit` refusal in `NetworkOwner::take_frame`, the loans out of the account at the refusal, and the lent buffers back with their port whose loans the service had not yet taken back, read right after the refusal's frame |
+| `materialised` | each frame `NetworkOwner::transmit` wrote whole in the port's slot, whatever the port answers |
+| `stage_ticks` | the clock between stage ends: `Intake` (link, tick, commands), `Returns` (returns, blocks given), `Receive`, `Notices`, `Publish` (offers, collections, plans, frames), `Settle` (eviction, delivery, the turn's end), and `Waiting`, a pass's return servicing |
+
+Off, a turn reads no clock and updates no counter. What it still costs is
+the enable check, one `Diagnostics::on` call per turn and per pass that
+takes returns (an observing S31 image's: two atomic loads and a compare;
+every other image has `()` and pays nothing), and
+at each point above a test of that answer, held in the turn's tally: six
+stage ends, one per collection, plan step and stop, one per return batch
+and per received frame, and in the core one per running place a walk
+visits, per end told, per frame built and per refusal for credit. The
+turn's tally stays on the task's stack either way.
+
 ## The device port
 
 `DevicePort` is a service's port over a `NetDevice` and its `NetTransmit`. It

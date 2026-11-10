@@ -87,7 +87,7 @@ fn a_table_that_moved_elsewhere_is_looked_at_again_and_the_frame_goes() {
         let chosen = stack.poll_demand(at(1)).unwrap().grant();
         let other = arp_frame(Operation::Reply, (MOVED, [192, 0, 2, 3]), OUR_IP);
         stack.input(at(1), &other, &mut ());
-        stack.transmit(at(1), chosen, unproduced).unwrap();
+        stack.transmit(at(1), chosen, unproduced, &()).unwrap();
         let (header, _) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
         assert_eq!(header.destination, PEER);
         assert_eq!(finished(stack.take_result(command)), Outcome::Accepted);
@@ -106,7 +106,7 @@ fn a_neighbor_heard_again_keeps_its_grant() {
         let chosen = stack.poll_demand(at(1)).unwrap().grant();
         let again = arp_frame(Operation::Reply, (PEER, PEER_IP), OUR_IP);
         stack.input(at(2), &again, &mut ());
-        stack.transmit(at(2), chosen, unproduced).unwrap();
+        stack.transmit(at(2), chosen, unproduced, &()).unwrap();
         assert_eq!(finished(stack.take_result(command)), Outcome::Accepted);
     });
 }

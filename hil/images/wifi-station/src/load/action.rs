@@ -1,10 +1,11 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_hil_services_load::{
-    Collect, CollectAddba, CollectCounters, CollectHart1, CollectLink, CollectMac, CollectNetwork,
-    CollectParts, CollectPositions, CollectProfile, CollectSamples, CollectStall, CollectStallMac,
-    CollectTracking, LoadError, MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US,
-    MIN_SAMPLE_PERIOD_US, Request, Start, Started, header,
+    Collect, CollectAddba, CollectCounters, CollectDiagnostics, CollectHart1, CollectLink,
+    CollectMac, CollectNetwork, CollectParts, CollectPositions, CollectProfile, CollectSamples,
+    CollectStall, CollectStallMac, CollectTracking, Diagnose, LoadError, MAX_DELAY_MS,
+    MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Request, Start,
+    Started, header,
 };
 
 /// The largest UDP payload the image sends or receives: one 1514-byte
@@ -32,6 +33,8 @@ pub(crate) enum Action {
     Start(Start),
     /// Answer with what the run kept.
     Kept(Kept),
+    /// Switch the network core's diagnostics as asked, in any phase.
+    Diagnose(Diagnose),
 }
 
 /// What a run keeps once it ended: its report, its parts' window, its
@@ -54,6 +57,8 @@ pub(crate) enum Kept {
     Stall,
     StallMac,
     Network,
+    /// The network core's diagnostics over the window.
+    Diagnostics,
     Addba,
     /// Page `page` of the turn profile.
     Profile {
@@ -117,6 +122,10 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
         (phase, Request::CollectProfile(CollectProfile { run, page })) => {
             collect(phase, run, Kept::Profile { page })
         }
+        (phase, Request::CollectDiagnostics(CollectDiagnostics { run })) => {
+            collect(phase, run, Kept::Diagnostics)
+        }
+        (_, Request::Diagnose(diagnose)) => Action::Diagnose(diagnose),
     }
 }
 
@@ -288,7 +297,7 @@ mod tests {
     #[test]
     fn a_collect_answers_running_then_what_its_own_run_kept_only() {
         type Asks = fn(u32) -> Request;
-        let requests: [(Kept, Asks); 14] = [
+        let requests: [(Kept, Asks); 15] = [
             (Kept::Report, |run| Request::Collect(Collect { run })),
             (Kept::Parts { from: 12 }, |run| {
                 Request::CollectParts(CollectParts { run, from: 12 })
@@ -323,6 +332,9 @@ mod tests {
             (Kept::Network, |run| {
                 Request::CollectNetwork(CollectNetwork { run })
             }),
+            (Kept::Diagnostics, |run| {
+                Request::CollectDiagnostics(CollectDiagnostics { run })
+            }),
             (Kept::Addba, |run| {
                 Request::CollectAddba(CollectAddba { run })
             }),
@@ -348,6 +360,20 @@ mod tests {
             Action::Start(start(None)),
             "a kept report does not hold off the next run"
         );
+    }
+
+    #[test]
+    fn the_diagnostics_switch_is_answered_in_every_phase() {
+        let diagnose = Diagnose {
+            on: true,
+            reset: true,
+        };
+        for phase in [IDLE, Phase::Idle { kept: Some(7) }, RUNNING] {
+            assert_eq!(
+                action(phase, Request::Diagnose(diagnose)),
+                Action::Diagnose(diagnose)
+            );
+        }
     }
 
     #[test]

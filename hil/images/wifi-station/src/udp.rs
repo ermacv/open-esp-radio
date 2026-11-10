@@ -522,6 +522,11 @@ pub(crate) struct Turns {
     profile_window: oer::observe::profile::TurnProfile,
     returns_start: oer::observe::profile::Returns,
     returns_window: oer::observe::profile::Returns,
+    /// The network core's diagnostics at the window's start, and what they
+    /// counted over the last closed window: none unless whole.
+    diagnostics_start: oer::observe::diagnostics::NetworkDiagnostics,
+    diagnostics_window:
+        Result<oer::observe::diagnostics::Counts, oer::observe::diagnostics::NoWindow>,
 }
 
 /// The one place of the turns.
@@ -534,7 +539,96 @@ pub(crate) static TURNS: static_cell::ConstStaticCell<Turns> =
         profile_window: PROFILE_NONE,
         returns_start: RETURNS_NONE,
         returns_window: RETURNS_NONE,
+        diagnostics_start: DIAGNOSTICS_NONE,
+        diagnostics_window: Err(oer::observe::diagnostics::NoWindow::Changed),
     });
+
+#[cfg(target_arch = "riscv32")]
+const DIAGNOSTICS_NONE: oer::observe::diagnostics::NetworkDiagnostics = {
+    use oer::observe::diagnostics::*;
+    NetworkDiagnostics {
+        on: false,
+        marker: 0,
+        settled: false,
+        counts: Counts {
+            turns: 0,
+            collections: 0,
+            walked: 0,
+            told: 0,
+            continued: 0,
+            stopped_spent: 0,
+            stopped_changed: 0,
+            stopped_grant: 0,
+            stopped_account: 0,
+            return_batches: 0,
+            blocks_returned: 0,
+            credits_restored: 0,
+            no_credit: 0,
+            no_credit_loans: 0,
+            no_credit_unreturned: 0,
+            materialised: 0,
+            stage_ticks: [0; STAGES],
+        },
+    }
+};
+
+// The load service carries the diagnostics' stages as the library counts
+// them.
+#[cfg(target_arch = "riscv32")]
+const _: () = {
+    if oer::observe::diagnostics::STAGES != oer_hil_services_load::DIAGNOSTIC_STAGES {
+        panic!("the load service's diagnostics have the library's stages");
+    }
+};
+
+/// Switch the network core's diagnostics as `diagnose` asks.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn diagnose(
+    diagnose: oer_hil_services_load::Diagnose,
+) -> oer_hil_services_load::Diagnosed {
+    use oer_hil_services_load::{Diagnosed, Reset};
+    let was_on = oer::observe::diagnose_network(diagnose.on);
+    let reset = match diagnose.reset {
+        false => Reset::NotAsked,
+        true => match oer::observe::reset_network_diagnostics() {
+            Ok(()) => Reset::Asked,
+            Err(oer::observe::diagnostics::ResetRefused) => Reset::Refused,
+        },
+    };
+    Diagnosed { was_on, reset }
+}
+
+/// What the network core's diagnostics counted over the last closed window.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn diagnostics_window(net: &Network) -> oer_hil_services_load::DiagnosticsCollected {
+    use oer::observe::diagnostics::NoWindow;
+    use oer_hil_services_load::{DiagnosticsCollected, NetworkDiagnostics};
+    match net.turns(|turns| Some(turns.diagnostics_window)) {
+        Some(Ok(counts)) => DiagnosticsCollected::Report(NetworkDiagnostics {
+            turns: counts.turns,
+            collections: counts.collections,
+            walked: counts.walked,
+            told: counts.told,
+            continued: counts.continued,
+            stopped_spent: counts.stopped_spent,
+            stopped_changed: counts.stopped_changed,
+            stopped_grant: counts.stopped_grant,
+            stopped_account: counts.stopped_account,
+            return_batches: counts.return_batches,
+            blocks_returned: counts.blocks_returned,
+            credits_restored: counts.credits_restored,
+            no_credit: counts.no_credit,
+            no_credit_loans: counts.no_credit_loans,
+            no_credit_unreturned: counts.no_credit_unreturned,
+            materialised: counts.materialised,
+            stage_cycles: counts.stage_ticks,
+        }),
+        Some(Err(NoWindow::Changed)) => DiagnosticsCollected::NoWindow,
+        Some(Err(NoWindow::Exhausted)) => DiagnosticsCollected::Exhausted,
+        // The group gave no place of the turns: nothing was kept.
+        None => DiagnosticsCollected::Refused(oer_hil_services_load::LoadError::UnknownRun),
+    }
+}
 
 #[cfg(target_arch = "riscv32")]
 const PROFILE_NONE: oer::observe::profile::TurnProfile = {
@@ -661,6 +755,7 @@ pub(crate) fn open_turns(net: &Network) {
         turns.start = network_turns(net.source);
         turns.profile_start = oer::observe::turn_profile();
         turns.returns_start = oer::observe::return_bursts();
+        turns.diagnostics_start = oer::observe::network_diagnostics();
     });
 }
 
@@ -679,6 +774,8 @@ pub(crate) fn close_turns(net: &Network) {
             &turns.returns_start,
             &oer::observe::return_bursts(),
         );
+        turns.diagnostics_window =
+            oer::observe::network_diagnostics().window(&turns.diagnostics_start);
     });
 }
 
