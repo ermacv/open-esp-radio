@@ -9,6 +9,7 @@ publish = false
 description = "TEMPORARY experiment host program: runs the beacon-stamp probe under a lease and decides, from its records and a monitor capture, who writes a transmitted beacon's Timestamp"
 
 [dependencies]
+oer-tools-image-bundle = { path = "../../../tools/image/bundle" }
 oer-tools-lab-arbiter = { path = "../../../tools/lab/arbiter" }
 oer-tools-lab-client = { path = "../../../tools/lab/client" }
 oer-tools-lab-model = { path = "../../../tools/lab/model" }
@@ -16,6 +17,8 @@ oer-tools-os-durable = { path = "../../../tools/os/durable" }
 serde_json = "1.0"
 
 [dev-dependencies]
+oer-chips-family-facts = { path = "../../../chips/family/facts" }
+oer-tools-chip-profile = { path = "../../../tools/chip/profile" }
 tempfile = "=3.27.0"
 
 [lints]

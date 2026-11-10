@@ -139,6 +139,9 @@ fn run(
             "beacon-stamp: bundle of {package} at {} (dirty {}), application {}",
             identity.commit, identity.dirty, identity.application_sha256
         );
+        for (part, sha256) in &identity.flash {
+            eprintln!("beacon-stamp:   {part} {sha256}");
+        }
     }
     let stand = oer_tools_lab_model::path()
         .and_then(|path| oer_tools_lab_model::Stand::load(&path))
@@ -556,28 +559,10 @@ mod tests {
         assert_eq!(record["responder"]["detail"], "no responder result");
     }
 
-    /// A bundle directory whose records name `package`.
+    /// A bundle directory, published whole, whose records name `package`.
     fn bundle_dir(root: &Path, name: &str, package: &str) -> PathBuf {
         let bundle = root.join(name);
-        std::fs::create_dir(&bundle).unwrap();
-        let application = name.as_bytes();
-        std::fs::write(bundle.join("application.bin"), application).unwrap();
-        let sha256 = oer_tools_os_durable::sha256_bytes(application);
-        std::fs::write(
-            bundle.join("bundle.json"),
-            serde_json::json!({"flash_files": [{"file": "application.bin", "sha256": sha256, "bytes": application.len()}]})
-                .to_string(),
-        )
-        .unwrap();
-        std::fs::write(
-            bundle.join("sizes.json"),
-            serde_json::json!({
-                "provenance": {"commit": "61564b55f", "dirty": false, "package": package},
-                "image_files": {"application.bin": application.len()},
-            })
-            .to_string(),
-        )
-        .unwrap();
+        crate::bundle::tests::bundle(&bundle, package, name.as_bytes());
         bundle
     }
 
@@ -601,8 +586,12 @@ mod tests {
         let resolved = paths(&probe, &responder, log, pcap).unwrap();
         assert!(resolved.bundle.is_absolute() && resolved.responder.is_absolute());
         assert!(resolved.console.is_absolute() && resolved.capture.is_absolute());
-        assert_eq!(resolved.identity.commit, "61564b55f");
-        assert_eq!(resolved.responder_identity.commit, "61564b55f");
+        assert_eq!(resolved.identity.commit, "834fd061621c");
+        assert_eq!(resolved.responder_identity.commit, "834fd061621c");
+        // A bundle missing a flash file is refused before the lease.
+        std::fs::remove_file(responder.join("bootloader.bin")).unwrap();
+        let error = paths(&probe, &responder, log, pcap).err().unwrap();
+        assert!(error.contains("lacks its bootloader"), "{error}");
     }
 
     #[test]

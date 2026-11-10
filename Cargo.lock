@@ -2280,6 +2280,9 @@ dependencies = [
 name = "oer-hil-scenarios-beacon-stamp"
 version = "0.1.0"
 dependencies = [
+ "oer-chips-family-facts",
+ "oer-tools-chip-profile",
+ "oer-tools-image-bundle",
  "oer-tools-lab-arbiter",
  "oer-tools-lab-client",
  "oer-tools-lab-model",
