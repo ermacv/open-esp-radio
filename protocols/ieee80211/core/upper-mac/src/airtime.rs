@@ -158,39 +158,41 @@ pub enum AirtimeError {
     },
 }
 
-fn funded_account<K>(
-    accounts: &mut [Option<Account<K>>],
+/// The funded place granted first from `cursor`: an account held there
+/// whose balance reaches its least grant.
+fn funded_place<const PEERS: usize>(
+    minimums: &[u32; PEERS],
+    balances: &[i64; PEERS],
+    held: &[bool; PEERS],
     cursor: usize,
-) -> Result<(usize, &mut Account<K>), AirtimeError> {
-    accounts
-        .iter_mut()
+) -> Result<usize, AirtimeError> {
+    minimums
+        .iter()
+        .zip(balances)
+        .zip(held)
         .enumerate()
-        .filter_map(|(index, slot)| slot.as_mut().map(|account| (index, account)))
-        .filter(|(_, account)| {
-            account.minimum != 0 && account.balance >= i64::from(account.minimum)
+        .filter(|(_, ((minimum, balance), held))| {
+            **held && **minimum != 0 && **balance >= i64::from(**minimum)
         })
-        .min_by_key(|(index, _)| (*index < cursor, *index))
+        .map(|(index, _)| index)
+        .min_by_key(|index| (*index < cursor, *index))
         .ok_or(AirtimeError::UnfundedDemand { cursor })
 }
 
-/// What one selection decided, on its own copy of the accounts.
+/// What one selection decided, place by place over the accounts, which it
+/// reads in place: nothing is copied of them, and nothing changes until it
+/// is committed.
 struct Selection<K, const PEERS: usize> {
-    accounts: [Option<Account<K>>; PEERS],
+    /// Each place's largest least grant over the candidates; zero for none.
+    minimums: [u32; PEERS],
+    /// A candidate's key no account held, at the place its new account takes.
+    fresh: [Option<K>; PEERS],
+    /// Each held or new account's balance as the selection leaves it.
+    balances: [i64; PEERS],
     /// The funded account it grants, by its place.
     selected: Option<usize>,
     /// The reservation place a grant takes.
     place: usize,
-}
-
-impl<K: Copy, const PEERS: usize> Selection<K, PEERS> {
-    fn key(&self) -> Option<K> {
-        let selected = self.selected?;
-        self.accounts
-            .get(selected)
-            .copied()
-            .flatten()
-            .map(|account| account.key)
-    }
 }
 
 /// What [`AirtimeScheduler::reserve_for`] did.
@@ -353,7 +355,8 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         &self,
         candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
     ) -> Result<Option<K>, AirtimeError> {
-        Ok(self.select(candidates)?.key())
+        let selection = self.select(candidates)?;
+        Ok(self.key_of(&selection))
     }
 
     /// [`Self::reserve`] when it would grant a key `wanted` takes, or grant
@@ -369,7 +372,7 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         events: &mut impl EventSink<AirtimeObservation<K>>,
     ) -> Result<Reserved<'owner, K>, AirtimeError> {
         let selection = self.select(candidates)?;
-        if let Some(key) = selection.key()
+        if let Some(key) = self.key_of(&selection)
             && !wanted(key)
         {
             return Ok(Reserved::Other(key));
@@ -380,8 +383,9 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         })
     }
 
-    /// What [`Self::reserve`] decides over `candidates`, on a copy of the
-    /// accounts: nothing changes until [`Self::commit`].
+    /// What [`Self::reserve`] decides over `candidates`, reading the
+    /// accounts in place: what each account would hold, and which is
+    /// granted. Nothing changes until [`Self::commit`].
     fn select(
         &self,
         candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
@@ -390,60 +394,98 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             .state
             .vacant()
             .ok_or(AirtimeError::ReservationCapacity)?;
-        // Admission is transactional: this bounded copy owns no packets.
-        let mut accounts = self.state.accounts;
-        for account in accounts.iter_mut().flatten() {
-            account.minimum = 0;
-        }
+        let accounts = &self.state.accounts;
+        let mut minimums = [0_u32; PEERS];
+        let mut fresh: [Option<K>; PEERS] = [None; PEERS];
         for candidate in candidates {
-            if let Some(account) = accounts
-                .iter_mut()
-                .flatten()
-                .find(|a| a.key == candidate.key)
-            {
-                if account.retired {
-                    return Err(AirtimeError::RetiredKey);
+            let held = accounts
+                .iter()
+                .position(|slot| slot.as_ref().is_some_and(|a| a.key == candidate.key));
+            let index = match held {
+                Some(index) => {
+                    if accounts
+                        .get(index)
+                        .and_then(Option::as_ref)
+                        .is_some_and(|account| account.retired)
+                    {
+                        return Err(AirtimeError::RetiredKey);
+                    }
+                    index
                 }
-                account.minimum = account.minimum.max(candidate.minimum_micros.get());
-            } else {
-                let slot = accounts
-                    .iter_mut()
-                    .find(|slot| slot.is_none())
-                    .ok_or(AirtimeError::AccountCapacity)?;
-                *slot = Some(Account {
-                    key: candidate.key,
-                    balance: 0,
-                    minimum: candidate.minimum_micros.get(),
-                    retired: false,
-                    outstanding: 0,
-                    outstanding_micros: 0,
-                });
+                None => match fresh.iter().position(|key| *key == Some(candidate.key)) {
+                    Some(index) => index,
+                    // A new account takes the first place no account holds.
+                    None => {
+                        let index = accounts
+                            .iter()
+                            .zip(&fresh)
+                            .position(|(slot, key)| slot.is_none() && key.is_none())
+                            .ok_or(AirtimeError::AccountCapacity)?;
+                        if let Some(key) = fresh.get_mut(index) {
+                            *key = Some(candidate.key);
+                        }
+                        index
+                    }
+                },
+            };
+            if let Some(minimum) = minimums.get_mut(index) {
+                *minimum = (*minimum).max(candidate.minimum_micros.get());
             }
         }
-        for account in accounts.iter_mut().flatten() {
-            if account.minimum == 0 {
-                account.balance = account.balance.min(0);
-            }
-        }
-        if !accounts
+        // One pass: each account's balance as the selection holds it (an
+        // idle one keeps its debt and no surplus, a new one starts at zero),
+        // whether one is funded already, and else the fewest rounds that
+        // fund one.
+        let quantum = i64::from(self.state.quantum.get());
+        let mut balances = [0_i64; PEERS];
+        let mut held = [false; PEERS];
+        let mut funded = false;
+        let mut rounds: Option<i64> = None;
+        // An overflow counts only where the rounds are needed: when no
+        // account is funded already.
+        let mut overflow = false;
+        let places = accounts
             .iter()
-            .flatten()
-            .any(|a| a.minimum != 0 && a.balance >= i64::from(a.minimum))
-        {
-            let quantum = i64::from(self.state.quantum.get());
-            let mut rounds: Option<i64> = None;
-            for account in accounts.iter().flatten().filter(|a| a.minimum != 0) {
-                let required = i64::from(account.minimum)
-                    .checked_sub(account.balance)
-                    .and_then(|needed| needed.checked_sub(1))
-                    .and_then(|needed| needed.checked_div(quantum))
-                    .and_then(|rounds| rounds.checked_add(1))
-                    .ok_or(AirtimeError::ArithmeticOverflow)?;
-                rounds = Some(rounds.map_or(required, |old| old.min(required)));
+            .zip(&fresh)
+            .zip(minimums)
+            .zip(balances.iter_mut().zip(held.iter_mut()));
+        for (((slot, key), minimum), (balance, live)) in places {
+            *balance = match (slot, key) {
+                (Some(account), _) if minimum == 0 => account.balance.min(0),
+                (Some(account), _) => account.balance,
+                (None, Some(_)) => 0,
+                (None, None) => continue,
+            };
+            *live = true;
+            if minimum == 0 || funded {
+                continue;
+            }
+            let least = i64::from(minimum);
+            if *balance >= least {
+                funded = true;
+                continue;
+            }
+            match least
+                .checked_sub(*balance)
+                .and_then(|needed| needed.checked_sub(1))
+                .and_then(|needed| needed.checked_div(quantum))
+                .and_then(|rounds| rounds.checked_add(1))
+            {
+                Some(required) => {
+                    rounds = Some(rounds.map_or(required, |old| old.min(required)));
+                }
+                None => overflow = true,
+            }
+        }
+        if !funded {
+            if overflow {
+                return Err(AirtimeError::ArithmeticOverflow);
             }
             let Some(rounds) = rounds else {
                 return Ok(Selection {
-                    accounts,
+                    minimums,
+                    fresh,
+                    balances,
                     selected: None,
                     place,
                 });
@@ -451,43 +493,61 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             let credit = quantum
                 .checked_mul(rounds)
                 .ok_or(AirtimeError::ArithmeticOverflow)?;
-            for account in accounts.iter_mut().flatten().filter(|a| a.minimum != 0) {
-                account.balance = account
-                    .balance
-                    .checked_add(credit)
-                    .ok_or(AirtimeError::ArithmeticOverflow)?;
+            let places = balances.iter_mut().zip(held).zip(minimums);
+            for ((balance, live), minimum) in places {
+                if live && minimum != 0 {
+                    *balance = balance
+                        .checked_add(credit)
+                        .ok_or(AirtimeError::ArithmeticOverflow)?;
+                }
             }
         }
-        let (selected, _) = funded_account(&mut accounts, self.state.cursor)?;
+        let selected = funded_place(&minimums, &balances, &held, self.state.cursor)?;
         Ok(Selection {
-            accounts,
+            minimums,
+            fresh,
+            balances,
             selected: Some(selected),
             place,
         })
     }
 
+    /// The key `selection` grants, if any.
+    fn key_of(&self, selection: &Selection<K, PEERS>) -> Option<K> {
+        let selected = selection.selected?;
+        self.state
+            .accounts
+            .get(selected)
+            .copied()
+            .flatten()
+            .map(|account| account.key)
+            .or_else(|| selection.fresh.get(selected).copied().flatten())
+    }
+
     /// Make `selection` the ledger's: its reservation, or, with none
-    /// selected, its accounts as the selection left them.
+    /// selected, its accounts as the selection left them. Every check comes
+    /// before the first write, so an error changes nothing.
     fn commit(
         &mut self,
         selection: Selection<K, PEERS>,
         events: &mut impl EventSink<AirtimeObservation<K>>,
     ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
-        let Selection {
-            mut accounts,
-            selected,
-            place,
-        } = selection;
-        let Some(selected) = selected else {
-            self.state.accounts = accounts;
+        let Some(selected) = selection.selected else {
+            self.apply(&selection);
             return Ok(None);
         };
-        let account = accounts.get_mut(selected).and_then(Option::as_mut).ok_or(
-            AirtimeError::UnfundedDemand {
-                cursor: self.state.cursor,
-            },
-        )?;
-        let budget = u32::try_from(account.balance.min(i64::from(u32::MAX)))
+        let cursor = self.state.cursor;
+        let before = self.state.accounts.get(selected).copied().flatten();
+        let key = before
+            .map(|account| account.key)
+            .or_else(|| selection.fresh.get(selected).copied().flatten())
+            .ok_or(AirtimeError::UnfundedDemand { cursor })?;
+        let balance = selection
+            .balances
+            .get(selected)
+            .copied()
+            .ok_or(AirtimeError::UnfundedDemand { cursor })?;
+        let budget = u32::try_from(balance.min(i64::from(u32::MAX)))
             .ok()
             .and_then(NonZeroU32::new)
             .ok_or(AirtimeError::ArithmeticOverflow)?;
@@ -496,43 +556,85 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
             .next_id
             .checked_add(1)
             .ok_or(AirtimeError::ArithmeticOverflow)?;
-        let reservation = AirtimeReservation {
-            origin: self.origin,
-            key: account.key,
-            id,
-            budget,
-            place,
-        };
-        account.balance = account
-            .balance
+        let balance = balance
             .checked_sub(i64::from(budget.get()))
             .ok_or(AirtimeError::ArithmeticOverflow)?;
-        // At most `RESERVATIONS` reservations of u32 budgets, which the
-        // storage's const bound keeps within both counts.
-        account.outstanding = account.outstanding.saturating_add(1);
-        account.outstanding_micros = account
-            .outstanding_micros
-            .saturating_add(u64::from(budget.get()));
-        let observed = *account;
         // The cursor wraps at the bounded peer arena, rather than at usize::MAX.
-        let cursor = selected
+        let next_cursor = selected
             .wrapping_add(1)
             .checked_rem(PEERS)
             .ok_or(AirtimeError::ArithmeticOverflow)?;
-        let Some(pending) = self.state.pending.get_mut(place) else {
+        if self.state.pending.get(selection.place).is_none() {
             return Err(AirtimeError::ReservationCapacity);
+        }
+        // At most `RESERVATIONS` reservations of u32 budgets, which the
+        // storage's const bound keeps within both counts.
+        let observed = Account {
+            key,
+            balance,
+            minimum: selection.minimums.get(selected).copied().unwrap_or(0),
+            retired: before.is_some_and(|account| account.retired),
+            outstanding: before
+                .map_or(0, |account| account.outstanding)
+                .saturating_add(1),
+            outstanding_micros: before
+                .map_or(0, |account| account.outstanding_micros)
+                .saturating_add(u64::from(budget.get())),
         };
-        *pending = Some(Pending {
+        let reservation = AirtimeReservation {
+            origin: self.origin,
+            key,
             id,
-            key: observed.key,
-            budget: budget.get(),
-        });
+            budget,
+            place: selection.place,
+        };
+        self.apply(&selection);
+        if let Some(slot) = self.state.accounts.get_mut(selected) {
+            *slot = Some(observed);
+        }
+        if let Some(pending) = self.state.pending.get_mut(selection.place) {
+            *pending = Some(Pending {
+                id,
+                key,
+                budget: budget.get(),
+            });
+        }
         self.state.occupy();
-        self.state.accounts = accounts;
         self.state.next_id = id;
-        self.state.cursor = cursor;
+        self.state.cursor = next_cursor;
         self.observe(observed, AirtimeAction::Granted, budget.get(), 0, events);
         Ok(Some(reservation))
+    }
+
+    /// Write what `selection` holds of each account: a new one made, a held
+    /// one's least grant and balance.
+    fn apply(&mut self, selection: &Selection<K, PEERS>) {
+        let places = self
+            .state
+            .accounts
+            .iter_mut()
+            .zip(selection.fresh)
+            .zip(selection.minimums)
+            .zip(selection.balances);
+        for (((slot, fresh), minimum), balance) in places {
+            match (slot.as_mut(), fresh) {
+                (Some(account), _) => {
+                    account.minimum = minimum;
+                    account.balance = balance;
+                }
+                (None, Some(key)) => {
+                    *slot = Some(Account {
+                        key,
+                        balance,
+                        minimum,
+                        retired: false,
+                        outstanding: 0,
+                        outstanding_micros: 0,
+                    });
+                }
+                (None, None) => {}
+            }
+        }
     }
 
     /// Complete all publications of this reservation at their modelled cost.
