@@ -12,6 +12,8 @@ struct Script {
     existing: Vec<String>,
     on_radio: Vec<String>,
     create_fails: bool,
+    isolate_fails: bool,
+    up_fails: bool,
     start_fails: bool,
     ready_fails: bool,
     stop_fails: bool,
@@ -63,13 +65,21 @@ impl Host for FakeHost {
         })
     }
 
-    fn create(&mut self, phy: &str, name: &str, channel: u8) -> Result<()> {
-        self.log
-            .borrow_mut()
-            .push(format!("create {phy} {name} {channel}"));
+    fn create(&mut self, phy: &str, name: &str) -> Result<()> {
+        self.log.borrow_mut().push(format!("create {phy} {name}"));
         // A partial create leaves the interface behind.
         self.created = true;
         failing(self.script.borrow().create_fails, "create")
+    }
+
+    fn isolate(&mut self, name: &str) -> Result<()> {
+        self.log.borrow_mut().push(format!("ipv6 off {name}"));
+        failing(self.script.borrow().isolate_fails, "ipv6 off")
+    }
+
+    fn up(&mut self, name: &str, channel: u8) -> Result<()> {
+        self.log.borrow_mut().push(format!("up {name} {channel}"));
+        failing(self.script.borrow().up_fails, "up")
     }
 
     fn start(&mut self, name: &str) -> Result<FakeProcess> {
@@ -215,7 +225,9 @@ fn a_cancelled_capture_streams_only_pcap_and_tears_down_in_order() {
     assert!(report.diagnostics.contains("listening"));
     let mut expected = vec![
         "listing".to_owned(),
-        "create phy0 oercap0 13".to_owned(),
+        "create phy0 oercap0".to_owned(),
+        "ipv6 off oercap0".to_owned(),
+        "up oercap0 13".to_owned(),
         "start oercap0".to_owned(),
         "ready".to_owned(),
     ];
@@ -264,25 +276,108 @@ fn an_interface_already_on_the_radio_refuses_the_start() {
 }
 
 #[test]
-fn a_partial_create_removes_the_interface_it_left() {
+fn a_refused_setup_step_removes_the_interface_and_starts_nothing() {
+    // Each step before the process exists: the steps up to the refused
+    // one, in order, then the interface's removal and its check; never a
+    // process, never a readiness.
+    let steps = ["create phy0 oercap0", "ipv6 off oercap0", "up oercap0 13"];
+    for (refused, failure) in ["create failed", "ipv6 off failed", "up failed"]
+        .into_iter()
+        .enumerate()
+    {
+        let (mut host, log) = fake(Script {
+            create_fails: refused == 0,
+            isolate_fails: refused == 1,
+            up_fails: refused == 2,
+            ..Script::default()
+        });
+        let mut unready = sink();
+        let error = capture(&mut host, 13, &mut unready, &clock::ManualClock::new()).unwrap_err();
+        assert!(
+            error.contains(failure) && error.contains("interface removal: confirmed"),
+            "{error}"
+        );
+        let mut expected = vec!["listing".to_owned()];
+        expected.extend(steps[..=refused].iter().map(|step| (*step).to_owned()));
+        expected.extend(["remove oercap0".to_owned(), "listing".to_owned()]);
+        assert_eq!(log_of(&log), expected);
+        assert!(unready.readied.is_empty());
+    }
+}
+
+#[test]
+fn the_setup_turns_ipv6_off_before_the_monitor_comes_up_then_starts_tcpdump() {
     let (mut host, log) = fake(Script {
-        create_fails: true,
+        idle_forever: true,
         ..Script::default()
     });
-    let error = capture(&mut host, 13, &mut sink(), &clock::ManualClock::new()).unwrap_err();
-    assert!(
-        error.contains("create failed") && error.contains("confirmed"),
-        "{error}"
-    );
+    let mut sink = FakeSink {
+        cancel_after: Some(0),
+        ..sink()
+    };
+    capture(&mut host, 13, &mut sink, &clock::ManualClock::new()).unwrap();
     assert_eq!(
-        log_of(&log),
+        log_of(&log)[..6],
         [
             "listing",
-            "create phy0 oercap0 13",
-            "remove oercap0",
-            "listing"
+            "create phy0 oercap0",
+            "ipv6 off oercap0",
+            "up oercap0 13",
+            "start oercap0",
+            "ready"
         ]
     );
+}
+
+#[test]
+fn the_router_scripts_are_exactly_these() {
+    assert_eq!(
+        create_script("phy1", INTERFACE).unwrap(),
+        "set -e\niw phy phy1 interface add oercap0 type monitor\n"
+    );
+    // The interface's own sysctl, read back; nothing global.
+    assert_eq!(
+        isolate_script(INTERFACE).unwrap(),
+        "set -e\necho 1 > /proc/sys/net/ipv6/conf/oercap0/disable_ipv6\n\
+         [ \"$(cat /proc/sys/net/ipv6/conf/oercap0/disable_ipv6)\" = 1 ]\n"
+    );
+    assert_eq!(
+        up_script(INTERFACE, 13).unwrap(),
+        "set -e\nip link set oercap0 up\niw dev oercap0 set channel 13\n"
+    );
+    assert_eq!(
+        capture_script(INTERFACE).unwrap(),
+        "echo \"oer-capture-pid $$\" >&2\n\
+         exec tcpdump -i oercap0 -Q in -y IEEE802_11_RADIO -s 0 -U -w -\n"
+    );
+    // A name the shell would split is quoted, never spliced.
+    assert!(
+        isolate_script("a b")
+            .unwrap()
+            .contains("'/proc/sys/net/ipv6/conf/a b/disable_ipv6'")
+    );
+}
+
+#[test]
+fn a_tcpdump_that_cannot_set_its_direction_never_announces_readiness() {
+    // tcpdump ends with its error before its listening line when libpcap
+    // refuses the direction (tcpdump.c: "%s: pcap_setdirection() failed:
+    // %s"); the reader ends, so the readiness channel closes unsent.
+    const STDERR: &str = "oer-capture-pid 14719\n\
+                          tcpdump: oercap0: pcap_setdirection() failed: \
+                          Setting direction is not supported on this device\n";
+    let pid = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let (announce, ready) = std::sync::mpsc::sync_channel(1);
+    let seen = pid.clone();
+    let reader = StderrReader::spawn(STDERR.as_bytes(), move |line| {
+        ssh::observe(line, &seen, &announce);
+    });
+    let diagnostics = reader.join();
+    assert_eq!(
+        ready.try_recv(),
+        Err(std::sync::mpsc::TryRecvError::Disconnected)
+    );
+    assert_eq!(diagnostics.text, STDERR);
 }
 
 #[test]

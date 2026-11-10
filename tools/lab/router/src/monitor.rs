@@ -135,9 +135,15 @@ impl StderrReader {
 pub trait Host {
     type Process: Process;
     fn listing(&mut self) -> Result<Listing>;
-    /// Create `name` as a monitor on `phy`, up, on `channel`.
-    fn create(&mut self, phy: &str, name: &str, channel: u8) -> Result<()>;
-    /// Start capturing `name` as pcap with radiotap headers.
+    /// Create `name` as a monitor on `phy`, still down.
+    fn create(&mut self, phy: &str, name: &str) -> Result<()>;
+    /// Turn IPv6 off on `name` alone, while it is down, and confirm it: the
+    /// kernel then sends nothing of its own (an MLD report, a router
+    /// solicitation) on it when it comes up.
+    fn isolate(&mut self, name: &str) -> Result<()>;
+    /// Bring `name` up on `channel`.
+    fn up(&mut self, name: &str, channel: u8) -> Result<()>;
+    /// Start capturing what `name` receives as pcap with radiotap headers.
     fn start(&mut self, name: &str) -> Result<Self::Process>;
     fn remove(&mut self, name: &str) -> Result<()>;
 }
@@ -362,13 +368,25 @@ pub fn capture<H: Host, S: Sink, C: Clock>(
             listing.on_radio.join(", ")
         ));
     }
-    // From here the interface is the capture's: it was absent.
-    if let Err(error) = host.create(&listing.phy, INTERFACE, channel) {
-        let teardown = teardown(host, None, clock);
-        return Err(format!(
-            "the monitor was not created: {error}; {}",
-            teardown.describe()
-        ));
+    // From here the interface is the capture's: it was absent. Each step
+    // before the process exists ends, when refused, by the teardown of the
+    // interface alone.
+    for step in 0..3 {
+        let (refusal, done) = match step {
+            0 => (
+                "the monitor was not created",
+                host.create(&listing.phy, INTERFACE),
+            ),
+            1 => (
+                "IPv6 was not turned off on the monitor",
+                host.isolate(INTERFACE),
+            ),
+            _ => ("the monitor did not come up", host.up(INTERFACE, channel)),
+        };
+        if let Err(error) = done {
+            let teardown = teardown(host, None, clock);
+            return Err(format!("{refusal}: {error}; {}", teardown.describe()));
+        }
     }
     let mut process = match host.start(INTERFACE) {
         Ok(process) => process,
@@ -431,6 +449,56 @@ pub fn capture<H: Host, S: Sink, C: Clock>(
             teardown.describe()
         )),
     }
+}
+
+/// Create the monitor `name` on `phy`; it stays down.
+fn create_script(phy: &str, name: &str) -> Result<String> {
+    Ok(format!(
+        "set -e\niw phy {} interface add {} type monitor\n",
+        crate::router::quote(phy)?,
+        crate::router::quote(name)?
+    ))
+}
+
+/// Turn IPv6 off on the down monitor `name` through its own sysctl, and
+/// read it back: no global setting and no other interface changes. A
+/// kernel without that file refuses the capture.
+fn isolate_script(name: &str) -> Result<String> {
+    let file = crate::router::quote(&format!("/proc/sys/net/ipv6/conf/{name}/disable_ipv6"))?;
+    Ok(format!(
+        "set -e\necho 1 > {file}\n[ \"$(cat {file})\" = 1 ]\n"
+    ))
+}
+
+/// Bring the monitor `name` up, then tune it to `channel`.
+fn up_script(name: &str, channel: u8) -> Result<String> {
+    let name = crate::router::quote(name)?;
+    Ok(format!(
+        "set -e\nip link set {name} up\niw dev {name} set channel {channel}\n"
+    ))
+}
+
+/// The capture's process: the shell prints its PID, which `exec` gives
+/// `tcpdump`, so the stop signals that process and no other.
+///
+/// `-Q in` sets the capture direction, libpcap's
+/// `pcap_setdirection(PCAP_D_IN)`. On Linux libpcap drops a packet whose
+/// packet-socket type is `PACKET_OUTGOING` (`pcap-linux.c`,
+/// `linux_check_direction`): the copies of what the host's own stack
+/// sends through the interface, such as an MLDv2 report of an interface
+/// coming up with IPv6 on. A
+/// direction tcpdump cannot set ends it before its listening line, so the
+/// start is refused before its readiness. `-Q in` does not remove every
+/// copy of a transmitted frame: mac80211 delivers the frames a radio
+/// transmitted to its monitor interfaces with their TX status, as received
+/// packets of type `PACKET_OTHERHOST` (`net/mac80211/status.c`,
+/// `ieee80211_tx_monitor`), and those stay in the capture.
+fn capture_script(name: &str) -> Result<String> {
+    Ok(format!(
+        "echo \"oer-capture-pid $$\" >&2\n\
+         exec tcpdump -i {} -Q in -y IEEE802_11_RADIO -s 0 -U -w -\n",
+        crate::router::quote(name)?
+    ))
 }
 
 /// Whether a trimmed stderr line of `tcpdump` says it listens: tcpdump
@@ -520,24 +588,23 @@ pub mod ssh {
             ))?)
         }
 
-        fn create(&mut self, phy: &str, name: &str, channel: u8) -> Result<()> {
-            let (phy, name) = (quote(phy)?, quote(name)?);
-            self.ssh.run(&format!(
-                "set -e\niw phy {phy} interface add {name} type monitor\n\
-                 ip link set {name} up\niw dev {name} set channel {channel}\n"
-            ))?;
+        fn create(&mut self, phy: &str, name: &str) -> Result<()> {
+            self.ssh.run(&super::create_script(phy, name)?)?;
+            Ok(())
+        }
+
+        fn isolate(&mut self, name: &str) -> Result<()> {
+            self.ssh.run(&super::isolate_script(name)?)?;
+            Ok(())
+        }
+
+        fn up(&mut self, name: &str, channel: u8) -> Result<()> {
+            self.ssh.run(&super::up_script(name, channel)?)?;
             Ok(())
         }
 
         fn start(&mut self, name: &str) -> Result<SshProcess> {
-            // The shell prints its PID, which `exec` gives tcpdump: the
-            // stop signals that process and no other.
-            let script = format!(
-                "echo \"oer-capture-pid $$\" >&2\n\
-                 exec tcpdump -i {} -y IEEE802_11_RADIO -s 0 -U -w -\n",
-                quote(name)?
-            );
-            SshProcess::start(self.ssh.parallel(), &script)
+            SshProcess::start(self.ssh.parallel(), &super::capture_script(name)?)
         }
 
         fn remove(&mut self, name: &str) -> Result<()> {
