@@ -1006,7 +1006,7 @@ fn full_places_never_confirm_the_end_and_the_half_reads_on_once_one_is_taken() {
         panic!("installation 1 retired");
     };
     let Err(RefusedProof {
-        half: mut half,
+        mut half,
         proof,
         cause: ProofRefusal::Unread,
     }) = half.finish(proof)
