@@ -316,7 +316,7 @@ impl<S> EventSink<ActorEvent> for ActorSink<S> {
 }
 
 /// The datapath actor of `W`.
-pub(crate) type ActorOf<W> =
+pub type ActorOf<W> =
     Actor<'static, ActorPort<W>, crate::station::Rates<W>, ActorSink<<W as Binding>::Sink>>;
 
 /// The tokens of one installation the station's lifecycle takes.
@@ -324,8 +324,48 @@ pub(crate) type Tokens<W> = port::StationTokens<'static, <W as Binding>::Id, Dev
 
 /// What the actor's task tells the station's task, in order, through the
 /// one-slot installation mailbox ([`crate::station_end::News`]).
-pub(crate) type News<W> =
-    crate::station_end::News<Commands<W>, Tokens<W>, Freed<W>, InitializationError>;
+pub(crate) type News<W> = crate::station_end::News<Commands<W>, Tokens<W>, InitializationError>;
+
+/// The datapath actor of `W` in its static place, with its port.
+pub type PlacedActor<W> = oer_portable_memory::Placed<'static, ActorOf<W>>;
+
+/// A station's installation of `W` that did not retire, whole: the actor
+/// with its port, the item a port call could not keep, an attempt returned
+/// unaccepted, the cleanup's receipt, the cause and the phase.
+pub type UnfinishedStationOf<W> = crate::station_end::UnfinishedStation<
+    PlacedActor<W>,
+    Unkept<'static, <Port<W> as DataPort<'static>>::Types>,
+    <Port<W> as DataPort<'static>>::Admitted,
+    Freed<W>,
+>;
+
+/// How the datapath actor's task ended.
+#[must_use = "an unfinished installation holds the actor, its port and their owners"]
+pub enum DatapathEnd<W: Binding> {
+    /// The installation retired: its radio's stop was confirmed and the
+    /// radio released, every owner ended with it.
+    Retired,
+    /// No installation came up: the station's task holds the refusal and
+    /// how the owners it returned ended.
+    NotInstalled,
+    /// The installation did not retire: everything it held.
+    Unfinished(UnfinishedStationOf<W>),
+}
+
+impl<W: Binding> crate::station_end::Installation for PlacedActor<W> {
+    type Port = Port<W>;
+    type Unkept = Unkept<'static, <Port<W> as DataPort<'static>>::Types>;
+    type Unaccepted = <Port<W> as DataPort<'static>>::Admitted;
+    fn port_mut(&mut self) -> &mut Port<W> {
+        Actor::port_mut(self)
+    }
+    fn take_unkept(&mut self) -> Option<Self::Unkept> {
+        Actor::take_unkept(self)
+    }
+    fn take_unaccepted(&mut self) -> Option<Self::Unaccepted> {
+        Actor::take_unaccepted(self)
+    }
+}
 
 /// What the station's port's cleanup freed: its removal receipt (a slot
 /// and its permission) and an item the port could not keep.
@@ -432,7 +472,16 @@ async fn post<W: Binding>(mailbox: &mut WakingSpscSender<'static, News<W>, 1>, n
 /// The datapath actor's task: install the port, run the actor, reinstall
 /// the port for each restart and release the radio after the stop. The
 /// actor's rates report to `observer`; its station events go to `sink`.
-pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observer, sink: W::Sink) {
+/// An installation that does not retire comes back whole
+/// ([`DatapathEnd::Unfinished`]): its actor with the port and every item
+/// it holds, the cleanup's receipt, the cause and the phase.
+pub(crate) async fn drive<W: Binding>(
+    datapath: Datapath<W>,
+    observer: W::Observer,
+    sink: W::Sink,
+) -> DatapathEnd<W> {
+    use crate::station_end::{DatapathCause, unfinished};
+    use crate::unfinished::Phase;
     let Datapath {
         boot,
         places,
@@ -452,7 +501,7 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
             )),
         )
         .await;
-        return;
+        return DatapathEnd::NotInstalled;
     };
     let Some(minted) = installations.first() else {
         post(
@@ -462,7 +511,7 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
             )),
         )
         .await;
-        return;
+        return DatapathEnd::NotInstalled;
     };
     let config = boot.config;
     let (parts, driver) = match install(boot, config, crate::supply::PORT_BUFFERS).await {
@@ -472,7 +521,7 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
             // outcome told with it.
             let unavailable = crate::release::refused(refused.cause, refused.owners).await;
             post(&mut mailbox, News::Unavailable(unavailable)).await;
-            return;
+            return DatapathEnd::NotInstalled;
         }
     };
     let PortInstallation {
@@ -484,7 +533,7 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
         Err((parts, _minted)) => {
             let unavailable = port_refused::<W>(InitializationError::Backend, parts.device).await;
             post(&mut mailbox, News::Unavailable(unavailable)).await;
-            return;
+            return DatapathEnd::NotInstalled;
         }
     };
     let (block_acks, tokens) = resources.into_station();
@@ -498,7 +547,7 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
     let receive =
         RxBlockAcks::<W>::init_in_place(receive.uninit(), block_acks, Duration::from_millis(100))
             .view();
-    let mut actor = ActorOf::<W>::init_in_place(
+    let mut actor: PlacedActor<W> = ActorOf::<W>::init_in_place(
         place.uninit(),
         port,
         crate::station::Rates(EspressifRateSelection::new(), observer),
@@ -511,20 +560,18 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
         match actor.run(&mut lifecycle, &mut network, &EmbassyClock).await {
             ActorEnd::Reinstall => {
                 let Some(next) = epoch.checked_add(1) else {
-                    post(
-                        &mut mailbox,
-                        News::Reinstall {
-                            cause: crate::failure::ReinstallCause::Epochs,
-                            returned: None,
-                        },
-                    )
-                    .await;
-                    return;
+                    let cause = crate::failure::ReinstallCause::Epochs;
+                    post(&mut mailbox, News::Reinstall(cause)).await;
+                    return DatapathEnd::Unfinished(unfinished(
+                        actor,
+                        None,
+                        DatapathCause::Reinstall(cause),
+                        Phase::Reinstalling,
+                    ));
                 };
                 // The stopped port's cleanup first: a port it did not
                 // finish keeps its owners and does not reinstall.
-                let cleaned = crate::release::clean(actor.port_mut());
-                let news = crate::station_end::reinstalled(cleaned, || {
+                match crate::station_end::reinstalled(actor, |actor: &mut PlacedActor<W>| {
                     actor
                         .reinstall_in_place(|port| port.reinstall(&mut installations, next))
                         .map(|(commands, resources)| {
@@ -535,20 +582,24 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
                             (commands, tokens)
                         })
                         .map_err(crate::failure::convert::reinstall)
-                });
-                let installed = matches!(news, News::<W>::Installed(..));
-                post(&mut mailbox, news).await;
-                if !installed {
-                    return;
+                }) {
+                    Ok((running, news)) => {
+                        post(&mut mailbox, news).await;
+                        actor = running;
+                        epoch = next;
+                    }
+                    Err((news, left)) => {
+                        post(&mut mailbox, news).await;
+                        return DatapathEnd::Unfinished(left);
+                    }
                 }
-                epoch = next;
             }
             ActorEnd::Retired => {
                 // Read before the release: the loss of the last stop's
                 // network participant, which the runner's exit records.
                 let network_lost = actor.network_lost();
-                let news = crate::station_end::retired(
-                    actor.port_mut(),
+                let (news, left) = crate::station_end::retired(
+                    actor,
                     network_lost,
                     &EmbassyClock,
                     RELEASE_RETRY,
@@ -556,11 +607,21 @@ pub(crate) async fn drive<W: Binding>(datapath: Datapath<W>, observer: W::Observ
                 )
                 .await;
                 post(&mut mailbox, news).await;
-                return;
+                return match left {
+                    Some(left) => DatapathEnd::Unfinished(left),
+                    None => DatapathEnd::Retired,
+                };
             }
-            // The lifecycle hears the fault and ends with it: every owner
-            // stays with the actor until the image resets.
-            ActorEnd::Faulted(_) => return,
+            // The lifecycle hears the fault and ends with it; the
+            // installation comes back with every owner the actor holds.
+            ActorEnd::Faulted(fault) => {
+                return DatapathEnd::Unfinished(unfinished(
+                    actor,
+                    None,
+                    DatapathCause::Faulted(crate::failure::convert::actor_fault(fault)),
+                    Phase::Running,
+                ));
+            }
         }
     }
 }

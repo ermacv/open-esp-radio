@@ -1451,12 +1451,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn clean_stopped(
         &mut self,
         _sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        core::convert::Infallible,
-        Result<(), CleanupRefused<Self::Fault>>,
-    > {
+    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
         #[allow(
             clippy::redundant_closure_call,
             reason = "the call's own answer, then its unkept item"
@@ -1483,12 +1478,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        core::convert::Infallible,
-        Result<Option<PortCompleted<'id, Self>>, ModelPortFault>,
-    > {
+    ) -> PortAnswer<'id, Self::Types, (), Result<Option<PortCompleted<'id, Self>>, ModelPortFault>>
+    {
         #[allow(
             clippy::redundant_closure_call,
             reason = "the call's own answer, then its unkept item"

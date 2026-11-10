@@ -553,14 +553,6 @@ pub(crate) struct ServiceRunner<W: Binding> {
 }
 /// How the station ended ([`crate::station_end::StationExitOf`]).
 pub type StationExit = crate::station_end::StationExitOf<InitializationError>;
-/// How the station ended, and the removal receipt (a key slot and its
-/// permission) of the stopped port's cleanup that a refused release or
-/// reinstall returned with its refusal: the caller holds it from here.
-#[must_use = "a refused release's receipt holds a key slot and its permission"]
-pub struct StationEnd<W: Binding> {
-    pub exit: StationExit,
-    pub returned: Option<radio::Freed<W>>,
-}
 /// The station's link and receive end.
 pub type StationNetwork<W> = Network<'static, <W as Binding>::Notifies>;
 /// The station's transmit end over `W`'s transmit memory and its packets.
@@ -698,13 +690,14 @@ pub fn station<W: Binding>(
 }
 impl<W: Binding> Datapath<W> {
     /// Run the datapath actor: its rates report to `observer`, its
-    /// station events go to `sink`.
-    pub async fn run(self, observer: W::Observer, sink: W::Sink) {
+    /// station events go to `sink`. An installation that did not retire
+    /// comes back whole ([`radio::DatapathEnd::Unfinished`]).
+    pub async fn run(self, observer: W::Observer, sink: W::Sink) -> radio::DatapathEnd<W> {
         radio::drive(self, observer, sink).await
     }
 }
 impl<W: Binding> StationRunner<W> {
-    pub async fn run(self, profile: Profile<W>) -> StationEnd<W> {
+    pub async fn run(self, profile: Profile<W>) -> StationExit {
         service::serve(self, profile).await
     }
 }

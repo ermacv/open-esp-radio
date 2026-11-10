@@ -261,11 +261,13 @@ impl<'id, T: PortTypes<'id>, I, R> core::fmt::Debug for Unkeeping<'id, T, I, R> 
 /// `R`, or the [`Unkept`] it stopped on beside its input.
 pub type PortAnswer<'id, T, I, R> = Result<R, Unkeeping<'id, T, I, R>>;
 
-/// The answer of [`DataPort::service_tx`] of the port `P`.
+/// The answer of [`DataPort::service_tx`] of the port `P`. Its input is
+/// the call itself (`()`): [`Input::NotAccepted`] says the call served
+/// nothing, as it found an item an earlier call could not keep.
 pub type ServiceAnswer<'id, P> = PortAnswer<
     'id,
     <P as DataPort<'id>>::Types,
-    core::convert::Infallible,
+    (),
     Result<Option<PortCompleted<'id, P>>, <P as DataPort<'id>>::Fault>,
 >;
 
@@ -656,7 +658,9 @@ pub trait DataPort<'id> {
     /// # Errors
     ///
     /// An item the call could neither give `sink` nor keep, beside its
-    /// answer ([`Unkeeping`]); nothing more was taken after it.
+    /// answer ([`Unkeeping`]); nothing more was taken after it. An item an
+    /// earlier call left refuses this one before it serves anything:
+    /// [`Input::NotAccepted`] of `()`.
     fn service_tx(
         &mut self,
         tx: TxFacts,
@@ -852,16 +856,12 @@ pub trait DataPort<'id> {
     /// # Errors
     ///
     /// A freed terminal the call could neither give `sink` nor keep, beside
-    /// its answer ([`Unkeeping`]).
+    /// its answer ([`Unkeeping`]). An item an earlier call left refuses
+    /// this one before it cleans anything: [`Input::NotAccepted`] of `()`.
     fn clean_stopped(
         &mut self,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        core::convert::Infallible,
-        Result<(), CleanupRefused<Self::Fault>>,
-    >;
+    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>>;
 
     /// Take back the fault the port last reported, so that a stop can run
     /// and return the owners it holds: whether it can. From then on the port

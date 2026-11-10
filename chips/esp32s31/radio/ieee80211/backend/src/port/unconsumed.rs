@@ -60,6 +60,21 @@ pub(super) const fn halted<
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     Item<'id, Id, D, B, O>
 {
+    /// The item of the contract's `unkept`.
+    #[cfg(test)]
+    pub(super) fn of_unkept(
+        unkept: oer_protocols_ieee80211_contracts_port::Unkept<'id, Types<Id, D, B, O>>,
+    ) -> Self {
+        match unkept {
+            oer_protocols_ieee80211_contracts_port::Unkept::Terminal(terminal) => {
+                Self::Terminal(terminal)
+            }
+            oer_protocols_ieee80211_contracts_port::Unkept::Received(frame, meta) => {
+                Self::Received(frame, meta)
+            }
+        }
+    }
+
     /// The item as the contract returns it.
     pub(super) fn into_unkept(
         self,
@@ -108,7 +123,8 @@ pub(super) struct Store<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     /// How many items the store keeps: every kept item's sequence is below.
     count: u8,
     /// An item a halted call could neither keep nor return, which the
-    /// producers' checks exclude: the next call returns it.
+    /// producers' checks exclude: the next producing call is refused with
+    /// it before it accepts its input.
     spilled: Option<Item<'id, Id, D, B, O>>,
     /// How many of the next puts a test refuses, as a taken place does.
     #[cfg(test)]
@@ -339,8 +355,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ///
     /// A halted call whose store cannot keep `item` either, which the
     /// producers' checks and each token's uniqueness exclude, holds it in
-    /// the store's spilled place: the next call returns it as its own
-    /// unkept item ([`Self::take_spilled`]) and takes nothing else.
+    /// the store's spilled place: the next producing call is refused before
+    /// it accepts its input and returns the item beside that input, whole
+    /// ([`Self::take_spilled`]), so the place is empty whenever a call
+    /// runs. A third such item of one call (two owners a halted call held
+    /// at once besides the first item) finds the place taken.
     pub(super) fn deliver(
         &mut self,
         sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
@@ -364,6 +383,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 }
             }
         }
+    }
+
+    /// Hold `item` in the spilled place, as a halted call does.
+    #[cfg(test)]
+    pub(super) fn spill_for_test(&mut self, item: Item<'id, Id, D, B, O>) {
+        self.spilled = Some(item);
     }
 
     /// The item a halted call held in the spilled place, once.

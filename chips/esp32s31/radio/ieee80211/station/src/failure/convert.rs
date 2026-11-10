@@ -814,6 +814,22 @@ pub(crate) fn lifecycle(
     })
 }
 
+/// The station's form of the fault the datapath actor ended on.
+#[cfg(target_arch = "riscv32")]
+pub(crate) fn actor_fault(
+    fault: oer_protocols_ieee80211_runtime::datapath::ActorFault<
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
+    >,
+) -> LifecycleFailure {
+    use oer_protocols_ieee80211_runtime::datapath::ActorFault;
+    match fault {
+        ActorFault::Port(fault) => LifecycleFailure::Port(backend_fault(fault)),
+        ActorFault::Contract(violation) => LifecycleFailure::Actor(violation),
+        ActorFault::Receive(fault) => LifecycleFailure::Receive(fault),
+        ActorFault::Unkept => LifecycleFailure::Unkept,
+    }
+}
+
 /// The broken contract a restart of the station came from, if one did.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn restart(

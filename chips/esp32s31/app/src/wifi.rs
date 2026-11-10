@@ -248,25 +248,76 @@ async fn radio_actor(actor: &'static mut Actor) {
     observed!(RadioActor, actor.run()).await.reset()
 }
 
-/// The datapath actor, which owns the radio, on the station's executor.
-pub(crate) type Datapath = wifi::Datapath<binding::Binding>;
+/// How the station's installation ended on the datapath actor's task: a
+/// retire, no installation, or the installation that did not retire,
+/// whole ([`Station::installation_end`]).
+pub type StationInstallationEnd = wifi::DatapathEnd<binding::Binding>;
 
-/// The datapath actor's task, on the station's executor. Its end needs no
-/// decision here: the station's task hears it and decides.
+/// Where an ended task leaves its installation for the application: one
+/// place, written once by the task and read once by the application's
+/// handle.
+type EndHome<T> = oer_portable_memory::WakingSpscQueue<T, 1>;
+/// The task's side of an [`EndHome`].
+type EndSender<T> = oer_portable_memory::WakingSpscSender<'static, T, 1>;
+/// The application's side of an [`EndHome`].
+pub(crate) type EndReceiver<T> = oer_portable_memory::WakingSpscReceiver<'static, T, 1>;
+
+static STATION_END: StaticCell<EndHome<StationInstallationEnd>> = StaticCell::new();
+
+/// Split a home for an ended task's installation out of `cell`.
+pub(crate) fn end_home<T>(
+    cell: &'static StaticCell<EndHome<T>>,
+) -> Result<(EndSender<T>, EndReceiver<T>), Error> {
+    let home = cell.try_init(EndHome::new()).ok_or(Error::Storage)?;
+    Ok(home.split())
+}
+
+/// Leave `end` in its home: the home's one place takes it, as the task
+/// sends once.
+pub(crate) async fn leave<T>(mut home: EndSender<T>, end: T) {
+    home.ready().await.send(end);
+}
+
+/// Wait for the installation an ended task left in its home, once.
+pub(crate) async fn ended<T>(home: &mut Option<EndReceiver<T>>) -> Option<T> {
+    let receiver = home.as_mut()?;
+    loop {
+        if let Some(end) = receiver.try_receive() {
+            *home = None;
+            return Some(end);
+        }
+        receiver.ready().await;
+    }
+}
+
+/// The datapath actor, which owns the radio, on the station's executor,
+/// and the home its end goes to.
+pub(crate) struct Datapath {
+    datapath: wifi::Datapath<binding::Binding>,
+    home: EndSender<StationInstallationEnd>,
+}
+
+/// The datapath actor's task, on the station's executor. The station's
+/// task hears its exit and decides; how the installation ended, an
+/// unfinished one whole, goes to the application's [`Station`]
+/// ([`Station::installation_end`]).
 pub(crate) async fn datapath(datapath: Datapath) {
-    observed!(
+    let Datapath { datapath, home } = datapath;
+    let end = observed!(
         Datapath,
         datapath.run(StationObserver::default(), STATION_SINK)
     )
     .await;
+    leave(home, end).await;
 }
 
 /// The station lifecycle's task: an ordinary stop ends it; a restart of
-/// the station stays inside the facade; a start the radio refused and a
-/// confirmed stop whose radio release failed keep their typed causes with
-/// the control; every other terminal exit records its typed cause and
-/// resets. A removal receipt the refusal returned stays with this task
-/// ([`hold`]).
+/// the station stays inside the facade; a start the radio refused, a
+/// confirmed stop whose radio release failed, a refused reinstall and an
+/// item a port call could not keep keep their typed causes with the
+/// control, and their installation comes back whole through the datapath
+/// task ([`Station::installation_end`]); every other failure records its
+/// typed cause and resets ([`wifi::failure::LifecycleFailure::resets`]).
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
         runner,
@@ -277,8 +328,8 @@ pub(crate) async fn serve_station(start: StationStart) {
     } = start;
     let profile = wifi::Profile::new(&config, address, Callbacks(nonces), aes, STATION_SINK)
         .unwrap_or_else(|error| failure(error));
-    let ended = observed!(Station, runner.run(profile)).await;
-    match ended.exit {
+    let exit = observed!(Station, runner.run(profile)).await;
+    match exit {
         wifi::StationExit::Stopped => {}
         // The start's refusal and how its owners ended stay typed with the
         // control ([`Station::connect`] answers them): a refused start
@@ -289,25 +340,18 @@ pub(crate) async fn serve_station(start: StationStart) {
         // keeps, records it ([`Station::stop`] answers it); nothing of the
         // radio failed, so nothing resets.
         wifi::StationExit::StoppedNetworkLost => {}
-        wifi::StationExit::Failed(failed) => super::fail_path(
+        wifi::StationExit::Failed(failed) if failed.resets() => super::fail_path(
             oer_portable_diagnostics::name!("wifi-failed"; 32),
             &oer_portable_diagnostics::DiagPath::of(&failed),
         ),
+        // A refused reinstall or an item a port call could not keep: the
+        // owners are kept, the cause stays with the control
+        // ([`Station::stop`]), and the installation comes back whole.
+        wifi::StationExit::Failed(_) => {}
         // The stop was confirmed; the release's typed error stays with the
         // control ([`Station::stop`] answers it). A leave it posted is never
         // posted again: resetting would repeat nothing and prove nothing.
         wifi::StationExit::ReleaseFailed(_) => {}
-    }
-    hold(ended.returned).await;
-}
-
-/// Hold the removal receipt a refused release or reinstall returned (a key
-/// slot and its permission) for good: the task parks with it and never
-/// ends it. Without one the task ends.
-pub(crate) async fn hold<T>(returned: Option<T>) {
-    if let Some(receipt) = returned {
-        let _receipt = receipt;
-        core::future::pending::<()>().await;
     }
 }
 
@@ -678,6 +722,8 @@ impl oer_portable_diagnostics::DiagnosticPath for ConnectError {
 /// A started Wi-Fi station: its control.
 pub struct Station {
     control: wifi::Control<'static, Notifies>,
+    /// Where the datapath task leaves how the installation ended.
+    end: Option<EndReceiver<StationInstallationEnd>>,
     started: bool,
     address: [u8; 6],
     /// How long a stop gives the network to return its receive buffers.
@@ -687,8 +733,10 @@ pub struct Station {
 /// Why a stop did not end with the station stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StopError {
-    /// The station ended by a failure, which the library records before it
-    /// resets the chip.
+    /// The station ended by a failure: a refused reinstall or an item a
+    /// port call could not keep, whose installation comes back whole
+    /// ([`Station::installation_end`]); any other failure the library
+    /// records before it resets the chip.
     Failed,
     /// The station stopped, and its radio's release did not complete, for
     /// this cause. A leave the release posted is never posted again.
@@ -740,9 +788,13 @@ impl Station {
         let address = started.resources.address;
         let nonces = started.nonces;
         let seed = started.seed;
+        let (home, end) = end_home(&STATION_END)?;
         let (control, network, transmit, stopper, runners) =
             wifi::station(started.resources, config.chip);
-        boot.pending.datapath = Some(runners.datapath);
+        boot.pending.datapath = Some(Datapath {
+            datapath: runners.datapath,
+            home,
+        });
         boot.pending.station = Some(StationStart {
             runner: runners.station,
             config: config.chip,
@@ -758,6 +810,7 @@ impl Station {
         Ok((
             Self {
                 control,
+                end: Some(end),
                 started: false,
                 address,
                 drain: config.drain,
@@ -842,6 +895,16 @@ impl Station {
             Ok(wifi::StationExit::StoppedNetworkLost) => Err(StopError::NetworkLost),
             Ok(_) | Err(wifi::RunnerLost) => Err(StopError::Failed),
         }
+    }
+
+    /// How the station's installation ended, once the datapath task ended:
+    /// a retire, no installation, or the installation that did not retire,
+    /// whole ([`wifi::DatapathEnd::Unfinished`]: the actor with its port,
+    /// the item a port call could not keep, an attempt returned
+    /// unaccepted, the cleanup's receipt, the cause and the phase), which
+    /// the application holds from here. `None` once taken.
+    pub async fn installation_end(&mut self) -> Option<StationInstallationEnd> {
+        ended(&mut self.end).await
     }
 
     /// The link's state and epoch now.

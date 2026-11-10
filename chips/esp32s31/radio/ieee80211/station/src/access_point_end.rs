@@ -8,9 +8,10 @@ use core::{cell::Cell, future::Future};
 
 use oer_portable_time::{Duration, Timer};
 use oer_protocols_ieee80211_contracts_port::{ReceiveAccounting, StopUnconfirmed};
-use oer_protocols_ieee80211_runtime::access_point::ApUnsupported;
+use oer_protocols_ieee80211_runtime::access_point::{ApUnsupported, StopWatch};
 
 use crate::release::{Leave, Stopped};
+use crate::unfinished::{Phase, UNKEPT_ITEMS, Unfinished};
 
 /// Why the access point's run ended.
 #[cfg_attr(
@@ -105,35 +106,80 @@ pub(crate) enum Stop {
 pub(crate) trait Retiring {
     /// Its port, whose stopped radio the release takes.
     type Port: Stopped;
-    /// A received unit the port refused, which stays with the runner.
-    type Unrecycled;
+    /// An item a port call of the run could not keep.
+    type Unkept;
     /// Watch the radio's stop until the port confirms it, each observation
-    /// going to `unconfirmed`; a unit whose recycle the port refused is the
-    /// error.
+    /// going to `unconfirmed`, or until the runner holds an item a port
+    /// call could not keep ([`StopWatch::Unkept`]); a unit whose recycle
+    /// the port refused is the error.
     fn finish_stop(
         &mut self,
         unconfirmed: impl FnMut(StopUnconfirmed),
-    ) -> impl Future<Output = Result<(), ReceiveAccounting>>;
-    /// The unit the port refused, once.
-    fn take_unrecycled(&mut self) -> Self::Unrecycled;
+    ) -> impl Future<Output = Result<StopWatch, ReceiveAccounting>>;
     /// Its port.
     fn port_mut(&mut self) -> &mut Self::Port;
-    /// The item a port call of the run could not keep, once, as the
-    /// release's caller holds it.
-    fn take_unkept(&mut self) -> Option<<Self::Port as Stopped>::Receipt>;
+    /// The item a port call of the run could not keep, once.
+    fn take_unkept(&mut self) -> Option<Self::Unkept>;
+}
+
+/// The items a port call of the run could not keep, which the retire holds
+/// while it goes on with the stop: its home's places, filled in order.
+pub type UnkeptItems<I> = [Option<I>; UNKEPT_ITEMS];
+
+/// Move the item the runner holds, if one, to the home's first free place;
+/// with no free place the runner keeps it.
+fn take_into<R: Retiring>(home: &mut UnkeptItems<R::Unkept>, runner: &mut R) {
+    if let Some(place) = home.iter_mut().find(|place| place.is_none()) {
+        *place = runner.take_unkept();
+    }
+}
+
+/// An access point's installation that did not retire: its runner, the
+/// items its port calls could not keep, the cleanup's receipt, its exit as
+/// the cause, and its phase.
+pub type UnfinishedAccessPoint<R, I, Receipt, E> =
+    Unfinished<R, UnkeptItems<I>, (), Receipt, ApExitOf<E>>;
+
+/// How the retire of an ended access point ended.
+#[must_use = "an unfinished retire holds the runner, its port and their owners"]
+pub(crate) enum Retired<R: Retiring, E> {
+    /// The radio's stop was confirmed and the radio released: every owner
+    /// ended with the runner.
+    Completed(ApExitOf<E>),
+    /// The installation did not retire: everything it held.
+    Unfinished(UnfinishedAccessPoint<R, R::Unkept, <R::Port as Stopped>::Receipt, E>),
+}
+
+impl<R: Retiring, E: Copy> Retired<R, E> {
+    /// The exit this retire ended with.
+    pub(crate) fn exit(&self) -> ApExitOf<E> {
+        match self {
+            Self::Completed(exit) => *exit,
+            Self::Unfinished(unfinished) => unfinished.cause,
+        }
+    }
 }
 
 /// Stop the radio of an ended run unless the port confirmed its stop, then
 /// release it ([`crate::release::release`] through `leave`, every `retry`
-/// after a refusal that posted nothing). Until the port confirms the stop,
-/// the runner keeps every owner and watches the stop on, each observation
-/// published in `published` as [`ApExitOf::StopUnconfirmed`]; until the
-/// release ends, a release the MAC refused as still active is published as
-/// [`ApExitOf::ReleaseRefused`] and tried again. The owners end with the
-/// runner once the stop is confirmed and the release ended; a refused
-/// release's cleanup receipt goes back to the runner's caller with it, and
-/// so does an item a port call of the run could not keep, which no release
-/// follows.
+/// after a refusal that posted nothing).
+///
+/// An item a port call of the run could not keep is taken from the runner
+/// before the stop is watched, and after each watch that returned with
+/// one, into a free place of the retire's home ([`UNKEPT_ITEMS`]), so the
+/// watch goes on serving the port; a further item that finds the home
+/// full stays with the runner and ends the retire unfinished
+/// ([`Phase::Stopping`]). Until the port confirms the
+/// stop, the runner keeps every owner and watches the stop on, each
+/// observation published in `published` as [`ApExitOf::StopUnconfirmed`].
+/// With the stop confirmed and items out, no release runs
+/// ([`Phase::Stopped`]); otherwise a release the MAC refused as still
+/// active is published as [`ApExitOf::ReleaseRefused`] and tried again,
+/// and a refusal it does not repeat ends the retire unfinished
+/// ([`Phase::Releasing`]). Only a release that succeeded completes the
+/// retire: the owners, the cleanup's receipt among them, end with the
+/// runner. Every unfinished end returns the runner, its port, the items
+/// and the receipt whole.
 pub(crate) async fn retire<R: Retiring, E: Copy, F>(
     published: &Cell<Option<ApExitOf<E>>>,
     mut runner: R,
@@ -142,37 +188,66 @@ pub(crate) async fn retire<R: Retiring, E: Copy, F>(
     timer: &impl Timer,
     retry: Duration,
     leave: impl FnMut(<R::Port as Stopped>::Radio) -> F,
-) -> (ApExitOf<E>, Option<<R::Port as Stopped>::Receipt>)
+) -> Retired<R, E>
 where
     F: Future<Output = Leave<<R::Port as Stopped>::Radio, crate::failure::ReleaseCause>>,
 {
     let unconfirmed = |observed| published.set(Some(ApExitOf::StopUnconfirmed { ended, observed }));
+    let unkept_exit = ApExitOf::ReleaseRefused {
+        ended,
+        cause: crate::failure::ReleaseCause::Unkept,
+    };
+    let mut unkept: UnkeptItems<R::Unkept> = core::array::from_fn(|_| None);
     let finished = match stop {
         Stop::Confirmed => Ok(()),
-        Stop::Unconfirmed(observed) => {
-            unconfirmed(observed);
-            runner.finish_stop(unconfirmed).await
+        stop => {
+            if let Stop::Unconfirmed(observed) = stop {
+                unconfirmed(observed);
+            }
+            loop {
+                // An item the runner holds goes to a free place of the
+                // home before the watch, which makes no port call while
+                // the runner holds one.
+                take_into(&mut unkept, &mut runner);
+                match runner.finish_stop(unconfirmed).await {
+                    Ok(StopWatch::Confirmed) => break Ok(()),
+                    // The next turn of the loop takes the item, while the
+                    // home has room; a full home leaves it with the
+                    // runner, and the retire ends there.
+                    Ok(StopWatch::Unkept) if unkept.iter().all(Option::is_some) => {
+                        return Retired::Unfinished(Unfinished {
+                            owner: runner,
+                            unkept,
+                            unaccepted: (),
+                            receipt: None,
+                            cause: unkept_exit,
+                            phase: Phase::Stopping,
+                        });
+                    }
+                    Ok(StopWatch::Unkept) => {}
+                    Err(fault) => break Err(fault),
+                }
+            }
         }
-        Stop::Owed => runner.finish_stop(unconfirmed).await,
     };
-    // A unit the port refused stays here until the runner ends, after the
-    // release.
-    let unrecycled = runner.take_unrecycled();
-    // An item a port call of the run could not keep: no release follows
-    // it, and it goes back to the runner's caller with the refusal.
-    if let Some(unkept) = runner.take_unkept() {
-        drop(unrecycled);
-        let cause = crate::failure::ReleaseCause::Unkept;
-        return (ApExitOf::ReleaseRefused { ended, cause }, Some(unkept));
+    // An item the run left with a stop confirmed before the retire; with
+    // the home full it stays with the runner.
+    take_into(&mut unkept, &mut runner);
+    // Items a port call could not keep: no release follows them, and they
+    // go back with the runner.
+    if unkept.iter().any(Option::is_some) {
+        return Retired::Unfinished(Unfinished {
+            owner: runner,
+            unkept,
+            unaccepted: (),
+            receipt: None,
+            cause: unkept_exit,
+            phase: Phase::Stopped,
+        });
     }
     let refused = |cause| published.set(Some(ApExitOf::ReleaseRefused { ended, cause }));
-    // The cleanup's removal receipt: a refused release returns it to the
-    // runner's caller with the refusal; after a release that succeeded it
-    // ends with the retired installation.
     let (released, returned) =
         crate::release::release(runner.port_mut(), timer, retry, leave, refused).await;
-    drop(unrecycled);
-    let returned = crate::release::returned(released.is_err(), returned);
     let exit = match (ended, finished, released) {
         // A refusal the stop found after another cause.
         (ended, Err(fault), released) if !matches!(ended, ApEnded::Unrecycled(_)) => {
@@ -185,7 +260,22 @@ where
         (ended, _, Ok(())) => ApExitOf::Ended(ended),
         (ended, _, Err(cause)) => ApExitOf::ReleaseRefused { ended, cause },
     };
-    (exit, returned)
+    match released {
+        // The receipt ends with the retired installation's other owners.
+        Ok(()) => {
+            drop(returned);
+            drop(runner);
+            Retired::Completed(exit)
+        }
+        Err(_) => Retired::Unfinished(Unfinished {
+            owner: runner,
+            unkept,
+            unaccepted: (),
+            receipt: returned,
+            cause: exit,
+            phase: Phase::Releasing,
+        }),
+    }
 }
 
 #[cfg(test)]

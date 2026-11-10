@@ -693,7 +693,7 @@ macro_rules! expired {
         let mut reported = 0;
         assert_eq!(
             $runner.finish_stop($counted, |_| reported += 1).await,
-            Ok(())
+            Ok(super::StopWatch::Confirmed)
         );
         assert_eq!(reported, 0, "the stop is never unconfirmed");
         drop(command);

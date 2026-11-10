@@ -433,10 +433,11 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 # retune fault, deadline, device), `StopUnconfirmed`, `RetuneUnconfirmed`
 # (unexpected-hardware), `Port` (the actor ended on the port's named fault:
 # unexpected-hardware, exhaustion), `Actor` and `Contract` (a broken actor or
-# lifecycle contract: software-invariant), `Reinstall` and `Mailbox`
-# (software-invariant). `ReleaseFailed` (a confirmed stop) and
-# `Unavailable` (a refused start) reset nothing: their typed causes stay
-# with the control.
+# lifecycle contract: software-invariant), `Receive` and `Mailbox`
+# (software-invariant). `ReleaseFailed` (a confirmed stop), `Unavailable`
+# (a refused start), `Failed(Reinstall)` and `Failed(Unkept)`
+# (`LifecycleFailure::resets`) reset nothing: their typed causes stay with
+# the control and their installation comes back whole to the application.
 "chips/esp32s31/app/src/lib.rs:crate::fail_path:terminal-entry:fail_path:1" = { owner = "chips/esp32s31/app", classes = ["cancellation", "software-invariant", "unexpected-hardware", "exhaustion"] }
 "chips/esp32s31/app/src/lib.rs:crate::fail_path:terminal-reference:boot_failure:1" = { owner = "chips/esp32s31/app", classes = ["cancellation", "software-invariant", "unexpected-hardware", "exhaustion"] }
 "chips/esp32s31/app/src/lib.rs:crate:terminal-binding:phy_fault_reporter:1" = { owner = "chips/esp32s31/app", classes = ["unexpected-hardware", "software-invariant", "configuration-boot", "exhaustion", "cancellation"] }

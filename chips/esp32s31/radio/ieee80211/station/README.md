@@ -134,18 +134,55 @@ reinstall is `Failed(Reinstall)`. Before a reinstall or a release the
 actor's task runs the stopped port's cleanup once (`DataPort::clean_stopped`);
 one that did not finish, a group key entry the hardware still holds among
 them, keeps the port stopped with its owners and is `Reinstall(Cleanup)` or
-`ReleaseFailed(Cleanup)`, and nothing runs it again. A removal receipt the
-cleanup frees comes back whole to the actor's task, which hands it on with
-its news. After a release that succeeded it ends with the retired
-installation; a refused release or reinstall returns it with the refusal to
-the runner's caller (`StationEnd::returned`, and the access point's
-`AccessPointEnd::returned`), which holds it from there (the port's release
-does not ask for it). After an ordinary stop
+`ReleaseFailed(Cleanup)`, and nothing runs it again. After an ordinary stop
 the actor's task takes the stopped device's Wi-Fi frontier and membership
 cell and releases the radio. The station's exit is published only after that
 release, or once the stop's drain passed first: a cleanup that did not
 finish, a still-active MAC, an unanswered leave, a poisoned domain or the
 passed drain is `ReleaseFailed`, never `Stopped`.
+
+## How an installation ends
+
+A Wi-Fi installation, the station's or the access point's, ends in one of
+two ways:
+
+- a **completed retire**: the radio's stop is confirmed, the stopped port's
+  cleanup ran, the radio is released, and every owner (the actor or runner,
+  its port, the cleanup's removal receipt) ends with the retired
+  installation;
+- an **unfinished installation** (`unfinished::Unfinished`), returned whole
+  to the external owner, the application: the actor or runner with its port
+  (`owner`), the items a port call could neither give it nor keep
+  (`unkept`), an attempt a submission returned unaccepted (`unaccepted`),
+  the cleanup's removal receipt (`receipt`), the cause and the phase
+  (`unfinished::Phase`: `Running`, `Stopping`, `Stopped`, `Reinstalling`,
+  `Releasing`). Nothing of it is dropped on the way.
+
+The station's datapath task returns `DatapathEnd` (`Retired`,
+`NotInstalled`, or `Unfinished(UnfinishedStationOf<W>)`, cause
+`DatapathCause`): a fault of the actor (`Running`), a refused cleanup or
+reinstall after a restart, or TSF epochs used up (`Reinstalling`), an item
+the actor could not keep at its retire (`Stopped`, no release), a refused
+release (`Releasing`). The station's task returns its `StationExit` alone;
+its news carries causes, never owners.
+
+The access point's runner returns `AccessPointEnd::Ended(ApExit)` after a
+completed retire (or a run that never installed), or
+`AccessPointEnd::Unfinished`. An item a port call could not keep goes, before
+each watch of the stop and after each watch that returned with one
+(`StopWatch::Unkept`), to a free place of the retire's home
+(`UNKEPT_ITEMS`), so the stop's watch goes on serving the port; a further
+item that finds the home full stays with the runner and ends the retire in
+`Stopping`. With the stop confirmed and items out no release runs
+(`Stopped`); a refusal the release does not repeat ends in `Releasing`.
+
+The application's `wifi::Station::installation_end` and
+`wifi::AccessPoint::installation_end` hand that value over once its task
+ended. A refused reinstall and an item a port call could not keep reset
+nothing (`LifecycleFailure::resets`); the station's other failures still
+record their cause and reset under the registered terminal policy of the
+app's `fail_path`.
+
 Owners a failed step does not return stay quarantined in their static
 backing.
 `StationExit` retains the facade's original typed failure. Its public failure

@@ -50,15 +50,26 @@ static AP_IP: StaticCell<ApIpResources> = StaticCell::new();
 static AP_GENERAL: StaticCell<GeneralPool<AP_PACKETS>> = StaticCell::new();
 static AP_CONTROL: StaticCell<ip::Control<'static>> = StaticCell::new();
 
-/// The access point's task: its runner and its IP service.
+/// How the access point's installation ended: its exit, or the
+/// installation that did not retire, whole
+/// ([`AccessPoint::installation_end`]).
+pub type ApInstallationEnd = ap::AccessPointEnd<binding::Binding>;
+
+static AP_END: StaticCell<EndHome<ApInstallationEnd>> = StaticCell::new();
+
+/// The access point's task: its runner, its IP service and the home its
+/// end goes to.
 pub(crate) struct ApStart {
     runner: AccessPointRunner<binding::Binding>,
     service: ApIpService,
+    home: EndSender<ApInstallationEnd>,
 }
 
 /// The access point: its control and its IP stack.
 pub struct AccessPoint {
     control: AccessPointControl,
+    /// Where the access point's task leaves how its installation ended.
+    end: Option<EndReceiver<ApInstallationEnd>>,
     stack: ApStack,
     net: &'static ip::Control<'static>,
     address: [u8; 6],
@@ -80,6 +91,7 @@ impl AccessPoint {
         address: ip::Ipv4Configuration,
         boot: &mut Boot,
     ) -> Result<Self, Error> {
+        let (home, end) = end_home(&AP_END)?;
         let started = start_radio(wifi, boot)?;
         let mac = started.resources.ap;
         let seed = started.seed;
@@ -117,9 +129,14 @@ impl AccessPoint {
             .map_err(Error::Net)?;
         let net: &'static ip::Control<'static> = AP_CONTROL.try_init(net).ok_or(Error::Storage)?;
         let stack = service.stack();
-        boot.pending.access_point = Some(ApStart { runner, service });
+        boot.pending.access_point = Some(ApStart {
+            runner,
+            service,
+            home,
+        });
         Ok(Self {
             control,
+            end: Some(end),
             stack,
             net,
             address: mac,
@@ -147,6 +164,16 @@ impl AccessPoint {
     /// command the port refused, after which the radio was released.
     pub fn exit(&self) -> Option<ApExit> {
         self.control.exit()
+    }
+
+    /// How the access point's installation ended, once its task ended: its
+    /// exit, or the installation that did not retire, whole
+    /// ([`ap::AccessPointEnd::Unfinished`]: the runner with its port, the
+    /// items a port call could not keep, the cleanup's receipt, the exit
+    /// as its cause and the phase), which the application holds from
+    /// here. `None` once taken.
+    pub async fn installation_end(&mut self) -> Option<ApInstallationEnd> {
+        ended(&mut self.end).await
     }
 
     /// Wait for a status other than `seen`.
@@ -178,16 +205,18 @@ impl AccessPoint {
 
 /// The access point's task: the runner and the IP service together. Every
 /// end of the access point keeps its typed cause in [`AccessPoint::exit`]
-/// and resets nothing: an ended run returned its owners and released the
-/// radio; until its stop is confirmed and its release ended, the runner
-/// keeps every owner in its task and the exit says how far the end came; a
-/// refused install names its cause, its started radio released. An IP
-/// service that ends stops the access point, its cause in the service's
-/// status.
+/// and resets nothing: a completed retire returned its owners and released
+/// the radio; until its stop is confirmed and its release ended, the
+/// runner keeps every owner in its task and the exit says how far the end
+/// came; an installation that did not retire goes whole to the
+/// application ([`AccessPoint::installation_end`]); a refused install
+/// names its cause, its started radio released. An IP service that ends
+/// stops the access point, its cause in the service's status.
 pub(crate) async fn serve_access_point(start: ApStart) {
     let ApStart {
         runner,
         mut service,
+        home,
     } = start;
     let ip = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
     let stop = runner.stop_handle();
@@ -200,5 +229,5 @@ pub(crate) async fn serve_access_point(start: ApStart) {
             run.await
         }
     };
-    super::hold(ended.returned).await;
+    super::leave(home, ended).await;
 }

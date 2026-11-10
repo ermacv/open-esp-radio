@@ -309,8 +309,28 @@ pub enum ApEnd<F> {
     /// A port call returned an item it could neither give the runner nor
     /// keep: the item is in the runner ([`ApRunner::take_unkept`]), every
     /// other owner in its place. The runner makes no port call that takes
-    /// owners while it holds it, its stop's watch included: a stop not yet
-    /// confirmed stays unconfirmed, the owners with the runner.
+    /// owners while it holds it; its stop goes on in
+    /// [`ApRunner::finish_stop`] once the item's owner took it.
+    Unkept,
+}
+
+/// How far a call of [`ApRunner::finish_stop`] watched the radio's stop.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StopWatch {
+    /// The port confirmed the stop.
+    Confirmed,
+    /// The runner holds an item a port call could not keep
+    /// ([`ApRunner::take_unkept`]): the watch made no port call after it
+    /// and returned. Once the item is taken, the next call goes on
+    /// watching.
+    Unkept,
+}
+
+/// Why a watch of the radio's stop ended before the port confirmed it.
+enum Unwatched {
+    /// The port's answer, which the watch's caller said ends it.
+    Unconfirmed(StopUnconfirmed),
+    /// The runner holds an item a port call could not keep.
     Unkept,
 }
 
@@ -753,7 +773,7 @@ where
     cut_units: u32,
     /// The instant of the port's call the terminals belong to.
     now: Instant,
-    /// The run ended on a port fault: the stop takes it back first.
+    /// The run ended on a port fault: the stop takes it back first, once.
     faulted: bool,
     /// Units, terminals and commands taken from the port, counted for the
     /// progress of a turn.
@@ -1833,14 +1853,12 @@ where
             // watched on by [`ApRunner::finish_stop`] if not confirmed.
             return ApEnd::Unrecycled(refused.fault);
         }
-        if self.homes.unkept.is_some() {
-            // The stop's watch found an item the port could not keep; no
-            // service follows it.
-            return ApEnd::Unkept;
-        }
         match watched {
             Ok(()) => ApEnd::Stopped,
-            Err(unconfirmed) => ApEnd::StopUnconfirmed(unconfirmed),
+            Err(Unwatched::Unconfirmed(unconfirmed)) => ApEnd::StopUnconfirmed(unconfirmed),
+            // The stop's watch found an item the port could not keep; no
+            // service follows it until its owner took it.
+            Err(Unwatched::Unkept) => ApEnd::Unkept,
         }
     }
 
@@ -1853,6 +1871,13 @@ where
     /// can ([`DataPort::recover_for_stop`]). Nothing is sent and no command
     /// goes meanwhile. It returns only once the port confirmed the stop.
     ///
+    /// A call returns before the confirmation once the runner holds an item
+    /// a port call could not keep ([`StopWatch::Unkept`]), at once when it
+    /// already holds one: the watch makes no port call while it does. Its
+    /// owner takes it ([`ApRunner::take_unkept`]) and calls again, and the
+    /// watch goes on from the port's state; the port's fault is taken back
+    /// at the first call only.
+    ///
     /// # Errors
     ///
     /// The port refused a unit's recycle, before or during the stop: the
@@ -1862,23 +1887,28 @@ where
         &mut self,
         clock: &T,
         mut unconfirmed: impl FnMut(StopUnconfirmed),
-    ) -> Result<(), ReceiveAccounting> {
-        if self.homes.faulted {
-            self.homes.faulted = !self.port.recover_for_stop();
+    ) -> Result<StopWatch, ReceiveAccounting> {
+        // The port is asked to take its fault back once: a later call of
+        // the same stop asks nothing again.
+        if core::mem::take(&mut self.homes.faulted) {
+            let _recovered: bool = self.port.recover_for_stop();
         }
         self.homes.stop = true;
         self.homes.phase = Phase::StoppingRadio;
         self.homes.status.running = false;
         self.homes.network.set_link(false);
-        let _confirmed = self
+        let watched = self
             .watch_stop(clock, |observed| {
                 unconfirmed(observed);
                 false
             })
             .await;
+        if let Err(Unwatched::Unkept) = watched {
+            return Ok(StopWatch::Unkept);
+        }
         match self.homes.unrecycled.as_ref() {
             Some(refused) => Err(refused.fault),
-            None => Ok(()),
+            None => Ok(StopWatch::Confirmed),
         }
     }
 
@@ -1887,16 +1917,21 @@ where
     /// over, and poll the stop. An unconfirmed answer goes to `ends`, which
     /// says whether it ends the watch; an answer equal to the last one is
     /// not reported again. A deadline the watch served at does not wake it
-    /// again, nor do the very facts it just served.
+    /// again, nor do the very facts it just served. The watch ends at once
+    /// while the runner holds an item a port call could not keep, and
+    /// after the service that returned one: no port call follows it.
     async fn watch_stop<T: Timer>(
         &mut self,
         clock: &T,
         mut ends: impl FnMut(StopUnconfirmed) -> bool,
-    ) -> Result<(), StopUnconfirmed> {
+    ) -> Result<(), Unwatched> {
         let mut facts = Facts::default();
         let mut served: Option<Instant> = None;
         let mut reported: Option<StopUnconfirmed> = None;
         loop {
+            if self.homes.unkept.is_some() {
+                return Err(Unwatched::Unkept);
+            }
             let now = clock.now();
             let due = self
                 .port
@@ -1907,16 +1942,17 @@ where
                 served = Some(now);
                 self.homes.now = now;
                 // A fault of this service is the stop's to name: its answer
-                // below says it. No service follows an item the port could
-                // not keep: the place stays the first one's.
-                if self.homes.unkept.is_none() {
-                    let (_served, unkept) = crate::answered(self.port.service_tx(
-                        facts.tx.unwrap_or(TxFacts::DUE),
-                        facts.tbtt,
-                        now,
-                        &mut self.homes,
-                    ));
+                // below says it. The place is empty here (checked above);
+                // an item the port could not keep ends the watch.
+                let (_served, unkept) = crate::answered(self.port.service_tx(
+                    facts.tx.unwrap_or(TxFacts::DUE),
+                    facts.tbtt,
+                    now,
+                    &mut self.homes,
+                ));
+                if unkept.is_some() {
                     self.homes.unkept = unkept;
+                    return Err(Unwatched::Unkept);
                 }
                 // The stop reads nothing a cut hands over: each unit goes
                 // back to its ring at once, until the port refuses one;
@@ -1979,7 +2015,7 @@ where
                 }
                 Woke::Stopped(Err(observed)) => {
                     if ends(observed) {
-                        return Err(observed);
+                        return Err(Unwatched::Unconfirmed(observed));
                     }
                 }
                 Woke::Facts(taken) => facts = union(facts, taken),

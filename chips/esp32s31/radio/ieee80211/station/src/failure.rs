@@ -623,6 +623,19 @@ pub enum LifecycleFailure {
     /// keep: it stays with the actor, which makes no port call after it.
     Unkept,
 }
+impl LifecycleFailure {
+    /// Whether the image records this failure and resets: under the
+    /// registered terminal policy of the station's exits
+    /// (`tools/test/layers/terminal-sites.toml`, the app's `fail_path`).
+    /// A refused reinstall and an item a port call could not keep are
+    /// handled outcomes with kept owners: their installation comes back
+    /// whole from the datapath actor's task ([`crate::unfinished`]) and
+    /// nothing resets for them.
+    pub const fn resets(&self) -> bool {
+        !matches!(self, Self::Reinstall(_) | Self::Unkept)
+    }
+}
+
 /// Why the port did not reinstall after the station's restart.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReinstallCause {

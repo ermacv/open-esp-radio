@@ -658,6 +658,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         Result<ApProgress<'id, Id, D, B, O>, AccessPointCommandFailed<'id, Self>>,
     > {
         // Nothing is delivered before the command is accepted.
+        let command = self.accepting(command)?;
         let ran = self.access_point_ran(command, now, sink);
         self.answer(ran)
     }

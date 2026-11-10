@@ -41,18 +41,6 @@ impl<'id, T: PortTypes<'id>> Freed<'id, T> {
             Some(Self { removed, unkept })
         }
     }
-
-    /// An item a run returned unkept, which no release follows.
-    #[cfg_attr(
-        not(target_arch = "riscv32"),
-        allow(dead_code, reason = "the chip's access point builds it")
-    )]
-    pub(crate) fn unkept(unkept: Unkept<'id, T>) -> Self {
-        Self {
-            removed: None,
-            unkept: Some(unkept),
-        }
-    }
 }
 
 /// The stopped port's cleanup, once per call of its lifecycle owner, after
@@ -68,20 +56,21 @@ where
     P::Types: PortTypes<'id>,
 {
     let mut sink = Returning { removed: None };
-    let (answer, unkept) = match port.clean_stopped(&mut sink) {
-        Ok(answer) => (answer, None),
-        Err(Unkeeping { unkept, input }) => match input {
-            Input::Accepted(answer) => (answer, Some(unkept)),
-            Input::NotAccepted(never) => match never {},
-        },
+    let (result, unkept) = match port.clean_stopped(&mut sink) {
+        Ok(answer) => (answer.map_err(crate::failure::convert::cleanup), None),
+        Err(Unkeeping { unkept, input }) => {
+            let result = match input {
+                // The cleanup ran: its own refusal first, then the item.
+                Input::Accepted(answer) => answer
+                    .map_err(crate::failure::convert::cleanup)
+                    .and(Err(crate::failure::CleanupCause::Unkept)),
+                // An item an earlier call left refused the cleanup before
+                // it ran: nothing was cleaned.
+                Input::NotAccepted(()) => Err(crate::failure::CleanupCause::Unkept),
+            };
+            (result, Some(unkept))
+        }
     };
-    let result = answer
-        .map_err(crate::failure::convert::cleanup)
-        .and(if unkept.is_some() {
-            Err(crate::failure::CleanupCause::Unkept)
-        } else {
-            Ok(())
-        });
     Cleaned {
         result,
         removed: Freed::of(sink.removed, unkept),
@@ -157,19 +146,6 @@ impl<'id, T: PortTypes<'id>> PortSink<'id, T> for Returning<'id, T> {
         meta: T::RxMeta,
     ) -> Result<(), (T::RxBuffer, T::RxMeta)> {
         Err((frame, meta))
-    }
-}
-
-/// The cleanup's removal receipt once the release or reinstall it came back
-/// with ended: a refusal returns it to the runner's caller with the
-/// refusal, whole; after a release that succeeded it ends with the retired
-/// installation's other tokens.
-pub(crate) fn returned<R>(refused: bool, receipt: Option<R>) -> Option<R> {
-    if refused {
-        receipt
-    } else {
-        drop(receipt);
-        None
     }
 }
 
@@ -280,30 +256,6 @@ mod tests {
 
     fn poll_now<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
         poll(future)
-    }
-
-    /// A receipt whose end the test observes.
-    struct Receipt<'a>(&'a Cell<u8>);
-
-    impl Drop for Receipt<'_> {
-        fn drop(&mut self) {
-            self.0.set(self.0.get() + 1);
-        }
-    }
-
-    #[test]
-    fn a_refused_release_returns_its_cleanup_receipt_to_the_caller() {
-        let ended = Cell::new(0);
-        let kept = returned(true, Some(Receipt(&ended)));
-        assert_eq!(ended.get(), 0, "the refusal ends nothing");
-        assert!(kept.is_some(), "the caller holds the receipt");
-        // A release that succeeded ends its receipt with the retired
-        // installation.
-        let succeeded = Cell::new(0);
-        assert!(returned(false, Some(Receipt(&succeeded))).is_none());
-        assert_eq!(succeeded.get(), 1);
-        drop(kept);
-        assert_eq!(ended.get(), 1);
     }
 
     #[test]

@@ -776,6 +776,8 @@ mod station_end;
 pub use station_end::StationExitOf;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod access_point_end;
+
+pub mod unfinished;
 #[cfg(oer_fault_injection)]
 pub use oer_chips_esp32s31_radio_ieee80211_backend::port::debug::refuse_next_publication;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
@@ -859,9 +861,13 @@ pub fn mac_counters() -> MacCounters {
 #[cfg(target_arch = "riscv32")]
 pub use chip::{
     Bell, Binding, Config, Datapath, DriverExecutor, Event, Events, InitializationError,
-    InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationEnd, StationExit,
-    StationRunner, Storage, station,
+    InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner,
+    Storage, station,
 };
+#[cfg(target_arch = "riscv32")]
+pub use radio::{DatapathEnd, UnfinishedStationOf};
+#[cfg(any(test, target_arch = "riscv32"))]
+pub use station_end::{DatapathCause, UnfinishedStation};
 
 /// Bind the facade's backing to this image's concrete interrupt entries.
 /// The image declares callbacks, collectors and terminal policy.

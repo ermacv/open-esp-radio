@@ -10,7 +10,7 @@
 //! Once the runner stopped the radio, the composition releases the radio's
 //! membership as the station's does.
 
-use crate::access_point_end::Stop;
+use crate::access_point_end::{Retired, Stop};
 use crate::chip::{Binding, Config, InitializationError, Resources};
 use crate::radio::{self, Port};
 use oer_chips_esp32s31_radio_ieee80211_backend::port::{BufferClass, PortInstallation, TX_TICKETS};
@@ -278,7 +278,8 @@ impl ApNonces for Nonces {
     }
 }
 
-pub use crate::access_point_end::{ApEnded, ApExitOf};
+pub use crate::access_point_end::{ApEnded, ApExitOf, UnfinishedAccessPoint, UnkeptItems};
+pub use crate::unfinished::{Phase, UNKEPT_ITEMS, Unfinished};
 /// How the access point ended, or how far its end came.
 pub type ApExit = ApExitOf<InitializationError>;
 
@@ -293,14 +294,39 @@ pub struct AccessPointRunner<W: Binding> {
     nonces: Nonces,
 }
 
-/// How the access point ended, and the removal receipt (a key slot and its
-/// permission) of the stopped port's cleanup that a refused release
-/// returned with its refusal: the caller holds it from here.
-#[must_use = "a refused release's receipt holds a key slot and its permission"]
-pub struct AccessPointEnd<W: Binding> {
-    pub exit: ApExit,
-    pub returned: Option<radio::Freed<W>>,
+/// How the access point ended: a completed retire (or a run that never
+/// installed), or an installation that did not retire, whole, which the
+/// caller holds from here.
+#[must_use = "an unfinished installation holds the runner, its port and their owners"]
+pub enum AccessPointEnd<W: Binding> {
+    /// Its exit; nothing of it is left.
+    Ended(ApExit),
+    /// The installation that did not retire: its runner with the port,
+    /// the items a port call could not keep, the cleanup's receipt, its
+    /// exit as the cause, and its phase.
+    Unfinished(UnfinishedAccessPointOf<W>),
 }
+
+impl<W: Binding> AccessPointEnd<W> {
+    /// The exit the access point ended with.
+    pub fn exit(&self) -> ApExit {
+        match self {
+            Self::Ended(exit) => *exit,
+            Self::Unfinished(unfinished) => unfinished.cause,
+        }
+    }
+}
+
+/// An access point's installation of `W` that did not retire.
+pub type UnfinishedAccessPointOf<W> = crate::access_point_end::UnfinishedAccessPoint<
+    ApRunnerOf<W>,
+    oer_protocols_ieee80211_contracts_port::Unkept<
+        'static,
+        <Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Types,
+    >,
+    radio::Freed<W>,
+    InitializationError,
+>;
 
 /// The access point's network device and its sending path.
 pub type ApNetwork = ApNetDevice<'static>;
@@ -407,12 +433,12 @@ impl<W: Binding> AccessPointRunner<W> {
     /// radio started.
     pub async fn run(self) -> AccessPointEnd<W> {
         let slot = self.start;
-        let (exit, returned) = self.serve().await;
-        slot.ended.set(Some(exit));
-        AccessPointEnd { exit, returned }
+        let end = self.serve().await;
+        slot.ended.set(Some(end.exit()));
+        end
     }
 
-    async fn serve(self) -> (ApExit, Option<radio::Freed<W>>) {
+    async fn serve(self) -> AccessPointEnd<W> {
         let Self {
             mut boot,
             start: slot,
@@ -423,27 +449,21 @@ impl<W: Binding> AccessPointRunner<W> {
             mut nonces,
         } = self;
         let Some((config, settings)) = slot.take(shared).await else {
-            return (ApExit::Ended(ApEnded::Stopped), None);
+            return AccessPointEnd::Ended(ApExit::Ended(ApEnded::Stopped));
         };
         boot.config = config;
         let Some(mut installations) = W::take_installations() else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Storage,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Storage),
+            ));
         };
         // The PMK of the passphrase, a step at a time between the
         // executor's other work.
         let Ok(mut derivation) = PmkDerivation::new(&settings.passphrase, settings.ssid.as_bytes())
         else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Ssid,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Ssid),
+            ));
         };
         let pmk = loop {
             if let Some(pmk) = derivation.step() {
@@ -452,12 +472,9 @@ impl<W: Binding> AccessPointRunner<W> {
             embassy_futures::yield_now().await;
         };
         let Some(gtk_bytes) = nonces.nonce() else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Storage,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Storage),
+            ));
         };
         let mut gtk = [0; 16];
         for (octet, source) in gtk.iter_mut().zip(gtk_bytes) {
@@ -469,21 +486,15 @@ impl<W: Binding> AccessPointRunner<W> {
             oer_protocols_ieee80211_wire::address::IndividualAddress::for_interface(boot.ap)
                 .map(|address| address.get())
         else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Address,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Address),
+            ));
         };
         let channel = config.supported;
         let Some(key_id) = GroupKeyId::new(GROUP_KEY_ID) else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Storage,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Storage),
+            ));
         };
         let Ok(service) = AccessPointService::<Interface>::new(
             address,
@@ -494,12 +505,9 @@ impl<W: Binding> AccessPointRunner<W> {
             AccessPointInactiveTimeout::default(),
             peers.lend(),
         ) else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Storage,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Storage),
+            ));
         };
         let wire_channel = channel.channel();
         let Ok(beacon) = ApBeacon::new(
@@ -513,43 +521,31 @@ impl<W: Binding> AccessPointRunner<W> {
             SequenceNumber::ZERO,
             ApSecurityPolicy::Wpa2Personal,
         ) else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Ssid,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Ssid),
+            ));
         };
         let (Some(management_transmissions), Some(data_transmissions)) = (
             core::num::NonZeroU8::new(MANAGEMENT_TRANSMISSIONS),
             core::num::NonZeroU8::new(lmac::SHORT_RETRY_LIMIT),
         ) else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Tx,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Tx),
+            ));
         };
         let Some(minted) = installations.first() else {
-            return (
-                ApExit::Unavailable(crate::failure::Unavailable::took_nothing(
-                    InitializationError::Registration,
-                )),
-                None,
-            );
+            return AccessPointEnd::Ended(ApExit::Unavailable(
+                crate::failure::Unavailable::took_nothing(InitializationError::Registration),
+            ));
         };
         let (parts, driver) = match radio::install(boot, config, AP_BANK).await {
             Ok(installed) => installed,
             Err(refused) => {
                 // A started radio leaves before the refusal is told, its
                 // outcome told with it.
-                return (
-                    ApExit::Unavailable(
-                        crate::release::refused(refused.cause, refused.owners).await,
-                    ),
-                    None,
-                );
+                return AccessPointEnd::Ended(ApExit::Unavailable(
+                    crate::release::refused(refused.cause, refused.owners).await,
+                ));
             }
         };
         let PortInstallation {
@@ -561,12 +557,9 @@ impl<W: Binding> AccessPointRunner<W> {
             Err((parts, _minted)) => {
                 // The started radio leaves from the refused parts' device,
                 // which the port never started; its outcome is the cleanup.
-                return (
-                    ApExit::Unavailable(
-                        radio::port_refused::<W>(InitializationError::Backend, parts.device).await,
-                    ),
-                    None,
-                );
+                return AccessPointEnd::Ended(ApExit::Unavailable(
+                    radio::port_refused::<W>(InitializationError::Backend, parts.device).await,
+                ));
             }
         };
         let mut tickets = heapless::Vec::new();
@@ -646,11 +639,11 @@ impl<W: Binding> AccessPointRunner<W> {
             // The start's check refuses such a port before the radio
             // starts; a run that still ended here never asked it to start.
             ApEnd::Unsupported(cause) => (ApEnded::Unsupported(cause), Stop::Owed),
-            // The runner makes no port call after it: its stop is watched
-            // and confirmed only if it already was.
+            // The retire takes the item from the runner, and the stop's
+            // watch goes on.
             ApEnd::Unkept => (ApEnded::Unkept, Stop::Owed),
         };
-        crate::access_point_end::retire(
+        match crate::access_point_end::retire(
             &slot.ended,
             runner,
             ended,
@@ -660,11 +653,15 @@ impl<W: Binding> AccessPointRunner<W> {
             radio::StoppedRadio::release,
         )
         .await
+        {
+            Retired::Completed(exit) => AccessPointEnd::Ended(exit),
+            Retired::Unfinished(unfinished) => AccessPointEnd::Unfinished(unfinished),
+        }
     }
 }
 
 /// The access point's runner over the S31 port.
-type ApRunnerOf<W> = ApRunner<
+pub type ApRunnerOf<W> = ApRunner<
     'static,
     'static,
     'static,
@@ -677,27 +674,26 @@ type ApRunnerOf<W> = ApRunner<
 
 impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
     type Port = Port<W>;
-    type Unrecycled = Option<
-        oer_protocols_ieee80211_contracts_port::RecycleRefused<
-            <<Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Types as oer_protocols_ieee80211_contracts_port::PortTypes<'static>>::RxBuffer,
-        >,
+    type Unkept = oer_protocols_ieee80211_contracts_port::Unkept<
+        'static,
+        <Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Types,
     >;
     fn finish_stop(
         &mut self,
         unconfirmed: impl FnMut(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
     ) -> impl core::future::Future<
-        Output = Result<(), oer_protocols_ieee80211_contracts_port::ReceiveAccounting>,
+        Output = Result<
+            oer_protocols_ieee80211_runtime::access_point::StopWatch,
+            oer_protocols_ieee80211_contracts_port::ReceiveAccounting,
+        >,
     > {
         ApRunner::finish_stop(self, &EmbassyClock, unconfirmed)
-    }
-    fn take_unrecycled(&mut self) -> Self::Unrecycled {
-        ApRunner::take_unrecycled(self)
     }
     fn port_mut(&mut self) -> &mut Port<W> {
         ApRunner::port_mut(self)
     }
-    fn take_unkept(&mut self) -> Option<radio::Freed<W>> {
-        ApRunner::take_unkept(self).map(crate::release::Freed::unkept)
+    fn take_unkept(&mut self) -> Option<Self::Unkept> {
+        ApRunner::take_unkept(self)
     }
 }
 

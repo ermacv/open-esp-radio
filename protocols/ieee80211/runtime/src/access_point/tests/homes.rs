@@ -244,3 +244,77 @@ fn an_item_the_port_cannot_keep_ends_the_turn_and_leaves_the_runner_once() {
         assert!(runner.take_unkept().is_none(), "once");
     }));
 }
+
+/// A run that ended on an item the port could not keep: its stop's watch
+/// returns at once while the item is held, making no port call, and goes
+/// on to the port's confirmation once its owner took the item; the port's
+/// fault is asked back once.
+#[test]
+fn a_stop_watch_returns_while_an_item_is_unkept_and_goes_on_once_it_is_taken() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        let now = || oer_portable_time::Clock::now(&*counted.clock);
+        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        assert!(started.is_ok(), "the radio starts");
+        let ticket = runner.homes.tickets.pop().unwrap();
+        let mut buffer = runner.homes.buffers.pop().unwrap();
+        let len = deauthentication(buffer.bytes_mut().unwrap());
+        let frame = ApFrame {
+            len,
+            kind: ApFrameKind::Management { peer: STATION },
+        };
+        let Ok(admitted) = runner.admit(ticket, buffer, frame, TxOperation::Data, None) else {
+            panic!("the frame is admitted");
+        };
+        assert!(matches!(
+            runner.port.submit(admitted, now(), &mut runner.homes),
+            Ok(Ok(()))
+        ));
+        air.unkeep_next(oer_protocols_ieee80211_testing_model::ModelUnkeep::AtDrain);
+        let mut halted = false;
+        for _ in 0..64 {
+            counted.clock.advance(Duration::from_millis(1)).unwrap();
+            air.clock_advanced();
+            let facts = Facts {
+                tx: Some(TxFacts::DUE),
+                ..Facts::default()
+            };
+            if runner.turn(now(), facts).is_err() {
+                halted = true;
+                break;
+            }
+        }
+        assert!(halted, "the terminal came back unkept");
+        assert!(matches!(
+            runner.run(&shared, &*counted.clock).await,
+            ApEnd::Unkept
+        ));
+        // While the item is held the watch returns at once.
+        let held = async {
+            for _ in 0..64 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+            core::future::pending::<()>().await;
+        };
+        match select(Woken::new(runner.finish_stop(&counted, |_| {})), held).await {
+            Either::First(watched) => assert_eq!(watched, Ok(StopWatch::Unkept)),
+            Either::Second(()) => panic!("the watch waits on nothing while it holds the item"),
+        }
+        let Some(item) = runner.take_unkept() else {
+            panic!("the item stays with the runner");
+        };
+        // Taken, the watch goes on to the port's confirmation.
+        let script = async {
+            for _ in 0..256 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+            core::future::pending::<()>().await;
+        };
+        match select(Woken::new(runner.finish_stop(&counted, |_| {})), script).await {
+            Either::First(watched) => assert_eq!(watched, Ok(StopWatch::Confirmed)),
+            Either::Second(()) => panic!("the port confirms the stop once the item is out"),
+        }
+        drop(item);
+    }));
+}

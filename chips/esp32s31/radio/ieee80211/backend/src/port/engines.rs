@@ -1007,6 +1007,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.unconsumed.refuse_keeps = count;
     }
 
+    /// Hold `unkept` in the store's spilled place, as a halted call's
+    /// second item does.
+    #[cfg(test)]
+    pub(crate) fn spill_for_test(
+        &mut self,
+        unkept: oer_protocols_ieee80211_contracts_port::Unkept<'id, Types<Id, D, B, O>>,
+    ) {
+        self.unconsumed
+            .spill_for_test(unconsumed::Item::of_unkept(unkept));
+    }
+
     /// How many attempts wait in the queues, and how many completions a
     /// halted call left with the driver.
     #[cfg(test)]
@@ -2171,18 +2182,33 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 {
     /// The answer of a producing call, beside the one item it could not
     /// keep, if any: the call accepted its input, and its own answer
-    /// stands.
+    /// stands. A second item the halted call held stays in the store's
+    /// spilled place and refuses the next call ([`Self::accepting`]).
     fn answer<I, R>(&mut self, answer: R) -> PortAnswer<'id, Types<Id, D, B, O>, I, R> {
-        match self
-            .unkept
-            .take()
-            .or_else(|| self.unconsumed.take_spilled())
-        {
+        match self.unkept.take() {
             Some(item) => Err(Unkeeping {
                 unkept: item.into_unkept(),
                 input: Input::Accepted(answer),
             }),
             None => Ok(answer),
+        }
+    }
+
+    /// Before a producing call accepts `input`: an item an earlier halted
+    /// call left in the store's spilled place refuses the call, which runs
+    /// nothing; the item comes back beside `input`, whole
+    /// ([`Input::NotAccepted`]). Otherwise the call runs with `input`.
+    #[allow(
+        clippy::result_large_err,
+        reason = "the refusal returns the item and the input whole, by value"
+    )]
+    fn accepting<I, R>(&mut self, input: I) -> Result<I, Unkeeping<'id, Types<Id, D, B, O>, I, R>> {
+        match self.unconsumed.take_spilled() {
+            Some(item) => Err(Unkeeping {
+                unkept: item.into_unkept(),
+                input: Input::NotAccepted(input),
+            }),
+            None => Ok(input),
         }
     }
 
@@ -2517,12 +2543,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        core::convert::Infallible,
-        Result<Option<PortCompleted<'id, Self>>, Self::Fault>,
-    > {
+    ) -> PortAnswer<'id, Self::Types, (), Result<Option<PortCompleted<'id, Self>>, Self::Fault>>
+    {
+        self.accepting(())?;
         let served = self.served_tx(tx, tbtt, now, sink);
         self.answer(served)
     }
@@ -2564,6 +2587,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // Nothing is delivered before the attempt is accepted: what the
         // port kept is offered again and stays in its own place when
         // refused.
+        let attempt = self.accepting(attempt)?;
         let submitted = self.submitted(attempt, now, sink);
         self.answer(submitted)
     }
@@ -2714,6 +2738,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     > {
         // Nothing is delivered before the command is accepted, as with a
         // submission.
+        let command = self.accepting(command)?;
         let ran = self.ran(command, now, sink);
         self.answer(ran)
     }
@@ -2889,12 +2914,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     fn clean_stopped(
         &mut self,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        core::convert::Infallible,
-        Result<(), CleanupRefused<Self::Fault>>,
-    > {
+    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
+        self.accepting(())?;
         let cleaned = self.cleaned(sink);
         self.answer(cleaned)
     }

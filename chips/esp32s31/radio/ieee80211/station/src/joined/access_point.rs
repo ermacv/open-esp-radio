@@ -18,7 +18,7 @@ use oer_protocols_ieee80211_core_roles_ap::{
 use oer_protocols_ieee80211_core_security_rsn::{PmkDerivation, frames::RsnGtk};
 use oer_protocols_ieee80211_runtime::access_point::{
     AP_BUFFERS, AP_KEYS, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared, ApUnsupported,
-    GROUP_KEY_ID, network::ApNetworkStorage, serves_beacons,
+    GROUP_KEY_ID, StopWatch, network::ApNetworkStorage, serves_beacons,
 };
 use oer_protocols_ieee80211_wire::{
     beacon::AP_BEACON_CAPACITY, phy::LegacyRate, security::spp::Interface,
@@ -266,7 +266,8 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                 let finished = runner.finish_stop(&airy, |_| {}).await;
                 if let Some(ended) = seen.borrow_mut().ended.as_mut() {
                     ended.push_str(match finished {
-                        Ok(()) => ", stop confirmed",
+                        Ok(StopWatch::Confirmed) => ", stop confirmed",
+                        Ok(StopWatch::Unkept) => ", an item unkept",
                         Err(_) => ", stop confirmed, a unit unrecycled",
                     });
                 }

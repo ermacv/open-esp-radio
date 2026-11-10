@@ -1,8 +1,9 @@
-//! What the datapath actor's task tells the station's task after an
-//! installation ended, and how the station reads that news into its exit
-//! and the removal receipt it returns to the runner's caller. Generic over
-//! the installation's commands `C`, tokens `K`, receipt `R` and start
-//! refusal `E`: the chip's binding names them; a host test names its own.
+//! How a station's installation ends on the datapath actor's task (a
+//! completed retire, or an unfinished installation the task returns whole),
+//! what that task tells the station's task, and how the station reads that
+//! news into its exit. Generic over the actor ([`Installation`]), the
+//! installation's commands `C`, tokens `K` and start refusal `E`: the
+//! chip's binding names them; a host test names its own.
 
 use core::future::Future;
 
@@ -10,6 +11,7 @@ use oer_portable_time::{Duration, Timer};
 
 use crate::failure::{LifecycleFailure, ReinstallCause, ReleaseCause, Unavailable};
 use crate::release::{Cleaned, Leave, Stopped};
+use crate::unfinished::{Phase, Unfinished};
 
 /// How the station ended: an ordinary stop, a refused start or a stop
 /// whose radio release failed (typed, nothing resets), or a failure the
@@ -33,122 +35,201 @@ pub enum StationExitOf<E> {
     Unavailable(Unavailable<E>),
 }
 
+/// The datapath actor of an installation, which owns its port: the chip's
+/// actor over the S31 port, an actor of the test on the host.
+pub(crate) trait Installation {
+    /// Its port, whose stopped radio the release takes.
+    type Port: Stopped;
+    /// An item a port call could not keep.
+    type Unkept;
+    /// An attempt a submission returned unaccepted beside such an item.
+    type Unaccepted;
+    /// Its port.
+    fn port_mut(&mut self) -> &mut Self::Port;
+    /// The item a port call could not keep, once.
+    fn take_unkept(&mut self) -> Option<Self::Unkept>;
+    /// The attempt a submission returned unaccepted, once.
+    fn take_unaccepted(&mut self) -> Option<Self::Unaccepted>;
+}
+
+/// Why a station's installation did not retire.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DatapathCause {
+    /// The datapath actor ended on its fault: the lifecycle hears it and
+    /// ends with it.
+    Faulted(LifecycleFailure),
+    /// The port did not reinstall after the station's restart.
+    Reinstall(ReinstallCause),
+    /// The radio's release did not complete.
+    Release(ReleaseCause),
+}
+
+/// A station's installation that did not retire: its actor `A` with the
+/// port, the item a port call could not keep, an attempt returned
+/// unaccepted, the cleanup's receipt, the cause and the phase.
+pub type UnfinishedStation<A, I, U, R> = Unfinished<A, Option<I>, Option<U>, R, DatapathCause>;
+
+/// The unfinished installation of the actor `A`.
+pub(crate) type UnfinishedOf<A> = UnfinishedStation<
+    A,
+    <A as Installation>::Unkept,
+    <A as Installation>::Unaccepted,
+    <<A as Installation>::Port as Stopped>::Receipt,
+>;
+
+/// `actor`'s installation, ended for `cause` in `phase` with the cleanup's
+/// `receipt`, whole: the items the actor holds come out beside it.
+pub(crate) fn unfinished<A: Installation>(
+    mut actor: A,
+    receipt: Option<<A::Port as Stopped>::Receipt>,
+    cause: DatapathCause,
+    phase: Phase,
+) -> UnfinishedOf<A> {
+    let unkept = actor.take_unkept();
+    let unaccepted = actor.take_unaccepted();
+    Unfinished {
+        owner: actor,
+        unkept,
+        unaccepted,
+        receipt,
+        cause,
+        phase,
+    }
+}
+
 /// What the actor's task tells the station's task, in order, through the
-/// one-slot installation mailbox.
+/// one-slot installation mailbox. The owners stay with the actor's task:
+/// an installation that does not retire is its to return
+/// ([`UnfinishedStation`]).
 #[cfg_attr(
     not(target_arch = "riscv32"),
     allow(dead_code, reason = "the chip's composition builds the other variants")
 )]
-pub(crate) enum News<C, K, R, E> {
+pub(crate) enum News<C, K, E> {
     /// An installation, on first install and after every reinstall: its
     /// commands' issuer and the lifecycle's tokens.
     Installed(C, K),
     /// The first installation did not come up.
     Unavailable(Unavailable<E>),
-    /// The port did not reinstall after the station's restart, and the
-    /// removal receipt its cleanup freed, if one, which the receiver keeps.
-    Reinstall {
-        cause: ReinstallCause,
-        returned: Option<R>,
-    },
-    /// The radio's release after the lifecycle retired the port, whether
-    /// the last stop's network participant was lost, and the removal
-    /// receipt the port's cleanup freed, if one, which the receiver keeps
-    /// past the release, refused or not.
+    /// The port did not reinstall after the station's restart.
+    Reinstall(ReinstallCause),
+    /// The radio's release after the lifecycle retired the port, and
+    /// whether the last stop's network participant was lost.
     Released {
         result: Result<(), ReleaseCause>,
         network_lost: bool,
-        returned: Option<R>,
     },
 }
 
-/// The news of a restart: the stopped port's cleanup `cleaned` first (a
+/// A restart of `actor`'s installation: the stopped port's cleanup first (a
 /// port it did not finish keeps its owners and does not reinstall), then
-/// `reinstall`. A refusal of either carries the cleanup's receipt back
-/// whole; after a reinstall that succeeded the receipt ends, as its owners
-/// are the retired installation's.
-pub(crate) fn reinstalled<C, K, R, E>(
-    cleaned: Cleaned<R>,
-    reinstall: impl FnOnce() -> Result<(C, K), ReinstallCause>,
-) -> News<C, K, R, E> {
-    let Cleaned { result, removed } = cleaned;
-    if let Err(cause) = result {
-        return News::Reinstall {
-            cause: ReinstallCause::Cleanup(cause),
-            returned: removed,
-        };
-    }
-    match reinstall() {
-        Ok((commands, tokens)) => {
-            drop(removed);
-            News::Installed(commands, tokens)
-        }
-        Err(cause) => News::Reinstall {
-            cause,
-            returned: removed,
+/// `reinstall`. A refusal of either leaves the installation unfinished,
+/// the cleanup's receipt with it, and tells the refusal; after a reinstall
+/// that succeeded the receipt ends, as its owners are the retired
+/// installation's, and the actor runs on.
+#[allow(
+    clippy::type_complexity,
+    reason = "the running actor and its news, or the news and the unfinished installation"
+)]
+pub(crate) fn reinstalled<A: Installation, C, K, E>(
+    mut actor: A,
+    reinstall: impl FnOnce(&mut A) -> Result<(C, K), ReinstallCause>,
+) -> Result<(A, News<C, K, E>), (News<C, K, E>, UnfinishedOf<A>)> {
+    let Cleaned { result, removed } = actor.port_mut().clean();
+    let refused = match result {
+        Err(cause) => ReinstallCause::Cleanup(cause),
+        Ok(()) => match reinstall(&mut actor) {
+            Ok((commands, tokens)) => {
+                drop(removed);
+                return Ok((actor, News::Installed(commands, tokens)));
+            }
+            Err(cause) => cause,
         },
-    }
+    };
+    Err((
+        News::Reinstall(refused),
+        unfinished(
+            actor,
+            removed,
+            DatapathCause::Reinstall(refused),
+            Phase::Reinstalling,
+        ),
+    ))
 }
 
-/// The news of the retired port: its cleanup and its radio's release
-/// ([`crate::release::release`]), whether the last stop's network
-/// participant was lost, and the cleanup's receipt.
-pub(crate) async fn retired<C, K, E, P: Stopped, F>(
-    port: &mut P,
+/// The news of `actor`'s retired port, and its installation unless it
+/// retired. An item a port call could not keep skips the release
+/// ([`ReleaseCause::Unkept`], [`Phase::Stopped`]); otherwise the port's
+/// cleanup and its radio's release run ([`crate::release::release`]). Only
+/// a release that succeeded retires the installation: the actor and the
+/// cleanup's receipt end with it. A refusal leaves it unfinished, whole,
+/// in [`Phase::Releasing`].
+pub(crate) async fn retired<A: Installation, C, K, E, F>(
+    mut actor: A,
     network_lost: bool,
     timer: &impl Timer,
     retry: Duration,
-    leave: impl FnMut(P::Radio) -> F,
-) -> News<C, K, P::Receipt, E>
+    leave: impl FnMut(<A::Port as Stopped>::Radio) -> F,
+) -> (News<C, K, E>, Option<UnfinishedOf<A>>)
 where
-    F: Future<Output = Leave<P::Radio, ReleaseCause>>,
+    F: Future<Output = Leave<<A::Port as Stopped>::Radio, ReleaseCause>>,
 {
-    let (result, returned) = crate::release::release(port, timer, retry, leave, |_| {}).await;
-    News::Released {
-        result,
-        network_lost,
-        returned,
+    if let Some(item) = actor.take_unkept() {
+        let cause = ReleaseCause::Unkept;
+        let mut left = unfinished(actor, None, DatapathCause::Release(cause), Phase::Stopped);
+        left.unkept = Some(item);
+        return (
+            News::Released {
+                result: Err(cause),
+                network_lost,
+            },
+            Some(left),
+        );
     }
+    let (result, returned) =
+        crate::release::release(actor.port_mut(), timer, retry, leave, |_| {}).await;
+    let left = match result {
+        Ok(()) => {
+            drop(returned);
+            drop(actor);
+            None
+        }
+        Err(cause) => Some(unfinished(
+            actor,
+            returned,
+            DatapathCause::Release(cause),
+            Phase::Releasing,
+        )),
+    };
+    (
+        News::Released {
+            result,
+            network_lost,
+        },
+        left,
+    )
 }
 
 /// The news the station waits for before a lifecycle: an installation, or
-/// the exit it ends with and the receipt a refusal returned with it.
-pub(crate) fn installed<C, K, R, E>(
-    news: News<C, K, R, E>,
-) -> Result<(C, K), (StationExitOf<E>, Option<R>)> {
+/// the exit it ends with.
+pub(crate) fn installed<C, K, E>(news: News<C, K, E>) -> Result<(C, K), StationExitOf<E>> {
     match news {
         News::Installed(commands, tokens) => Ok((commands, tokens)),
-        News::Unavailable(error) => Err((StationExitOf::Unavailable(error), None)),
-        // A refused reinstall: its receipt goes back with the refusal.
-        News::Reinstall { cause, returned } => Err((
-            StationExitOf::Failed(LifecycleFailure::Reinstall(cause)),
-            returned,
-        )),
-        news @ News::Released { .. } => {
-            let (_, returned) = ended(news);
-            Err((StationExitOf::Failed(LifecycleFailure::Mailbox), returned))
-        }
+        News::Unavailable(error) => Err(StationExitOf::Unavailable(error)),
+        News::Reinstall(cause) => Err(StationExitOf::Failed(LifecycleFailure::Reinstall(cause))),
+        News::Released { .. } => Err(StationExitOf::Failed(LifecycleFailure::Mailbox)),
     }
 }
 
-/// The exit the actor task's last news gives, and the removal receipt a
-/// refusal returned with it, for the runner's caller. Only a release that
-/// succeeded ends its receipt, with the retired installation.
-pub(crate) fn ended<C, K, R, E>(news: News<C, K, R, E>) -> (StationExitOf<E>, Option<R>) {
+/// The exit the actor task's last news gives.
+pub(crate) fn ended<C, K, E>(news: News<C, K, E>) -> StationExitOf<E> {
     match news {
         News::Released {
             result,
             network_lost,
-            returned,
-        } => {
-            let returned = crate::release::returned(result.is_err(), returned);
-            (released_exit(result, network_lost), returned)
-        }
-        News::Reinstall { returned, .. } => {
-            (StationExitOf::Failed(LifecycleFailure::Mailbox), returned)
-        }
-        News::Installed(..) | News::Unavailable(_) => {
-            (StationExitOf::Failed(LifecycleFailure::Mailbox), None)
+        } => released_exit(result, network_lost),
+        News::Reinstall(_) | News::Installed(..) | News::Unavailable(_) => {
+            StationExitOf::Failed(LifecycleFailure::Mailbox)
         }
     }
 }

@@ -533,25 +533,25 @@ where
             };
             // No turn runs while an unkept item is kept: its place is
             // empty here.
-            let (served, unkept) = crate::answered(self.port.service_tx(
+            let served = match self.port.service_tx(
                 facts.tx.unwrap_or(TxFacts::DUE),
                 facts.tbtt,
                 self.now,
                 &mut outbox,
-            ));
-            let served = match served {
-                Input::Accepted(served) => served,
-                Input::NotAccepted(never) => match never {},
-            };
-            if let Some(unkept) = unkept {
-                // The run ends on it; the arena the call ended stays with
-                // the actor, and the port keeps its own fault.
-                self.retained.unkept = Some(unkept);
-                if let Ok(Some(done)) = served {
-                    self.retained.completed = Some(done);
+            ) {
+                Ok(served) => served,
+                Err(oer_protocols_ieee80211_contracts_port::Unkeeping { unkept, input }) => {
+                    // The run ends on it; the arena an accepted call ended
+                    // stays with the actor, and the port keeps its own
+                    // fault. A call refused before it served
+                    // (`NotAccepted(())`) ran nothing and answered nothing.
+                    self.retained.unkept = Some(unkept);
+                    if let Input::Accepted(Ok(Some(done))) = input {
+                        self.retained.completed = Some(done);
+                    }
+                    return Err(ActorFault::Unkept);
                 }
-                return Err(ActorFault::Unkept);
-            }
+            };
             let done = served.map_err(ActorFault::Port)?;
             self.staged(lifecycle, network)?;
             if let Some(done) = done {

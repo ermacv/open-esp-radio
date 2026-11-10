@@ -426,19 +426,16 @@ fn poll_news<W: Binding>(
 /// restart waits for the next installation. The exit is published to
 /// Control once final: after an ordinary stop, once the radio's release
 /// ended.
-pub async fn serve<W: Binding>(
-    runner: StationRunner<W>,
-    profile: Profile<W>,
-) -> crate::chip::StationEnd<W> {
+pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) -> StationExit {
     let StationRunner {
         service,
         mut actor,
         news: mut mailbox,
         stop,
     } = runner;
-    let (exit, returned) = lifecycles::<W>(service, &mut actor, &mut mailbox, profile).await;
+    let exit = lifecycles::<W>(service, &mut actor, &mut mailbox, profile).await;
     stop.publish(exit);
-    crate::chip::StationEnd { exit, returned }
+    exit
 }
 
 async fn lifecycles<W: Binding>(
@@ -453,7 +450,7 @@ async fn lifecycles<W: Binding>(
     >,
     mailbox: &mut oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
     profile: Profile<W>,
-) -> (StationExit, Option<radio::Freed<W>>) {
+) -> StationExit {
     let ServiceRunner {
         config,
         connection,
@@ -486,13 +483,13 @@ async fn lifecycles<W: Binding>(
     loop {
         let (issuer, tokens) = match crate::station_end::installed(news(mailbox).await) {
             Ok(installed) => installed,
-            Err((exit, returned)) => {
+            Err(exit) => {
                 if let StationExit::Unavailable(error) = exit
                     && let Some(start) = start.take()
                 {
                     start.complete(Err(crate::StartError::Unavailable(error)));
                 }
-                return (exit, returned);
+                return exit;
             }
         };
         let lifecycle = initialize::<W>(
@@ -530,10 +527,7 @@ async fn lifecycles<W: Binding>(
                 .await;
                 return match released {
                     Some(news) => crate::station_end::ended(news),
-                    None => (
-                        StationExit::ReleaseFailed(crate::failure::ReleaseCause::Deadline),
-                        None,
-                    ),
+                    None => StationExit::ReleaseFailed(crate::failure::ReleaseCause::Deadline),
                 };
             }
             // The radio stopped. The network returned late
@@ -577,7 +571,7 @@ async fn lifecycles<W: Binding>(
                     Some(failure) => StationExit::Failed(failure),
                     None => StationExit::Stopped,
                 };
-                return (exit, None);
+                return exit;
             }
         }
     }

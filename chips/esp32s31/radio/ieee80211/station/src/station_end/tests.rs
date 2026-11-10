@@ -6,6 +6,7 @@
 use super::*;
 use crate::failure::{BackendFault, CleanupCause};
 use crate::release::Cleaned;
+use crate::unfinished::Phase;
 use core::{
     cell::Cell,
     pin::pin,
@@ -73,13 +74,78 @@ pub(crate) fn ready<F: Future>(future: F) -> F::Output {
     }
 }
 
-type TestNews<'a> = News<u8, u8, Receipt<'a>, ()>;
+type TestNews = News<u8, u8, ()>;
 
-/// The actor's news of the retired `port`, as its task posts it.
-fn retired_news<'a>(port: &mut TestPort<'a>) -> TestNews<'a> {
+/// A datapath actor of the test: its port, another owner it holds, and the
+/// item and attempt its port's calls returned.
+pub(crate) struct TestActor<'a> {
+    pub(crate) port: TestPort<'a>,
+    pub(crate) other: Option<Receipt<'a>>,
+    pub(crate) unkept: Option<Receipt<'a>>,
+    pub(crate) unaccepted: Option<Receipt<'a>>,
+}
+
+impl<'a> Installation for TestActor<'a> {
+    type Port = TestPort<'a>;
+    type Unkept = Receipt<'a>;
+    type Unaccepted = Receipt<'a>;
+    fn port_mut(&mut self) -> &mut TestPort<'a> {
+        &mut self.port
+    }
+    fn take_unkept(&mut self) -> Option<Receipt<'a>> {
+        self.unkept.take()
+    }
+    fn take_unaccepted(&mut self) -> Option<Receipt<'a>> {
+        self.unaccepted.take()
+    }
+}
+
+/// Counters of every owner of a test installation: the cleanup's receipt,
+/// the actor's other owner, its unkept item and its unaccepted attempt.
+#[derive(Default)]
+struct Ends {
+    receipt: Cell<u8>,
+    other: Cell<u8>,
+    unkept: Cell<u8>,
+    unaccepted: Cell<u8>,
+}
+
+impl Ends {
+    fn all(&self) -> [u8; 4] {
+        [
+            self.receipt.get(),
+            self.other.get(),
+            self.unkept.get(),
+            self.unaccepted.get(),
+        ]
+    }
+}
+
+/// An actor over a port of `cleanup` and `stopped`, every owner counted by
+/// `ends`; `items` gives it an unkept item and an unaccepted attempt.
+fn actor<'a>(
+    ends: &'a Ends,
+    cleanup: Result<(), CleanupCause>,
+    stopped: Option<Radio>,
+    items: bool,
+) -> TestActor<'a> {
+    TestActor {
+        port: TestPort {
+            cleanup,
+            receipt: Some(Receipt(&ends.receipt)),
+            stopped,
+        },
+        other: Some(Receipt(&ends.other)),
+        unkept: items.then(|| Receipt(&ends.unkept)),
+        unaccepted: items.then(|| Receipt(&ends.unaccepted)),
+    }
+}
+
+/// The actor task's end of the retired `actor`, as it calls it.
+fn retired_of(actor: TestActor<'_>) -> (TestNews, Option<UnfinishedOf<TestActor<'_>>>) {
     let clock = VirtualClock::<2>::new();
     ready(retired(
-        port,
+        actor,
         false,
         &clock,
         Duration::from_millis(1),
@@ -88,7 +154,7 @@ fn retired_news<'a>(port: &mut TestPort<'a>) -> TestNews<'a> {
 }
 
 #[test]
-fn a_refused_release_returns_its_receipt_through_the_news_to_the_runner_caller() {
+fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
     let refusals = [
         // No stopped radio.
         (Ok(()), None, ReleaseCause::NotStopped),
@@ -108,112 +174,148 @@ fn a_refused_release_returns_its_receipt_through_the_news_to_the_runner_caller()
         ),
     ];
     for (cleanup, stopped, cause) in refusals {
-        let ends = Cell::new(0);
-        let mut port = TestPort {
-            cleanup,
-            receipt: Some(Receipt(&ends)),
-            stopped,
+        let ends = Ends::default();
+        let (news, left) = retired_of(actor(&ends, cleanup, stopped, false));
+        assert_eq!(ended(news), StationExitOf::ReleaseFailed(cause));
+        assert_eq!(ends.all(), [0; 4], "the refusal ends nothing");
+        let Some(left) = left else {
+            panic!("a refused release leaves the installation unfinished");
         };
-        let news = retired_news(&mut port);
-        let (exit, returned) = ended(news);
-        assert_eq!(exit, StationExitOf::ReleaseFailed(cause));
-        assert_eq!(ends.get(), 0, "the refusal ends nothing");
-        assert!(returned.is_some(), "the caller holds the receipt");
-        drop(returned);
-        assert_eq!(ends.get(), 1, "one receipt, ended once by its holder");
+        assert_eq!(left.cause, DatapathCause::Release(cause));
+        assert_eq!(left.phase, Phase::Releasing);
+        assert!(left.receipt.is_some(), "the caller holds the receipt");
+        assert!(left.owner.other.is_some(), "and the actor with its owners");
+        drop(left);
+        assert_eq!(ends.all(), [1, 1, 0, 0], "each ended once by its holder");
     }
 }
 
 #[test]
-fn a_release_that_succeeded_ends_its_receipt_with_the_retired_installation() {
-    let ends = Cell::new(0);
-    let mut port = TestPort {
-        cleanup: Ok(()),
-        receipt: Some(Receipt(&ends)),
-        stopped: Some(Radio(Leaves::Left)),
-    };
-    let news = retired_news(&mut port);
-    assert_eq!(ends.get(), 0, "the news carries the receipt");
-    let (exit, returned) = ended(news);
-    assert_eq!(exit, StationExitOf::Stopped);
-    assert!(returned.is_none());
-    assert_eq!(ends.get(), 1);
+fn a_release_that_succeeded_retires_the_whole_installation() {
+    let ends = Ends::default();
+    let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), false));
+    assert!(left.is_none(), "a completed retire");
+    assert_eq!(ended(news), StationExitOf::Stopped);
+    assert_eq!(ends.all(), [1, 1, 0, 0]);
 }
 
 #[test]
-fn a_refused_reinstall_returns_its_receipt_through_the_news_to_the_runner_caller() {
-    // The port refused the reinstall: the cleanup's receipt comes back.
-    let ends = Cell::new(0);
-    let cleaned = Cleaned {
-        result: Ok(()),
-        removed: Some(Receipt(&ends)),
+fn an_item_the_actor_could_not_keep_skips_the_release_and_comes_back_whole() {
+    let ends = Ends::default();
+    let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), true));
+    assert_eq!(
+        ended(news),
+        StationExitOf::ReleaseFailed(ReleaseCause::Unkept)
+    );
+    let Some(mut left) = left else {
+        panic!("the item leaves the installation unfinished");
     };
-    let news: TestNews<'_> = reinstalled(cleaned, || Err(ReinstallCause::Resources));
-    let Err((exit, returned)) = installed(news) else {
+    assert_eq!(left.phase, Phase::Stopped);
+    assert!(left.unkept.is_some() && left.unaccepted.is_some());
+    assert!(left.receipt.is_none(), "no cleanup ran");
+    assert!(
+        left.owner.port.stopped.is_some(),
+        "no release took the radio"
+    );
+    assert!(left.owner.port.receipt.take().is_some());
+    assert_eq!(ends.all(), [1, 0, 0, 0]);
+    drop(left);
+    assert_eq!(ends.all(), [1, 1, 1, 1]);
+}
+
+#[test]
+fn a_refused_reinstall_returns_the_whole_installation_to_the_actor_task_caller() {
+    // The port refused the reinstall: the installation comes back, the
+    // cleanup's receipt with it.
+    let ends = Ends::default();
+    let Err((news, left)) = reinstalled::<_, u8, u8, ()>(actor(&ends, Ok(()), None, false), |_| {
+        Err(ReinstallCause::Resources)
+    }) else {
         panic!("a refused reinstall installs nothing");
     };
     assert_eq!(
-        exit,
-        StationExitOf::Failed(LifecycleFailure::Reinstall(ReinstallCause::Resources))
+        installed(news).err(),
+        Some(StationExitOf::Failed(LifecycleFailure::Reinstall(
+            ReinstallCause::Resources
+        )))
     );
-    assert_eq!(ends.get(), 0);
-    assert!(returned.is_some());
-    drop(returned);
-    assert_eq!(ends.get(), 1);
+    assert_eq!(left.phase, Phase::Reinstalling);
+    assert_eq!(
+        left.cause,
+        DatapathCause::Reinstall(ReinstallCause::Resources)
+    );
+    assert_eq!(ends.all(), [0; 4]);
+    assert!(left.receipt.is_some() && left.owner.other.is_some());
+    drop(left);
+    assert_eq!(ends.all(), [1, 1, 0, 0]);
 
-    // The cleanup did not finish: no reinstall runs, the receipt comes
-    // back with the cleanup's cause.
-    let ends = Cell::new(0);
+    // The cleanup did not finish: no reinstall runs, and the installation
+    // comes back with the cleanup's cause.
+    let ends = Ends::default();
     let fault = CleanupCause::Held(BackendFault::Abandoned);
-    let cleaned = Cleaned {
-        result: Err(fault),
-        removed: Some(Receipt(&ends)),
-    };
-    let news: TestNews<'_> = reinstalled(cleaned, || panic!("a cleanup that failed reinstalls"));
-    let Err((exit, returned)) = installed(news) else {
+    let Err((news, left)) =
+        reinstalled::<_, u8, u8, ()>(actor(&ends, Err(fault), None, true), |_| {
+            panic!("a cleanup that failed reinstalls")
+        })
+    else {
         panic!("a failed cleanup installs nothing");
     };
     assert_eq!(
-        exit,
-        StationExitOf::Failed(LifecycleFailure::Reinstall(ReinstallCause::Cleanup(fault)))
+        installed(news).err(),
+        Some(StationExitOf::Failed(LifecycleFailure::Reinstall(
+            ReinstallCause::Cleanup(fault)
+        )))
     );
-    assert_eq!(ends.get(), 0);
-    assert!(returned.is_some());
+    assert!(left.receipt.is_some() && left.unkept.is_some() && left.unaccepted.is_some());
+    assert_eq!(ends.all(), [0; 4]);
 }
 
 #[test]
-fn a_reinstall_that_succeeded_ends_its_receipt_and_installs() {
-    let ends = Cell::new(0);
-    let cleaned = Cleaned {
-        result: Ok(()),
-        removed: Some(Receipt(&ends)),
+fn a_reinstall_that_succeeded_ends_its_receipt_and_the_actor_runs_on() {
+    let ends = Ends::default();
+    let Ok((actor, news)) =
+        reinstalled::<_, u8, u8, ()>(actor(&ends, Ok(()), None, false), |_| Ok((7, 9)))
+    else {
+        panic!("the reinstall succeeds");
     };
-    let news: TestNews<'_> = reinstalled(cleaned, || Ok((7, 9)));
-    assert_eq!(ends.get(), 1, "the retired installation's receipt ended");
+    assert_eq!(
+        ends.all(),
+        [1, 0, 0, 0],
+        "the retired installation's receipt ended"
+    );
     assert!(matches!(installed(news), Ok((7, 9))));
+    assert!(actor.other.is_some(), "the actor runs on with its owners");
 }
 
 #[test]
-fn news_out_of_order_keeps_its_receipt() {
-    // A release while the station waits for an installation.
-    let ends = Cell::new(0);
-    let news: TestNews<'_> = News::Released {
+fn a_faulted_actor_returns_every_owner_beside_its_cause() {
+    let ends = Ends::default();
+    let left = unfinished(
+        actor(&ends, Ok(()), None, true),
+        None,
+        DatapathCause::Faulted(LifecycleFailure::Unkept),
+        Phase::Running,
+    );
+    assert!(left.unkept.is_some() && left.unaccepted.is_some());
+    assert!(left.owner.unkept.is_none(), "each item comes out once");
+    assert_eq!(ends.all(), [0; 4]);
+    drop(left);
+    assert_eq!(ends.all(), [1, 1, 1, 1]);
+}
+
+#[test]
+fn news_out_of_order_names_the_mailbox() {
+    let news: TestNews = News::Released {
         result: Err(ReleaseCause::NotStopped),
         network_lost: false,
-        returned: Some(Receipt(&ends)),
     };
-    let Err((exit, returned)) = installed(news) else {
-        panic!("a release installs nothing");
-    };
-    assert_eq!(exit, StationExitOf::Failed(LifecycleFailure::Mailbox));
-    assert!(returned.is_some());
-    // A refused reinstall while the station waits for the release.
-    let news: TestNews<'_> = News::Reinstall {
-        cause: ReinstallCause::Epochs,
-        returned: Some(Receipt(&ends)),
-    };
-    let (exit, kept) = ended(news);
-    assert_eq!(exit, StationExitOf::Failed(LifecycleFailure::Mailbox));
-    assert!(kept.is_some());
-    assert_eq!(ends.get(), 0);
+    assert_eq!(
+        installed(news).err(),
+        Some(StationExitOf::Failed(LifecycleFailure::Mailbox))
+    );
+    let news: TestNews = News::Reinstall(ReinstallCause::Epochs);
+    assert_eq!(
+        ended(news),
+        StationExitOf::Failed(LifecycleFailure::Mailbox)
+    );
 }

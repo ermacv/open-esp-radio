@@ -1287,7 +1287,7 @@ fn a_port_without_its_registers_faults_without_publishing() {
 type Served<'id, Id> = oer_protocols_ieee80211_contracts_port::PortAnswer<
     'id,
     Family<Id>,
-    core::convert::Infallible,
+    (),
     Result<
         Option<oer_protocols_ieee80211_contracts_port::PortCompleted<'id, Port<'id, Id>>>,
         Fault,
@@ -1443,5 +1443,68 @@ fn a_completion_the_halted_call_took_waits_in_the_driver_and_comes_home_first() 
         let mut sent = [best_effort, voice];
         sent.sort_unstable();
         assert_eq!(both, sent);
+    });
+}
+
+/// An item a halted call left in the store's spilled place refuses the next
+/// call before it serves anything: the item comes back beside the call's
+/// own input, not accepted, and the queued tails stay queued until a call
+/// runs.
+#[test]
+fn a_spilled_item_refuses_the_next_call_before_it_serves_anything() {
+    with_access(|fixture, _access| {
+        fixture.start();
+        fixture.hold_air(true);
+        let head = fixture.submit_mpdu(Spec::open(1));
+        fixture.turns(1);
+        let _tail = fixture.submit_mpdu(Spec::open(2));
+        let _last = fixture.submit_mpdu(Spec::open(3));
+        let waker = fixture.waker();
+        let now = fixture.now();
+        assert!(
+            fixture
+                .port
+                .poll_stop(&mut Context::from_waker(&waker), now)
+                .is_pending()
+        );
+        fixture.hold_air(false);
+        fixture.outbox.refuse = 1;
+        fixture.port.refuse_keeps_for_test(1);
+        let mut halted = None;
+        for _ in 0..16 {
+            match serve_once(fixture) {
+                Ok(served) => assert!(served.is_ok()),
+                Err(unkeeping) => {
+                    halted = Some(unkeeping);
+                    break;
+                }
+            }
+        }
+        let Some(unkeeping) = halted else {
+            panic!("the head's terminal comes back unkept");
+        };
+        // The halted call's second item, which the store's spilled place
+        // holds.
+        fixture.port.spill_for_test(unkeeping.unkept);
+        let Err(oer_protocols_ieee80211_contracts_port::Unkeeping {
+            unkept:
+                oer_protocols_ieee80211_contracts_port::Unkept::Terminal(LowerMacTerminal::TxCompleted(
+                    TxCompleted::Single(completed),
+                )),
+            input: oer_protocols_ieee80211_contracts_port::Input::NotAccepted(()),
+        }) = serve_once(fixture)
+        else {
+            panic!("the spilled item refuses the call before it serves");
+        };
+        assert_eq!(completed.ticket_index(), head);
+        assert!(fixture.outbox.terminals.is_empty(), "the call ran nothing");
+        assert_eq!(
+            fixture.port.waiting_for_test(),
+            (2, 0),
+            "the tails stay queued"
+        );
+        // The next call runs.
+        assert!(matches!(serve_once(fixture), Ok(Ok(_))));
+        assert_eq!(fixture.outbox.terminals.len(), 2);
     });
 }
