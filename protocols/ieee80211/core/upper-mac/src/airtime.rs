@@ -399,6 +399,134 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         })
     }
 
+    /// [`Self::reserve`] over `candidate` alone: the same decision and the
+    /// same writes, with no selection over every place. A plan whose
+    /// accounts are one takes each frame's reservation so. Every check comes
+    /// before the first write, so an error changes nothing.
+    ///
+    /// # Errors
+    /// What [`Self::reserve`] would return over that one candidate.
+    pub fn reserve_one(
+        &mut self,
+        candidate: AirtimeCandidate<K>,
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
+        let place = self
+            .state
+            .vacant()
+            .ok_or(AirtimeError::ReservationCapacity)?;
+        let accounts = &self.state.accounts;
+        let held = accounts
+            .iter()
+            .position(|slot| slot.as_ref().is_some_and(|a| a.key == candidate.key));
+        let (index, before) = match held {
+            Some(index) => {
+                let before = accounts.get(index).copied().flatten();
+                if before.is_some_and(|account| account.retired) {
+                    return Err(AirtimeError::RetiredKey);
+                }
+                (index, before)
+            }
+            // A new account takes the first place no account holds.
+            None => (
+                accounts
+                    .iter()
+                    .position(Option::is_none)
+                    .ok_or(AirtimeError::AccountCapacity)?,
+                None,
+            ),
+        };
+        let least = candidate.minimum_micros.get();
+        let mut balance = before.map_or(0, |account| account.balance);
+        if balance < i64::from(least) {
+            // The rounds that fund it, as a selection counts them.
+            let quantum = i64::from(self.state.quantum.get());
+            let rounds = i64::from(least)
+                .checked_sub(balance)
+                .and_then(|needed| {
+                    if needed <= quantum {
+                        Some(1)
+                    } else {
+                        needed
+                            .checked_sub(1)
+                            .and_then(|needed| needed.checked_div(quantum))
+                            .and_then(|rounds| rounds.checked_add(1))
+                    }
+                })
+                .ok_or(AirtimeError::ArithmeticOverflow)?;
+            let credit = quantum
+                .checked_mul(rounds)
+                .ok_or(AirtimeError::ArithmeticOverflow)?;
+            balance = balance
+                .checked_add(credit)
+                .ok_or(AirtimeError::ArithmeticOverflow)?;
+        }
+        let cursor = self.state.cursor;
+        if balance < i64::from(least) {
+            return Err(AirtimeError::UnfundedDemand { cursor });
+        }
+        let budget = u32::try_from(balance.min(i64::from(u32::MAX)))
+            .ok()
+            .and_then(NonZeroU32::new)
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        let id = self
+            .state
+            .next_id
+            .checked_add(1)
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        let balance = balance
+            .checked_sub(i64::from(budget.get()))
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        let next_cursor = index
+            .wrapping_add(1)
+            .checked_rem(PEERS)
+            .ok_or(AirtimeError::ArithmeticOverflow)?;
+        if self.state.pending.get(place).is_none() {
+            return Err(AirtimeError::ReservationCapacity);
+        }
+        let key = candidate.key;
+        let observed = Account {
+            key,
+            balance,
+            minimum: least,
+            retired: before.is_some_and(|account| account.retired),
+            outstanding: before
+                .map_or(0, |account| account.outstanding)
+                .saturating_add(1),
+            outstanding_micros: before
+                .map_or(0, |account| account.outstanding_micros)
+                .saturating_add(u64::from(budget.get())),
+        };
+        // Every other account is no candidate: it keeps its debt and no
+        // surplus, and asks for no least grant, as a selection leaves it.
+        for (at, slot) in self.state.accounts.iter_mut().enumerate() {
+            if at == index {
+                *slot = Some(observed);
+            } else if let Some(account) = slot.as_mut() {
+                account.minimum = 0;
+                account.balance = account.balance.min(0);
+            }
+        }
+        if let Some(pending) = self.state.pending.get_mut(place) {
+            *pending = Some(Pending {
+                id,
+                key,
+                budget: budget.get(),
+            });
+        }
+        self.state.occupy();
+        self.state.next_id = id;
+        self.state.cursor = next_cursor;
+        self.observe(observed, AirtimeAction::Granted, budget.get(), 0, events);
+        Ok(Some(AirtimeReservation {
+            origin: self.origin,
+            key,
+            id,
+            budget,
+            place,
+        }))
+    }
+
     /// What [`Self::reserve`] decides over `candidates`, reading the
     /// accounts in place and writing into `selection`, which starts empty
     /// ([`Selection::empty`]): what each account would hold, and which is

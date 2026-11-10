@@ -355,3 +355,76 @@ fn the_scheduler_decides_as_its_copying_reference_over_any_sequence() {
         }
     }
 }
+
+/// A reservation over one candidate decides as the selection over that one
+/// candidate: the same result, reservation and ledger, over any sequence of
+/// reservations, settlements, cancellations and retirements, every account
+/// and the horizon full among them.
+#[test]
+fn a_reservation_over_one_candidate_decides_as_the_selection_over_it() {
+    fn told(result: &Result<Option<AirtimeReservation<'_, u8>>, AirtimeError>) -> String {
+        match result {
+            Ok(Some(reservation)) => format!(
+                "this {} {} {} {}",
+                reservation.key, reservation.id, reservation.budget, reservation.place
+            ),
+            Ok(None) => "nothing".to_owned(),
+            Err(error) => format!("{error:?}"),
+        }
+    }
+    for seed in 0..300_u64 {
+        let mut random = Random(seed);
+        let quantum = us(1 + random.next(3000) as u32);
+        let mut ours = AirtimeStorage::<u8, 4, 6>::new(quantum);
+        let mut theirs = AirtimeStorage::<u8, 4, 6>::new(quantum);
+        let mut ours_held = Vec::new();
+        let mut theirs_held = Vec::new();
+        let mut a = ours.scheduler();
+        let mut b = theirs.scheduler();
+        for step in 0..200 {
+            match random.next(10) {
+                0..=5 => {
+                    let one = candidate(random.next(6) as u8, 1 + random.next(9000) as u32);
+                    let ours_result = a.reserve_one(one, &mut ());
+                    let theirs_result = b.reserve([one], &mut ());
+                    assert_eq!(
+                        told(&ours_result),
+                        told(&theirs_result),
+                        "seed {seed} step {step}: {one:?}"
+                    );
+                    if let (Ok(Some(x)), Ok(Some(y))) = (ours_result, theirs_result) {
+                        ours_held.push(x);
+                        theirs_held.push(y);
+                    }
+                }
+                6 | 7 if !ours_held.is_empty() => {
+                    let at = random.next(ours_held.len() as u64) as usize;
+                    let charged = us(1 + random.next(6000) as u32);
+                    let x = ours_held.swap_remove(at);
+                    let y = theirs_held.swap_remove(at);
+                    let ours_end = a
+                        .settle(x.published().completed(()), charged, &mut ())
+                        .map_err(|(error, _)| error);
+                    let theirs_end = b
+                        .settle(y.published().completed(()), charged, &mut ())
+                        .map_err(|(error, _)| error);
+                    assert_eq!(ours_end, theirs_end, "seed {seed} step {step}");
+                }
+                8 if !ours_held.is_empty() => {
+                    let at = random.next(ours_held.len() as u64) as usize;
+                    let x = ours_held.swap_remove(at);
+                    let y = theirs_held.swap_remove(at);
+                    let ours_end = a.cancel(x, &mut ()).map_err(|(error, _)| error);
+                    let theirs_end = b.cancel(y, &mut ()).map_err(|(error, _)| error);
+                    assert_eq!(ours_end, theirs_end, "seed {seed} step {step}");
+                }
+                _ => {
+                    let key = random.next(6) as u8;
+                    a.retire(key);
+                    b.retire(key);
+                }
+            }
+            assert_eq!(ledger(a.state), ledger(b.state), "seed {seed} step {step}");
+        }
+    }
+}

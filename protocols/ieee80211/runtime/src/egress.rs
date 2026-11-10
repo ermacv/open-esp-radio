@@ -503,9 +503,22 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
                 return Ok(Next::Stop(PlanStop::Spent));
             }
         }
-        let reserved =
-            self.scheduler
-                .reserve_for(|key| Some(key) == account, plan.candidates(), &mut ());
+        // One account is the plan's whole choice: the scheduler takes its
+        // candidate alone, as a selection over it would, with no selection
+        // over every place. Any other plan asks over every candidate.
+        let only = {
+            let mut candidates = plan.candidates();
+            (candidates.next(), candidates.next())
+        };
+        let reserved = match only {
+            (Some(one), None) if Some(one.key) == account => self
+                .scheduler
+                .reserve_one(one, &mut ())
+                .map(|granted| granted.map_or(Reserved::Nothing, Reserved::This)),
+            _ => self
+                .scheduler
+                .reserve_for(|key| Some(key) == account, plan.candidates(), &mut ()),
+        };
         let reservation = match reserved {
             Ok(Reserved::This(reservation)) => reservation,
             // A frame's completion makes room, and it wakes the service.
