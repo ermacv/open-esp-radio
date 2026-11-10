@@ -490,7 +490,13 @@ impl Drivers for StandDrivers {
                 let (board, _turn) = self.board(board, claims, &stop)?;
                 // A start resets into the image, which needs the chip profile.
                 let console = if *reset {
-                    self.profiled(board)?.open_console_from_reset()
+                    let console = self.profiled(board)?.open_console_from_reset();
+                    // The reset's edge has passed: what the stream holds from
+                    // here was read after it.
+                    if console.is_ok() {
+                        io.output.ready();
+                    }
+                    console
                 } else {
                     board.open_console()
                 }
@@ -585,12 +591,9 @@ impl Drivers for StandDrivers {
     }
 }
 
-/// Why a lease holding `claims` may not run `operation`. A board's radio
-/// works only on its image's command, which the scenario that gives it
-/// claims the air for; a router operation turns the router's own radio on,
-/// so its lease must hold the air.
 /// The stages of a write into a console, in their order: the held write,
-/// the start by the console's own reset, the start's confirmation, the
+/// the console opened without a reset, the start by the console's own
+/// reset (its readiness sent at once), the start's confirmation, the
 /// journal, then the console's stream until the operation stops.
 trait IntoConsole {
     type Written;
@@ -598,7 +601,10 @@ trait IntoConsole {
     fn write(&mut self) -> Result<Self::Written>;
     /// The written receipt, as the answer names it.
     fn receipt(&self, written: &Self::Written) -> serde_json::Value;
-    fn start(&mut self) -> Result<Self::Console>;
+    /// Open the console; no reset line is touched.
+    fn open(&mut self) -> Result<Self::Console>;
+    /// The start's reset; a failure may come after its edge.
+    fn start(&mut self, console: &mut Self::Console) -> Result<()>;
     fn confirm(&mut self, written: Self::Written) -> Result<()>;
     fn journal(&mut self) -> Result<()>;
     fn stream(&mut self, console: Self::Console) -> Result<()>;
@@ -615,9 +621,16 @@ fn into_console<S: IntoConsole>(steps: &mut S) -> Result<serde_json::Value> {
     let stopped = |stage: &str, reached: &str, error: String| {
         format!("the {stage} failed: {error}; {reached}; receipt {receipt}")
     };
-    let console = steps
-        .start()
-        .map_err(|error| stopped("start", "written, not started", error))?;
+    let mut console = steps
+        .open()
+        .map_err(|error| stopped("console's opening", "written, not started", error))?;
+    steps.start(&mut console).map_err(|error| {
+        stopped(
+            "start's reset",
+            "written; the reset may have started the image, its start unconfirmed",
+            error,
+        )
+    })?;
     steps.confirm(written).map_err(|error| {
         stopped(
             "start's confirmation",
@@ -666,8 +679,16 @@ impl<'a> IntoConsole for BoardIntoConsole<'a> {
             .unwrap_or_else(|error| serde_json::json!({ "unrecorded": error.to_string() }))
     }
 
-    fn start(&mut self) -> Result<BoardConsole> {
-        self.board.open_console_from_reset().map_err(text)
+    fn open(&mut self) -> Result<BoardConsole> {
+        self.board.open_console().map_err(text)
+    }
+
+    fn start(&mut self, console: &mut BoardConsole) -> Result<()> {
+        console.reset_into_image().map_err(text)?;
+        // The reset's edge has passed: what the stream holds from here was
+        // read after it.
+        self.io.output.ready();
+        Ok(())
     }
 
     fn confirm(&mut self, written: Self::Written) -> Result<()> {
@@ -689,6 +710,10 @@ impl<'a> IntoConsole for BoardIntoConsole<'a> {
     }
 }
 
+/// Why a lease holding `claims` may not run `operation`. A board's radio
+/// works only on its image's command, which the scenario that gives it
+/// claims the air for; a router operation turns the router's own radio on,
+/// so its lease must hold the air.
 fn air_refusal(operation: &Operation, claims: &[Claim]) -> Option<String> {
     (matches!(operation, Operation::Router { .. }) && !covers(claims, &[Claim::shared(AIR)]))
         .then(|| "a router operation radiates: the lease must hold the air".to_owned())

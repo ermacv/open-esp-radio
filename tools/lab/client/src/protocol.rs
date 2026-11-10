@@ -241,7 +241,8 @@ pub enum Operation {
     /// still held just before that reset (drained right before its edge;
     /// bytes in flight may follow the drain), then the boot from the ROM
     /// banner on, while the chip's USB Serial/JTAG stays enumerated across
-    /// the reset. Output the client reads too slowly is dropped and counted
+    /// the reset. `Reply::Ready` follows the reset's edge, in order with the
+    /// stream. Output the client reads too slowly is dropped and counted
     /// (`Reply::Lost`). Result: `{written, receipt}`. Every failure after
     /// the write (the start, its confirmation, the journal, the console)
     /// is an error naming its stage, what was reached and the receipt.
@@ -259,7 +260,9 @@ pub enum Operation {
     },
     /// `board`'s console as the operation's stream, opened without a reset,
     /// or with a reset into its application when `reset`, until the client
-    /// cancels it.
+    /// cancels it. With `reset`, `Reply::Ready` follows the reset's edge,
+    /// in order with the stream: every byte after it was read after the
+    /// edge (bytes in flight at the edge may still be the earlier boot's).
     Console { board: String, reset: bool },
     /// Read `board`'s console for `watch_ms` without a reset. Result: the
     /// text.
@@ -354,9 +357,9 @@ pub enum Reply {
         bytes: u64,
     },
     /// Operation `id` is ready: what it streams from now on is what it was
-    /// asked for (a monitor capture listens). Sent apart from the output,
-    /// in order with it, at most once; an operation without a readiness of
-    /// its own never sends it.
+    /// asked for (a monitor capture listens; a console's reset edge has
+    /// passed). Sent apart from the output, in order with it, at most once;
+    /// an operation without a readiness of its own never sends it.
     Ready {
         id: u64,
     },

@@ -186,6 +186,13 @@ impl std::io::Write for BoardConsole {
 }
 
 impl BoardConsole {
+    /// Reset the chip behind this console into its image over its USB
+    /// Serial/JTAG, the console's input drained just before the reset edge.
+    /// A failure may come after the edge: the image may have started.
+    pub fn reset_into_image(&mut self) -> std::io::Result<()> {
+        reset::reset_usb_serial_jtag(&mut self.port)
+    }
+
     /// The open port.
     pub fn into_port(self) -> Port {
         self.port
@@ -477,9 +484,9 @@ impl ProfiledBoard {
     /// Open the board's console and reset it into its image over its USB
     /// Serial/JTAG, which discards what the port held before.
     pub fn open_console_from_reset(&self) -> crate::stand::Result<BoardConsole> {
-        let mut port = self.open_console()?.into_port();
-        reset::reset_usb_serial_jtag(&mut port)?;
-        Ok(BoardConsole { port })
+        let mut console = self.open_console()?;
+        console.reset_into_image()?;
+        Ok(console)
     }
 
     /// Power the board off and on, watching it leave USB and return, then
