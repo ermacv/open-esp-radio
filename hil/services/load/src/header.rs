@@ -41,17 +41,15 @@ impl Header {
         if self.echo_reply {
             flags |= ECHO_REPLY;
         }
-        let bytes = MAGIC
-            .into_iter()
-            .chain([flags, 0, 0, 0])
-            .chain(self.run.to_be_bytes())
-            .chain(self.sequence.to_be_bytes())
-            .chain(self.sent_us.to_be_bytes());
-        let mut header = [0; LENGTH];
-        for (slot, byte) in header.iter_mut().zip(bytes) {
-            *slot = byte;
-        }
-        header
+        // Each field in its place, written once: no pass over the octets.
+        let [m0, m1, m2, m3] = MAGIC;
+        let [r0, r1, r2, r3] = self.run.to_be_bytes();
+        let [q0, q1, q2, q3, q4, q5, q6, q7] = self.sequence.to_be_bytes();
+        let [t0, t1, t2, t3, t4, t5, t6, t7] = self.sent_us.to_be_bytes();
+        [
+            m0, m1, m2, m3, flags, 0, 0, 0, r0, r1, r2, r3, q0, q1, q2, q3, q4, q5, q6, q7, t0, t1,
+            t2, t3, t4, t5, t6, t7,
+        ]
     }
 
     /// Write the header into the first [`LENGTH`] bytes of `payload`; `None`
