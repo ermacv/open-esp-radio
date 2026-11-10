@@ -880,6 +880,10 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
                     fault: fault.map(crate::failure::convert::backend_fault),
                     observed,
                 },
+                StopWatch::DeviceFailed { fault, observed } => StopWatch::DeviceFailed {
+                    fault: fault.map(crate::failure::convert::backend_fault),
+                    observed,
+                },
             })
         }
     }

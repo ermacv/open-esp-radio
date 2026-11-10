@@ -1837,6 +1837,9 @@ pub struct ModelAir {
     stream: Cell<ModelStream>,
     /// The port may take a poison back for a stop.
     recovery: Cell<bool>,
+    /// The next transmit service poisons the backend as it begins: a fault
+    /// a service meets before any other call does.
+    poison_at_service: Cell<bool>,
     /// How often the port asked to take a poison back.
     recovery_asks: Cell<u32>,
     disables: Cell<u32>,
@@ -1910,6 +1913,7 @@ impl ModelAir {
             group_writes: Default::default(),
             stream: Default::default(),
             recovery: Default::default(),
+            poison_at_service: Default::default(),
             recovery_asks: Cell::new(0),
             disables: Default::default(),
             unstop_enable: Cell::new(false),
@@ -2555,6 +2559,17 @@ impl ModelAir {
     /// Poison the backend.
     pub fn poison(&self) {
         self.stream.set(ModelStream::Ended);
+    }
+
+    /// Poison the backend as the next transmit service begins: that
+    /// service meets the fault first.
+    pub fn poison_at_next_service(&self) {
+        self.poison_at_service.set(true);
+    }
+
+    /// Whether the next transmit service poisons the backend, once.
+    pub(crate) fn take_poison_at_service(&self) -> bool {
+        self.poison_at_service.take()
     }
 
     /// How often the port asked to take a poison back.

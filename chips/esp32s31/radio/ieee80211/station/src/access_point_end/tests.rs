@@ -32,6 +32,9 @@ struct TestRunner<'a, 'b> {
     /// The port keeps a fault it could not take back: a watch without an
     /// item ends on this observation.
     kept_fault: Option<StopUnconfirmed>,
+    /// That observation is the stop's own answer naming a device fault, no
+    /// port call having answered one: the watch ends on it named.
+    device_first: bool,
 }
 
 impl<'a> Retiring for TestRunner<'a, '_> {
@@ -51,6 +54,10 @@ impl<'a> Retiring for TestRunner<'a, '_> {
                 Some(StopWatch::Unkept)
             }
             (None, _) if holds => None,
+            (None, Some(observed)) if self.device_first => Some(StopWatch::DeviceFailed {
+                fault: None,
+                observed,
+            }),
             (None, Some(observed)) => Some(StopWatch::Faulted {
                 fault: Some(BackendFault::Abandoned),
                 observed,
@@ -136,6 +143,7 @@ fn retired<'a, 'b>(
         confirmed,
         unaccepted: None,
         kept_fault: None,
+        device_first: false,
     };
     retired_with(runner, ApEnded::Stopped, stop)
 }
@@ -302,6 +310,7 @@ fn an_unkept_item_leaves_with_every_other_owner_of_the_unreleased_port() {
         confirmed: &confirmed,
         unaccepted: None,
         kept_fault: None,
+        device_first: false,
     };
     let left = retired_with(runner, ApEnded::Unkept, Stop::Confirmed);
     assert_eq!(item.get(), 0, "the item is alive");
@@ -343,6 +352,7 @@ fn a_stop_that_needs_a_service_goes_on_once_the_unkept_item_is_taken() {
         confirmed: &confirmed,
         unaccepted: None,
         kept_fault: None,
+        device_first: false,
     };
     let left = retired_with(runner, ApEnded::Unkept, Stop::Owed);
     assert!(confirmed.get(), "the stop was watched to its confirmation");
@@ -383,6 +393,7 @@ fn items_the_stop_finds_fill_the_home_then_the_next_stays_with_the_runner() {
         confirmed: &confirmed,
         unaccepted: None,
         kept_fault: None,
+        device_first: false,
     };
     let left = retired_with(runner, ApEnded::Stopped, Stop::Owed);
     assert!(!confirmed.get());
@@ -430,6 +441,7 @@ fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
         confirmed: &confirmed,
         unaccepted: Some(Receipt(&attempt)),
         kept_fault: None,
+        device_first: false,
     };
     let left = retired_with(runner, ApEnded::Unaccepted, Stop::Owed);
     assert_eq!(
@@ -477,6 +489,7 @@ fn a_kept_fault_ends_the_retire_unfinished_in_the_stopping_phase_with_every_owne
         confirmed: &confirmed,
         unaccepted: Some(Receipt(&attempt)),
         kept_fault: Some(observed),
+        device_first: false,
     };
     let ended = ApEnded::Faulted(BackendFault::Abandoned);
     let left = retired_with(runner, ended, Stop::Owed);
@@ -517,9 +530,57 @@ fn a_kept_fault_ends_the_retire_unfinished_in_the_stopping_phase_with_every_owne
         confirmed: &confirmed,
         unaccepted: None,
         kept_fault: Some(observed),
+        device_first: false,
     };
     let left = retired_with(runner, ApEnded::Stopped, Stop::Confirmed);
     assert_eq!(left.watched, 0);
     assert_eq!(left.exit, ApExitOf::Ended(ApEnded::Stopped));
     assert!(left.unfinished.is_none(), "a completed retire");
+}
+
+/// A device fault the stop's own answer named first ends the retire
+/// unfinished in the stopping phase, named apart from a kept fault, with
+/// the port's observation and every owner; no release runs.
+#[test]
+fn a_device_fault_the_stop_named_first_ends_the_retire_unfinished_and_named() {
+    let observed = StopUnconfirmed {
+        cause: oer_protocols_ieee80211_contracts_port::StopCause::Device,
+        observations: Default::default(),
+    };
+    let (ends, attempt) = (Cell::new(0), Cell::new(0));
+    let (watched, confirmed) = (Cell::new(0), Cell::new(false));
+    let runner = TestRunner {
+        port: TestPort {
+            cleanup: Ok(()),
+            receipt: Some(Receipt(&ends)),
+            stopped: Err(Unreleased::StopUnconfirmed),
+        },
+        other: Some(Receipt(&ends)),
+        watched: &watched,
+        unkept: std::vec::Vec::new(),
+        found: std::vec::Vec::new(),
+        confirmed: &confirmed,
+        unaccepted: Some(Receipt(&attempt)),
+        kept_fault: Some(observed),
+        device_first: true,
+    };
+    let ended = ApEnded::Faulted(BackendFault::Abandoned);
+    let left = retired_with(runner, ended, Stop::Owed);
+    assert_eq!(
+        left.exit,
+        ApExitOf::StopDeviceFailed {
+            ended,
+            fault: None,
+            observed,
+        }
+    );
+    let Some(mut unfinished) = left.unfinished else {
+        panic!("a device fault leaves the installation unfinished");
+    };
+    assert_eq!(unfinished.phase, Phase::Stopping);
+    assert!(!confirmed.get(), "no stop was confirmed");
+    assert_eq!([ends.get(), attempt.get()], [0, 0]);
+    assert!(unfinished.unaccepted.take().is_some(), "the attempt is out");
+    assert!(unfinished.receipt.is_none(), "no cleanup ran");
+    assert!(unfinished.owner.port.receipt.is_some() && unfinished.owner.other.is_some());
 }

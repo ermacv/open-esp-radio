@@ -118,6 +118,19 @@ pub enum ApExitOf<E> {
         /// What the port observed of the stop.
         observed: StopUnconfirmed,
     },
+    /// It ended for its cause, and the port's stop answered that its device
+    /// refused or failed the stop, a fault no port call answered first: the
+    /// stop's watch ended on it, nothing was asked back of the port, no
+    /// release ran, and the installation came back unfinished in
+    /// [`Phase::Stopping`] with every owner.
+    StopDeviceFailed {
+        /// Why it ended.
+        ended: ApEnded,
+        /// The last fault a port call answered the runner, when one did.
+        fault: Option<crate::failure::BackendFault>,
+        /// What the port observed of the stop.
+        observed: StopUnconfirmed,
+    },
     /// It ended for its cause holding an attempt the port did not accept
     /// for want of its right, and no item a port call could not keep: no
     /// release ran, and the installation came back unfinished with the
@@ -291,6 +304,24 @@ where
                             unaccepted,
                             receipt: None,
                             cause: ApExitOf::StopFaulted {
+                                ended,
+                                fault,
+                                observed,
+                            },
+                            phase: Phase::Stopping,
+                        });
+                    }
+                    // The stop's answer named a device fault: the retire
+                    // ends here, every owner with the runner.
+                    Ok(StopWatch::DeviceFailed { fault, observed }) => {
+                        take_into(&mut unkept, &mut runner);
+                        let unaccepted = runner.take_unaccepted();
+                        return Retired::Unfinished(Unfinished {
+                            owner: runner,
+                            unkept,
+                            unaccepted,
+                            receipt: None,
+                            cause: ApExitOf::StopDeviceFailed {
                                 ended,
                                 fault,
                                 observed,

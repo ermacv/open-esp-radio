@@ -88,7 +88,7 @@ use oer_protocols_ieee80211_contracts_port::{
     ConfigurePermission, Configured, ConnectionFrame, DataPort, Facts, GroupKeyId, Input,
     InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey, PhyRate, PortSink,
     PortTypes, Protection, ReceiveAccounting, ReceiveFilter, RecycleRefused, Removed, RemovedKey,
-    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd,
+    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopCause,
     StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl,
     TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool,
     TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
@@ -333,6 +333,21 @@ pub enum StopWatch<F> {
     Faulted {
         /// The last fault a port call of the runner answered, when one
         /// did: the run's own, or one its stop's service answered.
+        fault: Option<F>,
+        /// What the port observed of the stop.
+        observed: StopUnconfirmed,
+    },
+    /// The port's stop answered that its device refused or failed the stop
+    /// ([`StopCause::Device`]), a fault the watch did not see answered by a
+    /// port call first: the watch ended on it, named, and asked the port
+    /// to take nothing back. Every owner stays in the runner; the hardware
+    /// may still use the ones the port holds. A later call watches on from
+    /// the port's state. A stop the port only did not confirm yet (its
+    /// deadline, a MAC a failed start enabled) is no such end: the watch
+    /// goes on.
+    DeviceFailed {
+        /// The last fault a port call of the runner answered, when one
+        /// did.
         fault: Option<F>,
         /// What the port observed of the stop.
         observed: StopUnconfirmed,
@@ -1906,8 +1921,9 @@ where
     /// and each one the stop's service answers once. Nothing is sent and no
     /// command goes meanwhile. It returns once the port confirmed the stop,
     /// or once the port kept a fault it could not take back and observed
-    /// its stop unconfirmed ([`StopWatch::Faulted`]): no stop of such a
-    /// port confirms, and the runner keeps every owner.
+    /// its stop unconfirmed ([`StopWatch::Faulted`]), or once the stop's
+    /// own answer named a device fault ([`StopWatch::DeviceFailed`]): no
+    /// stop of such a port confirms, and the runner keeps every owner.
     ///
     /// A call returns before the confirmation once the runner holds an item
     /// a port call could not keep ([`StopWatch::Unkept`]), at once when it
@@ -1942,11 +1958,14 @@ where
             .await;
         match watched {
             Err(Unwatched::Unkept) => return Ok(StopWatch::Unkept),
-            // Only a kept fault ends this watch unconfirmed.
+            // A kept fault ends this watch unconfirmed, and so does a
+            // device fault the stop's own answer names first.
             Err(Unwatched::Unconfirmed(observed)) => {
-                return Ok(StopWatch::Faulted {
-                    fault: self.homes.fault,
-                    observed,
+                let fault = self.homes.fault;
+                return Ok(if self.homes.fault_kept {
+                    StopWatch::Faulted { fault, observed }
+                } else {
+                    StopWatch::DeviceFailed { fault, observed }
                 });
             }
             Ok(()) => {}
@@ -1967,7 +1986,8 @@ where
     /// after the service that returned one: no port call follows it. A
     /// fault the service answers is taken back once
     /// ([`DataPort::recover_for_stop`]); once the port kept one, its next
-    /// unconfirmed answer ends the watch whatever `ends` says.
+    /// unconfirmed answer ends the watch whatever `ends` says, and so does
+    /// an answer naming a device fault ([`StopCause::Device`]).
     async fn watch_stop<T: Timer>(
         &mut self,
         clock: &T,
@@ -2070,8 +2090,14 @@ where
                     self.take_unconsumed();
                     return Ok(());
                 }
+                // A device fault the stop's answer names ends the watch
+                // named, as a kept one does: no stop of it confirms by
+                // waiting, and nothing is asked back of the port.
                 Woke::Stopped(Err(observed)) => {
-                    if ends(observed) || self.homes.fault_kept {
+                    if ends(observed)
+                        || self.homes.fault_kept
+                        || observed.cause == StopCause::Device
+                    {
                         return Err(Unwatched::Unconfirmed(observed));
                     }
                 }

@@ -698,13 +698,18 @@ fn a_fault_first_seen_in_the_stops_watch_is_taken_back_once_or_kept() {
             let finish = runner.finish_stop(&counted, |_| observed.set(observed.get() + 1));
             let script = async {
                 counted.idle(1).await;
-                air.poison();
+                // The watch's next service meets the fault before the
+                // stop's answer does: a fault the stop's answer names first
+                // ends the watch named instead
+                // (`a_device_fault_first_named_by_the_stops_answer_ends_the_watch_named`).
+                air.poison_at_next_service();
                 if recovers {
                     air.allow_recovery();
                 }
                 for _ in 0..256 {
                     counted.advance(&air, Duration::from_millis(1)).await;
-                    if recovers {
+                    // The stop goes quiet once the fault was taken back.
+                    if recovers && air.recovery_asks() > 0 {
                         air.hold_stop(false);
                     }
                 }
@@ -746,6 +751,59 @@ fn a_fault_first_seen_in_the_stops_watch_is_taken_back_once_or_kept() {
             assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
         }));
     }
+}
+
+/// A device fault the stop's own answer names first (the port poisoned
+/// before the watch, no service answering it) ends the watch named, with
+/// the port's observations and every owner in the runner: the port is asked
+/// to take nothing back, and the watch does not wait on.
+#[test]
+fn a_device_fault_first_named_by_the_stops_answer_ends_the_watch_named() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        air.refuse_access_point_commands(1);
+        let idle = async {
+            loop {
+                counted.idle(1).await;
+            }
+        };
+        let end = match select(Woken::new(runner.run(&shared, &counted)), idle).await {
+            Either::First(end) => end,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(matches!(end, ApEnd::Refused(_)), "no fault ends the run");
+        air.poison();
+        let observed = Cell::new(0_u32);
+        let finish = runner.finish_stop(&counted, |_| observed.set(observed.get() + 1));
+        let script = async {
+            for _ in 0..256 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+        };
+        let watched = match select(Woken::new(finish), script).await {
+            Either::First(watched) => watched,
+            Either::Second(()) => panic!("the stop's watch never ends"),
+        };
+        let Ok(super::StopWatch::DeviceFailed {
+            fault,
+            observed: seen,
+        }) = watched
+        else {
+            panic!("a device fault ends the watch named: {watched:?}");
+        };
+        assert_eq!(
+            seen.cause,
+            oer_protocols_ieee80211_contracts_port::StopCause::Device
+        );
+        assert_eq!(fault, runner.homes.fault, "the last fault a call answered");
+        assert_eq!(observed.get(), 1, "its observation was reported");
+        assert_eq!(air.recovery_asks(), 0, "nothing is asked back");
+        assert!(!runner.homes.fault_kept);
+        assert!(runner.take_returned().is_some(), "the refused command");
+        assert!(runner.homes.beacon.is_some());
+        assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
+    }));
 }
 
 #[test]

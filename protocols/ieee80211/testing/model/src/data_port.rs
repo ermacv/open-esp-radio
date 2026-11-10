@@ -1485,6 +1485,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             clippy::redundant_closure_call,
             reason = "the call's own answer, then its unkept item"
         )]
+        if self.air.take_poison_at_service() {
+            self.air.poison();
+        }
         let answer = (|| -> Result<Option<PortCompleted<'id, Self>>, ModelPortFault> {
             self.check(ModelPortCall::ServiceTx)?;
             if tbtt {
