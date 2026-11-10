@@ -467,13 +467,18 @@ them; after a confirmed stop only `take_unconsumed` offers them. Nothing
 the port keeps makes its deadline due or raises a fact, and a port that
 keeps one does not retire. An item the store cannot keep (a taken or
 missing place: a token that was not unique) goes to the call's one unkept
-place and comes back beside the call's answer (`Unkeeping`); from then on
-the call takes no further owner. Every producing loop checks that place
-before it takes the next owner: queued withdrawals and a late beacon stay
-queued, completions the core already gave wait in the driver and come home
-first at the next call (no sink takes the core's completions meanwhile),
-waiting removals, the configuration and gate terminals and the receive cut
-wait for the next call.
+place and comes back beside the call's answer (`Unkeeping`). Each producing
+call has one right to fill that place (`unconsumed::Vacancy`, created once
+per call, neither `Clone` nor `Copy`), and every producer obtains it before
+it takes the owner an item carries (through `DriverEnv::vacancy` in the
+driver's steps); a given or kept item gives the right back, a held one ends
+it there. Without the right the owner stays where it is: queued withdrawals
+and a late beacon stay queued, completions the core already gave wait in
+the driver and come home first at the next call (no sink takes the core's
+completions meanwhile), after the first refusal the rest of a batch stays
+in the driver, waiting removals, the configuration and gate terminals, a
+key command (held) and the receive cut wait for the next call. A second
+item of one call never reaches a delivery, so none is dropped.
 
 A station group key mutation and an access point's are commands of their
 own role (`StationGroupCommand`, `AccessPointGroupCommand`). A step of

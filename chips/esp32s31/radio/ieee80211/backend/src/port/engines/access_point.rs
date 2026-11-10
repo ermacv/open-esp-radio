@@ -273,9 +273,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
-        match self.write_access_point_configuration(receive, tsf, sink) {
-            Ok(true) => {}
-            Ok(false) => {
+        let vacancy = match self.write_access_point_configuration(receive, tsf, sink) {
+            Ok(Some(vacancy)) => vacancy,
+            Ok(None) => {
                 return Ok(self.hold_access_point(
                     AccessPointCommand::Configure {
                         permission,
@@ -295,13 +295,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     fault,
                 });
             }
-        }
+        };
         self.access_point_holding = None;
         self.access_point_since = None;
         let loan = self.loan;
         self.unconsumed.deliver(
             sink,
             &mut self.unkept,
+            vacancy,
             unconsumed::Item::Terminal(
                 brand::OwnedTerminal::Configured(brand::OwnedConfigured::AccessPoint(
                     permission.into_owned(&loan),
@@ -313,13 +314,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     /// Write the access point's configuration and TSF control once its
-    /// barrier passed: whether it did.
+    /// barrier passed and the call has the right its terminal leaves under,
+    /// which it obtains before the write: the right once written, `None`
+    /// while it waits.
     fn write_access_point_configuration<S>(
         &mut self,
         receive: AccessPointReceive<Esp32s31Caps<B>>,
         tsf: Option<SupportedTsfControl<Esp32s31Caps<B>>>,
         sink: &mut S,
-    ) -> Result<bool, Fault>
+    ) -> Result<Option<unconsumed::Vacancy>, Fault>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
@@ -329,12 +332,35 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             driver.withdraw(&mut env)
         };
         if !drained
-            || self.halted()
             || self.access_point_on_air()
             || core_views::configuring::<Id, D, B>(self.driver.core.view())
         {
-            return Ok(false);
+            return Ok(None);
         }
+        let Some(vacancy) = self.unkept.vacancy() else {
+            return Ok(None);
+        };
+        match self.write_access_point_vif(receive, tsf, sink) {
+            Ok(()) => Ok(Some(vacancy)),
+            Err(fault) => {
+                self.unkept.vacate(vacancy);
+                Err(fault)
+            }
+        }
+    }
+
+    /// The access point's configuration and TSF control, written. The
+    /// caller holds the call's right, so the barrier's completions wait in
+    /// the driver for the next collection.
+    fn write_access_point_vif<S>(
+        &mut self,
+        receive: AccessPointReceive<Esp32s31Caps<B>>,
+        tsf: Option<SupportedTsfControl<Esp32s31Caps<B>>>,
+        sink: &mut S,
+    ) -> Result<(), Fault>
+    where
+        S: PortSink<'id, Types<Id, D, B, O>>,
+    {
         let address = self.addresses[1].get();
         let filter = match receive {
             AccessPointReceive::Off => ReceiveFilter::NONE,
@@ -377,7 +403,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             driver.access_point_configuring = false;
         }
-        Ok(true)
+        Ok(())
     }
 
     /// Run one access-point command of a running port. A fault before the
@@ -407,12 +433,29 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 material,
                 issued,
             })) => {
+                // The terminal leaves under the call's right, obtained
+                // before the core takes the slot: without it the command
+                // waits for the next call, whole.
+                let Some(vacancy) = self.unkept.vacancy() else {
+                    return Ok(self.hold_access_point(
+                        AccessPointCommand::InstallPairwise(AccessPointPairwiseInstall(
+                            PairwiseInstall {
+                                identity,
+                                installation,
+                                material,
+                                issued,
+                            },
+                        )),
+                        now,
+                    ));
+                };
                 // Refused, the installation comes back whole with its
                 // command: the core did not take its slot.
                 if let Err((installation, fault)) =
                     self.driver
                         .install(self.device, identity, installation, &material)
                 {
+                    self.unkept.vacate(vacancy);
                     return Err(CommandFailed::Returned {
                         command: AccessPointCommand::InstallPairwise(AccessPointPairwiseInstall(
                             PairwiseInstall {
@@ -429,6 +472,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 self.unconsumed.deliver(
                     sink,
                     &mut self.unkept,
+                    vacancy,
                     unconsumed::Item::Terminal(
                         brand::OwnedTerminal::PairwiseKeyInstalled(
                             brand::OwnedInstalledPairwise::new(identity.role, identity),
@@ -465,12 +509,20 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     .iter()
                     .flatten()
                     .any(|running| running.operation.payload().key == Some(identity));
-                if !drained || in_use || self.halted() {
-                    return Ok(self.hold_access_point(
-                        AccessPointCommand::RemovePairwise { association, key },
-                        now,
-                    ));
-                }
+                // The terminal leaves under the call's right, obtained
+                // before the core removes the key.
+                let vacancy = match self.unkept.vacancy() {
+                    Some(vacancy) if drained && !in_use => vacancy,
+                    vacancy => {
+                        if let Some(vacancy) = vacancy {
+                            self.unkept.vacate(vacancy);
+                        }
+                        return Ok(self.hold_access_point(
+                            AccessPointCommand::RemovePairwise { association, key },
+                            now,
+                        ));
+                    }
+                };
                 let removed = match self
                     .driver
                     .remove::<core_mac::association::AccessPointAssociation<'static, CorePath<Id>>>(
@@ -479,6 +531,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     ) {
                     Ok(removed) => removed,
                     Err(fault) => {
+                        self.unkept.vacate(vacancy);
                         return Err(CommandFailed::Returned {
                             command: AccessPointCommand::RemovePairwise { association, key },
                             fault,
@@ -491,14 +544,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 self.access_point_since = None;
                 // A removal whose key's last use is out ends at a later
                 // service.
-                if let Some(terminal) = terminal {
-                    self.unconsumed.deliver(
+                match terminal {
+                    Some(terminal) => self.unconsumed.deliver(
                         sink,
                         &mut self.unkept,
+                        vacancy,
                         unconsumed::Item::Terminal(
                             brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
                         ),
-                    );
+                    ),
+                    None => self.unkept.vacate(vacancy),
                 }
                 Ok(AccessPointProgress::Done)
             }
@@ -657,8 +712,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         ApCmd<'id, Id, D, B, O>,
         Result<ApProgress<'id, Id, D, B, O>, AccessPointCommandFailed<'id, Self>>,
     > {
-        // Nothing is delivered before the command is accepted.
-        let command = self.accepting(command)?;
+        self.unkept.open();
         let ran = self.access_point_ran(command, now, sink);
         self.answer(ran)
     }

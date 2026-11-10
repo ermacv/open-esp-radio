@@ -1446,30 +1446,29 @@ fn a_completion_the_halted_call_took_waits_in_the_driver_and_comes_home_first() 
     });
 }
 
-/// An item a halted call left in the store's spilled place refuses the next
-/// call before it serves anything: the item comes back beside the call's
-/// own input, not accepted, and the queued tails stay queued until a call
-/// runs.
+/// Three completions of one service, none of which the sink takes or the
+/// store keeps: the first fills the call's place and ends its right, so the
+/// other two never leave the driver (no further item has a place to be
+/// dropped from). They wait there, and the next call brings both home.
 #[test]
-fn a_spilled_item_refuses_the_next_call_before_it_serves_anything() {
+fn a_third_item_of_a_halted_call_stays_with_the_driver() {
     with_access(|fixture, _access| {
         fixture.start();
         fixture.hold_air(true);
-        let head = fixture.submit_mpdu(Spec::open(1));
+        let best_effort = fixture.submit_mpdu(Spec::open(1));
+        let voice = fixture.submit_mpdu(Spec {
+            category: WmmAccessCategory::Voice,
+            ..Spec::open(2)
+        });
+        let video = fixture.submit_mpdu(Spec {
+            category: WmmAccessCategory::Video,
+            ..Spec::open(3)
+        });
         fixture.turns(1);
-        let _tail = fixture.submit_mpdu(Spec::open(2));
-        let _last = fixture.submit_mpdu(Spec::open(3));
-        let waker = fixture.waker();
-        let now = fixture.now();
-        assert!(
-            fixture
-                .port
-                .poll_stop(&mut Context::from_waker(&waker), now)
-                .is_pending()
-        );
+        assert_eq!(fixture.publications(), 3);
         fixture.hold_air(false);
-        fixture.outbox.refuse = 1;
-        fixture.port.refuse_keeps_for_test(1);
+        fixture.outbox.refuse = 3;
+        fixture.port.refuse_keeps_for_test(3);
         let mut halted = None;
         for _ in 0..16 {
             match serve_once(fixture) {
@@ -1480,31 +1479,41 @@ fn a_spilled_item_refuses_the_next_call_before_it_serves_anything() {
                 }
             }
         }
-        let Some(unkeeping) = halted else {
-            panic!("the head's terminal comes back unkept");
-        };
-        // The halted call's second item, which the store's spilled place
-        // holds.
-        fixture.port.spill_for_test(unkeeping.unkept);
-        let Err(oer_protocols_ieee80211_contracts_port::Unkeeping {
+        let Some(oer_protocols_ieee80211_contracts_port::Unkeeping {
             unkept:
                 oer_protocols_ieee80211_contracts_port::Unkept::Terminal(LowerMacTerminal::TxCompleted(
-                    TxCompleted::Single(completed),
+                    TxCompleted::Single(first),
                 )),
-            input: oer_protocols_ieee80211_contracts_port::Input::NotAccepted(()),
-        }) = serve_once(fixture)
+            input: oer_protocols_ieee80211_contracts_port::Input::Accepted(Ok(_)),
+        }) = halted
         else {
-            panic!("the spilled item refuses the call before it serves");
+            panic!("the first terminal comes back unkept beside the answer");
         };
-        assert_eq!(completed.ticket_index(), head);
-        assert!(fixture.outbox.terminals.is_empty(), "the call ran nothing");
+        assert!(fixture.outbox.terminals.is_empty());
         assert_eq!(
             fixture.port.waiting_for_test(),
-            (2, 0),
-            "the tails stay queued"
+            (0, 2),
+            "the second and the third completion wait in the driver"
         );
-        // The next call runs.
+        fixture.outbox.refuse = 0;
+        fixture.port.refuse_keeps_for_test(0);
         assert!(matches!(serve_once(fixture), Ok(Ok(_))));
-        assert_eq!(fixture.outbox.terminals.len(), 2);
+        assert_eq!(fixture.port.waiting_for_test(), (0, 0));
+        let mut all: Vec<_> = fixture
+            .outbox
+            .terminals
+            .iter()
+            .map(|terminal| match terminal {
+                LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
+                    completed.ticket_index()
+                }
+                _ => panic!("only the completions end"),
+            })
+            .chain([first.ticket_index()])
+            .collect();
+        all.sort_unstable();
+        let mut sent = std::vec![best_effort, voice, video];
+        sent.sort_unstable();
+        assert_eq!(all, sent, "every ticket comes back once");
     });
 }
