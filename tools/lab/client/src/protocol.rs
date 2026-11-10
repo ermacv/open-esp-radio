@@ -242,8 +242,9 @@ pub enum Operation {
     /// bytes in flight may follow the drain), then the boot from the ROM
     /// banner on, while the chip's USB Serial/JTAG stays enumerated across
     /// the reset. Output the client reads too slowly is dropped and counted
-    /// (`Reply::Lost`). Result: `{written, receipt}`; a console failure
-    /// after the start is an error that names the started receipt.
+    /// (`Reply::Lost`). Result: `{written, receipt}`. Every failure after
+    /// the write (the start, its confirmation, the journal, the console)
+    /// is an error naming its stage, what was reached and the receipt.
     FlashConsole {
         board: String,
         bundle: String,

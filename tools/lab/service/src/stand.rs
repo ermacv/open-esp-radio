@@ -260,28 +260,6 @@ impl StandDrivers {
         Ok(serde_json::json!({ "written": true, "receipt": receipt }))
     }
 
-    /// Write `bundle` into `board` and start it by its console's reset,
-    /// journaled like [`Self::flash`]; the console, open from before that
-    /// reset.
-    fn flash_into_console(
-        &self,
-        board: &ProfiledBoard,
-        bundle: &str,
-        image: &ImageIdentity,
-        owner: &str,
-    ) -> Result<(serde_json::Value, BoardConsole)> {
-        let bundle = oer_tools_image_bundle::ImageBundle::load(Path::new(bundle)).map_err(text)?;
-        let store = oer_tools_lab_board::image::Store::open().map_err(text)?;
-        let (receipt, console) = board
-            .flash_into_console(&store, &bundle, &image.name, &image.origin)
-            .map_err(text)?;
-        self.journal_flash(board, owner, image, &receipt)?;
-        Ok((
-            serde_json::json!({ "written": true, "receipt": receipt }),
-            console,
-        ))
-    }
-
     /// Journal `receipt` as `image` written into `board` by `owner`.
     fn journal_flash(
         &self,
@@ -482,17 +460,19 @@ impl Drivers for StandDrivers {
             } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
                 let board = self.profiled(board)?;
-                let (receipt, console) = self.flash_into_console(&board, bundle, image, owner)?;
-                // Started and journaled: a later console failure keeps it.
-                self.console(console, &io).map_err(|error| {
-                    format!(
-                        "written and started ({}); then {error}",
-                        receipt
-                            .get("receipt")
-                            .map_or_else(String::new, ToString::to_string)
-                    )
-                })?;
-                Ok(receipt)
+                let bundle =
+                    oer_tools_image_bundle::ImageBundle::load(Path::new(bundle)).map_err(text)?;
+                let store = oer_tools_lab_board::image::Store::open().map_err(text)?;
+                into_console(&mut BoardIntoConsole {
+                    stand: self,
+                    board: &board,
+                    store: &store,
+                    bundle: &bundle,
+                    image,
+                    owner,
+                    io: &io,
+                    started: None,
+                })
             }
             Operation::Reset { board, path } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
@@ -609,6 +589,106 @@ impl Drivers for StandDrivers {
 /// works only on its image's command, which the scenario that gives it
 /// claims the air for; a router operation turns the router's own radio on,
 /// so its lease must hold the air.
+/// The stages of a write into a console, in their order: the held write,
+/// the start by the console's own reset, the start's confirmation, the
+/// journal, then the console's stream until the operation stops.
+trait IntoConsole {
+    type Written;
+    type Console;
+    fn write(&mut self) -> Result<Self::Written>;
+    /// The written receipt, as the answer names it.
+    fn receipt(&self, written: &Self::Written) -> serde_json::Value;
+    fn start(&mut self) -> Result<Self::Console>;
+    fn confirm(&mut self, written: Self::Written) -> Result<()>;
+    fn journal(&mut self) -> Result<()>;
+    fn stream(&mut self, console: Self::Console) -> Result<()>;
+}
+
+/// Run `steps` in their order. A failure before the write leaves nothing
+/// written; from the write on, every failure names the stage it stopped at,
+/// what was already reached, and the written receipt.
+fn into_console<S: IntoConsole>(steps: &mut S) -> Result<serde_json::Value> {
+    let written = steps
+        .write()
+        .map_err(|error| format!("the write failed: {error}"))?;
+    let receipt = steps.receipt(&written);
+    let stopped = |stage: &str, reached: &str, error: String| {
+        format!("the {stage} failed: {error}; {reached}; receipt {receipt}")
+    };
+    let console = steps
+        .start()
+        .map_err(|error| stopped("start", "written, not started", error))?;
+    steps.confirm(written).map_err(|error| {
+        stopped(
+            "start's confirmation",
+            "written and reset into the image, its start unconfirmed",
+            error,
+        )
+    })?;
+    steps
+        .journal()
+        .map_err(|error| stopped("journal", "written and started, not journaled", error))?;
+    steps
+        .stream(console)
+        .map_err(|error| stopped("console", "written, started and journaled", error))?;
+    Ok(serde_json::json!({ "written": true, "receipt": receipt }))
+}
+
+/// [`IntoConsole`] on a board of the stand.
+struct BoardIntoConsole<'a> {
+    stand: &'a StandDrivers,
+    board: &'a ProfiledBoard,
+    store: &'a oer_tools_lab_board::image::Store,
+    bundle: &'a oer_tools_image_bundle::ImageBundle,
+    image: &'a ImageIdentity,
+    owner: &'a str,
+    io: &'a OperationIo,
+    started: Option<oer_tools_lab_board::image::Receipt>,
+}
+
+impl<'a> IntoConsole for BoardIntoConsole<'a> {
+    type Written = oer_tools_lab_board::image::Written<'a>;
+    type Console = BoardConsole;
+
+    fn write(&mut self) -> Result<Self::Written> {
+        self.board
+            .write_held(
+                self.store,
+                self.bundle,
+                &self.image.name,
+                &self.image.origin,
+            )
+            .map_err(text)
+    }
+
+    fn receipt(&self, written: &Self::Written) -> serde_json::Value {
+        serde_json::to_value(written.receipt())
+            .unwrap_or_else(|error| serde_json::json!({ "unrecorded": error.to_string() }))
+    }
+
+    fn start(&mut self) -> Result<BoardConsole> {
+        self.board.open_console_from_reset().map_err(text)
+    }
+
+    fn confirm(&mut self, written: Self::Written) -> Result<()> {
+        self.started = Some(written.started().map_err(text)?);
+        Ok(())
+    }
+
+    fn journal(&mut self) -> Result<()> {
+        let receipt = self
+            .started
+            .as_ref()
+            .ok_or("no confirmed start to journal")?;
+        self.stand
+            .journal_flash(self.board, self.owner, self.image, receipt)
+    }
+
+    fn stream(&mut self, console: BoardConsole) -> Result<()> {
+        self.stand.console(console, self.io)
+    }
+}
+
 fn air_refusal(operation: &Operation, claims: &[Claim]) -> Option<String> {
     (matches!(operation, Operation::Router { .. }) && !covers(claims, &[Claim::shared(AIR)]))
         .then(|| "a router operation radiates: the lease must hold the air".to_owned())
