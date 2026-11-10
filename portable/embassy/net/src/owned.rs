@@ -290,6 +290,11 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, T: NetTransmit<Frame = Ow
         if self.tx.has_room() {
             return true;
         }
+        // What the device returned may be the room.
+        self.tx.reclaim();
+        if self.tx.has_room() {
+            return true;
+        }
         let Some(waker) = &self.waker else {
             return false;
         };

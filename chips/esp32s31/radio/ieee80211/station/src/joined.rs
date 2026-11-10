@@ -502,6 +502,9 @@ struct Transmit(Rc<RefCell<NetworkTransmit<'static, Joined, WrittenFrame, Supply
 
 impl NetTransmit for Transmit {
     type Frame = WrittenFrame;
+    fn reclaim(&mut self) {
+        self.0.borrow_mut().reclaim();
+    }
     fn has_room(&mut self) -> bool {
         self.0.borrow_mut().has_room()
     }
@@ -1363,7 +1366,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
 
     /// The buffers home: what the station gave back and the network took.
     fn buffers_home(&mut self) -> usize {
-        let _room = self.transmit.0.borrow_mut().has_room();
+        self.transmit.0.borrow_mut().reclaim();
         self.free.slots.borrow().len() + self.free.ended.borrow().len()
     }
 

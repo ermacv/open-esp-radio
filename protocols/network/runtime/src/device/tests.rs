@@ -163,9 +163,11 @@ impl Transmit {
 
 impl NetTransmit for Transmit {
     type Frame = Written;
-    fn has_room(&mut self) -> bool {
+    fn reclaim(&mut self) {
         self.take_back();
         self.takes += 1;
+    }
+    fn has_room(&mut self) -> bool {
         !self.full
     }
     fn poll_room(&mut self, _: &mut Context<'_>) -> Poll<()> {
@@ -636,12 +638,20 @@ fn a_buffer_frees_only_when_its_end_is_handed_on() {
     );
     let takes = port.transmit.takes;
     assert_eq!(port.take_notice(), Some(first));
-    assert!(port.transmit.takes > takes, "the device is asked first");
+    assert_eq!(
+        port.transmit.takes, takes,
+        "an end already held goes without asking the device"
+    );
     assert_eq!(port.buffers.free, 1);
     let third = sent(&mut port);
     assert_ne!(third, first);
     assert_eq!(port.take_notice(), Some(second));
+    let takes = port.transmit.takes;
     assert_eq!(port.take_notice(), None);
+    assert!(
+        port.transmit.takes > takes,
+        "with no end held, the device is asked for what it returned"
+    );
 }
 
 #[test]

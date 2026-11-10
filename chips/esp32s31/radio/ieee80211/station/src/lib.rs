@@ -311,6 +311,9 @@ impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSu
     for NetworkTransmit<'_, N, P, S>
 {
     type Frame = P;
+    fn reclaim(&mut self) {
+        self.inner.reclaim();
+    }
     fn has_room(&mut self) -> bool {
         self.inner.has_room()
     }

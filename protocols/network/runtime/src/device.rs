@@ -113,8 +113,7 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
     /// it tells the device it is over.
     pub fn give_back(&mut self) {
         while self.take_frame(|_, _| Keep::Drop).found() {}
-        // Asking the transmit half takes back what the device returned.
-        let _room = self.transmit.has_room();
+        self.transmit.reclaim();
         // The service whose policy those frames' ends settle has ended, its
         // account with it: each end frees its buffer and goes to no policy.
         while self.buffers.take_notice().is_some() {}
@@ -154,8 +153,11 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
         length: usize,
         fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
     ) -> Result<X::Ticket, Unpublished<PortRefusal, E>> {
-        // The queue first: asking it is where a device takes back what it
-        // finished, which may be the buffer asked for next.
+        // What the device returned is taken back only when the room or the
+        // buffers run out: it may be what is asked for.
+        if !(self.transmit.has_room() && self.buffers.available()) {
+            self.transmit.reclaim();
+        }
         if !self.transmit.has_room() {
             self.waiting = Waiting::Room;
             return Err(Unpublished::Port(PortRefusal::NoRoom));
@@ -245,9 +247,12 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
     }
 
     fn take_notice(&mut self) -> Option<X::Notice> {
-        // Asking the transmit half takes back what the device returned, which
-        // becomes the buffers' notices first.
-        let _room = self.transmit.has_room();
+        // The notices held come first; once they are out, what the device
+        // returned since becomes the next ones.
+        if let Some(notice) = self.buffers.take_notice() {
+            return Some(notice);
+        }
+        self.transmit.reclaim();
         self.buffers.take_notice()
     }
 
