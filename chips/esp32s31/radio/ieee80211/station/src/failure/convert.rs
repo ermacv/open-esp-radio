@@ -789,31 +789,6 @@ pub(crate) fn still_active(
     ReleaseCause::StillActive(maintenance_error(error))
 }
 
-/// The terminal cause of a lifecycle's end; `None` for an ordinary stop
-/// and a restart, which the facade serves itself.
-#[cfg(target_arch = "riscv32")]
-pub(crate) fn lifecycle(
-    end: oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd<
-        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
-    >,
-) -> Option<LifecycleFailure> {
-    use oer_protocols_ieee80211_runtime::datapath::ActorFault;
-    use oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd as End;
-    Some(match end {
-        End::Stopped | End::StoppedReturning(_) | End::StoppedNetworkLost(_) | End::Restart(_) => {
-            return None;
-        }
-        End::StartRefused(refused) => LifecycleFailure::StartRefused(start_refused(refused)),
-        End::StopUnconfirmed(observed) => LifecycleFailure::StopUnconfirmed(observed),
-        End::RetuneUnconfirmed(unconfirmed) => LifecycleFailure::RetuneUnconfirmed(unconfirmed),
-        End::Faulted(ActorFault::Port(fault)) => LifecycleFailure::Port(backend_fault(fault)),
-        End::Faulted(ActorFault::Contract(violation)) => LifecycleFailure::Actor(violation),
-        End::Faulted(ActorFault::Receive(fault)) => LifecycleFailure::Receive(fault),
-        End::Faulted(ActorFault::Unkept) => LifecycleFailure::Unkept,
-        End::Contract(violation) => LifecycleFailure::Contract(violation),
-    })
-}
-
 /// The station's form of the fault the datapath actor ended on.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn actor_fault(

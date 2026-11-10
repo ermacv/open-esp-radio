@@ -13,10 +13,11 @@ use crate::failure::{LifecycleFailure, ReinstallCause, ReleaseCause, Unavailable
 use crate::release::{Cleaned, Leave, Stopped};
 use crate::unfinished::{Phase, Unfinished};
 
-/// How the station ended: an ordinary stop, a refused start or a stop
-/// whose radio release failed (typed, nothing resets), or a failure the
-/// image records before it resets. A restart of the station never ends it.
-/// `E` is the start's refusal.
+/// How the station ended: an ordinary stop, a refused start, a stop whose
+/// radio release failed, or a failure of the lifecycle or the actor under
+/// it, each typed: nothing resets, and an installation that did not retire
+/// comes back whole, both halves of it. A restart of the station never ends
+/// it. `E` is the start's refusal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StationExitOf<E> {
     Stopped,
@@ -25,7 +26,9 @@ pub enum StationExitOf<E> {
     /// software error this exit records. The radio's stop was confirmed;
     /// nothing resets for it.
     StoppedNetworkLost,
-    /// The lifecycle or the datapath actor under it ended terminally.
+    /// The lifecycle or the datapath actor under it ended on a failure:
+    /// the installation comes back whole unless the radio's release after
+    /// a refused start completed.
     Failed(LifecycleFailure),
     /// Stopped, but the Wi-Fi radio release did not complete: the stop is
     /// confirmed and nothing resets; a posted leave is never posted again.
@@ -50,6 +53,8 @@ pub(crate) trait Installation {
     fn take_unkept(&mut self) -> Option<Self::Unkept>;
     /// The attempt a submission returned unaccepted, once.
     fn take_unaccepted(&mut self) -> Option<Self::Unaccepted>;
+    /// How far its radio came when its run ended.
+    fn radio_phase(&self) -> oer_protocols_ieee80211_runtime::datapath::RadioPhase;
 }
 
 /// Why a station's installation did not retire.
@@ -62,6 +67,10 @@ pub enum DatapathCause {
     Reinstall(ReinstallCause),
     /// The radio's release did not complete.
     Release(ReleaseCause),
+    /// The station's lifecycle ended on its failure without retiring the
+    /// actor (a stop or retune proved nothing, a broken contract, news out
+    /// of order): the actor's task ends with the installation.
+    Lifecycle(LifecycleFailure),
 }
 
 /// A station's installation that did not retire: its actor `A` with the
@@ -95,6 +104,15 @@ pub(crate) fn unfinished<A: Installation>(
         cause,
         phase,
     }
+}
+
+/// `actor`'s installation, ended for `cause` before its retire (its fault,
+/// or the lifecycle's end without retiring it), whole, in the phase its
+/// radio read: a stop asked for and not confirmed is
+/// [`Phase::Stopping`], whatever ended the run.
+pub(crate) fn ended_running<A: Installation>(actor: A, cause: DatapathCause) -> UnfinishedOf<A> {
+    let phase = Phase::of_radio(actor.radio_phase());
+    unfinished(actor, None, cause, phase)
 }
 
 /// What the actor's task tells the station's task, in order, through the
@@ -220,6 +238,38 @@ pub(crate) fn installed<C, K, E>(news: News<C, K, E>) -> Result<(C, K), StationE
         News::Reinstall(cause) => Err(StationExitOf::Failed(LifecycleFailure::Reinstall(cause))),
         News::Released { .. } => Err(StationExitOf::Failed(LifecycleFailure::Mailbox)),
     }
+}
+
+/// Whether the station lifecycle's half of an installation ended with
+/// the retired installation, or goes out beside its unfinished datapath
+/// half.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LifecycleHalf {
+    /// The radio's release completed: the half ends, and its place may be
+    /// reused.
+    Retired,
+    /// No release completed: the half goes out whole.
+    Unfinished,
+}
+
+/// The exit once the actor's task told how the radio's release ended
+/// (`None`: the stop's drain passed before it did), and how the
+/// lifecycle's half settles: only a release that succeeded retires it.
+/// `failure` is the lifecycle's own cause when it retired the actor after
+/// a refused start; the exit keeps it.
+pub(crate) fn release_settled<C, K, E>(
+    news: Option<News<C, K, E>>,
+    failure: Option<LifecycleFailure>,
+) -> (StationExitOf<E>, LifecycleHalf) {
+    let exit = match news {
+        Some(news) => ended(news),
+        None => StationExitOf::ReleaseFailed(ReleaseCause::Deadline),
+    };
+    let half = match exit {
+        StationExitOf::Stopped | StationExitOf::StoppedNetworkLost => LifecycleHalf::Retired,
+        _ => LifecycleHalf::Unfinished,
+    };
+    (failure.map_or(exit, StationExitOf::Failed), half)
 }
 
 /// The exit the actor task's last news gives.

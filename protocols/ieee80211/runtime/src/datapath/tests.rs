@@ -2331,6 +2331,72 @@ fn freed_memory_goes_back_as_one_burst_with_one_wake() {
     }
 }
 
+/// An item the port cannot keep, found while a stop the lifecycle asked
+/// for waits on a published MPDU: the actor ends on it, and its radio
+/// reads the stop, not a running radio.
+#[test]
+fn an_unkept_item_during_a_stop_ends_the_actor_in_the_stopping_phase() {
+    bench_then(
+        |bench| {
+            // The lifecycle's returns are full: the station frame's
+            // terminal finds no room there.
+            let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+            for _ in 0..RETURNS {
+                bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+            }
+            bench.send(ToActor::Start(supported()));
+            bench.connect(link(true, None));
+            for category in [
+                WmmAccessCategory::BestEffort,
+                WmmAccessCategory::Background,
+                WmmAccessCategory::Video,
+                WmmAccessCategory::Voice,
+            ] {
+                bench.air.hold_completion(category, true);
+            }
+            let transmit = station_frame_under(bench, 0, false);
+            bench.send(ToActor::StationTx(transmit));
+            bench.settle();
+            assert_eq!(bench.data_sent().len(), 1);
+            let deadline = bench
+                .clock
+                .inner
+                .now()
+                .saturating_add(oer_portable_time::Duration::from_millis(50));
+            bench.send(ToActor::Stop {
+                deadline,
+                network: NetworkEnd::Stays,
+            });
+            bench.settle();
+            assert!(bench.end.is_none(), "the stop waits on the air");
+            bench
+                .air
+                .unkeep_next(oer_protocols_ieee80211_testing_model::ModelUnkeep::AtDrain);
+            for category in [
+                WmmAccessCategory::BestEffort,
+                WmmAccessCategory::Background,
+                WmmAccessCategory::Video,
+                WmmAccessCategory::Voice,
+            ] {
+                bench.air.hold_completion(category, false);
+            }
+            for _ in 0..4 {
+                if bench.end.is_some() {
+                    break;
+                }
+                bench.advance(1);
+                bench.settle();
+            }
+            assert_eq!(bench.end, Some(ActorEnd::Faulted(ActorFault::Unkept)));
+        },
+        |actor, rerun| {
+            assert_eq!(rerun, Poll::Ready(ActorEnd::Faulted(ActorFault::Unkept)));
+            assert_eq!(actor.radio_phase(), RadioPhase::Stopping);
+            assert!(actor.take_unkept().is_some());
+        },
+    );
+}
+
 /// A terminal the full lifecycle refuses and the port cannot keep comes
 /// back beside the port's answer: the actor keeps it in its one place and
 /// ends, asks for no restart, runs no turn while it keeps it, and hands it

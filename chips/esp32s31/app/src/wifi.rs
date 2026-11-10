@@ -115,6 +115,9 @@ pub(crate) struct StationStart {
     nonces: &'static mut wifi::NonceSource,
     /// The accelerator the station unwraps its EAPOL-Key data with.
     aes: oer_chips_esp32s31_platform_runtime::crypto::AesEngine,
+    /// Where the lifecycle's half of an installation that did not retire
+    /// goes.
+    home: EndSender<Option<StationLifecycleEnd>>,
 }
 
 /// The image keeps no trace observations.
@@ -248,10 +251,21 @@ async fn radio_actor(actor: &'static mut Actor) {
     observed!(RadioActor, actor.run()).await.reset()
 }
 
-/// How the station's installation ended on the datapath actor's task: a
-/// retire, no installation, or the installation that did not retire,
-/// whole ([`Station::installation_end`]).
-pub type StationInstallationEnd = wifi::DatapathEnd<binding::Binding>;
+/// The station lifecycle's half of an installation that did not retire.
+pub type StationLifecycleEnd = wifi::UnfinishedLifecycle<binding::Binding>;
+
+/// How the station's installation ended, both halves
+/// ([`Station::installation_end`]): the datapath actor's (a retire, no
+/// installation, or the installation that did not retire, whole) and the
+/// station lifecycle's (its retired lifecycle when the installation did
+/// not retire).
+#[must_use = "an unfinished installation holds the port and its owners"]
+pub struct StationInstallationEnd {
+    /// The datapath actor's half.
+    pub datapath: wifi::DatapathEnd<binding::Binding>,
+    /// The lifecycle's half, when the installation did not retire.
+    pub lifecycle: Option<StationLifecycleEnd>,
+}
 
 /// Where an ended task leaves its installation for the application: one
 /// place, written once by the task and read once by the application's
@@ -262,7 +276,8 @@ type EndSender<T> = oer_portable_memory::WakingSpscSender<'static, T, 1>;
 /// The application's side of an [`EndHome`].
 pub(crate) type EndReceiver<T> = oer_portable_memory::WakingSpscReceiver<'static, T, 1>;
 
-static STATION_END: StaticCell<EndHome<StationInstallationEnd>> = StaticCell::new();
+static STATION_END: StaticCell<EndHome<wifi::DatapathEnd<binding::Binding>>> = StaticCell::new();
+static STATION_LIFECYCLE_END: StaticCell<EndHome<Option<StationLifecycleEnd>>> = StaticCell::new();
 
 /// Split a home for an ended task's installation out of `cell`.
 pub(crate) fn end_home<T>(
@@ -294,7 +309,7 @@ pub(crate) async fn ended<T>(home: &mut Option<EndReceiver<T>>) -> Option<T> {
 /// and the home its end goes to.
 pub(crate) struct Datapath {
     datapath: wifi::Datapath<binding::Binding>,
-    home: EndSender<StationInstallationEnd>,
+    home: EndSender<wifi::DatapathEnd<binding::Binding>>,
 }
 
 /// The datapath actor's task, on the station's executor. The station's
@@ -311,13 +326,11 @@ pub(crate) async fn datapath(datapath: Datapath) {
     leave(home, end).await;
 }
 
-/// The station lifecycle's task: an ordinary stop ends it; a restart of
-/// the station stays inside the facade; a start the radio refused, a
-/// confirmed stop whose radio release failed, a refused reinstall and an
-/// item a port call could not keep keep their typed causes with the
-/// control, and their installation comes back whole through the datapath
-/// task ([`Station::installation_end`]); every other failure records its
-/// typed cause and resets ([`wifi::failure::LifecycleFailure::resets`]).
+/// The station lifecycle's task: a stop ends it; a restart of the station
+/// stays inside the facade. Every other end keeps its typed cause with the
+/// control ([`Station::stop`]) and resets nothing: an installation that
+/// did not retire comes back whole, the lifecycle's half from here and
+/// the actor's from the datapath task ([`Station::installation_end`]).
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
         runner,
@@ -325,34 +338,12 @@ pub(crate) async fn serve_station(start: StationStart) {
         address,
         nonces,
         aes,
+        home,
     } = start;
     let profile = wifi::Profile::new(&config, address, Callbacks(nonces), aes, STATION_SINK)
         .unwrap_or_else(|error| failure(error));
-    let exit = observed!(Station, runner.run(profile)).await;
-    match exit {
-        wifi::StationExit::Stopped => {}
-        // The start's refusal and how its owners ended stay typed with the
-        // control ([`Station::connect`] answers them): a refused start
-        // resets nothing.
-        wifi::StationExit::Unavailable(_) => {}
-        // The radio stopped and every owner came back; the network's stop
-        // participant was lost. The exit, which the station's control
-        // keeps, records it ([`Station::stop`] answers it); nothing of the
-        // radio failed, so nothing resets.
-        wifi::StationExit::StoppedNetworkLost => {}
-        wifi::StationExit::Failed(failed) if failed.resets() => super::fail_path(
-            oer_portable_diagnostics::name!("wifi-failed"; 32),
-            &oer_portable_diagnostics::DiagPath::of(&failed),
-        ),
-        // A refused reinstall or an item a port call could not keep: the
-        // owners are kept, the cause stays with the control
-        // ([`Station::stop`]), and the installation comes back whole.
-        wifi::StationExit::Failed(_) => {}
-        // The stop was confirmed; the release's typed error stays with the
-        // control ([`Station::stop`] answers it). A leave it posted is never
-        // posted again: resetting would repeat nothing and prove nothing.
-        wifi::StationExit::ReleaseFailed(_) => {}
-    }
+    let end = observed!(Station, runner.run(profile)).await;
+    leave(home, end.lifecycle).await;
 }
 
 /// What a started radio hands the role that runs on it: the resources of
@@ -723,7 +714,12 @@ impl oer_portable_diagnostics::DiagnosticPath for ConnectError {
 pub struct Station {
     control: wifi::Control<'static, Notifies>,
     /// Where the datapath task leaves how the installation ended.
-    end: Option<EndReceiver<StationInstallationEnd>>,
+    end: Option<EndReceiver<wifi::DatapathEnd<binding::Binding>>>,
+    /// Where the lifecycle's task leaves its half.
+    lifecycle_end: Option<EndReceiver<Option<StationLifecycleEnd>>>,
+    /// The halves taken from their homes, until both are here.
+    datapath_half: Option<wifi::DatapathEnd<binding::Binding>>,
+    lifecycle_half: Option<Option<StationLifecycleEnd>>,
     started: bool,
     address: [u8; 6],
     /// How long a stop gives the network to return its receive buffers.
@@ -733,10 +729,9 @@ pub struct Station {
 /// Why a stop did not end with the station stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StopError {
-    /// The station ended by a failure: a refused reinstall or an item a
-    /// port call could not keep, whose installation comes back whole
-    /// ([`Station::installation_end`]); any other failure the library
-    /// records before it resets the chip.
+    /// The station ended by a failure, typed with the control; nothing
+    /// resets, and an installation that did not retire comes back whole
+    /// ([`Station::installation_end`]).
     Failed,
     /// The station stopped, and its radio's release did not complete, for
     /// this cause. A leave the release posted is never posted again.
@@ -785,6 +780,7 @@ impl Station {
     ) -> Result<(Self, NetStatus), Error> {
         let aes = aes.engine(boot)?;
         let (home, end) = end_home(&STATION_END)?;
+        let (lifecycle_home, lifecycle_end) = end_home(&STATION_LIFECYCLE_END)?;
         let started = start_radio(wifi, boot)?;
         let address = started.resources.address;
         let nonces = started.nonces;
@@ -801,6 +797,7 @@ impl Station {
             address,
             nonces,
             aes,
+            home: lifecycle_home,
         });
         boot.device = Some(Device {
             network: Some((network, transmit, stopper)),
@@ -811,6 +808,9 @@ impl Station {
             Self {
                 control,
                 end: Some(end),
+                lifecycle_end: Some(lifecycle_end),
+                datapath_half: None,
+                lifecycle_half: None,
                 started: false,
                 address,
                 drain: config.drain,
@@ -897,14 +897,36 @@ impl Station {
         }
     }
 
-    /// How the station's installation ended, once the datapath task ended:
-    /// a retire, no installation, or the installation that did not retire,
-    /// whole ([`wifi::DatapathEnd::Unfinished`]: the actor with its port,
-    /// the item a port call could not keep, an attempt returned
-    /// unaccepted, the cleanup's receipt, the cause and the phase), which
-    /// the application holds from here. `None` once taken.
+    /// How the station's installation ended, once both its tasks ended:
+    /// the datapath actor's half (a retire, no installation, or the
+    /// installation that did not retire, whole:
+    /// [`wifi::DatapathEnd::Unfinished`], the actor with its port, the item
+    /// a port call could not keep, an attempt returned unaccepted, the
+    /// cleanup's receipt, the cause and the phase) and the lifecycle's half
+    /// of an installation that did not retire (its station, places,
+    /// arbiter, issuer and contexts), which the application holds from
+    /// here. `None` once taken.
+    ///
+    /// Each half moves from its home into this handle as it comes, so a
+    /// wait that ends early keeps what it took for the next call.
     pub async fn installation_end(&mut self) -> Option<StationInstallationEnd> {
-        ended(&mut self.end).await
+        if self.datapath_half.is_none() {
+            self.datapath_half = ended(&mut self.end).await;
+        }
+        if self.lifecycle_half.is_none() {
+            self.lifecycle_half = ended(&mut self.lifecycle_end).await;
+        }
+        match (self.datapath_half.take(), self.lifecycle_half.take()) {
+            (Some(datapath), Some(lifecycle)) => Some(StationInstallationEnd {
+                datapath,
+                lifecycle,
+            }),
+            (datapath, lifecycle) => {
+                self.datapath_half = datapath;
+                self.lifecycle_half = lifecycle;
+                None
+            }
+        }
     }
 
     /// The link's state and epoch now.

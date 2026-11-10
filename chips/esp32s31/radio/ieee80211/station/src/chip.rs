@@ -538,6 +538,8 @@ pub struct StationRunner<W: Binding> {
     >,
     /// The installation mailbox the actor's task fills.
     pub(crate) news: oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
+    /// Tells the actor's task that the lifecycle ended without retiring it.
+    pub(crate) abandon: radio::Abandon,
     /// Publishes the exit to Control once it is final.
     pub(crate) stop: crate::StopGuard<'static, StationExit>,
 }
@@ -630,7 +632,7 @@ pub fn station<W: Binding>(
         events,
         status: control.status_reader(),
     });
-    let (places, actor, news) = storage.actor.split();
+    let (places, actor, news, abandon) = storage.actor.split();
     let crate::ActorConnection {
         network_stop,
         transmit,
@@ -683,6 +685,7 @@ pub fn station<W: Binding>(
                 },
                 actor,
                 news,
+                abandon,
                 stop,
             },
         },
@@ -697,7 +700,9 @@ impl<W: Binding> Datapath<W> {
     }
 }
 impl<W: Binding> StationRunner<W> {
-    pub async fn run(self, profile: Profile<W>) -> StationExit {
+    /// Run the station's lifecycle: its exit, and the lifecycle's half of
+    /// an installation that did not retire.
+    pub async fn run(self, profile: Profile<W>) -> service::StationEnd<W> {
         service::serve(self, profile).await
     }
 }

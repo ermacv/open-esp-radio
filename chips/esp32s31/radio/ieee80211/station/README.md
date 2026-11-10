@@ -158,13 +158,24 @@ two ways:
   (`unfinished::Phase`: `Running`, `Stopping`, `Stopped`, `Reinstalling`,
   `Releasing`). Nothing of it is dropped on the way.
 
-The station's datapath task returns `DatapathEnd` (`Retired`,
-`NotInstalled`, or `Unfinished(UnfinishedStationOf<W>)`, cause
-`DatapathCause`): a fault of the actor (`Running`), a refused cleanup or
-reinstall after a restart, or TSF epochs used up (`Reinstalling`), an item
-the actor could not keep at its retire (`Stopped`, no release), a refused
-release (`Releasing`). The station's task returns its `StationExit` alone;
-its news carries causes, never owners.
+The station's installation has two halves, and an unfinished one returns
+both. The datapath task returns `DatapathEnd` (`Retired`, `NotInstalled`,
+or `Unfinished(UnfinishedStationOf<W>)`, cause `DatapathCause`): a fault of
+the actor or the lifecycle's end without retiring it (`Lifecycle`: a stop
+or retune that proved nothing, a broken contract), each in the phase the
+actor's radio read (`Actor::radio_phase`: a stop asked for and not
+confirmed is `Stopping`), a refused cleanup or reinstall after a restart,
+or TSF epochs used up (`Reinstalling`), an item the actor could not keep at
+its retire (`Stopped`, no release), a refused release (`Releasing`). The
+station's task returns `StationEnd`: its `StationExit` and, unless the
+radio's release or the restart's reinstall completed, its lifecycle's half
+(`UnfinishedLifecycle`: the retired station, places, arbiter, issuer and
+contexts). That half stays in the place its lifecycle ran in until the
+actor's task told how the end settled; only a completed release or
+reinstall ends it and frees the place for the next installation, and any
+other end moves it whole to its own home (`Placed::move_to`), so the place
+is never reused while the half is in it. The news carries causes, never
+owners.
 
 The access point's runner returns `AccessPointEnd::Ended(ApExit)` after a
 completed retire (or a run that never installed), or
@@ -176,12 +187,10 @@ item that finds the home full stays with the runner and ends the retire in
 `Stopping`. With the stop confirmed and items out no release runs
 (`Stopped`); a refusal the release does not repeat ends in `Releasing`.
 
-The application's `wifi::Station::installation_end` and
-`wifi::AccessPoint::installation_end` hand that value over once its task
-ended. A refused reinstall and an item a port call could not keep reset
-nothing (`LifecycleFailure::resets`); the station's other failures still
-record their cause and reset under the registered terminal policy of the
-app's `fail_path`.
+The application's `wifi::Station::installation_end` (both halves, once
+both tasks ended) and `wifi::AccessPoint::installation_end` hand that value
+over. No end of an installation resets the chip: every `StationExit` keeps
+its typed cause with the control.
 
 Owners a failed step does not return stay quarantined in their static
 backing.

@@ -333,6 +333,39 @@ impl<K> Radio<K> {
     }
 }
 
+/// How far the actor's radio came, as an end reads it
+/// ([`Actor::radio_phase`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RadioPhase {
+    /// Stopped: before its first start, after a refused start, or after a
+    /// stop the port confirmed.
+    Stopped,
+    /// Starting or running, with no stop asked for; a retune whose stop
+    /// confirmed starts on its new channel.
+    Running,
+    /// A stop was asked for and the port has not confirmed it: a stop by
+    /// its deadline, a retune before its stop confirmed, or a refused
+    /// start's stop the port still owes.
+    Stopping,
+}
+
+impl<K> Radio<K> {
+    /// The phase this state reports.
+    const fn phase(&self) -> RadioPhase {
+        match self {
+            Self::Stopped | Self::Draining { .. } | Self::Returning | Self::Halted => {
+                RadioPhase::Stopped
+            }
+            Self::Starting(_) | Self::Running | Self::Retuning { stopped: true, .. } => {
+                RadioPhase::Running
+            }
+            Self::Unstopped | Self::Retuning { stopped: false, .. } | Self::Stopping { .. } => {
+                RadioPhase::Stopping
+            }
+        }
+    }
+}
+
 /// How far the network side's stop came.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum NetworkStopping {
@@ -676,6 +709,12 @@ where
     /// was confirmed.
     pub const fn network_lost(&self) -> bool {
         matches!(self.network_stopping, NetworkStopping::Lost)
+    }
+
+    /// How far the radio came, read when the run ended: an end on a fault
+    /// during a stop reports [`RadioPhase::Stopping`], not a running radio.
+    pub const fn radio_phase(&self) -> RadioPhase {
+        self.radio.phase()
     }
 
     /// The port, for its owner once the run retired it: the actor no

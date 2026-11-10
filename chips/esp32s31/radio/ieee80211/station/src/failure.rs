@@ -593,10 +593,10 @@ pub enum CleanupCause {
     /// runner's caller.
     Unkept,
 }
-/// Why the station's lifecycle, or the datapath actor under it, ended
-/// with a cause the image records before it resets. A restart of the
-/// station never ends here: it reinstalls the port and builds the service
-/// again.
+/// Why the station's lifecycle, or the datapath actor under it, ended on a
+/// failure. Nothing resets for it: the installation comes back whole, both
+/// halves ([`crate::unfinished`]). A restart of the station never ends
+/// here: it reinstalls the port and builds the service again.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LifecycleFailure {
     /// The radio did not start on its first channel; a refused retune
@@ -623,19 +623,6 @@ pub enum LifecycleFailure {
     /// keep: it stays with the actor, which makes no port call after it.
     Unkept,
 }
-impl LifecycleFailure {
-    /// Whether the image records this failure and resets: under the
-    /// registered terminal policy of the station's exits
-    /// (`tools/test/layers/terminal-sites.toml`, the app's `fail_path`).
-    /// A refused reinstall and an item a port call could not keep are
-    /// handled outcomes with kept owners: their installation comes back
-    /// whole from the datapath actor's task ([`crate::unfinished`]) and
-    /// nothing resets for them.
-    pub const fn resets(&self) -> bool {
-        !matches!(self, Self::Reinstall(_) | Self::Unkept)
-    }
-}
-
 /// Why the port did not reinstall after the station's restart.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReinstallCause {

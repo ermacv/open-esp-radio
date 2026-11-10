@@ -246,26 +246,3 @@ fn a_phy_refusal_keeps_its_name_through_the_conversion() {
         }
     );
 }
-
-/// A refused reinstall and an item a port call could not keep keep their
-/// owners: their installation comes back whole and nothing resets; every
-/// other failure still resets under the registered policy.
-#[test]
-fn a_refused_reinstall_and_an_unkept_item_do_not_reset() {
-    let handled = [
-        LifecycleFailure::Reinstall(ReinstallCause::Resources),
-        LifecycleFailure::Reinstall(ReinstallCause::Epochs),
-        LifecycleFailure::Reinstall(ReinstallCause::Cleanup(CleanupCause::Unkept)),
-        LifecycleFailure::Unkept,
-    ];
-    for failure in handled {
-        assert!(!failure.resets(), "{failure:?} resets nothing");
-    }
-    let resetting = [
-        LifecycleFailure::Mailbox,
-        LifecycleFailure::Port(BackendFault::Abandoned),
-    ];
-    for failure in resetting {
-        assert!(failure.resets(), "{failure:?} resets");
-    }
-}

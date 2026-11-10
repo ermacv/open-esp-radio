@@ -8,7 +8,24 @@
 //! port, the items a port call could not keep, an attempt a call returned
 //! unaccepted, the cleanup's removal receipt, the cause and the phase the
 //! end reached. Nothing of it is dropped on the way: the composition
-//! returns it to its caller, the application, which holds it.
+//! returns it to its caller, the application, which holds it. The
+//! station's installation has two halves, both returned: the datapath
+//! actor's (this value) and the station lifecycle's (its retired
+//! lifecycle: station, places, arbiter, issuer and contexts).
+//!
+//! The lifecycle's half leaves the place its lifecycle ran in before that
+//! place is reused: a half still held there keeps the place borrowed, so
+//! the next installation cannot take it.
+//!
+//! ```compile_fail,E0499
+//! use core::mem::MaybeUninit;
+//! use oer_portable_memory::Placed;
+//! let mut place = MaybeUninit::<u32>::uninit();
+//! let half = Placed::init(&mut place, |p| p.write(1));
+//! // The next installation, while the unfinished half is in the place.
+//! let next = Placed::init(&mut place, |p| p.write(2));
+//! drop((half, next));
+//! ```
 
 /// How far the end of an unfinished installation came.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -17,9 +34,10 @@ pub enum Phase {
     /// own end (a fault, a broken contract, an item a port call could not
     /// keep). The radio's stop was not asked for.
     Running,
-    /// The radio's stop was asked for and is not confirmed: the stop's
-    /// watch returned with an item a port call could not keep, and its
-    /// home had no room for it.
+    /// The radio's stop was asked for and is not confirmed: the run ended
+    /// during the stop (the actor's fault, an unconfirmed stop or retune,
+    /// the lifecycle's end), or the access point's stop watch returned with
+    /// an item a port call could not keep and its home had no room for it.
     Stopping,
     /// The radio's stop is confirmed and no release ran: items a port call
     /// could not keep are out, which the release would retire with the
@@ -31,6 +49,21 @@ pub enum Phase {
     /// The radio's release refused or its posted leave ended unanswered:
     /// the port keeps its radio, or what is left of it.
     Releasing,
+}
+
+impl Phase {
+    /// The phase of an actor's end that its radio read
+    /// ([`oer_protocols_ieee80211_runtime::datapath::Actor::radio_phase`]): a stop
+    /// asked for and not confirmed is [`Self::Stopping`], whatever ended
+    /// the actor.
+    pub const fn of_radio(radio: oer_protocols_ieee80211_runtime::datapath::RadioPhase) -> Self {
+        use oer_protocols_ieee80211_runtime::datapath::RadioPhase;
+        match radio {
+            RadioPhase::Running => Self::Running,
+            RadioPhase::Stopping => Self::Stopping,
+            RadioPhase::Stopped => Self::Stopped,
+        }
+    }
 }
 
 /// An installation that did not end in a completed retire, whole.

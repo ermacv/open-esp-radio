@@ -369,6 +369,9 @@ impl<W: Binding> crate::station_end::Installation for PlacedActor<W> {
     fn take_unaccepted(&mut self) -> Option<Self::Unaccepted> {
         Actor::take_unaccepted(self)
     }
+    fn radio_phase(&self) -> oer_protocols_ieee80211_runtime::datapath::RadioPhase {
+        Actor::radio_phase(self)
+    }
 }
 
 /// What the station's port's cleanup freed: its removal receipt (a slot
@@ -388,6 +391,7 @@ pub(crate) struct ActorStorage<W: Binding> {
     link: WakingSpscQueue<ActorLink<'static, ActorPort<W>>, 1>,
     link_return: WakingSpscQueue<LinkReturn, 1>,
     mailbox: WakingSpscQueue<News<W>, 1>,
+    abandon: WakingSpscQueue<crate::failure::LifecycleFailure, 1>,
 }
 impl<W: Binding> ActorStorage<W> {
     pub(crate) const fn new() -> Self {
@@ -402,6 +406,7 @@ impl<W: Binding> ActorStorage<W> {
             link: WakingSpscQueue::new(),
             link_return: WakingSpscQueue::new(),
             mailbox: WakingSpscQueue::new(),
+            abandon: WakingSpscQueue::new(),
         }
     }
     /// The actor's side and the lifecycle's side.
@@ -411,6 +416,7 @@ impl<W: Binding> ActorStorage<W> {
         ActorPlaces<W>,
         ActorEnds<'static, 'static, ActorPort<W>, TO, FROM, RETURNS>,
         WakingSpscReceiver<'static, News<W>, 1>,
+        Abandon,
     ) {
         let (to_actor, to_actor_end) = self.to_actor.split();
         let (parcels, parcels_end) = self.parcels.split();
@@ -420,6 +426,7 @@ impl<W: Binding> ActorStorage<W> {
         let (link, link_end) = self.link.split();
         let (link_return_end, link_return) = self.link_return.split();
         let (mailbox, news) = self.mailbox.split();
+        let (abandon, abandoned) = self.abandon.split();
         (
             ActorPlaces {
                 actor: &mut self.actor,
@@ -434,6 +441,7 @@ impl<W: Binding> ActorStorage<W> {
                     link_return: link_return_end,
                 },
                 mailbox,
+                abandoned,
             },
             ActorEnds {
                 to_actor,
@@ -445,9 +453,16 @@ impl<W: Binding> ActorStorage<W> {
                 link_return,
             },
             news,
+            abandon,
         )
     }
 }
+
+/// The station lifecycle's end of the abandon place: a lifecycle that
+/// ended on its failure without retiring the actor tells the actor's task
+/// once, which then ends with the installation
+/// ([`DatapathCause::Lifecycle`](crate::station_end::DatapathCause::Lifecycle)).
+pub(crate) type Abandon = WakingSpscSender<'static, crate::failure::LifecycleFailure, 1>;
 
 /// The actor task's places and its ends to the lifecycle.
 pub(crate) struct ActorPlaces<W: Binding> {
@@ -455,6 +470,8 @@ pub(crate) struct ActorPlaces<W: Binding> {
     receive: &'static mut oer_portable_memory::StaticPlace<RxBlockAcks<W>>,
     lifecycle: LifecycleEnds<'static, 'static, ActorPort<W>, TO, FROM, RETURNS>,
     mailbox: WakingSpscSender<'static, News<W>, 1>,
+    /// Where the lifecycle tells that it ended without retiring the actor.
+    abandoned: WakingSpscReceiver<'static, crate::failure::LifecycleFailure, 1>,
 }
 
 /// The actor task's ends to the network stack.
@@ -484,7 +501,7 @@ pub(crate) async fn drive<W: Binding>(
     observer: W::Observer,
     sink: W::Sink,
 ) -> DatapathEnd<W> {
-    use crate::station_end::{DatapathCause, unfinished};
+    use crate::station_end::{DatapathCause, ended_running, unfinished};
     use crate::unfinished::Phase;
     let Datapath {
         boot,
@@ -496,6 +513,7 @@ pub(crate) async fn drive<W: Binding>(
         receive,
         mut lifecycle,
         mut mailbox,
+        mut abandoned,
     } = places;
     let Some(mut installations) = W::take_installations() else {
         post(
@@ -561,7 +579,21 @@ pub(crate) async fn drive<W: Binding>(
     post(&mut mailbox, News::Installed(commands, tokens)).await;
     let mut epoch = FIRST_TSF_EPOCH;
     loop {
-        match actor.run(&mut lifecycle, &mut network, &EmbassyClock).await {
+        // The run stops between its polls when the lifecycle ended without
+        // retiring it: every poll of the run is synchronous over the actor,
+        // which keeps its state, its port and every owner.
+        let run = actor.run(&mut lifecycle, &mut network, &EmbassyClock);
+        let either = embassy_futures::select::select(run, abandoned_by(&mut abandoned)).await;
+        let end = match either {
+            embassy_futures::select::Either::First(end) => end,
+            embassy_futures::select::Either::Second(failure) => {
+                return DatapathEnd::Unfinished(ended_running(
+                    actor,
+                    DatapathCause::Lifecycle(failure),
+                ));
+            }
+        };
+        match end {
             ActorEnd::Reinstall => {
                 let Some(next) = epoch.checked_add(1) else {
                     let cause = crate::failure::ReinstallCause::Epochs;
@@ -618,15 +650,27 @@ pub(crate) async fn drive<W: Binding>(
             }
             // The lifecycle hears the fault and ends with it; the
             // installation comes back with every owner the actor holds.
+            // Its phase is the radio's when the fault ended the run: a fault
+            // during a stop leaves it stopping.
             ActorEnd::Faulted(fault) => {
-                return DatapathEnd::Unfinished(unfinished(
+                return DatapathEnd::Unfinished(ended_running(
                     actor,
-                    None,
                     DatapathCause::Faulted(crate::failure::convert::actor_fault(fault)),
-                    Phase::Running,
                 ));
             }
         }
+    }
+}
+
+/// The lifecycle's failure once it ended without retiring the actor.
+async fn abandoned_by(
+    abandoned: &mut WakingSpscReceiver<'static, crate::failure::LifecycleFailure, 1>,
+) -> crate::failure::LifecycleFailure {
+    loop {
+        if let Some(failure) = abandoned.try_receive() {
+            return failure;
+        }
+        abandoned.ready().await;
     }
 }
 
