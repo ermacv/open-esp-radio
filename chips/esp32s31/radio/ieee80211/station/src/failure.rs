@@ -622,6 +622,10 @@ pub enum LifecycleFailure {
     /// A port call returned an item it could neither give the actor nor
     /// keep: it stays with the actor, which makes no port call after it.
     Unkept,
+    /// The port did not accept a submission for want of its right to hand
+    /// out the attempt's terminal: the attempt stays with the actor, which
+    /// runs no turn after it.
+    Unaccepted,
 }
 /// Why the port did not reinstall after the station's restart.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

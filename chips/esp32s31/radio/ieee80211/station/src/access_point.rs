@@ -662,6 +662,7 @@ impl<W: Binding> AccessPointRunner<W> {
             // The retire takes the item from the runner, and the stop's
             // watch goes on.
             ApEnd::Unkept => (ApEnded::Unkept, Stop::Owed),
+            ApEnd::Unaccepted => (ApEnded::Unaccepted, Stop::Owed),
         };
         match crate::access_point_end::retire(
             &slot.ended,

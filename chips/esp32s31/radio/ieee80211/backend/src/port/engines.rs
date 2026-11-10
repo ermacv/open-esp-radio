@@ -28,8 +28,8 @@ use oer_protocols_ieee80211_contracts_port::{
     PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed, PortCommands,
     PortCompleted, PortRxBuffer, PortRxPull, PortSink, ReceiveAccounting, ReceiveOperation,
     RecycleRefused, RxPull, StartFailure, StartRefused, StationSubmission, StopCause,
-    StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts, Unconsumed, UnconsumedRefused,
-    Unkeeping,
+    StopObservations, StopUnconfirmed, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts,
+    Unconsumed, UnconsumedRefused, Unkeeping,
 };
 use oer_protocols_radio_port::{Installation as Receipt, Installations, Minted};
 
@@ -1050,6 +1050,18 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     #[cfg(test)]
     pub(crate) fn refuse_keeps_for_test(&mut self, count: usize) {
         self.unconsumed.refuse_keeps = count;
+    }
+
+    /// Lose the call place's right, as a producer that dropped it would.
+    #[cfg(test)]
+    pub(crate) fn lose_right_for_test(&mut self) {
+        self.unkept.lose_right_for_test();
+    }
+
+    /// Give the call place its right back, as a settle that freed it does.
+    #[cfg(test)]
+    pub(crate) fn restore_right_for_test(&mut self) {
+        self.unkept.restore_right_for_test();
     }
 
     /// How many attempts wait in the queues, and how many completions a
@@ -2316,7 +2328,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 {
     /// The answer of a producing call, beside the one item it could not
     /// keep, if any: the call accepted its input, and its own answer
-    /// stands. The call's right ends here ([`unconsumed::CallPlace::settle`]).
+    /// stands. A held item leaves the place here, which makes the next
+    /// right ([`unconsumed::CallPlace::settle`]).
     fn answer<I, R>(&mut self, answer: R) -> PortAnswer<'id, Types<Id, D, B, O>, I, R> {
         match self.unkept.settle() {
             Some(item) => Err(Unkeeping {
@@ -2569,6 +2582,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             return Err(CleanupRefused::NotStopped);
         }
         self.check().map_err(CleanupRefused::Faulted)?;
+        // Completions a halted call left with the driver go home first,
+        // each under the place's right: software only, no hardware call. A
+        // refused one fills the place and the rest stay with the driver.
+        let (driver, _device, mut env) = self.parts(sink);
+        let mut none = driver.completion_sink();
+        if let Err(fault) = driver.collect(&mut env, &mut none, true) {
+            return Err(CleanupRefused::Faulted(self.record(fault)));
+        }
         // The cleanup's result is the owner's, never the port's recorded
         // fault: a later call goes on from where it stands, writing nothing
         // it wrote before.
@@ -2673,7 +2694,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> PortAnswer<'id, Self::Types, (), Result<Option<PortCompleted<'id, Self>>, Self::Fault>>
     {
-        self.unkept.open();
         let served = self.served_tx(tx, tbtt, now, sink);
         self.answer(served)
     }
@@ -2711,12 +2731,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         attempt: Self::Admitted,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<'id, Self::Types, Self::Admitted, Result<(), SubmitRefusal>> {
-        // The call's right covers the attempt's own terminal: what the port
-        // kept is offered again and stays in its own place when refused.
-        let vacancy = self.unkept.begin();
+    ) -> SubmitAnswer<'id, Self::Types, Self::Admitted> {
+        // The place's right covers the attempt's own terminal: what the
+        // port kept is offered again and stays in its own place when
+        // refused. Without the right the port takes nothing of the attempt.
+        let Some(vacancy) = self.unkept.vacancy() else {
+            return Err(SubmitHalt::NotAccepted(attempt));
+        };
         let submitted = self.submitted(attempt, vacancy, now, sink);
-        self.answer(submitted)
+        self.answer(submitted).map_err(SubmitHalt::Unkeeping)
     }
 
     fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, Self::Fault> {
@@ -2863,7 +2886,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         PortCommand<'id, Self::Types, Self::Caps>,
         Result<CommandProgress<'id, Self::Types, Self::Caps>, PortCommandFailed<'id, Self>>,
     > {
-        self.unkept.open();
         let ran = self.ran(command, now, sink);
         self.answer(ran)
     }
@@ -3040,7 +3062,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
-        self.unkept.open();
         let cleaned = self.cleaned(sink);
         self.answer(cleaned)
     }

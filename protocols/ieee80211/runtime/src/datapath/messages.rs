@@ -361,6 +361,10 @@ pub enum ActorFault<F> {
     /// keep: the item stays with the actor ([`Actor::take_unkept`]), which
     /// makes no port call that takes owners while it keeps it.
     Unkept,
+    /// The port did not accept a submission for want of its right to hand
+    /// out the attempt's terminal: the attempt stays with the actor
+    /// ([`Actor::take_unaccepted`]), which runs no turn while it keeps it.
+    Unaccepted,
 }
 
 /// A broken contract the actor names.

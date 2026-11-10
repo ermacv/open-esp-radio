@@ -91,7 +91,8 @@ pub use data_port::{
     CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, Input,
     PortAnswer, PortArena, PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
     RxPull, StartFailure, StartRefused, StationSubmission, StopCause, StopObservations,
-    StopUnconfirmed, SubmitRefusal, TxFacts, Unconsumed, UnconsumedRefused, Unkeeping, Unkept,
+    StopUnconfirmed, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts, Unconsumed,
+    UnconsumedRefused, Unkeeping, Unkept,
 };
 mod layout;
 pub use layout::{

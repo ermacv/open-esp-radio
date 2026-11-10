@@ -873,6 +873,7 @@ where
                 network: end,
             } => self.stop(deadline, end, lifecycle, network)?,
             ToActor::Retire if matches!(self.radio, Radio::Returning) => {
+                self.finishing = true;
                 if self.pairwise.is_some() {
                     return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
                 }
@@ -881,6 +882,7 @@ where
                 self.retiring = true;
             }
             ToActor::Retire | ToActor::Reinstall => {
+                self.finishing = true;
                 if !matches!(self.radio, Radio::Halted | Radio::Stopped) {
                     // Only a stopped radio retires: the lifecycle stops it
                     // first.
@@ -1459,9 +1461,16 @@ where
     ) {
         // A refused recycle is final: its unit stays kept, so no restart.
         // So is an unkept item: it stays kept, and no port call follows.
+        // And any fault after the lifecycle's last message: the lifecycle
+        // ended and hears no recovery, so nothing would restart.
         if !self.recovering
-            && !matches!(fault, ActorFault::Receive(_) | ActorFault::Unkept)
+            && !self.finishing
+            && !matches!(
+                fault,
+                ActorFault::Receive(_) | ActorFault::Unkept | ActorFault::Unaccepted
+            )
             && self.retained.unkept.is_none()
+            && self.retained.unaccepted.is_none()
             && self.port.recover_for_stop()
             && lifecycle
                 .from_actor

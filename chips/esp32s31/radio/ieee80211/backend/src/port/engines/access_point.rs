@@ -712,7 +712,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         ApCmd<'id, Id, D, B, O>,
         Result<ApProgress<'id, Id, D, B, O>, AccessPointCommandFailed<'id, Self>>,
     > {
-        self.unkept.open();
         let ran = self.access_point_ran(command, now, sink);
         self.answer(ran)
     }

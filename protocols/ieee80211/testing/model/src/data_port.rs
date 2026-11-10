@@ -35,7 +35,8 @@ use oer_protocols_ieee80211_contracts_port::{
     LendRefused, PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed,
     PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull,
     StartFailure, StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed,
-    SubmitRefusal, TxFacts, Unconsumed, UnconsumedRefused, Unkeeping, Unkept,
+    SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts, Unconsumed, UnconsumedRefused, Unkeeping,
+    Unkept,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
@@ -1560,12 +1561,12 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         attempt: ModelAdmitted<Id, C, X>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<'id, Self::Types, ModelAdmitted<Id, C, X>, Result<(), SubmitRefusal>> {
+    ) -> SubmitAnswer<'id, Self::Types, ModelAdmitted<Id, C, X>> {
         if let Some(unkept) = self.unkept_before_acceptance(sink) {
-            return Err(Unkeeping {
+            return Err(SubmitHalt::Unkeeping(Unkeeping {
                 unkept,
                 input: Input::NotAccepted(attempt),
-            });
+            }));
         }
         #[allow(
             clippy::redundant_closure_call,
@@ -1655,7 +1656,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             self.refresh_deadline(now);
             Ok(())
         })();
-        self.answer(answer)
+        self.answer(answer).map_err(SubmitHalt::Unkeeping)
     }
 
     fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, ModelPortFault> {

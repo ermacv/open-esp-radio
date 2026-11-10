@@ -1124,6 +1124,35 @@ fn a_fault_the_port_stops_past_asks_for_a_restart_and_the_next_ends_the_actor() 
     });
 }
 
+/// A fault the port could stop past, after the lifecycle's last message
+/// (a retire of a radio still running): the lifecycle ended and waits only
+/// for the actor task's end, so no restart follows. The run ends on the
+/// fault, told once, instead of recovering unheard.
+#[test]
+fn a_fault_after_the_lifecycles_last_message_ends_the_actor_without_a_recovery() {
+    bench(|bench| {
+        bench.start();
+        while bench.next().is_some() {}
+        bench.air.allow_recovery();
+        bench.send(ToActor::Retire);
+        assert_eq!(
+            bench.end,
+            Some(ActorEnd::Faulted(ActorFault::Contract(
+                ActorViolation::RetireRunning
+            )))
+        );
+        let mut told = Vec::new();
+        while let Some(message) = bench.next() {
+            told.push(matches!(message, FromActor::Faulted(_)));
+            assert!(
+                !matches!(message, FromActor::Recovering(_)),
+                "no recovery after the lifecycle's end"
+            );
+        }
+        assert_eq!(told, [true], "the fault is told once");
+    });
+}
+
 #[test]
 fn a_port_recovering_sends_nothing_new_however_late_the_stop_comes() {
     bench(|bench| {

@@ -282,6 +282,34 @@ pub type CommandAnswer<'id, P> = PortAnswer<
     >,
 >;
 
+/// Why [`DataPort::submit`] gave no answer of its own: the [`Unkept`] it
+/// stopped on beside its attempt or its answer, or its attempt, never
+/// accepted, when the port had no right to hand out the attempt's
+/// terminal.
+#[must_use = "an unkept item and an unaccepted attempt hold owners"]
+pub enum SubmitHalt<'id, T: PortTypes<'id>, A> {
+    /// The call stopped on an item it could neither give its sink nor keep.
+    Unkeeping(Unkeeping<'id, T, A, Result<(), SubmitRefusal>>),
+    /// The port held no right to hand out the attempt's terminal, so it did
+    /// not accept the attempt: the attempt, whole, with every owner it
+    /// carries. Nothing ran and the port keeps nothing new.
+    NotAccepted(A),
+}
+
+/// Names the halt, not its owners.
+impl<'id, T: PortTypes<'id>, A> core::fmt::Debug for SubmitHalt<'id, T, A> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Unkeeping(unkeeping) => f.debug_tuple("Unkeeping").field(unkeeping).finish(),
+            Self::NotAccepted(_) => f.write_str("SubmitHalt::NotAccepted"),
+        }
+    }
+}
+
+/// The answer of [`DataPort::submit`] with the attempt `A`: its own answer,
+/// or why it gave none ([`SubmitHalt`]).
+pub type SubmitAnswer<'id, T, A> = Result<Result<(), SubmitRefusal>, SubmitHalt<'id, T, A>>;
+
 /// What [`DataPort::take_unconsumed`] left with the port.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Unconsumed {
@@ -306,8 +334,8 @@ pub enum UnconsumedRefused {
 pub enum CleanupRefused<F> {
     /// The radio has not confirmed a stop: nothing was done.
     NotStopped,
-    /// The port holds the backend's contract fault: nothing was done, and
-    /// the port does not retire.
+    /// The port holds the backend's contract fault: the cleanup wrote
+    /// nothing to the hardware, and the port does not retire.
     Faulted(F),
     /// The cleanup's next step cannot run now, for the backend's cause:
     /// that step wrote nothing, and a later call takes it.
@@ -702,15 +730,17 @@ pub trait DataPort<'id> {
     ///
     /// # Errors
     ///
-    /// An item the call could neither give `sink` nor keep ([`Unkeeping`]):
-    /// found before the attempt was accepted, the attempt comes back whole;
-    /// after, the answer.
+    /// An item the call could neither give `sink` nor keep
+    /// ([`SubmitHalt::Unkeeping`]): found before the attempt was accepted,
+    /// the attempt comes back whole; after, the answer. A port without the
+    /// right to hand out the attempt's terminal returns the attempt whole,
+    /// unaccepted ([`SubmitHalt::NotAccepted`]).
     fn submit(
         &mut self,
         attempt: Self::Admitted,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<'id, Self::Types, Self::Admitted, Result<(), SubmitRefusal>>;
+    ) -> SubmitAnswer<'id, Self::Types, Self::Admitted>;
 
     /// One received unit, while the caller holds fewer than `room`.
     ///

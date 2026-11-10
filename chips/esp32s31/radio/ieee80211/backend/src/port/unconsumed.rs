@@ -45,14 +45,16 @@ pub(super) enum Item<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, 
 /// is, with the driver or the caller. Handing out the item consumes the
 /// right: given or kept, it comes back; held, it ends in the place.
 ///
-/// It is created only by [`CallPlace::begin`], once per call, and is
-/// neither `Clone` nor `Copy`: one exists per call, so a held item is never
-/// overwritten and no drop branch exists for a further item.
-#[must_use = "a dropped right halts the rest of the call"]
+/// It is created only where the place is known empty: once with the empty
+/// place ([`CallPlace::new`]), and again only by a [`CallPlace::settle`]
+/// that emptied the place. It is neither `Clone` nor `Copy`: one exists per
+/// place, so a held item is never overwritten and no drop branch exists
+/// for a further item.
+#[must_use = "a dropped right halts the port's calls until a settle frees the place"]
 pub(super) struct Vacancy(());
 
-/// The one place of a port call for an item it could neither give its sink
-/// nor keep, and the call's right to fill it ([`Vacancy`]). The item goes
+/// The one place of the port's calls for an item a call could neither give
+/// its sink nor keep, and the right to fill it ([`Vacancy`]). The item goes
 /// back beside the call's answer ([`Self::settle`]).
 pub(super) struct CallPlace<
     'id,
@@ -68,30 +70,16 @@ pub(super) struct CallPlace<
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     CallPlace<'id, Id, D, B, O>
 {
-    /// An empty place between calls: no right exists until a call begins.
+    /// The empty place, with its first right.
     pub(super) const fn new() -> Self {
         Self {
             item: None,
-            vacancy: None,
+            vacancy: Some(Vacancy(())),
         }
     }
 
-    /// The right of a producing call that begins: the previous call's
-    /// [`Self::settle`] emptied the place, and every right of that call
-    /// ended with it.
-    pub(super) fn begin(&mut self) -> Vacancy {
-        self.vacancy = None;
-        Vacancy(())
-    }
-
-    /// [`Self::begin`], with the right left in the place for the call's
-    /// producers.
-    pub(super) fn open(&mut self) {
-        self.vacancy = Some(self.begin());
-    }
-
-    /// The right to hand out one item, while the call has it: none while
-    /// the place holds an item or another producer holds the right.
+    /// The right to hand out one item, while the place has it: none while
+    /// the place holds an item or a producer holds the right.
     pub(super) fn vacancy(&mut self) -> Option<Vacancy> {
         self.vacancy.take()
     }
@@ -114,10 +102,27 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.item.is_some()
     }
 
-    /// The end of the call: its held item, once, and no right left over.
+    /// The end of the call: its held item, once. Taking it frees the place,
+    /// and only that creates the next right; a place that held nothing
+    /// keeps the right its producers gave back.
     pub(super) fn settle(&mut self) -> Option<Item<'id, Id, D, B, O>> {
+        let item = self.item.take()?;
+        self.vacancy = Some(Vacancy(()));
+        Some(item)
+    }
+
+    /// Drop the place's right, as a producer that lost it would.
+    #[cfg(test)]
+    pub(super) fn lose_right_for_test(&mut self) {
         self.vacancy = None;
-        self.item.take()
+    }
+
+    /// Give an empty place its right back, as a freeing settle does.
+    #[cfg(test)]
+    pub(super) fn restore_right_for_test(&mut self) {
+        if self.item.is_none() {
+            self.vacancy = Some(Vacancy(()));
+        }
     }
 }
 

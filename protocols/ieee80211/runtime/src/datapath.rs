@@ -500,6 +500,10 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     /// The lifecycle retired the actor while the network's return went on:
     /// the actor ends once it came.
     retiring: bool,
+    /// The lifecycle sent its last message (a retire or a reinstall) and
+    /// waits only for how the actor's task ends: no restart follows, so a
+    /// fault the actor would recover from ends the run instead.
+    finishing: bool,
     /// The reply offered to the lifecycle, until it answers.
     reply_out: Option<ReplyPlace>,
     owed: Owed<'id, D>,
@@ -603,6 +607,7 @@ where
             network_stopping: NetworkStopping::NotAsked,
             queued: 0,
             retiring: false,
+            finishing: false,
             reply_out: None,
             owed: Owed::new(),
             facts: Facts::default(),
@@ -674,6 +679,7 @@ where
                 network_stopping: NetworkStopping::NotAsked,
                 queued: 0,
                 retiring: false,
+                finishing: false,
                 reply_out: None,
                 owed: Owed::new(),
                 facts: Facts::default(),
@@ -752,8 +758,9 @@ where
         self.retained.unkept.take()
     }
 
-    /// The attempt a submission returned unaccepted beside its unkept
-    /// item, once.
+    /// The attempt a submission returned unaccepted, beside its unkept
+    /// item or for want of the port's right ([`ActorFault::Unaccepted`]),
+    /// once.
     pub fn take_unaccepted(&mut self) -> Option<<D::Port as DataPort<'id>>::Admitted> {
         self.retained.unaccepted.take()
     }
@@ -826,6 +833,7 @@ where
         self.network_stopping = NetworkStopping::NotAsked;
         self.queued = 0;
         self.retiring = false;
+        self.finishing = false;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract
@@ -901,6 +909,10 @@ where
         // second one meanwhile.
         if self.retained.unkept.is_some() {
             return Poll::Ready(ActorEnd::Faulted(ActorFault::Unkept));
+        }
+        // And an attempt the port did not accept: its owners stay with it.
+        if self.retained.unaccepted.is_some() {
+            return Poll::Ready(ActorEnd::Faulted(ActorFault::Unaccepted));
         }
         let reposted = core::mem::take(&mut self.again);
         let fresh = self.collect_facts(cx);

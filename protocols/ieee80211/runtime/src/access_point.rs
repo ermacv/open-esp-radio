@@ -312,6 +312,11 @@ pub enum ApEnd<F> {
     /// owners while it holds it; its stop goes on in
     /// [`ApRunner::finish_stop`] once the item's owner took it.
     Unkept,
+    /// The port did not accept a submission for want of its right to hand
+    /// out the attempt's terminal: the attempt is in the runner
+    /// ([`ApRunner::take_unaccepted`]), every other owner in its place. The
+    /// port keeps nothing of it, so the stop goes on.
+    Unaccepted,
 }
 
 /// How far a call of [`ApRunner::finish_stop`] watched the radio's stop.
@@ -359,6 +364,9 @@ where
     /// A port call returned an item it could not keep, which the runner
     /// holds ([`ApRunner::take_unkept`]).
     Unkept,
+    /// The port did not accept a submission for want of its right, which
+    /// the runner holds ([`ApRunner::take_unaccepted`]).
+    Unaccepted,
 }
 
 impl<'id, P, C, F> From<Stray<'id, P, C>> for Halt<'id, P, C, F>
@@ -2069,6 +2077,7 @@ where
             Halt::Refused(refusal) => ApEnd::Refused(refusal),
             Halt::Unrecycled(fault) => ApEnd::Unrecycled(fault),
             Halt::Unkept => ApEnd::Unkept,
+            Halt::Unaccepted => ApEnd::Unaccepted,
         }
     }
 
@@ -2641,7 +2650,19 @@ where
         }
         // A refusal's terminal is in the homes. No step runs while an
         // unkept item is here: the place is empty.
-        let (submitted, unkept) = crate::answered(self.port.submit(admitted, now, &mut self.homes));
+        let answer = match self.port.submit(admitted, now, &mut self.homes) {
+            Ok(answer) => Ok(answer),
+            Err(oer_protocols_ieee80211_contracts_port::SubmitHalt::Unkeeping(unkeeping)) => {
+                Err(unkeeping)
+            }
+            // The port had no right to hand out the attempt's terminal: the
+            // attempt stays in the runner, which ends on it.
+            Err(oer_protocols_ieee80211_contracts_port::SubmitHalt::NotAccepted(attempt)) => {
+                self.homes.unaccepted = Some(attempt);
+                return Err(Halt::Unaccepted);
+            }
+        };
+        let (submitted, unkept) = crate::answered(answer);
         if unkept.is_some() {
             self.homes.unkept = unkept;
             if let Input::NotAccepted(attempt) = submitted {

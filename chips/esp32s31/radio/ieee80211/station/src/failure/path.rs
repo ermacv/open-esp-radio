@@ -474,6 +474,7 @@ impl DiagnosticPath for LifecycleFailure {
             }
             Self::Mailbox => path.name("Mailbox"),
             Self::Unkept => path.name("Unkept"),
+            Self::Unaccepted => path.name("Unaccepted"),
         }
     }
 }

@@ -802,6 +802,7 @@ pub(crate) fn actor_fault(
         ActorFault::Contract(violation) => LifecycleFailure::Actor(violation),
         ActorFault::Receive(fault) => LifecycleFailure::Receive(fault),
         ActorFault::Unkept => LifecycleFailure::Unkept,
+        ActorFault::Unaccepted => LifecycleFailure::Unaccepted,
     }
 }
 
@@ -821,6 +822,7 @@ pub(crate) fn restart(
         Failure::Fault(ActorFault::Contract(violation)) => Some(LifecycleFailure::Actor(violation)),
         Failure::Fault(ActorFault::Receive(fault)) => Some(LifecycleFailure::Receive(fault)),
         Failure::Fault(ActorFault::Unkept) => Some(LifecycleFailure::Unkept),
+        Failure::Fault(ActorFault::Unaccepted) => Some(LifecycleFailure::Unaccepted),
         _ => None,
     }
 }

@@ -43,6 +43,10 @@ pub enum ApEnded {
     /// keep; the run made no port call after it, and the retire took the
     /// item before it watched the stop on.
     Unkept,
+    /// The port did not accept a submission for want of its right to hand
+    /// out the attempt's terminal: the attempt is in the runner, and the
+    /// stop goes on.
+    Unaccepted,
 }
 
 /// How the access point ended, or how far its end came; `E` is the
