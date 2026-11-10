@@ -313,6 +313,50 @@ fn a_client_of_another_protocol_is_refused_with_the_reason() {
 }
 
 #[test]
+fn a_client_of_protocol_2_is_refused_at_its_hello_before_any_operation() {
+    // A client built before `Reply::Ready` greets with protocol 2 and sends
+    // its requests at once: the service refuses the hello and ends the
+    // connection, so nothing after it is served.
+    assert_eq!(PROTOCOL, 3);
+    let directory = tempfile::tempdir().unwrap();
+    let fake = Fake::new();
+    let service = open(directory.path(), &fake);
+    let mut stream = service.connect().unwrap();
+    for request in [
+        Request::Hello {
+            protocol: 2,
+            client: "beacon-stamp".to_owned(),
+        },
+        Request::Start {
+            id: 1,
+            operation: command("hold"),
+        },
+    ] {
+        Frame::message(&request)
+            .unwrap()
+            .write(&mut stream)
+            .unwrap();
+    }
+    let Some(Frame::Message(json)) = Frame::read(&mut stream).unwrap() else {
+        panic!("no reply");
+    };
+    let Reply::Refused { reason } = serde_json::from_slice(&json).unwrap() else {
+        panic!("not refused");
+    };
+    assert!(
+        reason.contains("protocol 2") && reason.contains("service 3"),
+        "{reason}"
+    );
+    // The connection ends: its end, or a reset for the request the
+    // service never read, and no reply to the operation.
+    assert!(
+        !matches!(Frame::read(&mut stream), Ok(Some(_))),
+        "a reply after the refusal"
+    );
+    assert!(service.status().holders.is_empty());
+}
+
+#[test]
 fn a_lost_client_releases_nothing_while_its_hardware_work_runs() {
     let directory = tempfile::tempdir().unwrap();
     let fake = Fake::new();
