@@ -9,9 +9,10 @@
 use super::{
     QueueNotify, WakingSpscQueue, WakingSpscReceiver, WakingSpscSendPermit, WakingSpscSender,
 };
-use crate::AffineSpscTrySendError;
-use core::future::poll_fn;
-use core::sync::atomic::{AtomicU8, Ordering};
+use crate::{AffineSpscSender, AffineSpscTrySendError};
+use core::future::{Future, poll_fn};
+use core::pin::Pin;
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering, fence};
 use core::task::{Context, Poll};
 use oer_portable_waker::AtomicWaker;
 
@@ -42,6 +43,11 @@ impl<T> ClosingSpscSendError<T> {
 /// before the permit published.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ClosingSpscClosed<T>(pub T);
+
+/// The consumer closed its reception: a wait for room ends with this, as
+/// no cell it frees is for the producer any more.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ClosingSpscReceptionClosed;
 
 /// Queue storage, its notifies and its reception state.
 pub struct ClosingSpscQueue<T, const DEPTH: usize, C = AtomicWaker, P = AtomicWaker> {
@@ -163,17 +169,103 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> ClosingSpscSender<'_
         Some(ClosingSpscSendPermit { permit, state })
     }
 
-    /// [`WakingSpscSender::poll_room`].
-    pub fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.sender.poll_room(cx)
+    /// [`WakingSpscSender::poll_room`], or the closed reception: the wait
+    /// registers as the waking queue's does, then looks at the reception,
+    /// and the close wakes a registered producer, so a close after the
+    /// check wakes this registration.
+    ///
+    /// # Errors
+    ///
+    /// The consumer closed its reception: no room comes for the producer.
+    pub fn poll_room(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), ClosingSpscReceptionClosed>> {
+        if self.is_closed() {
+            return Poll::Ready(Err(ClosingSpscReceptionClosed));
+        }
+        let room = self.sender.poll_room(cx);
+        // Looked at after the registration and the wait's mark: a close
+        // before it is seen here; one after it sees the mark and wakes.
+        if self.is_closed() {
+            return Poll::Ready(Err(ClosingSpscReceptionClosed));
+        }
+        room.map(Ok)
     }
 
-    /// [`WakingSpscSender::ready`]. The permit refuses its value whole once
-    /// the consumer closed its reception meanwhile.
-    pub async fn ready(&mut self) -> ClosingSpscSendPermit<'_, T, DEPTH, C> {
-        let state = self.state;
-        let permit = self.sender.ready().await;
-        ClosingSpscSendPermit { permit, state }
+    /// [`WakingSpscSender::ready`], or the closed reception: as
+    /// [`Self::poll_room`], a close wakes the wait and ends it. The permit
+    /// still refuses its value whole once the consumer closed its
+    /// reception after it was issued.
+    ///
+    /// # Errors
+    ///
+    /// The consumer closed its reception before a cell was free for the
+    /// producer.
+    pub async fn ready(
+        &mut self,
+    ) -> Result<ClosingSpscSendPermit<'_, T, DEPTH, C>, ClosingSpscReceptionClosed> {
+        let WakingSpscSender {
+            sender,
+            consumer,
+            producer,
+            producer_waits,
+            held: _,
+        } = &mut self.sender;
+        ClosingReady {
+            sender: Some(sender),
+            consumer: *consumer,
+            producer: *producer,
+            producer_waits: *producer_waits,
+            state: self.state,
+        }
+        .await
+    }
+}
+
+/// The wait of [`ClosingSpscSender::ready`]: the waking queue's wait for a
+/// cell, which a closed reception ends.
+struct ClosingReady<'sender, 'queue, T, const DEPTH: usize, C, P> {
+    // None only after returning; repolling a completed wait parks.
+    sender: Option<&'sender mut AffineSpscSender<'queue, T, DEPTH>>,
+    consumer: &'sender C,
+    producer: &'sender P,
+    producer_waits: &'sender AtomicBool,
+    state: &'sender AtomicU8,
+}
+
+impl<'sender, T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> Future
+    for ClosingReady<'sender, '_, T, DEPTH, C, P>
+{
+    type Output = Result<ClosingSpscSendPermit<'sender, T, DEPTH, C>, ClosingSpscReceptionClosed>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        let Some(sender) = this.sender.take() else {
+            return Poll::Pending;
+        };
+        // As the waking queue's wait: register, mark the wait, fence, then
+        // look. A close before the mark is seen by the load below; one
+        // after it sees the mark and wakes this registration.
+        this.producer.register(cx);
+        this.producer_waits.store(true, Ordering::SeqCst);
+        fence(Ordering::SeqCst);
+        if this.state.load(Ordering::SeqCst) & CLOSED != 0 {
+            return Poll::Ready(Err(ClosingSpscReceptionClosed));
+        }
+        match sender.try_reserve() {
+            Ok(permit) => Poll::Ready(Ok(ClosingSpscSendPermit {
+                permit: WakingSpscSendPermit {
+                    permit,
+                    consumer: this.consumer,
+                },
+                state: this.state,
+            })),
+            Err(sender) => {
+                this.sender = Some(sender);
+                Poll::Pending
+            }
+        }
     }
 }
 
@@ -254,11 +346,17 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify>
     /// this ends once a publication already in progress ended (its end
     /// wakes the wait). Then what the queue holds is all it ever will hold,
     /// and every later send or permit refuses its value whole. A producer
-    /// waiting for room ([`ClosingSpscSender::ready`]) is not woken by the
-    /// close: it hears of it once a receive frees a cell. Close against a
-    /// producer that stopped.
+    /// waiting for room ([`ClosingSpscSender::ready`],
+    /// [`ClosingSpscSender::poll_room`]) is woken by the mark and its wait
+    /// ends with [`ClosingSpscReceptionClosed`].
     pub async fn close(&mut self) {
         self.state.fetch_or(CLOSED, Ordering::SeqCst);
+        // After the mark: a producer that marked its wait before it is
+        // woken here; one that marks it later sees the mark.
+        fence(Ordering::SeqCst);
+        if self.receiver.producer_waits.swap(false, Ordering::SeqCst) {
+            self.receiver.producer.notify();
+        }
         let (state, consumer) = (self.state, self.receiver.consumer);
         poll_fn(|cx| {
             // Registered before the check: a publication ending after it

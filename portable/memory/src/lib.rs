@@ -114,9 +114,9 @@ pub use static_ref::StaticRef;
 pub use volatile::{read_volatile, write_volatile};
 pub use volatile_cell::VolatileCell;
 pub use waking_spsc::{
-    ClosingSpscClosed, ClosingSpscQueue, ClosingSpscReceiver, ClosingSpscSendError,
-    ClosingSpscSendPermit, ClosingSpscSender, QueueNotify, WakingSpscQueue, WakingSpscReceiver,
-    WakingSpscSendPermit, WakingSpscSender,
+    ClosingSpscClosed, ClosingSpscQueue, ClosingSpscReceiver, ClosingSpscReceptionClosed,
+    ClosingSpscSendError, ClosingSpscSendPermit, ClosingSpscSender, QueueNotify, WakingSpscQueue,
+    WakingSpscReceiver, WakingSpscSendPermit, WakingSpscSender,
 };
 
 /// Authority to prepare registers for one retained, software-owned TX chain.
