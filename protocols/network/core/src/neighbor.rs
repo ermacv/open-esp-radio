@@ -278,6 +278,14 @@ impl<const N: usize> Neighbors<N> {
             })
     }
 
+    /// Whether any request is owed: a look at each entry, as
+    /// [`Self::owed_requests`] makes.
+    pub(crate) fn owes_request(&self) -> bool {
+        self.entries
+            .iter()
+            .any(|entry| matches!(entry, Entry::Asking { owed: true, .. }))
+    }
+
     /// The port took the request of entry `index`.
     pub(crate) fn request_accepted(&mut self, index: u8, now: Instant) {
         if let Some(Entry::Asking {

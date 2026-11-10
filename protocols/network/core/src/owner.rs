@@ -269,6 +269,11 @@ impl<
         self.core.poll_deadline()
     }
 
+    /// See [`Core::idle`].
+    pub fn idle(&self) -> bool {
+        self.core.idle()
+    }
+
     /// See [`Core::demands`].
     pub fn demands<'s, C: Count + ?Sized>(
         &'s self,

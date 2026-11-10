@@ -2768,6 +2768,10 @@ struct Account {
     refused: usize,
     unknown: usize,
     completed: Vec<u32>,
+    /// Collections over the ready work.
+    plans: usize,
+    /// Steps the service took with no work ready and no collection.
+    nothing_ready: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2807,7 +2811,8 @@ impl Egress<u32, u32> for Policy {
         &mut self,
         mut ready: impl Iterator<Item = C> + Clone,
     ) -> Result<OneChoice<C>, &'static str> {
-        let account = self.0.borrow_mut();
+        let mut account = self.0.borrow_mut();
+        account.plans += 1;
         if account.fails && ready.clone().next().is_some() {
             return Err("choose");
         }
@@ -2833,6 +2838,11 @@ impl Egress<u32, u32> for Policy {
             self.0.borrow_mut().open += 1;
         }
         Ok(next)
+    }
+
+    fn nothing_ready(&mut self) -> Result<(), &'static str> {
+        self.0.borrow_mut().nothing_ready += 1;
+        Ok(())
     }
 
     fn accepted(&mut self, (): (), ticket: u32) -> Result<(), &'static str> {

@@ -1938,3 +1938,35 @@ fn a_time_due_at_the_wait_still_leaves_one_useful_turn_a_poll() {
     assert!(poll(&mut run, cx).is_pending());
     assert_eq!(line.produced(), [data_of(tag(0, 0), 16)], "the next poll's");
 }
+
+/// With no data the producer offers nothing and the turns collect nothing;
+/// its first offer after them is collected and goes.
+#[test]
+fn a_producer_s_offer_after_turns_with_nothing_ready_is_collected_and_goes() {
+    brand!(Net);
+    let policy = Policy::default();
+    let Bench {
+        mut service,
+        line,
+        script,
+        clock,
+        ..
+    } = bench::<Net, Policy, 2>(policy.clone());
+    let mut events = ();
+    let mut run = pin!(service.run(clock, &mut events));
+    let (count, waker) = counter();
+    settle(&mut run, &count, &waker);
+    {
+        let account = policy.0.borrow();
+        assert_eq!(account.plans, 0, "nothing was collected");
+        assert!(
+            account.nothing_ready > 0,
+            "the policy heard each empty turn"
+        );
+    }
+    script.push(tag(0, 0), broadcast(), 16);
+    script.wake();
+    settle(&mut run, &count, &waker);
+    assert_eq!(line.produced(), [data_of(tag(0, 0), 16)]);
+    assert!(policy.0.borrow().plans > 0, "the offer was collected");
+}

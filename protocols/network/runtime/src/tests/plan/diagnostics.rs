@@ -238,6 +238,11 @@ impl Egress<u32, u32> for StopsFor {
         })
     }
 
+    fn nothing_ready(&mut self) -> Result<(), Infallible> {
+        self.log.0.borrow_mut().push(Step::NothingReady);
+        Ok(())
+    }
+
     fn accepted(&mut self, (): (), _ticket: u32) -> Result<(), Infallible> {
         Ok(())
     }
