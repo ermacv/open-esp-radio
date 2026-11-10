@@ -6,7 +6,10 @@ work back as values. It awaits nothing, holds no waker and places no memory.
 
 The core takes values and gives values. Work is chosen before it exists:
 `demands` lists what is ready, with its peer, flow and priority, without building
-a frame; a `Grant` chooses one piece, named by a serial that never returns and
+a frame. `idle` says, with no walk of the running chains, that the list is
+certainly empty: no ARP reply, echo reply or DHCP message owed, no running chain
+with a head, and no neighbor entry owing a request (a look at each of the
+table's entries); `false` says only that work may be ready. A `Grant` chooses one piece, named by a serial that never returns and
 by the station address it was chosen for, so an old grant sends neither later
 work nor work to another address. `NetworkOwner` alone holds the core, the pool
 and the port, and its `transmit` builds the frame, lets the port write and
@@ -47,6 +50,17 @@ their words, and the edge octets are copied and summed apart; a producer's data 
 itself and summed there. The UDP checksum goes into the headers last. No
 owner changes: the block stays the core's until the port's answer, and the
 slot stays the port's.
+
+## Counting the core's steps
+
+`demands`, `next_end`, `transmit` and `take_frame` take a `Count`, which
+hears the running places a readiness walk visits, each end told, each frame
+built whole in the port's slot and each lending refusal for want of credit
+with the loans then out: the core's part of the service's switchable
+diagnostics (the runtime's README, "Diagnostics"). `()` counts nothing and
+leaves no code; an enabled count is asked `Count::on` at each point, and
+only counts. The core reads no clock for it, and nothing it decides reads a
+count.
 
 ## Work records
 

@@ -521,6 +521,10 @@ impl Egress<u32, u32> for Exhausted {
         Ok(oer_protocols_network_port::Next::Idle)
     }
 
+    fn nothing_ready(&mut self) -> Result<(), core::convert::Infallible> {
+        Ok(())
+    }
+
     fn accepted(&mut self, (): (), _ticket: u32) -> Result<(), core::convert::Infallible> {
         Ok(())
     }

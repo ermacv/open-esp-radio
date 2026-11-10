@@ -16,7 +16,7 @@ const PLAN_CREDITS: usize = 8;
 const PLAN_DEPTH: usize = 16;
 
 type PlanSocket<B> = Socket<'static, 'static, B, SIZE, PLAN_DEPTH, RECEIVED, PLAN_CREDITS>;
-type PlanService<B, E = Planned> = Service<
+type PlanService<B, E = Planned, D = ()> = Service<
     'static,
     'static,
     B,
@@ -30,6 +30,8 @@ type PlanService<B, E = Planned> = Service<
     RECEIVED,
     WirePort,
     E,
+    (),
+    D,
 >;
 type PlanEnded<B, E = Planned> = Ended<
     'static,
@@ -52,6 +54,8 @@ enum Step {
     /// A turn began, as the service's sink heard.
     Turn,
     Collected,
+    /// The service knew no work was ready, and collected none.
+    NothingReady,
     Reserved,
     Accepted,
     Refused,
@@ -101,6 +105,11 @@ impl Egress<u32, u32> for Planned {
         Ok(next)
     }
 
+    fn nothing_ready(&mut self) -> Result<(), Infallible> {
+        self.0.borrow_mut().push(Step::NothingReady);
+        Ok(())
+    }
+
     fn accepted(&mut self, (): (), _ticket: u32) -> Result<(), Infallible> {
         self.0.borrow_mut().push(Step::Accepted);
         Ok(())
@@ -121,8 +130,8 @@ impl Egress<u32, u32> for Planned {
     }
 }
 
-struct PlanBench<B: 'static, E: Egress<u32, u32, Fault = Infallible> = Planned> {
-    service: PlanService<B, E>,
+struct PlanBench<B: 'static, E: Egress<u32, u32, Fault = Infallible> = Planned, D = ()> {
+    service: PlanService<B, E, D>,
     sockets: [PlanSocket<B>; 2],
     wire: WirePort,
     policy: Planned,
@@ -139,14 +148,38 @@ fn plan_bench_with<B: 'static, E: Egress<u32, u32, Fault = Infallible>>(
     egress: E,
     policy: Planned,
 ) -> PlanBench<B, E> {
+    plan_bench_diagnosed(egress, policy, ())
+}
+
+/// As [`plan_bench_with`], the service counting into `diagnostics`.
+fn plan_bench_diagnosed<
+    B: 'static,
+    E: Egress<u32, u32, Fault = Infallible>,
+    D: crate::Diagnostics,
+>(
+    egress: E,
+    policy: Planned,
+    diagnostics: D,
+) -> PlanBench<B, E, D> {
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    plan_bench_on(interface, egress, policy, diagnostics)
+}
+
+/// As [`plan_bench_diagnosed`], on `interface`.
+fn plan_bench_on<B: 'static, E: Egress<u32, u32, Fault = Infallible>, D: crate::Diagnostics>(
+    interface: Interface,
+    egress: E,
+    policy: Planned,
+    diagnostics: D,
+) -> PlanBench<B, E, D> {
     let memory = Box::leak(Box::new([[0; SIZE]; PLAN_BLOCKS]));
     let (pool, brand) = claim::<B, SIZE, PLAN_BLOCKS>(memory).unwrap();
     let wire = WirePort::default();
     wire.0.borrow_mut().answers = true;
-    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, egress, MemoryPolicy::KEEP, stopping);
+    let mut service =
+        Service::new(owner, egress, MemoryPolicy::KEEP, stopping).with_diagnostics(diagnostics);
     let sockets = [5000, 5001].map(|port| {
         service
             .bind(
@@ -461,6 +494,11 @@ impl Egress<u32, u32> for AlwaysStops {
         })
     }
 
+    fn nothing_ready(&mut self) -> Result<(), Infallible> {
+        self.0.0.borrow_mut().push(Step::NothingReady);
+        Ok(())
+    }
+
     fn accepted(&mut self, (): (), _ticket: u32) -> Result<(), Infallible> {
         Ok(())
     }
@@ -531,3 +569,6 @@ fn collections_in_a_turn_are_bounded_by_its_frames() {
         "a turn collects at most once a frame"
     );
 }
+
+mod diagnostics;
+mod idle;

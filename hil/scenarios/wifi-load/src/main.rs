@@ -11,10 +11,13 @@
 //! receive path last moved by boundary, with its radio owner's snapshot at
 //! the window's end ([`stall`]).
 //! With `OER_WIFI_LOAD_PROFILE_US` each level also samples where the
-//! image's hart spends its window ([`profile`]).
+//! image's hart spends its window ([`profile`]), and with
+//! `OER_WIFI_LOAD_DIAGNOSTICS=on` it records the network core's switchable
+//! diagnostics over its window ([`diagnostics`]).
 #![forbid(unsafe_code)]
 
 mod addba;
+mod diagnostics;
 mod link;
 mod ping;
 mod profile;
@@ -34,13 +37,14 @@ use std::{
 
 use oer_hil_services_load::{
     Addba, AddbaCollected, CacheGeometry, CacheLevel, Collect, CollectAddba, CollectCounters,
-    CollectHart1, CollectLink, CollectMac, CollectNetwork, CollectParts, CollectPositions,
-    CollectProfile, CollectStall, CollectStallMac, CollectTracking, Collected, Counters,
-    CountersCollected, DataBus, Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected,
-    Load, MAC_COUNT_NAMES, MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns,
-    PROFILE_PAGES, PartWindow, PartsCollected, Positions, PositionsCollected, ProfileCollected,
-    Report, Stall, StallCollected, StallMac, StallMacCollected, Start, Started, TUNE_KNOBS,
-    TUNE_UNSET, Tracking, TrackingCollected, Transmit,
+    CollectDiagnostics, CollectHart1, CollectLink, CollectMac, CollectNetwork, CollectParts,
+    CollectPositions, CollectProfile, CollectStall, CollectStallMac, CollectTracking, Collected,
+    Counters, CountersCollected, DataBus, Diagnose, DiagnosticsCollected, Hart1Collected,
+    Hart1Window, InstructionBus, Link, LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac,
+    MacCollected, NetworkCollected, NetworkTurns, PROFILE_PAGES, PartWindow, PartsCollected,
+    Positions, PositionsCollected, ProfileCollected, Report, Stall, StallCollected, StallMac,
+    StallMacCollected, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected,
+    Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Join, Joined, Leave, Left, ScanVisit,
@@ -114,8 +118,10 @@ const DEVICE_PORT: u16 = 5001;
 const PAYLOAD: usize = 1472;
 /// Total offered load of each level, Mbit/s; a mode with two directions
 /// offers half each way. `OER_WIFI_LOAD_MBPS` (comma-separated) replaces
-/// them, e.g. to offer more than these levels; 0 measures the ceiling, a
-/// paced level above it stays behind the sender's own sleeps.
+/// them, e.g. to offer more than these levels; level 0 is no pacing in
+/// every direction ([`traffic::Rate::Unpaced`]): each sender sends as fast
+/// as its socket takes the datagrams, which measures the ceiling. A paced
+/// level above the ceiling stays behind the sender's own sleeps.
 const LEVELS_MBPS: [u64; 4] = [10, 30, 50, 65];
 const LEVELS_ENV: &str = "OER_WIFI_LOAD_MBPS";
 /// Each level's measuring window, the time before it opens and the drain
@@ -538,9 +544,8 @@ fn parse_probes(text: &str) -> Result<bool, Failure> {
     }
 }
 
-/// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`, each 0 (as
-/// fast as the socket takes the datagrams) to
-/// [`MAX_LEVEL_MBPS`].
+/// The levels to offer: [`LEVELS_MBPS`], or `OER_WIFI_LOAD_MBPS`, each 0 (no
+/// pacing, as fast as the socket takes the datagrams) to [`MAX_LEVEL_MBPS`].
 fn levels_mbps() -> Result<Vec<u64>, Failure> {
     match std::env::var(LEVELS_ENV) {
         Ok(text) => parse_levels(&text),
@@ -1134,6 +1139,12 @@ impl Sparse {
     fn rate_bps(self) -> u64 {
         u64::from(self.datagrams) * self.payload as u64 * 8 * 1000 / u64::from(self.every_ms)
     }
+
+    /// The shape's paced rate.
+    fn rate(self) -> Result<traffic::Rate, Failure> {
+        traffic::Rate::paced(self.rate_bps())
+            .ok_or_else(|| Failure::Incomplete(format!("{} has no paced rate", self.name())))
+    }
 }
 
 /// Isolated frames from an idle link, the archive's sparse peer of two
@@ -1231,7 +1242,7 @@ fn sparse(cx: &mut Cx<'_>) -> Result<(), Failure> {
         let offer = Offer {
             name,
             mode: Mode::RxTx,
-            each_bps: shape.rate_bps(),
+            each: shape.rate()?,
             payload: shape.payload,
             burst: shape.datagrams,
             probing: false,
@@ -1277,7 +1288,8 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
         format!("the image's load: {started:?}"),
     )?;
     let peer = SocketAddrV4::new(device, DEVICE_PORT);
-    let offered_bps = 65_000_000;
+    let offered = traffic::Rate::paced(65_000_000)
+        .ok_or_else(|| Failure::Incomplete("the stop case's rate".to_owned()))?;
     let (sent, left, took) = std::thread::scope(|scope| {
         let sender = scope.spawn(|| {
             traffic::send(
@@ -1285,7 +1297,7 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
                 peer,
                 run,
                 PAYLOAD,
-                offered_bps,
+                offered,
                 1,
                 STOP_AFTER + LEAVE_TIMEOUT,
             )
@@ -1301,7 +1313,7 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
     cx.measure(
         "stop under load",
         serde_json::json!({
-            "offered_mbps": offered_bps / 1_000_000,
+            "offered_mbps": offered.mbps(),
             "host_sent_datagrams": sent.as_ref().map_or(0, |sent| sent.datagrams),
             "leave_ms": took.as_millis() as u64,
             "left": format!("{left:?}"),
@@ -1418,8 +1430,8 @@ impl Path {
 struct Offer {
     name: String,
     mode: Mode,
-    /// Each direction's bits per second of UDP payload, on average.
-    each_bps: u64,
+    /// Each direction's rate of UDP payload.
+    each: traffic::Rate,
     payload: usize,
     /// The datagrams due together, each way.
     burst: u16,
@@ -1431,17 +1443,26 @@ struct Offer {
 }
 
 impl Offer {
-    /// `total_mbps` of full datagrams, split over `mode`'s directions.
+    /// `total_mbps` of full datagrams, split over `mode`'s directions; level
+    /// 0 is no pacing, in every direction the mode has.
     fn level(mode: Mode, total_mbps: u64, probing: bool) -> Result<Self, Failure> {
-        let each_bps = total_mbps
-            .checked_mul(1_000_000)
-            .map(|bps| bps / mode.directions())
-            .filter(|bps| u32::try_from(*bps).is_ok())
-            .ok_or_else(|| Failure::Incomplete(format!("{total_mbps} Mbit/s is out of range")))?;
+        let (each, name) = match total_mbps {
+            0 => (traffic::Rate::Unpaced, format!("{} unpaced", mode.name())),
+            _ => (
+                total_mbps
+                    .checked_mul(1_000_000)
+                    .map(|bps| bps / mode.directions())
+                    .and_then(traffic::Rate::paced)
+                    .ok_or_else(|| {
+                        Failure::Incomplete(format!("{total_mbps} Mbit/s is out of range"))
+                    })?,
+                format!("{} {total_mbps} Mbit/s", mode.name()),
+            ),
+        };
         Ok(Self {
-            name: format!("{} {total_mbps} Mbit/s", mode.name()),
+            name,
             mode,
-            each_bps,
+            each,
             payload: PAYLOAD,
             burst: 1,
             probing,
@@ -1451,17 +1472,72 @@ impl Offer {
     }
 }
 
+/// What the image sends in `offer`'s run: nothing for RX, otherwise the load
+/// at the offer's rate, where the wire's rate 0 is the unpaced rate.
+fn device_transmit(offer: &Offer, host: Ipv4Addr, host_port: u16) -> Option<Transmit> {
+    (offer.mode != Mode::Rx).then(|| Transmit {
+        peer: host.octets(),
+        peer_port: host_port,
+        payload: offer.payload as u16,
+        rate_bps: offer.each.device_bps(),
+        burst: offer.burst,
+    })
+}
+
 /// One level: `offer` over the window, with RTT probes from the start to
 /// the end of the drain when it asks and its ping within the window. The
 /// access point's view of the station is read before the run and after its
 /// drain. Returns the ping's echoes, empty without one.
 fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes, Failure> {
+    if !diagnostics::requested().map_err(Failure::Incomplete)? {
+        return measured_level(cx, path, offer, false);
+    }
+    let mut switch = LevelSwitch {
+        cx,
+        name: &offer.name,
+    };
+    diagnostics::around(&mut switch, |switch| {
+        measured_level(switch.cx, path, offer, true)
+    })
+}
+
+/// The diagnostics' switch of one level, over its context.
+struct LevelSwitch<'c, 'a> {
+    cx: &'c mut Cx<'a>,
+    name: &'c str,
+}
+
+impl diagnostics::Switch for LevelSwitch<'_, '_> {
+    fn switch(&mut self, on: bool) -> Result<(), Failure> {
+        // Through the context: after a request of unknown outcome it sends
+        // nothing more, and this fails.
+        let _was_on: oer_hil_services_load::Diagnosed =
+            self.cx.call(Diagnose { on, reset: false }, CALL)?;
+        Ok(())
+    }
+
+    fn record(&mut self, off: &Result<(), Failure>) {
+        self.cx.measure(
+            format!("{} diagnostics off", self.name),
+            diagnostics::switched_off(off),
+        );
+    }
+}
+
+/// [`level`]'s run and record; `diagnosing` when its diagnostics are on, to
+/// collect them after the window.
+fn measured_level(
+    cx: &mut Cx<'_>,
+    path: &Path,
+    offer: &Offer,
+    diagnosing: bool,
+) -> Result<traffic::Echoes, Failure> {
     let Path {
         device,
         ref station,
         host,
     } = *path;
-    let (mode, each_bps, probing) = (offer.mode, offer.each_bps, offer.probing);
+    let (mode, each, probing) = (offer.mode, offer.each, offer.probing);
     let profile = profile::requested()?;
     let run = run_id();
     let endpoint = traffic::Endpoint::open(SocketAddrV4::new(host, 0), run)
@@ -1473,13 +1549,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         .unwrap_or(0);
     let before = link::read(cx, station);
     let since = Instant::now();
-    let transmit = (mode != Mode::Rx).then(|| Transmit {
-        peer: host.octets(),
-        peer_port: host_port,
-        payload: offer.payload as u16,
-        rate_bps: u32::try_from(each_bps).unwrap_or(0),
-        burst: offer.burst,
-    });
+    let transmit = device_transmit(offer, host, host_port);
     let started = cx.call(
         Start {
             run,
@@ -1521,7 +1591,7 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
                 peer,
                 run,
                 offer.payload,
-                each_bps,
+                each,
                 offer.burst,
                 window,
             )
@@ -1536,6 +1606,12 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
     let after = link::read(cx, station);
     let span = since.elapsed();
     let ended = collect(cx, run)?;
+    let diagnosed = if diagnosing {
+        let collected: DiagnosticsCollected = cx.call(CollectDiagnostics { run }, CALL)?;
+        Some(collected)
+    } else {
+        None
+    };
     // Hart 0's samples, which a sampled run always has, and hart 1's,
     // where the image samples hart 1.
     let samples = match profile {
@@ -1567,6 +1643,13 @@ fn level(cx: &mut Cx<'_>, path: &Path, offer: &Offer) -> Result<traffic::Echoes,
         let profile = profile_measurement(name, &ended);
         object.insert("turn_profile".to_owned(), profile);
         object.insert("addba".to_owned(), addba_measurement(name, &ended));
+        if let Some(diagnosed) = &diagnosed {
+            println!("  diagnostics {name}: {}", diagnostics::summary(diagnosed));
+            object.insert(
+                "network_diagnostics".to_owned(),
+                diagnostics::window(diagnosed),
+            );
+        }
     }
     if let (Some((hart0, hart1)), Some(object)) = (samples, value.as_object_mut()) {
         let elf = profile::elf(IMAGE);
@@ -1604,10 +1687,10 @@ fn measurement(
 ) -> serde_json::Value {
     let report = &ended.report;
     let mode = offer.mode;
-    let offered_each = round(offer.each_bps as f64 / 1e6);
+    let offered_each = offer.each.mbps().map(round);
     let window = window_us(report) as f64 / 1e6;
     let mut value = serde_json::json!({
-        "offered_total_mbps": round(offer.each_bps as f64 * mode.directions() as f64 / 1e6),
+        "offered_total_mbps": offer.each.mbps().map(|each| round(each * mode.directions() as f64)),
         "payload_bytes": offer.payload,
         "burst_datagrams": offer.burst,
         "window_s": round(window),
@@ -1770,14 +1853,38 @@ mod tests {
     #[test]
     fn a_level_splits_its_total_over_its_directions() {
         assert_eq!(
-            Offer::level(Mode::RxTx, 130, true).unwrap().each_bps,
-            65_000_000
+            Offer::level(Mode::RxTx, 130, true).unwrap().each,
+            traffic::Rate::paced(65_000_000).unwrap()
         );
         assert_eq!(
-            Offer::level(Mode::Rx, 130, true).unwrap().each_bps,
-            130_000_000
+            Offer::level(Mode::Rx, 130, true).unwrap().each,
+            traffic::Rate::paced(130_000_000).unwrap()
         );
         assert!(Offer::level(Mode::Rx, 5000, true).is_err());
+    }
+
+    #[test]
+    fn level_zero_is_unpaced_in_every_direction_the_mode_has() {
+        let host = Ipv4Addr::new(10, 231, 0, 2);
+        for mode in [Mode::Rx, Mode::Tx, Mode::RxTx] {
+            let offer = Offer::level(mode, 0, true).unwrap();
+            assert_eq!(offer.each, traffic::Rate::Unpaced, "{}", mode.name());
+            assert_eq!(offer.each.mbps(), None);
+            // The image sends unpaced exactly where the mode has it send.
+            let transmit = device_transmit(&offer, host, 40000);
+            match mode {
+                Mode::Rx => assert_eq!(transmit, None),
+                Mode::Tx | Mode::RxTx => {
+                    assert_eq!(transmit.map(|transmit| transmit.rate_bps), Some(0));
+                }
+            }
+        }
+        // A positive level never turns unpaced, on the wire either.
+        let paced = Offer::level(Mode::RxTx, 1, true).unwrap();
+        assert_eq!(
+            device_transmit(&paced, host, 40000).map(|transmit| transmit.rate_bps),
+            Some(500_000)
+        );
     }
 
     #[test]

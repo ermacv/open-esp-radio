@@ -17,7 +17,7 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::AtomicWaker;
 use oer_portable_time::Instant;
 use oer_protocols_network_core::{
-    CommandId, CommandState, Declined, Ends, NetworkOwner, OpenRefused, Outcome, Remote,
+    CommandId, CommandState, Count, Declined, Ends, NetworkOwner, OpenRefused, Outcome, Remote,
     RetiredResults, SendRefusal, SocketId, WorkId,
 };
 use oer_protocols_network_port::FramePort;
@@ -274,7 +274,7 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
 
 pub(crate) mod sealed {
     use super::{
-        CommandId, CommandState, Context, Declined, Ends, EventSink, Instant, Remote,
+        CommandId, CommandState, Context, Count, Declined, Ends, EventSink, Instant, Remote,
         RetiredResults, SendRefusal, ServiceEvent, SocketId, WorkId,
     };
 
@@ -289,7 +289,7 @@ pub(crate) mod sealed {
         ) -> Result<CommandId<B>, SendRefusal>;
         fn withdraw(&mut self, command: &CommandId<B>) -> bool;
         fn take_result(&mut self, command: CommandId<B>) -> CommandState<B>;
-        fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId>;
+        fn next_end(&mut self, ends: &Ends<B>, count: &impl Count) -> Option<WorkId>;
         fn neighbors_changed(&self) -> u32;
         fn address_version(&self) -> u32;
     }
@@ -310,6 +310,7 @@ pub(crate) mod sealed {
             now: Instant,
             owner: &mut impl Owner<B>,
             events: &mut impl EventSink<ServiceEvent>,
+            count: &impl Count,
         ) -> bool;
 
         /// Fill `work`'s data in the port's slot, while its tag is current.
@@ -325,11 +326,13 @@ pub(crate) mod sealed {
         /// The flow the rest of the turn leaves out.
         fn filtered(&self) -> Option<u8>;
 
-        /// Deliver every outcome the core knows; whether any came.
+        /// Deliver every outcome the core knows; whether any came. `count`
+        /// hears each end told.
         fn deliver(
             &mut self,
             owner: &mut impl Owner<B>,
             events: &mut impl EventSink<ServiceEvent>,
+            count: &impl Count,
         ) -> bool;
 
         /// Register the producer for what the service can act on now;
@@ -396,8 +399,8 @@ impl<
         Self::take_result(self, command)
     }
 
-    fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId> {
-        Self::next_end(self, ends)
+    fn next_end(&mut self, ends: &Ends<B>, count: &impl Count) -> Option<WorkId> {
+        Self::next_end(self, ends, count)
     }
 
     fn neighbors_changed(&self) -> u32 {
@@ -421,6 +424,7 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
         _now: Instant,
         _owner: &mut impl Owner<B>,
         _events: &mut impl EventSink<ServiceEvent>,
+        _count: &impl Count,
     ) -> bool {
         false
     }
@@ -445,6 +449,7 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
         &mut self,
         _owner: &mut impl Owner<B>,
         _events: &mut impl EventSink<ServiceEvent>,
+        _count: &impl Count,
     ) -> bool {
         false
     }
@@ -484,6 +489,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         now: Instant,
         owner: &mut impl Owner<B>,
         events: &mut impl EventSink<ServiceEvent>,
+        count: &impl Count,
     ) -> bool {
         self.at = None;
         self.stopped = false;
@@ -503,7 +509,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             }
         }
         // What a withdrawal or a tick ended frees its place first.
-        moved |= self.deliver(owner, events);
+        moved |= self.deliver(owner, events, count);
         if let Some(hold) = &self.hold {
             let released = match hold.waits {
                 Waits::Place => self.open < CREDITS,
@@ -603,13 +609,14 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         &mut self,
         owner: &mut impl Owner<B>,
         _events: &mut impl EventSink<ServiceEvent>,
+        count: &impl Count,
     ) -> bool {
         let Some(ends) = self.ends else {
             return false;
         };
         let mut moved = false;
         // Only what the core told ended: open works are not looked at.
-        while let Some(work) = owner.next_end(&ends) {
+        while let Some(work) = owner.next_end(&ends, count) {
             // The generation decides: a told end that is not this work's
             // leaves the work where it is.
             let Some(slot) = self.works.get_mut(work.place()).filter(|slot| {

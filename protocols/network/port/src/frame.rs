@@ -217,6 +217,17 @@ pub trait Egress<Ticket, Notice> {
         plan: &mut Self::Plan<C>,
     ) -> Result<crate::Next<C, Self::Reservation>, Self::Fault>;
 
+    /// No work is ready, and its caller knows it with no collection: the
+    /// policy makes the same transition as [`Self::plan`] over no work and
+    /// that plan's first [`Self::next`], which then says
+    /// [`Next::Idle`](crate::Next::Idle), with no plan built and nothing
+    /// reserved. A policy whose look at no work changes nothing does nothing.
+    ///
+    /// # Errors
+    /// What that step over no work would return: [`Self::Fault`], which ends
+    /// the service.
+    fn nothing_ready(&mut self) -> Result<(), Self::Fault>;
+
     /// The port took the frame: its charge waits for a notice.
     ///
     /// # Errors

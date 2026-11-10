@@ -89,6 +89,10 @@ oer_protocols_hil_protocol::messages! {
     topic AddbaCollected = "load/addba-report";
     endpoint CollectProfile = "load/profile" => ProfileCollected;
     topic ProfileCollected = "load/profile-report";
+    endpoint Diagnose = "load/diagnose" => Diagnosed;
+    topic Diagnosed = "load/diagnosed";
+    endpoint CollectDiagnostics = "load/diagnostics" => DiagnosticsCollected;
+    topic DiagnosticsCollected = "load/diagnostics-report";
 }
 
 /// The longest measuring window, start delay and drain a run may ask for.
@@ -1175,6 +1179,105 @@ impl NetworkTurns {
     }
 }
 
+/// Switch the network core's diagnostics `on` or off and, with `reset`, ask
+/// their counts zeroed: each takes effect at the network's next turn. They
+/// are off from boot. Answered in every phase, a run's too; a switch or a
+/// reset within a run's window leaves that window no diagnostics
+/// ([`DiagnosticsCollected::NoWindow`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Diagnose {
+    pub on: bool,
+    pub reset: bool,
+}
+
+/// The answer to [`Diagnose`]: whether they were asked on before, and what
+/// became of the reset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Diagnosed {
+    pub was_on: bool,
+    pub reset: Reset,
+}
+
+/// What became of a [`Diagnose`]'s reset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Reset {
+    /// None was asked for.
+    NotAsked,
+    /// It was asked, for the network's next turn.
+    Asked,
+    /// It was refused: the diagnostics' marker has counted all the resets
+    /// it can, and the counts are as they were.
+    Refused,
+}
+
+/// What the network core's diagnostics counted within run `run`'s window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct CollectDiagnostics {
+    pub run: u32,
+}
+
+/// The answer to [`CollectDiagnostics`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum DiagnosticsCollected {
+    Report(NetworkDiagnostics),
+    /// The diagnostics were off at an end of the window, or were switched or
+    /// reset within it: they counted no whole window.
+    NoWindow,
+    /// The diagnostics' marker has counted all the switches or resets it
+    /// can: no window is whole any more, until the image boots again.
+    Exhausted,
+    /// The run's window or drain has not ended yet.
+    Running,
+    Refused(LoadError),
+}
+
+/// The stages of [`NetworkDiagnostics::stage_cycles`]: a turn's intake
+/// (link, tick, commands), returns, receive, notices, publish (offers,
+/// collections, plans, frames) and settle (eviction, delivery, the turn's
+/// end), then the wait's return servicing.
+pub const DIAGNOSTIC_STAGES: usize = 7;
+
+/// The names of [`NetworkDiagnostics::stage_cycles`], in order.
+pub const DIAGNOSTIC_STAGE_NAMES: [&str; DIAGNOSTIC_STAGES] = [
+    "intake", "returns", "receive", "notices", "publish", "settle", "waiting",
+];
+
+/// What the network core's hot path did within a window, as its switchable
+/// diagnostics counted it (`protocols/network/runtime/README.md`,
+/// "Diagnostics"). Each count wraps at 2^32.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct NetworkDiagnostics {
+    /// Turns counted.
+    pub turns: u32,
+    /// Full candidate collections, and the running places their readiness
+    /// walks visited.
+    pub collections: u32,
+    pub walked: u32,
+    /// Ends the ended chains told.
+    pub told: u32,
+    /// Frames a transmit plan sent after its first.
+    pub continued: u32,
+    /// Plans that stopped, by reason.
+    pub stopped_spent: u32,
+    pub stopped_changed: u32,
+    pub stopped_grant: u32,
+    pub stopped_account: u32,
+    /// Return batches that took something, the blocks they brought home
+    /// and the receive loans they gave back.
+    pub return_batches: u32,
+    pub blocks_returned: u32,
+    pub credits_restored: u32,
+    /// Lending refusals for want of credit, and summed over them the loans
+    /// out and the returned buffers whose loans were not yet taken back.
+    pub no_credit: u32,
+    pub no_credit_loans: u32,
+    pub no_credit_unreturned: u32,
+    /// Frames built whole in the port's slot.
+    pub materialised: u32,
+    /// The network hart's cycles in each stage ([`DIAGNOSTIC_STAGE_NAMES`]).
+    pub stage_cycles: [u64; DIAGNOSTIC_STAGES],
+}
+
 /// One page of what the network core's turns and the station's return
 /// bursts did within run `run`'s window ([`ProfileCollected`]): page 0 the
 /// [`TurnMoments`], 1 the [`TurnCells`], 2 the [`TurnSpread`]. Only a trace
@@ -1772,6 +1875,8 @@ oer_protocols_hil_agent::service! {
         CollectNetwork(CollectNetwork) => network,
         CollectAddba(CollectAddba) => addba,
         CollectProfile(CollectProfile) => profile,
+        Diagnose(Diagnose) => diagnose,
+        CollectDiagnostics(CollectDiagnostics) => diagnostics,
     }
 }
 

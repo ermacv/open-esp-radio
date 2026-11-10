@@ -576,6 +576,36 @@ pub fn return_bursts() -> crate::observe::profile::Returns {
     RETURNS.read()
 }
 
+/// The network core's switchable diagnostics now: whether they are asked
+/// on, how often they were switched and reset, and what they counted since
+/// the last reset. Read on the network's executor, between its polls, each
+/// word is whole.
+#[cfg(feature = "network")]
+pub fn network_diagnostics() -> oer_chips_family_app::diagnostics::NetworkDiagnostics {
+    crate::wifi::DIAGNOSTICS.read()
+}
+
+/// Ask the network core's diagnostics on or off, from the network's next
+/// turn; whether they were asked on before.
+#[cfg(feature = "network")]
+pub fn diagnose_network(on: bool) -> bool {
+    crate::wifi::DIAGNOSTICS.switch(on)
+}
+
+/// Ask the network core's diagnostics zeroed, at the network's next turn.
+///
+/// # Errors
+/// [`diagnostics::ResetRefused`]: their marker's reset count is spent, and
+/// nothing was asked.
+#[cfg(feature = "network")]
+pub fn reset_network_diagnostics() -> Result<(), oer_chips_family_app::diagnostics::ResetRefused> {
+    crate::wifi::DIAGNOSTICS.reset()
+}
+
+/// The diagnostics' vocabulary.
+#[cfg(feature = "network")]
+pub use oer_chips_family_app::diagnostics;
+
 /// The network service's sink: its turns and the core's drops, by reason,
 /// go to [`network_turns`]; in a trace build, each turn's cycles and work go
 /// to [`turn_profile`].

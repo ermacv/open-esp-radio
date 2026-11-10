@@ -36,6 +36,7 @@
 //! ```
 
 mod device;
+mod diagnostics;
 mod local;
 mod observation;
 mod returns;
@@ -44,6 +45,7 @@ mod socket;
 mod watch;
 
 pub use device::{DevicePort, PortRefusal, TxBuffers};
+pub use diagnostics::{Diagnosis, Diagnostics, STAGES, Stage};
 pub use local::{
     Interest, LocalEnd, LocalRefused, Next, Offer, Produce, Producer, Producers, Work,
 };

@@ -2313,6 +2313,8 @@ dependencies = [
  "heapless",
  "oer-hil-services-load",
  "oer-hil-services-wifi-station",
+ "oer-portable-time",
+ "oer-portable-time-virtual",
  "oer-protocols-hil-agent",
  "oer-tools-analysis-elf",
  "oer-tools-hil-harness",

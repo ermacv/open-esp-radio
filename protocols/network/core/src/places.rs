@@ -405,6 +405,12 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
         })
     }
 
+    /// Whether a command runs: the running chain has a head. Every place a
+    /// walk of [`Self::running`] visits is on that chain.
+    pub(crate) const fn runs(&self) -> bool {
+        self.running.head.is_some()
+    }
+
     /// Whether every place is free and nothing waits to be read.
     pub(crate) fn idle(&self) -> bool {
         matches!(self.close.run, Run::Free)

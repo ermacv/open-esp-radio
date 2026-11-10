@@ -8,8 +8,9 @@ use oer_protocols_network_port::{FramePort, FrameSource, Keep, Taken, Unpublishe
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::block::{Block, CoreBrand, Group, Pool};
+use crate::diagnostics::{Count, counted};
 use crate::interface::Interface;
-use crate::loans::Loan;
+use crate::loans::{Loan, NotLent};
 use crate::machine::{
     CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Ends, Eviction,
     FillFailed, Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal,
@@ -168,15 +169,18 @@ impl<
     /// data is `produce`'s to write, in the slot itself, once its headers are
     /// there; no other work calls it. What the fill did is this owner's own
     /// record, and a port's answer that contradicts it is the port's fault,
-    /// whatever the fill's error.
+    /// whatever the fill's error. `count` hears the frame once it was
+    /// written whole in the port's slot ([`Count::materialised`]), whatever
+    /// the port answers.
     ///
     /// # Errors
     /// [`Unsent`].
-    pub fn transmit(
+    pub fn transmit<C: Count + ?Sized>(
         &mut self,
         now: Instant,
         grant: Grant<B>,
         produce: impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined>,
+        count: &C,
     ) -> Result<P::Ticket, Unsent<P::Refusal>> {
         if self.broken {
             return Err(Unsent::PortContract);
@@ -186,7 +190,10 @@ impl<
         let published = self.port.publish(frame.length(), |slot| {
             let result = frame.write(slot, produce);
             filled = match result {
-                Ok(()) => Filled::Wrote,
+                Ok(()) => {
+                    counted(count, Count::materialised);
+                    Filled::Wrote
+                }
                 Err(cause) => Filled::Failed(cause),
             };
             result
@@ -262,9 +269,18 @@ impl<
         self.core.poll_deadline()
     }
 
+    /// See [`Core::idle`].
+    pub fn idle(&self) -> bool {
+        self.core.idle()
+    }
+
     /// See [`Core::demands`].
-    pub fn demands(&self, now: Instant) -> impl Iterator<Item = Demand<B>> + Clone + '_ {
-        self.core.demands(now)
+    pub fn demands<'s, C: Count + ?Sized>(
+        &'s self,
+        now: Instant,
+        count: &'s C,
+    ) -> impl Iterator<Item = Demand<B>> + Clone + 's {
+        self.core.demands(now, count)
     }
 
     /// See [`Core::poll_demand`].
@@ -281,10 +297,13 @@ impl<
     /// socket keeps its buffer only with a loan of that socket's credit,
     /// taken before the port hands the buffer over; without one it is
     /// dropped with [`NotLent`] counted, and its buffer stays the port's.
-    pub fn take_frame(
+    /// `count` hears a refusal for want of credit with the loans then out
+    /// ([`Count::no_credit`]).
+    pub fn take_frame<C: Count + ?Sized>(
         &mut self,
         now: Instant,
         events: &mut impl EventSink<NetEvent>,
+        count: &C,
     ) -> Intake<B, P::Held>
     where
         P: FrameSource,
@@ -302,6 +321,9 @@ impl<
                     Keep::Keep
                 }
                 Err(refused) => {
+                    if refused == NotLent::NoCredit {
+                        counted(count, |count| count.no_credit(pool.loans().outstanding()));
+                    }
                     report(events, || NetEvent::NotLent(refused));
                     Keep::Drop
                 }
@@ -468,8 +490,8 @@ impl<
     }
 
     /// See [`Core::next_end`].
-    pub fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId> {
-        self.core.next_end(ends)
+    pub fn next_end<C: Count + ?Sized>(&mut self, ends: &Ends<B>, count: &C) -> Option<WorkId> {
+        self.core.next_end(ends, count)
     }
 
     /// See [`Core::drop_observer`].

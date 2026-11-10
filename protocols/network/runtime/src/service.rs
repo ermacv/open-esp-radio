@@ -11,14 +11,15 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, Ends, Eviction, Group, GroupsFull, Intake, LentDatagram, LoansRefused,
-    NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId, Unsent,
+    CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, Intake, LentDatagram,
+    LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId, Unsent,
 };
 use oer_protocols_network_port::{
     Candidate, Egress, FramePort, FrameSource, Next, PlanStop, QUANTUM, Turns,
 };
 use oer_protocols_network_wire::ip::Dscp;
 
+use crate::diagnostics::{Diagnostics, Stage, Tally};
 use crate::local::{LocalEnd, LocalRefused, Produce, Producer, Producers};
 use crate::observation::{LocalEvent, PublishEnd, ServiceEvent, TurnEnd, seen};
 use crate::returns::ReturnEnd;
@@ -73,6 +74,11 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
             None if plan.more() => Next::Stop(PlanStop::Spent),
             None => Next::Idle,
         })
+    }
+
+    /// An empty list's plan changes nothing: there is nothing to do.
+    fn nothing_ready(&mut self) -> Result<(), Infallible> {
+        Ok(())
     }
 
     fn accepted(&mut self, (): (), _ticket: Ticket) -> Result<(), Infallible> {
@@ -327,7 +333,9 @@ struct Bound<
 }
 
 /// The network's task. `L` is its local producer: `()` for none, at no
-/// cost, or a [`Producer`] ([`Service::with_producer`]).
+/// cost, or a [`Producer`] ([`Service::with_producer`]). `D` are its
+/// switchable diagnostics: `()` for none, at no cost, or an image's
+/// ([`Service::with_diagnostics`]).
 pub struct Service<
     'a,
     'm,
@@ -343,6 +351,7 @@ pub struct Service<
     P: FramePort + FrameSource,
     E: Egress<P::Ticket, P::Notice>,
     L = (),
+    D = (),
 > {
     owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
     egress: E,
@@ -365,6 +374,7 @@ pub struct Service<
     /// Where the interface's address is published, and the core's count of
     /// changes at the last publication.
     watch: Option<Watching<'a>>,
+    diagnostics: D,
 }
 
 impl<
@@ -446,7 +456,43 @@ impl<
     ) -> Self {
         Self::build(owner, egress, memory, stop, Producer::new(producer, end))
     }
+}
 
+impl<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const NEIGHBORS: usize,
+    const BLOCKS: usize,
+    const DEPTH: usize,
+    const LANE: usize,
+    P: FramePort + FrameSource,
+    E: Egress<P::Ticket, P::Notice>,
+    Q: Produce,
+    D,
+>
+    Service<
+        'a,
+        'm,
+        B,
+        SIZE,
+        SOCKETS,
+        CREDITS,
+        RECEIVED,
+        NEIGHBORS,
+        BLOCKS,
+        DEPTH,
+        LANE,
+        P,
+        E,
+        Producer<'a, B, Q, CREDITS>,
+        D,
+    >
+{
     /// Open the producer's socket on `port`, whose datagrams carry `dscp`. It
     /// only sends: a datagram for its port is dropped before any block. A
     /// refusal changes nothing.
@@ -504,6 +550,65 @@ impl<
             returns: None,
             local,
             watch: None,
+            diagnostics: (),
+        }
+    }
+
+    /// As it is, counting into `diagnostics`, which it asks whether to at
+    /// each turn and each pass of the wait that takes returns (see
+    /// [`Diagnostics`]).
+    #[inline(always)]
+    pub fn with_diagnostics<D: Diagnostics>(
+        self,
+        diagnostics: D,
+    ) -> Service<
+        'a,
+        'm,
+        B,
+        SIZE,
+        SOCKETS,
+        CREDITS,
+        RECEIVED,
+        NEIGHBORS,
+        BLOCKS,
+        DEPTH,
+        LANE,
+        P,
+        E,
+        L,
+        D,
+    > {
+        let Self {
+            owner,
+            egress,
+            fault,
+            bound,
+            stop,
+            ended,
+            next_block,
+            memory,
+            pressure_at,
+            adopted,
+            returns,
+            local,
+            watch,
+            diagnostics: (),
+        } = self;
+        Service {
+            owner,
+            egress,
+            fault,
+            bound,
+            stop,
+            ended,
+            next_block,
+            memory,
+            pressure_at,
+            adopted,
+            returns,
+            local,
+            watch,
+            diagnostics,
         }
     }
 }
@@ -523,7 +628,8 @@ impl<
     P: FramePort + FrameSource,
     E: Egress<P::Ticket, P::Notice>,
     L: Producers<B, CREDITS>,
-> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E, L>
+    D: Diagnostics,
+> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E, L, D>
 {
     /// Take blocks home through `returns`, for as long as this service holds
     /// the pool.
@@ -604,12 +710,13 @@ impl<
     }
 
     /// Take the returns published to this service, as one batch.
-    fn take_returns(&mut self) -> Returned {
+    fn take_returns(&mut self, tally: &mut Tally<D>) -> Returned {
         Self::returns_of(
             &mut self.owner,
             &mut self.bound,
             self.returns.as_ref(),
             &mut self.adopted,
+            tally,
         )
     }
 
@@ -617,16 +724,24 @@ impl<
     /// lane, from adopted sockets and as lent buffers back with their port,
     /// and give it to the pool and the loans' account. It runs no command,
     /// reads no frame, chooses nothing and builds nothing. A block that came
-    /// home while a socket waits for one is work, which a turn grants.
+    /// home while a socket waits for one is work, which a turn grants. While
+    /// `tally` is on, a batch that took something counts, with the blocks it
+    /// brought home and the loans it gave back.
     fn returns_of(
         owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
         bound: &mut [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>; SOCKETS],
         returns: Option<&ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
         adopted: &mut [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
+        tally: &mut Tally<D>,
     ) -> Returned {
         let mut any = false;
         let pool = owner.pool();
         let free = pool.free();
+        let loans = if tally.on() {
+            pool.loans().outstanding()
+        } else {
+            0
+        };
         if let Some(returns) = returns {
             any |= returns.take_home(pool);
         }
@@ -642,6 +757,19 @@ impl<
             }
         }
         let came = pool.free() > free;
+        if any || came {
+            tally.note(|counts| {
+                let blocks = pool.free().saturating_sub(free);
+                let credits = loans.saturating_sub(pool.loans().outstanding());
+                counts.return_batches = counts.return_batches.wrapping_add(1);
+                counts.blocks_returned = counts
+                    .blocks_returned
+                    .wrapping_add(u32::try_from(blocks).unwrap_or(u32::MAX));
+                counts.credits_restored = counts
+                    .credits_restored
+                    .wrapping_add(u32::try_from(credits).unwrap_or(u32::MAX));
+            });
+        }
         Returned {
             any: any || came,
             work: came && bound.iter().flatten().any(Bound::waiting),
@@ -806,6 +934,7 @@ impl<
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> Turned {
         let mut again = false;
+        let mut tally = Tally::turn(&mut self.diagnostics);
         report(events, || ServiceEvent::TurnBegan);
         self.local.turn_begins();
         self.owner.observe_link(now);
@@ -813,11 +942,18 @@ impl<
         for index in 0..SOCKETS {
             self.commands(now, index, events);
         }
-        self.take_returns();
+        tally.stage(Stage::Intake, &mut self.diagnostics);
+        self.take_returns(&mut tally);
         self.give_blocks();
+        tally.stage(Stage::Returns, &mut self.diagnostics);
         let mut intake_full = true;
         for _ in 0..TURN_FRAMES {
-            match self.owner.take_frame(now, events) {
+            let intake = self.owner.take_frame(now, events, tally.steps());
+            // Read right after the refusal's frame, before anything else
+            // moves the loans.
+            let bound = &self.bound;
+            tally.read_unreturned(|| Self::unreturned(bound));
+            match intake {
                 Intake::Empty => {
                     intake_full = false;
                     break;
@@ -829,6 +965,7 @@ impl<
         }
         seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
         again |= intake_full;
+        tally.stage(Stage::Receive, &mut self.diagnostics);
         let mut told_all = false;
         for _ in 0..TURN_NOTICES {
             let Some(notice) = self.owner.take_notice() else {
@@ -842,12 +979,14 @@ impl<
                 break;
             }
         }
+        tally.stage(Stage::Notices, &mut self.diagnostics);
         if self.fault.is_some() {
             // Nothing more is offered or published: the epilogue delivers.
             report(events, || ServiceEvent::Published(PublishEnd::Fault));
         } else if told_all {
-            self.local.offers(now, &mut self.owner, events);
-            let end = self.publish(now, events);
+            self.local
+                .offers(now, &mut self.owner, events, tally.steps());
+            let end = self.publish(now, events, &mut tally);
             // More may be ready past the budget; a declining fill kept the
             // producer's flow out of the rest of this turn only.
             again |= end == PublishEnd::Budget || self.local.filtered().is_some();
@@ -858,19 +997,34 @@ impl<
             report(events, || ServiceEvent::Published(PublishEnd::Deferred));
             again = true;
         }
+        tally.stage(Stage::Publish, &mut self.diagnostics);
         // Eviction ends commands too, so it comes before the delivery: the
         // epilogue's delivery is the turn's last step that can learn a result.
         if self.fault.is_none() && !self.owner.port_broken() {
             // An evicted block is granted by the next turn.
             again |= self.relieve(now);
         }
-        self.deliver(events);
+        self.deliver(events, &tally);
         // What the delivery freed may release the producer's hold or budget,
         // which no wake of its own names.
         again |= self.local.again(&self.owner);
         again |= self.publish_configuration();
         self.turn_ended(events);
+        tally.stage(Stage::Settle, &mut self.diagnostics);
+        tally.end(&mut self.diagnostics);
         Turned { again }
+    }
+
+    /// The lent buffers back with their port whose loans the service has not
+    /// yet taken back, over every lending socket.
+    fn unreturned(
+        bound: &[Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>; SOCKETS],
+    ) -> u32 {
+        bound
+            .iter()
+            .flatten()
+            .filter_map(|bound| bound.lent.as_ref())
+            .fold(0_u32, |sum, lent| sum.saturating_add(lent.unreturned()))
     }
 
     /// Hand a lent datagram to its socket, or say why not: its buffer then
@@ -909,12 +1063,12 @@ impl<
 
     /// The turn's epilogue: hand every result the core knows to its client,
     /// the channel sockets' places and the producer alike; whether any went.
-    fn deliver(&mut self, events: &mut impl EventSink<ServiceEvent>) -> bool {
+    fn deliver(&mut self, events: &mut impl EventSink<ServiceEvent>, tally: &Tally<D>) -> bool {
         let mut moved = false;
         for bound in self.bound.iter_mut().flatten() {
-            moved |= bound.hand_back(&mut self.owner);
+            moved |= bound.hand_back(&mut self.owner, tally.steps());
         }
-        moved |= self.local.deliver(&mut self.owner, events);
+        moved |= self.local.deliver(&mut self.owner, events, tally.steps());
         moved
     }
 
@@ -1102,12 +1256,22 @@ impl<
     /// most one collection a frame of the budget, so a plan that stops at once
     /// cannot hold the turn. No await falls between a choice and its answer,
     /// so no cancellation can leave a reservation unanswered, and the plan
-    /// ends with publishing: it reserved nothing beyond its frames.
-    fn publish(&mut self, now: Instant, events: &mut impl EventSink<ServiceEvent>) -> PublishEnd {
+    /// ends with publishing: it reserved nothing beyond its frames. Where the
+    /// core is certainly idle no collection is made: the policy takes the
+    /// step of one over no work ([`Egress::nothing_ready`]).
+    fn publish(
+        &mut self,
+        now: Instant,
+        events: &mut impl EventSink<ServiceEvent>,
+        tally: &mut Tally<D>,
+    ) -> PublishEnd {
         let mut moved = false;
         let mut frames = 0_usize;
         let mut collections = 0_usize;
         let mut plan = None;
+        // Frames the plan in hand sent: those after its first are its
+        // continuations.
+        let mut planned = 0_usize;
         let end = loop {
             if frames == TURN_FRAMES {
                 break PublishEnd::Budget;
@@ -1118,13 +1282,29 @@ impl<
                     if collections == TURN_FRAMES {
                         break PublishEnd::Budget;
                     }
+                    // Certainly no work: the policy makes the step a
+                    // collection over none would, and nothing is collected.
+                    if self.owner.idle() {
+                        match self.egress.nothing_ready() {
+                            Ok(()) => break PublishEnd::Chose,
+                            Err(fault) => {
+                                self.note(Err(fault));
+                                break PublishEnd::Fault;
+                            }
+                        }
+                    }
                     collections = collections.saturating_add(1);
+                    planned = 0;
+                    tally.note(|counts| counts.collections = counts.collections.wrapping_add(1));
                     // After a declining fill, the producer's flow sits out
                     // the turn.
                     let filtered = self.local.filtered();
-                    let ready = self.owner.demands(now).filter(move |demand| {
-                        filtered.is_none_or(|flow| demand.ready.flow != Some(flow))
-                    });
+                    let ready = self
+                        .owner
+                        .demands(now, tally.steps())
+                        .filter(move |demand| {
+                            filtered.is_none_or(|flow| demand.ready.flow != Some(flow))
+                        });
                     match self.egress.plan(ready) {
                         Ok(collected) => plan.insert(collected),
                         Err(fault) => {
@@ -1138,7 +1318,8 @@ impl<
                 Ok(Next::Send(demand, reservation)) => (demand, reservation),
                 Ok(Next::Idle) => break PublishEnd::Chose,
                 // Nothing was reserved: a new collection chooses.
-                Ok(Next::Stop(_)) => {
+                Ok(Next::Stop(stop)) => {
+                    tally.stopped(stop);
                     plan = None;
                     continue;
                 }
@@ -1148,9 +1329,16 @@ impl<
                 }
             };
             frames = frames.saturating_add(1);
+            if planned != 0 {
+                tally.note(|counts| counts.continued = counts.continued.wrapping_add(1));
+            }
+            planned = planned.saturating_add(1);
             let local = &mut self.local;
             let fill = |work, data: &mut [u8]| local.fill(now, work, data);
-            match self.owner.transmit(now, demand.grant(), fill) {
+            match self
+                .owner
+                .transmit(now, demand.grant(), fill, tally.steps())
+            {
                 Ok(ticket) => {
                     moved = true;
                     report(events, || ServiceEvent::Accepted);
@@ -1234,6 +1422,7 @@ impl<
             adopted,
             returns,
             local,
+            diagnostics,
             ..
         } = self;
         let ready = poll_fn(|cx| {
@@ -1252,7 +1441,10 @@ impl<
                 returned |= returns.poll_waiting(cx);
             }
             if returned {
-                let taken = Self::returns_of(owner, bound, returns.as_ref(), adopted);
+                let mut tally = Tally::begin(diagnostics);
+                let taken = Self::returns_of(owner, bound, returns.as_ref(), adopted, &mut tally);
+                tally.stage(Stage::Waiting, diagnostics);
+                tally.end(diagnostics);
                 report(events, || ServiceEvent::Returned { work: taken.work });
                 ready |= taken.work;
             }
@@ -1293,7 +1485,7 @@ impl<
         // The lease leaves with the core: the watch ends here, as it would
         // at a drop.
         drop(this.watch.take());
-        while this.take_returns().any {}
+        while this.take_returns(&mut Tally::off()).any {}
         let adopted = this.adopted;
         let returns = this.returns;
         let mut retired = this.owner.retire();
@@ -1404,10 +1596,11 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
     >(
         &mut self,
         owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
+        count: &impl Count,
     ) -> bool {
         let mut moved = false;
         // Only what the core told ended: running commands are not looked at.
-        while let Some(work) = owner.next_end(&self.ends) {
+        while let Some(work) = owner.next_end(&self.ends, count) {
             if self
                 .closing
                 .as_ref()

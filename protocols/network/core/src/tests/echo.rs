@@ -56,7 +56,9 @@ fn ask<B>(stack: &mut Stack<B>, now: Instant, message: &[u8]) -> Vec<NetEvent> {
 fn flush<B>(stack: &mut Stack<B>, now: Instant) -> Vec<Vec<u8>> {
     let before = stack.port().sent.len();
     while let Some(demand) = stack.poll_demand(now) {
-        stack.transmit(now, demand.grant(), unproduced).unwrap();
+        stack
+            .transmit(now, demand.grant(), unproduced, &())
+            .unwrap();
     }
     stack.port().sent[before..].to_vec()
 }
@@ -261,7 +263,11 @@ fn a_reply_the_port_refuses_waits_and_retirement_brings_its_block_home() {
         assert!(ask(stack, at(0), &echo(1, b"ping")).is_empty());
         stack.port_mut().full = true;
         let demand = stack.poll_demand(at(0)).unwrap();
-        assert!(stack.transmit(at(0), demand.grant(), unproduced).is_err());
+        assert!(
+            stack
+                .transmit(at(0), demand.grant(), unproduced, &())
+                .is_err()
+        );
         assert!(stack.poll_demand(at(0)).is_some(), "it stays ready");
     });
     // Retirement: the owed reply's block goes home with the rest.

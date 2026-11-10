@@ -100,6 +100,11 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
         Ok(())
     }
 
+    /// Whether no reply is owed.
+    pub(crate) fn none(&self) -> bool {
+        self.owed.iter().all(Option::is_none)
+    }
+
     /// The replies owed, oldest first.
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Owed<'m, B, SIZE>> + Clone + '_ {
         let mut oldest = [None; ECHOES];
