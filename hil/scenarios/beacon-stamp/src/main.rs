@@ -11,19 +11,28 @@
 //!
 //! 1. the router's monitor capture of the probe's channel starts
 //!    (`sniffer.rs`);
-//! 2. the responder is written and read from its reset until it listens;
-//! 3. the probe is written; the preflight (`preflight.rs`) accepts the
-//!    capture of its first boot and decides the latch calibration
-//!    (`latch.rs`) from that boot's calibration frames and the responder's
-//!    ACKs;
-//! 4. the probe is reset and read to its `OER-RESULT:` line;
-//! 5. the responder is read to its own result line;
-//! 6. the capture stops, and the lease is released.
+//! 2. the responder is written into its console (`FlashConsole`: the
+//!    chip held in its loader, started by the console's own reset, the
+//!    console recorded from before that reset), until it listens;
+//! 3. the probe is written into its console the same way, its first boot
+//!    recorded from before its start; once it begins, the preflight
+//!    (`preflight.rs`) accepts the capture of that boot and decides the
+//!    latch calibration (`latch.rs`) from its calibration frames and the
+//!    responder's ACKs; that boot's console then stops;
+//! 4. the probe is reset by a console of its own and recorded to its
+//!    `OER-RESULT:` line: the measurement boot;
+//! 5. the responder is recorded to its own result line;
+//! 6. the capture stops, every console still recording is finished, and
+//!    the lease is released.
 //!
-//! The probe's, the responder's, the preflight's, the capture's and the
-//! lease's ends are kept and recorded apart, in `<console-log>.outcome.json`;
-//! the responder's console goes to `<console-log>.responder.log`. The run
-//! needs no network, peer or secret: the frames go out open.
+//! Every console is recorded continuously (`recorder.rs`) into its own
+//! file: the measurement boot into `<console-log>`, which `decide` reads
+//! alone, the preflight boot into `<console-log>.preflight.log`, the
+//! responder into `<console-log>.responder.log`. The probe's, the
+//! responder's, the preflight's, each console's (its write, loss, read and
+//! end), the capture's and the lease's ends are kept and recorded apart, in
+//! `<console-log>.outcome.json`. The run needs no network, peer or secret:
+//! the frames go out open.
 //!
 //! `decide <console-log> <capture.pcap>` reads both and applies the rule
 //! of `decide.rs` to each kind of subject frame. It exits 0 when every
@@ -33,11 +42,11 @@
 mod airtime;
 mod bundle;
 mod capture;
-mod console;
 mod decide;
 mod device;
 mod latch;
 mod preflight;
+mod recorder;
 mod result;
 mod sniffer;
 
@@ -50,15 +59,22 @@ use oer_tools_lab_arbiter::{
 };
 use oer_tools_lab_client::{
     client::Client,
-    protocol::{FlashVia, LeaseRequest, Operation},
+    protocol::{LeaseRequest, Operation},
 };
 
-use crate::{bundle::Identity, console::ConsoleSession, result::ProbeResult};
+use crate::{
+    bundle::Identity,
+    recorder::{Consoles, Recorder},
+    result::ProbeResult,
+};
 
 const IMAGE: &str = "esp32s31-beacon-stamp";
 const RESPONDER_IMAGE: &str = "esp32s31-ack-responder";
-/// From the responder's reset to its listening line: boot and RF start.
-const LISTEN_TIMEOUT: Duration = Duration::from_secs(30);
+/// From a write into a console to the image's first line it waits for: the
+/// write, the start's reset, the boot and, for the responder, its RF start.
+const START_TIMEOUT: Duration = Duration::from_secs(90);
+/// The probe's first line of a boot (`hil/probes/esp32s31-beacon-stamp/src/record.rs`).
+const PROBE_BEGIN: &str = "STAMP v1 begin";
 /// From the probe's result line to the responder's: its 120-s window from
 /// its listening line, with margin.
 const RESPONDER_TIMEOUT: Duration = Duration::from_secs(150);
@@ -185,16 +201,26 @@ fn run(
         probe: &board.mac,
         responder: &responder.mac,
     };
+    let mut consoles = Consoles::new();
     let captured = sniffer::with_capture(
         &mut client,
         &mut monitor,
         CHANNEL,
         &paths.capture,
-        |client, monitor| leased(client, monitor, &macs, &owner, &paths),
+        |client, monitor| leased(client, monitor, &macs, &owner, &paths, &mut consoles),
     );
+    // Every console still recording, whatever ended the body, before the
+    // lease ends.
+    let (recorded, consoles_clean) = consoles.finish_all();
     let released = client.release();
     eprintln!("beacon-stamp: lease {} released", granted.lease);
-    let (result, record) = ended(captured, released);
+    let (result, record) = ended(captured, released, recorded);
+    let result = match (result, consoles_clean) {
+        (Ok(passed), Ok(())) => Ok(passed),
+        (Ok(_), Err(unclean)) => Err(unclean),
+        (Err(error), Ok(())) => Err(error),
+        (Err(error), Err(unclean)) => Err(format!("{error}; {unclean}")),
+    };
     // Recorded apart: every end of the run.
     let mut file = paths.console.clone().into_os_string();
     file.push(".outcome.json");
@@ -265,6 +291,7 @@ struct Leased {
 fn ended(
     captured: sniffer::Captured<Leased>,
     released: Result<()>,
+    consoles: serde_json::Value,
 ) -> (Result<bool>, serde_json::Value) {
     let body = match captured.body {
         None => Err("the probe was not run".to_owned()),
@@ -298,6 +325,7 @@ fn ended(
             Ok(()) => end(true, "released".to_owned()),
             Err(error) => end(false, error.clone()),
         },
+        "consoles": consoles,
     });
     let result = match (body, captured.capture, released) {
         (
@@ -333,45 +361,15 @@ struct Macs<'a> {
     responder: &'a str,
 }
 
-fn flash(
-    client: &mut Client,
-    mac: &str,
-    owner: &str,
-    image: &str,
-    bundle: &Path,
-    identity: &Identity,
-) -> Result<()> {
-    client.run(
-        Operation::Flash {
-            board: mac.to_owned(),
-            bundle: bundle.display().to_string(),
-            image: ImageIdentity {
-                name: image.to_owned(),
-                sha256: identity.application_sha256.clone(),
-                commit: Some(identity.commit.clone()),
-                dirty: Some(identity.dirty),
-                origin: std::env::args().collect::<Vec<_>>().join(" "),
-            },
-            owner: owner.to_owned(),
-            via: FlashVia::Usb,
-            skip_carried: false,
-        },
-        &mut std::io::sink(),
-        None,
-    )?;
-    Ok(())
-}
-
-/// A console session of `image` on board `mac` from its reset.
-fn console_of(client: &mut Client, image: &'static str, mac: &str) -> Result<ConsoleSession> {
-    let running = client.start(Operation::Console {
-        board: mac.to_owned(),
-        reset: true,
-    })?;
-    let cancel = running.input();
-    Ok(ConsoleSession::new(image, running, move || {
-        let _ = cancel.cancel();
-    }))
+/// The image identity a flash journals for `image` of `identity`.
+fn journaled(image: &str, identity: &Identity) -> ImageIdentity {
+    ImageIdentity {
+        name: image.to_owned(),
+        sha256: identity.application_sha256.clone(),
+        commit: Some(identity.commit.clone()),
+        dirty: Some(identity.dirty),
+        origin: std::env::args().collect::<Vec<_>>().join(" "),
+    }
 }
 
 fn passed(result: ProbeResult, image: &str) -> bool {
@@ -390,32 +388,49 @@ fn leased(
     macs: &Macs<'_>,
     owner: &str,
     paths: &Paths,
+    consoles: &mut Consoles<oer_tools_lab_client::client::Input>,
 ) -> Result<Leased> {
-    flash(
-        client,
-        macs.responder,
-        owner,
-        RESPONDER_IMAGE,
-        &paths.responder,
-        &paths.responder_identity,
-    )?;
-    let mut responder_file = paths.console.clone().into_os_string();
-    responder_file.push(".responder.log");
-    let mut responder_log = std::fs::File::create(&responder_file)
-        .map_err(|error| format!("{}: {error}", Path::new(&responder_file).display()))?;
-    // Ends with this function on every path: cancelled and joined.
-    let responder = console_of(client, "ack-responder", macs.responder)?;
-    responder.wait_for(&mut responder_log, "ACKRESP listening", LISTEN_TIMEOUT)?;
+    // The responder, written into its console and recorded from before its
+    // start, until it listens.
+    let (file, log) = open_log(paths, ".responder.log")?;
+    let running = client.start(Operation::FlashConsole {
+        board: macs.responder.to_owned(),
+        bundle: paths.responder.display().to_string(),
+        image: journaled(RESPONDER_IMAGE, &paths.responder_identity),
+        owner: owner.to_owned(),
+    })?;
+    consoles.add(
+        "responder",
+        file,
+        Recorder::start("ack-responder", running, log),
+    );
+    consoles
+        .get("responder")?
+        .wait_for("ACKRESP listening", START_TIMEOUT)?;
     eprintln!("beacon-stamp: the responder listens; writing the probe");
-    flash(
-        client,
-        macs.probe,
-        owner,
-        IMAGE,
-        &paths.bundle,
-        &paths.identity,
-    )?;
-    let preflight = preflight::wait::<Client, _>(monitor)?;
+    // The probe's first boot: written into its console, recorded from
+    // before its start; the preflight reads its frames once it begins.
+    let (file, log) = open_log(paths, ".preflight.log")?;
+    let running = client.start(Operation::FlashConsole {
+        board: macs.probe.to_owned(),
+        bundle: paths.bundle.display().to_string(),
+        image: journaled(IMAGE, &paths.identity),
+        owner: owner.to_owned(),
+    })?;
+    consoles.add(
+        "preflight",
+        file,
+        Recorder::start("beacon-stamp", running, log),
+    );
+    consoles
+        .get("preflight")?
+        .wait_for(PROBE_BEGIN, START_TIMEOUT)?;
+    let preflight = preflight::wait::<Client, _>(monitor);
+    // That boot's console ends here, accepted or not: its port goes to the
+    // measurement boot's console.
+    let preflight_boot = consoles.finish("preflight")?.clean();
+    let preflight = preflight?;
+    preflight_boot.map_err(|error| format!("the preflight boot's console: {error}"))?;
     let latch = format!(
         "{:?} ({} pairs, {} unanswered, {} without an observed PHY, {} contradictory, {:?})",
         preflight.latch,
@@ -430,21 +445,41 @@ fn leased(
          reading the probe from its reset",
         preflight.frames
     );
-    let mut log = std::fs::File::create(&paths.console)
+    // The measurement boot: a console of its own resets the probe.
+    let log = std::fs::File::create(&paths.console)
         .map_err(|error| format!("{}: {error}", paths.console.display()))?;
-    let session = console_of(client, "beacon-stamp", macs.probe)?;
-    let verdict = session.result(&mut log, CONSOLE_TIMEOUT);
-    session.finish();
+    let running = client.start(Operation::Console {
+        board: macs.probe.to_owned(),
+        reset: true,
+    })?;
+    consoles.add(
+        "measurement",
+        paths.console.display().to_string(),
+        Recorder::start("beacon-stamp", running, log),
+    );
+    let verdict = consoles.get("measurement")?.result(CONSOLE_TIMEOUT);
+    consoles.finish("measurement")?;
     let probe = passed(verdict?, "beacon-stamp");
-    let responded = responder
-        .result(&mut responder_log, RESPONDER_TIMEOUT)
+    let responded = consoles
+        .get("responder")?
+        .result(RESPONDER_TIMEOUT)
         .map(|result| passed(result, "ack-responder"));
-    responder.finish();
+    consoles.finish("responder")?;
     Ok(Leased {
         probe,
         responder: responded,
         latch,
     })
+}
+
+/// A console file of the run, `<console-log>` with `suffix`: its name and
+/// the file.
+fn open_log(paths: &Paths, suffix: &str) -> Result<(String, std::fs::File)> {
+    let mut file = paths.console.clone().into_os_string();
+    file.push(suffix);
+    let name = Path::new(&file).display().to_string();
+    let opened = std::fs::File::create(&file).map_err(|error| format!("{name}: {error}"))?;
+    Ok((name, opened))
 }
 
 /// `Ok(true)` when every kind is decided.
@@ -536,16 +571,26 @@ mod tests {
             body: Some(Ok(leased(Ok(true)))),
             capture: Ok(PathBuf::from("run.pcap")),
         };
-        let (result, record) = ended(captured, Ok(()));
+        let (result, record) = ended(
+            captured,
+            Ok(()),
+            serde_json::json!({"preflight": {"written": 1}}),
+        );
         assert_eq!(result, Ok(true));
         for end in ["probe", "responder", "latch", "capture", "release"] {
             assert_eq!(record[end]["ok"], true, "{end}");
         }
+        // Each console's results, kept apart from the others.
+        assert_eq!(record["consoles"]["preflight"]["written"], 1);
         let captured = sniffer::Captured {
             body: Some(Ok(leased(Ok(true)))),
             capture: Ok(PathBuf::from("run.pcap")),
         };
-        let (result, record) = ended(captured, Err("lab gone".into()));
+        let (result, record) = ended(
+            captured,
+            Err("lab gone".into()),
+            serde_json::json!({"preflight": {"written": 1}}),
+        );
         assert!(result.unwrap_err().contains("lab gone"));
         assert_eq!(record["probe"]["ok"], true);
         assert_eq!(record["release"]["detail"], "lab gone");
@@ -553,7 +598,11 @@ mod tests {
             body: Some(Ok(leased(Err("no responder result".into())))),
             capture: Ok(PathBuf::from("run.pcap")),
         };
-        let (result, record) = ended(captured, Ok(()));
+        let (result, record) = ended(
+            captured,
+            Ok(()),
+            serde_json::json!({"preflight": {"written": 1}}),
+        );
         assert!(result.unwrap_err().contains("no responder result"));
         assert_eq!(record["probe"]["ok"], true);
         assert_eq!(record["responder"]["detail"], "no responder result");
@@ -600,7 +649,11 @@ mod tests {
             body: Some(Err("console timeout".into())),
             capture: Err("tcpdump lost".into()),
         };
-        let (result, record) = ended(captured, Err("release refused".into()));
+        let (result, record) = ended(
+            captured,
+            Err("release refused".into()),
+            serde_json::json!({"preflight": {"written": 1}}),
+        );
         let error = result.unwrap_err();
         for cause in ["console timeout", "tcpdump lost", "release refused"] {
             assert!(error.contains(cause), "{error}");
@@ -613,7 +666,13 @@ mod tests {
             body: None,
             capture: Err("the capture did not start".into()),
         };
-        let error = ended(captured, Ok(())).0.unwrap_err();
+        let error = ended(
+            captured,
+            Ok(()),
+            serde_json::json!({"preflight": {"written": 1}}),
+        )
+        .0
+        .unwrap_err();
         assert!(error.contains("not run") && error.contains("did not start"));
     }
 }
