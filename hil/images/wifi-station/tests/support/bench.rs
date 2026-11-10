@@ -49,7 +49,7 @@ impl FramePort for Port {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<(), E>> {
         let mut wire = self.0.borrow_mut();
         if !wire.open {
@@ -59,7 +59,8 @@ impl FramePort for Port {
             return Ok(());
         }
         let mut frame = vec![0; length];
-        fill(&mut frame).map_err(Unpublished::Fill)?;
+        fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None))
+            .map_err(Unpublished::Fill)?;
         wire.sent.push(frame);
         Ok(())
     }

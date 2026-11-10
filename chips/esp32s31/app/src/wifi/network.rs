@@ -66,6 +66,7 @@ pub use oer_protocols_network_core::{
 };
 /// Why a lent buffer no longer holds what the station showed.
 pub use oer_protocols_network_port::FrameLengthError;
+use oer_protocols_network_port::{Held, Slot};
 pub use oer_protocols_network_runtime::{
     Interest, LocalEnd, Next, Observer, Offer, Produce, RESERVE_AHEAD, Refusal, Refused,
     SocketClosed, WatchRefused, Work,
@@ -646,6 +647,16 @@ impl TxSupply<TxPacket> for WifiTx {
 #[doc(hidden)]
 pub struct WifiBuffers {
     link: &'static wifi::NetworkLinkSource<Notifies>,
+    /// The run of one octet each buffer holds from the last frame written
+    /// into it, by its place, which runs to that frame's end. Nothing else
+    /// writes a run's octets: the station writes its MPDU header in front of
+    /// the frame's payload, and on a shorter header moves the payload down
+    /// in place, which moves octets of a run ending at the frame's end onto
+    /// octets of it (`write_mpdu`,
+    /// `protocols/ieee80211/core/roles/sta/src/data/plane.rs`); the
+    /// hardware's MIC and FCS room lies behind the frame, and a retry goes
+    /// from the octets as they are.
+    held: [Option<Held>; wifi::NETWORK_BUFFERS],
 }
 
 impl TxBuffers for WifiBuffers {
@@ -675,14 +686,22 @@ impl TxBuffers for WifiBuffers {
     fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut Slot<'_>) -> Result<(), E>,
     ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
         let mut slot = FREE.take().ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
+        let held = self.held.get_mut(usize::from(slot.place()));
         // A frame longer than a buffer is the port's refusal, before any
         // fill; a fill's own failure stays the fill's.
-        let written = match slot.bytes_mut().get_mut(..length) {
-            Some(bytes) => fill(bytes).map_err(Unpublished::Fill),
-            None => Err(Unpublished::Port(PortRefusal::BadFrame)),
+        let written = match (slot.bytes_mut().get_mut(..length), held) {
+            (Some(bytes), Some(held)) => {
+                let mut room = Slot::new(bytes, held.take());
+                let filled = fill(&mut room).map_err(Unpublished::Fill);
+                // Whatever the fill did, the buffer holds what the room says.
+                *held = room.held();
+                filled
+            }
+            (Some(bytes), None) => fill(&mut Slot::new(bytes, None)).map_err(Unpublished::Fill),
+            (None, _) => Err(Unpublished::Port(PortRefusal::BadFrame)),
         };
         match written {
             Ok(()) => Ok(WrittenFrame { slot, length }),
@@ -784,7 +803,14 @@ impl<P: Produce + 'static, M: TransmitMode, R: ReceiveMode> Network<P, M, R> {
         let (end, watch): (&'static LocalEnd, &'static ConfigurationWatch) = (end, watch);
         let (stop, stopping) = stop.split();
         let link = network.link_source();
-        let port = DevicePort::new(network, transmit, WifiBuffers { link });
+        let port = DevicePort::new(
+            network,
+            transmit,
+            WifiBuffers {
+                link,
+                held: [None; wifi::NETWORK_BUFFERS],
+            },
+        );
         let owner = NetworkOwner::new(brand, interface, pool, port);
         let running = service.insert(
             Service::with_producer(

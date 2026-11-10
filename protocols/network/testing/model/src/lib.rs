@@ -448,7 +448,7 @@ impl FramePort for Medium {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<Ticket, Unpublished<NoRoom, E>> {
         let mut state = self.0.borrow_mut();
         if state.refusals > 0 {
@@ -461,7 +461,8 @@ impl FramePort for Medium {
             return Err(Unpublished::Port(NoRoom));
         };
         let mut frame = vec![0; length];
-        fill(&mut frame).map_err(Unpublished::Fill)?;
+        fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None))
+            .map_err(Unpublished::Fill)?;
         Ok(state.fly(place, &frame))
     }
 }

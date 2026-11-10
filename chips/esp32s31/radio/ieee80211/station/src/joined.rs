@@ -470,7 +470,7 @@ impl TxBuffers for Buffers {
     fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
         let mut slot = self
             .0
@@ -543,7 +543,7 @@ impl FramePort for Counted {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<PortRefusal, E>> {
         self.inner
             .as_mut()

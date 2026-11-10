@@ -44,7 +44,7 @@ impl FramePort for Port {
     fn publish<E>(
         &mut self,
         _: usize,
-        _: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        _: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<(), E>> {
         Err(Unpublished::Port(()))
     }

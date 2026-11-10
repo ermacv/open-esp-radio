@@ -347,7 +347,7 @@ impl FramePort for LocalPort {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<u32, Unpublished<(), E>> {
         let mut line = self.0.borrow_mut();
         line.publishes += 1;
@@ -366,18 +366,20 @@ impl FramePort for LocalPort {
             Reply::Full => Err(Unpublished::Port(())),
             Reply::Lazy => Ok(0),
             Reply::Yes => {
-                let _either = fill(&mut frame);
+                let _either = fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None));
                 Ok(0)
             }
-            Reply::Take | Reply::Misreport => match fill(&mut frame) {
-                Err(error) if reply == Reply::Take => Err(Unpublished::Fill(error)),
-                Err(_) => Err(Unpublished::Port(())),
-                Ok(()) => {
-                    line.sent.push(frame);
-                    line.tickets += 1;
-                    Ok(line.tickets)
+            Reply::Take | Reply::Misreport => {
+                match fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None)) {
+                    Err(error) if reply == Reply::Take => Err(Unpublished::Fill(error)),
+                    Err(_) => Err(Unpublished::Port(())),
+                    Ok(()) => {
+                        line.sent.push(frame);
+                        line.tickets += 1;
+                        Ok(line.tickets)
+                    }
                 }
-            },
+            }
         }
     }
 }

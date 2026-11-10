@@ -32,6 +32,7 @@ use crate::loans::{LoansRefused, NotLent};
 use crate::neighbor::{Holds, Lookup, Neighbors};
 use crate::payload::Payload;
 use crate::places::{Declared, Place, Places, Run, Sending};
+use oer_protocols_network_port::{Held, Slot};
 
 /// RFC 1122, 3.2.1.7: a default time to live large enough for the Internet.
 const TIME_TO_LIVE: u8 = 64;
@@ -211,12 +212,17 @@ impl Frame<'_> {
     /// called for no other. A producer that leaves part of its data
     /// unwritten declines ([`Declined::Unwritable`]): no octet an earlier use
     /// of the slot left goes out.
+    ///
+    /// A produced frame keeps the run of one octet its producer repeats where
+    /// the slot holds it from the buffer's last frame, and leaves the slot
+    /// holding that run; every other frame leaves it holding none.
     pub(crate) fn write(
         &self,
-        slot: &mut [u8],
+        room: &mut Slot<'_>,
         produce: impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined>,
     ) -> Result<(), FillFailed> {
         let short = |_| FillFailed::SlotTooShort;
+        let (slot, kept) = room.open();
         match self {
             Self::Arp(frame) => Writer::new(slot).write(frame).map_err(short),
             Self::Datagram { headers, data } => {
@@ -234,14 +240,29 @@ impl Frame<'_> {
             } => {
                 let (head, rest, sum) = headers.open(slot)?;
                 let data = rest.get_mut(..*length).ok_or(FillFailed::SlotTooShort)?;
-                // One pass over the data: each octet is summed as it is
-                // written.
-                let mut payload = Payload::new(data, sum);
+                // The data starts behind the headers: what the slot holds,
+                // in the data's places.
+                let kept = kept.and_then(|run| {
+                    Some(Held {
+                        at: run.at.checked_sub(HEADERS)?,
+                        ..run
+                    })
+                });
+                // One pass over the data at most: each octet is summed as it
+                // is written, and a run the slot holds is not written again.
+                let mut payload = Payload::new(data, sum, kept);
                 produce(*work, &mut payload).map_err(FillFailed::Declined)?;
-                let sum = payload
+                let (sum, left) = payload
                     .finish()
                     .ok_or(FillFailed::Declined(Declined::Unwritable))?;
-                headers.close(head, sum)
+                headers.close(head, sum)?;
+                room.hold(left.and_then(|run| {
+                    Some(Held {
+                        at: run.at.checked_add(HEADERS)?,
+                        ..run
+                    })
+                }));
+                Ok(())
             }
             Self::Dhcp { headers, message } => {
                 let (head, rest, sum) = headers.open(slot)?;

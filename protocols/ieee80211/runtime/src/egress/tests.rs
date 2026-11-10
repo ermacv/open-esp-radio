@@ -1039,7 +1039,8 @@ fn a_refusal_in_a_plan_costs_what_it_costs_a_choice_per_frame() {
         panic!("the plan goes on");
     };
     planned.refused(held).unwrap();
-    drop(plan);
+    // The plan is dropped here, its storage with it.
+    drop(stored);
     assert_eq!(planned.balance_micros(1), per_frame.balance_micros(1));
     assert_eq!(
         (planned.unsettled(), planned.in_flight()),

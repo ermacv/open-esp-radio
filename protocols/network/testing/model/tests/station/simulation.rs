@@ -586,7 +586,7 @@ impl<I: FramePort<Refusal = PortRefusal>> FramePort for Held<I> {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<I::Ticket, Unpublished<PortRefusal, E>> {
         self.0
             .as_mut()

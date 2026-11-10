@@ -153,7 +153,7 @@ impl FramePort for WirePort {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<u32, Unpublished<bool, E>> {
         let mut wire = self.0.borrow_mut();
         wire.refused = wire.full;
@@ -172,7 +172,7 @@ impl FramePort for WirePort {
             return Ok(0);
         }
         let mut frame = std::vec![0; wire.room.unwrap_or(length)];
-        if let Err(error) = fill(&mut frame) {
+        if let Err(error) = fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None)) {
             return match wire.after_failed_fill {
                 AfterFailedFill::Fill => Err(Unpublished::Fill(error)),
                 AfterFailedFill::Refusal => Err(Unpublished::Port(false)),

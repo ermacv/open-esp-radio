@@ -63,6 +63,10 @@ struct Port {
     received: std::collections::VecDeque<(Vec<u8>, oer_protocols_network_port::Holding)>,
     /// Keeps no buffer it is asked to.
     keeps_nothing: bool,
+    /// Writes every frame into one buffer it keeps, and the run of one octet
+    /// that buffer holds, as a port that keeps its buffers' runs does.
+    keeps_buffer: bool,
+    buffer: Option<(Vec<u8>, Option<oer_protocols_network_port::Held>)>,
 }
 
 /// A frame the tests' port lent, in its own octets.
@@ -144,7 +148,7 @@ impl FramePort for Port {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<&'static str, E>> {
         if self.full {
             return Err(Unpublished::Port("full"));
@@ -155,8 +159,20 @@ impl FramePort for Port {
         if self.lazy {
             return Ok(());
         }
-        let mut slot = vec![0; self.room.unwrap_or(length)];
-        let written = fill(&mut slot);
+        let room = self.room.unwrap_or(length);
+        let (mut slot, held) = match self.buffer.take() {
+            Some((mut buffer, held)) => {
+                buffer.resize(room, 0);
+                (buffer, held)
+            }
+            None => (vec![0; room], None),
+        };
+        let mut room = oer_protocols_network_port::Slot::new(&mut slot, held);
+        let written = fill(&mut room);
+        let held = room.held();
+        if self.keeps_buffer {
+            self.buffer = Some((slot.clone(), held));
+        }
         if self.careless {
             return Ok(());
         }

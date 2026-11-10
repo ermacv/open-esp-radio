@@ -223,7 +223,7 @@ impl TxBuffers for Buffers {
     fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<Written, Unpublished<PortRefusal, E>> {
         if let Some(refusal) = self.refuse {
             return Err(Unpublished::Port(refusal));
@@ -235,7 +235,8 @@ impl TxBuffers for Buffers {
             return Err(Unpublished::Port(PortRefusal::BadFrame));
         }
         let mut bytes = std::vec![0; length];
-        fill(&mut bytes).map_err(Unpublished::Fill)?;
+        fill(&mut oer_protocols_network_port::Slot::new(&mut bytes, None))
+            .map_err(Unpublished::Fill)?;
         self.free -= 1;
         Ok(Written(bytes))
     }
@@ -276,13 +277,15 @@ fn port() -> Port {
 #[derive(Debug, Eq, PartialEq)]
 struct Declined;
 
-fn octets(slot: &mut [u8]) -> Result<(), Declined> {
-    slot.fill(7);
+fn octets(slot: &mut oer_protocols_network_port::Slot<'_>) -> Result<(), Declined> {
+    slot.open().0.fill(7);
     Ok(())
 }
 
 /// A fill no port may call.
-fn unreachable_fill(why: &'static str) -> impl FnOnce(&mut [u8]) -> Result<(), Declined> {
+fn unreachable_fill(
+    why: &'static str,
+) -> impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), Declined> {
     move |_| panic!("{why}")
 }
 

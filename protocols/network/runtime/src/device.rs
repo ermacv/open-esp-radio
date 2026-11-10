@@ -31,7 +31,7 @@ pub trait TxBuffers {
     fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<Self::Frame, Unpublished<PortRefusal, E>>;
 
     /// A frame the device did not take: its buffer is free again.
@@ -151,7 +151,7 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<X::Ticket, Unpublished<PortRefusal, E>> {
         // What the device returned is taken back only when the room or the
         // buffers run out: it may be what is asked for.
