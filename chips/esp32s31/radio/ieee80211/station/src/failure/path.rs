@@ -520,7 +520,6 @@ fn lifecycle_violation(
         V::Missing => "Missing",
         V::QueueFull => "QueueFull",
         V::ActorClosed => "ActorClosed",
-        V::UnsentOverflow => "UnsentOverflow",
         V::RetuneWithoutRequest => "RetuneWithoutRequest",
     }
 }

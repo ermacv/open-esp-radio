@@ -61,7 +61,11 @@
 //! typed cause for the image to record ([`LifecycleEnd`]).
 
 mod inbox;
+mod outbox;
 mod step;
+
+use outbox::{Messages, Sending, UnitRight};
+pub use outbox::{Outbox, UNSENT, Unsent};
 
 #[cfg(test)]
 mod tests;
@@ -280,9 +284,6 @@ pub enum LifecycleViolation {
     /// sends nothing more, and what it did not send is in
     /// [`RetiredLifecycle::unsent`].
     ActorClosed,
-    /// One unit of the lifecycle's work sent more after a refusal than
-    /// [`UNSENT`] keeps: the lifecycle's own count broke.
-    UnsentOverflow,
     /// The arbiter's move was refused while no move was pending.
     RetuneWithoutRequest,
 }
@@ -353,26 +354,6 @@ pub enum Rejected<'id, D: DatapathPort<'id>> {
     /// A group token of no pending change.
     Group(GroupPending<'id, ActorEpochPath<'id, D>>),
 }
-
-/// The most messages one unit of the lifecycle's work sends between two
-/// looks at its end: a reply's place, then its action's keyed frame (the
-/// lent key, the frame and the key's recall). After a refusal, the unit's
-/// later messages are kept here unsent, in order, and no unit follows.
-pub const UNSENT: usize = 4;
-
-/// A message the actor's queues refused, or one the unit sent after such a
-/// refusal: kept whole, never sent.
-pub enum Unsent<'id, D: DatapathPort<'id>> {
-    /// For the actor's message queue.
-    ToActor(ToActor<'id, D>),
-    /// For the parcel queue.
-    Parcel(crate::datapath::Parcel<'id, D>),
-    /// For the link mailbox.
-    Link(ActorLink<'id, D>),
-}
-
-/// The messages the lifecycle did not send, in order.
-pub type UnsentMessages<'id, D> = heapless::Deque<Unsent<'id, D>, UNSENT>;
 
 /// A transmit ticket of the port of `D`.
 pub type LifecycleTicket<'id, D> = Slot<
@@ -511,8 +492,8 @@ struct Inner<'id, D: DatapathPort<'id>, X, T, O> {
     ending: Option<(Ending<PortFault<'id, D>>, Instant, EndStage)>,
     /// The first owner a broken contract left, and its cause.
     rejected: Option<Rejected<'id, D>>,
-    /// What the actor's queues refused, and what followed it unsent.
-    unsent: UnsentMessages<'id, D>,
+    /// The right to send a unit's messages, or a refused unit's remainder.
+    sending: Sending<'id, D>,
     /// A confirmed stop's end whose message to the actor was refused.
     confirmed: Option<
         LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>,
@@ -560,10 +541,11 @@ pub struct RetiredLifecycle<
     pub tx_contexts: T,
     /// The first owner a broken contract left.
     pub rejected: Option<Rejected<'id, D>>,
-    /// What the actor's queues refused, and the messages after it, whole
-    /// and in order ([`LifecycleViolation::QueueFull`],
+    /// The unit whose message the actor's queues refused: that message and
+    /// the unit's later ones, whole and in order
+    /// ([`LifecycleViolation::QueueFull`],
     /// [`LifecycleViolation::ActorClosed`]).
-    pub unsent: UnsentMessages<'id, D>,
+    pub unsent: Option<Outbox<'id, D>>,
     /// The end the radio's confirmed stop told, when its message to the
     /// actor was refused: the lifecycle ended on the refusal
     /// ([`LifecycleCompleted::end`]), and what the stop confirmed is kept.
@@ -641,7 +623,7 @@ where
                 reply: None,
                 ending: None,
                 rejected: None,
-                unsent: heapless::Deque::new(),
+                sending: Sending::new(),
                 confirmed: None,
                 end: None,
                 lesson: None,
@@ -690,8 +672,12 @@ where
         timer: &impl Timer,
     ) -> LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>
     {
-        let start = ToActor::Start(self.inner.channel);
-        self.inner.send(actor, start);
+        // The lifecycle sent nothing yet: the right is open.
+        if let Some(right) = self.inner.sending.take() {
+            let start = ToActor::Start(self.inner.channel);
+            self.inner
+                .flush(actor, right, Outbox::of(Some(start), Messages::None));
+        }
         let arm = |at: Option<Instant>| alarm_at(timer, at);
         let mut alarm = core::pin::pin!(arm(None));
         poll_fn(|cx| self.poll(cx, actor, io, timer, alarm.as_mut(), &arm)).await
@@ -756,7 +742,7 @@ where
                         reply: None,
                         ending: None,
                         rejected: None,
-                        unsent: heapless::Deque::new(),
+                        sending: Sending::new(),
                         confirmed: None,
                         end: None,
                         lesson: None,
@@ -825,7 +811,7 @@ where
             _reply,
             _ending,
             rejected,
-            unsent,
+            sending,
             confirmed,
             _end,
             _lesson,
@@ -853,7 +839,7 @@ where
                 reply,
                 ending,
                 rejected,
-                unsent,
+                sending,
                 confirmed,
                 end,
                 lesson,
@@ -885,7 +871,7 @@ where
                         issuer: issuer.read(),
                         tx_contexts: tx_contexts.read(),
                         rejected: rejected.read(),
-                        unsent: unsent.read(),
+                        unsent: sending.read().into_unsent(),
                         confirmed: confirmed.read(),
                         events: events.read(),
                     })
@@ -1231,19 +1217,26 @@ where
         let Some((stage, message)) = next else {
             return;
         };
-        if !self.inner.unsent.is_empty() {
+        // A refused unit holds the right: nothing more is sent.
+        let Some(right) = self.inner.sending.take() else {
             return;
-        }
+        };
         match actor.to_actor.try_send(message) {
-            Ok(()) => {}
-            // The end's message waits for the actor's room.
+            Ok(()) => self.inner.sending = Sending::Open(right),
+            // The end's message, which moves no owner, waits for the actor's
+            // room.
             Err(ClosingSpscSendError::Full(_)) => {
+                self.inner.sending = Sending::Open(right);
                 self.inner.blocked = true;
                 return;
             }
             // No room comes: the message is kept and the lifecycle ends.
-            Err(closed @ ClosingSpscSendError::Closed(_)) => {
-                self.inner.refused(closed, Unsent::ToActor);
+            Err(ClosingSpscSendError::Closed(message)) => {
+                self.inner.keep(
+                    right,
+                    Outbox::of(Some(message), Messages::None),
+                    LifecycleViolation::ActorClosed,
+                );
                 return;
             }
         }
@@ -1271,7 +1264,7 @@ where
             tx_contexts,
             events,
             rejected,
-            unsent,
+            sending,
             confirmed,
             ..
         } = inner;
@@ -1305,7 +1298,7 @@ where
                 issuer,
                 tx_contexts,
                 rejected,
-                unsent,
+                unsent: sending.into_unsent(),
                 confirmed,
                 events,
             },

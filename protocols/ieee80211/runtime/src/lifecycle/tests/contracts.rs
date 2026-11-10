@@ -266,7 +266,7 @@ fn a_closed_actor_reception_ends_the_lifecycle_named_and_keeps_its_message() {
             completed.end,
             LifecycleEnd::Contract(LifecycleViolation::ActorClosed)
         );
-        let mut unsent = completed.retired.unsent;
+        let mut unsent = completed.retired.unsent.expect("the refused unit is kept");
         assert!(matches!(
             unsent.pop_front(),
             Some(Unsent::ToActor(ToActor::Start(_)))
@@ -275,4 +275,128 @@ fn a_closed_actor_reception_ends_the_lifecycle_named_and_keeps_its_message() {
         assert!(to_actor_end.try_receive().is_none());
         drop(port);
     }));
+}
+
+/// The actor's ends over queues the test holds, `to` the message queue.
+fn ends_over<'c, 's, const N: usize>(
+    to: &'c mut ClosingSpscQueue<ToActor<'s, P<'s>>, N>,
+    parcels: &'c mut ClosingSpscQueue<Parcel<'s, P<'s>>, ACTOR_PARCELS>,
+    from: &'c mut ClosingSpscQueue<FromActor<'s, P<'s>>, FROM>,
+    returns: &'c mut ClosingSpscQueue<Returned<'s, P<'s>>, RETURNS>,
+    link: &'c mut ClosingSpscQueue<ActorLink<'s, P<'s>>, 1>,
+    groups: &'c mut ClosingSpscQueue<GroupPending<'s, ActorEpochPath<'s, P<'s>>>, 1>,
+    link_return: &'c mut ClosingSpscQueue<LinkReturn, 1>,
+) -> (
+    ActorEnds<'c, 's, P<'s>, N, FROM, RETURNS>,
+    ClosingSpscReceiver<'c, ToActor<'s, P<'s>>, N>,
+) {
+    let (to_actor, to_actor_end) = to.split();
+    let (parcels, _) = parcels.split();
+    let (_, from_actor) = from.split();
+    let (_, returns) = returns.split();
+    let (link, _) = link.split();
+    let (_, groups) = groups.split();
+    let (_, link_return) = link_return.split();
+    (
+        ActorEnds {
+            to_actor,
+            parcels,
+            from_actor,
+            returns,
+            groups,
+            link,
+            link_return,
+        },
+        to_actor_end,
+    )
+}
+
+/// A unit's outbox, refused part way: the messages before the refusal went
+/// in order, the refused one and every later one stay in the outbox whole
+/// and in order, and the right goes with them, so no unit follows. A
+/// reception that closes after the room was looked at (the reservation)
+/// refuses the whole unit, named closed, all of it kept.
+#[test]
+fn a_unit_refused_part_way_keeps_its_remainder_in_order_and_no_unit_follows() {
+    fn unit<'s>() -> Outbox<'s, P<'s>> {
+        Outbox::of(
+            Some(ToActor::Release),
+            Messages::Three(
+                ToActor::Connect,
+                ToActor::Disconnect,
+                ToActor::ReturnPairwise,
+            ),
+        )
+    }
+    let mut to = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+    let mut parcels = ClosingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
+    let mut from = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+    let mut returns = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+    let mut link = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+    let mut groups = ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+    let mut link_return = ClosingSpscQueue::<LinkReturn, 1>::new();
+    let (ends, mut actor) = ends_over(
+        &mut to,
+        &mut parcels,
+        &mut from,
+        &mut returns,
+        &mut link,
+        &mut groups,
+        &mut link_return,
+    );
+    // Two places are left of the actor's queue.
+    while ends.to_actor.free_capacity() > 2 {
+        assert!(ends.to_actor.try_send(ToActor::Hold).is_ok());
+    }
+    let mut sending = Sending::<'_, P<'_>>::new();
+    let right = sending
+        .take()
+        .expect("the right of a lifecycle that sent nothing");
+    assert!(sending.take().is_none(), "one unit holds the right");
+    let mut outbox = unit();
+    assert_eq!(outbox.send(&ends), Err(LifecycleViolation::QueueFull));
+    let mut sent = Vec::new();
+    while let Some(message) = actor.try_receive() {
+        if !matches!(message, ToActor::Hold) {
+            sent.push(message);
+        }
+    }
+    assert!(matches!(
+        sent.as_slice(),
+        [ToActor::Release, ToActor::Connect]
+    ));
+    let mut sending = Sending::refused(right, outbox);
+    assert!(sending.take().is_none(), "no unit follows a refused one");
+    let mut kept = sending.into_unsent().expect("the remainder");
+    assert!(matches!(
+        kept.pop_front(),
+        Some(Unsent::ToActor(ToActor::Disconnect))
+    ));
+    assert!(matches!(
+        kept.pop_front(),
+        Some(Unsent::ToActor(ToActor::ReturnPairwise))
+    ));
+    assert!(kept.pop_front().is_none() && kept.is_empty());
+
+    // The room is there when looked at; the reception closes after it.
+    assert!(ends.to_actor.free_capacity() >= UNSENT);
+    embassy_futures::block_on(actor.close());
+    let mut outbox = unit();
+    assert_eq!(outbox.send(&ends), Err(LifecycleViolation::ActorClosed));
+    assert!(matches!(
+        [
+            outbox.pop_front(),
+            outbox.pop_front(),
+            outbox.pop_front(),
+            outbox.pop_front(),
+            outbox.pop_front(),
+        ],
+        [
+            Some(Unsent::ToActor(ToActor::Release)),
+            Some(Unsent::ToActor(ToActor::Connect)),
+            Some(Unsent::ToActor(ToActor::Disconnect)),
+            Some(Unsent::ToActor(ToActor::ReturnPairwise)),
+            None,
+        ]
+    ));
 }
