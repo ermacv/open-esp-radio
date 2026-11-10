@@ -33,13 +33,15 @@ pub enum ApEnded {
     /// The port refused one of its commands.
     Refused(oer_protocols_ieee80211_contracts_port::AccessPointRefusal),
     /// The port refused a received unit's recycle for its count; the unit
-    /// stayed with the runner and ended with it after the release.
+    /// stays with the runner: it ends with it after a completed retire, and
+    /// comes back inside it otherwise.
     Unrecycled(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
     /// The port's capabilities do not serve the access point; the run
     /// never asked the radio to start.
     Unsupported(ApUnsupported),
     /// A port call returned an item it could neither give the runner nor
-    /// keep; the runner made no port call after it.
+    /// keep; the run made no port call after it, and the retire took the
+    /// item before it watched the stop on.
     Unkept,
 }
 
@@ -76,8 +78,9 @@ pub enum ApExitOf<E> {
         cause: crate::failure::ReleaseCause,
     },
     /// It ended for its cause, and the stop that followed found a received
-    /// unit whose recycle the port refused for its count: the unit stayed
-    /// with the runner and ended with it after the release.
+    /// unit whose recycle the port refused for its count: the unit stays
+    /// with the runner, ended with it after a released radio and returned
+    /// inside it after a refused release.
     Unrecycled {
         /// Why it ended.
         ended: ApEnded,
@@ -89,6 +92,30 @@ pub enum ApExitOf<E> {
     /// It never served: its refusal before the runner existed, and how the
     /// owners that refusal returned ended.
     Unavailable(crate::failure::Unavailable<E>),
+    /// It ended for its cause, and port calls of the run returned items
+    /// they could neither give the runner nor keep: no release ran, and the
+    /// installation came back unfinished with them
+    /// ([`crate::unfinished::Unfinished`]).
+    Unkept {
+        /// Why it ended.
+        ended: ApEnded,
+        /// How far the radio's stop came.
+        stop: UnkeptStop,
+    },
+}
+
+/// How far the radio's stop came when an access point's retire ended on
+/// items a port call could not keep.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnkeptStop {
+    /// Not confirmed: the retire's home had no room for a further item,
+    /// which the runner keeps; the hardware may still use the owners.
+    Unconfirmed,
+    /// Confirmed.
+    Confirmed,
+    /// Confirmed, and the stop found a received unit whose recycle the
+    /// port refused for this count; the unit is in the runner.
+    Unrecycled(ReceiveAccounting),
 }
 
 /// What a run's end left of the radio's stop.
@@ -193,10 +220,6 @@ where
     F: Future<Output = Leave<<R::Port as Stopped>::Radio, crate::failure::ReleaseCause>>,
 {
     let unconfirmed = |observed| published.set(Some(ApExitOf::StopUnconfirmed { ended, observed }));
-    let unkept_exit = ApExitOf::ReleaseRefused {
-        ended,
-        cause: crate::failure::ReleaseCause::Unkept,
-    };
     let mut unkept: UnkeptItems<R::Unkept> = core::array::from_fn(|_| None);
     let finished = match stop {
         Stop::Confirmed => Ok(()),
@@ -220,7 +243,10 @@ where
                             unkept,
                             unaccepted: (),
                             receipt: None,
-                            cause: unkept_exit,
+                            cause: ApExitOf::Unkept {
+                                ended,
+                                stop: UnkeptStop::Unconfirmed,
+                            },
                             phase: Phase::Stopping,
                         });
                     }
@@ -236,12 +262,16 @@ where
     // Items a port call could not keep: no release follows them, and they
     // go back with the runner.
     if unkept.iter().any(Option::is_some) {
+        let stop = match finished {
+            Ok(()) => UnkeptStop::Confirmed,
+            Err(fault) => UnkeptStop::Unrecycled(fault),
+        };
         return Retired::Unfinished(Unfinished {
             owner: runner,
             unkept,
             unaccepted: (),
             receipt: None,
-            cause: unkept_exit,
+            cause: ApExitOf::Unkept { ended, stop },
             phase: Phase::Stopped,
         });
     }

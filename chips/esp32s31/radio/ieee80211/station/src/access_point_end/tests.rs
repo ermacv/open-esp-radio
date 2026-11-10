@@ -247,9 +247,9 @@ fn an_item_the_run_could_not_keep_skips_the_release_and_goes_back_to_the_caller(
     );
     assert_eq!(
         left.exit,
-        ApExitOf::ReleaseRefused {
+        ApExitOf::Unkept {
             ended: ApEnded::Stopped,
-            cause: ReleaseCause::Unkept
+            stop: UnkeptStop::Confirmed
         }
     );
     let Some(mut unfinished) = left.unfinished else {
@@ -325,6 +325,13 @@ fn a_stop_that_needs_a_service_goes_on_once_the_unkept_item_is_taken() {
     };
     let left = retired_with(runner, ApEnded::Unkept, Stop::Owed);
     assert!(confirmed.get(), "the stop was watched to its confirmation");
+    assert_eq!(
+        left.exit,
+        ApExitOf::Unkept {
+            ended: ApEnded::Unkept,
+            stop: UnkeptStop::Confirmed
+        }
+    );
     assert_eq!(item.get(), 0);
     let Some(unfinished) = left.unfinished else {
         panic!("the item leaves the installation unfinished");
@@ -356,6 +363,14 @@ fn items_the_stop_finds_fill_the_home_then_the_next_stays_with_the_runner() {
     };
     let left = retired_with(runner, ApEnded::Stopped, Stop::Owed);
     assert!(!confirmed.get());
+    // The stop is not confirmed, and the exit says so.
+    assert_eq!(
+        left.exit,
+        ApExitOf::Unkept {
+            ended: ApEnded::Stopped,
+            stop: UnkeptStop::Unconfirmed
+        }
+    );
     let Some(unfinished) = left.unfinished else {
         panic!("a full home ends the retire unfinished");
     };

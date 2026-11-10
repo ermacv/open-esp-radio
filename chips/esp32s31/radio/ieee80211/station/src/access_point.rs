@@ -278,7 +278,9 @@ impl ApNonces for Nonces {
     }
 }
 
-pub use crate::access_point_end::{ApEnded, ApExitOf, UnfinishedAccessPoint, UnkeptItems};
+pub use crate::access_point_end::{
+    ApEnded, ApExitOf, UnfinishedAccessPoint, UnkeptItems, UnkeptStop,
+};
 pub use crate::unfinished::{Phase, UNKEPT_ITEMS, Unfinished};
 /// How the access point ended, or how far its end came.
 pub type ApExit = ApExitOf<InitializationError>;

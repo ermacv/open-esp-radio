@@ -322,7 +322,11 @@ pub enum StopWatch {
     /// The runner holds an item a port call could not keep
     /// ([`ApRunner::take_unkept`]): the watch made no port call after it
     /// and returned. Once the item is taken, the next call goes on
-    /// watching.
+    /// watching from the port's state: it serves the port at its next fact
+    /// or due deadline. The facts the halted service took are not carried
+    /// over, so a port whose stop still owes work keeps a deadline for it
+    /// ([`DataPort::deadline`]), as the S31 port does until its stop is
+    /// served.
     Unkept,
 }
 

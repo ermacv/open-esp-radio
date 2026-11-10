@@ -784,11 +784,11 @@ impl Station {
         boot: &mut Boot,
     ) -> Result<(Self, NetStatus), Error> {
         let aes = aes.engine(boot)?;
+        let (home, end) = end_home(&STATION_END)?;
         let started = start_radio(wifi, boot)?;
         let address = started.resources.address;
         let nonces = started.nonces;
         let seed = started.seed;
-        let (home, end) = end_home(&STATION_END)?;
         let (control, network, transmit, stopper, runners) =
             wifi::station(started.resources, config.chip);
         boot.pending.datapath = Some(Datapath {
