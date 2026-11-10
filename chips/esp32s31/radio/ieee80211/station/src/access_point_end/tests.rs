@@ -6,6 +6,7 @@ extern crate std;
 
 use super::*;
 use crate::failure::{BackendFault, CleanupCause, ReleaseCause};
+use crate::release::Unreleased;
 use crate::station_end::tests::{Leaves, Radio, Receipt, TestPort, leave, ready};
 use crate::unfinished::Phase;
 use oer_portable_time_virtual::VirtualClock;
@@ -134,17 +135,17 @@ fn retired<'a, 'b>(
 #[test]
 fn a_refused_release_returns_its_receipt_from_the_retire_to_the_runner_caller() {
     let refusals = [
-        (Ok(()), None, ReleaseCause::NotStopped),
+        (Ok(()), Err(Unreleased::Held), ReleaseCause::Held),
         (
             Ok(()),
-            Some(Radio(Leaves::Ended(ReleaseCause::LeaveUnanswered([
+            Ok(Radio(Leaves::Ended(ReleaseCause::LeaveUnanswered([
                 4, 3, 2, 1,
             ])))),
             ReleaseCause::LeaveUnanswered([4, 3, 2, 1]),
         ),
         (
             Err(CleanupCause::Faulted(BackendFault::Abandoned)),
-            Some(Radio(Leaves::Left)),
+            Ok(Radio(Leaves::Left)),
             ReleaseCause::Cleanup(CleanupCause::Faulted(BackendFault::Abandoned)),
         ),
     ];
@@ -182,7 +183,7 @@ fn a_release_that_succeeded_ends_its_receipt_in_the_retire() {
     let port = TestPort {
         cleanup: Ok(()),
         receipt: Some(Receipt(&ends)),
-        stopped: Some(Radio(Leaves::Left)),
+        stopped: Ok(Radio(Leaves::Left)),
     };
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let left = retired(port, None, Stop::Owed, &watched, &confirmed);
@@ -198,7 +199,7 @@ fn an_unconfirmed_stop_is_published_then_watched_before_the_release() {
     let port = TestPort {
         cleanup: Ok(()),
         receipt: Some(Receipt(&ends)),
-        stopped: None,
+        stopped: Err(Unreleased::Held),
     };
     let observed = StopUnconfirmed {
         cause: oer_protocols_ieee80211_contracts_port::StopCause::Deadline,
@@ -226,7 +227,7 @@ fn an_unconfirmed_stop_is_published_then_watched_before_the_release() {
         left.exit,
         ApExitOf::ReleaseRefused {
             ended: ApEnded::Stopped,
-            cause: ReleaseCause::NotStopped
+            cause: ReleaseCause::Held
         }
     );
     assert!(
@@ -243,7 +244,7 @@ fn an_item_the_run_could_not_keep_skips_the_release_and_goes_back_to_the_caller(
     let port = TestPort {
         cleanup: Ok(()),
         receipt: Some(Receipt(&cleanups)),
-        stopped: Some(Radio(Leaves::Left)),
+        stopped: Ok(Radio(Leaves::Left)),
     };
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let left = retired(
@@ -284,7 +285,7 @@ fn an_unkept_item_leaves_with_every_other_owner_of_the_unreleased_port() {
         port: TestPort {
             cleanup: Ok(()),
             receipt: None,
-            stopped: Some(Radio(Leaves::Left)),
+            stopped: Ok(Radio(Leaves::Left)),
         },
         other: Some(Receipt(&other)),
         watched: &watched,
@@ -324,7 +325,7 @@ fn a_stop_that_needs_a_service_goes_on_once_the_unkept_item_is_taken() {
         port: TestPort {
             cleanup: Ok(()),
             receipt: None,
-            stopped: Some(Radio(Leaves::Left)),
+            stopped: Ok(Radio(Leaves::Left)),
         },
         other: Some(Receipt(&other)),
         watched: &watched,
@@ -363,7 +364,7 @@ fn items_the_stop_finds_fill_the_home_then_the_next_stays_with_the_runner() {
         port: TestPort {
             cleanup: Ok(()),
             receipt: None,
-            stopped: Some(Radio(Leaves::Left)),
+            stopped: Ok(Radio(Leaves::Left)),
         },
         other: None,
         watched: &watched,
@@ -409,7 +410,7 @@ fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
         port: TestPort {
             cleanup: Ok(()),
             receipt: None,
-            stopped: Some(Radio(Leaves::Left)),
+            stopped: Ok(Radio(Leaves::Left)),
         },
         other: Some(Receipt(&other)),
         watched: &watched,
@@ -432,7 +433,7 @@ fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
     };
     assert_eq!(unfinished.phase, Phase::Stopped);
     assert!(unfinished.unaccepted.is_some());
-    assert!(unfinished.owner.port.stopped.is_some(), "no release ran");
+    assert!(unfinished.owner.port.stopped.is_ok(), "no release ran");
     drop(unfinished);
     assert_eq!((attempt.get(), other.get()), (1, 1), "each ended once");
 }

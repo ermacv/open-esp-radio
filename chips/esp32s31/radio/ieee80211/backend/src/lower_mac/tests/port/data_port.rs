@@ -1341,9 +1341,11 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
         fixture.stop();
         fixture.outbox.refuse = 0;
         // After the confirmed stop the port's other calls offer nothing it
-        // keeps, and the kept terminal holds the port from retiring.
+        // keeps, and the kept terminal holds the port from retiring: a
+        // confirmed stop that holds an owner, not an unconfirmed one.
         let _ = fixture.turn();
         assert!(fixture.outbox.terminals.is_empty());
+        assert!(fixture.port.stop_confirmed());
         assert!(fixture.port.release().is_none());
         // Refused again, it stays; then it leaves once, with its outcome.
         fixture.outbox.refuse = 1;
@@ -1381,8 +1383,10 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
 fn only_a_stopped_port_releases_its_device() {
     with_installations(|mut fixture, _| {
         fixture.start();
+        assert!(!fixture.port.stop_confirmed(), "a running port");
         assert!(fixture.port.release().is_none());
         fixture.stop();
+        assert!(fixture.port.stop_confirmed());
         let Fixture {
             mut port, buffers, ..
         } = fixture;

@@ -1023,6 +1023,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         reusable
     }
 
+    /// Whether the port confirmed its radio's stop: its last stop ended
+    /// confirmed and nothing started it again.
+    pub fn stop_confirmed(&self) -> bool {
+        self.state == PortState::Stopped
+    }
+
     /// End the stopped port's installations after the retire checks: its
     /// device, for the owner's release. The port then holds no installation
     /// a later call could run.

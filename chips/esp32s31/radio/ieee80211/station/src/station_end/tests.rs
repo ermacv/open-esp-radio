@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::failure::{BackendFault, CleanupCause};
-use crate::release::Cleaned;
+use crate::release::{Cleaned, Unreleased};
 use crate::unfinished::Phase;
 use core::{
     cell::Cell,
@@ -46,7 +46,7 @@ pub(crate) async fn leave(radio: Radio) -> Leave<Radio, ReleaseCause> {
 pub(crate) struct TestPort<'a> {
     pub(crate) cleanup: Result<(), CleanupCause>,
     pub(crate) receipt: Option<Receipt<'a>>,
-    pub(crate) stopped: Option<Radio>,
+    pub(crate) stopped: Result<Radio, Unreleased>,
 }
 
 impl<'a> Stopped for TestPort<'a> {
@@ -58,8 +58,8 @@ impl<'a> Stopped for TestPort<'a> {
             removed: self.receipt.take(),
         }
     }
-    fn take_stopped(&mut self) -> Option<Radio> {
-        self.stopped.take()
+    fn take_stopped(&mut self) -> Result<Radio, Unreleased> {
+        core::mem::replace(&mut self.stopped, Err(Unreleased::Held))
     }
 }
 
@@ -138,7 +138,7 @@ impl Ends {
 fn actor<'a>(
     ends: &'a Ends,
     cleanup: Result<(), CleanupCause>,
-    stopped: Option<Radio>,
+    stopped: Result<Radio, Unreleased>,
     items: bool,
 ) -> TestActor<'a> {
     TestActor {
@@ -177,12 +177,18 @@ fn retired_of(
 #[test]
 fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
     let refusals = [
-        // No stopped radio.
-        (Ok(()), None, ReleaseCause::NotStopped),
+        // No confirmed stop.
+        (
+            Ok(()),
+            Err(Unreleased::StopUnconfirmed),
+            ReleaseCause::StopUnconfirmed,
+        ),
+        // A confirmed stop whose port still holds owners.
+        (Ok(()), Err(Unreleased::Held), ReleaseCause::Held),
         // A posted leave that ended.
         (
             Ok(()),
-            Some(Radio(Leaves::Ended(ReleaseCause::LeaveUnanswered([
+            Ok(Radio(Leaves::Ended(ReleaseCause::LeaveUnanswered([
                 1, 2, 3, 4,
             ])))),
             ReleaseCause::LeaveUnanswered([1, 2, 3, 4]),
@@ -190,7 +196,7 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
         // A cleanup that did not finish: nothing released.
         (
             Err(CleanupCause::Unavailable(BackendFault::Abandoned)),
-            Some(Radio(Leaves::Left)),
+            Ok(Radio(Leaves::Left)),
             ReleaseCause::Cleanup(CleanupCause::Unavailable(BackendFault::Abandoned)),
         ),
     ];
@@ -214,7 +220,7 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
 #[test]
 fn a_release_that_succeeded_retires_the_whole_installation() {
     let ends = Ends::default();
-    let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), false), 0);
+    let (news, left) = retired_of(actor(&ends, Ok(()), Ok(Radio(Leaves::Left)), false), 0);
     assert!(left.is_ok(), "a completed retire");
     assert_eq!(ended(news), StationExitOf::Stopped);
     assert_eq!(ends.all(), [1, 1, 0, 0]);
@@ -223,7 +229,7 @@ fn a_release_that_succeeded_retires_the_whole_installation() {
 #[test]
 fn an_item_the_actor_could_not_keep_skips_the_release_and_comes_back_whole() {
     let ends = Ends::default();
-    let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), true), 0);
+    let (news, left) = retired_of(actor(&ends, Ok(()), Ok(Radio(Leaves::Left)), true), 0);
     assert_eq!(
         ended(news),
         StationExitOf::ReleaseFailed(ReleaseCause::Unkept)
@@ -234,10 +240,7 @@ fn an_item_the_actor_could_not_keep_skips_the_release_and_comes_back_whole() {
     assert_eq!(left.phase, Phase::Stopped);
     assert!(left.unkept.is_some() && left.unaccepted.is_some());
     assert!(left.receipt.is_none(), "no cleanup ran");
-    assert!(
-        left.owner.port.stopped.is_some(),
-        "no release took the radio"
-    );
+    assert!(left.owner.port.stopped.is_ok(), "no release took the radio");
     assert!(left.owner.port.receipt.take().is_some());
     assert_eq!(ends.all(), [1, 0, 0, 0]);
     drop(left);
@@ -249,11 +252,10 @@ fn a_refused_reinstall_returns_the_whole_installation_to_the_actor_task_caller()
     // The port refused the reinstall: the installation comes back, the
     // cleanup's receipt with it.
     let ends = Ends::default();
-    let Err((news, left)) =
-        reinstalled::<_, u8, u8, (), TestId>(actor(&ends, Ok(()), None, false), |_| {
-            Err(ReinstallCause::Resources)
-        })
-    else {
+    let Err((news, left)) = reinstalled::<_, u8, u8, (), TestId>(
+        actor(&ends, Ok(()), Err(Unreleased::StopUnconfirmed), false),
+        |_| Err(ReinstallCause::Resources),
+    ) else {
         panic!("a refused reinstall installs nothing");
     };
     assert_eq!(
@@ -276,11 +278,10 @@ fn a_refused_reinstall_returns_the_whole_installation_to_the_actor_task_caller()
     // comes back with the cleanup's cause.
     let ends = Ends::default();
     let fault = CleanupCause::Held(BackendFault::Abandoned);
-    let Err((news, left)) =
-        reinstalled::<_, u8, u8, (), TestId>(actor(&ends, Err(fault), None, true), |_| {
-            panic!("a cleanup that failed reinstalls")
-        })
-    else {
+    let Err((news, left)) = reinstalled::<_, u8, u8, (), TestId>(
+        actor(&ends, Err(fault), Err(Unreleased::StopUnconfirmed), true),
+        |_| panic!("a cleanup that failed reinstalls"),
+    ) else {
         panic!("a failed cleanup installs nothing");
     };
     assert_eq!(
@@ -296,11 +297,10 @@ fn a_refused_reinstall_returns_the_whole_installation_to_the_actor_task_caller()
 #[test]
 fn a_reinstall_that_succeeded_ends_its_receipt_and_the_actor_runs_on() {
     let ends = Ends::default();
-    let Ok((actor, news)) =
-        reinstalled::<_, u8, u8, (), TestId>(actor(&ends, Ok(()), None, false), |_| {
-            Ok((7, 9, installation(1)))
-        })
-    else {
+    let Ok((actor, news)) = reinstalled::<_, u8, u8, (), TestId>(
+        actor(&ends, Ok(()), Err(Unreleased::StopUnconfirmed), false),
+        |_| Ok((7, 9, installation(1))),
+    ) else {
         panic!("the reinstall succeeds");
     };
     assert_eq!(
@@ -316,7 +316,7 @@ fn a_reinstall_that_succeeded_ends_its_receipt_and_the_actor_runs_on() {
 fn a_faulted_actor_returns_every_owner_beside_its_cause() {
     let ends = Ends::default();
     let left = unfinished(
-        actor(&ends, Ok(()), None, true),
+        actor(&ends, Ok(()), Err(Unreleased::StopUnconfirmed), true),
         None,
         DatapathCause::Faulted(LifecycleFailure::Unkept),
         Phase::Running,
@@ -331,7 +331,7 @@ fn a_faulted_actor_returns_every_owner_beside_its_cause() {
 #[test]
 fn news_out_of_order_names_the_mailbox() {
     let news: TestNews = News::Released {
-        result: Err(ReleaseCause::NotStopped),
+        result: Err(ReleaseCause::Held),
         network_lost: false,
     };
     assert_eq!(
@@ -359,7 +359,7 @@ fn a_fault_during_a_stop_returns_the_installation_in_the_stopping_phase() {
     ];
     for (radio, phase) in cases {
         let ends = Ends::default();
-        let mut running = actor(&ends, Ok(()), Some(Radio(Leaves::Left)), true);
+        let mut running = actor(&ends, Ok(()), Ok(Radio(Leaves::Left)), true);
         running.phase = radio;
         let left = ended_running(running, DatapathCause::Faulted(LifecycleFailure::Unkept));
         assert_eq!(left.phase, phase);
@@ -393,7 +393,7 @@ fn each_former_resetting_failure_returns_the_whole_installation() {
             DatapathCause::Lifecycle(failure),
         ] {
             let ends = Ends::default();
-            let mut running = actor(&ends, Ok(()), Some(Radio(Leaves::Left)), true);
+            let mut running = actor(&ends, Ok(()), Ok(Radio(Leaves::Left)), true);
             running.phase = RadioPhase::Stopping;
             let left = ended_running(running, cause);
             assert_eq!(left.cause, cause);
@@ -433,9 +433,9 @@ fn only_a_completed_release_retires_the_lifecycle_half() {
         (StationExitOf::StoppedNetworkLost, LifecycleHalf::Retired)
     );
     assert_eq!(
-        release_settled(released(Err(ReleaseCause::NotStopped), false), None),
+        release_settled(released(Err(ReleaseCause::Held), false), None),
         (
-            StationExitOf::ReleaseFailed(ReleaseCause::NotStopped),
+            StationExitOf::ReleaseFailed(ReleaseCause::Held),
             LifecycleHalf::Unfinished
         )
     );
@@ -459,10 +459,7 @@ fn only_a_completed_release_retires_the_lifecycle_half() {
         (StationExitOf::Failed(refused), LifecycleHalf::Retired)
     );
     assert_eq!(
-        release_settled(
-            released(Err(ReleaseCause::NotStopped), false),
-            Some(refused)
-        ),
+        release_settled(released(Err(ReleaseCause::Held), false), Some(refused)),
         (StationExitOf::Failed(refused), LifecycleHalf::Unfinished)
     );
 }
@@ -676,7 +673,7 @@ fn a_second_installation_news_is_out_of_order_and_both_are_kept() {
 fn a_proof_of_another_installation_finishes_nothing() {
     use oer_portable_memory::WakingSpscQueue;
     let earlier = Ends::default();
-    let (_, proof) = retired_of(actor(&earlier, Ok(()), Some(Radio(Leaves::Left)), false), 0);
+    let (_, proof) = retired_of(actor(&earlier, Ok(()), Ok(Radio(Leaves::Left)), false), 0);
     let Ok(foreign) = proof else {
         panic!("installation 0 retired");
     };
@@ -704,7 +701,7 @@ fn a_proof_of_another_installation_finishes_nothing() {
     assert_eq!(kept.installation(), installation(1));
     assert_eq!(kept.queues().try_receive(), Some(4), "its owners stay");
     let own = Ends::default();
-    let (_, proof) = retired_of(actor(&own, Ok(()), Some(Radio(Leaves::Left)), false), 1);
+    let (_, proof) = retired_of(actor(&own, Ok(()), Ok(Radio(Leaves::Left)), false), 1);
     let Ok(own) = proof else {
         panic!("installation 1 retired");
     };
@@ -757,10 +754,7 @@ fn a_late_retire_finishes_the_lifecycles_half_without_a_second_release() {
     assert_eq!(exit, StationExitOf::ReleaseFailed(ReleaseCause::Deadline));
     assert_eq!(half, LifecycleHalf::Unfinished);
     let datapath = Ends::default();
-    let (late, proof) = retired_of(
-        actor(&datapath, Ok(()), Some(Radio(Leaves::Left)), false),
-        0,
-    );
+    let (late, proof) = retired_of(actor(&datapath, Ok(()), Ok(Radio(Leaves::Left)), false), 0);
     let Ok(proof) = proof else {
         panic!("the release completed");
     };

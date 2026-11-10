@@ -86,9 +86,30 @@ pub(crate) trait Stopped {
     type Radio;
     /// The stopped port's cleanup, once ([`clean`]).
     fn clean(&mut self) -> Cleaned<Self::Receipt>;
-    /// Take the stopped radio: `None` while the port is not retirable or
-    /// holds no stopped radio, and then nothing was taken.
-    fn take_stopped(&mut self) -> Option<Self::Radio>;
+    /// Take the stopped radio.
+    ///
+    /// # Errors
+    ///
+    /// Why the port gives up none, and then nothing was taken.
+    fn take_stopped(&mut self) -> Result<Self::Radio, Unreleased>;
+}
+
+/// Why a retired port gave up no stopped radio: nothing was taken.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Unreleased {
+    /// Its radio's stop is not confirmed.
+    StopUnconfirmed,
+    /// Its radio's stop is confirmed and it still holds owners.
+    Held,
+}
+
+impl From<Unreleased> for crate::failure::ReleaseCause {
+    fn from(unreleased: Unreleased) -> Self {
+        match unreleased {
+            Unreleased::StopUnconfirmed => Self::StopUnconfirmed,
+            Unreleased::Held => Self::Held,
+        }
+    }
 }
 
 /// Run the stopped port's cleanup once, then release the retired port's
@@ -110,8 +131,9 @@ where
     if let Err(cause) = result {
         return (Err(crate::failure::ReleaseCause::Cleanup(cause)), removed);
     }
-    let Some(radio) = port.take_stopped() else {
-        return (Err(crate::failure::ReleaseCause::NotStopped), removed);
+    let radio = match port.take_stopped() {
+        Ok(radio) => radio,
+        Err(unreleased) => return (Err(unreleased.into()), removed),
     };
     let left = until_left(timer, retry, radio, leave, |cause| still_active(*cause)).await;
     (left, removed)

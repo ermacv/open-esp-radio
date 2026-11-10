@@ -860,13 +860,23 @@ pub(crate) fn he_power(
     .map_err(|_| InitializationError::HePower)
 }
 
-/// Take the retired port's stopped radio: `None` while the port is not
-/// retirable or its device holds no stopped radio, and then nothing was
-/// taken.
-pub(crate) fn take_stopped<W: Binding>(port: &mut Port<W>) -> Option<StoppedRadio> {
-    let device = port.release()?;
-    let (stopped, cell) = device.0.take_stopped()?;
-    Some(StoppedRadio { stopped, cell })
+/// Take the retired port's stopped radio.
+///
+/// # Errors
+///
+/// The port has not confirmed its stop, or it did and it or its device
+/// still holds owners (it is not retirable, or the device holds a live or
+/// failed radio frontier): nothing was taken.
+pub(crate) fn take_stopped<W: Binding>(
+    port: &mut Port<W>,
+) -> Result<StoppedRadio, crate::release::Unreleased> {
+    use crate::release::Unreleased;
+    if !port.stop_confirmed() {
+        return Err(Unreleased::StopUnconfirmed);
+    }
+    let device = port.release().ok_or(Unreleased::Held)?;
+    let (stopped, cell) = device.0.take_stopped().ok_or(Unreleased::Held)?;
+    Ok(StoppedRadio { stopped, cell })
 }
 
 impl<W: Binding> crate::release::Stopped for Port<W> {
@@ -875,7 +885,7 @@ impl<W: Binding> crate::release::Stopped for Port<W> {
     fn clean(&mut self) -> crate::release::Cleaned<Freed<W>> {
         crate::release::clean(self)
     }
-    fn take_stopped(&mut self) -> Option<StoppedRadio> {
+    fn take_stopped(&mut self) -> Result<StoppedRadio, crate::release::Unreleased> {
         take_stopped::<W>(self)
     }
 }
@@ -887,7 +897,7 @@ impl<W: Binding> crate::release::Stopped for Port<W> {
 /// tried again and a posted leave awaited however late, and the cleanup
 /// is that leave's outcome. A device whose session began a start keeps
 /// the radio ([`take_stopped`] needs a stop first), and the cleanup names
-/// it not stopped. The other parts end here: nothing was published to the
+/// its stop unconfirmed. The other parts end here: nothing was published to the
 /// MAC or its DMA.
 pub(crate) async fn port_refused<W: Binding>(
     cause: InitializationError,
@@ -904,7 +914,7 @@ pub(crate) async fn port_refused<W: Binding>(
             )
             .await
         }
-        None => Err(crate::failure::ReleaseCause::NotStopped),
+        None => Err(crate::failure::ReleaseCause::StopUnconfirmed),
     };
     crate::failure::Unavailable { cause, cleanup }
 }

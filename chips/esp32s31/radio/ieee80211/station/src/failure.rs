@@ -554,8 +554,14 @@ impl<C> Unavailable<C> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReleaseCause {
-    /// The stopped device still held a live or failed radio frontier.
-    NotStopped,
+    /// The port has not confirmed its radio's stop: nothing was released,
+    /// and the port keeps the radio and every owner.
+    StopUnconfirmed,
+    /// The port confirmed its radio's stop and still holds owners (admitted
+    /// work, a received unit, an item a sink refused, a removal waiting, a
+    /// live or failed radio frontier of its device): nothing was released,
+    /// and the port keeps the radio and those owners.
+    Held,
     /// The MAC or its RX walker was still active; nothing was posted.
     StillActive(MaintenanceError),
     /// The radio actor never answered the leave request.
