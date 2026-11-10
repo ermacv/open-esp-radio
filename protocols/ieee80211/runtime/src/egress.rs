@@ -407,6 +407,8 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
     /// their turns. When the scheduler would serve another account first, a
     /// second pass takes that one's turns. More accounts than `PEERS` cannot
     /// all be served: the plan keeps one more, for the scheduler to say so.
+    // Once a collection, not once a frame: apart from the frames' path.
+    #[inline(never)]
     fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
         ready: impl Fn() -> I,
@@ -537,6 +539,8 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
     /// idle account's surplus, never its debt, and with the reservation
     /// horizon full nothing at all. The air's view is not read: a plan's
     /// first step reads the view it was just collected with.
+    #[cold]
+    #[inline(never)]
     fn nothing_ready(&mut self) -> Result<(), AirtimeFault> {
         match self
             .scheduler
