@@ -1661,13 +1661,16 @@ impl<
         let mut serial = self.serial;
         let mut changes = self.neighbor_changes;
         let dhcp = dhcp_hop(self.dhcp.as_ref(), self.ipv4);
+        // An expired neighbor some work still needs is asked again. The
+        // table names its expired entries, usually none, so a turn walks no
+        // work unless an entry expired.
+        let (sockets, echoes) = (&self.sockets, &self.echoes);
         let hops = self
-            .sockets
-            .iter()
-            .flat_map(|socket| socket.places.running())
-            .filter_map(|(_, place)| place.run().hop())
-            .chain(self.echoes.iter().map(|owed| owed.hop))
-            .chain(dhcp);
+            .neighbors
+            .expired(now)
+            .into_iter()
+            .flatten()
+            .filter(|address| data_needs(sockets, echoes, *address) || dhcp == Some(*address));
         for hop in hops {
             let next = serial.wrapping_add(1);
             if self.neighbors.reask(now, hop, next) {

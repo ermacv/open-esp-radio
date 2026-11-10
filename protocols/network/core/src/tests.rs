@@ -687,6 +687,20 @@ fn a_changed_neighbor_reaches_a_datagram_that_waits() {
     });
 }
 
+/// An expired neighbor that no work needs is not asked again: a turn asks
+/// only for what some work goes through.
+#[test]
+fn a_neighbor_that_expires_with_no_work_is_not_asked_again() {
+    world!(|stack| {
+        knows_peer(stack);
+        let _socket = stack.open(5000, best_effort()).unwrap();
+        let later = at(0).saturating_add(Duration::from_secs(61));
+        stack.tick(later, &mut ());
+        assert!(stack.poll_demand(later).is_none(), "no request is owed");
+        assert!(stack.port().sent.is_empty());
+    });
+}
+
 #[test]
 fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
     world!(|stack| {

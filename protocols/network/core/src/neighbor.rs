@@ -207,6 +207,24 @@ impl<const N: usize> Neighbors<N> {
         }
     }
 
+    /// The addresses whose known entries expired by `now`, each once: what
+    /// [`Self::reask`] would ask again for. Usually none, and never more
+    /// than the table holds, so a caller looks at its own work only for
+    /// these.
+    pub(crate) fn expired(&self, now: Instant) -> [Option<[u8; 4]>; N] {
+        let mut expired = [None; N];
+        for (slot, entry) in expired.iter_mut().zip(&self.entries) {
+            if let Entry::Known {
+                address, expires, ..
+            } = *entry
+                && now >= expires
+            {
+                *slot = Some(address);
+            }
+        }
+        expired
+    }
+
     /// Ask again for `address` if its entry expired; whether it did.
     pub(crate) fn reask(&mut self, now: Instant, address: [u8; 4], serial: u64) -> bool {
         for entry in &mut self.entries {
