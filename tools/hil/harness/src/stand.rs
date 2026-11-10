@@ -52,20 +52,23 @@ pub(crate) struct Session {
 }
 
 impl Session {
-    /// Build `scenario`'s image, lease the board `selector` names (or the
-    /// one device under test of the image's chip), write the image unless
-    /// the board runs it, and open the link with a reset.
+    /// Resolve the board `selector` names (or the one device under test of
+    /// the image's chip) and the stand owner, then build `scenario`'s image,
+    /// lease the board, write the image unless the board runs it, and open
+    /// the link with a reset. A selection or an owner that cannot be
+    /// resolved fails before the build.
     pub(crate) fn open(scenario: &Scenario, selector: Option<&str>) -> Result<Self> {
         let root = oer_tools_os_process::Checkout::discover("HIL scenario")?.root;
+        let stand = Stand::load(&oer_tools_lab_model::path()?)?;
+        let (board, owner) = resolve(&stand, selector, || {
+            Ok(oer_tools_lab_arbiter::owner::from_environment()?.to_string())
+        })?;
         let bundle = build(&root, scenario.image)?;
         let image_crc32 = bundle
             .staged
             .as_ref()
             .map(|staged| staged.runtime_crc32)
             .ok_or("the image is not staged: it has no identity to check")?;
-        let stand = Stand::load(&oer_tools_lab_model::path()?)?;
-        let board = device_under_test(&stand, selector)?.clone();
-        let owner = oer_tools_lab_arbiter::owner::from_environment()?.to_string();
         let mut client = Client::open(&format!("hil {}", scenario.name))?;
         eprintln!("hil: waiting for board {}", board.id);
         client.acquire(
@@ -290,6 +293,18 @@ fn build(root: &Path, image: &str) -> Result<ImageBundle> {
 
 /// The board `selector` names, or the one board of the image's chip that
 /// may be a device under test.
+/// The device under test `selector` names on `stand` and the owner `owner`
+/// resolves, in that order: everything a run needs from the stand before it
+/// builds anything.
+fn resolve(
+    stand: &Stand,
+    selector: Option<&str>,
+    owner: impl FnOnce() -> Result<String>,
+) -> Result<(oer_tools_lab_model::Board, String)> {
+    let board = device_under_test(stand, selector)?.clone();
+    Ok((board, owner()?))
+}
+
 fn device_under_test<'a>(
     stand: &'a Stand,
     selector: Option<&str>,
@@ -322,6 +337,56 @@ fn device_under_test<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stand with `duts` boards of the image's chip that may be the
+    /// device under test.
+    fn stand_with(duts: usize) -> Stand {
+        let mut text = String::from(
+            "schema = 2\n[stand]\nid = \"t\"\nair = \"exclusive\"\n\
+             [[hub]]\nid = \"h\"\nusb2 = \"1-1\"\n",
+        );
+        for index in 0..duts {
+            text.push_str(&format!(
+                "[[board]]\nid = \"dut-{index}\"\nusb-serial = \"02:00:00:00:25:6{index}\"\n\
+                 chip = \"{chip}\"\nradios = [\"wifi-2g4\"]\nroles = [\"dut\", \"peer\"]\n\
+                 port = {{ hub = \"h\", port = {port} }}\nreset = [\"jtag\"]\n",
+                chip = images::CHIP,
+                port = index + 1,
+            ));
+        }
+        Stand::parse(&text).unwrap()
+    }
+
+    #[test]
+    fn an_ambiguous_board_selection_fails_before_the_owner_or_the_build() {
+        let stand = stand_with(2);
+        let mut asked = false;
+        let error = resolve(&stand, None, || {
+            asked = true;
+            Ok("owner".to_owned())
+        })
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("name one with --board"),
+            "{error}"
+        );
+        assert!(!asked, "the owner is asked only for a resolved board");
+        let error = resolve(&stand, Some("dut-9"), || Ok("owner".to_owned())).unwrap_err();
+        assert!(error.to_string().contains("no board `dut-9`"), "{error}");
+    }
+
+    #[test]
+    fn a_named_or_single_board_resolves_with_its_owner() {
+        let stand = stand_with(2);
+        let (board, owner) = resolve(&stand, Some("dut-1"), || Ok("owner".to_owned())).unwrap();
+        assert_eq!((board.id.as_str(), owner.as_str()), ("dut-1", "owner"));
+        let single = stand_with(1);
+        let (board, _) = resolve(&single, None, || Ok("owner".to_owned())).unwrap();
+        assert_eq!(board.id, "dut-0");
+        let error =
+            resolve(&single, None, || Err("no stand owner is registered".into())).unwrap_err();
+        assert!(error.to_string().contains("no stand owner"), "{error}");
+    }
 
     #[test]
     fn a_run_leases_the_air_only_for_a_scenario_that_turns_a_radio_on() {
