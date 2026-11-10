@@ -504,9 +504,14 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     ///
     /// Buffer geometry is checked at monomorphization, including storage
     /// initialized as zero bytes without calling [`Self::new`].
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refused place returns its placement whole"
+    )]
     pub fn place(
         placed: Placed<Self>,
-    ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, RxDmaStorageError> {
+    ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, (RxDmaStorageError, Placed<Self>)>
+    {
         Self::place_rotated(placed, 0)
     }
 
@@ -522,37 +527,49 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
     /// # Errors
     ///
     /// The rotation is not below `COUNT`, or an address does not fit the
-    /// DMA address width of the space.
+    /// DMA address width of the space: the placement comes back beside the
+    /// cause, published to no hardware (the buffers' recorded addresses and
+    /// the rotation a refusal after them left are the next place's to
+    /// write again).
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refused place returns its placement whole"
+    )]
     pub fn place_rotated(
         placed: Placed<Self>,
         rotation: usize,
-    ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, RxDmaStorageError> {
+    ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, (RxDmaStorageError, Placed<Self>)>
+    {
         RxDmaBuffer::<BUFFER_SIZE, STORAGE_SIZE>::check_geometry();
-        let (storage, _range, projection) = placed
-            .into_dma_parts::<S>()
-            .ok_or(RxDmaStorageError::AddressWidth)?;
-        storage.validate_descriptor_rotation(rotation)?;
-        for descriptor_index in 0..COUNT {
-            let buffer_id = (descriptor_index + rotation) % COUNT;
-            let address = projection
-                .address(&storage.buffers[buffer_id])
-                .map_err(|_| RxDmaStorageError::AddressWidth)?;
-            storage.buffer_addresses.record(descriptor_index, address);
-        }
-        storage.bind_descriptor_rotation(rotation)?;
-        let descriptors = projection
-            .table(
-                storage
-                    .descriptors
-                    .ring()
-                    .iter()
-                    .chain(core::iter::once(storage.descriptors.reserved()))
-                    .map(|descriptor| descriptor.layout()),
-            )
-            .map_err(|_| RxDmaStorageError::AddressWidth)?;
-        let reserved_buffer = projection
-            .address(&storage.reserved_buffer)
-            .map_err(|_| RxDmaStorageError::AddressWidth)?;
+        let (storage, _range, _projection, (descriptors, reserved_buffer)) = placed
+            .bind_dma::<S, _, _>(|storage, _range, projection| {
+                storage.validate_descriptor_rotation(rotation)?;
+                for descriptor_index in 0..COUNT {
+                    let buffer_id = (descriptor_index + rotation) % COUNT;
+                    let address = projection
+                        .address(&storage.buffers[buffer_id])
+                        .map_err(|_| RxDmaStorageError::AddressWidth)?;
+                    storage.buffer_addresses.record(descriptor_index, address);
+                }
+                storage.bind_descriptor_rotation(rotation)?;
+                let descriptors = projection
+                    .table(
+                        storage
+                            .descriptors
+                            .ring()
+                            .iter()
+                            .chain(core::iter::once(storage.descriptors.reserved()))
+                            .map(|descriptor| descriptor.layout()),
+                    )
+                    .map_err(|_| RxDmaStorageError::AddressWidth)?;
+                let reserved_buffer = projection
+                    .address(&storage.reserved_buffer)
+                    .map_err(|_| RxDmaStorageError::AddressWidth)?;
+                Ok((descriptors, reserved_buffer))
+            })
+            .map_err(|(refusal, placed)| {
+                (refusal.cause(RxDmaStorageError::AddressWidth), placed)
+            })?;
         Ok(PlacedRxDma {
             storage,
             descriptors,

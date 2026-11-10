@@ -1,11 +1,11 @@
 //! The staged preparation of a port's parts before its radio starts: the
 //! receive path's bind, the device's place, each transmit descriptor's pin
 //! into its slot, each aggregate chain, the lent units' notifies and the
-//! shared storage's place, in that order. Each step consumes only its own
-//! input, as its contract names (a placement that does not bind, a
-//! descriptor that does not pin, a place already taken); a refusal returns
-//! the step it refused at, every part the steps before it reached and
-//! every input no step took yet. Generic over the steps ([`Steps`]): the
+//! shared storage's place, in that order. A refused step returns what it
+//! holds of its own input (the input whole, or the owning intermediate it
+//! reached: a placement split, a place claimed, a storage pinned); a
+//! refusal returns the step it refused at, that step's own, every part the
+//! steps before it reached and every input no step took yet. Generic over the steps ([`Steps`]): the
 //! chip's install names its own; a host test names its own and refuses at
 //! each step through this same path.
 
@@ -15,56 +15,61 @@ pub(crate) const SLOTS: usize = 5;
 /// The aggregate chains a port prepares.
 pub(crate) const CHAINS: usize = 2;
 
-/// One kind of step of a port's preparation, each with its input and the
-/// part it makes.
+/// One kind of step of a port's preparation, each with its input, the
+/// part it makes and what its refusal returns of its input (`*Back`).
 pub trait Steps {
     /// Why a step refuses.
     type Error;
     type RxIn;
     type Rx;
+    type RxBack;
     type DeviceIn;
     type Device;
+    type DeviceBack;
     type SlotIn;
     type Slot;
+    type SlotBack;
     type ChainIn;
     type Chain;
+    type ChainBack;
     type LentIn;
     type Lent;
+    type LentBack;
     type SharedIn;
     type Shared;
+    type SharedBack;
     /// Bind the receive path.
-    fn bind(&mut self, input: Self::RxIn) -> StepResult<Self::Rx, Self::Error, Self::RxIn>;
+    fn bind(&mut self, input: Self::RxIn) -> StepResult<Self::Rx, Self::Error, Self::RxBack>;
     /// Take the device's place.
     fn device(
         &mut self,
         input: Self::DeviceIn,
-    ) -> StepResult<Self::Device, Self::Error, Self::DeviceIn>;
+    ) -> StepResult<Self::Device, Self::Error, Self::DeviceBack>;
     /// Pin one transmit descriptor into its slot.
-    fn slot(&mut self, input: Self::SlotIn) -> StepResult<Self::Slot, Self::Error, Self::SlotIn>;
+    fn slot(&mut self, input: Self::SlotIn) -> StepResult<Self::Slot, Self::Error, Self::SlotBack>;
     /// Make one aggregate chain.
     fn chain(
         &mut self,
         input: Self::ChainIn,
-    ) -> StepResult<Self::Chain, Self::Error, Self::ChainIn>;
+    ) -> StepResult<Self::Chain, Self::Error, Self::ChainBack>;
     /// Take the lent units' notifies.
-    fn lent(&mut self, input: Self::LentIn) -> StepResult<Self::Lent, Self::Error, Self::LentIn>;
+    fn lent(&mut self, input: Self::LentIn) -> StepResult<Self::Lent, Self::Error, Self::LentBack>;
     /// Take the shared storage's place.
     fn shared(
         &mut self,
         input: Self::SharedIn,
-    ) -> StepResult<Self::Shared, Self::Error, Self::SharedIn>;
+    ) -> StepResult<Self::Shared, Self::Error, Self::SharedBack>;
 }
 
-/// Why one step refused: its cause, and its input when the step took
-/// nothing of it (a step that consumed part of it per its primitive's
-/// contract returns `None`).
-pub struct StepRefused<E, I> {
+/// Why one step refused: its cause, and what it holds of its input (`B`:
+/// the input whole, or the owning intermediate its primitive reached).
+pub struct StepRefused<E, B> {
     pub cause: E,
-    pub input: Option<I>,
+    pub back: B,
 }
 
 /// What one step gives: its part, or its refusal.
-pub type StepResult<O, E, I> = Result<O, StepRefused<E, I>>;
+pub type StepResult<O, E, B> = Result<O, StepRefused<E, B>>;
 
 /// The step a preparation refused at.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132,6 +137,16 @@ pub type ReachedOf<S> = Stage<
     <S as Steps>::Lent,
     <S as Steps>::Shared,
 >;
+/// What the refused step of a preparation returned of its input: only that
+/// step's place holds it.
+pub type BackOf<S> = Stage<
+    <S as Steps>::RxBack,
+    <S as Steps>::DeviceBack,
+    <S as Steps>::SlotBack,
+    <S as Steps>::ChainBack,
+    <S as Steps>::LentBack,
+    <S as Steps>::SharedBack,
+>;
 /// The inputs no step of a refused preparation took.
 pub type RemainingOf<S> = Stage<
     <S as Steps>::RxIn,
@@ -142,13 +157,14 @@ pub type RemainingOf<S> = Stage<
     <S as Steps>::SharedIn,
 >;
 
-/// A refused preparation: why, at which step, the parts the steps before it
-/// reached and the inputs no step took, the refused step's own among them
-/// when it took nothing of it.
+/// A refused preparation: why, at which step, what that step returned of
+/// its input, the parts the steps before it reached and the inputs no step
+/// took.
 #[must_use = "a refused preparation returns the parts it reached and the inputs it did not take"]
 pub struct PreparationRefused<S: Steps> {
     pub cause: S::Error,
     pub step: Step,
+    pub back: BackOf<S>,
     pub reached: ReachedOf<S>,
     pub remaining: RemainingOf<S>,
 }
@@ -185,16 +201,17 @@ pub(crate) fn prepare<S: Steps>(
          remaining [$($m:ident $([$mi:literal])? => $mv:expr),*]) => {
             match $call {
                 Ok(part) => part,
-                Err(StepRefused { cause, input }) => {
+                Err(StepRefused { cause, back: returned }) => {
                     #[allow(unused_mut, reason = "a step with nothing before it reaches nothing")]
                     let mut reached = ReachedOf::<S>::none();
                     $( reached.$r $([$ri])? = Some($rv); )*
                     #[allow(unused_mut, reason = "the last step leaves no input")]
                     let mut remaining = RemainingOf::<S>::none();
                     $( remaining.$m $([$mi])? = Some($mv); )*
-                    // The refused step's input, when it took nothing of it.
-                    remaining.$b $([$bi])? = input;
-                    return Err(PreparationRefused { cause, step: $step, reached, remaining });
+                    // What the refused step returned of its input.
+                    let mut back = BackOf::<S>::none();
+                    back.$b $([$bi])? = Some(returned);
+                    return Err(PreparationRefused { cause, step: $step, back, reached, remaining });
                 }
             }
         };

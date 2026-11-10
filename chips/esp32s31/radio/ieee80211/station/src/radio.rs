@@ -1207,9 +1207,55 @@ pub struct Prepared<W: Binding> {
     >,
 }
 
-/// The chip's steps of a port's preparation ([`crate::prepare`]): each
-/// consumes only its own input, as its primitive's contract names.
+/// The chip's steps of a port's preparation ([`crate::prepare`]): a refused
+/// step returns its input whole, or the owning intermediate it reached.
 pub struct PrepareSteps<W>(core::marker::PhantomData<W>);
+
+/// A transmit descriptor's input of a preparation step.
+pub type SlotInput = (
+    oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxDescriptor>,
+    &'static StaticCell<TxSlot<TX>>,
+);
+
+/// What a refused descriptor step returns of its input.
+pub enum SlotLeft {
+    /// Its slot's place was taken: the input, whole.
+    Untouched(SlotInput),
+    /// The descriptor did not pin: the placement, whole, and the slot's
+    /// place it claimed, unwritten.
+    Unpinned {
+        dma: oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxDescriptor>,
+        place: &'static mut core::mem::MaybeUninit<TxSlot<TX>>,
+    },
+}
+
+/// An aggregate chain's input of a preparation step.
+pub type ChainInput = (
+    oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxChain>,
+    &'static StaticCell<HtAmpduTxStorage<TX_AMPDU_SUBFRAMES>>,
+    &'static StaticCell<RetainedAmpduDmaStorage<TxBacking<TX>, TX_AMPDU_SUBFRAMES>>,
+);
+
+/// What a refused chain step returns of its input.
+pub enum ChainLeft {
+    /// Its metadata's place was taken: the input, whole.
+    Untouched(ChainInput),
+    /// Its retention's place was taken: the chain's placement, whole, the
+    /// metadata's place it claimed, unwritten, and the retention's cell.
+    MetadataClaimed {
+        dma: oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxChain>,
+        metadata: &'static mut core::mem::MaybeUninit<HtAmpduTxStorage<TX_AMPDU_SUBFRAMES>>,
+        retention: &'static StaticCell<RetainedAmpduDmaStorage<TxBacking<TX>, TX_AMPDU_SUBFRAMES>>,
+    },
+    /// The chain did not pin: both arenas as far as they came, and the
+    /// retention written in its place.
+    Unpinned {
+        refused: oer_chips_esp32s31_radio_ieee80211_backend::mac::tx::ampdu::HtAmpduPinRefused<
+            TX_AMPDU_SUBFRAMES,
+        >,
+        retention: &'static mut RetainedAmpduDmaStorage<TxBacking<TX>, TX_AMPDU_SUBFRAMES>,
+    },
+}
 
 impl<W: Binding> crate::prepare::Steps for PrepareSteps<W> {
     type Error = InitializationError;
@@ -1234,26 +1280,31 @@ impl<W: Binding> crate::prepare::Steps for PrepareSteps<W> {
         ChipDma,
         DriverExecutor,
     >;
+    type RxBack = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxBindRefused<
+        N,
+        B,
+        S,
+        Q,
+        DriverExecutor,
+    >;
     type DeviceIn = &'static StaticCell<Device<W>>;
     type Device = &'static mut core::mem::MaybeUninit<Device<W>>;
-    type SlotIn = (
-        oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxDescriptor>,
-        &'static StaticCell<TxSlot<TX>>,
-    );
+    type DeviceBack = Self::DeviceIn;
+    type SlotIn = SlotInput;
     type Slot = Pin<&'static mut TxSlot<TX>>;
-    type ChainIn = (
-        oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxChain>,
-        &'static StaticCell<HtAmpduTxStorage<TX_AMPDU_SUBFRAMES>>,
-        &'static StaticCell<RetainedAmpduDmaStorage<TxBacking<TX>, TX_AMPDU_SUBFRAMES>>,
-    );
+    type SlotBack = SlotLeft;
+    type ChainIn = ChainInput;
     type Chain = oer_chips_esp32s31_radio_ieee80211_backend::port::AmpduChain<TX>;
+    type ChainBack = ChainLeft;
     type LentIn = &'static mut Option<Lent<W>>;
     type Lent = Lent<W>;
+    type LentBack = Self::LentIn;
     type SharedIn = &'static StaticCell<PortSharedStorage<TX, Lent<W>>>;
     type Shared = &'static mut core::mem::MaybeUninit<PortSharedStorage<TX, Lent<W>>>;
+    type SharedBack = Self::SharedIn;
 
-    fn bind(&mut self, (rx, signals): Self::RxIn) -> PrepareResult<Self::Rx, Self::RxIn> {
-        // A placement that does not bind is consumed by the bind.
+    fn bind(&mut self, (rx, signals): Self::RxIn) -> PrepareResult<Self::Rx, Self::RxBack> {
+        // A placement that does not bind comes back split, with the signals.
         let (rx, _, _) = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxArena::<
             N,
             B,
@@ -1261,85 +1312,93 @@ impl<W: Binding> crate::prepare::Steps for PrepareSteps<W> {
             Q,
             DriverExecutor,
         >::bind(rx, signals)
-        .map_err(|_| consumed(InitializationError::Rx))?;
+        .map_err(|refused| back(InitializationError::Rx, refused))?;
         Ok(rx)
     }
 
-    fn device(&mut self, device: Self::DeviceIn) -> PrepareResult<Self::Device, Self::DeviceIn> {
+    fn device(&mut self, device: Self::DeviceIn) -> PrepareResult<Self::Device, Self::DeviceBack> {
         device
             .try_uninit()
-            .ok_or_else(|| whole(InitializationError::Storage, device))
+            .ok_or_else(|| back(InitializationError::Storage, device))
     }
 
-    fn slot(&mut self, (dma, slot): Self::SlotIn) -> PrepareResult<Self::Slot, Self::SlotIn> {
-        // The place first: a place already taken returns the descriptor
-        // untouched; a descriptor that does not pin is consumed by the pin.
+    fn slot(&mut self, (dma, slot): Self::SlotIn) -> PrepareResult<Self::Slot, Self::SlotBack> {
+        // The place first: a place already taken returns the input whole; a
+        // descriptor that does not pin comes back with the claimed place.
         let Some(place) = slot.try_uninit() else {
-            return Err(whole(InitializationError::Storage, (dma, slot)));
+            return Err(back(
+                InitializationError::Storage,
+                SlotLeft::Untouched((dma, slot)),
+            ));
         };
-        let dma =
-            TxDmaStorage::pin::<ChipDma, _>(dma).map_err(|_| consumed(InitializationError::Tx))?;
+        let dma = match TxDmaStorage::pin::<ChipDma, _>(dma) {
+            Ok(dma) => dma,
+            Err((_, dma)) => {
+                return Err(back(
+                    InitializationError::Tx,
+                    SlotLeft::Unpinned { dma, place },
+                ));
+            }
+        };
         Ok(Pin::new(&mut *place.write(TxSlot::from_dma(dma))))
     }
 
     fn chain(
         &mut self,
         (dma, metadata, retention): Self::ChainIn,
-    ) -> PrepareResult<Self::Chain, Self::ChainIn> {
-        // Both places first: a place already taken returns the chain's
-        // placement untouched; one that does not pin is consumed by the pin.
+    ) -> PrepareResult<Self::Chain, Self::ChainBack> {
+        // Both places first: a taken place returns what the step holds of
+        // its input; a chain that does not pin comes back with both arenas.
         let Some(metadata_place) = metadata.try_uninit() else {
-            return Err(whole(
+            return Err(back(
                 InitializationError::Storage,
-                (dma, metadata, retention),
+                ChainLeft::Untouched((dma, metadata, retention)),
             ));
         };
         let Some(retention_place) = retention.try_uninit() else {
-            return Err(whole(
+            return Err(back(
                 InitializationError::Storage,
-                (dma, metadata, retention),
+                ChainLeft::MetadataClaimed {
+                    dma,
+                    metadata: metadata_place,
+                    retention,
+                },
             ));
         };
         let metadata = metadata_place.write(HtAmpduTxStorage::new());
         let retention = retention_place.write(RetainedAmpduDmaStorage::new());
-        let resources = HtAmpduTxResources::pin_static(metadata, dma)
-            .map_err(|_| consumed(InitializationError::Tx))?;
-        Ok(RetainedDmaAmpduTx::new(resources, retention))
-    }
-
-    fn lent(&mut self, lent: Self::LentIn) -> PrepareResult<Self::Lent, Self::LentIn> {
-        match lent.take() {
-            Some(taken) => Ok(taken),
-            None => Err(whole(InitializationError::Storage, lent)),
+        match HtAmpduTxResources::pin_static(metadata, dma) {
+            Ok(resources) => Ok(RetainedDmaAmpduTx::new(resources, retention)),
+            Err(refused) => Err(back(
+                InitializationError::Tx,
+                ChainLeft::Unpinned { refused, retention },
+            )),
         }
     }
 
-    fn shared(&mut self, shared: Self::SharedIn) -> PrepareResult<Self::Shared, Self::SharedIn> {
+    fn lent(&mut self, lent: Self::LentIn) -> PrepareResult<Self::Lent, Self::LentBack> {
+        match lent.take() {
+            Some(taken) => Ok(taken),
+            None => Err(back(InitializationError::Storage, lent)),
+        }
+    }
+
+    fn shared(&mut self, shared: Self::SharedIn) -> PrepareResult<Self::Shared, Self::SharedBack> {
         shared
             .try_uninit()
-            .ok_or_else(|| whole(InitializationError::Storage, shared))
+            .ok_or_else(|| back(InitializationError::Storage, shared))
     }
 }
 
 /// What one of the chip's preparation steps gives.
 type PrepareResult<O, I> = crate::prepare::StepResult<O, InitializationError, I>;
 
-/// A step that refused before it took anything of `input`.
-const fn whole<I>(
+/// A step that refused for `cause`, returning what it holds of its input.
+const fn back<B>(
     cause: InitializationError,
-    input: I,
-) -> crate::prepare::StepRefused<InitializationError, I> {
-    crate::prepare::StepRefused {
-        cause,
-        input: Some(input),
-    }
-}
-
-/// A step whose primitive consumed its input as it refused.
-const fn consumed<I>(
-    cause: InitializationError,
-) -> crate::prepare::StepRefused<InitializationError, I> {
-    crate::prepare::StepRefused { cause, input: None }
+    back: B,
+) -> crate::prepare::StepRefused<InitializationError, B> {
+    crate::prepare::StepRefused { cause, back }
 }
 
 /// Start the radio and assemble the port's parts: the port holds the first

@@ -5,7 +5,7 @@ use super::StableDmaRange;
 fn bind<T: ?Sized>(storage: &mut T, start: u32) -> Option<(&mut T, StableDmaRange<'_>)> {
     // SAFETY: the synthetic host address maps to this complete allocation.
     // No hardware accesses it; the returned borrow retains the storage.
-    unsafe { StableDmaRange::from_owner(storage, start) }
+    unsafe { StableDmaRange::from_owner(storage, start) }.ok()
 }
 
 #[test]
@@ -40,4 +40,16 @@ fn empty_and_wrapping_allocations_have_no_range() {
     assert!(bind(&mut [0_u8; 0], 100).is_none());
     assert!(bind(&mut [0_u8; 16], u32::MAX - 15).is_none());
     assert!(bind(&mut [0_u8; 16], u32::MAX - 16).is_some());
+}
+
+#[test]
+fn an_allocation_that_does_not_fit_comes_back_as_the_refusal() {
+    let mut storage = [0_u8; 16];
+    // SAFETY: as `bind`: a synthetic host address, no hardware.
+    let refused = unsafe { StableDmaRange::from_owner(&mut storage, u32::MAX - 8) };
+    let Err(owner) = refused else {
+        panic!("the extent does not fit");
+    };
+    owner[0] = 9;
+    assert_eq!(storage[0], 9);
 }

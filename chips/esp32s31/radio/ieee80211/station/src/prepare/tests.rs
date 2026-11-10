@@ -23,7 +23,8 @@ impl Drop for Owner<'_> {
 }
 
 /// Steps of the test: each makes its part from its input's name, the
-/// input consumed; the step numbered `refuse` refuses.
+/// input consumed; the step numbered `refuse` refuses and returns its
+/// input, whole or as the intermediate it reached (named 50 on).
 struct TestSteps<'a> {
     refuse: u8,
     /// Whether the refused step took nothing of its input.
@@ -36,20 +37,19 @@ impl<'a> TestSteps<'a> {
     fn run(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         let at = self.taken;
         self.taken += 1;
-        if at == self.refuse && self.untouched {
+        if at == self.refuse {
+            let mut back = input;
+            if !self.untouched {
+                // The intermediate it reached holds the input.
+                back.0 += 50;
+            }
             return Err(StepRefused {
                 cause: Refusal,
-                input: Some(input),
+                back,
             });
         }
         let name = input.0;
         drop(input);
-        if at == self.refuse {
-            return Err(StepRefused {
-                cause: Refusal,
-                input: None,
-            });
-        }
         Ok(Owner(name + 100, self.ended))
     }
 }
@@ -58,16 +58,22 @@ impl<'a> Steps for TestSteps<'a> {
     type Error = Refusal;
     type RxIn = Owner<'a>;
     type Rx = Owner<'a>;
+    type RxBack = Owner<'a>;
     type DeviceIn = Owner<'a>;
     type Device = Owner<'a>;
+    type DeviceBack = Owner<'a>;
     type SlotIn = Owner<'a>;
     type Slot = Owner<'a>;
+    type SlotBack = Owner<'a>;
     type ChainIn = Owner<'a>;
     type Chain = Owner<'a>;
+    type ChainBack = Owner<'a>;
     type LentIn = Owner<'a>;
     type Lent = Owner<'a>;
+    type LentBack = Owner<'a>;
     type SharedIn = Owner<'a>;
     type Shared = Owner<'a>;
+    type SharedBack = Owner<'a>;
     fn bind(&mut self, input: Owner<'a>) -> StepResult<Owner<'a>, Refusal, Owner<'a>> {
         self.run(input)
     }
@@ -128,10 +134,10 @@ const fn step_of(at: u8) -> Step {
     }
 }
 
-/// A refusal at any step returns, whole: the step it refused at, the part
-/// of every step before it, and the input of every step after it. Only the
-/// refused step's input ended, as its contract names; nothing else ended
-/// on the way.
+/// A refusal at any step returns, whole: the step it refused at, what that
+/// step holds of its input (the input itself, or the intermediate it
+/// reached), the part of every step before it, and the input of every step
+/// after it. Only the inputs the earlier steps made their parts of ended.
 #[test]
 fn a_refusal_at_each_step_returns_the_reached_parts_and_the_remaining_inputs() {
     for untouched in [false, true] {
@@ -150,17 +156,19 @@ fn a_refusal_at_each_step_returns_the_reached_parts_and_the_remaining_inputs() {
             assert_eq!(refused.cause, Refusal);
             assert_eq!(refused.step, step_of(refuse));
             assert_eq!(steps.taken, refuse + 1, "no step runs after the refusal");
-            // Each step's input ended as it made its part; the refused
-            // one's too unless it took nothing of it, and nothing else.
-            let last = if untouched { refuse } else { refuse + 1 };
-            assert_eq!(*ended.borrow(), (0..last).collect::<Vec<_>>());
+            // Each step's input ended as it made its part, and nothing
+            // else: the refused one's comes back.
+            assert_eq!(*ended.borrow(), (0..refuse).collect::<Vec<_>>());
+            let expected_back: Vec<_> = (0..STEPS)
+                .map(|at| (at == refuse).then_some(if untouched { at } else { at + 50 }))
+                .collect();
+            assert_eq!(names(&refused.back), expected_back, "at {refuse}");
             let expected_reached: Vec<_> = (0..STEPS)
                 .map(|at| (at < refuse).then_some(at + 100))
                 .collect();
             assert_eq!(names(&refused.reached), expected_reached, "at {refuse}");
-            let expected_remaining: Vec<_> = (0..STEPS)
-                .map(|at| (at > refuse || (untouched && at == refuse)).then_some(at))
-                .collect();
+            let expected_remaining: Vec<_> =
+                (0..STEPS).map(|at| (at > refuse).then_some(at)).collect();
             assert_eq!(names(&refused.remaining), expected_remaining, "at {refuse}");
         }
     }
