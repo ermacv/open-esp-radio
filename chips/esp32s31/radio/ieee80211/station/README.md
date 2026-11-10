@@ -158,9 +158,16 @@ two ways:
   (`unfinished::Phase`: `Running`, `Stopping`, `Stopped`, `Reinstalling`,
   `Releasing`). Nothing of it is dropped on the way.
 
+A port that refuses its installation installs nothing and hands back
+every input it was given (`Esp32s31Port::install`'s `InstallRefused`: the
+parts, the minted installation, the driver's place): the station's
+datapath task returns them as `DatapathEnd::Refused(RefusedInstall<W>)`
+and the access point's as `AccessPointEnd::Refused`, after the started
+radio left from the device.
+
 The station's installation has two halves, and an unfinished one returns
 both. The datapath task returns `DatapathEnd` (`Retired`, `NotInstalled`,
-or `Unfinished(UnfinishedStationOf<W>)`, cause `DatapathCause`): a fault of
+`Refused`, or `Unfinished(UnfinishedStationOf<W>)`, cause `DatapathCause`): a fault of
 the actor or the lifecycle's end without retiring it (`Lifecycle`: a stop
 or retune that proved nothing, a broken contract), each in the phase the
 actor's radio read (`Actor::radio_phase`: a stop asked for and not

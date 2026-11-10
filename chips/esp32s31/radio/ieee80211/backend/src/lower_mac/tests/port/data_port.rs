@@ -620,6 +620,32 @@ fn with_fixture<R>(test: impl for<'id> FnOnce(&mut Fixture<'id, radio::LocalId<'
     }))
 }
 
+/// A refusal before installation hands back every input unchanged: the
+/// parts, the minted installation and the driver's place. The same inputs,
+/// corrected, install: nothing of them was taken or replaced.
+#[test]
+fn a_refused_installation_returns_its_parts_mint_and_driver_whole() {
+    block_on(radio::with_local_slot(async move |claim| {
+        let (mut parts, observed, timer) = installed(Vec::new());
+        let bank = parts.bank;
+        // A bank larger than the port's buffers: refused before anything
+        // is taken.
+        parts.bank = u8::MAX;
+        let mut installations = Installations::<_, InstallationPools>::claim(claim);
+        let minted: Minted<_, InstallationPools> = installations.first().expect("first mint");
+        let driver = Box::leak(Box::new(PortDriver::vacant()));
+        let Err((mut parts, minted, driver)) = Port::install(parts, minted, driver) else {
+            panic!("a bank the port cannot hold is refused");
+        };
+        parts.bank = bank;
+        let installation = Port::install(parts, minted, driver)
+            .ok()
+            .expect("the returned inputs install");
+        let mut fixture = Fixture::new(installation, observed, timer);
+        assert_eq!(cases::check(&mut fixture, Case::ALL[0]), Ok(()));
+    }));
+}
+
 #[test]
 fn every_data_port_case_passes_on_the_s31_port() {
     for case in Case::ALL {

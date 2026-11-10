@@ -193,6 +193,19 @@ pub type Installations<W> =
     oer_protocols_radio_port::Installations<<W as Binding>::Id, InstallationPools>;
 /// The data port's driver state of `W`.
 pub(crate) type PortDriverOf<W> = PortDriver<<W as Binding>::Id, Device<W>, TX, ()>;
+
+/// A port installation refused before it installed: every input it was
+/// handed, unchanged (the parts with their device, pool, descriptors and
+/// settings, the minted installation and its pools, the driver's place,
+/// the installation registry), for the application. The started radio
+/// left from the device first; the refusal's news tells how.
+#[must_use = "a refused installation holds every input it was handed"]
+pub struct RefusedInstall<W: Binding> {
+    pub parts: PortParts<Device<W>, TX, ()>,
+    pub minted: oer_protocols_radio_port::Minted<<W as Binding>::Id, InstallationPools>,
+    pub driver: &'static mut PortDriverOf<W>,
+    pub installations: Installations<W>,
+}
 /// The receive units the actor holds at most: the station's share of the
 /// staged units, less the frames its lifecycle holds.
 const ACTOR_RX_HELD: u8 = {
@@ -349,9 +362,12 @@ pub enum DatapathEnd<W: Binding> {
     /// The installation retired: its radio's stop was confirmed and the
     /// radio released, every owner ended with it.
     Retired,
-    /// No installation came up: the station's task holds the refusal and
-    /// how the owners it returned ended.
+    /// No installation came up before the port was handed anything: the
+    /// station's task holds the refusal and how the owners it returned
+    /// ended.
     NotInstalled,
+    /// The port refused its installation: every input it was handed, whole.
+    Refused(RefusedInstall<W>),
     /// The installation did not retire: everything it held.
     Unfinished(UnfinishedStationOf<W>),
 }
@@ -552,10 +568,16 @@ pub(crate) async fn drive<W: Binding>(
         resources,
     } = match Port::<W>::install(parts, minted, driver) {
         Ok(installation) => installation,
-        Err((parts, _minted)) => {
-            let unavailable = port_refused::<W>(InitializationError::Backend, parts.device).await;
+        Err((mut parts, minted, driver)) => {
+            let unavailable =
+                port_refused::<W>(InitializationError::Backend, &mut *parts.device).await;
             post(&mut mailbox, News::Unavailable(unavailable)).await;
-            return DatapathEnd::NotInstalled;
+            return DatapathEnd::Refused(RefusedInstall {
+                parts,
+                minted,
+                driver,
+                installations,
+            });
         }
     };
     let (block_acks, tokens) = resources.into_station();
@@ -781,7 +803,7 @@ impl<W: Binding> crate::release::Stopped for Port<W> {
 /// MAC or its DMA.
 pub(crate) async fn port_refused<W: Binding>(
     cause: InitializationError,
-    device: &'static mut Device<W>,
+    device: &mut Device<W>,
 ) -> crate::failure::Unavailable<InitializationError> {
     let cleanup = match device.0.take_unstarted() {
         Some((stopped, cell)) => {

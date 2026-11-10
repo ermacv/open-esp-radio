@@ -523,9 +523,13 @@ where
     }
 }
 
-/// The parts and the mint an installation refused, both unchanged.
-pub type InstallRefused<Id, D, const B: usize, O> =
-    (PortParts<D, B, O>, Minted<Id, InstallationPools>);
+/// The parts, the mint and the driver an installation refused, all
+/// unchanged: nothing was installed.
+pub type InstallRefused<'id, Id, D, const B: usize, O> = (
+    PortParts<D, B, O>,
+    Minted<Id, InstallationPools>,
+    &'id mut PortDriver<Id, D, B, O>,
+);
 
 /// The driver, the device and the environment of one shared step.
 type Step<'a, 'id, Id, D, const B: usize, O, S> = (
@@ -558,9 +562,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         parts: PortParts<D, B, O>,
         minted: Minted<Id, InstallationPools>,
         driver: &'id mut PortDriver<Id, D, B, O>,
-    ) -> Result<PortInstallation<'id, Id, D, B, O>, InstallRefused<Id, D, B, O>> {
+    ) -> Result<PortInstallation<'id, Id, D, B, O>, InstallRefused<'id, Id, D, B, O>> {
         let Ok(station) = IndividualAddress::for_interface(parts.config.station_address) else {
-            return Err((parts, minted));
+            return Err((parts, minted, driver));
         };
         if parts.config.publication_timeout > PUBLICATION_BOUND
             || parts.config.publication_timeout == Duration::ZERO
@@ -577,7 +581,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             || parts.shared.lost()
             || !parts.shared.returned.none_out()
         {
-            return Err((parts, minted));
+            return Err((parts, minted, driver));
         }
         let PortParts {
             device,

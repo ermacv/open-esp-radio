@@ -311,13 +311,19 @@ pub enum AccessPointEnd<W: Binding> {
     /// the items a port call could not keep, the cleanup's receipt, its
     /// exit as the cause, and its phase.
     Unfinished(UnfinishedAccessPointOf<W>),
+    /// The port refused its installation: its exit, and every input the
+    /// port was handed, whole.
+    Refused {
+        exit: ApExit,
+        inputs: radio::RefusedInstall<W>,
+    },
 }
 
 impl<W: Binding> AccessPointEnd<W> {
     /// The exit the access point ended with.
     pub fn exit(&self) -> ApExit {
         match self {
-            Self::Ended(exit) => *exit,
+            Self::Ended(exit) | Self::Refused { exit, .. } => *exit,
             Self::Unfinished(unfinished) => unfinished.cause,
         }
     }
@@ -560,28 +566,36 @@ impl<W: Binding> AccessPointRunner<W> {
             resources,
         } = match Port::<W>::install(parts, minted, driver) {
             Ok(installation) => installation,
-            Err((parts, _minted)) => {
+            Err((mut parts, minted, driver)) => {
                 // The started radio leaves from the refused parts' device,
-                // which the port never started; its outcome is the cleanup.
-                return AccessPointEnd::Ended(ApExit::Unavailable(
-                    radio::port_refused::<W>(InitializationError::Backend, parts.device).await,
-                ));
+                // which the port never started; its outcome is the cleanup,
+                // and every input comes back.
+                let unavailable =
+                    radio::port_refused::<W>(InitializationError::Backend, &mut *parts.device)
+                        .await;
+                return AccessPointEnd::Refused {
+                    exit: ApExit::Unavailable(unavailable),
+                    inputs: radio::RefusedInstall {
+                        parts,
+                        minted,
+                        driver,
+                        installations,
+                    },
+                };
             }
         };
-        let mut tickets = heapless::Vec::new();
-        for ticket in resources.tickets {
-            // The access point holds every ticket: `TX_TICKETS` is its
-            // `AP_TICKETS`.
-            if let Err(ticket) = tickets.push(ticket) {
-                drop(ticket);
+        // The access point holds every ticket (`TX_TICKETS` is at most its
+        // `AP_TICKETS`) and the first `AP_BUFFERS` buffer places, which
+        // hold the port's bank; the other places hold no memory and have
+        // no owner here, as the station's.
+        let tickets = heapless::Vec::from_array(resources.tickets);
+        let [b0, b1, b2, b3, b4, b5, b6, b7, ..] = resources.buffers;
+        const {
+            if AP_BUFFERS != 8 {
+                panic!("the access point takes eight buffer places");
             }
         }
-        let mut buffers = heapless::Vec::new();
-        for buffer in resources.buffers.into_iter().take(AP_BUFFERS) {
-            if let Err(buffer) = buffers.push(buffer) {
-                drop(buffer);
-            }
-        }
+        let buffers = heapless::Vec::from_array([b0, b1, b2, b3, b4, b5, b6, b7]);
         let (start, bank) = resources.access_point_association.into_parts();
         let (pairwise_slots, group_slots) = bank.into_parts();
         let mut pairwise = heapless::Vec::new();
