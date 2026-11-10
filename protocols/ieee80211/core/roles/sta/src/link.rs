@@ -66,7 +66,7 @@ use crate::machine::{
     EapolProtection, StaEapol, StaFrame, StaInput, StaReceived, StaRxError, StaTokens, StaTransmit,
     TxRefusal, sta_frame,
 };
-use crate::receive::{Received, classify};
+use crate::receive::{Received, sort};
 
 /// The space a station frame's Sequence Number comes from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -494,17 +494,22 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
     /// data and its EAPOL frames to `eapol`, the station's
     /// [`Station::eapol`](crate::machine::Station::eapol); any other frame is
     /// the station's.
+    ///
+    /// `header` is the frame's MAC header as its receive buffer decoded it
+    /// ([`RxBuffer::header`](oer_protocols_ieee80211_contracts_port::RxBuffer::header)),
+    /// `None` for one that does not decode, which is the station's.
     pub fn receive<'f, M: RxMetadata>(
         &mut self,
-        frame: &'f [u8],
+        header: Option<DecodedHeader<'f>>,
         meta: &M,
         deliver: impl FnMut(MsduDelivery<'f>),
         eapol: impl FnMut(&'f [u8], EapolProtection) -> Result<StaEapol, StaRxError>,
     ) -> LinkRx {
-        let header = match classify(frame) {
-            Ok(Received::Data(header)) => header,
-            Ok(Received::Management(_)) | Err(_) => return LinkRx::Station,
+        let header = match header.map(sort) {
+            Some(Received::Data(header)) => header,
+            Some(Received::Management(_)) | None => return LinkRx::Station,
         };
+        let frame = header.frame();
         LinkRx::Taken(self.rx.receive(
             header,
             frame,

@@ -8,6 +8,7 @@ use oer_protocols_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, LowerMacCapabilities, PhyFormatSet,
     RateSupport, ReceiveFilter, RxMeta, WidthSet,
 };
+use oer_protocols_ieee80211_wire::frame::DecodedHeader;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
@@ -60,6 +61,10 @@ struct Frame(Vec<u8>);
 impl RxBuffer for Frame {
     fn bytes(&self) -> &[u8] {
         &self.0
+    }
+
+    fn header(&self) -> Option<DecodedHeader<'_>> {
+        DecodedHeader::decode(&self.0)
     }
 }
 

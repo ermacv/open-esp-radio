@@ -242,7 +242,7 @@ fn a_fault_the_station_reports_later_ends_the_links_data() {
     let deliveries = |link: &mut LinkHandover<'_, _, ()>| {
         let mut count = 0;
         let routed = link.receive(
-            &frame,
+            DecodedHeader::decode(&frame),
             &meta(RxEvidence::Unavailable),
             |_| count += 1,
             |_, _| Ok(StaEapol::Taken),

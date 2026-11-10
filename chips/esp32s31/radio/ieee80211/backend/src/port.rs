@@ -28,6 +28,7 @@ use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::association;
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
+use oer_protocols_ieee80211_wire::frame::{CheckedHeader, DecodedHeader};
 use oer_protocols_ieee80211_wire::{address::IndividualAddress, ccmp::GroupKeyId};
 use oer_protocols_radio_port::{self as radio, Child, Root, Slot};
 use oer_protocols_radio_port::{BodyLoan, ClockError, LoanedContext, SlotIdentity};
@@ -662,6 +663,8 @@ pub struct ReceiveBuffer<'id, Id: SlotIdentity, R> {
     /// it: its original DMA lease stays quarantined.
     unit: core::mem::ManuallyDrop<R>,
     loss: LossGuard,
+    /// The MPDU's MAC header, decoded once against the narrowed bytes.
+    header: Option<CheckedHeader>,
 }
 /// Records the loss of its receive buffer: dropping a buffer does not
 /// authorize rearming its allocation, and the port's next call answers
@@ -686,14 +689,20 @@ impl Drop for LossGuard {
         }
     }
 }
-impl<'id, Id: SlotIdentity, R> ReceiveBuffer<'id, Id, R> {
+impl<'id, Id: SlotIdentity, R: ReceiveUnit> ReceiveBuffer<'id, Id, R> {
+    /// `unit`, its view narrowed to the MPDU: its MAC header is decoded
+    /// here, once, for every reader after.
     pub(crate) fn new(unit: R, loss: LossGuard) -> Self {
+        let header = CheckedHeader::check(unit.bytes());
         Self {
             brand: PhantomData,
             unit: core::mem::ManuallyDrop::new(unit),
             loss,
+            header,
         }
     }
+}
+impl<'id, Id: SlotIdentity, R> ReceiveBuffer<'id, Id, R> {
     /// The unit, by an explicit return path.
     pub(crate) fn into_unit(self) -> R {
         let Self { unit, loss, .. } = self;
@@ -702,17 +711,24 @@ impl<'id, Id: SlotIdentity, R> ReceiveBuffer<'id, Id, R> {
     }
     /// The same buffer under another brand.
     pub(crate) fn rebrand<'p>(self) -> ReceiveBuffer<'p, Id, R> {
-        let Self { unit, loss, .. } = self;
+        let Self {
+            unit, loss, header, ..
+        } = self;
         ReceiveBuffer {
             brand: PhantomData,
             unit,
             loss,
+            header,
         }
     }
 }
 impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
     fn bytes(&self) -> &[u8] {
         self.unit.bytes()
+    }
+
+    fn header(&self) -> Option<DecodedHeader<'_>> {
+        self.header.as_ref()?.of(self.unit.bytes())
     }
 }
 

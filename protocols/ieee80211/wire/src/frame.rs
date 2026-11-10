@@ -396,6 +396,89 @@ impl<'a> DecodedHeader<'a> {
     }
 }
 
+/// A MAC header decoded once, kept compact beside its frame's owner: the
+/// fields that decide its variable length and the frame's place. It gives
+/// its [`DecodedHeader`] again for those same bytes only, reading the fixed
+/// fields with no second decode of the variable layout; any other slice,
+/// another frame's or the same buffer after its start moved, gets none.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CheckedHeader {
+    control: FrameControl,
+    sequence_control: u16,
+    qos: Option<u16>,
+    /// Where the body starts.
+    header_length: u16,
+    /// The frame the header was decoded from: its first byte's address and
+    /// its length.
+    at: usize,
+    length: usize,
+}
+
+impl CheckedHeader {
+    /// Decode `frame`'s header once; `None` as [`DecodedHeader::decode`].
+    pub fn check(frame: &[u8]) -> Option<Self> {
+        let header = DecodedHeader::decode(frame)?;
+        let header_length = u16::try_from(frame.len().checked_sub(header.body.len())?).ok()?;
+        Some(Self {
+            control: header.control,
+            sequence_control: header.sequence_control,
+            qos: header.qos,
+            header_length,
+            at: frame.as_ptr().addr(),
+            length: frame.len(),
+        })
+    }
+
+    /// The decoded header of `frame`, when it is the frame this was checked
+    /// against.
+    pub fn of<'a>(&self, frame: &'a [u8]) -> Option<DecodedHeader<'a>> {
+        if frame.as_ptr().addr() != self.at || frame.len() != self.length {
+            return None;
+        }
+        let address =
+            |at: usize| -> Option<[u8; 6]> { frame.get(at..)?.first_chunk::<6>().copied() };
+        let address4 = if self.control.is_four_address() {
+            Some(address(24)?)
+        } else {
+            None
+        };
+        let ht_control = if self.control.has_ht_control() {
+            let at = usize::from(self.header_length).checked_sub(4)?;
+            Some(*frame.get(at..)?.first_chunk::<4>()?)
+        } else {
+            None
+        };
+        Some(DecodedHeader {
+            control: self.control,
+            duration: u16::from_le_bytes(*frame.get(2..)?.first_chunk::<2>()?),
+            receiver: address(4)?,
+            transmitter: address(10)?,
+            address3: address(16)?,
+            sequence_control: self.sequence_control,
+            address4,
+            qos: self.qos,
+            ht_control,
+            frame,
+            body: frame.get(usize::from(self.header_length)..)?,
+        })
+    }
+
+    /// The decoded `control` field.
+    pub const fn control(&self) -> FrameControl {
+        self.control
+    }
+
+    /// The decoded `sequence_control` field.
+    pub const fn sequence_control(&self) -> u16 {
+        self.sequence_control
+    }
+
+    /// The decoded `qos` field.
+    pub const fn qos(&self) -> Option<u16> {
+        self.qos
+    }
+}
+
 /// The Ack Policy a lower-MAC frame writes into its QoS Control field.
 /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5.4 (Ack Policy subfield), Table
 /// 9-11: Normal Ack or Implicit BAR is 0, No Ack is 1.

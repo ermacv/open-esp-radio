@@ -1311,6 +1311,10 @@ impl<Id: SlotIdentity> RxBuffer for ModelRxBuffer<'_, Id> {
     fn bytes(&self) -> &[u8] {
         &self.owner.bytes
     }
+
+    fn header(&self) -> Option<oer_protocols_ieee80211_wire::frame::DecodedHeader<'_>> {
+        oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(&self.owner.bytes)
+    }
 }
 impl<Id: SlotIdentity> core::fmt::Debug for ModelRxBuffer<'_, Id> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

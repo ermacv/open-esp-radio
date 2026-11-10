@@ -1139,9 +1139,12 @@ impl<'id, const G: usize> World<'id, G> {
     ) -> Result<StaReceived, StaRxError> {
         let station = &mut self.station;
         let routed = match self.link.as_mut() {
-            Some(link) => link.receive(frame, &meta, deliver, |payload, protection| {
-                station.eapol(payload, protection)
-            }),
+            Some(link) => link.receive(
+                oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(frame),
+                &meta,
+                deliver,
+                |payload, protection| station.eapol(payload, protection),
+            ),
             None => crate::link::LinkRx::Station,
         };
         match routed {
@@ -5573,7 +5576,7 @@ fn received_data_is_admitted_by_the_link_without_the_station() {
             .expect("the connected station lent its link");
         assert_eq!(
             link.receive(
-                &frame,
+                oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(&frame),
                 &meta(),
                 |delivery| {
                     // The payload range indexes the MPDU it came in.

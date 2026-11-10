@@ -301,3 +301,44 @@ fn every_control_subtype_has_a_known_or_refused_layout() {
         Err(AddressFieldsError::Truncated)
     );
 }
+
+/// A checked header gives what a decode of the same bytes gives, for every
+/// layout a header has, and nothing for any other slice.
+#[test]
+fn a_checked_header_gives_its_own_frame_s_decode_and_no_other_s() {
+    // Frame Control octets: (type, subtype, flags), then the frame's length
+    // past the 24 fixed octets of a three-address header.
+    let layouts: [([u8; 2], usize); 5] = [
+        ([0x08, 0x02], 0),     // data, from DS
+        ([0x88, 0x02], 2),     // QoS data, from DS
+        ([0x88, 0x03], 6 + 2), // QoS data, four addresses
+        ([0x88, 0x82], 2 + 4), // QoS data with HT Control (+HTC/Order)
+        ([0x80, 0x00], 0),     // beacon
+    ];
+    for (control, extra) in layouts {
+        let mut frame = std::vec![0_u8; 24 + extra + 5];
+        frame[..2].copy_from_slice(&control);
+        for (at, octet) in frame.iter_mut().enumerate().skip(2) {
+            *octet = at as u8 ^ 0x5a;
+        }
+        let decoded = DecodedHeader::decode(&frame).unwrap();
+        let checked = CheckedHeader::check(&frame).unwrap();
+        let again = checked.of(&frame).unwrap();
+        assert_eq!(
+            std::format!("{again:?}"),
+            std::format!("{decoded:?}"),
+            "{control:x?}"
+        );
+        let copy = frame.clone();
+        assert!(checked.of(&copy).is_none(), "another frame's bytes");
+        assert!(checked.of(&frame[1..]).is_none(), "a moved start");
+        assert!(
+            checked.of(&frame[..frame.len() - 1]).is_none(),
+            "a shorter view"
+        );
+    }
+    assert!(
+        CheckedHeader::check(&[0x08, 0x02, 0, 0]).is_none(),
+        "truncated"
+    );
+}
