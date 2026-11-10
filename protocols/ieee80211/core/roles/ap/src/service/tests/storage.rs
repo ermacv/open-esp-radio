@@ -168,7 +168,7 @@ fn removing_the_last_generation_keeps_the_frontier_exhausted_across_restart() {
         service.remove_peer(PEER),
         Ok(ApMlmeAction::PeerRemoved { peer: PEER })
     );
-    let mut peers = service.into_peer_storage();
+    let peers = service.into_peer_storage();
     // An observable state of the storage the refusal must keep.
     peers.storage.management_replay[0].activate();
     let result =
