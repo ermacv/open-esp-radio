@@ -6,7 +6,10 @@ work back as values. It awaits nothing, holds no waker and places no memory.
 
 The core takes values and gives values. Work is chosen before it exists:
 `demands` lists what is ready, with its peer, flow and priority, without building
-a frame; a `Grant` chooses one piece, named by a serial that never returns and
+a frame. `idle` says, with no walk of the running chains, that the list is
+certainly empty: no ARP reply, echo reply or DHCP message owed, no running chain
+with a head, and no neighbor entry owing a request (a look at each of the
+table's entries); `false` says only that work may be ready. A `Grant` chooses one piece, named by a serial that never returns and
 by the station address it was chosen for, so an old grant sends neither later
 work nor work to another address. `NetworkOwner` alone holds the core, the pool
 and the port, and its `transmit` builds the frame, lets the port write and

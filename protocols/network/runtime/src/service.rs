@@ -76,6 +76,11 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
         })
     }
 
+    /// An empty list's plan changes nothing: there is nothing to do.
+    fn nothing_ready(&mut self) -> Result<(), Infallible> {
+        Ok(())
+    }
+
     fn accepted(&mut self, (): (), _ticket: Ticket) -> Result<(), Infallible> {
         Ok(())
     }
@@ -1251,7 +1256,9 @@ impl<
     /// most one collection a frame of the budget, so a plan that stops at once
     /// cannot hold the turn. No await falls between a choice and its answer,
     /// so no cancellation can leave a reservation unanswered, and the plan
-    /// ends with publishing: it reserved nothing beyond its frames.
+    /// ends with publishing: it reserved nothing beyond its frames. Where the
+    /// core is certainly idle no collection is made: the policy takes the
+    /// step of one over no work ([`Egress::nothing_ready`]).
     fn publish(
         &mut self,
         now: Instant,
@@ -1274,6 +1281,17 @@ impl<
                 None => {
                     if collections == TURN_FRAMES {
                         break PublishEnd::Budget;
+                    }
+                    // Certainly no work: the policy makes the step a
+                    // collection over none would, and nothing is collected.
+                    if self.owner.idle() {
+                        match self.egress.nothing_ready() {
+                            Ok(()) => break PublishEnd::Chose,
+                            Err(fault) => {
+                                self.note(Err(fault));
+                                break PublishEnd::Fault;
+                            }
+                        }
                     }
                     collections = collections.saturating_add(1);
                     planned = 0;

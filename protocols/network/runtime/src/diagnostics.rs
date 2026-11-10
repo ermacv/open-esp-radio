@@ -84,7 +84,8 @@ pub struct Diagnosis {
     /// Turns counted: the stages' time is theirs.
     pub turns: u32,
     /// Full candidate collections: each a walk of all ready work into a
-    /// transmit plan.
+    /// transmit plan. A turn whose core is idle collects nothing and counts
+    /// none.
     pub collections: u32,
     /// Running places the collections' readiness walks visited, ready or
     /// not, on every pass a policy made over them.

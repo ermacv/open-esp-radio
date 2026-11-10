@@ -1715,6 +1715,21 @@ impl<
         [neighbors, client].into_iter().flatten().min()
     }
 
+    /// Whether certainly no work is ready, as [`Self::demands`] would find
+    /// none: no ARP reply, echo reply or DHCP message is owed, no socket's
+    /// running chain has a head, and no neighbor entry owes a request. Those
+    /// are every source the list takes its work from, each read in its own
+    /// state; the walk of the running chains visits no place for it. The
+    /// neighbor table comes last, a look at each of its `NEIGHBORS` entries.
+    /// `false` says only that work may be ready.
+    pub fn idle(&self) -> bool {
+        self.replies.is_empty()
+            && self.echoes.none()
+            && self.dhcp.as_ref().and_then(Client::owed).is_none()
+            && self.sockets.iter().all(|socket| !socket.places.runs())
+            && !self.neighbors.owes_request()
+    }
+
     /// Every piece of work ready now, with no frame built: control first,
     /// then datagrams from the socket whose turn it is. A scheduler chooses
     /// among these; a direct interface takes [`Self::poll_demand`]. `count`
@@ -2400,3 +2415,6 @@ impl<B, const SOCKETS: usize, const CREDITS: usize> RetiredResults<B, SOCKETS, C
             .count()
     }
 }
+
+#[cfg(test)]
+mod idle;

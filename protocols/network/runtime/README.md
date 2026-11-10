@@ -68,7 +68,17 @@ service with `EndCause::Egress`, and `Ended` returns the policy with its account
 ## Transmit plan
 
 A turn's publishing collects the ready work once into the policy's plan
-(`Egress::plan`), which reserves nothing. Each frame then takes the plan's next
+(`Egress::plan`), which reserves nothing. Where the core is certainly idle
+(`NetworkOwner::idle`), nothing is collected: the policy hears
+`Egress::nothing_ready`, the transition a plan over no work and its first step
+make, and publishing ends as that step's `Idle` ends it. The core is idle when
+no ARP reply, echo reply or DHCP message is owed, no socket's running chain has
+a head (a producer's declared works among them), and no neighbor entry owes a
+request: every source `demands` lists. Each is read in its own state, with no
+walk of the running chains; the neighbor table, last, is a look at each of its
+entries. Work that runs but is not ready (a datagram waiting for its neighbor)
+leaves the core not idle, and a collection finds nothing. The check comes after
+the producer's offers, so an offer of the turn is a running work by then. Each frame then takes the plan's next
 step (`Egress::next`): a frame with its own reservation, exactly what a choice
 over the same ready work would choose and reserve; nothing, when nothing may go;
 or a stop, with nothing reserved, when the plan can no longer say what that
@@ -327,7 +337,7 @@ only these:
 | Counter | Counted where |
 | --- | --- |
 | `turns` | each turn counted, the stages' time is theirs |
-| `collections` | each full candidate collection: `demands` into `Egress::plan` in publishing |
+| `collections` | each full candidate collection: `demands` into `Egress::plan` in publishing; a turn whose core is idle collects nothing and counts none |
 | `walked` | each running place a collection's walk of the sockets' running chains visits, ready or not, on every pass a policy makes (`Core::demands`) |
 | `told` | each end an ended chain tells (`Core::next_end`), the sockets' in the delivery and the producer's |
 | `continued` | each `Next::Send` of a plan after its first: a frame with no collection |

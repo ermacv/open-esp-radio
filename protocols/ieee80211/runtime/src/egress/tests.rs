@@ -1,5 +1,6 @@
 extern crate std;
 
+use std::vec;
 use std::vec::Vec;
 
 use core::num::NonZeroU32;
@@ -1146,4 +1147,151 @@ fn a_plan_stops_when_the_scheduler_serves_another_account() {
         .unwrap()
         .unwrap();
     assert_eq!(work, ready[1], "the other peer's turn");
+}
+
+/// What a turn with no work did before the hook: a plan over nothing and its
+/// first step, which chooses nothing.
+fn empty_plan(policy: &mut Policy<'_>) {
+    let mut plan = policy.plan(core::iter::empty::<Work>()).unwrap();
+    assert!(matches!(policy.next(&mut plan).unwrap(), Next::Idle));
+}
+
+/// What a turn with no work does now: no plan, the policy's own step.
+fn hook(policy: &mut Policy<'_>) {
+    policy.nothing_ready().unwrap();
+}
+
+/// What a test reads of a policy: peers 1 to 3's balances, its frames out
+/// and its open reservations.
+type Seen = ([Option<i64>; 3], usize, usize);
+
+fn seen(policy: &Policy<'_>) -> Seen {
+    (
+        [1, 2, 3].map(|peer| policy.balance_micros(peer)),
+        policy.in_flight(),
+        policy.unsettled(),
+    )
+}
+
+/// Run `scenario` on two fresh policies, idle by the empty plan on one and
+/// by the hook on the other, and require one trace of both.
+fn same_both_ways(
+    scenario: impl Fn(&mut Policy<'_>, fn(&mut Policy<'_>)) -> Vec<Seen>,
+) -> Vec<Seen> {
+    let mut old = storage();
+    let mut new = storage();
+    let before = scenario(&mut Policy::new(&mut old, Air::default()), empty_plan);
+    let after = scenario(&mut Policy::new(&mut new, Air::default()), hook);
+    assert_eq!(before, after, "the hook is the empty plan's step");
+    after
+}
+
+/// Grants after the idle step, as one more trace: each choice's peer in the
+/// balance places, so a different grant shows.
+fn served_after(policy: &mut Policy<'_>, trace: &mut Vec<Seen>, rounds: u32) {
+    let ready = [data(1, 0), data(2, 1)];
+    for round in 0..rounds {
+        let work = exchange(policy, &ready, place(round), COST);
+        trace.push(seen(policy));
+        trace.push(([Some(i64::from(work.0.peer[5])), None, None], 0, 0));
+    }
+}
+
+#[test]
+fn the_hook_takes_an_idle_peer_s_surplus_as_an_empty_plan_does() {
+    let trace = same_both_ways(|policy, idle| {
+        exchange(policy, &[data(1, 0)], 0, COST);
+        let mut trace = vec![seen(policy)];
+        idle(policy);
+        trace.push(seen(policy));
+        served_after(policy, &mut trace, 6);
+        trace
+    });
+    assert_eq!(trace[0].0[0], Some(i64::from(QUANTUM - COST)), "a surplus");
+    assert_eq!(trace[1].0[0], Some(0), "idle, the surplus goes");
+}
+
+#[test]
+fn the_hook_keeps_debt_as_an_empty_plan_does() {
+    let trace = same_both_ways(|policy, idle| {
+        let (_, held) = policy
+            .first_choice([data(2, 1)].into_iter())
+            .unwrap()
+            .unwrap();
+        policy.unknown(held).unwrap();
+        exchange(policy, &[data(1, 0)], 0, COST);
+        let mut trace = vec![seen(policy)];
+        idle(policy);
+        trace.push(seen(policy));
+        served_after(policy, &mut trace, 6);
+        trace
+    });
+    let debt = i64::from(QUANTUM) - i64::from(CEILING);
+    assert_eq!(trace[1].0[1], Some(debt), "idle, the debt stays");
+}
+
+#[test]
+fn the_hook_leaves_live_reservations_as_an_empty_plan_does() {
+    same_both_ways(|policy, idle| {
+        // One frame out and unsettled, one reserved and not yet answered.
+        let (_, out) = policy
+            .first_choice([data(1, 0)].into_iter())
+            .unwrap()
+            .unwrap();
+        policy.accepted(out, 0).unwrap();
+        exchange(policy, &[data(2, 1)], 1, COST);
+        let (_, reserved) = policy
+            .first_choice([data(2, 1)].into_iter())
+            .unwrap()
+            .unwrap();
+        let mut trace = vec![seen(policy)];
+        idle(policy);
+        trace.push(seen(policy));
+        policy.accepted(reserved, 1).unwrap();
+        for ticket in [0, 1] {
+            let done = Exchange {
+                ticket,
+                charged: Some(micros(COST)),
+                rate: None,
+            };
+            policy.notice(RadioNotice::Ended(done)).unwrap();
+            trace.push(seen(policy));
+        }
+        served_after(policy, &mut trace, 6);
+        trace
+    });
+}
+
+#[test]
+fn with_the_horizon_full_the_hook_changes_nothing_as_an_empty_plan_does() {
+    let trace = same_both_ways(|policy, idle| {
+        // Three peers earn a round's credit; two frames take two of them and
+        // fill the horizon, and peer 3 keeps its credit.
+        let ready = [data(1, 0), data(2, 1), data(3, 2)];
+        for ticket in [0, 1] {
+            let (_, held) = policy.first_choice(ready.iter().copied()).unwrap().unwrap();
+            policy.accepted(held, ticket).unwrap();
+        }
+        let mut trace = vec![seen(policy)];
+        idle(policy);
+        trace.push(seen(policy));
+        for ticket in [0, 1] {
+            let done = Exchange {
+                ticket,
+                charged: Some(micros(COST)),
+                rate: None,
+            };
+            policy.notice(RadioNotice::Ended(done)).unwrap();
+        }
+        trace.push(seen(policy));
+        served_after(policy, &mut trace, 6);
+        trace
+    });
+    assert_eq!(trace[0].1, 2, "the horizon is full");
+    assert_eq!(trace[0].0[2], Some(i64::from(QUANTUM)), "peer 3's credit");
+    assert_eq!(
+        trace[1].0[2],
+        Some(i64::from(QUANTUM)),
+        "a full horizon refuses before any account changes"
+    );
 }

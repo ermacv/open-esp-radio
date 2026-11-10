@@ -505,6 +505,32 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
         Ok(Next::Send(work, held))
     }
 
+    /// The step of a plan over no work: it names no account, so the scheduler
+    /// is asked as [`Self::next`] asks it, over no candidate and for none.
+    /// It grants none and changes what a selection over none changes: an
+    /// idle account's surplus, never its debt, and with the reservation
+    /// horizon full nothing at all. The air's view is not read: a plan's
+    /// first step reads the view it was just collected with.
+    fn nothing_ready(&mut self) -> Result<(), AirtimeFault> {
+        match self
+            .scheduler
+            .reserve_for(|_| false, core::iter::empty(), &mut ())
+        {
+            // With the horizon full the scheduler refuses before any account
+            // changes, as a plan's step meets it.
+            Ok(Reserved::Nothing) | Err(AirtimeError::ReservationCapacity) => Ok(()),
+            // A selection over no candidate names no account, so neither
+            // comes; another account's turn changed nothing, and a grant goes
+            // back, as a plan's step gives back one its turns cannot use.
+            Ok(Reserved::Other(_)) => Ok(()),
+            Ok(Reserved::This(reservation)) => self
+                .scheduler
+                .cancel(reservation, &mut ())
+                .map_err(|(error, _)| error.into()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     fn accepted(&mut self, held: Held<'o, A::Key>, ticket: T) -> Result<(), AirtimeFault> {
         let Held {
             reservation,
