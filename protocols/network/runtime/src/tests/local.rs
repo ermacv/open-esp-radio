@@ -93,8 +93,8 @@ struct Source {
     /// Not offered yet, first first.
     ready: VecDeque<Item>,
     /// Offered and not ended. Its store is found by index alone, as a source
-    /// that reuses its entries: only the service keeps a later generation's
-    /// data out of an earlier work.
+    /// that reuses its entries: the fill's check of the entry's tag keeps a
+    /// later generation's data out of an earlier work.
     held: Vec<Item>,
     /// Indices whose fill declines; every fill declines with `declines`.
     declining: Vec<u32>,
@@ -214,6 +214,9 @@ impl Produce for Script {
             .held
             .iter()
             .find(|item| item.tag.index == work.tag.index)
+            // The entry at the index is reused: its tag says whether it is
+            // still this work's data.
+            .filter(|item| item.tag == work.tag)
             .ok_or(Declined::Stale)?;
         data.put(&item.data).map_err(|_| Declined::Unwritable)
     }
@@ -1103,8 +1106,9 @@ fn a_new_generation_ends_old_works_and_its_offers_go_in_the_same_turn() {
     }
 }
 
-/// A work no longer current when its slot comes is declined by the service
-/// without its producer's fill, though the generation did not change.
+/// A work no longer current when its slot comes is declined by its
+/// producer's fill, which finds the data gone and writes nothing, though the
+/// generation did not change: no frame goes.
 #[test]
 fn a_work_not_current_at_its_fill_ends_declined_unfilled() {
     brand!(Net);
@@ -1129,6 +1133,7 @@ fn a_work_not_current_at_its_fill_ends_declined_unfilled() {
         script.calls(),
         [
             Call::Offered(tag(0, 0)),
+            Call::Filled(tag(0, 0)),
             Call::Ended(tag(0, 0), Outcome::Declined),
         ]
     );
