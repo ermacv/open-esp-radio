@@ -375,6 +375,11 @@ pub enum ActorViolation {
     /// The return queue or its announcement had no room: the producers'
     /// bounds did not hold. The owner stays with the actor.
     OutboxFull,
+    /// The lifecycle closed its reception while the actor ran: nothing the
+    /// actor sends reaches it, so the actor sends nothing more and does not
+    /// wait for its room. The owner it did not send stays with the actor,
+    /// or with the port that offered it.
+    LifecycleClosed,
     /// The port did not lend its two data arenas.
     ArenaClaim,
     /// A data arena's end named an arena the plane did not publish, or

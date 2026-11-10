@@ -59,18 +59,33 @@ fn is_group<'id, T: PortTypes<'id>>(terminal: &LowerMacTerminal<'id, T>) -> bool
     )
 }
 
-/// Send `returned` and its announcement, when both queues have room.
+/// The violation a refused send to the lifecycle names: a closed reception
+/// is its own, never a full queue.
+pub(super) const fn refusal<T>(refused: &ClosingSpscSendError<T>) -> ActorViolation {
+    match refused {
+        ClosingSpscSendError::Full(_) => ActorViolation::OutboxFull,
+        ClosingSpscSendError::Closed(_) => ActorViolation::LifecycleClosed,
+    }
+}
+
+/// Send `returned` and its announcement, when both queues have room and
+/// the lifecycle's reception is open; otherwise `returned` comes back with
+/// the refusal's violation.
 pub(super) fn give_back<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize>(
     from_actor: &ClosingSpscSender<'_, FromActor<'id, D>, FROM>,
     returns: &ClosingSpscSender<'_, Returned<'id, D>, RETURNS>,
     returned: Returned<'id, D>,
-) -> Result<(), Returned<'id, D>> {
-    if from_actor.free_capacity() == 0 {
-        return Err(returned);
+) -> Result<(), (Returned<'id, D>, ActorViolation)> {
+    if from_actor.is_closed() {
+        return Err((returned, ActorViolation::LifecycleClosed));
     }
-    returns
-        .try_send(returned)
-        .map_err(|refused| refused.into_inner())?;
+    if from_actor.free_capacity() == 0 {
+        return Err((returned, ActorViolation::OutboxFull));
+    }
+    returns.try_send(returned).map_err(|refused| {
+        let violation = refusal(&refused);
+        (refused.into_inner(), violation)
+    })?;
     // The announcement's room was checked; the one sender sends.
     from_actor
         .try_send(FromActor::Returned)
@@ -88,6 +103,12 @@ impl<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize> PortSin
             self.stage.group_terminal = Some(terminal);
             return Ok(());
         }
+        // A closed reception has no lifecycle to hand it to: the port keeps
+        // it, whole, and nothing waits for room that never comes.
+        if self.from_actor.is_closed() || self.returns.is_closed() {
+            self.stage.closed = true;
+            return Err(terminal);
+        }
         // Both cells first: a terminal without its announcement's room is
         // refused whole, and the port keeps it.
         let (Some(announce), Some(cell)) =
@@ -97,15 +118,14 @@ impl<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize> PortSin
             return Err(terminal);
         };
         D::terminal(&terminal);
-        // A closed reception has no lifecycle to hand it to: the port keeps
-        // it, whole.
+        // Closed after the check above: the same end.
         if let Err(ClosingSpscClosed(terminal)) =
             cell.send_with(terminal, |terminal| Returned::Terminal {
                 terminal,
                 grouped: false,
             })
         {
-            self.stage.refused = true;
+            self.stage.closed = true;
             return Err(terminal);
         }
         // The announcement carries no owner: a closed reception has no
@@ -354,10 +374,14 @@ where
         // What the outbox refused waits in the port, which signals nothing
         // for it: the lifecycle's room wakes the actor, each queue's wait
         // armed before its room is checked again.
+        // A closed reception ends the wait at once: the turn ends the run.
         if self.stage.refused {
-            let announce = lifecycle.from_actor.poll_room(cx).is_ready();
-            let cell = lifecycle.returns.poll_room(cx).is_ready();
-            if announce && cell {
+            let announce = lifecycle.from_actor.poll_room(cx);
+            let cell = lifecycle.returns.poll_room(cx);
+            if matches!(announce, Poll::Ready(Err(_))) || matches!(cell, Poll::Ready(Err(_))) {
+                self.stage.closed = true;
+                ready = true;
+            } else if announce.is_ready() && cell.is_ready() {
                 ready = true;
             }
         }
@@ -440,6 +464,26 @@ where
         // now, so the network's next MSDU wakes this actor.
         self.connect_plane()?;
         self.flush(lifecycle);
+        self.lifecycle_open(lifecycle)
+    }
+
+    /// The run ends once the lifecycle's reception closed: nothing the
+    /// actor owes it is sent any more, and no wait for its room follows.
+    /// What it did not send stays where it is: the owed answers with the
+    /// actor, a refused terminal with the port.
+    pub(super) fn lifecycle_open<const TO: usize, const FROM: usize, const RETURNS: usize>(
+        &mut self,
+        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+    ) -> Result<(), Failed<'id, D>> {
+        if self.stage.closed
+            || lifecycle.from_actor.is_closed()
+            || lifecycle.returns.is_closed()
+            || lifecycle.groups.is_closed()
+            || lifecycle.link_return.is_closed()
+        {
+            self.stage.closed = true;
+            return Err(ActorFault::Contract(ActorViolation::LifecycleClosed));
+        }
         Ok(())
     }
 
@@ -617,8 +661,9 @@ where
             return Ok(false);
         };
         lifecycle.groups.try_send(group).map_err(|refused| {
+            let violation = refusal(&refused);
             self.retained.group = Some(refused.into_inner());
-            ActorFault::Contract(ActorViolation::OutboxFull)
+            ActorFault::Contract(violation)
         })?;
         Ok(true)
     }
@@ -630,10 +675,12 @@ where
         lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         returned: Returned<'id, D>,
     ) -> Result<(), Failed<'id, D>> {
-        give_back(&lifecycle.from_actor, &lifecycle.returns, returned).map_err(|returned| {
-            self.retained.returned = Some(returned);
-            ActorFault::Contract(ActorViolation::OutboxFull)
-        })
+        give_back(&lifecycle.from_actor, &lifecycle.returns, returned).map_err(
+            |(returned, violation)| {
+                self.retained.returned = Some(returned);
+                ActorFault::Contract(violation)
+            },
+        )
     }
 
     /// Take the lifecycle's messages in order: at most
@@ -1048,8 +1095,12 @@ where
             self.pairwise = Some(key);
         }
         if let Err(refused) = lifecycle.link_return.try_send(link) {
+            let violation = match refused {
+                ClosingSpscSendError::Full(_) => ActorViolation::LinkReturn,
+                ClosingSpscSendError::Closed(_) => ActorViolation::LifecycleClosed,
+            };
             self.retained.link_return = Some(refused.into_inner());
-            return Err(ActorFault::Contract(ActorViolation::LinkReturn));
+            return Err(ActorFault::Contract(violation));
         }
         self.owed.link_returned = true;
         Ok(())
@@ -1478,7 +1529,10 @@ where
             && !self.finishing
             && !matches!(
                 fault,
-                ActorFault::Receive(_) | ActorFault::Unkept | ActorFault::Unaccepted
+                ActorFault::Receive(_)
+                    | ActorFault::Unkept
+                    | ActorFault::Unaccepted
+                    | ActorFault::Contract(ActorViolation::LifecycleClosed)
             )
             && self.retained.unkept.is_none()
             && self.retained.unaccepted.is_none()

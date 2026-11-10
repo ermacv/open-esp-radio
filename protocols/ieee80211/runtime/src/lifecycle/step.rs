@@ -260,11 +260,17 @@ where
     T: TxContextStorage<LifecycleTxContext<'id, D>>,
     O: StationEvents,
 {
-    /// Whether the actor's queues take one more action's messages.
-    fn room<const TO: usize, const FROM: usize, const RETURNS: usize>(
+    /// Whether the actor's queues take one more action's messages. A
+    /// closed reception takes none, ever: the lifecycle ends before the
+    /// action moves any owner ([`LifecycleViolation::ActorClosed`]).
+    pub(super) fn room<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         actor: &ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
     ) -> bool {
+        if actor.to_actor.is_closed() || actor.parcels.is_closed() || actor.link.is_closed() {
+            self.closed();
+            return false;
+        }
         let room =
             actor.to_actor.free_capacity() >= ACTION_MESSAGES && actor.parcels.free_capacity() >= 1;
         if !room {
@@ -272,16 +278,64 @@ where
         }
         room
     }
-    /// Send `message`; a full queue, which [`Self::room`] checked, is a
-    /// broken contract.
+    /// The actor's reception closed: the lifecycle ends on it, unless a
+    /// refusal named its end already.
+    pub(super) fn closed(&mut self) {
+        if self.unsent.is_empty() {
+            self.end = Some(LifecycleEnd::Contract(LifecycleViolation::ActorClosed));
+        }
+    }
+    /// Send `message`. A refusal, which [`Self::room`] excluded for a full
+    /// queue and a reception closed before the action, keeps it whole
+    /// ([`Self::refused`]); after one, the unit's later messages are kept
+    /// behind it unsent.
     pub(super) fn send<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         actor: &ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
         message: ToActor<'id, D>,
     ) {
-        if let Err(refused) = actor.to_actor.try_send(message) {
-            let _quarantined = core::mem::ManuallyDrop::new(refused.into_inner());
-            self.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
+        self.deliver(message, Unsent::ToActor, |message| {
+            actor.to_actor.try_send(message)
+        });
+    }
+    /// Deliver `message` through `send`, or keep it unsent after a refusal
+    /// of this unit: the first refusal names the end.
+    fn deliver<M>(
+        &mut self,
+        message: M,
+        wrap: fn(M) -> Unsent<'id, D>,
+        send: impl FnOnce(M) -> Result<(), ClosingSpscSendError<M>>,
+    ) {
+        if !self.unsent.is_empty() {
+            self.keep_unsent(wrap(message));
+            return;
+        }
+        if let Err(refused) = send(message) {
+            self.refused(refused, wrap);
+        }
+    }
+    /// A refused send: its message is kept whole and the lifecycle ends on
+    /// the refusal's own cause, a closed reception never named full.
+    pub(super) fn refused<M>(
+        &mut self,
+        refused: ClosingSpscSendError<M>,
+        wrap: fn(M) -> Unsent<'id, D>,
+    ) {
+        let violation = match refused {
+            ClosingSpscSendError::Full(_) => LifecycleViolation::QueueFull,
+            ClosingSpscSendError::Closed(_) => LifecycleViolation::ActorClosed,
+        };
+        let first = self.unsent.is_empty();
+        self.keep_unsent(wrap(refused.into_inner()));
+        if first {
+            self.end = Some(LifecycleEnd::Contract(violation));
+        }
+    }
+    /// Keep `message` unsent, in order. A unit sends at most [`UNSENT`]
+    /// messages between two looks at the end, so the store has a place.
+    fn keep_unsent(&mut self, message: Unsent<'id, D>) {
+        if self.unsent.push_back(message).is_err() {
+            self.end = Some(LifecycleEnd::Contract(LifecycleViolation::UnsentOverflow));
         }
     }
     /// Send one station frame: its context waits at its ticket's place.
@@ -361,9 +415,10 @@ where
                     LinkAction::HandOver(handover) => {
                         let keyed = handover.numbers().key().is_some();
                         let epoch = handover.epoch().sequence();
-                        if let Err(refused) = actor.link.try_send(handover) {
-                            let _quarantined = core::mem::ManuallyDrop::new(refused.into_inner());
-                            self.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
+                        self.deliver(handover, Unsent::Link, |handover| {
+                            actor.link.try_send(handover)
+                        });
+                        if !self.unsent.is_empty() {
                             return Follow::Nothing;
                         }
                         self.link.lent = true;
@@ -578,9 +633,10 @@ where
             }
             StaAction::Associated(peer) => {
                 // The rates start from what the association made known.
-                if let Err(refused) = actor.parcels.try_send(Parcel::Associated(peer)) {
-                    let _quarantined = core::mem::ManuallyDrop::new(refused.into_inner());
-                    self.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
+                self.deliver(Parcel::Associated(peer), Unsent::Parcel, |parcel| {
+                    actor.parcels.try_send(parcel)
+                });
+                if !self.unsent.is_empty() {
                     return Follow::Nothing;
                 }
                 self.send(actor, ToActor::Parcel);
@@ -604,9 +660,12 @@ where
             .insert(crate::station::PendingTerminal::Control(
                 crate::station::ControlTerminal::GroupChange,
             ));
-        if let Err(refused) = actor.parcels.try_send(Parcel::Group { command, pending }) {
-            let _quarantined = core::mem::ManuallyDrop::new(refused.into_inner());
-            self.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
+        self.deliver(
+            Parcel::Group { command, pending },
+            Unsent::Parcel,
+            |parcel| actor.parcels.try_send(parcel),
+        );
+        if !self.unsent.is_empty() {
             return;
         }
         self.send(actor, ToActor::Parcel);

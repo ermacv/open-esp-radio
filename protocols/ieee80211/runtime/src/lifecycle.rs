@@ -71,7 +71,9 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use oer_portable_events::report;
-use oer_portable_memory::{ClosingSpscReceiver, ClosingSpscSender, WakingSpscReceiver};
+use oer_portable_memory::{
+    ClosingSpscReceiver, ClosingSpscSendError, ClosingSpscSender, WakingSpscReceiver,
+};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     CommandKind, CommandRefusal, KeyTypes, PoolMpdu, PortCommands, PortTypes, StartRefused,
@@ -274,6 +276,13 @@ pub enum LifecycleViolation {
     Missing,
     /// The actor's queue had no room the lifecycle had checked.
     QueueFull,
+    /// The actor's reception closed while the lifecycle ran: the lifecycle
+    /// sends nothing more, and what it did not send is in
+    /// [`RetiredLifecycle::unsent`].
+    ActorClosed,
+    /// One unit of the lifecycle's work sent more after a refusal than
+    /// [`UNSENT`] keeps: the lifecycle's own count broke.
+    UnsentOverflow,
     /// The arbiter's move was refused while no move was pending.
     RetuneWithoutRequest,
 }
@@ -344,6 +353,26 @@ pub enum Rejected<'id, D: DatapathPort<'id>> {
     /// A group token of no pending change.
     Group(GroupPending<'id, ActorEpochPath<'id, D>>),
 }
+
+/// The most messages one unit of the lifecycle's work sends between two
+/// looks at its end: a reply's place, then its action's keyed frame (the
+/// lent key, the frame and the key's recall). After a refusal, the unit's
+/// later messages are kept here unsent, in order, and no unit follows.
+pub const UNSENT: usize = 4;
+
+/// A message the actor's queues refused, or one the unit sent after such a
+/// refusal: kept whole, never sent.
+pub enum Unsent<'id, D: DatapathPort<'id>> {
+    /// For the actor's message queue.
+    ToActor(ToActor<'id, D>),
+    /// For the parcel queue.
+    Parcel(crate::datapath::Parcel<'id, D>),
+    /// For the link mailbox.
+    Link(ActorLink<'id, D>),
+}
+
+/// The messages the lifecycle did not send, in order.
+pub type UnsentMessages<'id, D> = heapless::Deque<Unsent<'id, D>, UNSENT>;
 
 /// A transmit ticket of the port of `D`.
 pub type LifecycleTicket<'id, D> = Slot<
@@ -482,6 +511,8 @@ struct Inner<'id, D: DatapathPort<'id>, X, T, O> {
     ending: Option<(Ending<PortFault<'id, D>>, Instant, EndStage)>,
     /// The first owner a broken contract left, and its cause.
     rejected: Option<Rejected<'id, D>>,
+    /// What the actor's queues refused, and what followed it unsent.
+    unsent: UnsentMessages<'id, D>,
     end: Option<
         LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>,
     >,
@@ -525,6 +556,10 @@ pub struct RetiredLifecycle<
     pub tx_contexts: T,
     /// The first owner a broken contract left.
     pub rejected: Option<Rejected<'id, D>>,
+    /// What the actor's queues refused, and the messages after it, whole
+    /// and in order ([`LifecycleViolation::QueueFull`],
+    /// [`LifecycleViolation::ActorClosed`]).
+    pub unsent: UnsentMessages<'id, D>,
     /// The events' sink.
     pub events: O,
 }
@@ -596,6 +631,7 @@ where
                 reply: None,
                 ending: None,
                 rejected: None,
+                unsent: heapless::Deque::new(),
                 end: None,
                 lesson: None,
                 stop: false,
@@ -643,13 +679,8 @@ where
         timer: &impl Timer,
     ) -> LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>
     {
-        if actor
-            .to_actor
-            .try_send(ToActor::Start(self.inner.channel))
-            .is_err()
-        {
-            self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
-        }
+        let start = ToActor::Start(self.inner.channel);
+        self.inner.send(actor, start);
         let arm = |at: Option<Instant>| alarm_at(timer, at);
         let mut alarm = core::pin::pin!(arm(None));
         poll_fn(|cx| self.poll(cx, actor, io, timer, alarm.as_mut(), &arm)).await
@@ -714,6 +745,7 @@ where
                         reply: None,
                         ending: None,
                         rejected: None,
+                        unsent: heapless::Deque::new(),
                         end: None,
                         lesson: None,
                         stop: false,
@@ -781,6 +813,7 @@ where
             _reply,
             _ending,
             rejected,
+            unsent,
             _end,
             _lesson,
             _stop,
@@ -807,6 +840,7 @@ where
                 reply,
                 ending,
                 rejected,
+                unsent,
                 end,
                 lesson,
                 stop,
@@ -837,6 +871,7 @@ where
                         issuer: issuer.read(),
                         tx_contexts: tx_contexts.read(),
                         rejected: rejected.read(),
+                        unsent: unsent.read(),
                         events: events.read(),
                     })
                 },
@@ -954,8 +989,16 @@ where
         {
             again = true;
         }
-        if self.inner.blocked && core::pin::pin!(actor.to_actor.ready()).poll(cx).is_ready() {
-            again = true;
+        if self.inner.blocked {
+            match core::pin::pin!(actor.to_actor.ready()).poll(cx) {
+                // No room comes: the lifecycle ends, and nothing retries.
+                Poll::Ready(Err(_)) => {
+                    self.inner.closed();
+                    again = true;
+                }
+                Poll::Ready(Ok(_)) => again = true,
+                Poll::Pending => {}
+            }
         }
         if self.accepts_commands() {
             if core::pin::pin!(io.commands.ready()).poll(cx).is_ready()
@@ -1173,9 +1216,21 @@ where
         let Some((stage, message)) = next else {
             return;
         };
-        if actor.to_actor.try_send(message).is_err() {
-            self.inner.blocked = true;
+        if !self.inner.unsent.is_empty() {
             return;
+        }
+        match actor.to_actor.try_send(message) {
+            Ok(()) => {}
+            // The end's message waits for the actor's room.
+            Err(ClosingSpscSendError::Full(_)) => {
+                self.inner.blocked = true;
+                return;
+            }
+            // No room comes: the message is kept and the lifecycle ends.
+            Err(closed @ ClosingSpscSendError::Closed(_)) => {
+                self.inner.refused(closed, Unsent::ToActor);
+                return;
+            }
         }
         if stage == EndStage::Link {
             self.inner.link.asked = false;
@@ -1201,6 +1256,7 @@ where
             tx_contexts,
             events,
             rejected,
+            unsent,
             ..
         } = inner;
         let (reason, arbiter_end) = Self::reasons(&end);
@@ -1233,6 +1289,7 @@ where
                 issuer,
                 tx_contexts,
                 rejected,
+                unsent,
                 events,
             },
         }

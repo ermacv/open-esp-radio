@@ -81,8 +81,8 @@ use core::task::{Context, Poll};
 
 use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{
-    ClosingSpscClosed, ClosingSpscReceiver, ClosingSpscSender, SlotReceiver, SlotSender,
-    WakingSpscSender,
+    ClosingSpscClosed, ClosingSpscReceiver, ClosingSpscSendError, ClosingSpscSender, SlotReceiver,
+    SlotSender, WakingSpscSender,
 };
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
@@ -459,6 +459,10 @@ struct Stage<'id, D: DatapathPort<'id>> {
     /// actor's wait registers for the lifecycle's room, and its next turn
     /// has the port offer it again.
     refused: bool,
+    /// The lifecycle's reception closed: what the outbox refused for it
+    /// stays in the port, nothing waits for the lifecycle's room, and the
+    /// turn ends on [`ActorViolation::LifecycleClosed`].
+    closed: bool,
 }
 
 /// The data transmission's state: the plane over the port's arenas, the
@@ -605,6 +609,7 @@ where
                 group_terminal: None,
                 tbtt: None,
                 refused: false,
+                closed: false,
             },
             frames_out: 0,
             network_stopping: NetworkStopping::NotAsked,
@@ -676,6 +681,7 @@ where
                         group_terminal: None,
                         tbtt: None,
                         refused: false,
+                        closed: false,
                     })
                 },
                 frames_out: 0,

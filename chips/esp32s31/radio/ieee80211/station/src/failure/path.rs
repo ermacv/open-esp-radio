@@ -499,6 +499,7 @@ fn actor_violation(
     use oer_protocols_ieee80211_runtime::datapath::ActorViolation as V;
     match violation {
         V::OutboxFull => "OutboxFull",
+        V::LifecycleClosed => "LifecycleClosed",
         V::ArenaClaim => "ArenaClaim",
         V::ArenaCompletion => "ArenaCompletion",
         V::LinkMailbox => "LinkMailbox",
@@ -518,6 +519,8 @@ fn lifecycle_violation(
         V::Returned(_) => "Returned",
         V::Missing => "Missing",
         V::QueueFull => "QueueFull",
+        V::ActorClosed => "ActorClosed",
+        V::UnsentOverflow => "UnsentOverflow",
         V::RetuneWithoutRequest => "RetuneWithoutRequest",
     }
 }

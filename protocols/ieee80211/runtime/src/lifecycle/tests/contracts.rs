@@ -188,3 +188,91 @@ fn an_unsolicited_access_point_key_removal_ends_the_lifecycle_and_keeps_its_owne
         assert!(announced);
     });
 }
+
+/// A closed reception of the actor is its own refusal, never a full queue:
+/// the lifecycle ends on it at once, retries nothing, and keeps the message
+/// it could not send whole.
+#[test]
+fn a_closed_actor_reception_ends_the_lifecycle_named_and_keeps_its_message() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let clock = Rc::new(VirtualClock::new());
+        let mut installations = Installations::claim(claim);
+        let (install, _air) = ModelPort::install(
+            &mut installations,
+            channel6(),
+            [
+                IndividualAddress::new(LOCAL).unwrap(),
+                IndividualAddress::new(BSSID).unwrap(),
+            ],
+            clock.clone(),
+        )
+        .unwrap();
+        let ModelInstall {
+            port,
+            commands,
+            resources,
+        } = install;
+        let (parts, _storage, _spare) = lifecycle_spare::<2>(open(), resources, commands);
+        let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+        let mut parcel_queue = ClosingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
+        let mut from_queue = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+        let mut return_queue = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+        let mut link_queue = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+        let mut group_queue =
+            ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+        let mut link_return_queue = ClosingSpscQueue::<LinkReturn, 1>::new();
+        let mut command_queue =
+            WakingSpscQueue::<crate::station::ServiceCommand<ModelCaps24>, COMMANDS>::new();
+        let (to_actor, mut to_actor_end) = to_queue.split();
+        let (parcels, _parcels_end) = parcel_queue.split();
+        let (_from_actor_end, from_actor) = from_queue.split();
+        let (_returns_end, returns) = return_queue.split();
+        let (link, _link_end) = link_queue.split();
+        let (_groups_end, groups) = group_queue.split();
+        let (_link_return_end, link_return) = link_return_queue.split();
+        let (application, commands) = command_queue.split();
+        // The actor's side closed its reception before the lifecycle ran.
+        embassy_futures::block_on(to_actor_end.close());
+        let state = State::new();
+        let (application, control) = Control::new(application, &state).unwrap();
+        let mut lifecycle_ends = ActorEnds {
+            to_actor,
+            parcels,
+            from_actor,
+            returns,
+            groups,
+            link,
+            link_return,
+        };
+        let mut output = application.events(|_| {});
+        let mut io = LifecycleIo {
+            commands,
+            output: &mut output,
+            control,
+            stop: StopPolicy {
+                drain: Duration::from_secs(1),
+            },
+        };
+        let mut cx = Context::from_waker(Waker::noop());
+        let completed = {
+            let run = parts.run(&mut lifecycle_ends, &mut io, &clock, Observed::default());
+            let mut run = core::pin::pin!(run);
+            match run.as_mut().poll(&mut cx) {
+                Poll::Ready(done) => done,
+                Poll::Pending => panic!("a closed reception ends the lifecycle at once"),
+            }
+        };
+        assert_eq!(
+            completed.end,
+            LifecycleEnd::Contract(LifecycleViolation::ActorClosed)
+        );
+        let mut unsent = completed.retired.unsent;
+        assert!(matches!(
+            unsent.pop_front(),
+            Some(Unsent::ToActor(ToActor::Start(_)))
+        ));
+        assert!(unsent.is_empty());
+        assert!(to_actor_end.try_receive().is_none());
+        drop(port);
+    }));
+}

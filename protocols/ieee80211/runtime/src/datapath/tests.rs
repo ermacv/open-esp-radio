@@ -2523,3 +2523,32 @@ fn an_item_the_port_cannot_keep_ends_the_actor_and_comes_out_once() {
         },
     );
 }
+
+/// A closed reception of the lifecycle is its own refusal: the owners the
+/// actor could not give back stay with it, and the run ends named instead
+/// of waiting for the lifecycle's room.
+#[test]
+fn a_closed_lifecycle_reception_ends_the_actor_named_and_retries_nothing() {
+    bench(|bench| {
+        bench.start();
+        embassy_futures::block_on(bench.from_actor.close());
+        embassy_futures::block_on(bench.returns.close());
+        let tickets = bench.tickets.len();
+        let transmit = station_frame(bench, 0);
+        bench.send(ToActor::StationTx(transmit));
+        assert_eq!(
+            bench.end,
+            Some(ActorEnd::Faulted(ActorFault::Contract(
+                ActorViolation::LifecycleClosed
+            )))
+        );
+        // The refused frame's owners did not go into the closed queues.
+        assert!(bench.returns.try_receive().is_none());
+        assert!(bench.from_actor.try_receive().is_none());
+        assert_eq!(
+            bench.tickets.len(),
+            tickets - 1,
+            "the ticket stays with the actor"
+        );
+    });
+}

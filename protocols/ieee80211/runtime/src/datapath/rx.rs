@@ -47,6 +47,34 @@ enum Refusal {
     NoNetwork,
 }
 
+/// What a frame for the lifecycle's lane is, besides the frame itself.
+enum LaneFrame<'id, D: DatapathPort<'id>> {
+    /// A frame for the station, with what the hardware observed of it.
+    Received(ActorRxMeta<'id, D>),
+    /// An EAPOL frame of the link.
+    Eapol {
+        payload: core::ops::Range<u16>,
+        protection: EapolProtection,
+    },
+}
+
+impl<'id, D: DatapathPort<'id>> LaneFrame<'id, D> {
+    /// The lane's message for `frame`.
+    fn message(self, frame: ActorRxBuffer<'id, D>) -> FromActor<'id, D> {
+        match self {
+            Self::Received(meta) => FromActor::Received { frame, meta },
+            Self::Eapol {
+                payload,
+                protection,
+            } => FromActor::Eapol {
+                frame,
+                payload,
+                protection,
+            },
+        }
+    }
+}
+
 fn count(refused: &mut RxMsdusRefused, refusal: Option<Refusal>) {
     match refusal {
         Some(Refusal::TooLong) => refused.too_long = refused.too_long.saturating_add(1),
@@ -376,32 +404,37 @@ where
     }
 
     /// Give a frame to the lifecycle while its lane has room; otherwise it
-    /// goes back to the ring, counted.
+    /// goes back to the ring, counted. A closed reception takes nothing:
+    /// the frame goes back to the ring and the run ends on it
+    /// ([`ActorViolation::LifecycleClosed`]).
     fn hand_to_lifecycle<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
-        message: FromActor<'id, D>,
-        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        frame: ActorRxBuffer<'id, D>,
+        lane: LaneFrame<'id, D>,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
     ) -> Result<(), Failed<'id, D>> {
-        let lane = usize::from(self.frames_out) < LIFECYCLE_FRAMES;
-        let refused = if lane {
-            match lifecycle.from_actor.try_send(message) {
+        let free = usize::from(self.frames_out) < LIFECYCLE_FRAMES;
+        let closed = if !free {
+            false
+        } else if let Some(permit) = lifecycle.from_actor.try_reserve() {
+            // The frame and what names it come back whole on a closed
+            // reception, never the message built of them.
+            match permit.send_with((frame, lane), |(frame, lane)| lane.message(frame)) {
                 Ok(()) => {
                     self.frames_out = self.frames_out.saturating_add(1);
                     return Ok(());
                 }
-                Err(refused) => refused.into_inner(),
+                Err(ClosingSpscClosed((frame, _lane))) => {
+                    self.recycle(frame)?;
+                    return Err(ActorFault::Contract(ActorViolation::LifecycleClosed));
+                }
             }
         } else {
-            message
+            lifecycle.from_actor.is_closed()
         };
-        match refused {
-            FromActor::Received { frame, .. } | FromActor::Eapol { frame, .. } => {
-                self.recycle(frame)?;
-            }
-            // Only frames take the lane.
-            other => {
-                let _quarantined = core::mem::ManuallyDrop::new(other);
-            }
+        self.recycle(frame)?;
+        if closed {
+            return Err(ActorFault::Contract(ActorViolation::LifecycleClosed));
         }
         report(&mut self.events, || ActorEvent::LaneFull);
         Ok(())
@@ -427,7 +460,7 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         let Some(link) = self.link.as_mut() else {
-            return self.hand_to_lifecycle(FromActor::Received { frame, meta }, lifecycle);
+            return self.hand_to_lifecycle(frame, LaneFrame::Received(meta), lifecycle);
         };
         // Delivery runs for every sink; only an enabled one counts.
         let counted = <O as EventSink<ServiceEvent>>::ENABLED;
@@ -477,7 +510,7 @@ where
         };
         let result = match routed {
             LinkRx::Station => {
-                return self.hand_to_lifecycle(FromActor::Received { frame, meta }, lifecycle);
+                return self.hand_to_lifecycle(frame, LaneFrame::Received(meta), lifecycle);
             }
             LinkRx::Taken(result) => result,
         };
@@ -492,8 +525,8 @@ where
                     }
                 }
                 self.hand_to_lifecycle(
-                    FromActor::Eapol {
-                        frame,
+                    frame,
+                    LaneFrame::Eapol {
                         payload,
                         protection,
                     },
