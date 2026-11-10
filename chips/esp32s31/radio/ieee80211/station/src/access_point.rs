@@ -379,9 +379,9 @@ pub enum ApPeers {
     Storage(&'static mut AccessPointPeerStorage),
     /// The service built on it.
     Service(AccessPointService<'static, Interface>),
-    /// The service's construction refused and kept its loan of the
-    /// storage: no owner is in it.
-    Lent,
+    /// The service's construction refused: its loan of the storage, back
+    /// as it was.
+    Lent(oer_protocols_ieee80211_core_roles_ap::AccessPointPeers<'static>),
 }
 
 /// The access point's beacon storage, as a refusal left it.
@@ -390,9 +390,6 @@ pub enum ApTemplate {
     Storage(&'static mut [u8; AP_BEACON_CAPACITY]),
     /// The beacon built on it.
     Beacon(ApBeacon<'static>),
-    /// The beacon's construction refused and kept its loan of the storage:
-    /// no owner is in it.
-    Lent,
 }
 
 impl<W: Binding> AccessPointEnd<W> {
@@ -653,7 +650,7 @@ impl<W: Binding> AccessPointRunner<W> {
             );
         };
         let channel = config.supported;
-        let Ok(service) = AccessPointService::<Interface>::new(
+        let service = match AccessPointService::<Interface>::new(
             address,
             pmk,
             RsnGtk::new(GROUP_KEY, true, &gtk),
@@ -661,19 +658,23 @@ impl<W: Binding> AccessPointRunner<W> {
             settings.client_limit,
             AccessPointInactiveTimeout::default(),
             peers.lend(),
-        ) else {
-            refuse!(
+        ) {
+            Ok(service) => service,
+            // The PMK and GTK it returns were derived here from the
+            // settings and a nonce: they end with the refusal; the storage
+            // comes back.
+            Err(refused) => refuse!(
                 took_nothing(InitializationError::Storage),
                 Some(installations),
                 Some(minted),
                 radio::BootLeft::Boot(boot),
                 Some(settings),
-                ApPeers::Lent,
+                ApPeers::Lent(refused.peer_storage),
                 ApTemplate::Storage(template)
-            );
+            ),
         };
         let wire_channel = channel.channel();
-        let Ok(beacon) = ApBeacon::new(
+        let beacon = match ApBeacon::new(
             template,
             &ADVERTISEMENT,
             address,
@@ -683,16 +684,17 @@ impl<W: Binding> AccessPointRunner<W> {
             settings.dtim_period,
             SequenceNumber::ZERO,
             ApSecurityPolicy::Wpa2Personal,
-        ) else {
-            refuse!(
+        ) {
+            Ok(beacon) => beacon,
+            Err(refused) => refuse!(
                 took_nothing(InitializationError::Ssid),
                 Some(installations),
                 Some(minted),
                 radio::BootLeft::Boot(boot),
                 Some(settings),
                 ApPeers::Service(service),
-                ApTemplate::Lent
-            );
+                ApTemplate::Storage(refused.storage)
+            ),
         };
         let (parts, driver) = match radio::install(boot, config, AP_BANK).await {
             Ok(installed) => installed,

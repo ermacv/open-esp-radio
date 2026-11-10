@@ -103,7 +103,17 @@ fn exhausted_storage_refuses_every_security_constructor_without_reusing_its_fron
                 storage.lend(),
             ),
         };
-        assert_eq!(result.err(), Some(ApServiceError::GenerationExhausted));
+        let Some(refused) = result.err() else {
+            panic!("an exhausted generation refuses");
+        };
+        assert_eq!(refused.error, ApServiceError::GenerationExhausted);
+        let returned = match &refused.security {
+            AccessPointSecurityMaterial::Open => ApSecurityPolicy::Open,
+            AccessPointSecurityMaterial::Wpa2Personal { .. } => ApSecurityPolicy::Wpa2Personal,
+            AccessPointSecurityMaterial::Wpa3Personal { .. } => ApSecurityPolicy::Wpa3Personal,
+        };
+        assert_eq!(returned, policy, "its security material comes back");
+        drop(refused);
         assert_eq!(storage.generation, u32::MAX);
     }
 }
@@ -158,7 +168,9 @@ fn removing_the_last_generation_keeps_the_frontier_exhausted_across_restart() {
         service.remove_peer(PEER),
         Ok(ApMlmeAction::PeerRemoved { peer: PEER })
     );
-    let peers = service.into_peer_storage();
+    let mut peers = service.into_peer_storage();
+    // An observable state of the storage the refusal must keep.
+    peers.storage.management_replay[0].activate();
     let result =
         AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new_open(
             AP,
@@ -166,6 +178,14 @@ fn removing_the_last_generation_keeps_the_frontier_exhausted_across_restart() {
             AccessPointInactiveTimeout::default(),
             peers,
         );
-    assert_eq!(result.err(), Some(ApServiceError::GenerationExhausted));
+    let Some(refused) = result.err() else {
+        panic!("an exhausted generation refuses");
+    };
+    assert_eq!(refused.error, ApServiceError::GenerationExhausted);
+    assert!(
+        refused.peer_storage.storage.management_replay[0].active(),
+        "the refusal returns the storage as it was"
+    );
+    drop(refused);
     assert_eq!(storage.generation, u32::MAX);
 }

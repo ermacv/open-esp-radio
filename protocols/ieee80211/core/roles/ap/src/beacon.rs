@@ -49,6 +49,16 @@ pub struct ApBeaconLengthError {
     pub capacity: usize,
 }
 
+/// A refused [`ApBeacon`] construction: why, and the storage it was given.
+#[must_use = "a refused beacon returns its storage"]
+#[derive(Debug)]
+pub struct ApBeaconRefused<'storage> {
+    /// Why it was refused.
+    pub error: ApBeaconBuildError,
+    /// The storage it was given; its bytes are not a template.
+    pub storage: &'storage mut [u8; AP_BEACON_CAPACITY],
+}
+
 pub struct ApBeacon<'storage> {
     storage: &'storage mut [u8; AP_BEACON_CAPACITY],
     len: usize,
@@ -107,6 +117,10 @@ impl<'storage> ApBeacon<'storage> {
         )
     }
 
+    /// # Errors
+    ///
+    /// [`ApBeaconRefused`]: the template does not fit or an input is out of
+    /// range; the storage comes back (its bytes are not a template).
     #[expect(
         clippy::too_many_arguments,
         reason = "each beacon field is an independent 802.11 input the caller owns"
@@ -121,8 +135,8 @@ impl<'storage> ApBeacon<'storage> {
         dtim_period: u8,
         management_sequence: SequenceNumber,
         security: ApSecurityPolicy,
-    ) -> Result<Self, ApBeaconBuildError> {
-        let len = write_ht_beacon(
+    ) -> Result<Self, ApBeaconRefused<'storage>> {
+        let written = write_ht_beacon(
             advertisement,
             storage,
             access_point,
@@ -133,7 +147,11 @@ impl<'storage> ApBeacon<'storage> {
             management_sequence,
             security.advertisement(),
             ApBssProtection::default(),
-        )?;
+        );
+        let len = match written {
+            Ok(len) => len,
+            Err(error) => return Err(ApBeaconRefused { error, storage }),
+        };
         Ok(Self {
             storage,
             len,

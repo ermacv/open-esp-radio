@@ -62,6 +62,6 @@ pub use service::{
     ApGroupKeyInstallation, ApGroupManagementError, ApGroupTransmitKey, ApManagementAction,
     ApManagementProtection, ApManagementRejection, ApManagementRx, ApManagementRxProtection,
     ApMlmeAction, ApPeerBinding, ApPeerClose, ApPeerCloseKind, ApPeerPhase, ApPeerPowerState,
-    ApPeerStatus, ApPowerSaveAction, ApServiceError, ApWpa2Error, ApWpa2Progress,
+    ApPeerStatus, ApPowerSaveAction, ApServiceError, ApServiceRefused, ApWpa2Error, ApWpa2Progress,
     ApWpa2RetryProgress,
 };
