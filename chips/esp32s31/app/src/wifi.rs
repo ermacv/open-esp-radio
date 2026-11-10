@@ -300,7 +300,7 @@ impl StationInstallationEnd {
     /// no release runs again. The actual end of the actor's task, beside
     /// the exit the station's task returned, the owners still in transit
     /// and the datapath's network ends come back. Any other end, and a
-    /// proof of another installation, comes back unchanged.
+    /// proof the half refused, comes back unchanged.
     #[allow(
         clippy::result_large_err,
         reason = "an end this does not finish comes back whole, by value"

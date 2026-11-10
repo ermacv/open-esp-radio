@@ -871,13 +871,13 @@ pub use radio::{
 };
 #[cfg(target_arch = "riscv32")]
 pub use station::{
-    FinishedLifecycle, ForeignProofOf, RejectedOf, RetiredArbiterOf, RetiredStationOf, StationEnd,
+    FinishedLifecycle, RefusedProofOf, RejectedOf, RetiredArbiterOf, RetiredStationOf, StationEnd,
     StationPlacesOf, UnfinishedLifecycle,
 };
 #[cfg(any(test, target_arch = "riscv32"))]
 pub use station_end::{
-    DatapathCause, DatapathRetired, FinishedLifecycleOf, ForeignProof, InstallationOf, LateEnd,
-    NotInstalledOf, UnfinishedLifecycleOf, UnfinishedStation,
+    DatapathCause, DatapathRetired, FinishedLifecycleOf, InstallationOf, KeptFull, LateEnd,
+    LateRead, NotInstalledOf, ProofRefusal, RefusedProof, UnfinishedLifecycleOf, UnfinishedStation,
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.

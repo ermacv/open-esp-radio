@@ -301,12 +301,30 @@ pub enum LateEnd<E> {
     /// Its run stopped on the lifecycle's abandon: its half is the
     /// datapath's unfinished installation.
     Abandoned,
-    /// More installations' news came than the actor's task posts before
-    /// its end ([`INSTALLED`]): a broken bound, named. Nothing confirms
-    /// that its run stopped; the news past the bound stays in the mailbox,
-    /// unread, with its owners.
-    Unbounded,
 }
+
+/// What a lifecycle half has read of the actor task's end.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LateRead<E> {
+    /// The actor's task told how it ended: the confirmation, kept once
+    /// read.
+    Ended(LateEnd<E>),
+    /// It told nothing that ends it yet: its mailbox is empty.
+    Running,
+    /// Every place for installations' news is full ([`INSTALLED`]): more
+    /// came than the actor's task posts before its end, a broken bound.
+    /// Nothing is confirmed and nothing more is read; once the
+    /// application took a kept news
+    /// ([`UnfinishedLifecycleOf::take_installed`]) the half reads on
+    /// ([`UnfinishedLifecycleOf::confirm_end`]), the next news still in
+    /// the mailbox with its owners.
+    Full,
+}
+
+/// Every place for installations' news of a lifecycle half is full: the
+/// end is not read, and is read only once a kept news was taken.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct KeptFull;
 
 /// The station lifecycle's half of an installation that did not retire,
 /// whole: its retired lifecycle `R`, its ends `Q` of the queues to the
@@ -318,7 +336,10 @@ pub enum LateEnd<E> {
 pub struct UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     retired: R,
     queues: Q,
-    installation: InstallationOf<B>,
+    /// The installation the actor's task runs on now: the one the
+    /// lifecycle ran on, then each one a news of an installation named, in
+    /// order. Taking a kept news does not change it.
+    current: InstallationOf<B>,
     mailbox: oer_portable_memory::WakingSpscReceiver<'a, News<C, K, E, B>, 1>,
     /// The news that ended the actor's task, once read.
     late: Option<LateEnd<E>>,
@@ -364,35 +385,51 @@ pub struct FinishedLifecycleOf<Q, C, K, E, B> {
 pub type Installed<C, K, B> = (C, K, InstallationOf<B>);
 
 /// How a lifecycle half `H`'s finish ended: the finished half, or the half
-/// and a proof of another installation, unchanged.
+/// and the proof it refused, unchanged.
 pub type Finished<H, Q, C, K, E, B> =
-    Result<FinishedLifecycleOf<Q, C, K, E, B>, ForeignProof<H, B>>;
+    Result<FinishedLifecycleOf<Q, C, K, E, B>, RefusedProof<H, B>>;
 
-/// A proof of another installation, refused by a lifecycle half: both come
-/// back unchanged, nothing finished or consumed.
+/// Why a lifecycle half refused a proof.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProofRefusal {
+    /// The proof names another installation than the one the actor's task
+    /// runs on now ([`UnfinishedLifecycleOf::installation`]).
+    Foreign,
+    /// Every place for installations' news is full and the actor task's
+    /// end is not read: the half reads on once the application took a
+    /// kept news ([`LateRead::Full`]).
+    Unread,
+}
+
+/// A proof refused by a lifecycle half: both come back unchanged, nothing
+/// finished or consumed.
 #[must_use = "the refused finish returns the half and the proof whole"]
-pub struct ForeignProof<H, B> {
+pub struct RefusedProof<H, B> {
     /// The half, unchanged.
     pub half: H,
     /// The proof, unchanged.
     pub proof: DatapathRetired<B>,
+    /// Why it was refused.
+    pub cause: ProofRefusal,
 }
 
 impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// The half of `retired`, which ran on `installation`, with the
-    /// lifecycle's `queues` and `mailbox`.
+    /// lifecycle's `queues` and `mailbox`, and `late`, the actor task's end
+    /// when the lifecycle already read it.
     pub(crate) const fn new(
         retired: R,
         queues: Q,
         installation: InstallationOf<B>,
         mailbox: oer_portable_memory::WakingSpscReceiver<'a, News<C, K, E, B>, 1>,
+        late: Option<LateEnd<E>>,
     ) -> Self {
         Self {
             retired,
             queues,
-            installation,
+            current: installation,
             mailbox,
-            late: None,
+            late,
             installed: [None, None, None],
         }
     }
@@ -408,22 +445,43 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// they are collected.
     ///
     /// With every place for installations' news full ([`INSTALLED`]) the
-    /// bound broke: the wait ends on that named end
-    /// ([`LateEnd::Unbounded`]), the next news left in the mailbox.
+    /// bound broke: the wait stops unconfirmed ([`LateRead::Full`]), the
+    /// next news left in the mailbox, and the application continues it
+    /// ([`Self::confirm_end`]) once it took a kept news. A full store never
+    /// stands for the end.
     pub(crate) async fn abandoned(
         mut self,
         failure: LifecycleFailure,
         abandon: &mut oer_portable_memory::WakingSpscSender<'_, LifecycleFailure, 1>,
     ) -> Self {
         abandon.ready().await.send(failure);
-        while self.late.is_none() {
+        // Confirmed, or every place full: the half tells which
+        // ([`Self::late_end`]).
+        let _read = self.confirm_end().await;
+        self
+    }
+
+    /// Wait until the actor's task tells how it ended, keeping each news of
+    /// an installation it reads on the way: the managed continuation of an
+    /// abandon whose wait stopped on full places, once the application
+    /// took a kept news ([`Self::take_installed`]). An end already read
+    /// returns at once.
+    ///
+    /// # Errors
+    ///
+    /// [`KeptFull`]: every place for installations' news is full and the
+    /// end is not read; nothing more was read.
+    pub async fn confirm_end(&mut self) -> Result<LateEnd<E>, KeptFull> {
+        loop {
+            if let Some(late) = self.late {
+                return Ok(late);
+            }
             match self.read_one() {
                 Read::Taken => {}
                 Read::Empty => self.mailbox.ready().await,
-                Read::Full => self.late = Some(LateEnd::Unbounded),
+                Read::Full => return Err(KeptFull),
             }
         }
-        self
     }
 
     /// Read the next news of the actor's task, when there is room for it:
@@ -437,10 +495,15 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
         };
         self.late = match news {
             News::Installed(commands, tokens, installation) => {
+                // The actor's task runs on that installation now.
+                self.current = installation;
                 *place = Some((commands, tokens, installation));
                 return Read::Taken;
             }
             News::Abandoned => Some(LateEnd::Abandoned),
+            News::Reinstall(cause) => Some(LateEnd::Ended(StationExitOf::Failed(
+                LifecycleFailure::Reinstall(cause),
+            ))),
             news => Some(LateEnd::Ended(ended(news))),
         };
         Read::Taken
@@ -451,9 +514,11 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
         &mut self.retired
     }
 
-    /// The installation the lifecycle ran on.
+    /// The installation the actor's task runs on now, as far as its news
+    /// was read: the one the lifecycle ran on, or the last one a news of an
+    /// installation named. Only its proof finishes the half.
     pub const fn installation(&self) -> InstallationOf<B> {
-        self.installation
+        self.current
     }
 
     /// The lifecycle's ends of the queues to the actor: the owners in
@@ -462,17 +527,26 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
         &mut self.queues
     }
 
-    /// How the actor's task ended after the lifecycle stopped waiting for
-    /// it, read from its news and kept: `None` while it has told nothing
-    /// that ends it. A news of an installation is kept
-    /// ([`Self::take_installed`]) and the next one read.
-    pub fn late_end(&mut self) -> Option<LateEnd<E>> {
-        while self.late.is_none() && matches!(self.read_one(), Read::Taken) {}
-        self.late
+    /// How far the actor task's end is read, its news read on now without
+    /// waiting: the end, kept once read; nothing that ends it yet; or every
+    /// place for installations' news full. A news of an installation is
+    /// kept ([`Self::take_installed`]) and the next one read.
+    pub fn late_end(&mut self) -> LateRead<E> {
+        loop {
+            if let Some(late) = self.late {
+                return LateRead::Ended(late);
+            }
+            match self.read_one() {
+                Read::Taken => {}
+                Read::Empty => return LateRead::Running,
+                Read::Full => return LateRead::Full,
+            }
+        }
     }
 
     /// The commands, tokens and installation a news of an installation
-    /// carried, each once, in order.
+    /// carried, each once, in order. The installation the actor's task
+    /// runs on ([`Self::installation`]) stays.
     pub fn take_installed(&mut self) -> Option<Installed<C, K, B>> {
         self.installed.iter_mut().find_map(Option::take)
     }
@@ -486,25 +560,39 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     ///
     /// # Errors
     ///
-    /// The proof names another installation than this half's: the half
-    /// and the proof come back unchanged, nothing ended.
+    /// The half and the proof come back unchanged, nothing ended, when the
+    /// places for installations' news are full and the end is unread
+    /// ([`ProofRefusal::Unread`]), or when the proof names another
+    /// installation than the one the actor's task runs on now
+    /// ([`ProofRefusal::Foreign`]: a kept earlier or later one included).
     #[allow(
         clippy::result_large_err,
         reason = "a refused finish returns the half and the proof whole, by value"
     )]
     pub fn finish(mut self, retired: DatapathRetired<B>) -> Finished<Self, Q, C, K, E, B> {
-        if retired.installation != self.installation {
-            return Err(ForeignProof {
+        // Read on first: a news of the proof's installation moves the
+        // current one to it.
+        let read = self.late_end();
+        let cause = if matches!(read, LateRead::Full) {
+            Some(ProofRefusal::Unread)
+        } else if retired.installation != self.current {
+            Some(ProofRefusal::Foreign)
+        } else {
+            None
+        };
+        if let Some(cause) = cause {
+            return Err(RefusedProof {
                 half: self,
                 proof: retired,
+                cause,
             });
         }
         let DatapathRetired { installation: _ } = retired;
-        let late = self.late_end();
+        let late = self.late;
         let Self {
             retired: _retired,
             queues,
-            installation: _,
+            current: _,
             mailbox: _mailbox,
             late: _,
             installed,
@@ -706,23 +794,26 @@ pub(crate) enum LifecycleHalf {
 }
 
 /// The exit once the actor's task told how the radio's release ended
-/// (`None`: the stop's drain passed before it did), and how the
-/// lifecycle's half settles: only a release that succeeded retires it.
-/// `failure` is the lifecycle's own cause when it retired the actor after
-/// a refused start; the exit keeps it.
-pub(crate) fn release_settled<C, K, E, B>(
+/// (`None`: the stop's drain passed before it did), how the lifecycle's
+/// half settles (only a release that succeeded retires it), and the actor
+/// task's end as its news told, for a half that goes out. `failure` is the
+/// lifecycle's own cause when it retired the actor after a refused start;
+/// the exit keeps it.
+pub(crate) fn release_settled<C, K, E: Copy, B>(
     news: Option<News<C, K, E, B>>,
     failure: Option<LifecycleFailure>,
-) -> (StationExitOf<E>, LifecycleHalf) {
-    let exit = match news {
-        Some(news) => ended(news),
-        None => StationExitOf::ReleaseFailed(ReleaseCause::Deadline),
-    };
+) -> (StationExitOf<E>, LifecycleHalf, Option<LateEnd<E>>) {
+    let told = news.map(ended);
+    let exit = told.unwrap_or(StationExitOf::ReleaseFailed(ReleaseCause::Deadline));
     let half = match exit {
         StationExitOf::Stopped | StationExitOf::StoppedNetworkLost => LifecycleHalf::Retired,
         _ => LifecycleHalf::Unfinished,
     };
-    (failure.map_or(exit, StationExitOf::Failed), half)
+    (
+        failure.map_or(exit, StationExitOf::Failed),
+        half,
+        told.map(LateEnd::Ended),
+    )
 }
 
 /// The exit the actor task's last news gives.

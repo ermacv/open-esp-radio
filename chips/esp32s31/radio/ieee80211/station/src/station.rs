@@ -371,10 +371,10 @@ pub type FinishedLifecycle<W> = crate::station_end::FinishedLifecycleOf<
 /// One installation of `W`'s port.
 pub type InstallationOf<W> = crate::station_end::InstallationOf<<W as Binding>::Id>;
 
-/// A proof of another installation that `W`'s lifecycle half refused: the
-/// half and the proof, unchanged.
-pub type ForeignProofOf<W> =
-    crate::station_end::ForeignProof<UnfinishedLifecycle<W>, <W as Binding>::Id>;
+/// A proof that `W`'s lifecycle half refused: the half and the proof,
+/// unchanged, and why.
+pub type RefusedProofOf<W> =
+    crate::station_end::RefusedProof<UnfinishedLifecycle<W>, <W as Binding>::Id>;
 
 impl<W: Binding> UnfinishedLifecycle<W> {
     /// The lifecycle's ends of the queues to the actor: the owners the
@@ -428,11 +428,26 @@ impl<W: Binding> UnfinishedLifecycle<W> {
         self.0.retired_mut().rejected.take()
     }
 
-    /// How the actor's task ended after the lifecycle stopped waiting for
-    /// it (a release past the stop's drain, the stop after an abandon),
-    /// once it told, kept once read.
-    pub fn late_end(&mut self) -> Option<crate::station_end::LateEnd<InitializationError>> {
+    /// How far the actor task's end after the lifecycle stopped waiting for
+    /// it (a release past the stop's drain, the stop after an abandon, a
+    /// refused reinstall) is read, kept once read
+    /// ([`crate::station_end::LateRead`]).
+    pub fn late_end(&mut self) -> crate::station_end::LateRead<InitializationError> {
         self.0.late_end()
+    }
+
+    /// Wait until the actor's task tells how it ended: the continuation of
+    /// an abandon whose wait stopped on full places, once a kept news was
+    /// taken ([`Self::take_installed`]).
+    ///
+    /// # Errors
+    ///
+    /// Every place for installations' news is full: nothing more was read.
+    pub async fn confirm_end(
+        &mut self,
+    ) -> Result<crate::station_end::LateEnd<InitializationError>, crate::station_end::KeptFull>
+    {
+        self.0.confirm_end().await
     }
 
     /// The commands, tokens and installation a late news of an
@@ -443,7 +458,8 @@ impl<W: Binding> UnfinishedLifecycle<W> {
         self.0.take_installed()
     }
 
-    /// The installation the lifecycle ran on.
+    /// The installation the actor's task runs on now, as far as its news
+    /// was read: only its proof finishes the half.
     pub fn installation(&self) -> InstallationOf<W> {
         self.0.installation()
     }
@@ -465,12 +481,13 @@ impl<W: Binding> UnfinishedLifecycle<W> {
     pub fn finish(
         self,
         retired: crate::station_end::DatapathRetired<<W as Binding>::Id>,
-    ) -> Result<FinishedLifecycle<W>, ForeignProofOf<W>> {
+    ) -> Result<FinishedLifecycle<W>, RefusedProofOf<W>> {
         self.0
             .finish(retired)
-            .map_err(|foreign| crate::station_end::ForeignProof {
-                half: Self(foreign.half),
-                proof: foreign.proof,
+            .map_err(|refused| crate::station_end::RefusedProof {
+                half: Self(refused.half),
+                proof: refused.proof,
+                cause: refused.cause,
             })
     }
 }
@@ -649,12 +666,14 @@ fn unfinished<W: Binding>(
     queues: radio::LifecycleQueues<W>,
     installation: InstallationOf<W>,
     mailbox: Mailbox<W>,
+    late: Option<crate::station_end::LateEnd<InitializationError>>,
 ) -> UnfinishedLifecycle<W> {
     UnfinishedLifecycle(crate::station_end::UnfinishedLifecycleOf::new(
         retired.move_to(home),
         queues,
         installation,
         mailbox,
+        late,
     ))
 }
 
@@ -798,6 +817,8 @@ async fn lifecycles<W: Binding>(
                         next = installed;
                         continue;
                     }
+                    // The news read is the actor task's end: the half
+                    // keeps it too.
                     Err(exit) => {
                         return StationEnd {
                             exit,
@@ -807,6 +828,7 @@ async fn lifecycles<W: Binding>(
                                 actor,
                                 installation,
                                 mailbox,
+                                Some(crate::station_end::LateEnd::Ended(exit)),
                             )),
                             in_transit: None,
                         };
@@ -817,22 +839,22 @@ async fn lifecycles<W: Binding>(
             // task ends with its half, and this one goes out beside it.
             LifecycleEnd::StopUnconfirmed(observed) => {
                 let failure = crate::failure::LifecycleFailure::StopUnconfirmed(observed);
-                let half = unfinished(retired, home, actor, installation, mailbox);
+                let half = unfinished(retired, home, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::RetuneUnconfirmed(unconfirmed) => {
                 let failure = crate::failure::LifecycleFailure::RetuneUnconfirmed(unconfirmed);
-                let half = unfinished(retired, home, actor, installation, mailbox);
+                let half = unfinished(retired, home, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::Faulted(fault) => {
                 let failure = crate::failure::convert::actor_fault(fault);
-                let half = unfinished(retired, home, actor, installation, mailbox);
+                let half = unfinished(retired, home, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::Contract(violation) => {
                 let failure = crate::failure::LifecycleFailure::Contract(violation);
-                let half = unfinished(retired, home, actor, installation, mailbox);
+                let half = unfinished(retired, home, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
         };
@@ -846,7 +868,7 @@ async fn lifecycles<W: Binding>(
             }
             None => Some(news(&mut mailbox).await),
         };
-        let (exit, half) = crate::station_end::release_settled(news, failure);
+        let (exit, half, late) = crate::station_end::release_settled(news, failure);
         return match half {
             // The actor's task ended with its release: nothing produces
             // into the queues any more, and an owner still in them comes
@@ -861,7 +883,14 @@ async fn lifecycles<W: Binding>(
             }
             LifecycleHalf::Unfinished => StationEnd {
                 exit,
-                lifecycle: Some(unfinished(retired, home, actor, installation, mailbox)),
+                lifecycle: Some(unfinished(
+                    retired,
+                    home,
+                    actor,
+                    installation,
+                    mailbox,
+                    late,
+                )),
                 in_transit: None,
             },
         };
