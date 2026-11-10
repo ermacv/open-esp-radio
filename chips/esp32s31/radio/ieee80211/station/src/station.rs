@@ -329,6 +329,14 @@ pub struct UnfinishedLifecycle<W: Binding>(
     >,
 );
 
+/// What a finished lifecycle half of `W` hands back.
+pub type FinishedLifecycle<W> = crate::station_end::FinishedLifecycleOf<
+    radio::LifecycleQueues<W>,
+    radio::Commands<W>,
+    radio::Tokens<W>,
+    InitializationError,
+>;
+
 impl<W: Binding> UnfinishedLifecycle<W> {
     /// The lifecycle's ends of the queues to the actor: the owners the
     /// actor sent and the lifecycle had not taken, each once, in order.
@@ -344,15 +352,22 @@ impl<W: Binding> UnfinishedLifecycle<W> {
     /// How the actor's task ended after the lifecycle stopped waiting for
     /// it (a release past the stop's drain, the stop after an abandon),
     /// once it told, kept once read.
-    pub fn late_end(&mut self) -> Option<StationExit> {
+    pub fn late_end(&mut self) -> Option<crate::station_end::LateEnd<InitializationError>> {
         self.0.late_end()
     }
 
+    /// The commands and tokens a late news of an installation carried,
+    /// once.
+    pub fn take_installed(&mut self) -> Option<(radio::Commands<W>, radio::Tokens<W>)> {
+        self.0.take_installed()
+    }
+
     /// Finish the half of an installation whose datapath half retired
-    /// ([`radio::DatapathEnd::Retired`]): its owners end with the retired
-    /// installation and no release runs again. The actual end of the
-    /// actor's task, beside the exit the station's task returned.
-    pub fn finish(self, retired: crate::station_end::DatapathRetired) -> Option<StationExit> {
+    /// ([`radio::DatapathEnd::Retired`]): the retired lifecycle's owners end
+    /// with the retired installation and no release runs again. The actual
+    /// end of the actor's task, beside the exit the station's task
+    /// returned, and every owner still in transit come back.
+    pub fn finish(self, retired: crate::station_end::DatapathRetired) -> FinishedLifecycle<W> {
         self.0.finish(retired)
     }
 }

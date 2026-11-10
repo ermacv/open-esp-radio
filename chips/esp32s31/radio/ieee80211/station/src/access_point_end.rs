@@ -106,6 +106,16 @@ pub enum ApExitOf<E> {
         /// How far the radio's stop came.
         stop: UnkeptStop,
     },
+    /// It ended for its cause holding an attempt the port did not accept
+    /// for want of its right, and no item a port call could not keep: no
+    /// release ran, and the installation came back unfinished with the
+    /// attempt.
+    Unaccepted {
+        /// Why it ended.
+        ended: ApEnded,
+        /// How far the radio's stop came.
+        stop: UnkeptStop,
+    },
 }
 
 /// How far the radio's stop came when an access point's retire ended on
@@ -151,6 +161,10 @@ pub(crate) trait Retiring {
     fn port_mut(&mut self) -> &mut Self::Port;
     /// The item a port call of the run could not keep, once.
     fn take_unkept(&mut self) -> Option<Self::Unkept>;
+    /// An attempt a submission of the run returned unaccepted.
+    type Unaccepted;
+    /// The attempt a submission returned unaccepted, once.
+    fn take_unaccepted(&mut self) -> Option<Self::Unaccepted>;
 }
 
 /// The items a port call of the run could not keep, which the retire holds
@@ -166,10 +180,10 @@ fn take_into<R: Retiring>(home: &mut UnkeptItems<R::Unkept>, runner: &mut R) {
 }
 
 /// An access point's installation that did not retire: its runner, the
-/// items its port calls could not keep, the cleanup's receipt, its exit as
-/// the cause, and its phase.
-pub type UnfinishedAccessPoint<R, I, Receipt, E> =
-    Unfinished<R, UnkeptItems<I>, (), Receipt, ApExitOf<E>>;
+/// items its port calls could not keep, an attempt a submission returned
+/// unaccepted, the cleanup's receipt, its exit as the cause, and its phase.
+pub type UnfinishedAccessPoint<R, I, A, Receipt, E> =
+    Unfinished<R, UnkeptItems<I>, Option<A>, Receipt, ApExitOf<E>>;
 
 /// How the retire of an ended access point ended.
 #[must_use = "an unfinished retire holds the runner, its port and their owners"]
@@ -178,7 +192,9 @@ pub(crate) enum Retired<R: Retiring, E> {
     /// ended with the runner.
     Completed(ApExitOf<E>),
     /// The installation did not retire: everything it held.
-    Unfinished(UnfinishedAccessPoint<R, R::Unkept, <R::Port as Stopped>::Receipt, E>),
+    Unfinished(
+        UnfinishedAccessPoint<R, R::Unkept, R::Unaccepted, <R::Port as Stopped>::Receipt, E>,
+    ),
 }
 
 /// Stop the radio of an ended run unless the port confirmed its stop, then
@@ -232,10 +248,11 @@ where
                     // home has room; a full home leaves it with the
                     // runner, and the retire ends there.
                     Ok(StopWatch::Unkept) if unkept.iter().all(Option::is_some) => {
+                        let unaccepted = runner.take_unaccepted();
                         return Retired::Unfinished(Unfinished {
                             owner: runner,
                             unkept,
-                            unaccepted: (),
+                            unaccepted,
                             receipt: None,
                             cause: ApExitOf::Unkept {
                                 ended,
@@ -253,19 +270,25 @@ where
     // An item the run left with a stop confirmed before the retire; with
     // the home full it stays with the runner.
     take_into(&mut unkept, &mut runner);
-    // Items a port call could not keep: no release follows them, and they
-    // go back with the runner.
-    if unkept.iter().any(Option::is_some) {
+    // Items a port call could not keep, or an attempt the port did not
+    // accept: no release follows them, and they go back with the runner.
+    let unaccepted = runner.take_unaccepted();
+    if unkept.iter().any(Option::is_some) || unaccepted.is_some() {
         let stop = match finished {
             Ok(()) => UnkeptStop::Confirmed,
             Err(fault) => UnkeptStop::Unrecycled(fault),
         };
+        let cause = if unkept.iter().any(Option::is_some) {
+            ApExitOf::Unkept { ended, stop }
+        } else {
+            ApExitOf::Unaccepted { ended, stop }
+        };
         return Retired::Unfinished(Unfinished {
             owner: runner,
             unkept,
-            unaccepted: (),
+            unaccepted,
             receipt: None,
-            cause: ApExitOf::Unkept { ended, stop },
+            cause,
             phase: Phase::Stopped,
         });
     }
@@ -294,7 +317,7 @@ where
         Err(_) => Retired::Unfinished(Unfinished {
             owner: runner,
             unkept,
-            unaccepted: (),
+            unaccepted: None,
             receipt: returned,
             cause: exit,
             phase: Phase::Releasing,

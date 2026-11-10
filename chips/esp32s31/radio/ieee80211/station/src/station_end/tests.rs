@@ -578,6 +578,18 @@ fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
     assert!(matches!(news.try_receive(), Some(News::Abandoned)));
 }
 
+/// The stop after an abandon reads as such in the lifecycle's half, not as
+/// a broken mailbox.
+#[test]
+fn the_stop_after_an_abandon_reads_abandoned() {
+    use oer_portable_memory::WakingSpscQueue;
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mailbox, news) = mailbox_place.split();
+    assert!(mailbox.try_send(News::Abandoned).is_ok());
+    let mut half = UnfinishedLifecycleOf::new((), (), news);
+    assert_eq!(half.late_end(), Some(LateEnd::Abandoned));
+}
+
 /// A registry that mints no first installation comes back whole.
 #[test]
 fn a_registry_that_mints_nothing_comes_back_whole() {
@@ -627,14 +639,20 @@ fn a_late_retire_finishes_the_lifecycles_half_without_a_second_release() {
     assert_eq!(half.queues().try_receive(), Some(9), "the owner in transit");
     assert_eq!(half.queues().try_receive(), None, "once");
     assert!(half.retired_mut().0.get() == 0);
-    assert_eq!(half.late_end(), Some(StationExitOf::Stopped));
-    assert_eq!(
-        half.late_end(),
-        Some(StationExitOf::Stopped),
-        "kept once read"
-    );
+    assert!(to_lifecycle.try_send(10).is_ok());
+    let stopped = Some(LateEnd::Ended(StationExitOf::Stopped));
+    assert_eq!(half.late_end(), stopped);
+    assert_eq!(half.late_end(), stopped, "kept once read");
+    assert!(half.take_installed().is_none());
     assert_eq!(lifecycle.all(), [0; 4]);
-    assert_eq!(half.finish(proof), Some(StationExitOf::Stopped));
+    let mut finished = half.finish(proof);
+    assert_eq!(finished.late, stopped);
+    assert_eq!(
+        finished.queues.try_receive(),
+        Some(10),
+        "an owner still in transit comes back"
+    );
+    assert!(finished.installed.is_none());
     assert_eq!(
         lifecycle.all(),
         [0, 1, 0, 0],

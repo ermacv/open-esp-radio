@@ -10,6 +10,8 @@ pub enum BackendFault {
     /// The data arenas quarantined themselves.
     Arena(ArenaFault),
     TuneNotRecorded,
+    /// The port lost the right of its one unkept place.
+    RightLost,
     HardwareUnavailable,
     /// The lower-MAC core was not in the view a step needed.
     CoreViewUnavailable(CoreOperation),

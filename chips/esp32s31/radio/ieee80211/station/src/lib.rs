@@ -870,10 +870,11 @@ pub use radio::{
     UnfinishedStationOf,
 };
 #[cfg(target_arch = "riscv32")]
-pub use station::{StationEnd, UnfinishedLifecycle};
+pub use station::{FinishedLifecycle, StationEnd, UnfinishedLifecycle};
 #[cfg(any(test, target_arch = "riscv32"))]
 pub use station_end::{
-    DatapathCause, DatapathRetired, NotInstalledOf, UnfinishedLifecycleOf, UnfinishedStation,
+    DatapathCause, DatapathRetired, FinishedLifecycleOf, LateEnd, NotInstalledOf,
+    UnfinishedLifecycleOf, UnfinishedStation,
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.

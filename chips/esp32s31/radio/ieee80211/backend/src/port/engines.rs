@@ -1058,10 +1058,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.unkept.lose_right_for_test();
     }
 
-    /// Give the call place its right back, as a settle that freed it does.
+    /// Mark the radio's stop confirmed, as a stop whose core disable left
+    /// completions with the driver ends.
     #[cfg(test)]
-    pub(crate) fn restore_right_for_test(&mut self) {
-        self.unkept.restore_right_for_test();
+    pub(crate) fn confirm_stop_for_test(&mut self) {
+        self.state = PortState::Stopped;
+        self.recompute_deadline();
     }
 
     /// How many attempts wait in the queues, and how many completions a
@@ -2331,6 +2333,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// stands. A held item leaves the place here, which makes the next
     /// right ([`unconsumed::CallPlace::settle`]).
     fn answer<I, R>(&mut self, answer: R) -> PortAnswer<'id, Types<Id, D, B, O>, I, R> {
+        // A call that ends with an empty place and no right lost it: the
+        // port records its permanent fault, and its next calls answer it.
+        if self.unkept.right_lost() {
+            self.record(Fault::RightLost);
+        }
         match self.unkept.settle() {
             Some(item) => Err(Unkeeping {
                 unkept: item.into_unkept(),
@@ -2736,6 +2743,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // port kept is offered again and stays in its own place when
         // refused. Without the right the port takes nothing of the attempt.
         let Some(vacancy) = self.unkept.vacancy() else {
+            self.record(Fault::RightLost);
             return Err(SubmitHalt::NotAccepted(attempt));
         };
         let submitted = self.submitted(attempt, vacancy, now, sink);

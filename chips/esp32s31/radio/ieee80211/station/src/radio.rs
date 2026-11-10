@@ -333,7 +333,7 @@ pub type ActorOf<W> =
     Actor<'static, ActorPort<W>, crate::station::Rates<W>, ActorSink<<W as Binding>::Sink>>;
 
 /// The tokens of one installation the station's lifecycle takes.
-pub(crate) type Tokens<W> = port::StationTokens<'static, <W as Binding>::Id, Device<W>, TX, ()>;
+pub type Tokens<W> = port::StationTokens<'static, <W as Binding>::Id, Device<W>, TX, ()>;
 
 /// What the actor's task tells the station's task, in order, through the
 /// one-slot installation mailbox ([`crate::station_end::News`]).

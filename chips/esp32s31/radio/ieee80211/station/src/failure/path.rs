@@ -64,6 +64,7 @@ impl DiagnosticPath for BackendFault {
                 }
             }
             Self::TuneNotRecorded => path.name("TuneNotRecorded"),
+            Self::RightLost => path.name("RightLost"),
             Self::HardwareUnavailable => path.name("HardwareUnavailable"),
             Self::CoreViewUnavailable(op) => {
                 path.name("CoreViewUnavailable");

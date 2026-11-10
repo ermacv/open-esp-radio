@@ -351,6 +351,10 @@ pub enum Fault {
     /// The core asked for a retune right after recording the channel it was
     /// tuned to.
     TuneNotRecorded,
+    /// A call ended with its one unkept place empty and no right to fill
+    /// it: a producer dropped the right, and no settle makes another
+    /// ([`unconsumed::Vacancy`]). Permanent: the port hands nothing out.
+    RightLost,
     /// The device's registers were lent to an actor transaction or retired.
     HardwareUnavailable,
     /// The lower-MAC core is not in the view this step needs.

@@ -1449,10 +1449,10 @@ fn a_completion_the_halted_call_took_waits_in_the_driver_and_comes_home_first() 
 /// Completions left with the driver when the radio stopped: the stopped
 /// port's cleanup brings them home under the place's right. A refused one
 /// fills the place and the rest stay with the driver for the next
-/// cleanup; nothing is published again. The state is reached through the
-/// place's right: without it the stop's services hand nothing out and the
-/// stop confirms with every completion still with the driver; the right
-/// comes back as a settle that freed the place would make it.
+/// cleanup; nothing is published again. The model device completes no
+/// MPDU inside the core's disable, where a halted call leaves completions
+/// behind a confirmed stop on the chip, so the stop is marked confirmed
+/// through a test seam after a halted service left two with the driver.
 #[test]
 fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
     use oer_protocols_ieee80211_contracts_port::{Input, Unkeeping, Unkept};
@@ -1472,18 +1472,30 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
         ];
         fixture.turns(1);
         assert_eq!(fixture.publications(), 3);
-        fixture.port.lose_right_for_test();
         fixture.hold_air(false);
-        fixture.stop();
-        assert_eq!(
-            fixture.port.waiting_for_test(),
-            (0, 3),
-            "the stop left every completion with the driver"
-        );
-        assert!(fixture.outbox.terminals.is_empty());
-        fixture.port.restore_right_for_test();
+        fixture.outbox.refuse = 3;
+        fixture.port.refuse_keeps_for_test(3);
+        let mut halted = None;
+        for _ in 0..16 {
+            match serve_once(fixture) {
+                Ok(served) => assert!(served.is_ok()),
+                Err(unkeeping) => {
+                    halted = Some(unkeeping);
+                    break;
+                }
+            }
+        }
+        let Some(Unkeeping {
+            unkept: Unkept::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(first))),
+            input: Input::Accepted(Ok(_)),
+        }) = halted
+        else {
+            panic!("the first completion comes back unkept");
+        };
+        assert_eq!(fixture.port.waiting_for_test(), (0, 2));
+        fixture.port.confirm_stop_for_test();
         // The first cleanup's first delivery is refused: it fills the
-        // place and the other two stay with the driver.
+        // place and the other stays with the driver.
         fixture.outbox.refuse = 1;
         fixture.port.refuse_keeps_for_test(1);
         let Err(Unkeeping {
@@ -1493,7 +1505,7 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
         else {
             panic!("the refused completion comes back beside the cleanup");
         };
-        assert_eq!(fixture.port.waiting_for_test(), (0, 2));
+        assert_eq!(fixture.port.waiting_for_test(), (0, 1));
         assert!(fixture.outbox.terminals.is_empty());
         fixture.outbox.refuse = 0;
         fixture.port.refuse_keeps_for_test(0);
@@ -1513,7 +1525,7 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
                 }
                 _ => panic!("only the completions end"),
             })
-            .chain([held.ticket_index()])
+            .chain([first.ticket_index(), held.ticket_index()])
             .collect();
         all.sort_unstable();
         let mut sent = sent.to_vec();
@@ -1525,8 +1537,9 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
 /// The call place's right exists once: made with the empty place and
 /// again only by a settle that emptied it. A place whose right was lost
 /// takes no submission (the attempt comes back whole, unaccepted, nothing
-/// published or handed out), and no later call makes a right of its own:
-/// the next submission is refused the same way.
+/// published or handed out), records the permanent fault of the lost right,
+/// and no later call makes a right of its own: the next submission is
+/// refused the same way.
 #[test]
 fn a_submission_without_the_places_right_comes_back_whole_and_no_call_makes_one() {
     with_access(|fixture, _access| {
@@ -1547,9 +1560,12 @@ fn a_submission_without_the_places_right_comes_back_whole_and_no_call_makes_one(
                 "the attempt comes back whole"
             );
             drop(attempt);
-            // A later call of its own (a service, a cleanup refusal) makes
-            // no right.
-            let _ = fixture.turn();
+            // The lost right is the port's permanent fault: a later call
+            // answers it and makes no right of its own.
+            assert!(matches!(
+                serve_once(fixture),
+                Ok(Err(crate::port::Fault::RightLost))
+            ));
             assert!(fixture.outbox.terminals.is_empty());
         }
         assert_eq!(fixture.publications(), 0);

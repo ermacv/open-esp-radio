@@ -134,7 +134,11 @@ reinstall is `Failed(Reinstall)`. Before a reinstall or a release the
 actor's task runs the stopped port's cleanup once (`DataPort::clean_stopped`);
 one that did not finish, a group key entry the hardware still holds among
 them, keeps the port stopped with its owners and is `Reinstall(Cleanup)` or
-`ReleaseFailed(Cleanup)`, and nothing runs it again. After an ordinary stop
+`ReleaseFailed(Cleanup)`, and nothing runs it again. The cleanup's sink takes only the removal
+receipt: a completion the driver still kept, which the cleanup brings
+home, is refused there and stays in the port's store, so the port does not
+retire and the release ends `ReleaseFailed(NotStopped)` with the port
+unfinished. After an ordinary stop
 the actor's task takes the stopped device's Wi-Fi frontier and membership
 cell and releases the radio. The station's exit is published only after that
 release, or once the stop's drain passed first: a cleanup that did not
@@ -192,11 +196,14 @@ actor tells the actor's task once and waits until its run stopped
 while either half collects its queues, and each owner in transit is in
 its queue once, in order. The half's operations read its queues
 (`queues`), its events' sink (`events`) and the actor task's late end
-(`late_end`, kept once read), and finish it once the datapath half
-retired (`finish`, on `DatapathRetired`, which only a completed release
-makes): a release that completed after the stop's drain passed keeps both
-actual outcomes (the lifecycle's exit and the late end) and the half
-ends without a second release (the application's
+(`late_end`: `LateEnd`, kept once read; an out-of-order installation's
+commands and tokens through `take_installed`), and finish it once the
+datapath half retired (`finish`, on `DatapathRetired`, which only a
+completed release makes): the retired lifecycle's owners end, and the late
+end, the queues with every owner still in transit and any kept
+installation come back (`FinishedLifecycle`). A release that completed
+after the stop's drain passed keeps both actual outcomes (the lifecycle's
+exit and the late end) and the half ends without a second release (the application's
 `StationInstallationEnd::finish_late_retire`). A fault the actor would
 recover from after the lifecycle's retire or reinstall ends the actor
 instead (no recovery is told to a lifecycle that ended): its news ends

@@ -344,6 +344,7 @@ pub type UnfinishedAccessPointOf<W> = crate::access_point_end::UnfinishedAccessP
         'static,
         <Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Types,
     >,
+    <Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Admitted,
     radio::Freed<W>,
     InitializationError,
 >;
@@ -761,6 +762,11 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
     }
     fn take_unkept(&mut self) -> Option<Self::Unkept> {
         ApRunner::take_unkept(self)
+    }
+    type Unaccepted =
+        <Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Admitted;
+    fn take_unaccepted(&mut self) -> Option<Self::Unaccepted> {
+        ApRunner::take_unaccepted(self)
     }
 }
 

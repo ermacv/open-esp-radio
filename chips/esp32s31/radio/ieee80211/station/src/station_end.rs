@@ -239,6 +239,21 @@ pub(crate) async fn abandon<C, K, E>(
     }
 }
 
+/// How the actor's task ended after the lifecycle stopped waiting for it,
+/// as its late news told.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LateEnd<E> {
+    /// Its last news: a release past the stop's drain, a fault, a refused
+    /// reinstall.
+    Ended(StationExitOf<E>),
+    /// Its run stopped on the lifecycle's abandon: its half is the
+    /// datapath's unfinished installation.
+    Abandoned,
+    /// A news of an installation, out of its order: its commands and tokens
+    /// are in the half ([`UnfinishedLifecycleOf::take_installed`]).
+    Installed,
+}
+
 /// The station lifecycle's half of an installation that did not retire,
 /// whole: its retired lifecycle `R`, its ends `Q` of the queues to the
 /// actor with every owner in transit in them, in order, and the actor
@@ -248,10 +263,24 @@ pub struct UnfinishedLifecycleOf<'a, R, Q, C, K, E> {
     retired: R,
     queues: Q,
     mailbox: oer_portable_memory::WakingSpscReceiver<'a, News<C, K, E>, 1>,
-    /// The late news's exit, once read.
-    late: Option<StationExitOf<E>>,
+    /// The late news, once read.
+    late: Option<LateEnd<E>>,
     /// An installation's commands and tokens a late news carried, kept.
     installed: Option<(C, K)>,
+}
+
+/// What a finished lifecycle half hands back: how the actor's task ended
+/// after the lifecycle stopped waiting, the lifecycle's ends of the queues
+/// with every owner still in transit in them, and an installation's
+/// commands and tokens a late news carried.
+#[must_use = "the finished half returns the owners still in transit"]
+pub struct FinishedLifecycleOf<Q, C, K, E> {
+    /// How the actor's task ended, once it told.
+    pub late: Option<LateEnd<E>>,
+    /// The lifecycle's ends of the queues to the actor.
+    pub queues: Q,
+    /// The commands and tokens a late news of an installation carried.
+    pub installed: Option<(C, K)>,
 }
 
 impl<'a, R, Q, C, K, E: Copy> UnfinishedLifecycleOf<'a, R, Q, C, K, E> {
@@ -282,32 +311,49 @@ impl<'a, R, Q, C, K, E: Copy> UnfinishedLifecycleOf<'a, R, Q, C, K, E> {
     }
 
     /// How the actor's task ended after the lifecycle stopped waiting for
-    /// it (a release past the drain's deadline, the stop after an
-    /// abandon), read once from its news and kept: `None` while it has
-    /// told nothing. A news of an installation is out of order
-    /// ([`LifecycleFailure::Mailbox`]); its owners stay in the half.
-    pub fn late_end(&mut self) -> Option<StationExitOf<E>> {
+    /// it, read once from its news and kept: `None` while it has told
+    /// nothing.
+    pub fn late_end(&mut self) -> Option<LateEnd<E>> {
         if self.late.is_none() {
             self.late = self.mailbox.try_receive().map(|news| match news {
                 News::Installed(commands, tokens) => {
                     self.installed = Some((commands, tokens));
-                    StationExitOf::Failed(LifecycleFailure::Mailbox)
+                    LateEnd::Installed
                 }
-                news => ended(news),
+                News::Abandoned => LateEnd::Abandoned,
+                news => LateEnd::Ended(ended(news)),
             });
         }
         self.late
     }
 
-    /// Finish the half of an installation whose datapath half retired: its
-    /// owners end with the retired installation, as after a completed
-    /// retire, and no release runs again (the datapath half's release
-    /// was the installation's one). The actual end of the actor's task is
-    /// returned ([`Self::late_end`]), beside the exit the lifecycle's task
-    /// returned.
-    pub fn finish(mut self, retired: DatapathRetired) -> Option<StationExitOf<E>> {
+    /// The commands and tokens a late news of an installation carried,
+    /// once.
+    pub fn take_installed(&mut self) -> Option<(C, K)> {
+        self.installed.take()
+    }
+
+    /// Finish the half of an installation whose datapath half retired: the
+    /// retired lifecycle's owners end with the retired installation, as
+    /// after a completed retire, and no release runs again (the datapath
+    /// half's release was the installation's one). The actual end of the
+    /// actor's task ([`Self::late_end`]), beside the exit the lifecycle's
+    /// task returned, and every owner still in transit come back.
+    pub fn finish(mut self, retired: DatapathRetired) -> FinishedLifecycleOf<Q, C, K, E> {
         let DatapathRetired(()) = retired;
-        self.late_end()
+        let late = self.late_end();
+        let Self {
+            retired: _retired,
+            queues,
+            mailbox: _mailbox,
+            late: _,
+            installed,
+        } = self;
+        FinishedLifecycleOf {
+            late,
+            queues,
+            installed,
+        }
     }
 }
 

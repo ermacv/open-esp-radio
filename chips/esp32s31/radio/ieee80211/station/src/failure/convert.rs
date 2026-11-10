@@ -28,6 +28,7 @@ pub(crate) fn backend_fault(
         Source::Abandoned => BackendFault::Abandoned,
         Source::Arena(v0) => BackendFault::Arena(arena_fault(v0)),
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
+        Source::RightLost => BackendFault::RightLost,
         Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
         Source::CoreViewUnavailable(op) => BackendFault::CoreViewUnavailable(core_operation(op)),
         Source::Publish { queue, step } => BackendFault::Publish {

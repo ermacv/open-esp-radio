@@ -26,6 +26,8 @@ struct TestRunner<'a, 'b> {
     /// stop is confirmed.
     found: std::vec::Vec<Receipt<'a>>,
     confirmed: &'b Cell<bool>,
+    /// An attempt a submission returned unaccepted.
+    unaccepted: Option<Receipt<'a>>,
 }
 
 impl<'a> Retiring for TestRunner<'a, '_> {
@@ -65,6 +67,10 @@ impl<'a> Retiring for TestRunner<'a, '_> {
     fn take_unkept(&mut self) -> Option<Receipt<'a>> {
         self.unkept.pop()
     }
+    type Unaccepted = Receipt<'a>;
+    fn take_unaccepted(&mut self) -> Option<Receipt<'a>> {
+        self.unaccepted.take()
+    }
 }
 
 type Exit = ApExitOf<()>;
@@ -73,7 +79,9 @@ type Exit = ApExitOf<()>;
 /// the last publication and how many times the stop was watched.
 struct Left<'a, 'b> {
     exit: Exit,
-    unfinished: Option<UnfinishedAccessPoint<TestRunner<'a, 'b>, Receipt<'a>, Receipt<'a>, ()>>,
+    unfinished: Option<
+        UnfinishedAccessPoint<TestRunner<'a, 'b>, Receipt<'a>, Receipt<'a>, Receipt<'a>, ()>,
+    >,
     published: Option<Exit>,
     watched: u8,
 }
@@ -118,6 +126,7 @@ fn retired<'a, 'b>(
         unkept: unkept.into_iter().collect(),
         found: std::vec::Vec::new(),
         confirmed,
+        unaccepted: None,
     };
     retired_with(runner, ApEnded::Stopped, stop)
 }
@@ -282,6 +291,7 @@ fn an_unkept_item_leaves_with_every_other_owner_of_the_unreleased_port() {
         unkept: std::vec![Receipt(&item)],
         found: std::vec::Vec::new(),
         confirmed: &confirmed,
+        unaccepted: None,
     };
     let left = retired_with(runner, ApEnded::Unkept, Stop::Confirmed);
     assert_eq!(item.get(), 0, "the item is alive");
@@ -321,6 +331,7 @@ fn a_stop_that_needs_a_service_goes_on_once_the_unkept_item_is_taken() {
         unkept: std::vec![Receipt(&item)],
         found: std::vec::Vec::new(),
         confirmed: &confirmed,
+        unaccepted: None,
     };
     let left = retired_with(runner, ApEnded::Unkept, Stop::Owed);
     assert!(confirmed.get(), "the stop was watched to its confirmation");
@@ -359,6 +370,7 @@ fn items_the_stop_finds_fill_the_home_then_the_next_stays_with_the_runner() {
         unkept: std::vec::Vec::new(),
         found: (0..=UNKEPT_ITEMS).map(|_| Receipt(&ends)).collect(),
         confirmed: &confirmed,
+        unaccepted: None,
     };
     let left = retired_with(runner, ApEnded::Stopped, Stop::Owed);
     assert!(!confirmed.get());
@@ -383,4 +395,44 @@ fn items_the_stop_finds_fill_the_home_then_the_next_stays_with_the_runner() {
     assert_eq!(ends.get(), 0);
     drop(unfinished);
     assert_eq!(ends.get(), UNKEPT_ITEMS as u8 + 1);
+}
+
+/// A run that ended on an attempt the port did not accept: the retire runs
+/// no release, and the attempt comes back with the runner and every other
+/// owner of the unreleased port, the stop confirmed.
+#[test]
+fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
+    let attempt = Cell::new(0);
+    let other = Cell::new(0);
+    let (watched, confirmed) = (Cell::new(0), Cell::new(false));
+    let runner = TestRunner {
+        port: TestPort {
+            cleanup: Ok(()),
+            receipt: None,
+            stopped: Some(Radio(Leaves::Left)),
+        },
+        other: Some(Receipt(&other)),
+        watched: &watched,
+        unkept: std::vec::Vec::new(),
+        found: std::vec::Vec::new(),
+        confirmed: &confirmed,
+        unaccepted: Some(Receipt(&attempt)),
+    };
+    let left = retired_with(runner, ApEnded::Unaccepted, Stop::Owed);
+    assert_eq!(
+        left.exit,
+        ApExitOf::Unaccepted {
+            ended: ApEnded::Unaccepted,
+            stop: UnkeptStop::Confirmed,
+        }
+    );
+    assert_eq!((attempt.get(), other.get()), (0, 0), "nothing ended");
+    let Some(unfinished) = left.unfinished else {
+        panic!("no release runs while the attempt is out");
+    };
+    assert_eq!(unfinished.phase, Phase::Stopped);
+    assert!(unfinished.unaccepted.is_some());
+    assert!(unfinished.owner.port.stopped.is_some(), "no release ran");
+    drop(unfinished);
+    assert_eq!((attempt.get(), other.get()), (1, 1), "each ended once");
 }

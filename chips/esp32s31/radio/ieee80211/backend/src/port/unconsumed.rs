@@ -50,7 +50,7 @@ pub(super) enum Item<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, 
 /// that emptied the place. It is neither `Clone` nor `Copy`: one exists per
 /// place, so a held item is never overwritten and no drop branch exists
 /// for a further item.
-#[must_use = "a dropped right halts the port's calls until a settle frees the place"]
+#[must_use = "a dropped right is the port's permanent fault (`Fault::RightLost`)"]
 pub(super) struct Vacancy(());
 
 /// The one place of the port's calls for an item a call could neither give
@@ -96,6 +96,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.item = Some(item);
     }
 
+    /// Whether the place lost its right: it holds no item and no right, as
+    /// a producer dropped it. No settle makes another.
+    pub(super) const fn right_lost(&self) -> bool {
+        self.item.is_none() && self.vacancy.is_none()
+    }
+
     /// Whether the call stopped on an item it could not keep: it takes no
     /// further owner, and what it has not taken stays in its place.
     pub(super) const fn halted(&self) -> bool {
@@ -115,14 +121,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     #[cfg(test)]
     pub(super) fn lose_right_for_test(&mut self) {
         self.vacancy = None;
-    }
-
-    /// Give an empty place its right back, as a freeing settle does.
-    #[cfg(test)]
-    pub(super) fn restore_right_for_test(&mut self) {
-        if self.item.is_none() {
-            self.vacancy = Some(Vacancy(()));
-        }
     }
 }
 
