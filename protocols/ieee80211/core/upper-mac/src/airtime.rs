@@ -173,6 +173,38 @@ fn funded_account<K>(
         .ok_or(AirtimeError::UnfundedDemand { cursor })
 }
 
+/// What one selection decided, on its own copy of the accounts.
+struct Selection<K, const PEERS: usize> {
+    accounts: [Option<Account<K>>; PEERS],
+    /// The funded account it grants, by its place.
+    selected: Option<usize>,
+    /// The reservation place a grant takes.
+    place: usize,
+}
+
+impl<K: Copy, const PEERS: usize> Selection<K, PEERS> {
+    fn key(&self) -> Option<K> {
+        let selected = self.selected?;
+        self.accounts
+            .get(selected)
+            .copied()
+            .flatten()
+            .map(|account| account.key)
+    }
+}
+
+/// What [`AirtimeScheduler::reserve_for`] did.
+#[must_use = "settle a published reservation or cancel unpublished work"]
+#[derive(Debug, Eq, PartialEq)]
+pub enum Reserved<'owner, K> {
+    /// A reservation of a wanted key.
+    This(AirtimeReservation<'owner, K>),
+    /// No key is granted now, as [`AirtimeScheduler::reserve`] would say.
+    Nothing,
+    /// The grant would go to this key, which was not wanted: nothing changed.
+    Other(K),
+}
+
 /// Stable CPU metadata for one airtime ledger. No packet or DMA storage.
 /// Borrow `scheduler()` for selection and completion. Reservations borrow the
 /// same identity, so storage cannot move, be replaced or be borrowed for another
@@ -308,6 +340,52 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
         candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
         events: &mut impl EventSink<AirtimeObservation<K>>,
     ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
+        let selection = self.select(candidates)?;
+        self.commit(selection, events)
+    }
+
+    /// The key [`Self::reserve`] would grant now over `candidates`, changing
+    /// nothing; `None` when it would grant none.
+    ///
+    /// # Errors
+    /// What [`Self::reserve`] would return.
+    pub fn selects(
+        &self,
+        candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
+    ) -> Result<Option<K>, AirtimeError> {
+        Ok(self.select(candidates)?.key())
+    }
+
+    /// [`Self::reserve`] when it would grant a key `wanted` takes, or grant
+    /// none; when it would grant another key, nothing changes and that key
+    /// comes back ([`Reserved::Other`]).
+    ///
+    /// # Errors
+    /// What [`Self::reserve`] would return.
+    pub fn reserve_for(
+        &mut self,
+        wanted: impl FnOnce(K) -> bool,
+        candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<Reserved<'owner, K>, AirtimeError> {
+        let selection = self.select(candidates)?;
+        if let Some(key) = selection.key()
+            && !wanted(key)
+        {
+            return Ok(Reserved::Other(key));
+        }
+        Ok(match self.commit(selection, events)? {
+            Some(reservation) => Reserved::This(reservation),
+            None => Reserved::Nothing,
+        })
+    }
+
+    /// What [`Self::reserve`] decides over `candidates`, on a copy of the
+    /// accounts: nothing changes until [`Self::commit`].
+    fn select(
+        &self,
+        candidates: impl IntoIterator<Item = AirtimeCandidate<K>>,
+    ) -> Result<Selection<K, PEERS>, AirtimeError> {
         let place = self
             .state
             .vacant()
@@ -364,8 +442,11 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
                 rounds = Some(rounds.map_or(required, |old| old.min(required)));
             }
             let Some(rounds) = rounds else {
-                self.state.accounts = accounts;
-                return Ok(None);
+                return Ok(Selection {
+                    accounts,
+                    selected: None,
+                    place,
+                });
             };
             let credit = quantum
                 .checked_mul(rounds)
@@ -377,7 +458,35 @@ impl<'owner, K: Copy + Eq, const PEERS: usize, const RESERVATIONS: usize>
                     .ok_or(AirtimeError::ArithmeticOverflow)?;
             }
         }
-        let (selected, account) = funded_account(&mut accounts, self.state.cursor)?;
+        let (selected, _) = funded_account(&mut accounts, self.state.cursor)?;
+        Ok(Selection {
+            accounts,
+            selected: Some(selected),
+            place,
+        })
+    }
+
+    /// Make `selection` the ledger's: its reservation, or, with none
+    /// selected, its accounts as the selection left them.
+    fn commit(
+        &mut self,
+        selection: Selection<K, PEERS>,
+        events: &mut impl EventSink<AirtimeObservation<K>>,
+    ) -> Result<Option<AirtimeReservation<'owner, K>>, AirtimeError> {
+        let Selection {
+            mut accounts,
+            selected,
+            place,
+        } = selection;
+        let Some(selected) = selected else {
+            self.state.accounts = accounts;
+            return Ok(None);
+        };
+        let account = accounts.get_mut(selected).and_then(Option::as_mut).ok_or(
+            AirtimeError::UnfundedDemand {
+                cursor: self.state.cursor,
+            },
+        )?;
         let budget = u32::try_from(account.balance.min(i64::from(u32::MAX)))
             .ok()
             .and_then(NonZeroU32::new)

@@ -161,7 +161,7 @@ fn late_returns_across_associations_bring_every_buffer_home_and_charge_once() {
         // The previous association's end comes first.
         assert!(handed_on(&mut ends, &mut egress).is_empty());
         let (_, held) = egress
-            .choose([Frame(ready(1514))].into_iter())
+            .first_choice([Frame(ready(1514))].into_iter())
             .unwrap()
             .expect("every association has its account");
         let ticket = u8::try_from(epoch).unwrap();
@@ -329,7 +329,7 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
     let mut egress =
         AirtimeEgress::<'_, _, u8, 2, 2>::new(&mut storage, StationAir::new(&link, &asked));
     let (_, held) = egress
-        .choose([Frame(ready(1514))].into_iter())
+        .first_choice([Frame(ready(1514))].into_iter())
         .unwrap()
         .expect("association 1's account");
     egress.accepted(held, 1).unwrap();
@@ -343,7 +343,7 @@ fn a_late_completion_through_the_policy_leaves_the_new_association_s_grant() {
         .unwrap();
     asked.0.borrow_mut().clear();
     let _chosen = egress
-        .choose([Frame(ready(1514))].into_iter())
+        .first_choice([Frame(ready(1514))].into_iter())
         .unwrap()
         .expect("association 2's account");
     assert_eq!(
@@ -399,7 +399,6 @@ fn two_associations_without_reports_ask_at_their_own_slowest_rates() {
 fn a_link_up_without_its_association_s_rate_offers_no_account() {
     use crate::egress::AirtimeEgress;
     use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
-    use oer_protocols_network_port::Egress;
     let link = NetworkLink::new();
     link.publish(up(1), None);
     let asked = Asked::default();
@@ -409,7 +408,7 @@ fn a_link_up_without_its_association_s_rate_offers_no_account() {
     assert_eq!(egress.air().candidate(&ready(1514)), None);
     assert!(
         egress
-            .choose([Frame(ready(1514))].into_iter())
+            .first_choice([Frame(ready(1514))].into_iter())
             .unwrap()
             .is_none()
     );
@@ -418,7 +417,7 @@ fn a_link_up_without_its_association_s_rate_offers_no_account() {
     link.publish(up(1), FLOOR);
     assert!(
         egress
-            .choose([Frame(ready(1514))].into_iter())
+            .first_choice([Frame(ready(1514))].into_iter())
             .unwrap()
             .is_some()
     );

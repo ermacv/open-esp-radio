@@ -172,23 +172,50 @@ pub trait Candidate {
 }
 
 /// Chooses what goes out before any frame exists, and keeps the account of what
-/// it chose. Reserve in `choose`; exactly one of `accepted`, `refused` or
-/// `unknown` answers each reservation. `Ticket` and `Notice` are the port's.
+/// it chose. `Ticket` and `Notice` are the port's.
+///
+/// A choice is made in two steps. [`Self::plan`] collects the ready work once
+/// and reserves nothing: it keeps the continuation of its choice, at most
+/// [`QUANTUM`](crate::QUANTUM) frames, and what the choice read. Each
+/// [`Self::next`] then chooses one frame from the plan and reserves for that
+/// frame alone, exactly what a choice over the same ready work would choose
+/// and reserve; or it says nothing may go, or that the plan no longer knows
+/// ([`Next::Stop`](crate::Next::Stop)), reserving nothing. Exactly one of
+/// [`Self::accepted`], [`Self::refused`] or [`Self::unknown`] answers each
+/// reservation. A plan goes on only after its last frame was accepted, and only
+/// while nothing but its own frames' answers reached the policy or the work
+/// since it was collected: its caller drops it at any other answer, at a
+/// notice, and at the end of its publishing. A plan holds no owner, so
+/// dropping it returns nothing and costs nothing.
 pub trait Egress<Ticket, Notice> {
     /// What a choice holds until it is answered.
     type Reservation;
     /// Why the policy cannot go on.
     type Fault;
+    /// What one collection of the ready work keeps for the frames after it.
+    type Plan<C: Candidate>;
 
-    /// Choose among `ready`, which holds every piece of ready work; `None`
-    /// until a port's wake if nothing may go now.
+    /// Collect a plan from `ready`, which holds every piece of ready work.
+    /// It reserves nothing.
     ///
     /// # Errors
     /// [`Self::Fault`], which ends the service.
-    fn choose<C: Candidate>(
+    fn plan<C: Candidate>(
         &mut self,
         ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Option<(C, Self::Reservation)>, Self::Fault>;
+    ) -> Result<Self::Plan<C>, Self::Fault>;
+
+    /// The plan's next frame, reserved; [`Next::Idle`](crate::Next::Idle)
+    /// until a port's wake or a notice if nothing may go now; or
+    /// [`Next::Stop`](crate::Next::Stop), with nothing reserved, once the plan
+    /// cannot say what a choice over the ready work would.
+    ///
+    /// # Errors
+    /// [`Self::Fault`], which ends the service.
+    fn next<C: Candidate>(
+        &mut self,
+        plan: &mut Self::Plan<C>,
+    ) -> Result<crate::Next<C, Self::Reservation>, Self::Fault>;
 
     /// The port took the frame: its charge waits for a notice.
     ///

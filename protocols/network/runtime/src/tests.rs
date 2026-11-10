@@ -22,7 +22,7 @@ use oer_protocols_network_core::{
 };
 use oer_protocols_network_port::{
     Candidate, CopyReason, Egress, EthernetFrame, EthernetFrameView, FrameLengthError, FramePort,
-    FrameSource, Holding, Keep, LinkSnapshot, LinkState, Taken, Unpublished,
+    FrameSource, Holding, Keep, LinkSnapshot, LinkState, Next, PlanStop, Taken, Unpublished,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
@@ -83,6 +83,10 @@ struct Wire {
     waker: Option<Waker>,
     /// The last frame was refused for room.
     refused: bool,
+    /// Frames refused for room.
+    refusals: usize,
+    /// Frames the port takes before it is full; `None` for no such bound.
+    accepts: Option<usize>,
     /// How the port holds what it shows: lendable buffers, or its copies.
     holding: Option<Holding>,
     /// Buffers the port lent and has not got back.
@@ -154,6 +158,7 @@ impl FramePort for WirePort {
         let mut wire = self.0.borrow_mut();
         wire.refused = wire.full;
         if wire.full {
+            wire.refusals += 1;
             return Err(Unpublished::Port(false));
         }
         if wire.rejects {
@@ -178,6 +183,13 @@ impl FramePort for WirePort {
         wire.sent.push(frame);
         wire.incoming.extend(reply);
         wire.tickets += 1;
+        if let Some(accepts) = &mut wire.accepts {
+            *accepts -= 1;
+            if *accepts == 0 {
+                wire.accepts = None;
+                wire.full = true;
+            }
+        }
         Ok(wire.tickets)
     }
 }
@@ -2761,20 +2773,46 @@ struct Account {
 #[derive(Clone, Debug, Default)]
 struct Policy(Rc<RefCell<Account>>);
 
+/// A test policy's plan: one choice, then a new collection.
+#[derive(Debug)]
+pub(crate) struct OneChoice<C> {
+    work: Option<C>,
+    chose: bool,
+}
+
+impl<C> OneChoice<C> {
+    pub(crate) fn of(work: Option<C>) -> Self {
+        Self {
+            chose: work.is_some(),
+            work,
+        }
+    }
+
+    /// The choice, then a stop for a new collection; nothing if none.
+    pub(crate) fn next(&mut self) -> Next<C, ()> {
+        match self.work.take() {
+            Some(work) => Next::Send(work, ()),
+            None if self.chose => Next::Stop(PlanStop::Spent),
+            None => Next::Idle,
+        }
+    }
+}
+
 impl Egress<u32, u32> for Policy {
     type Reservation = ();
     type Fault = &'static str;
+    type Plan<C: Candidate> = OneChoice<C>;
 
-    fn choose<C: Candidate>(
+    fn plan<C: Candidate>(
         &mut self,
         mut ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Option<(C, ())>, &'static str> {
-        let mut account = self.0.borrow_mut();
+    ) -> Result<OneChoice<C>, &'static str> {
+        let account = self.0.borrow_mut();
         if account.fails && ready.clone().next().is_some() {
             return Err("choose");
         }
         if account.shut {
-            return Ok(None);
+            return Ok(OneChoice::of(None));
         }
         if let Some(needed) = account.notices_before_work
             && ready.clone().next().is_some()
@@ -2786,8 +2824,15 @@ impl Egress<u32, u32> for Policy {
         } else {
             ready.next()
         };
-        account.open += usize::from(work.is_some());
-        Ok(work.map(|work| (work, ())))
+        Ok(OneChoice::of(work))
+    }
+
+    fn next<C: Candidate>(&mut self, plan: &mut OneChoice<C>) -> Result<Next<C, ()>, &'static str> {
+        let next = plan.next();
+        if matches!(next, Next::Send(..)) {
+            self.0.borrow_mut().open += 1;
+        }
+        Ok(next)
     }
 
     fn accepted(&mut self, (): (), ticket: u32) -> Result<(), &'static str> {
@@ -3088,6 +3133,7 @@ mod arbiter;
 mod lending;
 mod local;
 mod paced;
+mod plan;
 mod reserve;
 mod turns;
 
