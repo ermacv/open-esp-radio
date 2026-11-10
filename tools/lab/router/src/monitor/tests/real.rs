@@ -256,8 +256,16 @@ impl Host for PipeHost {
         })
     }
 
-    fn create(&mut self, _: &str, _: &str, _: u8) -> Result<()> {
+    fn create(&mut self, _: &str, _: &str) -> Result<()> {
         self.created = true;
+        Ok(())
+    }
+
+    fn isolate(&mut self, _: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn up(&mut self, _: &str, _: u8) -> Result<()> {
         Ok(())
     }
 
