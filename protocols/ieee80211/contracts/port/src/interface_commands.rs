@@ -80,7 +80,11 @@ pub struct ConfigurePermission<
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
     C = (),
 > {
-    slot: IssuedSlot<'id, ConfigureKind<R>, Path>,
+    slot: IssuedSlot<
+        'id,
+        oer_protocols_radio_port::Slots<ConfigureKind<R>, CONFIGURE_PER_INTERFACE>,
+        Path,
+    >,
     context: C,
 }
 

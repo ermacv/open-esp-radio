@@ -91,6 +91,8 @@ impl ApTsfHardware for RadioAccess {
 #[derive(Debug, Eq, PartialEq)]
 pub struct AccessPointTsf {
     relation: TsfRelation,
+    /// Whether this owner's last write started the timer.
+    running: bool,
 }
 
 impl AccessPointTsf {
@@ -98,7 +100,14 @@ impl AccessPointTsf {
     pub const fn new(epoch: u32) -> Self {
         Self {
             relation: TsfRelation::new(epoch, ACCESS_POINT_TSF_SAMPLE_UNCERTAINTY),
+            running: false,
         }
+    }
+
+    /// Whether this owner's last write started the timer: a restart since
+    /// the last stop.
+    pub const fn running(&self) -> bool {
+        self.running
     }
 
     /// The generation of the access-point TSF's relation.
@@ -120,6 +129,7 @@ impl AccessPointTsf {
     pub fn restart<H: ApTsfHardware>(&mut self, hardware: &mut H) {
         self.relation.break_relation();
         hardware.reset_and_start_access_point_tsf(AccessPointTsfWrite { _owner: () });
+        self.running = true;
     }
 
     /// Stop the timer before relinquishing or changing the access-point
@@ -130,6 +140,7 @@ impl AccessPointTsf {
     pub fn stop<H: ApTsfHardware>(&mut self, hardware: &mut H) {
         self.relation.break_relation();
         hardware.stop_access_point_tsf(AccessPointTsfWrite { _owner: () });
+        self.running = false;
     }
 
     /// Start a new generation without a write: the access point follows

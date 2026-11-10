@@ -32,8 +32,8 @@ pub mod session;
 
 pub use banks::{
     AddbaOutcome, AgreementStop, Parked, RX_BLOCK_ACK_WINDOW, ReorderCause, ReplyPlace,
-    RxBlockAckCapacity, RxBlockAckEvent, RxBlockAckPort, RxBlockAckReplyBody, RxBlockAckStorage,
-    RxBlockAckTypes, RxBlockAckView, RxDisposition,
+    RxBlockAckCapacity, RxBlockAckEvent, RxBlockAckPort, RxBlockAckRefused, RxBlockAckReplyBody,
+    RxBlockAckStorage, RxBlockAckTypes, RxBlockAckView, RxDisposition,
 };
 pub use originator::{
     DialogTokenSequence, TX_BLOCK_ACK_MAX_TIDS, TxBlockAckOriginator, TxBlockAckOriginatorConfig,

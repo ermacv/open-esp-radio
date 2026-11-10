@@ -5,7 +5,7 @@ use oer_portable_memory::{
 };
 
 enum Kind {}
-type Token<Id> = Slot<'static, Kind, Root<Id>>;
+type Token<Id> = Slot<'static, Slots<Kind, 1>, Root<Id>>;
 
 struct Payload<Id: SlotIdentity> {
     token: Token<Id>,
@@ -44,13 +44,13 @@ struct QueueOwner<'m, Id: SlotIdentity> {
 struct BodyViews<'p, Id: SlotIdentity, S: SlotOwner<Id>> {
     commands: LocalSpscSender<'p, Command<Id>, 2>,
     events: LocalSpscReceiver<'p, Payload<Id>, 1>,
-    token: Option<Slot<'p, Kind, Root<Id>>>,
+    token: Option<Slot<'p, Slots<Kind, 1>, Root<Id>>>,
     loan: BodyLoan<'p, Id, S>,
     wakes: SlotWakes<'p, Id>,
 }
 
 struct BodyPayload<'p, Id: SlotIdentity, S: SlotOwner<Id>> {
-    token: Option<Slot<'p, Kind, Root<Id>>>,
+    token: Option<Slot<'p, Slots<Kind, 1>, Root<Id>>>,
     context: Rc<Cell<usize>>,
     returns: LocalSpscSender<'p, Command<Id>, 2>,
     loan: BodyLoan<'p, Id, S>,

@@ -96,55 +96,68 @@ impl<const SLOTS: usize, const BUFFER_SIZE: usize> AmpduDmaStorage<SLOTS, BUFFER
     /// Bind the placed storage at its DMA addresses in space `S`, once. The
     /// link keeps the placed storage in the DMA window, so its addresses
     /// need no window check.
+    ///
+    /// # Errors
+    ///
+    /// The storage has no DMA layout in space `S`: the placement comes back
+    /// whole beside the cause, nothing bound.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refused pin returns its placement whole"
+    )]
     pub fn pin<S: DmaSpace>(
         placed: Placed<Self>,
-    ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, AmpduDmaStorageError> {
-        let (storage, range, projection) = placed
-            .into_dma_parts::<S>()
-            .ok_or(AmpduDmaStorageError::Address)?;
-        let descriptor_count = u8::try_from(SLOTS).map_err(|_| AmpduDmaStorageError::Count)?;
-        if descriptor_count == 0 {
-            return Err(AmpduDmaStorageError::Count);
-        }
-        let descriptors = projection
-            .table::<WifiTxDmaDescriptor>(
-                storage
-                    .descriptors
-                    .iter()
-                    .map(|descriptor| descriptor.layout()),
-            )
-            .map_err(|_| AmpduDmaStorageError::Address)?;
-        let descriptor_len = u32::try_from(core::mem::size_of_val(&storage.descriptors))
-            .map_err(|_| AmpduDmaStorageError::Address)?;
-        let descriptor_range = range
-            .subrange(descriptors.base(), descriptor_len)
-            .ok_or(AmpduDmaStorageError::Address)?;
-        let buffer_capacity =
-            u32::try_from(BUFFER_SIZE).map_err(|_| AmpduDmaStorageError::Address)?;
-        let (buffer_range, buffers) = if BUFFER_SIZE == 0 {
-            (None, None)
-        } else {
-            let buffers = projection
-                .slots(&storage.buffers)
-                .map_err(|_| AmpduDmaStorageError::Address)?;
-            let buffer_len = u32::try_from(core::mem::size_of_val(&storage.buffers))
-                .map_err(|_| AmpduDmaStorageError::Address)?;
-            let buffer_range = range
-                .subrange(buffers.base(), buffer_len)
-                .ok_or(AmpduDmaStorageError::Address)?;
-            (Some(buffer_range), Some(buffers))
-        };
+    ) -> Result<PinnedAmpduDmaStorage<SLOTS, BUFFER_SIZE>, (AmpduDmaStorageError, Placed<Self>)>
+    {
+        let (storage, _range, _projection, binding) = placed
+            .bind_dma::<S, _, _>(|storage, range, projection| {
+                let descriptor_count =
+                    u8::try_from(SLOTS).map_err(|_| AmpduDmaStorageError::Count)?;
+                if descriptor_count == 0 {
+                    return Err(AmpduDmaStorageError::Count);
+                }
+                let descriptors = projection
+                    .table::<WifiTxDmaDescriptor>(
+                        storage
+                            .descriptors
+                            .iter()
+                            .map(|descriptor| descriptor.layout()),
+                    )
+                    .map_err(|_| AmpduDmaStorageError::Address)?;
+                let descriptor_len = u32::try_from(core::mem::size_of_val(&storage.descriptors))
+                    .map_err(|_| AmpduDmaStorageError::Address)?;
+                let descriptor_range = range
+                    .subrange(descriptors.base(), descriptor_len)
+                    .ok_or(AmpduDmaStorageError::Address)?;
+                let buffer_capacity =
+                    u32::try_from(BUFFER_SIZE).map_err(|_| AmpduDmaStorageError::Address)?;
+                let (buffer_range, buffers) = if BUFFER_SIZE == 0 {
+                    (None, None)
+                } else {
+                    let buffers = projection
+                        .slots(&storage.buffers)
+                        .map_err(|_| AmpduDmaStorageError::Address)?;
+                    let buffer_len = u32::try_from(core::mem::size_of_val(&storage.buffers))
+                        .map_err(|_| AmpduDmaStorageError::Address)?;
+                    let buffer_range = range
+                        .subrange(buffers.base(), buffer_len)
+                        .ok_or(AmpduDmaStorageError::Address)?;
+                    (Some(buffer_range), Some(buffers))
+                };
+                Ok(AmpduDmaBinding {
+                    descriptors,
+                    descriptor_count,
+                    descriptor_range,
+                    buffers,
+                    buffer_capacity,
+                    buffer_range,
+                })
+            })
+            .map_err(|(refusal, placed)| (refusal.cause(AmpduDmaStorageError::Address), placed))?;
 
         Ok(PinnedAmpduDmaStorage {
             storage: Pin::static_mut(storage),
-            binding: AmpduDmaBinding {
-                descriptors,
-                descriptor_count,
-                descriptor_range,
-                buffers,
-                buffer_capacity,
-                buffer_range,
-            },
+            binding,
         })
     }
 }

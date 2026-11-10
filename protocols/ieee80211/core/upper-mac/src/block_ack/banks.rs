@@ -16,7 +16,8 @@ use super::{
 };
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    Ieee80211Capabilities, RxBuffer, RxCryptoStatus, RxEvidence, RxMetadata, SupportedBlockAck, Tid,
+    Ieee80211Capabilities, ReceiveAccounting, RecycleRefused, RxBuffer, RxCryptoStatus, RxEvidence,
+    RxMetadata, SupportedBlockAck, Tid,
 };
 use oer_protocols_ieee80211_wire::{
     address::Bssid,
@@ -139,7 +140,11 @@ pub trait RxBlockAckPort<T: RxBlockAckTypes> {
     /// End `running`, returning its slot.
     fn remove(&mut self, running: T::Running) -> T::Slot;
     /// Return a retained frame's receive owner.
-    fn recycle(&mut self, frame: T::Frame);
+    ///
+    /// # Errors
+    ///
+    /// The port's count refused it: the frame, unchanged, with the count.
+    fn recycle(&mut self, frame: T::Frame) -> Result<(), RecycleRefused<T::Frame>>;
 }
 
 type Session<T> = RxBlockAckSession<<T as RxBlockAckTypes>::Running, WINDOW, WINDOW>;
@@ -270,6 +275,16 @@ pub enum Parked<T: RxBlockAckTypes> {
 /// No reply place or bank remains for an admitted request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RxBlockAckCapacity;
+
+/// Why [`RxBlockAckView::offer`] did not take an Action.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RxBlockAckRefused {
+    /// No reply place or bank remains for an admitted request.
+    Capacity(RxBlockAckCapacity),
+    /// The previous association's clear did not complete
+    /// ([`RxBlockAckView::clear`]): the Action was not taken.
+    Clear(ReceiveAccounting),
+}
 
 impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     fn queue(&mut self, response: [u8; ADDBA_ACTION_BODY_LEN]) -> bool {
@@ -414,11 +429,18 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
 
     /// End only this role's agreements; every bank and retained frame returns
     /// through the same port before a healthy Stop; temporary absences keep them.
+    ///
+    /// # Errors
+    ///
+    /// The port refused a retained frame's recycle: that frame stays in its
+    /// own place, the frames after it in theirs, and the association and
+    /// its replies stay. The clear did not complete; the agreements it
+    /// ended stay ended.
     pub fn clear(
         &mut self,
         port: &mut impl RxBlockAckPort<T>,
         events: &mut impl EventSink<RxBlockAckEvent>,
-    ) {
+    ) -> Result<(), ReceiveAccounting> {
         for bank in self.banks.iter_mut() {
             if let Some(active) = bank.active.take() {
                 let tid = active.tid();
@@ -438,14 +460,22 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
             bank.response = false;
         }
-        for frame in self.frames.iter_mut().filter_map(Option::take) {
-            port.recycle(frame.0);
+        for place in self.frames.iter_mut() {
+            let Some((frame, meta)) = place.take() else {
+                continue;
+            };
+            if let Err(RecycleRefused { unit, fault }) = port.recycle(frame) {
+                // Its own place, which the take emptied.
+                *place = Some((unit, meta));
+                return Err(fault);
+            }
         }
         self.header.association = None;
         self.header.pending.clear();
         self.header.ready_len = 0;
         self.header.deferred.clear();
         self.header.failed = false;
+        Ok(())
     }
 
     /// The association the agreements belong to.
@@ -470,9 +500,9 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         supported: bool,
         port: &mut P,
         events: &mut impl EventSink<RxBlockAckEvent>,
-    ) -> Result<(), RxBlockAckCapacity> {
+    ) -> Result<(), RxBlockAckRefused> {
         if self.association() != Some(association) {
-            self.clear(port, events);
+            self.clear(port, events).map_err(RxBlockAckRefused::Clear)?;
             self.header.association = Some((association, bssid));
         }
         match action {
@@ -502,7 +532,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                 Err(RxBlockAckCapacity) => AddbaOutcome::Unanswered,
             },
         });
-        answered.map(|_| ())
+        answered.map(|_| ()).map_err(RxBlockAckRefused::Capacity)
     }
 
     /// Answer one ADDBA Request: start, repeat or refuse its agreement.

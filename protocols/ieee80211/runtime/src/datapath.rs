@@ -80,13 +80,17 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use oer_portable_events::{EventSink, report};
-use oer_portable_memory::{SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{
+    ClosingSpscClosed, ClosingSpscReceiver, ClosingSpscSendError, ClosingSpscSender, SlotReceiver,
+    SlotSender, WakingSpscSender,
+};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
-    CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed, GateOpen,
-    Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, PortBlockAckSlot, PortCommand,
-    PortSingleOutcome, PortSink, PortTypes, RxBuffer, StartRefused, StopUnconfirmed,
-    SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool, TxFacts,
+    CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed,
+    GateOpen, Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, PortBlockAckSlot,
+    PortCommand, PortSingleOutcome, PortSink, PortTypes, RecycleRefused, RxBuffer, StartRefused,
+    StopUnconfirmed, SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool,
+    TxFacts,
 };
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::data::plane::{DataPlane, OutboundMsdu, TxWindow};
@@ -294,6 +298,10 @@ pub type ActorLink<'id, D> = LinkHandover<'id, ActorEpochPath<'id, D>, ActorLink
 enum Radio<K> {
     /// Stopped, before its first start or after a refused start.
     Stopped,
+    /// A start failed after it began, and the port's stop of what it began
+    /// has not confirmed ([`StartRefused::Unstopped`]): the next stop goes
+    /// on with the port's, and no start runs before it confirms.
+    Unstopped,
     /// Starting on the channel.
     Starting(SupportedChannel<K>),
     /// Running.
@@ -325,6 +333,39 @@ impl<K> Radio<K> {
     /// run: it starts or moves.
     const fn changing(&self) -> bool {
         matches!(self, Self::Starting(_) | Self::Retuning { .. })
+    }
+}
+
+/// How far the actor's radio came, as an end reads it
+/// ([`Actor::radio_phase`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RadioPhase {
+    /// Stopped: before its first start, after a refused start, or after a
+    /// stop the port confirmed.
+    Stopped,
+    /// Starting or running, with no stop asked for; a retune whose stop
+    /// confirmed starts on its new channel.
+    Running,
+    /// A stop was asked for and the port has not confirmed it: a stop by
+    /// its deadline, a retune before its stop confirmed, or a refused
+    /// start's stop the port still owes.
+    Stopping,
+}
+
+impl<K> Radio<K> {
+    /// The phase this state reports.
+    const fn phase(&self) -> RadioPhase {
+        match self {
+            Self::Stopped | Self::Draining { .. } | Self::Returning | Self::Halted => {
+                RadioPhase::Stopped
+            }
+            Self::Starting(_) | Self::Running | Self::Retuning { stopped: true, .. } => {
+                RadioPhase::Running
+            }
+            Self::Unstopped | Self::Retuning { stopped: false, .. } | Self::Stopping { .. } => {
+                RadioPhase::Stopping
+            }
+        }
     }
 }
 
@@ -371,7 +412,7 @@ struct Owed<'id, D: DatapathPort<'id>> {
     /// The answers to the lifecycle's radio and link messages.
     started: Option<Result<(), StartRefused<<D::Port as DataPort<'id>>::Fault>>>,
     retuned: Option<Result<(), RetuneFailed<<D::Port as DataPort<'id>>::Fault>>>,
-    stopped: Option<StopOutcome>,
+    stopped: Option<StopOutcome<<D::Port as DataPort<'id>>::Fault>>,
     link_returned: bool,
     sequence: Option<(WmmUserPriority, SequenceNumber)>,
     pairwise: Option<ActorLinkKey<'id, D>>,
@@ -414,9 +455,14 @@ struct Stage<'id, D: DatapathPort<'id>> {
     cut: heapless::Deque<(ActorRxBuffer<'id, D>, ActorRxMeta<'id, D>), CUT_UNITS>,
     group_terminal: Option<ActorTerminal<'id, D>>,
     tbtt: Option<TbttEvent>,
-    /// The sink found no room for an owner: the run ends on this broken
-    /// contract.
-    overflow: Option<ActorViolation>,
+    /// The outbox refused a terminal or a unit, which the port keeps: the
+    /// actor's wait registers for the lifecycle's room, and its next turn
+    /// has the port offer it again.
+    refused: bool,
+    /// The lifecycle's reception closed: what the outbox refused for it
+    /// stays in the port, nothing waits for the lifecycle's room, and the
+    /// turn ends on [`ActorViolation::LifecycleClosed`].
+    closed: bool,
 }
 
 /// The data transmission's state: the plane over the port's arenas, the
@@ -461,6 +507,10 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     /// The lifecycle retired the actor while the network's return went on:
     /// the actor ends once it came.
     retiring: bool,
+    /// The lifecycle sent its last message (a retire or a reinstall) and
+    /// waits only for how the actor's task ends: no restart follows, so a
+    /// fault the actor would recover from ends the run instead.
+    finishing: bool,
     /// The reply offered to the lifecycle, until it answers.
     reply_out: Option<ReplyPlace>,
     owed: Owed<'id, D>,
@@ -492,10 +542,22 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     end: Option<ActorEnd<<D::Port as DataPort<'id>>::Fault>>,
     /// A fault asked for a restart: the next one ends the run.
     recovering: bool,
+    /// The last stop or retune's stop ended unconfirmed: the halted radio
+    /// may still hold what it ran, until a start begins.
+    stop_unconfirmed: bool,
 }
 
 /// Owners a broken contract leaves with the actor.
 struct Retained<'id, D: DatapathPort<'id>> {
+    /// The unit whose recycle the port refused: the run ended on it, and
+    /// no turn runs while it is kept, so no second refusal comes.
+    unrecycled: Option<RecycleRefused<ActorRxBuffer<'id, D>>>,
+    /// The item a port call could neither give the actor nor keep: the run
+    /// ended on it, and no turn runs while it is kept, so no port call
+    /// gives a second one.
+    unkept: Option<oer_protocols_ieee80211_contracts_port::Unkept<'id, Ty<'id, D>>>,
+    /// The attempt a submission returned unaccepted beside an unkept item.
+    unaccepted: Option<<D::Port as DataPort<'id>>::Admitted>,
     link: Option<ActorLink<'id, D>>,
     returned: Option<Returned<'id, D>>,
     completed: Option<oer_protocols_ieee80211_contracts_port::PortCompleted<'id, D::Port>>,
@@ -546,12 +608,14 @@ where
                 cut: heapless::Deque::new(),
                 group_terminal: None,
                 tbtt: None,
-                overflow: None,
+                refused: false,
+                closed: false,
             },
             frames_out: 0,
             network_stopping: NetworkStopping::NotAsked,
             queued: 0,
             retiring: false,
+            finishing: false,
             reply_out: None,
             owed: Owed::new(),
             facts: Facts::default(),
@@ -564,6 +628,9 @@ where
             progressed: false,
             now: Instant::EPOCH,
             retained: Retained {
+                unrecycled: None,
+                unkept: None,
+                unaccepted: None,
                 link: None,
                 returned: None,
                 completed: None,
@@ -573,6 +640,7 @@ where
             },
             end: None,
             recovering: false,
+            stop_unconfirmed: false,
         }
     }
 
@@ -612,13 +680,15 @@ where
                         cut: heapless::Deque::new(),
                         group_terminal: None,
                         tbtt: None,
-                        overflow: None,
+                        refused: false,
+                        closed: false,
                     })
                 },
                 frames_out: 0,
                 network_stopping: NetworkStopping::NotAsked,
                 queued: 0,
                 retiring: false,
+                finishing: false,
                 reply_out: None,
                 owed: Owed::new(),
                 facts: Facts::default(),
@@ -631,6 +701,9 @@ where
                 progressed: false,
                 now: Instant::EPOCH,
                 retained: Retained {
+                    unrecycled: None,
+                    unkept: None,
+                    unaccepted: None,
                     link: None,
                     returned: None,
                     completed: None,
@@ -640,6 +713,7 @@ where
                 },
                 end: None,
                 recovering: false,
+            stop_unconfirmed: false,
             })
         })
     }
@@ -657,10 +731,47 @@ where
         matches!(self.network_stopping, NetworkStopping::Lost)
     }
 
+    /// How far the radio came, read when the run ended: an end on a fault
+    /// during a stop reports [`RadioPhase::Stopping`], not a running radio.
+    ///
+    /// A halted radio whose stop ended unconfirmed, and a running one whose
+    /// port is recovering for a stop the lifecycle was asked for, read
+    /// [`RadioPhase::Stopping`].
+    pub const fn radio_phase(&self) -> RadioPhase {
+        match self.radio {
+            Radio::Halted if self.stop_unconfirmed => RadioPhase::Stopping,
+            _ if self.recovering => RadioPhase::Stopping,
+            _ => self.radio.phase(),
+        }
+    }
+
     /// The port, for its owner once the run retired it: the actor no
     /// longer calls it.
     pub fn port_mut(&mut self) -> &mut D::Port {
         &mut self.port
+    }
+
+    /// The unit whose recycle the port refused, with the count that
+    /// refused it, once: the run ended on it
+    /// ([`ActorFault::Receive`]). The actor runs no turn while it keeps it.
+    pub fn take_unrecycled(&mut self) -> Option<RecycleRefused<ActorRxBuffer<'id, D>>> {
+        self.retained.unrecycled.take()
+    }
+
+    /// The item a port call could neither give the actor nor keep, once:
+    /// the run ended on it ([`ActorFault::Unkept`]), and the actor runs no
+    /// turn while it keeps it.
+    pub fn take_unkept(
+        &mut self,
+    ) -> Option<oer_protocols_ieee80211_contracts_port::Unkept<'id, Ty<'id, D>>> {
+        self.retained.unkept.take()
+    }
+
+    /// The attempt a submission returned unaccepted, beside its unkept
+    /// item or for want of the port's right ([`ActorFault::Unaccepted`]),
+    /// once.
+    pub fn take_unaccepted(&mut self) -> Option<<D::Port as DataPort<'id>>::Admitted> {
+        self.retained.unaccepted.take()
     }
 
     /// The rate selection.
@@ -725,11 +836,13 @@ where
         self.radio = Radio::Stopped;
         self.end = None;
         self.recovering = false;
+        self.stop_unconfirmed = false;
         // A stop that stopped the network ended with its installation: the
         // next stop asks the network of the next installation again.
         self.network_stopping = NetworkStopping::NotAsked;
         self.queued = 0;
         self.retiring = false;
+        self.finishing = false;
     }
 
     /// Serve the port until the lifecycle retires it or a broken contract
@@ -795,6 +908,20 @@ where
     ) -> Poll<ActorEnd<<D::Port as DataPort<'id>>::Fault>> {
         if let Some(end) = self.end.take() {
             return Poll::Ready(end);
+        }
+        // A unit the port refused ends every run until its owner takes it:
+        // no turn takes or returns a unit meanwhile.
+        if let Some(refused) = self.retained.unrecycled.as_ref() {
+            return Poll::Ready(ActorEnd::Faulted(ActorFault::Receive(refused.fault)));
+        }
+        // So does an item a port call could not keep: no port call gives a
+        // second one meanwhile.
+        if self.retained.unkept.is_some() {
+            return Poll::Ready(ActorEnd::Faulted(ActorFault::Unkept));
+        }
+        // And an attempt the port did not accept: its owners stay with it.
+        if self.retained.unaccepted.is_some() {
+            return Poll::Ready(ActorEnd::Faulted(ActorFault::Unaccepted));
         }
         let reposted = core::mem::take(&mut self.again);
         let fresh = self.collect_facts(cx);
