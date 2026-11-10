@@ -133,8 +133,12 @@ impl IntoConsole for Steps {
         serde_json::json!({ "digest": written })
     }
 
-    fn start(&mut self) -> Result<HeldConsole> {
-        self.step("start").map(|()| HeldConsole(self.log.clone()))
+    fn open(&mut self) -> Result<HeldConsole> {
+        self.step("open").map(|()| HeldConsole(self.log.clone()))
+    }
+
+    fn start(&mut self, _: &mut HeldConsole) -> Result<()> {
+        self.step("start")
     }
 
     fn confirm(&mut self, _: &'static str) -> Result<()> {
@@ -175,6 +179,7 @@ fn a_write_into_a_console_runs_its_stages_in_order_and_answers_its_receipt() {
         log,
         [
             "write",
+            "open",
             "start",
             "confirm",
             "journal",
@@ -193,37 +198,34 @@ fn every_failure_after_the_write_keeps_its_stage_and_the_receipt() {
         "{refused}"
     );
     assert_eq!(log, ["write"]);
-    for (stage, named, reached, steps) in [
+    let all = ["write", "open", "start", "confirm", "journal", "stream"];
+    for (stage, named, reached) in [
+        // Before any reset line moves: not started, exactly.
+        (
+            "open",
+            "the console's opening failed",
+            "written, not started",
+        ),
+        // The reset's failure may follow its edge: unconfirmed.
         (
             "start",
-            "the start failed",
-            "written, not started",
-            &["write", "start"][..],
+            "the start's reset failed",
+            "the reset may have started the image, its start unconfirmed",
         ),
         (
             "confirm",
             "the start's confirmation failed",
             "its start unconfirmed",
-            &["write", "start", "confirm", "console released"][..],
         ),
         (
             "journal",
             "the journal failed",
             "written and started, not journaled",
-            &["write", "start", "confirm", "journal", "console released"][..],
         ),
         (
             "stream",
             "the console failed",
             "written, started and journaled",
-            &[
-                "write",
-                "start",
-                "confirm",
-                "journal",
-                "stream",
-                "console released",
-            ][..],
         ),
     ] {
         let (result, log) = into_console_failing(Some(stage));
@@ -234,7 +236,23 @@ fn every_failure_after_the_write_keeps_its_stage_and_the_receipt() {
                 && error.contains("digest-of-the-bundle"),
             "{stage}: {error}"
         );
-        // Nothing after the failed stage runs; a console it opened is released.
-        assert_eq!(log, steps, "{stage}");
+        // Nothing after the failed stage runs; an opened console is released.
+        let ran = all.iter().position(|step| *step == stage).unwrap() + 1;
+        let mut expected: Vec<&str> = all[..ran].to_vec();
+        if stage != "open" {
+            expected.push("console released");
+        }
+        assert_eq!(log, expected, "{stage}");
     }
+}
+
+#[test]
+fn the_owners_reset_failure_after_the_edge_is_never_not_started() {
+    let (result, _) = into_console_failing(Some("start"));
+    let error = result.unwrap_err();
+    assert!(!error.contains("not started"), "{error}");
+    assert!(
+        error.contains("unconfirmed") && error.contains("receipt"),
+        "{error}"
+    );
 }
