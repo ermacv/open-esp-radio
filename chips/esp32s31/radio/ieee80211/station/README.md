@@ -257,11 +257,13 @@ its stop's service answers once (`DataPort::recover_for_stop`); a port
 that keeps one never confirms a stop, so its next unconfirmed answer ends
 the watch (`StopWatch::Faulted`) and the retire ends in `Stopping`
 (`ApExitOf::StopFaulted`: the cause, the last fault and the port's
-observation) with every owner. A stop answer naming a device fault no
-port call answered first (`StopCause::Device`) ends the watch too, nothing
-asked back of the port (`StopWatch::DeviceFailed`), and the retire ends in
-`Stopping` (`ApExitOf::StopDeviceFailed`); a stop not confirmed yet (its
-deadline, a line mask not yet confirmed) is watched on. A stop confirmed
+observation) with every owner. A stop answer naming a device fault
+(`StopCause::Device`) while the port keeps none ends the watch too, by
+that very fault and the port's observations, nothing asked back of the
+port (`StopWatch::DeviceFailed`), and the retire ends in `Stopping`
+(`ApExitOf::StopDeviceFailed`); a stop not confirmed yet (its deadline, a
+line mask not yet confirmed) is watched on, and a later confirmation of
+the same stop completes it. A stop confirmed
 before is not watched again. With the stop confirmed and items out no release runs
 (`Stopped`); a refusal the release does not repeat ends in `Releasing`.
 

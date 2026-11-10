@@ -75,8 +75,10 @@
 
 pub mod network;
 
+use core::convert::Infallible;
 use core::future::poll_fn;
 use core::num::NonZeroU8;
+use core::ops::ControlFlow;
 use core::task::{Context, Poll};
 
 use embassy_futures::select::{Either, Either4, select, select4};
@@ -89,10 +91,10 @@ use oer_protocols_ieee80211_contracts_port::{
     InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey, PhyRate, PortSink,
     PortTypes, Protection, ReceiveAccounting, ReceiveFilter, RecycleRefused, Removed, RemovedKey,
     RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopCause,
-    StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower, SupportedTsfControl,
-    TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory, TxBufferPool,
-    TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection, TxSource,
-    Unconsumed, UnconsumedRefused,
+    StopObservations, StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower,
+    SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory,
+    TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection,
+    TxSource, Unconsumed, UnconsumedRefused,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
     ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
@@ -287,7 +289,7 @@ pub enum ApEnd<F> {
     /// runner holds what the hardware may still use, and
     /// [`ApRunner::finish_stop`] watches the stop on until the port
     /// confirms it.
-    StopUnconfirmed(StopUnconfirmed),
+    StopUnconfirmed(StopUnconfirmed<F>),
     /// The port reported its named fault; every owner is in the runner, a
     /// command the port gave back beside it among them
     /// ([`ApRunner::take_returned`]).
@@ -335,22 +337,21 @@ pub enum StopWatch<F> {
         /// did: the run's own, or one its stop's service answered.
         fault: Option<F>,
         /// What the port observed of the stop.
-        observed: StopUnconfirmed,
+        observed: StopUnconfirmed<F>,
     },
     /// The port's stop answered that its device refused or failed the stop
-    /// ([`StopCause::Device`]), a fault the watch did not see answered by a
-    /// port call first: the watch ended on it, named, and asked the port
-    /// to take nothing back. Every owner stays in the runner; the hardware
-    /// may still use the ones the port holds. A later call watches on from
-    /// the port's state. A stop the port only did not confirm yet (its
-    /// deadline, a MAC a failed start enabled) is no such end: the watch
-    /// goes on.
+    /// for `fault` ([`StopCause::Device`]), while the port kept no fault
+    /// it could not take back: the watch ended on it, named, and asked the
+    /// port to take nothing back. Every owner stays in the runner; the
+    /// hardware may still use the ones the port holds. A later call
+    /// watches on from the port's state. A stop the port only did not
+    /// confirm yet (its deadline, a MAC a failed start enabled) is no such
+    /// end: the watch goes on.
     DeviceFailed {
-        /// The last fault a port call of the runner answered, when one
-        /// did.
-        fault: Option<F>,
-        /// What the port observed of the stop.
-        observed: StopUnconfirmed,
+        /// The fault the stop's own answer named.
+        fault: F,
+        /// What the port held then.
+        observations: StopObservations,
     },
     /// The runner holds an item a port call could not keep
     /// ([`ApRunner::take_unkept`]): the watch made no port call after it
@@ -363,10 +364,21 @@ pub enum StopWatch<F> {
     Unkept,
 }
 
-/// Why a watch of the radio's stop ended before the port confirmed it.
-enum Unwatched {
-    /// The port's answer, which the watch's caller said ends it.
-    Unconfirmed(StopUnconfirmed),
+/// Why a watch of the radio's stop ended before the port confirmed it; `F`
+/// is the port's fault, `E` the end the watch's caller makes of an answer.
+enum Unwatched<F, E> {
+    /// The end the watch's caller made of the port's answer.
+    Ended(E),
+    /// The port's answer after it kept a fault it could not take back.
+    Kept(StopUnconfirmed<F>),
+    /// The stop's answer named the device's `fault`, while the port kept
+    /// none.
+    Device {
+        /// The fault the answer named.
+        fault: F,
+        /// What the port held then.
+        observations: StopObservations,
+    },
     /// The runner holds an item a port call could not keep.
     Unkept,
 }
@@ -932,11 +944,11 @@ where
 }
 
 /// What woke a wait of the runner.
-enum Woke {
+enum Woke<F> {
     /// The port's facts.
     Facts(Facts),
     /// The radio's stop ended, confirmed or not.
-    Stopped(Result<(), StopUnconfirmed>),
+    Stopped(Result<(), StopUnconfirmed<F>>),
     /// A deadline, the network, the stop request or the yield.
     Other,
 }
@@ -1896,7 +1908,7 @@ where
         }
         self.homes.status.running = false;
         shared.publish(self.homes.status);
-        let watched = self.watch_stop(clock, |_| true).await;
+        let watched = self.watch_stop(clock, ControlFlow::Break).await;
         if let Some(refused) = self.homes.unrecycled.as_ref() {
             // The stop's watch found a unit the port refused; the stop is
             // watched on by [`ApRunner::finish_stop`] if not confirmed.
@@ -1904,7 +1916,16 @@ where
         }
         match watched {
             Ok(()) => ApEnd::Stopped,
-            Err(Unwatched::Unconfirmed(unconfirmed)) => ApEnd::StopUnconfirmed(unconfirmed),
+            Err(Unwatched::Ended(unconfirmed) | Unwatched::Kept(unconfirmed)) => {
+                ApEnd::StopUnconfirmed(unconfirmed)
+            }
+            Err(Unwatched::Device {
+                fault,
+                observations,
+            }) => ApEnd::StopUnconfirmed(StopUnconfirmed {
+                cause: StopCause::Device(fault),
+                observations,
+            }),
             // The stop's watch found an item the port could not keep; no
             // service follows it until its owner took it.
             Err(Unwatched::Unkept) => ApEnd::Unkept,
@@ -1939,7 +1960,7 @@ where
     pub async fn finish_stop<T: Timer>(
         &mut self,
         clock: &T,
-        mut unconfirmed: impl FnMut(StopUnconfirmed),
+        mut unconfirmed: impl FnMut(StopUnconfirmed<PortFault<'id, P>>),
     ) -> Result<StopWatch<PortFault<'id, P>>, ReceiveAccounting> {
         // The port is asked to take the run's fault back once: a later call
         // of the same stop asks nothing again for it.
@@ -1951,21 +1972,29 @@ where
         self.homes.status.running = false;
         self.homes.network.set_link(false);
         let watched = self
-            .watch_stop(clock, |observed| {
+            .watch_stop(clock, |observed| -> ControlFlow<Infallible> {
                 unconfirmed(observed);
-                false
+                ControlFlow::Continue(())
             })
             .await;
         match watched {
             Err(Unwatched::Unkept) => return Ok(StopWatch::Unkept),
             // A kept fault ends this watch unconfirmed, and so does a
-            // device fault the stop's own answer names first.
-            Err(Unwatched::Unconfirmed(observed)) => {
-                let fault = self.homes.fault;
-                return Ok(if self.homes.fault_kept {
-                    StopWatch::Faulted { fault, observed }
-                } else {
-                    StopWatch::DeviceFailed { fault, observed }
+            // device fault the stop's own answer names, by that fault.
+            Err(Unwatched::Ended(never)) => match never {},
+            Err(Unwatched::Kept(observed)) => {
+                return Ok(StopWatch::Faulted {
+                    fault: self.homes.fault,
+                    observed,
+                });
+            }
+            Err(Unwatched::Device {
+                fault,
+                observations,
+            }) => {
+                return Ok(StopWatch::DeviceFailed {
+                    fault,
+                    observations,
                 });
             }
             Ok(()) => {}
@@ -1979,7 +2008,8 @@ where
     /// Watch the radio's stop: serve the port at its facts and its due
     /// deadline, bring the terminals' owners home, recycle what a cut hands
     /// over, and poll the stop. An unconfirmed answer goes to `ends`, which
-    /// says whether it ends the watch; an answer equal to the last one is
+    /// breaks with the end it makes of it or lets the watch go on; an
+    /// answer equal to the last one is
     /// not reported again. A deadline the watch served at does not wake it
     /// again, nor do the very facts it just served. The watch ends at once
     /// while the runner holds an item a port call could not keep, and
@@ -1987,15 +2017,16 @@ where
     /// fault the service answers is taken back once
     /// ([`DataPort::recover_for_stop`]); once the port kept one, its next
     /// unconfirmed answer ends the watch whatever `ends` says, and so does
-    /// an answer naming a device fault ([`StopCause::Device`]).
-    async fn watch_stop<T: Timer>(
+    /// an answer naming a device fault ([`StopCause::Device`]), by that
+    /// fault.
+    async fn watch_stop<T: Timer, E>(
         &mut self,
         clock: &T,
-        mut ends: impl FnMut(StopUnconfirmed) -> bool,
-    ) -> Result<(), Unwatched> {
+        mut ends: impl FnMut(StopUnconfirmed<PortFault<'id, P>>) -> ControlFlow<E>,
+    ) -> Result<(), Unwatched<PortFault<'id, P>, E>> {
         let mut facts = Facts::default();
         let mut served: Option<Instant> = None;
-        let mut reported: Option<StopUnconfirmed> = None;
+        let mut reported: Option<StopUnconfirmed<PortFault<'id, P>>> = None;
         loop {
             if self.homes.unkept.is_some() {
                 return Err(Unwatched::Unkept);
@@ -2094,11 +2125,18 @@ where
                 // named, as a kept one does: no stop of it confirms by
                 // waiting, and nothing is asked back of the port.
                 Woke::Stopped(Err(observed)) => {
-                    if ends(observed)
-                        || self.homes.fault_kept
-                        || observed.cause == StopCause::Device
-                    {
-                        return Err(Unwatched::Unconfirmed(observed));
+                    let ended = ends(observed);
+                    if self.homes.fault_kept {
+                        return Err(Unwatched::Kept(observed));
+                    }
+                    if let StopCause::Device(fault) = observed.cause {
+                        return Err(Unwatched::Device {
+                            fault,
+                            observations: observed.observations,
+                        });
+                    }
+                    if let ControlFlow::Break(end) = ended {
+                        return Err(Unwatched::Ended(end));
                     }
                 }
                 Woke::Facts(taken) => facts = union(facts, taken),

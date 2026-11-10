@@ -7,11 +7,15 @@
 use core::{cell::Cell, future::Future};
 
 use oer_portable_time::{Duration, Timer};
-use oer_protocols_ieee80211_contracts_port::{ReceiveAccounting, StopUnconfirmed};
+use oer_protocols_ieee80211_contracts_port::{ReceiveAccounting, StopObservations};
 use oer_protocols_ieee80211_runtime::access_point::{ApUnsupported, StopWatch};
 
 use crate::release::{Leave, Stopped};
 use crate::unfinished::{Phase, UNKEPT_ITEMS, Unfinished};
+
+/// A port's unconfirmed stop, with the station's name of its fault.
+type StopUnconfirmed =
+    oer_protocols_ieee80211_contracts_port::StopUnconfirmed<crate::failure::BackendFault>;
 
 /// Why the access point's run ended.
 #[cfg_attr(
@@ -68,7 +72,7 @@ pub enum ApExitOf<E> {
         /// Why it ended.
         ended: ApEnded,
         /// What the port observed of the stop.
-        observed: oer_protocols_ieee80211_contracts_port::StopUnconfirmed,
+        observed: StopUnconfirmed,
     },
     /// It ended for its cause, its radio's stop was confirmed, and the
     /// radio's release refused: published while the MAC refuses it as
@@ -119,17 +123,17 @@ pub enum ApExitOf<E> {
         observed: StopUnconfirmed,
     },
     /// It ended for its cause, and the port's stop answered that its device
-    /// refused or failed the stop, a fault no port call answered first: the
-    /// stop's watch ended on it, nothing was asked back of the port, no
-    /// release ran, and the installation came back unfinished in
-    /// [`Phase::Stopping`] with every owner.
+    /// refused or failed the stop for `fault`, while the port kept no fault
+    /// it could not take back: the stop's watch ended on it, nothing was
+    /// asked back of the port, no release ran, and the installation came
+    /// back unfinished in [`Phase::Stopping`] with every owner.
     StopDeviceFailed {
         /// Why it ended.
         ended: ApEnded,
-        /// The last fault a port call answered the runner, when one did.
-        fault: Option<crate::failure::BackendFault>,
-        /// What the port observed of the stop.
-        observed: StopUnconfirmed,
+        /// The fault the stop's own answer named.
+        fault: crate::failure::BackendFault,
+        /// What the port held then.
+        observations: StopObservations,
     },
     /// It ended for its cause holding an attempt the port did not accept
     /// for want of its right, and no item a port call could not keep: no
@@ -314,7 +318,10 @@ where
                     }
                     // The stop's answer named a device fault: the retire
                     // ends here, every owner with the runner.
-                    Ok(StopWatch::DeviceFailed { fault, observed }) => {
+                    Ok(StopWatch::DeviceFailed {
+                        fault,
+                        observations,
+                    }) => {
                         take_into(&mut unkept, &mut runner);
                         let unaccepted = runner.take_unaccepted();
                         return Retired::Unfinished(Unfinished {
@@ -325,7 +332,7 @@ where
                             cause: ApExitOf::StopDeviceFailed {
                                 ended,
                                 fault,
-                                observed,
+                                observations,
                             },
                             phase: Phase::Stopping,
                         });

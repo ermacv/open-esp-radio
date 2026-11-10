@@ -29,7 +29,11 @@ which keeps no command), or names that the port took them
 automatically. A start that fails after it began on the device or the MAC,
 and whose stop is not confirmed, answers `StartRefused::Unstopped` with the
 start's cause and the stop's observation: the port is stopping, and
-`poll_stop` goes on with that stop before any start. Installation commands come only from the backend's issuer
+`poll_stop` goes on with that stop before any start. An unconfirmed stop
+names its cause (`StopUnconfirmed<Fault>`): `Deadline` (not confirmed
+yet: the same stop goes on and a later poll can confirm it),
+`CoreEnabled`, or `Device(fault)`, the very fault the stop met.
+Installation commands come only from the backend's issuer
 (`PortCommands`), which mints the identity the installed key will carry.
 Terminals, TBTTs and the units a group mutation's receive cut drained go to
 the turn's `PortSink`, in the order the port produced them; a data arena's

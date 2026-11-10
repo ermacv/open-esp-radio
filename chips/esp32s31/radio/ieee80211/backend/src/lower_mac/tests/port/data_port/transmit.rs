@@ -1210,9 +1210,9 @@ fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keep
                 .port
                 .poll_stop(&mut Context::from_waker(&waker), now),
             Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device,
+                cause: StopCause::Device(found),
                 ..
-            }))
+            })) if found == fault
         ));
         assert_eq!(fixture.publications(), 1);
     });

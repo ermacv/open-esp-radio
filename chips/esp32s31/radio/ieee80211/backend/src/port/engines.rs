@@ -2977,7 +2977,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed>> {
+    ) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         self.now = now;
         let since = match self.state {
             PortState::Stopped => return Poll::Ready(Ok(())),
@@ -2997,14 +2997,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             PortState::Stopping { since } => since,
         };
-        let unconfirmed = |port: &mut Self, cause: StopCause| {
+        let unconfirmed = |port: &mut Self, cause: StopCause<Fault>| {
             Poll::Ready(Err(StopUnconfirmed {
                 cause,
                 observations: port.stop_observations(),
             }))
         };
-        if self.check().is_err() {
-            return unconfirmed(self, StopCause::Device);
+        if let Err(fault) = self.check() {
+            return unconfirmed(self, StopCause::Device(fault));
         }
         let expired = now.saturating_duration_since(since) >= COMMAND_BOUND;
         if !self.core_disabled {
@@ -3027,7 +3027,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             Poll::Ready(Err(Fault::Receive(crate::rx::control::WifiRxCause::LineRefused))) => {
                 unconfirmed(self, StopCause::Deadline)
             }
-            Poll::Ready(Err(_)) => unconfirmed(self, StopCause::Device),
+            Poll::Ready(Err(fault)) => unconfirmed(self, StopCause::Device(fault)),
             Poll::Pending if expired => unconfirmed(self, StopCause::Deadline),
             Poll::Pending => {
                 // The device may have asked to look again before the bound.
@@ -3152,7 +3152,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         refused: StartFailure<Fault>,
         now: Instant,
     ) -> Poll<Result<(), StartRefused<Fault>>> {
-        let unstopped = |port: &mut Self, cause: StopCause| {
+        let unstopped = |port: &mut Self, cause: StopCause<Fault>| {
             port.state = PortState::Stopping { since };
             Err(StartRefused::Unstopped {
                 cause: refused,
@@ -3167,7 +3167,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 self.state = PortState::Stopped;
                 Err(refused.into())
             }
-            Poll::Ready(Err(_)) => unstopped(self, StopCause::Device),
+            Poll::Ready(Err(fault)) => unstopped(self, StopCause::Device(fault)),
             Poll::Pending if now.saturating_duration_since(since) >= COMMAND_BOUND => {
                 unstopped(self, StopCause::Deadline)
             }

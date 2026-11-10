@@ -1224,7 +1224,10 @@ where
 
     /// The answer of a stop whose network settled: confirmed, or the
     /// radio's confirmed stop with the network's participant lost.
-    fn network_outcome(&self, observed: &StopObserved) -> StopOutcome {
+    fn network_outcome(
+        &self,
+        observed: &StopObserved<PortFault<'id, D>>,
+    ) -> StopOutcome<PortFault<'id, D>> {
         if self.network_stopping == NetworkStopping::Lost {
             StopOutcome::NetworkLost(ReturnObserved {
                 memory_held: observed.memory_held,
@@ -1237,7 +1240,11 @@ where
     }
 
     /// What a stop still holds.
-    fn observed(&self, port: Option<StopUnconfirmed>, deadline: bool) -> StopObserved {
+    fn observed(
+        &self,
+        port: Option<StopUnconfirmed<PortFault<'id, D>>>,
+        deadline: bool,
+    ) -> StopObserved<PortFault<'id, D>> {
         StopObserved {
             port,
             deadline,

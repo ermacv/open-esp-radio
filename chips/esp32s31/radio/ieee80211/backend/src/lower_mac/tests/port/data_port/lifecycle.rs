@@ -134,7 +134,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             .poll_start(&mut Context::from_waker(&waker), supported(wifi), now)
     }
 
-    fn poll_stop_now(&mut self) -> Poll<Result<(), StopUnconfirmed>> {
+    fn poll_stop_now(&mut self) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         let waker = self.waker();
         let now = self.now();
         self.port.poll_stop(&mut Context::from_waker(&waker), now)
@@ -145,7 +145,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn stop_keeping(
         &mut self,
         step: Duration,
-    ) -> (Result<(), StopUnconfirmed>, Vec<Completed<'id, Id>>) {
+    ) -> (Result<(), StopUnconfirmed<Fault>>, Vec<Completed<'id, Id>>) {
         let mut ended = Vec::new();
         for _ in 0..64 {
             match self.poll_stop_now() {
@@ -1277,7 +1277,11 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         let Poll::Ready(Err(unconfirmed)) = fixture.poll_stop_now() else {
             panic!("a faulted port cannot confirm its stop");
         };
-        assert_eq!(unconfirmed.cause, StopCause::Device);
+        assert_eq!(
+            unconfirmed.cause,
+            StopCause::Device(Fault::RemovalMismatch),
+            "the stop names the fault it met"
+        );
         assert_eq!(unconfirmed.observations.published, 1);
         assert_eq!(unconfirmed.observations.queued, 1);
         assert_eq!(fixture.now(), now, "no time passed for the answer");
@@ -1314,6 +1318,75 @@ fn a_stop_the_device_holds_wakes_at_the_devices_own_settle() {
             Some(settle),
             "the port sleeps until the device looks again, not to its bound"
         );
+    });
+}
+
+/// Poll the stop the first call asked for, serving a turn between polls
+/// and never moving time: the stop's answers in order, up to its first
+/// confirmation or `polls` answers.
+fn stop_answers<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &mut Fixture<'id, Id>,
+    polls: usize,
+) -> Vec<Result<(), StopUnconfirmed<Fault>>> {
+    let mut answers = Vec::new();
+    for _ in 0..64 {
+        if let Poll::Ready(answer) = fixture.poll_stop_now() {
+            let confirmed = answer.is_ok();
+            answers.push(answer);
+            if confirmed || answers.len() == polls {
+                return answers;
+            }
+        }
+        let _ = fixture.turn();
+    }
+    panic!("the stop answers");
+}
+
+/// A line mask the line's handler has not confirmed within its bound is a
+/// stop not confirmed yet, never a fault of the device: the stop's answer
+/// is `Deadline`, the one stop the first call asked for goes on, and the
+/// handler's later confirmation completes it at the next poll, without the
+/// stop asked again. No time passes: the device's own answers drive it.
+#[test]
+fn a_late_line_mask_is_a_stop_not_confirmed_yet_that_its_later_confirmation_completes() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.observed.borrow_mut().fail_stop =
+            Some(Fault::Receive(crate::rx::control::WifiRxCause::LineRefused));
+        let began = fixture.now();
+        let answers = stop_answers(&mut fixture, 2);
+        let [Err(late), Ok(())] = answers.as_slice() else {
+            panic!("a late mask, then the confirmation: {answers:?}");
+        };
+        assert_eq!(late.cause, StopCause::Deadline, "not a device fault");
+        assert_eq!(fixture.now(), began, "no time passed");
+        assert_eq!(
+            fixture.observed.borrow().stops,
+            1,
+            "the device stopped once, on the first request"
+        );
+        assert_eq!(fixture.port.fault(), None);
+        assert_eq!(
+            fixture.poll_stop_now(),
+            Poll::Ready(Ok(())),
+            "it stays stopped"
+        );
+    });
+}
+
+/// Every other failure of the device's stop is the device's fault, named by
+/// that very fault.
+#[test]
+fn another_failure_of_the_devices_stop_is_named_by_its_own_fault() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        let cause = Fault::Receive(crate::rx::control::WifiRxCause::ForeignExecutor);
+        fixture.observed.borrow_mut().fail_stop = Some(cause);
+        let answers = stop_answers(&mut fixture, 1);
+        let [Err(failed)] = answers.as_slice() else {
+            panic!("the device's failure: {answers:?}");
+        };
+        assert_eq!(failed.cause, StopCause::Device(cause));
     });
 }
 

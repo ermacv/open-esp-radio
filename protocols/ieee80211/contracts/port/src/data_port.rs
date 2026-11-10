@@ -492,7 +492,7 @@ pub enum StartRefused<F> {
         /// Why the start failed.
         cause: StartFailure<F>,
         /// What the stop of the begun start observed.
-        stop: StopUnconfirmed,
+        stop: StopUnconfirmed<F>,
     },
 }
 
@@ -519,23 +519,25 @@ impl<F> From<StartFailure<F>> for StartRefused<F> {
 }
 
 /// The radio did not confirm its stop: the backend cannot prove the MAC,
-/// its DMA and its interrupt work quiet. The observations say what it
-/// still held.
+/// its DMA and its interrupt work quiet. The cause names the port's fault
+/// `F` the stop met, and the observations say what it still held.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct StopUnconfirmed {
+pub struct StopUnconfirmed<F> {
     /// Why the stop ended unconfirmed.
-    pub cause: StopCause,
+    pub cause: StopCause<F>,
     /// What the port held when it gave up.
     pub observations: StopObservations,
 }
 
-/// Why a stop ended unconfirmed.
+/// Why a stop ended unconfirmed; `F` is the port's fault.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum StopCause {
-    /// The stop did not end by its deadline.
+pub enum StopCause<F> {
+    /// The stop did not end by its deadline, or its confirmation has not
+    /// come yet: the stop goes on, and a later poll can confirm it.
     Deadline,
-    /// The device refused or failed the stop.
-    Device,
+    /// The device refused or failed the stop, for the port's fault: the
+    /// very fault the stop met, never one an earlier call answered.
+    Device(F),
     /// A failed start had enabled the MAC: the port's next service
     /// disables it, and [`DataPort::poll_stop`] goes on from there.
     CoreEnabled,
@@ -632,7 +634,7 @@ pub trait DataPort<'id> {
     /// A broken contract of the backend's own state, named with its
     /// observations. The backend keeps every owner it holds; the caller
     /// ends the installation.
-    type Fault: Copy + core::fmt::Debug;
+    type Fault: Copy + core::fmt::Debug + Eq;
     /// A station MPDU the port accepted from its sealed attempt
     /// ([`Self::admit`]), carrying no borrow of the port.
     type Admitted;
@@ -855,7 +857,7 @@ pub trait DataPort<'id> {
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed>>;
+    ) -> Poll<Result<(), StopUnconfirmed<Self::Fault>>>;
 
     /// After the radio's confirmed stop: offer what a sink refused and the
     /// port keeps to `sink`, oldest first, each once, until the sink refuses

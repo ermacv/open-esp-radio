@@ -1217,7 +1217,7 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
                 .port
                 .poll_stop(&mut Context::from_waker(&waker), now),
             Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device,
+                cause: StopCause::Device(Fault::ReceiveLost),
                 ..
             }))
         ));

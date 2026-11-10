@@ -246,3 +246,40 @@ fn a_phy_refusal_keeps_its_name_through_the_conversion() {
         }
     );
 }
+
+#[test]
+fn an_unconfirmed_stop_keeps_the_device_fault_it_met_in_its_path() {
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::Fault;
+    use oer_portable_diagnostics::DiagPath;
+    use oer_protocols_ieee80211_contracts_port::{StopCause, StopObservations, StopUnconfirmed};
+    let port = StopUnconfirmed {
+        cause: StopCause::Device(Fault::ReceiveLost),
+        observations: StopObservations {
+            published: 2,
+            ..StopObservations::default()
+        },
+    };
+    let observed =
+        super::convert::stop_observed(oer_protocols_ieee80211_runtime::datapath::StopObserved {
+            port: Some(port),
+            deadline: false,
+            arena_on_air: false,
+            frames_out: 0,
+            network_running: false,
+            network_lost: false,
+            lent: 0,
+            memory_held: 0,
+        });
+    let converted = super::convert::stop_unconfirmed(port);
+    assert_eq!(observed.port, Some(converted));
+    assert_eq!(
+        converted.cause,
+        StopCause::Device(super::convert::backend_fault(Fault::ReceiveLost))
+    );
+    let path = DiagPath::of(&LifecycleFailure::RetuneUnconfirmed(converted));
+    let fault = DiagPath::of(&super::convert::backend_fault(Fault::ReceiveLost));
+    assert_eq!(path.names().first(), Some(&"RetuneUnconfirmed"));
+    assert_eq!(path.names().get(1), Some(&"Device"));
+    assert_eq!(path.names().get(2..), Some(fault.names()));
+    assert_eq!(path.words().get(1), Some(&2), "the observations follow");
+}

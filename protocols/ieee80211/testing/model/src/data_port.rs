@@ -1972,10 +1972,12 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 .set(self.air.disables.get().saturating_add(1));
             self.radio = Radio::Stopping { since: now };
             self.refresh_deadline(now);
+            // The MAC the start enabled is still on: the stop is not done
+            // yet, and no fault names it.
             return Poll::Ready(Err(StartRefused::Unstopped {
                 cause: StartFailure::Device,
                 stop: StopUnconfirmed {
-                    cause: StopCause::Device,
+                    cause: StopCause::CoreEnabled,
                     observations: self.stop_observations(),
                 },
             }));
@@ -1990,10 +1992,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed>> {
-        if self.check(ModelPortCall::Stop).is_err() {
+    ) -> Poll<Result<(), StopUnconfirmed<ModelPortFault>>> {
+        if let Err(fault) = self.check(ModelPortCall::Stop) {
             return Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device,
+                cause: StopCause::Device(fault),
                 observations: self.stop_observations(),
             }));
         }

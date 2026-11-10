@@ -113,6 +113,8 @@ struct Observed {
     /// A held cut waits for units the network holds.
     cut_by_units: bool,
     hold_stop: bool,
+    /// The device's next stop poll answers this fault, once.
+    fail_stop: Option<Fault>,
     cut_calls: usize,
     resumed_cuts: usize,
     /// Cuts ended for a mutation that did not run.
@@ -367,6 +369,9 @@ impl Device<512> for TestDevice {
         self.assert_task_context();
         if self.observed.borrow().hold_stop {
             return Poll::Pending;
+        }
+        if let Some(fault) = self.observed.borrow_mut().fail_stop.take() {
+            return Poll::Ready(Err(fault));
         }
         if !self.stopped {
             self.observed.borrow_mut().stops += 1;

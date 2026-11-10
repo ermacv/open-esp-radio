@@ -806,7 +806,10 @@ impl<W: Binding> AccessPointRunner<W> {
         let end = runner.run(shared, &EmbassyClock).await;
         let (ended, stop) = match end {
             ApEnd::Stopped => (ApEnded::Stopped, Stop::Confirmed),
-            ApEnd::StopUnconfirmed(observed) => (ApEnded::Stopped, Stop::Unconfirmed(observed)),
+            ApEnd::StopUnconfirmed(observed) => (
+                ApEnded::Stopped,
+                Stop::Unconfirmed(crate::failure::convert::stop_unconfirmed(observed)),
+            ),
             ApEnd::StartRefused(refused) => (
                 ApEnded::StartRefused(crate::failure::convert::start_refused(refused)),
                 Stop::Owed,
@@ -863,7 +866,9 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
     >;
     fn finish_stop(
         &mut self,
-        unconfirmed: impl FnMut(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
+        mut unconfirmed: impl FnMut(
+            oer_protocols_ieee80211_contracts_port::StopUnconfirmed<crate::failure::BackendFault>,
+        ),
     ) -> impl core::future::Future<
         Output = Result<
             oer_protocols_ieee80211_runtime::access_point::StopWatch<crate::failure::BackendFault>,
@@ -871,18 +876,23 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
         >,
     > {
         use oer_protocols_ieee80211_runtime::access_point::StopWatch;
-        let watch = ApRunner::finish_stop(self, &EmbassyClock, unconfirmed);
+        let watch = ApRunner::finish_stop(self, &EmbassyClock, move |observed| {
+            unconfirmed(crate::failure::convert::stop_unconfirmed(observed))
+        });
         async {
             watch.await.map(|watched| match watched {
                 StopWatch::Confirmed => StopWatch::Confirmed,
                 StopWatch::Unkept => StopWatch::Unkept,
                 StopWatch::Faulted { fault, observed } => StopWatch::Faulted {
                     fault: fault.map(crate::failure::convert::backend_fault),
-                    observed,
+                    observed: crate::failure::convert::stop_unconfirmed(observed),
                 },
-                StopWatch::DeviceFailed { fault, observed } => StopWatch::DeviceFailed {
-                    fault: fault.map(crate::failure::convert::backend_fault),
-                    observed,
+                StopWatch::DeviceFailed {
+                    fault,
+                    observations,
+                } => StopWatch::DeviceFailed {
+                    fault: crate::failure::convert::backend_fault(fault),
+                    observations,
                 },
             })
         }

@@ -480,12 +480,21 @@ impl DiagnosticPath for LifecycleFailure {
     }
 }
 
-/// A port's unconfirmed stop: its cause, then what it still held.
+/// A port's unconfirmed stop: its cause (the device's fault by name), then
+/// what it still held.
 fn stop_unconfirmed(
-    unconfirmed: &oer_protocols_ieee80211_contracts_port::StopUnconfirmed,
+    unconfirmed: &oer_protocols_ieee80211_contracts_port::StopUnconfirmed<BackendFault>,
     path: &mut DiagPath,
 ) {
-    path.truncated();
+    use oer_protocols_ieee80211_contracts_port::StopCause;
+    match unconfirmed.cause {
+        StopCause::Deadline => path.name("Deadline"),
+        StopCause::Device(fault) => {
+            path.name("Device");
+            fault.push_path(path);
+        }
+        StopCause::CoreEnabled => path.name("CoreEnabled"),
+    }
     let observations = unconfirmed.observations;
     path.word(u32::from(observations.arena_on_air));
     path.word(u32::from(observations.published));

@@ -614,9 +614,9 @@ pub enum LifecycleFailure {
     /// keeps the port's cause.
     StartRefused(oer_protocols_ieee80211_contracts_port::StartRefused<BackendFault>),
     /// A stop proved nothing by its deadline: what was still out.
-    StopUnconfirmed(oer_protocols_ieee80211_runtime::datapath::StopObserved),
+    StopUnconfirmed(oer_protocols_ieee80211_runtime::datapath::StopObserved<BackendFault>),
     /// A retune's stop proved nothing.
-    RetuneUnconfirmed(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
+    RetuneUnconfirmed(oer_protocols_ieee80211_contracts_port::StopUnconfirmed<BackendFault>),
     /// The data port broke its contract: its named fault.
     Port(BackendFault),
     /// The datapath actor broke its own contract.

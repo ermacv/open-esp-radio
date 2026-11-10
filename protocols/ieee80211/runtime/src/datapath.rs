@@ -412,7 +412,7 @@ struct Owed<'id, D: DatapathPort<'id>> {
     /// The answers to the lifecycle's radio and link messages.
     started: Option<Result<(), StartRefused<<D::Port as DataPort<'id>>::Fault>>>,
     retuned: Option<Result<(), RetuneFailed<<D::Port as DataPort<'id>>::Fault>>>,
-    stopped: Option<StopOutcome>,
+    stopped: Option<StopOutcome<<D::Port as DataPort<'id>>::Fault>>,
     link_returned: bool,
     sequence: Option<(WmmUserPriority, SequenceNumber)>,
     pairwise: Option<ActorLinkKey<'id, D>>,

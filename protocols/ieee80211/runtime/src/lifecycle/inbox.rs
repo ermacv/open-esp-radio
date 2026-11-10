@@ -315,7 +315,10 @@ where
 
     /// The radio's stop ended: a confirmed one ends the actor's run, by its
     /// message and the end it tells once that message went.
-    fn stopped(&mut self, outcome: StopOutcome) -> Answer<'id, D, super::PortFault<'id, D>> {
+    fn stopped(
+        &mut self,
+        outcome: StopOutcome<super::PortFault<'id, D>>,
+    ) -> Answer<'id, D, super::PortFault<'id, D>> {
         let Some((why, _, super::EndStage::Radio)) = self.inner.ending else {
             self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::Missing));
             return Answer::of(Messages::None);

@@ -760,7 +760,7 @@ struct Bench<'b, 's, T: 'static> {
     /// The radio's start answered.
     started: bool,
     /// How the stop ended, once it answered.
-    stopped: Option<StopOutcome>,
+    stopped: Option<StopOutcome<oer_chips_esp32s31_radio_ieee80211_backend::port::Fault>>,
     /// The actor ended on a broken contract.
     faulted: bool,
     /// Terminals of the lifecycle's commands.

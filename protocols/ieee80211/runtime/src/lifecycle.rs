@@ -313,9 +313,9 @@ pub enum LifecycleEnd<F> {
     /// The radio did not start on its first channel; the actor retired.
     StartRefused(StartRefused<F>),
     /// A stop proved nothing by its deadline.
-    StopUnconfirmed(StopObserved),
+    StopUnconfirmed(StopObserved<F>),
     /// A retune's stop proved nothing.
-    RetuneUnconfirmed(StopUnconfirmed),
+    RetuneUnconfirmed(StopUnconfirmed<F>),
     /// The actor ended on a broken contract.
     Faulted(ActorFault<F>),
     /// The actor returned an owner the lifecycle did not send.

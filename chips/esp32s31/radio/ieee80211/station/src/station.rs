@@ -850,12 +850,16 @@ async fn lifecycles<W: Binding>(
             // The lifecycle ended without retiring the actor: the actor's
             // task ends with its half, and this one goes out beside it.
             LifecycleEnd::StopUnconfirmed(observed) => {
-                let failure = crate::failure::LifecycleFailure::StopUnconfirmed(observed);
+                let failure = crate::failure::LifecycleFailure::StopUnconfirmed(
+                    crate::failure::convert::stop_observed(observed),
+                );
                 let half = unfinished(retired, home, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::RetuneUnconfirmed(unconfirmed) => {
-                let failure = crate::failure::LifecycleFailure::RetuneUnconfirmed(unconfirmed);
+                let failure = crate::failure::LifecycleFailure::RetuneUnconfirmed(
+                    crate::failure::convert::stop_unconfirmed(unconfirmed),
+                );
                 let half = unfinished(retired, home, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }

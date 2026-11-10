@@ -651,7 +651,8 @@ fn a_fault_the_port_keeps_ends_the_stops_watch_unconfirmed_with_every_owner() {
             assert_eq!(kept, Some(fault), "the run's fault is kept");
             assert_eq!(
                 unconfirmed.cause,
-                oer_protocols_ieee80211_contracts_port::StopCause::Device
+                oer_protocols_ieee80211_contracts_port::StopCause::Device(fault),
+                "the stop's answer names the fault it met"
             );
             assert_eq!(observed.get(), 1, "the observation was published once");
             assert!(
@@ -753,10 +754,12 @@ fn a_fault_first_seen_in_the_stops_watch_is_taken_back_once_or_kept() {
     }
 }
 
-/// A device fault the stop's own answer names first (the port poisoned
-/// before the watch, no service answering it) ends the watch named, with
-/// the port's observations and every owner in the runner: the port is asked
-/// to take nothing back, and the watch does not wait on.
+/// The owner's counterexample: a device fault the stop's own answer names
+/// first (the port poisoned before the watch, no service answering it)
+/// ends the watch named by that very fault, not by the last one a port
+/// call answered (none here), with the port's observations and every owner
+/// in the runner: the port is asked to take nothing back, and the watch
+/// does not wait on.
 #[test]
 fn a_device_fault_first_named_by_the_stops_answer_ends_the_watch_named() {
     embassy_futures::block_on(with_local_slot(async |claim| {
@@ -785,24 +788,99 @@ fn a_device_fault_first_named_by_the_stops_answer_ends_the_watch_named() {
             Either::First(watched) => watched,
             Either::Second(()) => panic!("the stop's watch never ends"),
         };
-        let Ok(super::StopWatch::DeviceFailed {
-            fault,
-            observed: seen,
-        }) = watched
-        else {
+        let Ok(super::StopWatch::DeviceFailed { fault, .. }) = watched else {
             panic!("a device fault ends the watch named: {watched:?}");
         };
-        assert_eq!(
-            seen.cause,
-            oer_protocols_ieee80211_contracts_port::StopCause::Device
+        assert!(
+            matches!(
+                fault,
+                oer_protocols_ieee80211_testing_model::ModelPortFault::Quarantined {
+                    call: oer_protocols_ieee80211_testing_model::ModelPortCall::Stop,
+                    ..
+                }
+            ),
+            "the fault the stop's answer met: {fault:?}"
         );
-        assert_eq!(fault, runner.homes.fault, "the last fault a call answered");
+        assert_eq!(runner.homes.fault, None, "no port call answered a fault");
         assert_eq!(observed.get(), 1, "its observation was reported");
         assert_eq!(air.recovery_asks(), 0, "nothing is asked back");
         assert!(!runner.homes.fault_kept);
         assert!(runner.take_returned().is_some(), "the refused command");
         assert!(runner.homes.beacon.is_some());
         assert!(runner.homes.group_slot.is_some() && runner.homes.group_permission.is_some());
+    }));
+}
+
+/// A device fault the stop's answer meets after another fault a service
+/// answered and the port took back: the watch ends named by the stop's own
+/// fault, never by the earlier one the runner recorded.
+#[test]
+fn a_device_fault_the_stop_meets_after_a_taken_back_one_is_named_by_its_own_cause() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+        air.refuse_access_point_commands(1);
+        let idle = async {
+            loop {
+                counted.idle(1).await;
+            }
+        };
+        let end = match select(Woken::new(runner.run(&shared, &counted)), idle).await {
+            Either::First(end) => end,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(matches!(end, ApEnd::Refused(_)), "no fault ends the run");
+        // The stop is held on the air; the watch's next service meets a
+        // first fault, which the port takes back.
+        air.hold_stop(true);
+        air.allow_recovery();
+        let finish = runner.finish_stop(&counted, |_| {});
+        let script = async {
+            counted.idle(1).await;
+            air.poison_at_next_service();
+            let mut poisoned = false;
+            for _ in 0..256 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+                // Once the first is back, the stop's own answer meets the
+                // next one at the watch's next wake.
+                if !poisoned && air.recovery_asks() > 0 {
+                    air.poison();
+                    poisoned = true;
+                }
+            }
+        };
+        let watched = match select(Woken::new(finish), script).await {
+            Either::First(watched) => watched,
+            Either::Second(()) => panic!("the stop's watch never ends"),
+        };
+        let first = runner.homes.fault;
+        assert!(
+            matches!(
+                first,
+                Some(
+                    oer_protocols_ieee80211_testing_model::ModelPortFault::Quarantined {
+                        call: oer_protocols_ieee80211_testing_model::ModelPortCall::ServiceTx,
+                        ..
+                    }
+                )
+            ),
+            "the service answered the first fault: {first:?}"
+        );
+        assert_eq!(air.recovery_asks(), 1, "the first fault is taken back once");
+        let Ok(super::StopWatch::DeviceFailed { fault, .. }) = watched else {
+            panic!("the stop's device fault ends the watch named: {watched:?}");
+        };
+        assert!(
+            matches!(
+                fault,
+                oer_protocols_ieee80211_testing_model::ModelPortFault::Quarantined {
+                    call: oer_protocols_ieee80211_testing_model::ModelPortCall::Stop,
+                    ..
+                }
+            ),
+            "the fault the stop's answer met, not the earlier one: {fault:?}"
+        );
+        assert!(!runner.homes.fault_kept);
     }));
 }
 

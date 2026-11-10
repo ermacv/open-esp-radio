@@ -54,10 +54,15 @@ impl<'a> Retiring for TestRunner<'a, '_> {
                 Some(StopWatch::Unkept)
             }
             (None, _) if holds => None,
-            (None, Some(observed)) if self.device_first => Some(StopWatch::DeviceFailed {
-                fault: None,
-                observed,
-            }),
+            (None, Some(observed)) if self.device_first => match observed.cause {
+                oer_protocols_ieee80211_contracts_port::StopCause::Device(fault) => {
+                    Some(StopWatch::DeviceFailed {
+                        fault,
+                        observations: observed.observations,
+                    })
+                }
+                _ => None,
+            },
             (None, Some(observed)) => Some(StopWatch::Faulted {
                 fault: Some(BackendFault::Abandoned),
                 observed,
@@ -471,7 +476,7 @@ fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
 #[test]
 fn a_kept_fault_ends_the_retire_unfinished_in_the_stopping_phase_with_every_owner() {
     let observed = StopUnconfirmed {
-        cause: oer_protocols_ieee80211_contracts_port::StopCause::Device,
+        cause: oer_protocols_ieee80211_contracts_port::StopCause::Device(BackendFault::Abandoned),
         observations: Default::default(),
     };
     let (ends, item, attempt) = (Cell::new(0), Cell::new(0), Cell::new(0));
@@ -543,8 +548,10 @@ fn a_kept_fault_ends_the_retire_unfinished_in_the_stopping_phase_with_every_owne
 /// the port's observation and every owner; no release runs.
 #[test]
 fn a_device_fault_the_stop_named_first_ends_the_retire_unfinished_and_named() {
+    // The stop's own fault, another than the run's.
+    let met = BackendFault::QueueFull { queue: 3 };
     let observed = StopUnconfirmed {
-        cause: oer_protocols_ieee80211_contracts_port::StopCause::Device,
+        cause: oer_protocols_ieee80211_contracts_port::StopCause::Device(met),
         observations: Default::default(),
     };
     let (ends, attempt) = (Cell::new(0), Cell::new(0));
@@ -570,8 +577,8 @@ fn a_device_fault_the_stop_named_first_ends_the_retire_unfinished_and_named() {
         left.exit,
         ApExitOf::StopDeviceFailed {
             ended,
-            fault: None,
-            observed,
+            fault: met,
+            observations: observed.observations,
         }
     );
     let Some(mut unfinished) = left.unfinished else {

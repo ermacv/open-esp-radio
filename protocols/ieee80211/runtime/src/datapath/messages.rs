@@ -219,7 +219,7 @@ pub enum FromActor<'id, D: DatapathPort<'id>> {
     /// The retune's end.
     Retuned(Result<(), RetuneFailed<<D::Port as DataPort<'id>>::Fault>>),
     /// The stop's end.
-    Stopped(StopOutcome),
+    Stopped(StopOutcome<<D::Port as DataPort<'id>>::Fault>),
     /// The actor ended on a broken contract; it keeps every owner it held.
     Faulted(ActorFault<<D::Port as DataPort<'id>>::Fault>),
     /// A broken contract the actor survives: it serves a stop, and the
@@ -275,14 +275,14 @@ pub enum Returned<'id, D: DatapathPort<'id>> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RetuneFailed<F> {
     /// The radio did not confirm its stop.
-    Stop(StopUnconfirmed),
+    Stop(StopUnconfirmed<F>),
     /// The radio did not start on the new channel; it is stopped.
     Start(StartRefused<F>),
 }
 
-/// How a stop ended.
+/// How a stop ended; `F` is the port's fault.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StopOutcome {
+pub enum StopOutcome<F> {
     /// The radio is stopped and every owner of the run is back.
     Confirmed,
     /// The radio is stopped and its data settled, but by the deadline the
@@ -298,7 +298,7 @@ pub enum StopOutcome {
     /// to record, not a fault of the radio.
     NetworkLost(ReturnObserved),
     /// The stop proved nothing by its deadline: what was still out.
-    Unconfirmed(StopObserved),
+    Unconfirmed(StopObserved<F>),
 }
 
 /// What the network still owed a stopped radio at the stop's deadline.
@@ -324,11 +324,13 @@ pub enum NetworkEnd {
     Stops,
 }
 
-/// What a stop still held when it ended unconfirmed.
+/// What a stop still held when it ended unconfirmed; `F` is the port's
+/// fault.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StopObserved {
-    /// The port's own report, when it ended its stop unconfirmed.
-    pub port: Option<StopUnconfirmed>,
+pub struct StopObserved<F> {
+    /// The port's own report, when it ended its stop unconfirmed, with the
+    /// fault the stop met.
+    pub port: Option<StopUnconfirmed<F>>,
     /// The deadline passed.
     pub deadline: bool,
     /// A data arena's end is still owed.

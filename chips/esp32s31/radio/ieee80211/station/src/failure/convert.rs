@@ -95,8 +95,55 @@ pub(crate) fn start_refused(
                 Failure::Deadline => Failure::Deadline,
                 Failure::Device => Failure::Device,
             },
-            stop,
+            stop: stop_unconfirmed(stop),
         },
+    }
+}
+
+/// A port's unconfirmed stop, with the device's fault it met.
+pub(crate) fn stop_unconfirmed(
+    value: oer_protocols_ieee80211_contracts_port::StopUnconfirmed<
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
+    >,
+) -> oer_protocols_ieee80211_contracts_port::StopUnconfirmed<BackendFault> {
+    use oer_protocols_ieee80211_contracts_port::StopCause as Source;
+    oer_protocols_ieee80211_contracts_port::StopUnconfirmed {
+        cause: match value.cause {
+            Source::Deadline => Source::Deadline,
+            Source::Device(fault) => Source::Device(backend_fault(fault)),
+            Source::CoreEnabled => Source::CoreEnabled,
+        },
+        observations: value.observations,
+    }
+}
+
+/// What a stop still held when it ended unconfirmed, with the port's
+/// report converted.
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+pub(crate) fn stop_observed(
+    value: oer_protocols_ieee80211_runtime::datapath::StopObserved<
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
+    >,
+) -> oer_protocols_ieee80211_runtime::datapath::StopObserved<BackendFault> {
+    let oer_protocols_ieee80211_runtime::datapath::StopObserved {
+        port,
+        deadline,
+        arena_on_air,
+        frames_out,
+        network_running,
+        network_lost,
+        lent,
+        memory_held,
+    } = value;
+    oer_protocols_ieee80211_runtime::datapath::StopObserved {
+        port: port.map(stop_unconfirmed),
+        deadline,
+        arena_on_air,
+        frames_out,
+        network_running,
+        network_lost,
+        lent,
+        memory_held,
     }
 }
 
