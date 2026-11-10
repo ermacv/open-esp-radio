@@ -104,6 +104,27 @@ impl<T, const Q: usize> Turns<T, Q> {
         turns
     }
 
+    /// Start again in place, as [`Self::after`] `last` starts: what it held
+    /// is gone, and nothing of it moves.
+    pub fn restart(&mut self, last: Option<u8>) {
+        self.last = last;
+        self.from_list = false;
+        for slot in &mut self.planned {
+            *slot = None;
+        }
+        for flow in &mut self.flows {
+            *flow = None;
+        }
+        self.listed = 0;
+        self.more = false;
+    }
+
+    /// Start again in place, as [`Self::listed`] starts.
+    pub fn relist(&mut self) {
+        self.restart(None);
+        self.from_list = true;
+    }
+
     /// Offer one ready work, `item`, described by `ready`, in the order the
     /// ready work lists them.
     pub fn offer(&mut self, ready: &Ready, item: T) {

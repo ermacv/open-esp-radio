@@ -191,6 +191,17 @@ impl<C, V, K: Copy + Eq, const PEERS: usize> Plan<C, V, K, PEERS> {
             .filter_map(Account::candidate)
     }
 
+    /// Empty again in place, the air's view now `view`: what it held is
+    /// gone, and nothing of it moves.
+    fn restart(&mut self, view: V) {
+        self.view = view;
+        self.accounts.clear();
+        self.extra = None;
+        self.account = None;
+        self.turns.restart(None);
+        self.last = None;
+    }
+
     fn served(&mut self) -> Option<&mut Account<K>> {
         let key = self.account?;
         self.accounts.iter_mut().find(|account| account.key == key)
@@ -339,8 +350,13 @@ impl<'o, A: PeerAir, T, const PEERS: usize, const RESERVATIONS: usize>
     where
         T: Copy + Into<usize>,
     {
-        let mut plan = <Self as Egress<T, RadioNotice<T, A::Key>>>::plan(self, ready)?;
-        match <Self as Egress<T, RadioNotice<T, A::Key>>>::next(self, &mut plan)? {
+        let mut storage = None;
+        let plan = <Self as Egress<T, RadioNotice<T, A::Key>>>::plan(
+            self,
+            || ready.clone(),
+            &mut storage,
+        )?;
+        match <Self as Egress<T, RadioNotice<T, A::Key>>>::next(self, plan)? {
             Next::Send(work, held) => Ok(Some((work, held))),
             Next::Idle => Ok(None),
             Next::Stop(stop) => panic!("a fresh plan stopped: {stop:?}"),
@@ -391,19 +407,27 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
     /// their turns. When the scheduler would serve another account first, a
     /// second pass takes that one's turns. More accounts than `PEERS` cannot
     /// all be served: the plan keeps one more, for the scheduler to say so.
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Self::Plan<C>, AirtimeFault> {
-        let mut plan = Plan {
-            view: self.air.view(),
-            accounts: heapless::Vec::new(),
-            extra: None,
-            account: None,
-            turns: Turns::after(None),
-            last: None,
+        ready: impl Fn() -> I,
+        plan: &'p mut Option<Self::Plan<C>>,
+    ) -> Result<&'p mut Self::Plan<C>, AirtimeFault> {
+        let view = self.air.view();
+        let plan = match plan {
+            Some(plan) => {
+                plan.restart(view);
+                plan
+            }
+            None => plan.insert(Plan {
+                view,
+                accounts: heapless::Vec::new(),
+                extra: None,
+                account: None,
+                turns: Turns::after(None),
+                last: None,
+            }),
         };
-        for work in ready.clone() {
+        for work in ready() {
             let Some(candidate) = self.air.candidate(work.ready()) else {
                 continue;
             };
@@ -412,7 +436,9 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
                 Some(account) => account,
                 None => {
                     plan.account = Some(candidate.key);
-                    plan.turns = Turns::after(self.last_flow(candidate.key));
+                    // Nothing is offered yet: the turns only learn their
+                    // start.
+                    plan.turns.restart(self.last_flow(candidate.key));
                     candidate.key
                 }
             };
@@ -430,8 +456,8 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
             && plan.account != Some(first)
         {
             plan.account = Some(first);
-            plan.turns = Turns::after(self.last_flow(first));
-            for work in ready {
+            plan.turns.restart(self.last_flow(first));
+            for work in ready() {
                 if let Some(candidate) = self.air.candidate(work.ready())
                     && candidate.key == first
                 {

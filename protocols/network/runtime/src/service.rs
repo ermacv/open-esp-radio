@@ -53,12 +53,19 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
     type Fault = Infallible;
     type Plan<C: Candidate> = Turns<C, QUANTUM>;
 
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Turns<C, QUANTUM>, Infallible> {
-        let mut turns = Turns::listed();
-        for work in ready {
+        ready: impl Fn() -> I,
+        plan: &'p mut Option<Turns<C, QUANTUM>>,
+    ) -> Result<&'p mut Turns<C, QUANTUM>, Infallible> {
+        let turns = match plan {
+            Some(turns) => {
+                turns.relist();
+                turns
+            }
+            None => plan.insert(Turns::listed()),
+        };
+        for work in ready() {
             let described = *work.ready();
             turns.offer(&described, work);
         }
@@ -1268,7 +1275,10 @@ impl<
         let mut moved = false;
         let mut frames = 0_usize;
         let mut collections = 0_usize;
+        // The plan's storage, kept from one collection to the next: whether
+        // it holds the collection in hand is `live`.
         let mut plan = None;
+        let mut live = false;
         // Frames the plan in hand sent: those after its first are its
         // continuations.
         let mut planned = 0_usize;
@@ -1277,8 +1287,8 @@ impl<
                 break PublishEnd::Budget;
             }
             let current = match &mut plan {
-                Some(current) => current,
-                None => {
+                Some(current) if live => current,
+                _ => {
                     if collections == TURN_FRAMES {
                         break PublishEnd::Budget;
                     }
@@ -1299,14 +1309,17 @@ impl<
                     // After a declining fill, the producer's flow sits out
                     // the turn.
                     let filtered = self.local.filtered();
-                    let ready = self
-                        .owner
-                        .demands(now, tally.steps())
-                        .filter(move |demand| {
+                    let (owner, steps) = (&self.owner, tally.steps());
+                    let ready = || {
+                        owner.demands(now, steps).filter(move |demand| {
                             filtered.is_none_or(|flow| demand.ready.flow != Some(flow))
-                        });
-                    match self.egress.plan(ready) {
-                        Ok(collected) => plan.insert(collected),
+                        })
+                    };
+                    match self.egress.plan(ready, &mut plan) {
+                        Ok(collected) => {
+                            live = true;
+                            collected
+                        }
                         Err(fault) => {
                             self.note(Err(fault));
                             break PublishEnd::Fault;
@@ -1320,7 +1333,7 @@ impl<
                 // Nothing was reserved: a new collection chooses.
                 Ok(Next::Stop(stop)) => {
                     tally.stopped(stop);
-                    plan = None;
+                    live = false;
                     continue;
                 }
                 Err(fault) => {
@@ -1349,7 +1362,7 @@ impl<
                 // are not the choice's.
                 Err(Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort) => {
                     moved = true;
-                    plan = None;
+                    live = false;
                     let answer = self.egress.refused(reservation);
                     self.note(answer);
                 }
@@ -1357,7 +1370,7 @@ impl<
                 // the rest of it, so its declines never stop another's work.
                 Err(Unsent::Declined) => {
                     moved = true;
-                    plan = None;
+                    live = false;
                     report(events, || ServiceEvent::Local(LocalEvent::Declined));
                     self.local.declined();
                     let answer = self.egress.refused(reservation);

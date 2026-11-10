@@ -195,15 +195,20 @@ pub trait Egress<Ticket, Notice> {
     /// What one collection of the ready work keeps for the frames after it.
     type Plan<C: Candidate>;
 
-    /// Collect a plan from `ready`, which holds every piece of ready work.
-    /// It reserves nothing.
+    /// Collect a plan into `plan`, in place, from the ready work: each call
+    /// of `ready` lists every piece of it, and a collection that needs a
+    /// second look calls it again. What `plan` held before is gone; it
+    /// reserves nothing. The caller keeps `plan`'s storage from one
+    /// collection to the next, so a collection moves no plan. Returns the
+    /// plan collected, in `plan`.
     ///
     /// # Errors
     /// [`Self::Fault`], which ends the service.
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Self::Plan<C>, Self::Fault>;
+        ready: impl Fn() -> I,
+        plan: &'p mut Option<Self::Plan<C>>,
+    ) -> Result<&'p mut Self::Plan<C>, Self::Fault>;
 
     /// The plan's next frame, reserved; [`Next::Idle`](crate::Next::Idle)
     /// until a port's wake or a notice if nothing may go now; or
