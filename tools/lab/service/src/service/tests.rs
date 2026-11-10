@@ -321,7 +321,10 @@ fn a_client_of_protocol_2_is_refused_at_its_hello_before_any_operation() {
     let directory = tempfile::tempdir().unwrap();
     let fake = Fake::new();
     let service = open(directory.path(), &fake);
-    let mut stream = service.connect().unwrap();
+    // Both frames are in the socket before the service reads any: its
+    // refusal of the hello cannot close the connection under the second
+    // write.
+    let (mut stream, served) = std::os::unix::net::UnixStream::pair().unwrap();
     for request in [
         Request::Hello {
             protocol: 2,
@@ -337,6 +340,7 @@ fn a_client_of_protocol_2_is_refused_at_its_hello_before_any_operation() {
             .write(&mut stream)
             .unwrap();
     }
+    service.attach(served).unwrap();
     let Some(Frame::Message(json)) = Frame::read(&mut stream).unwrap() else {
         panic!("no reply");
     };
