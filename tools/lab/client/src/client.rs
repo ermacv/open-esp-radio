@@ -56,6 +56,8 @@ struct Notices {
 #[derive(Debug)]
 pub enum Event {
     Output(Vec<u8>),
+    /// The operation is ready (`Reply::Ready`), in order with its output.
+    Ready,
     /// Output dropped for a slow reader, in bytes.
     Lost(u64),
     Finished(Result<serde_json::Value>),
@@ -89,12 +91,19 @@ struct RouteQueue {
 
 #[derive(Default)]
 struct RouteState {
-    output: std::collections::VecDeque<Vec<u8>>,
+    output: std::collections::VecDeque<Queued>,
     bytes: usize,
     lost: u64,
     finished: Option<Result<serde_json::Value>>,
     /// The service went away before the operation finished.
     closed: bool,
+}
+
+/// What waits in an operation's output queue: its bytes, and its
+/// readiness in order with them.
+enum Queued {
+    Bytes(Vec<u8>),
+    Ready,
 }
 
 impl RouteQueue {
@@ -104,8 +113,14 @@ impl RouteQueue {
             state.lost = state.lost.saturating_add(bytes.len() as u64);
         } else {
             state.bytes += bytes.len();
-            state.output.push_back(bytes);
+            state.output.push_back(Queued::Bytes(bytes));
         }
+        self.changed.notify_all();
+    }
+
+    /// The operation is ready: never dropped, unlike output.
+    fn ready(&self) {
+        lock(&self.state).output.push_back(Queued::Ready);
         self.changed.notify_all();
     }
 
@@ -125,13 +140,18 @@ impl RouteQueue {
         self.changed.notify_all();
     }
 
-    /// The next event: output first, then a loss, then the end.
+    /// The next event: output and readiness in their order first, then a
+    /// loss, then the end.
     fn next(&self) -> Event {
         let mut state = lock(&self.state);
         loop {
-            if let Some(bytes) = state.output.pop_front() {
-                state.bytes = state.bytes.saturating_sub(bytes.len());
-                return Event::Output(bytes);
+            match state.output.pop_front() {
+                Some(Queued::Bytes(bytes)) => {
+                    state.bytes = state.bytes.saturating_sub(bytes.len());
+                    return Event::Output(bytes);
+                }
+                Some(Queued::Ready) => return Event::Ready,
+                None => {}
             }
             if state.lost > 0 {
                 return Event::Lost(std::mem::take(&mut state.lost));
@@ -245,6 +265,14 @@ impl Client {
                             .map(|route| route.events.clone());
                         if let Some(route) = route {
                             route.lost(bytes);
+                        }
+                    }
+                    Reply::Ready { id } => {
+                        let route = lock(&thread_routes)
+                            .get(&id)
+                            .map(|route| route.events.clone());
+                        if let Some(route) = route {
+                            route.ready();
                         }
                     }
                     Reply::Credit { id } => {
@@ -674,6 +702,7 @@ impl Running {
                         .write_all(&bytes)
                         .map_err(|error| error.to_string())?;
                 }
+                Event::Ready => {}
                 Event::Lost(bytes) => lost = lost.saturating_add(bytes),
                 Event::Finished(result) => {
                     if lost > 0 {
@@ -699,6 +728,7 @@ impl Read for Running {
             }
             match self.event() {
                 Event::Output(bytes) => self.pending = bytes,
+                Event::Ready => {}
                 Event::Lost(bytes) => {
                     return Err(io::Error::other(format!(
                         "{bytes} bytes of output were lost to a slow reader"
@@ -726,5 +756,98 @@ impl Write for Running {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bytes(event: Event) -> Option<Vec<u8>> {
+        match event {
+            Event::Output(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn a_readiness_comes_in_order_with_the_output_and_before_the_end() {
+        let queue = RouteQueue::default();
+        queue.output(b"header".to_vec());
+        queue.ready();
+        queue.output(b"frame".to_vec());
+        queue.finish(Ok(serde_json::json!({"bytes": 11})));
+        assert_eq!(bytes(queue.next()).as_deref(), Some(&b"header"[..]));
+        assert!(matches!(queue.next(), Event::Ready));
+        assert_eq!(bytes(queue.next()).as_deref(), Some(&b"frame"[..]));
+        assert!(matches!(queue.next(), Event::Finished(Ok(_))));
+    }
+
+    #[test]
+    fn a_readiness_is_never_dropped_with_the_output_beyond_the_budget() {
+        let queue = RouteQueue::default();
+        queue.output(vec![0; ROUTE_BUDGET]);
+        // Beyond the budget: lost, counted.
+        queue.output(vec![0; 1]);
+        queue.ready();
+        queue.finish(Err("cancelled".to_owned()));
+        assert_eq!(
+            bytes(queue.next()).map(|bytes| bytes.len()),
+            Some(ROUTE_BUDGET)
+        );
+        assert!(matches!(queue.next(), Event::Ready));
+        assert!(matches!(queue.next(), Event::Lost(1)));
+        assert!(matches!(queue.next(), Event::Finished(Err(_))));
+    }
+
+    /// A service of protocol 2, the one before `Reply::Ready`: it refuses
+    /// another version at the hello, as that service does, and records
+    /// every frame the client sent until the connection ended.
+    fn old_service(stream: UnixStream) -> std::thread::JoinHandle<Vec<Request>> {
+        std::thread::spawn(move || {
+            let mut stream = stream;
+            let mut received = Vec::new();
+            while let Ok(Some(Frame::Message(json))) = Frame::read(&mut stream) {
+                let request: Request = serde_json::from_slice(&json).unwrap();
+                if let Request::Hello { protocol, .. } = &request {
+                    let reply = if *protocol == 2 {
+                        Reply::Welcome { protocol: 2 }
+                    } else {
+                        Reply::Refused {
+                            reason: format!(
+                                "this client speaks protocol {protocol}, the installed service \
+                                 2: update the client or reinstall the service (`cargo stand \
+                                 install`)"
+                            ),
+                        }
+                    };
+                    let refused = matches!(reply, Reply::Refused { .. });
+                    Frame::message(&reply).unwrap().write(&mut stream).unwrap();
+                    received.push(request);
+                    if refused {
+                        break;
+                    }
+                } else {
+                    received.push(request);
+                }
+            }
+            received
+        })
+    }
+
+    #[test]
+    fn this_client_is_refused_by_a_service_of_protocol_2_before_any_operation() {
+        assert_eq!(PROTOCOL, 3);
+        let (client_end, service_end) = UnixStream::pair().unwrap();
+        let service = old_service(service_end);
+        let error = Client::connect(client_end, "beacon-stamp").err().unwrap();
+        assert!(
+            error.contains("protocol 3") && error.contains("cargo stand install"),
+            "{error}"
+        );
+        // The hello was the only request: no lease, no operation.
+        let received = service.join().unwrap();
+        assert_eq!(received.len(), 1);
+        assert!(matches!(received[0], Request::Hello { protocol: 3, .. }));
     }
 }

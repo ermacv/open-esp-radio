@@ -25,8 +25,10 @@ use serde::{Deserialize, Serialize};
 
 pub mod station_link;
 
-/// The protocol version; another one is refused.
-pub const PROTOCOL: u32 = 2;
+/// The protocol version; another one is refused at the hello, before any
+/// operation. Version 3 adds [`Reply::Ready`], which a version 2 client
+/// cannot parse and a version 2 service never sends.
+pub const PROTOCOL: u32 = 3;
 /// The token a command runs under: its client joins the lease the token
 /// belongs to, for no more than the token allows, instead of queueing.
 pub const LEASE_ENV: &str = "OER_LAB_LEASE";
@@ -331,6 +333,13 @@ pub enum Reply {
         id: u64,
         bytes: u64,
     },
+    /// Operation `id` is ready: what it streams from now on is what it was
+    /// asked for (a monitor capture listens). Sent apart from the output,
+    /// in order with it, at most once; an operation without a readiness of
+    /// its own never sends it.
+    Ready {
+        id: u64,
+    },
     Status {
         status: Status,
     },
@@ -496,9 +505,11 @@ pub enum RouterOperation {
     /// monitor interface the operation creates on the idle AP radio, until
     /// the operation stops. The output is the pcap stream alone (radiotap
     /// headers, link type 127); an output the client does not take ends
-    /// the capture. Every ending stops `tcpdump`, waits for its exit and
-    /// removes the interface. Needs the router held exclusively. Result:
-    /// the router's `monitor::Report`.
+    /// the capture. Once `tcpdump` listens the client hears `Ready`, apart
+    /// from the bytes; a capture that never listens ends without it. Every
+    /// ending stops `tcpdump`, waits for its exit and removes the
+    /// interface. Needs the router held exclusively. Result: the router's
+    /// `monitor::Report`.
     MonitorCapture { channel: u8 },
 }
 

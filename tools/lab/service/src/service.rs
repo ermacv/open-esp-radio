@@ -158,6 +158,14 @@ impl Output {
 }
 
 impl Output {
+    /// Tell the client the operation is ready (`Reply::Ready`): in order
+    /// with the output queued before it, and never dropped.
+    pub fn ready(&self) {
+        self.outbox.push(&Reply::Ready { id: self.operation });
+    }
+}
+
+impl Output {
     /// Queue all of `bytes` for the client, or refuse: a client that is
     /// gone or reads too slowly takes none of the rest. For a stream a gap
     /// would corrupt. A slow reader's refused bytes, from the refused chunk
