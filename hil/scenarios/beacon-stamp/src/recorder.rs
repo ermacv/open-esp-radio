@@ -7,12 +7,16 @@
 //! worker cancels the operation and every wait from then on fails with that
 //! write, never with a line the file does not hold.
 //!
-//! A console opened on a running board holds a prefix of an earlier boot
-//! before the boot it was opened for. The waits count only the lines of
-//! the boot observed starting in the stream: its start is the ROM's reset
-//! line (`oer_tools_lab_model::rom::is_reset_line`). Lines before it are
-//! kept in the file and never read as this boot's; a second reset line is
-//! another boot, and every wait from then on is refused.
+//! A console the operation reset holds a prefix of an earlier boot before
+//! the boot its reset started. The boot is bound to that reset: the
+//! service marks the reset's edge in the stream (`Event::Ready`), and only
+//! the ROM reset line (`oer_tools_lab_model::rom::is_reset_line`) received
+//! after it starts the boot the waits read. Lines before the edge, and
+//! after it before that reset line, are kept in the file and never read as
+//! this boot's. A second reset line after the edge is another boot: every
+//! wait from then on is refused, and the whole stream's count of reset
+//! lines after the edge is part of the recording, so a reboot after a
+//! result was read still makes the console unclean.
 //!
 //! Every ending cancels the operation and joins the worker, and keeps four
 //! results apart: the file's write, the bytes the service dropped for a
@@ -81,6 +85,10 @@ pub struct Recording {
     pub end: End,
     /// The finish's cancel of the operation.
     pub cancel: Outcome,
+    /// Whether the service marked the console's reset edge.
+    pub edge: bool,
+    /// The reset lines received after the edge: exactly one is the boot.
+    pub resets: u32,
 }
 
 impl Recording {
@@ -92,6 +100,20 @@ impl Recording {
             read: Outcome::Unknown("the stream was not read to its end".to_owned()),
             end: End::Unknown("not reported".to_owned()),
             cancel: Outcome::Ok,
+            edge: false,
+            resets: 0,
+        }
+    }
+
+    /// The boot the stream held after the console's reset edge.
+    fn boot(&self) -> Result<(), String> {
+        match (self.edge, self.resets) {
+            (false, _) => Err("no reset edge was reported".to_owned()),
+            (true, 0) => Err("no reset line after the console's reset".to_owned()),
+            (true, 1) => Ok(()),
+            (true, resets) => Err(format!(
+                "rebooted: {resets} reset lines after the console's reset"
+            )),
         }
     }
 
@@ -104,6 +126,12 @@ impl Recording {
             "lost": self.lost,
             "read": self.read.record(),
             "cancel": self.cancel.record(),
+            "edge": self.edge,
+            "resets": self.resets,
+            "boot": match self.boot() {
+                Ok(()) => serde_json::json!({ "ok": true }),
+                Err(error) => serde_json::json!({ "ok": false, "detail": error }),
+            },
             "end": match &self.end {
                 End::Unknown(why) => serde_json::json!({ "ok": null, "detail": why }),
                 End::Reported(Ok(value)) => serde_json::json!({ "ok": true, "detail": value }),
@@ -130,6 +158,9 @@ impl Recording {
         if self.lost > 0 {
             causes.push(format!("lost: {} bytes", self.lost));
         }
+        if let Err(error) = self.boot() {
+            causes.push(format!("boot: {error}"));
+        }
         match &self.end {
             End::Reported(Ok(_)) => {}
             End::Reported(Err(error)) => causes.push(format!("end: {error}")),
@@ -145,27 +176,21 @@ impl Recording {
 
 /// What the worker hands the waits.
 enum Message {
-    Line(String),
+    /// A complete line; `current` when it belongs to the boot the
+    /// console's reset started (after the edge and its one reset line).
+    Line { text: String, current: bool },
+    /// The `n`th reset line after the edge.
+    Boot(u32),
     /// The file refused a write: the record stops here.
     Failed(String),
-}
-
-/// Where the waits are in the stream's boots.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Boot {
-    /// No reset line yet: every line is an earlier boot's prefix.
-    Before,
-    /// After the first reset line: the current boot's lines.
-    Current,
-    /// A second reset line came: another boot.
-    Again,
 }
 
 pub struct Recorder<C: Cancel + Send + 'static> {
     /// The image whose result line ends a result wait.
     image: &'static str,
     lines: mpsc::Receiver<Message>,
-    boot: Cell<Boot>,
+    /// A second boot was seen: every wait is refused.
+    rebooted: Cell<bool>,
     cancel: C,
     observed: Arc<Mutex<Recording>>,
     worker: Option<JoinHandle<()>>,
@@ -189,6 +214,8 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
         let worker = std::thread::spawn(move || {
             let mut line = Vec::new();
             let mut recorded = true;
+            let mut edge = false;
+            let mut resets = 0u32;
             loop {
                 match operation.event() {
                     Event::Output(bytes) => {
@@ -224,8 +251,15 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
                         for byte in bytes {
                             if byte == b'\n' {
                                 let text = String::from_utf8_lossy(&line).trim_end().to_owned();
-                                let _ = send.send(Message::Line(text));
                                 line.clear();
+                                if edge && oer_tools_lab_model::rom::is_reset_line(text.trim()) {
+                                    resets = resets.saturating_add(1);
+                                    observe(&recording, |recording| recording.resets = resets);
+                                    let _ = send.send(Message::Boot(resets));
+                                } else {
+                                    let current = edge && resets == 1;
+                                    let _ = send.send(Message::Line { text, current });
+                                }
                             } else {
                                 line.push(byte);
                             }
@@ -234,11 +268,15 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
                     Event::Lost(bytes) => observe(&recording, |recording| {
                         recording.lost = recording.lost.saturating_add(bytes);
                     }),
-                    Event::Ready => {}
+                    Event::Ready => {
+                        edge = true;
+                        observe(&recording, |recording| recording.edge = true);
+                    }
                     Event::Finished(result) => {
                         if recorded && !line.is_empty() {
                             let text = String::from_utf8_lossy(&line).trim_end().to_owned();
-                            let _ = send.send(Message::Line(text));
+                            let current = edge && resets == 1;
+                            let _ = send.send(Message::Line { text, current });
                         }
                         observe(&recording, |recording| match result {
                             Err(error) if error == SERVICE_GONE => {
@@ -260,7 +298,7 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
         Self {
             image,
             lines,
-            boot: Cell::new(Boot::Before),
+            rebooted: Cell::new(false),
             cancel,
             observed,
             worker: Some(worker),
@@ -273,7 +311,7 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
     fn line(&self, deadline: Option<Instant>, waiting: &str) -> Result<String, String> {
         let ended = || format!("the console ended before {waiting}");
         loop {
-            if self.boot.get() == Boot::Again {
+            if self.rebooted.get() {
                 return Err(format!("the board booted again before {waiting}"));
             }
             let message = match deadline {
@@ -288,25 +326,21 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
                     })?
                 }
             };
-            let line = match message {
+            match message {
                 Message::Failed(error) => {
                     return Err(format!(
                         "the console record stopped before {waiting}: {error}"
                     ));
                 }
-                Message::Line(line) => line,
-            };
-            if oer_tools_lab_model::rom::is_reset_line(line.trim()) {
-                self.boot.set(match self.boot.get() {
-                    Boot::Before => Boot::Current,
-                    Boot::Current | Boot::Again => Boot::Again,
-                });
-                continue;
+                Message::Boot(1) => {}
+                Message::Boot(_) => self.rebooted.set(true),
+                Message::Line {
+                    text,
+                    current: true,
+                } => return Ok(text),
+                // Before the boot the reset started: kept in the file only.
+                Message::Line { current: false, .. } => {}
             }
-            if self.boot.get() == Boot::Current {
-                return Ok(line);
-            }
-            // An earlier boot's prefix: kept in the file, never this boot's.
         }
     }
 
@@ -555,25 +589,42 @@ mod tests {
     const ROM: &str = "ESP-ROM:esp32s31-20251218\nBuild:Dec 18 2025\n\
                        rst:0x17 (CHIP_USB_UART_RESET),boot:0x58 (SPI_FAST_FLASH_BOOT)\n";
 
+    /// Feed `events`, then end the operation as the service does: every
+    /// wait after it ends, whatever the recorder does.
+    fn feed(
+        events: &mpsc::Sender<Event>,
+        feed: Vec<Event>,
+        end: Result<serde_json::Value, String>,
+    ) {
+        for event in feed {
+            events.send(event).unwrap();
+        }
+        events.send(Event::Finished(end)).unwrap();
+    }
+
     #[test]
     fn every_byte_is_in_the_file_before_its_line_is_read() {
         let file = File::default();
         let (recorder, events, cancels) = record(&file);
-        // An earlier boot's fragment, the ROM, a line split across chunks,
-        // then the start of the next one.
-        events
-            .send(output(&format!("I (195) esp_image{ROM}STAMP v1 be")))
-            .unwrap();
-        events.send(output("gin run=1\nSTAMP roun")).unwrap();
+        // An earlier boot's fragment, the reset's edge, the ROM, a line
+        // split across chunks, then the start of the next one.
+        feed(
+            &events,
+            vec![
+                output("I (195) esp_image"),
+                Event::Ready,
+                output(&format!("{ROM}STAMP v1 be")),
+                output("gin run=1\nSTAMP roun"),
+            ],
+            Ok(serde_json::json!("receipt")),
+        );
         assert_eq!(recorder.wait_for("STAMP v1 begin", Duration::MAX), Ok(()));
-        // The unfinished tail is in the file already, never read as a line.
+        // The unfinished tail is in the file, never read as a line of its own
+        // before the end.
         assert_eq!(
             file.text(),
             format!("I (195) esp_image{ROM}STAMP v1 begin run=1\nSTAMP roun")
         );
-        events
-            .send(Event::Finished(Ok(serde_json::json!("receipt"))))
-            .unwrap();
         let recording = recorder.finish();
         assert_eq!(cancels.try_recv(), Ok(()));
         assert_eq!(recording.written, file.text().len() as u64);
@@ -583,6 +634,7 @@ mod tests {
             recording.end,
             End::Reported(Ok(serde_json::json!("receipt")))
         );
+        assert_eq!((recording.edge, recording.resets), (true, 1));
         assert!(recording.clean().is_ok());
     }
 
@@ -590,6 +642,7 @@ mod tests {
     fn a_wait_that_gives_up_keeps_the_tail_and_the_end_still_joins() {
         let file = File::default();
         let (recorder, events, cancels) = record(&file);
+        events.send(Event::Ready).unwrap();
         events
             .send(output(&format!("{ROM}STAMP boot\nhalf a li")))
             .unwrap();
@@ -599,10 +652,7 @@ mod tests {
         // The cancel the finish sends is what the service ends on.
         let finisher = std::thread::spawn(move || recorder.finish());
         assert_eq!(cancels.recv(), Ok(()));
-        events.send(output("ne\n")).unwrap();
-        events
-            .send(Event::Finished(Err("cancelled".into())))
-            .unwrap();
+        feed(&events, vec![output("ne\n")], Err("cancelled".into()));
         let recording = finisher.join().unwrap();
         assert_eq!(file.text(), format!("{ROM}STAMP boot\nhalf a line\n"));
         assert_eq!(recording.end, End::Reported(Err("cancelled".into())));
@@ -613,16 +663,17 @@ mod tests {
     fn a_result_before_the_marker_is_refused_and_recorded() {
         let file = File::default();
         let (recorder, events, _cancels) = record(&file);
+        events.send(Event::Ready).unwrap();
         events
             .send(output(&format!(
                 "{ROM}OER-RESULT: fail beacon-stamp clocks\n"
             )))
             .unwrap();
+        drop(events);
         let refused = recorder
             .wait_for("STAMP v1 begin", Duration::MAX)
             .unwrap_err();
         assert!(refused.contains("ended before"), "{refused}");
-        drop(events);
         let recording = recorder.finish();
         assert!(
             file.text()
@@ -640,9 +691,15 @@ mod tests {
             ..File::default()
         };
         let (recorder, events, cancels) = record(&file);
-        events
-            .send(output(&format!("{ROM}STAMP v1 begin\n")))
-            .unwrap();
+        feed(
+            &events,
+            vec![
+                Event::Ready,
+                output(&format!("{ROM}STAMP v1 begin\n")),
+                Event::Lost(7),
+            ],
+            Err("the operation was cancelled".into()),
+        );
         // The marker came, but the file does not hold it: the wait fails
         // with the write.
         let refused = recorder
@@ -655,10 +712,6 @@ mod tests {
         // The worker cancelled the operation it can no longer record; the
         // finish and the other results still go on.
         assert_eq!(cancels.recv(), Ok(()));
-        events.send(Event::Lost(7)).unwrap();
-        events
-            .send(Event::Finished(Err("the operation was cancelled".into())))
-            .unwrap();
         let recording = recorder.finish();
         assert_eq!(recording.written, 0);
         assert!(matches!(&recording.write, Outcome::Failed(error) if error.contains("disk full")));
@@ -671,33 +724,64 @@ mod tests {
     }
 
     #[test]
-    fn the_owners_old_result_prefix_is_not_the_new_boots_result() {
+    fn an_old_result_prefix_before_the_edge_is_not_the_new_boots_result() {
         let file = File::default();
         let (recorder, events, _cancels) = record(&file);
-        // The earlier boot's result, then the ROM and a new boot that has
-        // not ended.
-        events
-            .send(output(&format!(
-                "OER-RESULT: pass beacon-stamp\n{ROM}STAMP v1 begin run=2\n"
-            )))
-            .unwrap();
-        drop(events);
+        // The earlier boot's result, then the reset's edge, the ROM and a
+        // new boot that ends without a result.
+        feed(
+            &events,
+            vec![
+                output("OER-RESULT: pass beacon-stamp\n"),
+                Event::Ready,
+                output(&format!("{ROM}STAMP v1 begin run=2\n")),
+            ],
+            Ok(serde_json::Value::Null),
+        );
         let refused = recorder.result(Duration::MAX).unwrap_err();
         assert!(refused.contains("ended before"), "{refused}");
         // The prefix stays in the file, raw.
         assert!(file.text().starts_with("OER-RESULT: pass beacon-stamp\n"));
-        drop(recorder);
+    }
+
+    #[test]
+    fn the_owners_old_reset_and_pass_before_the_edge_are_not_the_new_boots() {
+        let file = File::default();
+        let (recorder, events, _cancels) = record(&file);
+        // The earlier boot's own reset line and result, then this
+        // operation's reset edge and a boot that fails.
+        feed(
+            &events,
+            vec![
+                output(&format!("{ROM}OER-RESULT: pass beacon-stamp\n")),
+                Event::Ready,
+                output(&format!("{ROM}OER-RESULT: fail beacon-stamp clocks\n")),
+            ],
+            Ok(serde_json::Value::Null),
+        );
+        assert_eq!(
+            recorder.result(Duration::MAX),
+            Ok(ProbeResult::Fail("clocks".into()))
+        );
+        let recording = recorder.finish();
+        assert_eq!((recording.edge, recording.resets), (true, 1));
+        assert!(recording.clean().is_ok());
     }
 
     #[test]
     fn a_second_boot_refuses_every_wait() {
         let file = File::default();
         let (recorder, events, _cancels) = record(&file);
-        events
-            .send(output(&format!(
-                "{ROM}STAMP v1 begin\n{ROM}OER-RESULT: pass beacon-stamp\n"
-            )))
-            .unwrap();
+        feed(
+            &events,
+            vec![
+                Event::Ready,
+                output(&format!(
+                    "{ROM}STAMP v1 begin\n{ROM}OER-RESULT: pass beacon-stamp\n"
+                )),
+            ],
+            Ok(serde_json::Value::Null),
+        );
         assert_eq!(recorder.wait_for("STAMP v1 begin", Duration::MAX), Ok(()));
         let refused = recorder.result(Duration::MAX).unwrap_err();
         assert!(refused.contains("booted again"), "{refused}");
@@ -707,20 +791,71 @@ mod tests {
                 .unwrap_err()
                 .contains("booted again")
         );
-        drop(events);
-        drop(recorder);
+        assert!(recorder.finish().clean().unwrap_err().contains("rebooted"));
     }
 
     #[test]
-    fn a_console_without_a_boot_start_answers_no_wait() {
+    fn the_owners_reboot_after_the_result_makes_the_console_unclean() {
         let file = File::default();
         let (recorder, events, _cancels) = record(&file);
+        events.send(Event::Ready).unwrap();
         events
-            .send(output("STAMP v1 begin\nOER-RESULT: pass beacon-stamp\n"))
+            .send(output(&format!("{ROM}OER-RESULT: pass beacon-stamp\n")))
             .unwrap();
-        drop(events);
+        assert_eq!(recorder.result(Duration::MAX), Ok(ProbeResult::Pass));
+        // The board reboots after the result was read; no wait sees it, the
+        // whole stream's check does.
+        feed(&events, vec![output(ROM)], Ok(serde_json::Value::Null));
+        let mut consoles = Consoles::new();
+        consoles.add("measurement", "m.log".into(), recorder);
+        let (record, clean) = consoles.finish_all();
+        assert_eq!(record["measurement"]["resets"], 2);
+        assert_eq!(record["measurement"]["boot"]["ok"], false);
+        let unclean = clean.unwrap_err();
+        assert!(unclean.contains("rebooted: 2 reset lines"), "{unclean}");
+    }
+
+    #[test]
+    fn an_old_boot_in_flight_after_the_edge_makes_the_console_unclean() {
+        let file = File::default();
+        let (recorder, events, _cancels) = record(&file);
+        // Bytes in flight at the edge: an earlier boot's reset line and
+        // result after it, then this reset's boot. A wait cannot tell the
+        // first result apart; the stream's two reset lines make the console
+        // unclean, so no run passes on it.
+        feed(
+            &events,
+            vec![
+                Event::Ready,
+                output(&format!(
+                    "{ROM}OER-RESULT: pass beacon-stamp\n{ROM}OER-RESULT: fail beacon-stamp x\n"
+                )),
+            ],
+            Ok(serde_json::Value::Null),
+        );
+        let _ = recorder.result(Duration::MAX);
+        assert!(recorder.finish().clean().unwrap_err().contains("rebooted"));
+    }
+
+    #[test]
+    fn a_console_without_a_reset_edge_answers_no_wait_and_is_unclean() {
+        let file = File::default();
+        let (recorder, events, _cancels) = record(&file);
+        feed(
+            &events,
+            vec![output(&format!(
+                "{ROM}STAMP v1 begin\nOER-RESULT: pass beacon-stamp\n"
+            ))],
+            Ok(serde_json::Value::Null),
+        );
         assert!(recorder.wait_for("STAMP v1 begin", Duration::MAX).is_err());
-        drop(recorder);
+        assert!(
+            recorder
+                .finish()
+                .clean()
+                .unwrap_err()
+                .contains("no reset edge")
+        );
     }
 
     #[test]
@@ -756,12 +891,11 @@ mod tests {
     fn a_console_that_ends_before_its_marker_ends_the_wait() {
         let file = File::default();
         let (recorder, events, _cancels) = record(&file);
-        events.send(output(&format!("{ROM}STAMP boot"))).unwrap();
-        events
-            .send(Event::Finished(Err(
-                "the console failed: broken pipe".into()
-            )))
-            .unwrap();
+        feed(
+            &events,
+            vec![Event::Ready, output(&format!("{ROM}STAMP boot"))],
+            Err("the console failed: broken pipe".into()),
+        );
         let refused = recorder
             .wait_for("STAMP v1 begin", Duration::MAX)
             .unwrap_err();
@@ -794,12 +928,11 @@ mod tests {
         let mut consoles = Consoles::new();
         consoles.add("preflight", "p.log".into(), first);
         consoles.add("responder", "r.log".into(), second);
-        first_events
-            .send(output(&format!("{ROM}STAMP v1 begin\n")))
-            .unwrap();
-        first_events
-            .send(Event::Finished(Ok(serde_json::json!("receipt"))))
-            .unwrap();
+        feed(
+            &first_events,
+            vec![Event::Ready, output(&format!("{ROM}STAMP v1 begin\n"))],
+            Ok(serde_json::json!("receipt")),
+        );
         assert!(
             consoles
                 .get("preflight")
@@ -811,12 +944,15 @@ mod tests {
         assert!(consoles.get("preflight").is_err());
         // The run ends early: the responder is still recording; its finish
         // cancels it, and its service then ends it with a loss reported.
+        second_events.send(Event::Ready).unwrap();
+        second_events.send(output(ROM)).unwrap();
         let ender = std::thread::spawn(move || consoles.finish_all());
         assert_eq!(second_cancels.recv(), Ok(()));
-        second_events.send(Event::Lost(3)).unwrap();
-        second_events
-            .send(Event::Finished(Ok(serde_json::Value::Null)))
-            .unwrap();
+        feed(
+            &second_events,
+            vec![Event::Lost(3)],
+            Ok(serde_json::Value::Null),
+        );
         let (record, clean) = ender.join().unwrap();
         assert_eq!(record["preflight"]["file"], "p.log");
         assert_eq!(record["preflight"]["end"]["ok"], true);
