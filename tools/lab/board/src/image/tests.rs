@@ -129,3 +129,17 @@ fn a_write_past_the_store_voids_what_the_board_is_said_to_carry() {
     // A board without a receipt has nothing to void.
     store.void(&access).unwrap();
 }
+
+#[test]
+fn a_held_usb_write_leaves_the_start_to_its_caller_whatever_the_bundle_says() {
+    for bundle in [Start::Reset, Start::PowerOn] {
+        assert_eq!(usb_start(true, bundle), Start::PowerOn);
+        assert_eq!(usb_start(false, bundle), bundle);
+    }
+    // A held write leaves the chip in its loader: no writer reset.
+    assert_eq!(
+        After::of(usb_start(true, Start::Reset)),
+        After::StayInBootloader
+    );
+    assert_eq!(After::of(usb_start(false, Start::Reset)), After::HardReset);
+}

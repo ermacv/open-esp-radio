@@ -313,11 +313,12 @@ fn a_client_of_another_protocol_is_refused_with_the_reason() {
 }
 
 #[test]
-fn a_client_of_protocol_2_is_refused_at_its_hello_before_any_operation() {
-    // A client built before `Reply::Ready` greets with protocol 2 and sends
+fn a_client_of_protocol_3_is_refused_at_its_hello_before_any_operation() {
+    // A client built before `Operation::FlashConsole` greets with protocol 3
+    // and sends
     // its requests at once: the service refuses the hello and ends the
     // connection, so nothing after it is served.
-    assert_eq!(PROTOCOL, 3);
+    assert_eq!(PROTOCOL, 4);
     let directory = tempfile::tempdir().unwrap();
     let fake = Fake::new();
     let service = open(directory.path(), &fake);
@@ -327,7 +328,7 @@ fn a_client_of_protocol_2_is_refused_at_its_hello_before_any_operation() {
     let (mut stream, served) = std::os::unix::net::UnixStream::pair().unwrap();
     for request in [
         Request::Hello {
-            protocol: 2,
+            protocol: 3,
             client: "beacon-stamp".to_owned(),
         },
         Request::Start {
@@ -348,7 +349,7 @@ fn a_client_of_protocol_2_is_refused_at_its_hello_before_any_operation() {
         panic!("not refused");
     };
     assert!(
-        reason.contains("protocol 2") && reason.contains("service 3"),
+        reason.contains("protocol 3") && reason.contains("service 4"),
         "{reason}"
     );
     // The connection ends: its end, or a reset for the request the

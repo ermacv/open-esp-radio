@@ -328,6 +328,10 @@ pub enum Transport<'a> {
     Usb {
         port: &'a Path,
         espflash_chip: &'a str,
+        /// Leave the chip in its ROM loader whatever the bundle's start
+        /// policy says, so the caller starts the image with a reset of its
+        /// own (its pending start is then [`Start::PowerOn`]).
+        hold: bool,
     },
     /// OpenOCD's program through the chip `chip`'s debug module, which works
     /// over any running image and resets into the written one.
@@ -379,6 +383,12 @@ impl Written<'_> {
     }
 }
 
+/// The start a USB write leaves: the bundle's own, or, when the caller
+/// holds the chip in its loader to start it itself, the caller's reset.
+fn usb_start(hold: bool, bundle: Start) -> Start {
+    if hold { Start::PowerOn } else { bundle }
+}
+
 /// Write `bundle`, known as `image`, into the board `device` through
 /// `transport` for the command `by`: snapshot, invalidate, write the
 /// snapshot, publish the receipt. The one write of a board's flash.
@@ -400,9 +410,11 @@ pub fn write<'a>(
         Transport::Usb {
             port,
             espflash_chip,
+            hold,
         } => {
-            crate::flash::write(port, espflash_chip, &snapshot, After::of(snapshot.start))?;
-            snapshot.start
+            let start = usb_start(hold, snapshot.start);
+            crate::flash::write(port, espflash_chip, &snapshot, After::of(start))?;
+            start
         }
         Transport::Jtag { chip } => {
             // OpenOCD programs files: the snapshot's, in a directory only

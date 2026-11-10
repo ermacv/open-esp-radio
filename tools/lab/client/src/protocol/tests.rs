@@ -124,3 +124,25 @@ fn an_airtime_limit_names_its_category_and_both_limits() {
         .is_err()
     );
 }
+
+#[test]
+fn a_flash_into_console_crosses_the_wire_as_its_own_operation() {
+    let operation = Operation::FlashConsole {
+        board: "s31-a".to_owned(),
+        bundle: "/bundles/probe".to_owned(),
+        image: oer_tools_lab_arbiter::journal::ImageIdentity {
+            name: "esp32s31-beacon-stamp".to_owned(),
+            sha256: "4c1b".to_owned(),
+            commit: Some("2583c01c7".to_owned()),
+            dirty: Some(false),
+            origin: "test".to_owned(),
+        },
+        owner: "claude-wt11".to_owned(),
+    };
+    let json = serde_json::to_value(&operation).unwrap();
+    assert_eq!(json["operation"], "flash-console");
+    assert_eq!(
+        serde_json::from_value::<Operation>(json).unwrap(),
+        operation
+    );
+}

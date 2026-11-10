@@ -69,6 +69,18 @@ fn only_a_router_operation_needs_the_air() {
             via: FlashVia::Usb,
             skip_carried: false,
         },
+        Operation::FlashConsole {
+            board: board(),
+            bundle: "bundle".to_owned(),
+            image: oer_tools_lab_arbiter::journal::ImageIdentity {
+                name: "aes".to_owned(),
+                sha256: String::new(),
+                commit: None,
+                dirty: None,
+                origin: "test".to_owned(),
+            },
+            owner: "ann".to_owned(),
+        },
         Operation::Reset {
             board: board(),
             path: None,

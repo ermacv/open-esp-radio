@@ -256,6 +256,40 @@ impl StandDrivers {
         let receipt = board
             .flash(&store, &bundle, &image.name, via, &image.origin)
             .map_err(text)?;
+        self.journal_flash(board, owner, image, &receipt)?;
+        Ok(serde_json::json!({ "written": true, "receipt": receipt }))
+    }
+
+    /// Write `bundle` into `board` and start it by its console's reset,
+    /// journaled like [`Self::flash`]; the console, open from before that
+    /// reset.
+    fn flash_into_console(
+        &self,
+        board: &ProfiledBoard,
+        bundle: &str,
+        image: &ImageIdentity,
+        owner: &str,
+    ) -> Result<(serde_json::Value, BoardConsole)> {
+        let bundle = oer_tools_image_bundle::ImageBundle::load(Path::new(bundle)).map_err(text)?;
+        let store = oer_tools_lab_board::image::Store::open().map_err(text)?;
+        let (receipt, console) = board
+            .flash_into_console(&store, &bundle, &image.name, &image.origin)
+            .map_err(text)?;
+        self.journal_flash(board, owner, image, &receipt)?;
+        Ok((
+            serde_json::json!({ "written": true, "receipt": receipt }),
+            console,
+        ))
+    }
+
+    /// Journal `receipt` as `image` written into `board` by `owner`.
+    fn journal_flash(
+        &self,
+        board: &ProfiledBoard,
+        owner: &str,
+        image: &ImageIdentity,
+        receipt: &oer_tools_lab_board::image::Receipt,
+    ) -> Result<()> {
         let application = receipt
             .segment("application")
             .ok_or("the receipt names no application segment")?;
@@ -268,8 +302,7 @@ impl StandDrivers {
                     ..image.clone()
                 },
             )
-            .map_err(text)?;
-        Ok(serde_json::json!({ "written": true, "receipt": receipt }))
+            .map_err(text)
     }
 
     /// Stream `console` both ways until `io.stop`.
@@ -440,6 +473,26 @@ impl Drivers for StandDrivers {
                 let (board, _turn) = self.board(board, claims, &stop)?;
                 let board = self.profiled(board)?;
                 self.flash(&board, bundle, image, owner, *via, *skip_carried)
+            }
+            Operation::FlashConsole {
+                board,
+                bundle,
+                image,
+                owner,
+            } => {
+                let (board, _turn) = self.board(board, claims, &stop)?;
+                let board = self.profiled(board)?;
+                let (receipt, console) = self.flash_into_console(&board, bundle, image, owner)?;
+                // Started and journaled: a later console failure keeps it.
+                self.console(console, &io).map_err(|error| {
+                    format!(
+                        "written and started ({}); then {error}",
+                        receipt
+                            .get("receipt")
+                            .map_or_else(String::new, ToString::to_string)
+                    )
+                })?;
+                Ok(receipt)
             }
             Operation::Reset { board, path } => {
                 let (board, _turn) = self.board(board, claims, &stop)?;
