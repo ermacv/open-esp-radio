@@ -16,6 +16,7 @@ use crate::machine::{
     FillFailed, Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal,
     SendRefused, SocketId, StaleSocket, WorkId,
 };
+use crate::payload::Payload;
 
 /// What a retired core hands on, each to its own owner.
 #[derive(Debug)]
@@ -179,7 +180,7 @@ impl<
         &mut self,
         now: Instant,
         grant: Grant<B>,
-        produce: impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined>,
+        produce: impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined>,
         count: &C,
     ) -> Result<P::Ticket, Unsent<P::Refusal>> {
         if self.broken {

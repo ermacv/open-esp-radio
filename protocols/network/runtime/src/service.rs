@@ -12,7 +12,8 @@ use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
     CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, Intake, LentDatagram,
-    LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Pool, Retired, SocketId, Unsent,
+    LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool, Retired, SocketId,
+    Unsent,
 };
 use oer_protocols_network_port::{
     Candidate, Egress, FramePort, FrameSource, Next, PlanStop, QUANTUM, Turns,
@@ -1347,7 +1348,7 @@ impl<
             }
             planned = planned.saturating_add(1);
             let local = &mut self.local;
-            let fill = |work, data: &mut [u8]| local.fill(now, work, data);
+            let fill = |work, data: &mut Payload<'_>| local.fill(now, work, data);
             match self
                 .owner
                 .transmit(now, demand.grant(), fill, tally.steps())

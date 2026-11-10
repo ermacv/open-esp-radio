@@ -727,9 +727,9 @@ async fn unpaced(
 }
 
 /// The header of datagram `sequence`, sent at `now`. The image's UDP writes
-/// the whole payload from it where it leaves, the header at its front and the
-/// filler behind it ([`Header::write_datagram`]): every octet, on both stacks
-/// alike.
+/// the whole payload from it where it leaves, the header at its front and
+/// [`oer_hil_services_load::header::FILLER`] behind it: every octet, on both
+/// stacks alike.
 const fn datagram(run: u32, sequence: u64, now: u64) -> Header {
     Header {
         run,

@@ -5,7 +5,7 @@ use std::cell::Cell;
 use std::vec::Vec;
 
 use super::*;
-use crate::{Declined, WorkId};
+use crate::{Declined, Payload, WorkId};
 
 /// The data a producer writes for `work`: its place, then a count.
 fn pattern(length: usize) -> Vec<u8> {
@@ -13,15 +13,19 @@ fn pattern(length: usize) -> Vec<u8> {
 }
 
 /// A fill that writes [`pattern`] and counts its calls.
-fn writes(calls: &Cell<usize>) -> impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined> + '_ {
+fn writes(
+    calls: &Cell<usize>,
+) -> impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined> + '_ {
     move |_, data| {
         calls.set(calls.get() + 1);
-        data.copy_from_slice(&pattern(data.len()));
-        Ok(())
+        data.put(&pattern(data.remaining()))
+            .map_err(|_| Declined::Unwritable)
     }
 }
 
-fn declines(calls: &Cell<usize>) -> impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined> + '_ {
+fn declines(
+    calls: &Cell<usize>,
+) -> impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined> + '_ {
     move |_, _| {
         calls.set(calls.get() + 1);
         Err(Declined::Stale)
@@ -39,7 +43,7 @@ fn broadcast() -> Remote {
 fn produce_next<B>(
     stack: &mut Stack<B>,
     now: Instant,
-    fill: impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined>,
+    fill: impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined>,
 ) -> Result<(), Unsent<&'static str>> {
     let demand = stack.poll_demand(now).unwrap();
     stack.transmit(now, demand.grant(), fill, &())
@@ -152,6 +156,65 @@ fn a_produced_frame_is_written_in_the_slot_and_its_checksum_verifies() {
                 .with(datagram)
                 .verifies()
         );
+    });
+}
+
+/// A producer's header and its filler, written as one pass with no read of
+/// the filler, go out as written, under a checksum that verifies.
+#[test]
+fn a_header_and_filler_go_out_whole_under_a_checksum_that_verifies() {
+    world!(|stack| {
+        knows_peer(stack);
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        for length in [1, 2, 28, 29, 1472] {
+            let work = stack.declare(at(1), &socket, peer(), length).unwrap();
+            let header: Vec<u8> = pattern(length.min(28));
+            let fill = |_, data: &mut Payload<'_>| {
+                data.put(&header).map_err(|_| Declined::Unwritable)?;
+                data.repeat(0x5a, data.remaining())
+                    .map_err(|_| Declined::Unwritable)
+            };
+            produce_next(stack, at(1), fill).unwrap();
+            assert_eq!(finished(stack.take_result(work)), Outcome::Accepted);
+            let frame = stack.port_mut().sent.pop().unwrap();
+            let (_, packet) = EthernetHeader::parse(&frame).unwrap();
+            let ip = Ipv4Header::parse(packet).unwrap();
+            let datagram = ip.payload();
+            let (udp, data) = UdpHeader::parse(datagram).unwrap();
+            let mut expected = header.clone();
+            expected.resize(length, 0x5a);
+            assert_eq!(data, expected, "{length} octets");
+            assert!(
+                Checksum::new()
+                    .with(&ipv4_pseudo_header(
+                        OUR_IP,
+                        PEER_IP,
+                        PROTOCOL_UDP,
+                        udp.length
+                    ))
+                    .with(datagram)
+                    .verifies(),
+                "{length} octets"
+            );
+        }
+    });
+}
+
+/// A fill that leaves part of its data unwritten is declined: its work ends
+/// declined and no frame goes, so nothing an earlier use of the slot left
+/// goes out.
+#[test]
+fn a_fill_that_writes_part_of_its_data_is_declined_and_sends_nothing() {
+    world!(|stack| {
+        knows_peer(stack);
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let work = stack.declare(at(1), &socket, peer(), 37).unwrap();
+        let short =
+            |_, data: &mut Payload<'_>| data.put(&[1, 2, 3]).map_err(|_| Declined::Unwritable);
+        assert_eq!(produce_next(stack, at(1), short), Err(Unsent::Declined));
+        assert_eq!(finished(stack.take_result(work)), Outcome::Declined);
+        assert!(stack.port().sent.is_empty());
+        assert!(!stack.port_broken());
     });
 }
 

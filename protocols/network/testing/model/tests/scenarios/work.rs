@@ -10,7 +10,7 @@
 
 use super::*;
 
-use oer_protocols_network_core::{Declined, SendRefusal};
+use oer_protocols_network_core::{Declined, Payload, SendRefusal};
 use oer_protocols_network_port::PlanStop;
 use oer_protocols_network_runtime::TurnEnd;
 use oer_protocols_network_runtime::{
@@ -101,15 +101,18 @@ impl Produce for Load {
         })
     }
 
-    fn fill(&mut self, _now: Instant, work: Work<u64>, data: &mut [u8]) -> Result<(), Declined> {
+    fn fill(
+        &mut self,
+        _now: Instant,
+        work: Work<u64>,
+        data: &mut Payload<'_>,
+    ) -> Result<(), Declined> {
         self.asked.borrow_mut().fills += 1;
-        let (header, filler) = data
-            .split_at_mut_checked(HEADER)
-            .ok_or(Declined::Unwritable)?;
-        header.fill(0);
+        let mut header = [0; HEADER];
         header[12..20].copy_from_slice(&work.tag.to_be_bytes());
-        filler.fill(FILLER);
-        Ok(())
+        data.put(&header).map_err(|_| Declined::Unwritable)?;
+        data.repeat(FILLER, data.remaining())
+            .map_err(|_| Declined::Unwritable)
     }
 
     fn refused(&mut self, _tag: u64, _reason: SendRefusal) {

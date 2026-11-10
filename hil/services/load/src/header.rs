@@ -32,10 +32,8 @@ pub struct Header {
 }
 
 impl Header {
-    /// Write the header into the first [`LENGTH`] bytes of `payload`; `None`
-    /// when it is shorter.
-    pub fn write(&self, payload: &mut [u8]) -> Option<()> {
-        let header = payload.get_mut(..LENGTH)?;
+    /// The header's octets, as they lead a datagram's payload.
+    pub fn to_bytes(&self) -> [u8; LENGTH] {
         let mut flags = 0;
         if self.echo_request {
             flags |= ECHO_REQUEST;
@@ -49,19 +47,20 @@ impl Header {
             .chain(self.run.to_be_bytes())
             .chain(self.sequence.to_be_bytes())
             .chain(self.sent_us.to_be_bytes());
+        let mut header = [0; LENGTH];
         for (slot, byte) in header.iter_mut().zip(bytes) {
             *slot = byte;
         }
-        Some(())
+        header
     }
 
-    /// Write the whole datagram into `payload`: the header in its first
-    /// [`LENGTH`] bytes and [`FILLER`] in every octet behind it, so nothing an
-    /// earlier use of the buffer left goes on air; `None` when it is shorter
-    /// than the header.
-    pub fn write_datagram(&self, payload: &mut [u8]) -> Option<()> {
-        self.write(payload)?;
-        payload.get_mut(LENGTH..)?.fill(FILLER);
+    /// Write the header into the first [`LENGTH`] bytes of `payload`; `None`
+    /// when it is shorter.
+    pub fn write(&self, payload: &mut [u8]) -> Option<()> {
+        let header = payload.get_mut(..LENGTH)?;
+        for (slot, byte) in header.iter_mut().zip(self.to_bytes()) {
+            *slot = byte;
+        }
         Some(())
     }
 

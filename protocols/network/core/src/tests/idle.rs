@@ -87,7 +87,14 @@ fn a_declared_work_alone_keeps_the_core_from_idle() {
         assert!(!stack.idle(), "a producer's work runs");
         let demand = stack.poll_demand(at(0)).unwrap();
         stack
-            .transmit(at(0), demand.grant(), |_, _| Ok(()), &())
+            .transmit(
+                at(0),
+                demand.grant(),
+                |_, data: &mut crate::Payload<'_>| {
+                    data.repeat(0, 10).map_err(|_| crate::Declined::Unwritable)
+                },
+                &(),
+            )
             .unwrap();
         assert!(stack.idle());
     });

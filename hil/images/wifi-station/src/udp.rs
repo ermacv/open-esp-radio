@@ -10,7 +10,8 @@
 //! The sender hands each datagram's header to the producer's [`Source`]; the
 //! network's task asks the producer for it in its own turn and the producer
 //! writes the whole payload, header and filler, straight into the transmit
-//! buffer ([`Header::write_datagram`]). Each run is a generation of the
+//! buffer, in one pass that the network sums as it goes ([`Payload`]). Each
+//! run is a generation of the
 //! source: a datagram of an earlier run still waiting is declined, never
 //! sent with a later run's data.
 
@@ -23,8 +24,8 @@ use embassy_futures::select::{Either, select};
 use heapless::Vec;
 use oer::wifi::{
     self, AtomicWaker, ClaimCell, Declined, Delivered, FrameLengthError, Interest, Ipv4,
-    LendingSocket as Socket, LocalEnd, NetworkBlock, NetworkInstant, Next, Offer, Outcome, Produce,
-    Refusal, Refused, Remote, SendRefusal, WatchRefused, Work,
+    LendingSocket as Socket, LocalEnd, NetworkBlock, NetworkInstant, Next, Offer, Outcome, Payload,
+    Produce, Refusal, Refused, Remote, SendRefusal, WatchRefused, Work,
 };
 use oer_hil_services_load::header::{self, Header};
 use oer_hil_services_load::{LoadError, Start};
@@ -341,10 +342,14 @@ impl Produce for LoadProducer {
         &mut self,
         _now: NetworkInstant,
         work: Work<Tag>,
-        data: &mut [u8],
+        data: &mut Payload<'_>,
     ) -> Result<(), Declined> {
+        // The header, then the filler behind it: every octet written, so
+        // nothing an earlier use of the buffer left goes on air.
         let written = self.find(work.tag, |_, pending| {
-            pending.header.write_datagram(data).is_some()
+            data.put(&pending.header.to_bytes())
+                .and_then(|()| data.repeat(header::FILLER, data.remaining()))
+                .is_ok()
         });
         match written {
             Some(true) => Ok(()),

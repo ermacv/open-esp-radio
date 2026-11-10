@@ -68,6 +68,28 @@ impl Checksum {
         Ok(self)
     }
 
+    /// Add `count` octets of `byte`, the next of the sequence, without
+    /// reading them: the sum of [`Self::with`] over them, in time that does
+    /// not grow with `count`. Each whole word of them is `byte` twice.
+    #[must_use]
+    pub fn repeated(mut self, byte: u8, count: usize) -> Self {
+        let mut left = count;
+        if left == 0 {
+            return self;
+        }
+        if let Some(high) = self.odd.take() {
+            self.add_word(high, byte);
+            left = left.saturating_sub(1);
+        }
+        let words = u64::try_from(left >> 1).unwrap_or(u64::MAX);
+        let word = u64::from(u16::from_be_bytes([byte, byte]));
+        self.sum = self.sum.wrapping_add(words.wrapping_mul(word));
+        if left & 1 == 1 {
+            self.odd = Some(byte);
+        }
+        self
+    }
+
     fn octets(&mut self, bytes: &[u8]) {
         for byte in bytes {
             match self.odd.take() {
@@ -292,6 +314,33 @@ mod tests {
             for end in start..bytes.len() {
                 let part = &bytes[start..end];
                 assert_eq!(Checksum::new().with(part).finish(), reference(part));
+            }
+        }
+    }
+
+    /// Repeated octets sum as the octets themselves, after a part of any
+    /// length, odd or even, and before another.
+    #[test]
+    fn repeated_octets_sum_as_the_octets_written_out() {
+        let head = octets(9);
+        for before in 0..head.len() {
+            for byte in [0x00, 0x5a, 0xff] {
+                for count in (0..12).chain([1443, 1444, 1445]) {
+                    let filler = vec![byte; count];
+                    let tail = [0x12, 0x34, 0x56];
+                    let mut whole = head[..before].to_vec();
+                    whole.extend_from_slice(&filler);
+                    whole.extend_from_slice(&tail);
+                    let sum = Checksum::new()
+                        .with(&head[..before])
+                        .repeated(byte, count)
+                        .with(&tail);
+                    assert_eq!(
+                        sum.finish(),
+                        reference(&whole),
+                        "{before} before, {count} of {byte:#x}"
+                    );
+                }
             }
         }
     }

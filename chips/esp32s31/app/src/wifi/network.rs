@@ -61,8 +61,8 @@ pub use oer_portable_memory::{AtomicWaker, ClaimCell};
 /// The network's time, which a producer is called with.
 pub use oer_portable_time::Instant as NetworkInstant;
 pub use oer_protocols_network_core::{
-    Block, Configuration, Datagram, Declined, DhcpState, Ipv4, Lease, Outcome, Remote, SendRefusal,
-    WorkId,
+    Block, Configuration, Datagram, Declined, DhcpState, Ipv4, Lease, Outcome, Payload, Remote,
+    SendRefusal, WorkId,
 };
 /// Why a lent buffer no longer holds what the station showed.
 pub use oer_protocols_network_port::FrameLengthError;

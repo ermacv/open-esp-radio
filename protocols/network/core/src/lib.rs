@@ -136,6 +136,7 @@ mod loans;
 mod machine;
 mod neighbor;
 mod owner;
+mod payload;
 mod places;
 
 pub use block::{
@@ -153,6 +154,7 @@ pub use machine::{
     SendRefusal, SendRefused, SocketId, StaleSocket, WorkId,
 };
 pub use owner::{Intake, LentDatagram, NetworkOwner, Retired, Unsent};
+pub use payload::{Payload, PayloadFull};
 
 #[cfg(test)]
 mod tests;

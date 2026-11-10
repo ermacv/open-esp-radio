@@ -30,6 +30,7 @@ use crate::interface::{
 };
 use crate::loans::{LoansRefused, NotLent};
 use crate::neighbor::{Found, Lookup, Neighbors};
+use crate::payload::Payload;
 use crate::places::{Declared, Place, Places, Run, Sending};
 
 /// RFC 1122, 3.2.1.7: a default time to live large enough for the Internet.
@@ -218,12 +219,15 @@ impl Frame<'_> {
     }
 
     /// Write the frame into `slot`. A produced frame's headers go first, then
-    /// `produce` fills its data in place, and the UDP checksum, summed over
-    /// that data in the slot, goes last; `produce` is called for no other.
+    /// `produce` writes its data in place, through a [`Payload`] that sums
+    /// it as it is written, and the UDP checksum goes last; `produce` is
+    /// called for no other. A producer that leaves part of its data
+    /// unwritten declines ([`Declined::Unwritable`]): no octet an earlier use
+    /// of the slot left goes out.
     pub(crate) fn write(
         &self,
         slot: &mut [u8],
-        produce: impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined>,
+        produce: impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined>,
     ) -> Result<(), FillFailed> {
         let short = |_| FillFailed::SlotTooShort;
         match self {
@@ -258,11 +262,14 @@ impl Frame<'_> {
                     .ok_or(FillFailed::SlotTooShort)?;
                 Writer::new(head).write(headers).map_err(short)?;
                 let data = rest.get_mut(..*length).ok_or(FillFailed::SlotTooShort)?;
-                produce(*work, data).map_err(FillFailed::Declined)?;
-                let sum = Checksum::new()
-                    .with(pseudo)
-                    .with(&udp.to_bytes())
-                    .with(data);
+                let sum = Checksum::new().with(pseudo).with(&udp.to_bytes());
+                // One pass over the data: each octet is summed as it is
+                // written.
+                let mut payload = Payload::new(data, sum);
+                produce(*work, &mut payload).map_err(FillFailed::Declined)?;
+                let sum = payload
+                    .finish()
+                    .ok_or(FillFailed::Declined(Declined::Unwritable))?;
                 checksum_last(head, udp, sum)
             }
             Self::Dhcp {

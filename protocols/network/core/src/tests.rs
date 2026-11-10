@@ -334,7 +334,7 @@ fn filled<B>(pool: &mut Blocks<B>, data: &[u8]) -> Block<'static, B, SIZE> {
 
 /// The fill of a test whose work no producer declared: only a declared
 /// work's frame calls it.
-fn unproduced(_: crate::WorkId, _: &mut [u8]) -> Result<(), crate::Declined> {
+fn unproduced(_: crate::WorkId, _: &mut crate::Payload<'_>) -> Result<(), crate::Declined> {
     panic!("no work of this test is a producer's")
 }
 
