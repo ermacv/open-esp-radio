@@ -74,7 +74,15 @@ pub(crate) fn ready<F: Future>(future: F) -> F::Output {
     }
 }
 
-type TestNews = News<u8, u8, ()>;
+/// The slot identity of the test's installations.
+pub(crate) struct TestId;
+
+type TestNews = News<u8, u8, (), TestId>;
+
+/// The test identity's installation of `generation`.
+const fn installation(generation: u32) -> InstallationOf<TestId> {
+    InstallationOf::minted(generation)
+}
 
 /// A datapath actor of the test: its port, another owner it holds, and the
 /// item and attempt its port's calls returned.
@@ -146,16 +154,19 @@ fn actor<'a>(
     }
 }
 
-/// The actor task's end of the retired `actor`, as it calls it.
+/// The actor task's end of the retired `actor` of the installation of
+/// `generation`, as it calls it.
 fn retired_of(
     actor: TestActor<'_>,
+    generation: u32,
 ) -> (
     TestNews,
-    Result<DatapathRetired, UnfinishedOf<TestActor<'_>>>,
+    Result<DatapathRetired<TestId>, UnfinishedOf<TestActor<'_>>>,
 ) {
     let clock = VirtualClock::<2>::new();
     ready(retired(
         actor,
+        installation(generation),
         false,
         &clock,
         Duration::from_millis(1),
@@ -185,7 +196,7 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
     ];
     for (cleanup, stopped, cause) in refusals {
         let ends = Ends::default();
-        let (news, left) = retired_of(actor(&ends, cleanup, stopped, false));
+        let (news, left) = retired_of(actor(&ends, cleanup, stopped, false), 0);
         assert_eq!(ended(news), StationExitOf::ReleaseFailed(cause));
         assert_eq!(ends.all(), [0; 4], "the refusal ends nothing");
         let Err(left) = left else {
@@ -203,7 +214,7 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
 #[test]
 fn a_release_that_succeeded_retires_the_whole_installation() {
     let ends = Ends::default();
-    let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), false));
+    let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), false), 0);
     assert!(left.is_ok(), "a completed retire");
     assert_eq!(ended(news), StationExitOf::Stopped);
     assert_eq!(ends.all(), [1, 1, 0, 0]);
@@ -212,7 +223,7 @@ fn a_release_that_succeeded_retires_the_whole_installation() {
 #[test]
 fn an_item_the_actor_could_not_keep_skips_the_release_and_comes_back_whole() {
     let ends = Ends::default();
-    let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), true));
+    let (news, left) = retired_of(actor(&ends, Ok(()), Some(Radio(Leaves::Left)), true), 0);
     assert_eq!(
         ended(news),
         StationExitOf::ReleaseFailed(ReleaseCause::Unkept)
@@ -238,9 +249,11 @@ fn a_refused_reinstall_returns_the_whole_installation_to_the_actor_task_caller()
     // The port refused the reinstall: the installation comes back, the
     // cleanup's receipt with it.
     let ends = Ends::default();
-    let Err((news, left)) = reinstalled::<_, u8, u8, ()>(actor(&ends, Ok(()), None, false), |_| {
-        Err(ReinstallCause::Resources)
-    }) else {
+    let Err((news, left)) =
+        reinstalled::<_, u8, u8, (), TestId>(actor(&ends, Ok(()), None, false), |_| {
+            Err(ReinstallCause::Resources)
+        })
+    else {
         panic!("a refused reinstall installs nothing");
     };
     assert_eq!(
@@ -264,7 +277,7 @@ fn a_refused_reinstall_returns_the_whole_installation_to_the_actor_task_caller()
     let ends = Ends::default();
     let fault = CleanupCause::Held(BackendFault::Abandoned);
     let Err((news, left)) =
-        reinstalled::<_, u8, u8, ()>(actor(&ends, Err(fault), None, true), |_| {
+        reinstalled::<_, u8, u8, (), TestId>(actor(&ends, Err(fault), None, true), |_| {
             panic!("a cleanup that failed reinstalls")
         })
     else {
@@ -284,7 +297,9 @@ fn a_refused_reinstall_returns_the_whole_installation_to_the_actor_task_caller()
 fn a_reinstall_that_succeeded_ends_its_receipt_and_the_actor_runs_on() {
     let ends = Ends::default();
     let Ok((actor, news)) =
-        reinstalled::<_, u8, u8, ()>(actor(&ends, Ok(()), None, false), |_| Ok((7, 9)))
+        reinstalled::<_, u8, u8, (), TestId>(actor(&ends, Ok(()), None, false), |_| {
+            Ok((7, 9, installation(1)))
+        })
     else {
         panic!("the reinstall succeeds");
     };
@@ -293,7 +308,7 @@ fn a_reinstall_that_succeeded_ends_its_receipt_and_the_actor_runs_on() {
         [1, 0, 0, 0],
         "the retired installation's receipt ended"
     );
-    assert!(matches!(installed(news), Ok((7, 9))));
+    assert!(matches!(installed(news), Ok((7, 9, next)) if next == installation(1)));
     assert!(actor.other.is_some(), "the actor runs on with its owners");
 }
 
@@ -425,7 +440,7 @@ fn only_a_completed_release_retires_the_lifecycle_half() {
         )
     );
     assert_eq!(
-        release_settled::<u8, u8, ()>(None, None),
+        release_settled::<u8, u8, (), TestId>(None, None),
         (
             StationExitOf::ReleaseFailed(ReleaseCause::Deadline),
             LifecycleHalf::Unfinished
@@ -526,7 +541,7 @@ fn poll_once<F: Future>(future: core::pin::Pin<&mut F>) -> Poll<F::Output> {
 /// A lifecycle that abandons the actor: the actor's run stops before the
 /// lifecycle's ends go out, so every owner in transit is in the queues, in
 /// the order it was sent, each once, and nothing follows it; the actor's
-/// news that it stopped stays in the mailbox for the lifecycle's half.
+/// news that it stopped is the half's late end.
 #[test]
 fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
     use oer_portable_memory::WakingSpscQueue;
@@ -551,9 +566,11 @@ fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
             assert!(poll_once(datapath.as_mut()).is_pending());
         }
         let lifecycle = async {
-            abandon(failure, &mut abandon_end, &mut news).await;
+            let half = UnfinishedLifecycleOf::new((), (), installation(0), news)
+                .abandoned(failure, &mut abandon_end)
+                .await;
             // The lifecycle's ends go out here.
-            alive.get()
+            (alive.get(), half)
         };
         let mut both = pin!(embassy_futures::join::join(lifecycle, datapath.as_mut()));
         let mut ended = None;
@@ -565,7 +582,7 @@ fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
         }
         ended
     };
-    let Some((producing, run)) = ended else {
+    let Some(((producing, mut half), run)) = ended else {
         panic!("both sides end");
     };
     assert!(!producing, "the actor stopped before the ends went out");
@@ -575,7 +592,124 @@ fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
         assert!(received.push(item).is_ok());
     }
     assert_eq!(received, [0, 1, 2, 3], "in order, each once");
-    assert!(matches!(news.try_receive(), Some(News::Abandoned)));
+    assert_eq!(half.late_end(), Some(LateEnd::Abandoned));
+}
+
+/// The owner's case A: a news of an installation already in the mailbox
+/// is no confirmation that the actor's run stopped. The wait goes on while
+/// the abandon is still in its queue, keeps the installation's owners, and
+/// ends only on the news that ends the actor's task.
+#[test]
+fn a_queued_installation_does_not_end_the_abandons_wait() {
+    use oer_portable_memory::WakingSpscQueue;
+    let failure = LifecycleFailure::Mailbox;
+    let mut abandon_place = WakingSpscQueue::<LifecycleFailure, 1>::new();
+    let (mut abandon_end, abandoned) = abandon_place.split();
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mailbox, news) = mailbox_place.split();
+    assert!(
+        mailbox
+            .try_send(News::Installed(5, 6, installation(1)))
+            .is_ok()
+    );
+    let half = UnfinishedLifecycleOf::new((), (), installation(0), news);
+    let mut wait = pin!(half.abandoned(failure, &mut abandon_end));
+    assert!(
+        poll_once(wait.as_mut()).is_pending(),
+        "an installation's news confirms nothing"
+    );
+    assert_eq!(
+        abandoned.try_receive(),
+        Some(failure),
+        "the abandon is still in its queue while the wait goes on"
+    );
+    assert!(poll_once(wait.as_mut()).is_pending());
+    assert!(mailbox.try_send(News::Abandoned).is_ok());
+    let Poll::Ready(mut half) = poll_once(wait.as_mut()) else {
+        panic!("the actor's end confirms the stop");
+    };
+    assert_eq!(half.late_end(), Some(LateEnd::Abandoned));
+    assert!(
+        matches!(half.take_installed(), Some((5, 6, kept)) if kept == installation(1)),
+        "the installation's owners come back with the half"
+    );
+    assert!(half.take_installed().is_none(), "once");
+}
+
+/// A second news of an installation before any end breaks the mailbox's
+/// order: the wait ends on it, named, and both installations' owners are
+/// kept in the half.
+#[test]
+fn a_second_installation_news_is_out_of_order_and_both_are_kept() {
+    use oer_portable_memory::WakingSpscQueue;
+    let mut abandon_place = WakingSpscQueue::<LifecycleFailure, 1>::new();
+    let (mut abandon_end, _abandoned) = abandon_place.split();
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mailbox, news) = mailbox_place.split();
+    assert!(
+        mailbox
+            .try_send(News::Installed(1, 2, installation(1)))
+            .is_ok()
+    );
+    let half = UnfinishedLifecycleOf::new((), (), installation(0), news);
+    let mut wait = pin!(half.abandoned(LifecycleFailure::Mailbox, &mut abandon_end));
+    assert!(poll_once(wait.as_mut()).is_pending());
+    assert!(
+        mailbox
+            .try_send(News::Installed(3, 4, installation(2)))
+            .is_ok()
+    );
+    let Poll::Ready(mut half) = poll_once(wait.as_mut()) else {
+        panic!("a broken order ends the wait");
+    };
+    assert_eq!(half.late_end(), Some(LateEnd::OutOfOrder));
+    assert!(matches!(half.take_installed(), Some((1, 2, _))));
+    assert!(matches!(half.take_installed(), Some((3, 4, _))));
+    assert!(half.take_installed().is_none());
+}
+
+/// The owner's case B: the proof that installation 0 retired does not
+/// finish the lifecycle half of installation 1, which reused its places:
+/// the half and the proof come back unchanged and nothing of the half
+/// ended. The half's own proof finishes it.
+#[test]
+fn a_proof_of_another_installation_finishes_nothing() {
+    use oer_portable_memory::WakingSpscQueue;
+    let earlier = Ends::default();
+    let (_, proof) = retired_of(actor(&earlier, Ok(()), Some(Radio(Leaves::Left)), false), 0);
+    let Ok(foreign) = proof else {
+        panic!("installation 0 retired");
+    };
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (_mailbox, news) = mailbox_place.split();
+    let mut transit = WakingSpscQueue::<u8, 8>::new();
+    let (to_lifecycle, in_transit) = transit.split();
+    assert!(to_lifecycle.try_send(4).is_ok());
+    let lifecycle = Ends::default();
+    let half =
+        UnfinishedLifecycleOf::new(Receipt(&lifecycle.other), in_transit, installation(1), news);
+    let Err(ForeignProof {
+        half: mut kept,
+        proof,
+    }) = half.finish(foreign)
+    else {
+        panic!("a proof of installation 0 finished installation 1's half");
+    };
+    assert_eq!(lifecycle.all(), [0; 4], "nothing of the half ended");
+    assert_eq!(
+        proof.installation(),
+        installation(0),
+        "the proof comes back"
+    );
+    assert_eq!(kept.installation(), installation(1));
+    assert_eq!(kept.queues().try_receive(), Some(4), "its owners stay");
+    let own = Ends::default();
+    let (_, proof) = retired_of(actor(&own, Ok(()), Some(Radio(Leaves::Left)), false), 1);
+    let Ok(own) = proof else {
+        panic!("installation 1 retired");
+    };
+    assert!(kept.finish(own).is_ok(), "its own proof finishes it");
+    assert_eq!(lifecycle.all(), [0, 1, 0, 0]);
 }
 
 /// The stop after an abandon reads as such in the lifecycle's half, not as
@@ -586,7 +720,7 @@ fn the_stop_after_an_abandon_reads_abandoned() {
     let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
     let (mailbox, news) = mailbox_place.split();
     assert!(mailbox.try_send(News::Abandoned).is_ok());
-    let mut half = UnfinishedLifecycleOf::new((), (), news);
+    let mut half = UnfinishedLifecycleOf::new((), (), installation(0), news);
     assert_eq!(half.late_end(), Some(LateEnd::Abandoned));
 }
 
@@ -619,11 +753,14 @@ fn a_registry_that_mints_nothing_comes_back_whole() {
 #[test]
 fn a_late_retire_finishes_the_lifecycles_half_without_a_second_release() {
     use oer_portable_memory::WakingSpscQueue;
-    let (exit, half) = release_settled::<u8, u8, ()>(None, None);
+    let (exit, half) = release_settled::<u8, u8, (), TestId>(None, None);
     assert_eq!(exit, StationExitOf::ReleaseFailed(ReleaseCause::Deadline));
     assert_eq!(half, LifecycleHalf::Unfinished);
     let datapath = Ends::default();
-    let (late, proof) = retired_of(actor(&datapath, Ok(()), Some(Radio(Leaves::Left)), false));
+    let (late, proof) = retired_of(
+        actor(&datapath, Ok(()), Some(Radio(Leaves::Left)), false),
+        0,
+    );
     let Ok(proof) = proof else {
         panic!("the release completed");
     };
@@ -635,7 +772,8 @@ fn a_late_retire_finishes_the_lifecycles_half_without_a_second_release() {
     let (to_lifecycle, in_transit) = transit.split();
     assert!(to_lifecycle.try_send(9).is_ok());
     let lifecycle = Ends::default();
-    let mut half = UnfinishedLifecycleOf::new(Receipt(&lifecycle.other), in_transit, news);
+    let mut half =
+        UnfinishedLifecycleOf::new(Receipt(&lifecycle.other), in_transit, installation(0), news);
     assert_eq!(half.queues().try_receive(), Some(9), "the owner in transit");
     assert_eq!(half.queues().try_receive(), None, "once");
     assert!(half.retired_mut().0.get() == 0);
@@ -645,17 +783,57 @@ fn a_late_retire_finishes_the_lifecycles_half_without_a_second_release() {
     assert_eq!(half.late_end(), stopped, "kept once read");
     assert!(half.take_installed().is_none());
     assert_eq!(lifecycle.all(), [0; 4]);
-    let finished = half.finish(proof);
+    let Ok(finished) = half.finish(proof) else {
+        panic!("its own installation's proof");
+    };
     assert_eq!(finished.late, stopped);
     assert_eq!(
         finished.queues.try_receive(),
         Some(10),
         "an owner still in transit comes back"
     );
-    assert!(finished.installed.is_none());
+    assert!(finished.installed.iter().all(Option::is_none));
     assert_eq!(
         lifecycle.all(),
         [0, 1, 0, 0],
         "the lifecycle's half ended once"
     );
+}
+
+/// One side's queue of the test.
+struct Side<'q, 'a>(oer_portable_memory::WakingSpscReceiver<'q, Receipt<'a>, 4>);
+
+impl InTransit for Side<'_, '_> {
+    fn holds(&self) -> bool {
+        !self.0.is_empty()
+    }
+}
+
+/// A completed retire's queues: empty ones end with the retired
+/// installation; one that still holds owners after its producer stopped
+/// comes back whole, each owner once, in order.
+#[test]
+fn a_completed_retire_returns_the_owners_still_in_transit() {
+    use oer_portable_memory::WakingSpscQueue;
+    let ends = Ends::default();
+    let mut empty = WakingSpscQueue::<Receipt<'_>, 4>::new();
+    let (_producer, receiver) = empty.split();
+    assert!(
+        in_transit(Side(receiver)).is_none(),
+        "nothing is in transit"
+    );
+    let mut place = WakingSpscQueue::<Receipt<'_>, 4>::new();
+    let (producer, receiver) = place.split();
+    assert!(producer.try_send(Receipt(&ends.receipt)).is_ok());
+    assert!(producer.try_send(Receipt(&ends.other)).is_ok());
+    drop(producer);
+    let Some(Side(left)) = in_transit(Side(receiver)) else {
+        panic!("the owners in transit come back");
+    };
+    assert_eq!(ends.all(), [0; 4], "nothing ended on the way");
+    drop(left.try_receive());
+    assert_eq!(ends.all(), [1, 0, 0, 0], "first in, first out");
+    drop(left.try_receive());
+    assert_eq!(ends.all(), [1, 1, 0, 0], "each once");
+    assert!(left.try_receive().is_none());
 }

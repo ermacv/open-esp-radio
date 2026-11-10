@@ -116,8 +116,8 @@ pub(crate) struct StationStart {
     /// The accelerator the station unwraps its EAPOL-Key data with.
     aes: oer_chips_esp32s31_platform_runtime::crypto::AesEngine,
     /// Where the lifecycle's half of an installation that did not retire
-    /// goes.
-    home: EndSender<Option<StationLifecycleEnd>>,
+    /// goes, or the owners still in transit to it after a retire.
+    home: EndSender<StationLifecycleLeft>,
 }
 
 /// The image keeps no trace observations.
@@ -254,6 +254,15 @@ async fn radio_actor(actor: &'static mut Actor) {
 /// The station lifecycle's half of an installation that did not retire.
 pub type StationLifecycleEnd = wifi::UnfinishedLifecycle<binding::Binding>;
 
+/// What the station lifecycle's task leaves: the lifecycle's half of an
+/// installation that did not retire, or, after a completed retire, its
+/// ends of the queues to the actor when an owner was still in transit in
+/// them.
+pub(crate) struct StationLifecycleLeft {
+    lifecycle: Option<StationLifecycleEnd>,
+    in_transit: Option<wifi::LifecycleQueues<binding::Binding>>,
+}
+
 /// How the station's installation ended, both halves
 /// ([`Station::installation_end`]): the datapath actor's (a retire, no
 /// installation, or the installation that did not retire, whole) and the
@@ -265,6 +274,9 @@ pub struct StationInstallationEnd {
     pub datapath: wifi::DatapathEnd<binding::Binding>,
     /// The lifecycle's half, when the installation did not retire.
     pub lifecycle: Option<StationLifecycleEnd>,
+    /// After a completed retire, the lifecycle's ends of the queues to the
+    /// actor when an owner was still in transit in them.
+    pub in_transit: Option<wifi::LifecycleQueues<binding::Binding>>,
 }
 
 impl StationInstallationEnd {
@@ -281,9 +293,17 @@ impl StationInstallationEnd {
     pub fn finish_late_retire(self) -> Result<wifi::FinishedLifecycle<binding::Binding>, Self> {
         match self {
             Self {
-                datapath: wifi::DatapathEnd::Retired(retired),
+                datapath: wifi::DatapathEnd::Retired(wifi::RetiredDatapath { proof, in_transit }),
                 lifecycle: Some(half),
-            } => Ok(half.finish(retired)),
+                in_transit: lifecycle_in_transit,
+            } => half.finish(proof).map_err(|foreign| Self {
+                datapath: wifi::DatapathEnd::Retired(wifi::RetiredDatapath {
+                    proof: foreign.proof,
+                    in_transit,
+                }),
+                lifecycle: Some(foreign.half),
+                in_transit: lifecycle_in_transit,
+            }),
             other => Err(other),
         }
     }
@@ -299,7 +319,7 @@ type EndSender<T> = oer_portable_memory::WakingSpscSender<'static, T, 1>;
 pub(crate) type EndReceiver<T> = oer_portable_memory::WakingSpscReceiver<'static, T, 1>;
 
 static STATION_END: StaticCell<EndHome<wifi::DatapathEnd<binding::Binding>>> = StaticCell::new();
-static STATION_LIFECYCLE_END: StaticCell<EndHome<Option<StationLifecycleEnd>>> = StaticCell::new();
+static STATION_LIFECYCLE_END: StaticCell<EndHome<StationLifecycleLeft>> = StaticCell::new();
 
 /// Split a home for an ended task's installation out of `cell`.
 pub(crate) fn end_home<T>(
@@ -365,7 +385,14 @@ pub(crate) async fn serve_station(start: StationStart) {
     let profile = wifi::Profile::new(&config, address, Callbacks(nonces), aes, STATION_SINK)
         .unwrap_or_else(|error| failure(error));
     let end = observed!(Station, runner.run(profile)).await;
-    leave(home, end.lifecycle).await;
+    leave(
+        home,
+        StationLifecycleLeft {
+            lifecycle: end.lifecycle,
+            in_transit: end.in_transit,
+        },
+    )
+    .await;
 }
 
 /// What a started radio hands the role that runs on it: the resources of
@@ -738,10 +765,10 @@ pub struct Station {
     /// Where the datapath task leaves how the installation ended.
     end: Option<EndReceiver<wifi::DatapathEnd<binding::Binding>>>,
     /// Where the lifecycle's task leaves its half.
-    lifecycle_end: Option<EndReceiver<Option<StationLifecycleEnd>>>,
+    lifecycle_end: Option<EndReceiver<StationLifecycleLeft>>,
     /// The halves taken from their homes, until both are here.
     datapath_half: Option<wifi::DatapathEnd<binding::Binding>>,
-    lifecycle_half: Option<Option<StationLifecycleEnd>>,
+    lifecycle_half: Option<StationLifecycleLeft>,
     started: bool,
     address: [u8; 6],
     /// How long a stop gives the network to return its receive buffers.
@@ -939,9 +966,16 @@ impl Station {
             self.lifecycle_half = ended(&mut self.lifecycle_end).await;
         }
         match (self.datapath_half.take(), self.lifecycle_half.take()) {
-            (Some(datapath), Some(lifecycle)) => Some(StationInstallationEnd {
+            (
+                Some(datapath),
+                Some(StationLifecycleLeft {
+                    lifecycle,
+                    in_transit,
+                }),
+            ) => Some(StationInstallationEnd {
                 datapath,
                 lifecycle,
+                in_transit,
             }),
             (datapath, lifecycle) => {
                 self.datapath_half = datapath;

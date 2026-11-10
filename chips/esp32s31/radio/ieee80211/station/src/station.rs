@@ -328,6 +328,7 @@ type HalfOf<W> = crate::station_end::UnfinishedLifecycleOf<
     radio::Commands<W>,
     radio::Tokens<W>,
     InitializationError,
+    <W as Binding>::Id,
 >;
 
 /// What a finished lifecycle half of `W` hands back.
@@ -336,7 +337,16 @@ pub type FinishedLifecycle<W> = crate::station_end::FinishedLifecycleOf<
     radio::Commands<W>,
     radio::Tokens<W>,
     InitializationError,
+    <W as Binding>::Id,
 >;
+
+/// One installation of `W`'s port.
+pub type InstallationOf<W> = crate::station_end::InstallationOf<<W as Binding>::Id>;
+
+/// A proof of another installation that `W`'s lifecycle half refused: the
+/// half and the proof, unchanged.
+pub type ForeignProofOf<W> =
+    crate::station_end::ForeignProof<UnfinishedLifecycle<W>, <W as Binding>::Id>;
 
 impl<W: Binding> UnfinishedLifecycle<W> {
     /// The lifecycle's ends of the queues to the actor: the owners the
@@ -357,10 +367,17 @@ impl<W: Binding> UnfinishedLifecycle<W> {
         self.0.late_end()
     }
 
-    /// The commands and tokens a late news of an installation carried,
-    /// once.
-    pub fn take_installed(&mut self) -> Option<(radio::Commands<W>, radio::Tokens<W>)> {
+    /// The commands, tokens and installation a late news of an
+    /// installation carried, each once, in order.
+    pub fn take_installed(
+        &mut self,
+    ) -> Option<(radio::Commands<W>, radio::Tokens<W>, InstallationOf<W>)> {
         self.0.take_installed()
+    }
+
+    /// The installation the lifecycle ran on.
+    pub fn installation(&self) -> InstallationOf<W> {
+        self.0.installation()
     }
 
     /// Finish the half of an installation whose datapath half retired
@@ -368,8 +385,25 @@ impl<W: Binding> UnfinishedLifecycle<W> {
     /// with the retired installation and no release runs again. The actual
     /// end of the actor's task, beside the exit the station's task
     /// returned, and every owner still in transit come back.
-    pub fn finish(self, retired: crate::station_end::DatapathRetired) -> FinishedLifecycle<W> {
-        self.0.finish(retired)
+    ///
+    /// # Errors
+    ///
+    /// The proof names another installation: the half and the proof come
+    /// back unchanged.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refused finish returns the half and the proof whole, by value"
+    )]
+    pub fn finish(
+        self,
+        retired: crate::station_end::DatapathRetired<<W as Binding>::Id>,
+    ) -> Result<FinishedLifecycle<W>, ForeignProofOf<W>> {
+        self.0
+            .finish(retired)
+            .map_err(|foreign| crate::station_end::ForeignProof {
+                half: Self(foreign.half),
+                proof: foreign.proof,
+            })
     }
 }
 
@@ -381,6 +415,12 @@ impl<W: Binding> UnfinishedLifecycle<W> {
 pub struct StationEnd<W: Binding> {
     pub exit: StationExit,
     pub lifecycle: Option<UnfinishedLifecycle<W>>,
+    /// After a completed retire, the lifecycle's ends of the queues to the
+    /// actor when an owner was still in transit in them once the actor's
+    /// task had ended: the owners, each once, in order. `None` when the
+    /// queues were empty (they end with the retired installation) or the
+    /// half holds them.
+    pub in_transit: Option<radio::LifecycleQueues<W>>,
 }
 
 /// The station's configuration and callbacks, which every installation's
@@ -532,37 +572,39 @@ pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) ->
 /// The actor task's news to the station's task.
 type Mailbox<W> = oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>;
 
-/// `retired`, moved whole to `home`, with the lifecycle's ends of the
-/// queues and the mailbox: the half of an installation that did not
-/// retire, for the application.
+/// `retired`, which ran on `installation`, moved whole to `home`, with the
+/// lifecycle's ends of the queues and the mailbox: the half of an
+/// installation that did not retire, for the application.
 fn unfinished<W: Binding>(
     retired: Placed<'_, RetiredOf<W>>,
     home: &'static mut MaybeUninit<RetiredOf<W>>,
     queues: radio::LifecycleQueues<W>,
+    installation: InstallationOf<W>,
     mailbox: Mailbox<W>,
-) -> Option<UnfinishedLifecycle<W>> {
-    Some(UnfinishedLifecycle(
-        crate::station_end::UnfinishedLifecycleOf::new(retired.move_to(home), queues, mailbox),
+) -> UnfinishedLifecycle<W> {
+    UnfinishedLifecycle(crate::station_end::UnfinishedLifecycleOf::new(
+        retired.move_to(home),
+        queues,
+        installation,
+        mailbox,
     ))
 }
 
 /// The end of a lifecycle that ended on `failure` without retiring the
 /// actor: the actor's task hears it once and ends with its half
-/// ([`crate::station_end::DatapathCause::Lifecycle`]); once its run
-/// stopped, `retired` and the lifecycle's ends of the queues go out whole
-/// beside it.
+/// ([`crate::station_end::DatapathCause::Lifecycle`]); once it told that
+/// its task ended, `retired` and the lifecycle's ends of the queues go out
+/// whole beside it.
 async fn abandoned<W: Binding>(
     failure: crate::failure::LifecycleFailure,
-    retired: Placed<'_, RetiredOf<W>>,
-    home: &'static mut MaybeUninit<RetiredOf<W>>,
+    half: UnfinishedLifecycle<W>,
     abandon: &mut radio::Abandon,
-    queues: radio::LifecycleQueues<W>,
-    mut mailbox: Mailbox<W>,
 ) -> StationEnd<W> {
-    crate::station_end::abandon(failure, abandon, &mut mailbox).await;
+    let UnfinishedLifecycle(half) = half;
     StationEnd {
         exit: StationExit::Failed(failure),
-        lifecycle: unfinished(retired, home, queues, mailbox),
+        lifecycle: Some(UnfinishedLifecycle(half.abandoned(failure, abandon).await)),
+        in_transit: None,
     }
 }
 
@@ -616,11 +658,12 @@ async fn lifecycles<W: Binding>(
             return StationEnd {
                 exit,
                 lifecycle: None,
+                in_transit: None,
             };
         }
     };
     loop {
-        let (issuer, tokens) = next;
+        let (issuer, tokens, installation) = next;
         let lifecycle = initialize::<W>(
             &mut *lifecycle_place,
             station_config,
@@ -690,7 +733,14 @@ async fn lifecycles<W: Binding>(
                     Err(exit) => {
                         return StationEnd {
                             exit,
-                            lifecycle: unfinished(retired, home, actor, mailbox),
+                            lifecycle: Some(unfinished(
+                                retired,
+                                home,
+                                actor,
+                                installation,
+                                mailbox,
+                            )),
+                            in_transit: None,
                         };
                     }
                 }
@@ -699,19 +749,23 @@ async fn lifecycles<W: Binding>(
             // task ends with its half, and this one goes out beside it.
             LifecycleEnd::StopUnconfirmed(observed) => {
                 let failure = crate::failure::LifecycleFailure::StopUnconfirmed(observed);
-                return abandoned(failure, retired, home, &mut abandon, actor, mailbox).await;
+                let half = unfinished(retired, home, actor, installation, mailbox);
+                return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::RetuneUnconfirmed(unconfirmed) => {
                 let failure = crate::failure::LifecycleFailure::RetuneUnconfirmed(unconfirmed);
-                return abandoned(failure, retired, home, &mut abandon, actor, mailbox).await;
+                let half = unfinished(retired, home, actor, installation, mailbox);
+                return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::Faulted(fault) => {
                 let failure = crate::failure::convert::actor_fault(fault);
-                return abandoned(failure, retired, home, &mut abandon, actor, mailbox).await;
+                let half = unfinished(retired, home, actor, installation, mailbox);
+                return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::Contract(violation) => {
                 let failure = crate::failure::LifecycleFailure::Contract(violation);
-                return abandoned(failure, retired, home, &mut abandon, actor, mailbox).await;
+                let half = unfinished(retired, home, actor, installation, mailbox);
+                return abandoned(failure, half, &mut abandon).await;
             }
         };
         let news = match deadline {
@@ -725,14 +779,22 @@ async fn lifecycles<W: Binding>(
             None => Some(news(&mut mailbox).await),
         };
         let (exit, half) = crate::station_end::release_settled(news, failure);
-        return StationEnd {
-            exit,
-            lifecycle: match half {
-                LifecycleHalf::Retired => {
-                    drop(retired);
-                    None
+        return match half {
+            // The actor's task ended with its release: nothing produces
+            // into the queues any more, and an owner still in them comes
+            // back.
+            LifecycleHalf::Retired => {
+                drop(retired);
+                StationEnd {
+                    exit,
+                    lifecycle: None,
+                    in_transit: crate::station_end::in_transit(actor),
                 }
-                LifecycleHalf::Unfinished => unfinished(retired, home, actor, mailbox),
+            }
+            LifecycleHalf::Unfinished => StationEnd {
+                exit,
+                lifecycle: Some(unfinished(retired, home, actor, installation, mailbox)),
+                in_transit: None,
             },
         };
     }

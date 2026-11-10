@@ -337,7 +337,8 @@ pub type Tokens<W> = port::StationTokens<'static, <W as Binding>::Id, Device<W>,
 
 /// What the actor's task tells the station's task, in order, through the
 /// one-slot installation mailbox ([`crate::station_end::News`]).
-pub(crate) type News<W> = crate::station_end::News<Commands<W>, Tokens<W>, InitializationError>;
+pub(crate) type News<W> =
+    crate::station_end::News<Commands<W>, Tokens<W>, InitializationError, <W as Binding>::Id>;
 
 /// The datapath actor of `W` in its static place, with its port.
 pub type PlacedActor<W> = oer_portable_memory::Placed<'static, ActorOf<W>>;
@@ -370,15 +371,32 @@ pub type MintedOf<W> = oer_protocols_radio_port::Minted<<W as Binding>::Id, Inst
 /// The datapath half of a station's installation that did not retire,
 /// whole: the installation (actor, port, items, receipt, cause, phase),
 /// the actor's ends of the queues to the lifecycle with every owner in
-/// transit in them, and the installation registry.
+/// transit in them, its ends to the network stack (the network's
+/// transmit direction and the direction it returns), and the
+/// installation registry.
 #[must_use = "an unfinished installation holds the actor, its port and their owners"]
 pub struct UnfinishedDatapath<W: Binding> {
     /// The installation, whole.
     pub installation: UnfinishedStationOf<W>,
     /// The actor's ends of the queues, its run stopped.
     pub queues: ActorQueues<W>,
+    /// The actor's ends to the network stack, its run stopped.
+    pub network: NetworkSide<W>,
     /// The installation registry.
     pub installations: Installations<W>,
+}
+
+/// The datapath half of a station's installation that retired: the proof
+/// of that installation's retire, and the actor's ends of the queues to
+/// the lifecycle when an owner was still in transit in them once the
+/// lifecycle had stopped producing (`None`: they were empty and ended with
+/// the installation).
+#[must_use = "the proof finishes the lifecycle's half; the queues hold owners in transit"]
+pub struct RetiredDatapath<W: Binding> {
+    /// The proof of the retire.
+    pub proof: crate::station_end::DatapathRetired<<W as Binding>::Id>,
+    /// The actor's ends of the queues, when they held owners.
+    pub in_transit: Option<ActorQueues<W>>,
 }
 
 /// How the datapath actor's task ended.
@@ -390,8 +408,9 @@ pub struct UnfinishedDatapath<W: Binding> {
 pub enum DatapathEnd<W: Binding> {
     /// The installation retired: its radio's stop was confirmed and the
     /// radio released, every owner ended with it. The proof finishes the
-    /// lifecycle's half when that half did not wait for the release.
-    Retired(crate::station_end::DatapathRetired),
+    /// lifecycle's half when that half did not wait for the release; an
+    /// owner still in transit to the actor comes back beside it.
+    Retired(RetiredDatapath<W>),
     /// No installation came up before the port was handed anything: the
     /// registry and the minted installation it had taken, whole; the
     /// station's task holds the refusal and how the owners it returned
@@ -522,7 +541,7 @@ pub(crate) struct ActorPlaces<W: Binding> {
 }
 
 /// The actor task's ends to the network stack.
-pub(crate) type NetworkSide<W> = NetworkEnds<
+pub type NetworkSide<W> = NetworkEnds<
     'static,
     crate::TxMemory,
     crate::LentRx<<W as Binding>::Notifies>,
@@ -639,14 +658,17 @@ pub(crate) async fn drive<W: Binding>(
         receive,
         ActorSink(sink),
     );
-    post(&mut mailbox, News::Installed(commands, tokens)).await;
+    let mut current = crate::station_end::InstallationOf::minted(installations.generation());
+    post(&mut mailbox, News::Installed(commands, tokens, current)).await;
     let mut epoch = FIRST_TSF_EPOCH;
     // Every end that did not retire returns the installation with the
-    // actor's ends of the queues (its run stopped) and the registry.
-    let left = |installation, queues, installations| {
+    // actor's ends of the queues and to the network (its run stopped) and
+    // the registry.
+    let left = |installation, queues, network, installations| {
         DatapathEnd::Unfinished(UnfinishedDatapath {
             installation,
             queues,
+            network,
             installations,
         })
     };
@@ -664,6 +686,7 @@ pub(crate) async fn drive<W: Binding>(
                 return left(
                     ended_running(actor, DatapathCause::Lifecycle(failure)),
                     lifecycle,
+                    network,
                     installations,
                 );
             }
@@ -681,6 +704,7 @@ pub(crate) async fn drive<W: Binding>(
                             Phase::Reinstalling,
                         ),
                         lifecycle,
+                        network,
                         installations,
                     );
                 };
@@ -694,18 +718,24 @@ pub(crate) async fn drive<W: Binding>(
                             // storage; the new installation's slots stay
                             // unused.
                             let (_kept, tokens) = resources.into_station();
-                            (commands, tokens)
+                            let installed = crate::station_end::InstallationOf::minted(
+                                installations.generation(),
+                            );
+                            (commands, tokens, installed)
                         })
                         .map_err(crate::failure::convert::reinstall)
                 }) {
                     Ok((running, news)) => {
+                        if let News::Installed(_, _, installed) = &news {
+                            current = *installed;
+                        }
                         post(&mut mailbox, news).await;
                         actor = running;
                         epoch = next;
                     }
                     Err((news, unfinished)) => {
                         post(&mut mailbox, news).await;
-                        return left(unfinished, lifecycle, installations);
+                        return left(unfinished, lifecycle, network, installations);
                     }
                 }
             }
@@ -715,6 +745,7 @@ pub(crate) async fn drive<W: Binding>(
                 let network_lost = actor.network_lost();
                 let (news, retired) = crate::station_end::retired(
                     actor,
+                    current,
                     network_lost,
                     &EmbassyClock,
                     RELEASE_RETRY,
@@ -723,8 +754,14 @@ pub(crate) async fn drive<W: Binding>(
                 .await;
                 post(&mut mailbox, news).await;
                 return match retired {
-                    Ok(retired) => DatapathEnd::Retired(retired),
-                    Err(unfinished) => left(unfinished, lifecycle, installations),
+                    // The lifecycle produces nothing more once it heard the
+                    // release: an owner it sent that the actor did not take
+                    // comes back.
+                    Ok(proof) => DatapathEnd::Retired(RetiredDatapath {
+                        proof,
+                        in_transit: crate::station_end::in_transit(lifecycle),
+                    }),
+                    Err(unfinished) => left(unfinished, lifecycle, network, installations),
                 };
             }
             // The lifecycle hears the fault and ends with it; the
@@ -739,6 +776,7 @@ pub(crate) async fn drive<W: Binding>(
                 return left(
                     ended_running(actor, DatapathCause::Faulted(failure)),
                     lifecycle,
+                    network,
                     installations,
                 );
             }
