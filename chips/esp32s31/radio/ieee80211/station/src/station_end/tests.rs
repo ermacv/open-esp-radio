@@ -1153,3 +1153,79 @@ fn kept_installations_come_out_in_their_order_after_a_take_and_a_later_read() {
         .map(|kept| kept.map_or(0, |(commands, _, _)| commands));
     assert_eq!(order, [3, 4, 0]);
 }
+
+/// The cycle of an installation's two ends: the datapath's task ends only
+/// once the application served the lifecycle's half, whose places for
+/// installations' news are full. Each end goes out as it arrives, so the
+/// application gets the lifecycle's half first, serves it, and the
+/// datapath's end follows; a wait for both ends first would wait for
+/// itself.
+#[test]
+fn the_lifecycle_half_goes_out_before_the_datapath_end_it_lets_come() {
+    use oer_portable_memory::WakingSpscQueue;
+    type Half<'m> = UnfinishedLifecycleOf<'m, (), (), u8, u8, (), TestId>;
+    let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
+    let (mut mailbox, news) = mailbox_place.split();
+    let mut half: Half<'_> = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
+    for next in 1..=3_u8 {
+        assert!(
+            mailbox
+                .try_send(News::Installed(next, next, installation(u32::from(next))))
+                .is_ok()
+        );
+        let _read = half.late_end();
+    }
+    assert_eq!(half.late_end(), LateRead::Full);
+    // A fourth news waits in the mailbox: the datapath's task cannot post
+    // its last one, nor end, before the half reads on.
+    assert!(
+        mailbox
+            .try_send(News::Installed(4, 4, installation(4)))
+            .is_ok()
+    );
+    let mut datapath_place = WakingSpscQueue::<u8, 1>::new();
+    let (mut datapath_home, datapath_end) = datapath_place.split();
+    let mut lifecycle_place = WakingSpscQueue::<Half<'_>, 1>::new();
+    let (lifecycle_home, lifecycle_end) = lifecycle_place.split();
+    assert!(lifecycle_home.try_send(half).is_ok());
+    let mut datapath = pin!(async {
+        mailbox.ready().await.send(News::Abandoned);
+        datapath_home.ready().await.send(7);
+    });
+    let mut halves = EndHalves::new(datapath_end, lifecycle_end);
+    let mut application = pin!(async {
+        let mut served = None;
+        let mut datapath = None;
+        while let Some(end) = halves.next().await {
+            match end {
+                EndHalf::Lifecycle(mut half) => {
+                    // Served while the datapath's end has not come.
+                    while !matches!(half.late_end(), LateRead::Ended(_)) {
+                        assert!(half.take_installed().is_some());
+                        if matches!(half.late_end(), LateRead::Running) {
+                            half.confirm_end().await.ok();
+                        }
+                    }
+                    served = Some(half);
+                }
+                EndHalf::Datapath(end) => {
+                    assert!(served.is_some(), "the lifecycle's half went out first");
+                    datapath = Some(end);
+                }
+            }
+        }
+        (served, datapath)
+    });
+    let mut done = None;
+    for _ in 0..64 {
+        let _datapath = poll_once(datapath.as_mut());
+        if let Poll::Ready(ends) = poll_once(application.as_mut()) {
+            done = Some(ends);
+            break;
+        }
+    }
+    let Some((Some(mut half), Some(7))) = done else {
+        panic!("both ends came out, the lifecycle's first");
+    };
+    assert_eq!(half.late_end(), LateRead::Ended(LateEnd::Abandoned));
+}

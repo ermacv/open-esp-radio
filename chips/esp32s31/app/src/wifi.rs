@@ -263,11 +263,28 @@ pub(crate) struct StationLifecycleLeft {
     in_transit: Option<wifi::LifecycleQueues<binding::Binding>>,
 }
 
-/// How the station's installation ended, both halves
-/// ([`Station::installation_end`]): the datapath actor's (a retire, no
-/// installation, or the installation that did not retire, whole) and the
-/// station lifecycle's (its retired lifecycle when the installation did
-/// not retire).
+/// One half of how the station's installation ended, as it arrived
+/// ([`Station::installation_half`]).
+#[must_use = "an unfinished installation's half holds its owners"]
+pub enum StationEndHalf {
+    /// The datapath actor's half: a retire, no installation, or the
+    /// installation that did not retire, whole.
+    Datapath(wifi::DatapathEnd<binding::Binding>),
+    /// The station lifecycle's half.
+    Lifecycle {
+        /// Its retired lifecycle, when the installation did not retire.
+        lifecycle: Option<StationLifecycleEnd>,
+        /// After a completed retire, the lifecycle's ends of the queues to
+        /// the actor when an owner was still in transit in them.
+        in_transit: Option<wifi::LifecycleQueues<binding::Binding>>,
+    },
+}
+
+/// How the station's installation ended, both halves, as the application
+/// put them together from [`Station::installation_half`]: the datapath
+/// actor's (a retire, no installation, or the installation that did not
+/// retire, whole) and the station lifecycle's (its retired lifecycle when
+/// the installation did not retire).
 #[must_use = "an unfinished installation holds the port and its owners"]
 pub struct StationInstallationEnd {
     /// The datapath actor's half.
@@ -387,7 +404,7 @@ pub(crate) struct Datapath {
 /// The datapath actor's task, on the station's executor. The station's
 /// task hears its exit and decides; how the installation ended, an
 /// unfinished one whole, goes to the application's [`Station`]
-/// ([`Station::installation_end`]).
+/// ([`Station::installation_half`]).
 pub(crate) async fn datapath(datapath: Datapath) {
     let Datapath { datapath, home } = datapath;
     let end = observed!(
@@ -402,7 +419,7 @@ pub(crate) async fn datapath(datapath: Datapath) {
 /// stays inside the facade. Every other end keeps its typed cause with the
 /// control ([`Station::stop`]) and resets nothing: an installation that
 /// did not retire comes back whole, the lifecycle's half from here and
-/// the actor's from the datapath task ([`Station::installation_end`]).
+/// the actor's from the datapath task ([`Station::installation_half`]).
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
         runner,
@@ -792,13 +809,9 @@ impl oer_portable_diagnostics::DiagnosticPath for ConnectError {
 /// A started Wi-Fi station: its control.
 pub struct Station {
     control: wifi::Control<'static, Notifies>,
-    /// Where the datapath task leaves how the installation ended.
-    end: Option<EndReceiver<wifi::DatapathEnd<binding::Binding>>>,
-    /// Where the lifecycle's task leaves its half.
-    lifecycle_end: Option<EndReceiver<StationLifecycleLeft>>,
-    /// The halves taken from their homes, until both are here.
-    datapath_half: Option<wifi::DatapathEnd<binding::Binding>>,
-    lifecycle_half: Option<StationLifecycleLeft>,
+    /// Where the datapath task and the lifecycle's task leave their
+    /// halves of how the installation ended, each going out as it comes.
+    ends: wifi::EndHalves<'static, wifi::DatapathEnd<binding::Binding>, StationLifecycleLeft>,
     started: bool,
     address: [u8; 6],
     /// How long a stop gives the network to return its receive buffers.
@@ -810,7 +823,7 @@ pub struct Station {
 pub enum StopError {
     /// The station ended by a failure, typed with the control; nothing
     /// resets, and an installation that did not retire comes back whole
-    /// ([`Station::installation_end`]).
+    /// ([`Station::installation_half`]).
     Failed,
     /// The station stopped, and its radio's release did not complete, for
     /// this cause. A leave the release posted is never posted again.
@@ -886,10 +899,7 @@ impl Station {
         Ok((
             Self {
                 control,
-                end: Some(end),
-                lifecycle_end: Some(lifecycle_end),
-                datapath_half: None,
-                lifecycle_half: None,
+                ends: wifi::EndHalves::new(end, lifecycle_end),
                 started: false,
                 address,
                 drain: config.drain,
@@ -976,43 +986,31 @@ impl Station {
         }
     }
 
-    /// How the station's installation ended, once both its tasks ended:
-    /// the datapath actor's half (a retire, no installation, or the
-    /// installation that did not retire, whole:
-    /// [`wifi::DatapathEnd::Unfinished`], the actor with its port, the item
-    /// a port call could not keep, an attempt returned unaccepted, the
-    /// cleanup's receipt, the cause and the phase) and the lifecycle's half
-    /// of an installation that did not retire (its station, places,
-    /// arbiter, issuer and contexts), which the application holds from
-    /// here. `None` once taken.
+    /// The next half of how the station's installation ended, as it
+    /// arrives, the lifecycle's first when both are there: the datapath
+    /// actor's half (a retire, no installation, or the installation that
+    /// did not retire, whole: [`wifi::DatapathEnd::Unfinished`], the actor
+    /// with its port, the item a port call could not keep, an attempt
+    /// returned unaccepted, the cleanup's receipt, the cause and the
+    /// phase) and the lifecycle's half of an installation that did not
+    /// retire (its station, places, arbiter, issuer and contexts), which
+    /// the application holds from here. `None` once both went out.
     ///
-    /// Each half moves from its home into this handle as it comes, so a
-    /// wait that ends early keeps what it took for the next call.
-    pub async fn installation_end(&mut self) -> Option<StationInstallationEnd> {
-        if self.datapath_half.is_none() {
-            self.datapath_half = ended(&mut self.end).await;
-        }
-        if self.lifecycle_half.is_none() {
-            self.lifecycle_half = ended(&mut self.lifecycle_end).await;
-        }
-        match (self.datapath_half.take(), self.lifecycle_half.take()) {
-            (
-                Some(datapath),
-                Some(StationLifecycleLeft {
-                    lifecycle,
-                    in_transit,
-                }),
-            ) => Some(StationInstallationEnd {
-                datapath,
+    /// Neither half waits for the other: the datapath's task may end only
+    /// after the application served the lifecycle's half (one whose places
+    /// for installations' news are full,
+    /// [`wifi::LateRead::Full`]). A wait that is dropped takes nothing.
+    pub async fn installation_half(&mut self) -> Option<StationEndHalf> {
+        Some(match self.ends.next().await? {
+            wifi::EndHalf::Datapath(datapath) => StationEndHalf::Datapath(datapath),
+            wifi::EndHalf::Lifecycle(StationLifecycleLeft {
                 lifecycle,
                 in_transit,
-            }),
-            (datapath, lifecycle) => {
-                self.datapath_half = datapath;
-                self.lifecycle_half = lifecycle;
-                None
-            }
-        }
+            }) => StationEndHalf::Lifecycle {
+                lifecycle,
+                in_transit,
+            },
+        })
     }
 
     /// The link's state and epoch now.

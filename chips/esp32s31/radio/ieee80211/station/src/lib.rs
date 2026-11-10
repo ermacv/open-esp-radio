@@ -880,8 +880,9 @@ pub use station::{
 };
 #[cfg(any(test, target_arch = "riscv32"))]
 pub use station_end::{
-    DatapathCause, DatapathRetired, FinishedLifecycleOf, InstallationOf, KeptFull, LateEnd,
-    LateRead, NotInstalledOf, ProofRefusal, RefusedProof, UnfinishedLifecycleOf, UnfinishedStation,
+    DatapathCause, DatapathRetired, EndHalf, EndHalves, FinishedLifecycleOf, InstallationOf,
+    KeptFull, LateEnd, LateRead, NotInstalledOf, ProofRefusal, RefusedProof, UnfinishedLifecycleOf,
+    UnfinishedStation,
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.

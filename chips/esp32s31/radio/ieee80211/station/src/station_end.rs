@@ -291,6 +291,83 @@ pub(crate) async fn run_until_abandoned<F: Future, C, K, E, B>(
     Err(failure)
 }
 
+/// One of an installation's two ends, as it arrived in its home.
+#[derive(Debug, Eq, PartialEq)]
+pub enum EndHalf<D, L> {
+    /// The datapath actor's task's end.
+    Datapath(D),
+    /// The lifecycle's task's end.
+    Lifecycle(L),
+}
+
+/// The homes of an installation's two ends, the datapath actor's task's
+/// (`D`) and the lifecycle's task's (`L`), each written once by its task:
+/// each end goes out as it arrives, never held back for the other. The
+/// datapath's task may end only after the application served the
+/// lifecycle's half (a half whose places for installations' news are full
+/// reads the task's last news only once one was taken: [`LateRead::Full`]),
+/// so a wait for both before either goes out could wait for itself.
+pub struct EndHalves<'a, D, L> {
+    datapath: Option<oer_portable_memory::WakingSpscReceiver<'a, D, 1>>,
+    lifecycle: Option<oer_portable_memory::WakingSpscReceiver<'a, L, 1>>,
+}
+
+impl<'a, D, L> EndHalves<'a, D, L> {
+    /// The two homes, neither end taken.
+    pub const fn new(
+        datapath: oer_portable_memory::WakingSpscReceiver<'a, D, 1>,
+        lifecycle: oer_portable_memory::WakingSpscReceiver<'a, L, 1>,
+    ) -> Self {
+        Self {
+            datapath: Some(datapath),
+            lifecycle: Some(lifecycle),
+        }
+    }
+
+    /// The next end to arrive, the lifecycle's first when both are there,
+    /// each once; `None` once both went out. A wait that is dropped takes
+    /// nothing: an end that arrived stays in its home for the next call.
+    pub async fn next(&mut self) -> Option<EndHalf<D, L>> {
+        core::future::poll_fn(|cx| {
+            if self.datapath.is_none() && self.lifecycle.is_none() {
+                return core::task::Poll::Ready(None);
+            }
+            if let Some(end) = arrived(&mut self.lifecycle, cx) {
+                return core::task::Poll::Ready(Some(EndHalf::Lifecycle(end)));
+            }
+            if let Some(end) = arrived(&mut self.datapath, cx) {
+                return core::task::Poll::Ready(Some(EndHalf::Datapath(end)));
+            }
+            core::task::Poll::Pending
+        })
+        .await
+    }
+
+    /// Whether an end is still to come.
+    pub const fn pending(&self) -> bool {
+        self.datapath.is_some() || self.lifecycle.is_some()
+    }
+}
+
+/// The end in `home`, which then has none; otherwise the wait for it is
+/// registered with `cx` before a second look, so an end written after the
+/// first look wakes it.
+fn arrived<T>(
+    home: &mut Option<oer_portable_memory::WakingSpscReceiver<'_, T, 1>>,
+    cx: &mut core::task::Context<'_>,
+) -> Option<T> {
+    let receiver = home.as_mut()?;
+    let end = match receiver.try_receive() {
+        Some(end) => end,
+        None => {
+            let _registered = core::pin::pin!(receiver.ready()).poll(cx);
+            receiver.try_receive()?
+        }
+    };
+    *home = None;
+    Some(end)
+}
+
 /// How the actor's task ended after the lifecycle stopped waiting for it,
 /// as its late news told.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
