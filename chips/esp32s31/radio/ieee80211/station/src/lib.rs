@@ -765,6 +765,10 @@ pub use supply::{
     FRAME_WORD_OFFSET, NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, TxMemory, TxPublishRefused,
     TxPublisher, TxSlot,
 };
+#[cfg(any(test, target_arch = "riscv32"))]
+mod prepare;
+#[cfg(target_arch = "riscv32")]
+pub use prepare::{PreparationRefused, Stage, Step, Steps};
 mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod release;

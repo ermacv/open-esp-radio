@@ -995,14 +995,16 @@ pub(crate) enum Acquired<W: Binding> {
     /// taken.
     Boot(Boot<W>),
     /// The port's storage did not take its parts before the radio started:
-    /// the radio's partition and cell, its interrupt binding and bell, and
-    /// the driver state's place.
+    /// the radio's partition and cell, its interrupt binding and bell, the
+    /// driver state's place, and the refused preparation: the step it
+    /// refused at, the parts it reached and the inputs it did not take.
     Unstarted {
         cell: MembershipCell<Wifi>,
         wifi: WifiPartition,
         bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
         bell: irq::Bell<W::Wifi, W::DriverEntry>,
         driver: &'static mut PortDriverOf<W>,
+        preparation: crate::prepare::PreparationRefused<PrepareSteps<W>>,
     },
     /// The radio's join or track was never answered: its cell and
     /// partition went with the request; the radio system keeps its seat.
@@ -1043,14 +1045,16 @@ pub enum BootLeft<W: Binding> {
     /// The boot, whole: nothing was taken.
     Boot(Boot<W>),
     /// The port's storage did not take its parts before the radio started:
-    /// the radio's partition and cell, its interrupt binding and bell, and
-    /// the driver state's place.
+    /// the radio's partition and cell, its interrupt binding and bell, the
+    /// driver state's place, and the refused preparation: the step it
+    /// refused at, the parts it reached and the inputs it did not take.
     Unstarted {
         cell: MembershipCell<Wifi>,
         wifi: WifiPartition,
         bound: oer_chips_family_platform_interrupt_table::Bound<W::Wifi>,
         bell: irq::Bell<W::Wifi, W::DriverEntry>,
         driver: &'static mut PortDriverOf<W>,
+        preparation: crate::prepare::PreparationRefused<PrepareSteps<W>>,
     },
     /// The radio's join or track was never answered, or its join refused:
     /// the prepared parts; the membership cell and partition went with the
@@ -1096,6 +1100,7 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
                 bound,
                 bell,
                 driver,
+                preparation,
             } => (
                 Ok(()),
                 BootLeft::Unstarted {
@@ -1104,6 +1109,7 @@ impl<W: Binding> crate::release::Retire for Acquired<W> {
                     bound,
                     bell,
                     driver,
+                    preparation,
                 },
             ),
             Self::Unanswered(prepared) => (
@@ -1201,6 +1207,95 @@ pub struct Prepared<W: Binding> {
     >,
 }
 
+/// The chip's steps of a port's preparation ([`crate::prepare`]): each
+/// consumes only its own input, as its primitive's contract names.
+pub struct PrepareSteps<W>(core::marker::PhantomData<W>);
+
+impl<W: Binding> crate::prepare::Steps for PrepareSteps<W> {
+    type Error = InitializationError;
+    type RxIn = (
+        oer_chips_esp32s31_hal::system::memory::dma_static::Placed<
+            oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxStatic<
+                N,
+                B,
+                S,
+                Q,
+                DriverExecutor,
+            >,
+        >,
+        WifiIrqSignals<DriverExecutor>,
+    );
+    type Rx = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxParts<
+        'static,
+        N,
+        B,
+        S,
+        Q,
+        ChipDma,
+        DriverExecutor,
+    >;
+    type DeviceIn = &'static StaticCell<Device<W>>;
+    type Device = &'static mut core::mem::MaybeUninit<Device<W>>;
+    type SlotIn = (
+        oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxDescriptor>,
+        &'static StaticCell<TxSlot<TX>>,
+    );
+    type Slot = Pin<&'static mut TxSlot<TX>>;
+    type ChainIn = (
+        oer_chips_esp32s31_hal::system::memory::dma_static::Placed<crate::dma::TxChain>,
+        &'static StaticCell<HtAmpduTxStorage<TX_AMPDU_SUBFRAMES>>,
+        &'static StaticCell<RetainedAmpduDmaStorage<TxBacking<TX>, TX_AMPDU_SUBFRAMES>>,
+    );
+    type Chain = oer_chips_esp32s31_radio_ieee80211_backend::port::AmpduChain<TX>;
+    type LentIn = &'static mut Option<Lent<W>>;
+    type Lent = Lent<W>;
+    type SharedIn = &'static StaticCell<PortSharedStorage<TX, Lent<W>>>;
+    type Shared = &'static mut core::mem::MaybeUninit<PortSharedStorage<TX, Lent<W>>>;
+
+    fn bind(&mut self, (rx, signals): Self::RxIn) -> Result<Self::Rx, InitializationError> {
+        let (rx, _, _) = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxArena::<
+            N,
+            B,
+            S,
+            Q,
+            DriverExecutor,
+        >::bind(rx, signals)
+        .map_err(|_| InitializationError::Rx)?;
+        Ok(rx)
+    }
+
+    fn device(&mut self, device: Self::DeviceIn) -> Result<Self::Device, InitializationError> {
+        device.try_uninit().ok_or(InitializationError::Storage)
+    }
+
+    fn slot(&mut self, (dma, slot): Self::SlotIn) -> Result<Self::Slot, InitializationError> {
+        let place = slot.try_uninit().ok_or(InitializationError::Storage)?;
+        let dma = TxDmaStorage::pin::<ChipDma, _>(dma).map_err(|_| InitializationError::Tx)?;
+        Ok(Pin::new(&mut *place.write(TxSlot::from_dma(dma))))
+    }
+
+    fn chain(
+        &mut self,
+        (dma, metadata, retention): Self::ChainIn,
+    ) -> Result<Self::Chain, InitializationError> {
+        let metadata = metadata.try_uninit().ok_or(InitializationError::Storage)?;
+        let retention = retention.try_uninit().ok_or(InitializationError::Storage)?;
+        let metadata = metadata.write(HtAmpduTxStorage::new());
+        let retention = retention.write(RetainedAmpduDmaStorage::new());
+        let resources =
+            HtAmpduTxResources::pin_static(metadata, dma).map_err(|_| InitializationError::Tx)?;
+        Ok(RetainedDmaAmpduTx::new(resources, retention))
+    }
+
+    fn lent(&mut self, lent: Self::LentIn) -> Result<Self::Lent, InitializationError> {
+        lent.take().ok_or(InitializationError::Storage)
+    }
+
+    fn shared(&mut self, shared: Self::SharedIn) -> Result<Self::Shared, InitializationError> {
+        shared.try_uninit().ok_or(InitializationError::Storage)
+    }
+}
+
 /// Start the radio and assemble the port's parts: the port holds the first
 /// `bank` buffers of the transmit pool.
 ///
@@ -1288,73 +1383,56 @@ pub(crate) async fn install<W: Binding>(
         retention,
         driver,
     } = storage;
-    // The port's parts are placed before the radio starts: a refusal of
-    // theirs leaves the radio unstarted.
-    let prepared = (|| {
-        let (rx, _, _) = oer_chips_esp32s31_radio_ieee80211_backend::rx::arena::WifiRxArena::<
-            N,
-            B,
-            S,
-            Q,
-            DriverExecutor,
-        >::bind(
-            rx,
-            WifiIrqSignals {
-                mac,
-                receive,
-                power,
-            },
-        )
-        .map_err(|_| InitializationError::Rx)?;
-        let device = device.try_uninit().ok_or(InitializationError::Storage)?;
-        let [t0, t1, t2, t3, t4] = descriptors;
-        let [c0, c1] = chains;
-        let [s0, s1, s2, s3, s4] = slots;
-        let [m0, m1] = chain_storage;
-        let [r0, r1] = retention;
-        macro_rules! slot {
-            ($dma:ident, $slot:ident) => {{
-                let place = $slot.try_uninit().ok_or(InitializationError::Storage)?;
-                let dma =
-                    TxDmaStorage::pin::<ChipDma, _>($dma).map_err(|_| InitializationError::Tx)?;
-                Pin::new(&mut *place.write(TxSlot::from_dma(dma)))
-            }};
-        }
-        macro_rules! chain {
-            ($dma:ident, $metadata:ident, $retention:ident) => {{
-                let metadata = $metadata.try_uninit().ok_or(InitializationError::Storage)?;
-                let retention = $retention
-                    .try_uninit()
-                    .ok_or(InitializationError::Storage)?;
-                let metadata = metadata.write(HtAmpduTxStorage::new());
-                let retention = retention.write(RetainedAmpduDmaStorage::new());
-                let resources = HtAmpduTxResources::pin_static(metadata, $dma)
-                    .map_err(|_| InitializationError::Tx)?;
-                RetainedDmaAmpduTx::new(resources, retention)
-            }};
-        }
-        let first = slot!(t0, s0);
-        let single = [slot!(t1, s1), slot!(t2, s2), slot!(t3, s3), slot!(t4, s4)];
-        let chained = [chain!(c0, m0, r0), chain!(c1, m1, r1)];
-        let lent = lent.take().ok_or(InitializationError::Storage)?;
-        let shared = shared.try_uninit().ok_or(InitializationError::Storage)?;
-        Ok((rx, device, first, single, chained, lent, shared))
-    })();
-    let (rx, device, first, single, chained, lent, shared) = match prepared {
-        Ok(prepared) => prepared,
-        Err(cause) => {
+    let [t0, t1, t2, t3, t4] = descriptors;
+    let [c0, c1] = chains;
+    let [s0, s1, s2, s3, s4] = slots;
+    let [m0, m1] = chain_storage;
+    let [r0, r1] = retention;
+    // The port's parts are placed before the radio starts, a step at a
+    // time: a refusal of theirs leaves the radio unstarted, and returns the
+    // parts reached and the inputs no step took.
+    let prepared = crate::prepare::prepare(
+        &mut PrepareSteps::<W>(core::marker::PhantomData),
+        crate::prepare::Inputs {
+            rx: (
+                rx,
+                WifiIrqSignals {
+                    mac,
+                    receive,
+                    power,
+                },
+            ),
+            device,
+            slots: [(t0, &*s0), (t1, &*s1), (t2, &*s2), (t3, &*s3), (t4, &*s4)],
+            chains: [(c0, &*m0, &*r0), (c1, &*m1, &*r1)],
+            lent,
+            shared,
+        },
+    );
+    let crate::prepare::Parts {
+        rx,
+        device,
+        slots: [first, s1, s2, s3, s4],
+        chains: chained,
+        lent,
+        shared,
+    } = match prepared {
+        Ok(parts) => parts,
+        Err(preparation) => {
             return Err(InstallRefused {
-                cause,
+                cause: preparation.cause,
                 owners: Acquired::Unstarted {
                     cell,
                     wifi,
                     bound,
                     bell,
                     driver,
+                    preparation,
                 },
             });
         }
     };
+    let single = [s1, s2, s3, s4];
     let started = start_esp32s31_radio(cell, wifi, Platform { power: None }, start).await;
     let (cell, stopped) = match started {
         Ok(started) => started,
