@@ -599,6 +599,74 @@ fn a_command_the_faulted_port_gives_back_ends_the_run_faulted_with_the_command_r
     }));
 }
 
+/// The owner's question 1: a port that keeps a fault it could not take
+/// back never confirms a stop. The stop's watch ends on the port's
+/// unconfirmed answer, with the fault and what the port observed, and
+/// every owner stays in the runner; a port that takes its fault back stops
+/// as before.
+#[test]
+fn a_fault_the_port_keeps_ends_the_stops_watch_unconfirmed_with_every_owner() {
+    for recovers in [false, true] {
+        embassy_futures::block_on(with_local_slot(async |claim| {
+            let counted = Counted::new();
+            fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
+            air.fault_next_access_point_command();
+            if recovers {
+                air.allow_recovery();
+            }
+            let idle = async {
+                loop {
+                    counted.idle(1).await;
+                }
+            };
+            let end = match select(Woken::new(runner.run(&shared, &counted)), idle).await {
+                Either::First(end) => end,
+                Either::Second(()) => unreachable!(),
+            };
+            let ApEnd::Faulted(fault) = end else {
+                panic!("the fault ends the run");
+            };
+            let observed = Cell::new(0_u32);
+            let finish = runner.finish_stop(&counted, |_| observed.set(observed.get() + 1));
+            let bounded = async {
+                for _ in 0..256 {
+                    counted.advance(&air, Duration::from_millis(1)).await;
+                }
+            };
+            let watched = match select(Woken::new(finish), bounded).await {
+                Either::First(watched) => watched,
+                Either::Second(()) => panic!("the watch of a kept fault never ends"),
+            };
+            if recovers {
+                assert_eq!(watched, Ok(super::StopWatch::Confirmed));
+                return;
+            }
+            let Ok(super::StopWatch::Faulted {
+                fault: kept,
+                observed: unconfirmed,
+            }) = watched
+            else {
+                panic!("a kept fault ends the watch unconfirmed: {watched:?}");
+            };
+            assert_eq!(kept, Some(fault), "the run's fault is kept");
+            assert_eq!(
+                unconfirmed.cause,
+                oer_protocols_ieee80211_contracts_port::StopCause::Device
+            );
+            assert_eq!(observed.get(), 1, "the observation was published once");
+            assert!(
+                runner.take_returned().is_some(),
+                "the command comes back beside the fault"
+            );
+            assert_eq!(
+                runner.homes.tickets.len(),
+                oer_protocols_ieee80211_testing_model::MODEL_TICKETS
+            );
+            assert!(runner.homes.beacon.is_some() && runner.homes.configure.is_none());
+        }));
+    }
+}
+
 #[test]
 fn a_refused_command_returns_the_runner_with_the_command_and_every_owner() {
     embassy_futures::block_on(with_local_slot(async |claim| {

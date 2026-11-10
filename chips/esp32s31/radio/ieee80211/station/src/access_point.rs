@@ -751,11 +751,22 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
         unconfirmed: impl FnMut(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
     ) -> impl core::future::Future<
         Output = Result<
-            oer_protocols_ieee80211_runtime::access_point::StopWatch,
+            oer_protocols_ieee80211_runtime::access_point::StopWatch<crate::failure::BackendFault>,
             oer_protocols_ieee80211_contracts_port::ReceiveAccounting,
         >,
     > {
-        ApRunner::finish_stop(self, &EmbassyClock, unconfirmed)
+        use oer_protocols_ieee80211_runtime::access_point::StopWatch;
+        let watch = ApRunner::finish_stop(self, &EmbassyClock, unconfirmed);
+        async {
+            watch.await.map(|watched| match watched {
+                StopWatch::Confirmed => StopWatch::Confirmed,
+                StopWatch::Unkept => StopWatch::Unkept,
+                StopWatch::Faulted { fault, observed } => StopWatch::Faulted {
+                    fault: fault.map(crate::failure::convert::backend_fault),
+                    observed,
+                },
+            })
+        }
     }
     fn port_mut(&mut self) -> &mut Port<W> {
         ApRunner::port_mut(self)

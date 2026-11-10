@@ -54,6 +54,9 @@ fn an_unconfirmed_stop_that_the_port_confirms_later_returns_every_owner() {
             Either::First(Ok(crate::access_point::StopWatch::Unkept)) => {
                 panic!("the port keeps every item")
             }
+            Either::First(Ok(crate::access_point::StopWatch::Faulted { .. })) => {
+                panic!("the port keeps no fault")
+            }
             Either::First(Err(fault)) => panic!("the port takes every unit back: {fault:?}"),
             Either::Second(()) => panic!("the port confirms the stop once the MAC is quiet"),
         }

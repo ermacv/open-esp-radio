@@ -29,6 +29,9 @@ struct TestRunner<'a, 'b> {
     confirmed: &'b Cell<bool>,
     /// An attempt a submission returned unaccepted.
     unaccepted: Option<Receipt<'a>>,
+    /// The port keeps a fault it could not take back: a watch without an
+    /// item ends on this observation.
+    kept_fault: Option<StopUnconfirmed>,
 }
 
 impl<'a> Retiring for TestRunner<'a, '_> {
@@ -37,18 +40,22 @@ impl<'a> Retiring for TestRunner<'a, '_> {
     fn finish_stop(
         &mut self,
         _unconfirmed: impl FnMut(StopUnconfirmed),
-    ) -> impl Future<Output = Result<StopWatch, ReceiveAccounting>> {
+    ) -> impl Future<Output = Result<StopWatch<BackendFault>, ReceiveAccounting>> {
         self.watched.set(self.watched.get() + 1);
         let holds = !self.unkept.is_empty();
         // The watch's service returns the next item it could not keep.
         let found = if holds { None } else { self.found.pop() };
-        let watch = match found {
-            Some(item) => {
+        let watch = match (found, self.kept_fault) {
+            (Some(item), _) => {
                 self.unkept.push(item);
                 Some(StopWatch::Unkept)
             }
-            None if holds => None,
-            None => Some(StopWatch::Confirmed),
+            (None, _) if holds => None,
+            (None, Some(observed)) => Some(StopWatch::Faulted {
+                fault: Some(BackendFault::Abandoned),
+                observed,
+            }),
+            (None, None) => Some(StopWatch::Confirmed),
         };
         let confirmed = self.confirmed;
         core::future::poll_fn(move |_| match watch {
@@ -128,6 +135,7 @@ fn retired<'a, 'b>(
         found: std::vec::Vec::new(),
         confirmed,
         unaccepted: None,
+        kept_fault: None,
     };
     retired_with(runner, ApEnded::Stopped, stop)
 }
@@ -293,6 +301,7 @@ fn an_unkept_item_leaves_with_every_other_owner_of_the_unreleased_port() {
         found: std::vec::Vec::new(),
         confirmed: &confirmed,
         unaccepted: None,
+        kept_fault: None,
     };
     let left = retired_with(runner, ApEnded::Unkept, Stop::Confirmed);
     assert_eq!(item.get(), 0, "the item is alive");
@@ -333,6 +342,7 @@ fn a_stop_that_needs_a_service_goes_on_once_the_unkept_item_is_taken() {
         found: std::vec::Vec::new(),
         confirmed: &confirmed,
         unaccepted: None,
+        kept_fault: None,
     };
     let left = retired_with(runner, ApEnded::Unkept, Stop::Owed);
     assert!(confirmed.get(), "the stop was watched to its confirmation");
@@ -372,6 +382,7 @@ fn items_the_stop_finds_fill_the_home_then_the_next_stays_with_the_runner() {
         found: (0..=UNKEPT_ITEMS).map(|_| Receipt(&ends)).collect(),
         confirmed: &confirmed,
         unaccepted: None,
+        kept_fault: None,
     };
     let left = retired_with(runner, ApEnded::Stopped, Stop::Owed);
     assert!(!confirmed.get());
@@ -418,6 +429,7 @@ fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
         found: std::vec::Vec::new(),
         confirmed: &confirmed,
         unaccepted: Some(Receipt(&attempt)),
+        kept_fault: None,
     };
     let left = retired_with(runner, ApEnded::Unaccepted, Stop::Owed);
     assert_eq!(
@@ -436,4 +448,78 @@ fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
     assert!(unfinished.owner.port.stopped.is_ok(), "no release ran");
     drop(unfinished);
     assert_eq!((attempt.get(), other.get()), (1, 1), "each ended once");
+}
+
+/// The owner's decision 1: a port that keeps a fault it could not take
+/// back ends the retire unfinished in the stopping phase, with the fault,
+/// the port's last observation and every owner (an item it could not keep,
+/// an attempt it did not accept, the runner with its port); no release
+/// runs. A stop confirmed before the retire is not watched again, so a
+/// kept fault does not downgrade it.
+#[test]
+fn a_kept_fault_ends_the_retire_unfinished_in_the_stopping_phase_with_every_owner() {
+    let observed = StopUnconfirmed {
+        cause: oer_protocols_ieee80211_contracts_port::StopCause::Device,
+        observations: Default::default(),
+    };
+    let (ends, item, attempt) = (Cell::new(0), Cell::new(0), Cell::new(0));
+    let (watched, confirmed) = (Cell::new(0), Cell::new(false));
+    let runner = TestRunner {
+        port: TestPort {
+            cleanup: Ok(()),
+            receipt: Some(Receipt(&ends)),
+            stopped: Err(Unreleased::StopUnconfirmed),
+        },
+        other: Some(Receipt(&ends)),
+        watched: &watched,
+        unkept: std::vec![Receipt(&item)],
+        found: std::vec::Vec::new(),
+        confirmed: &confirmed,
+        unaccepted: Some(Receipt(&attempt)),
+        kept_fault: Some(observed),
+    };
+    let ended = ApEnded::Faulted(BackendFault::Abandoned);
+    let left = retired_with(runner, ended, Stop::Owed);
+    assert_eq!(
+        left.exit,
+        ApExitOf::StopFaulted {
+            ended,
+            fault: Some(BackendFault::Abandoned),
+            observed,
+        }
+    );
+    let Some(mut unfinished) = left.unfinished else {
+        panic!("a kept fault leaves the installation unfinished");
+    };
+    assert_eq!(unfinished.phase, Phase::Stopping);
+    assert!(!confirmed.get(), "no stop was confirmed");
+    assert_eq!([ends.get(), item.get(), attempt.get()], [0, 0, 0]);
+    assert!(unfinished.unkept[0].take().is_some(), "the item is out");
+    assert!(unfinished.unaccepted.take().is_some(), "and the attempt");
+    assert!(unfinished.receipt.is_none(), "no cleanup ran");
+    assert!(unfinished.owner.port.receipt.is_some() && unfinished.owner.other.is_some());
+    assert_eq!([item.get(), attempt.get()], [1, 1]);
+    drop(unfinished);
+    assert_eq!(ends.get(), 2, "the runner's owners end with their holder");
+
+    // A stop the port confirmed before the retire is not watched again.
+    let (ends, watched, confirmed) = (Cell::new(0), Cell::new(0), Cell::new(false));
+    let runner = TestRunner {
+        port: TestPort {
+            cleanup: Ok(()),
+            receipt: Some(Receipt(&ends)),
+            stopped: Ok(Radio(Leaves::Left)),
+        },
+        other: None,
+        watched: &watched,
+        unkept: std::vec::Vec::new(),
+        found: std::vec::Vec::new(),
+        confirmed: &confirmed,
+        unaccepted: None,
+        kept_fault: Some(observed),
+    };
+    let left = retired_with(runner, ApEnded::Stopped, Stop::Confirmed);
+    assert_eq!(left.watched, 0);
+    assert_eq!(left.exit, ApExitOf::Ended(ApEnded::Stopped));
+    assert!(left.unfinished.is_none(), "a completed retire");
 }

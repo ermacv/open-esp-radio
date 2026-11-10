@@ -106,6 +106,18 @@ pub enum ApExitOf<E> {
         /// How far the radio's stop came.
         stop: UnkeptStop,
     },
+    /// It ended for its cause, and its port keeps a fault it could not take
+    /// back, so no stop of it confirms: the stop is unconfirmed as the
+    /// port observed it last, no release ran, and the installation came
+    /// back unfinished in [`Phase::Stopping`] with every owner.
+    StopFaulted {
+        /// Why it ended.
+        ended: ApEnded,
+        /// The last fault a port call answered the runner, when one did.
+        fault: Option<crate::failure::BackendFault>,
+        /// What the port observed of the stop.
+        observed: StopUnconfirmed,
+    },
     /// It ended for its cause holding an attempt the port did not accept
     /// for want of its right, and no item a port call could not keep: no
     /// release ran, and the installation came back unfinished with the
@@ -150,13 +162,15 @@ pub(crate) trait Retiring {
     /// An item a port call of the run could not keep.
     type Unkept;
     /// Watch the radio's stop until the port confirms it, each observation
-    /// going to `unconfirmed`, or until the runner holds an item a port
-    /// call could not keep ([`StopWatch::Unkept`]); a unit whose recycle
-    /// the port refused is the error.
+    /// going to `unconfirmed`, until the runner holds an item a port call
+    /// could not keep ([`StopWatch::Unkept`]), or until the port, keeping a
+    /// fault it could not take back, observed its stop unconfirmed
+    /// ([`StopWatch::Faulted`]); a unit whose recycle the port refused is
+    /// the error.
     fn finish_stop(
         &mut self,
         unconfirmed: impl FnMut(StopUnconfirmed),
-    ) -> impl Future<Output = Result<StopWatch, ReceiveAccounting>>;
+    ) -> impl Future<Output = Result<StopWatch<crate::failure::BackendFault>, ReceiveAccounting>>;
     /// Its port.
     fn port_mut(&mut self) -> &mut Self::Port;
     /// The item a port call of the run could not keep, once.
@@ -208,7 +222,11 @@ pub(crate) enum Retired<R: Retiring, E> {
 /// full stays with the runner and ends the retire unfinished
 /// ([`Phase::Stopping`]). Until the port confirms the
 /// stop, the runner keeps every owner and watches the stop on, each
-/// observation published in `published` as [`ApExitOf::StopUnconfirmed`].
+/// observation published in `published` as [`ApExitOf::StopUnconfirmed`];
+/// a port that keeps a fault it could not take back ends the watch, and
+/// the retire ends unfinished in [`Phase::Stopping`]
+/// ([`ApExitOf::StopFaulted`]). A stop confirmed before is never watched
+/// again.
 /// With the stop confirmed and items out, no release runs
 /// ([`Phase::Stopped`]); otherwise a release the MAC refused as still
 /// active is published as [`ApExitOf::ReleaseRefused`] and tried again,
@@ -262,6 +280,24 @@ where
                         });
                     }
                     Ok(StopWatch::Unkept) => {}
+                    // No stop of the port confirms: the retire ends here,
+                    // every owner with the runner.
+                    Ok(StopWatch::Faulted { fault, observed }) => {
+                        take_into(&mut unkept, &mut runner);
+                        let unaccepted = runner.take_unaccepted();
+                        return Retired::Unfinished(Unfinished {
+                            owner: runner,
+                            unkept,
+                            unaccepted,
+                            receipt: None,
+                            cause: ApExitOf::StopFaulted {
+                                ended,
+                                fault,
+                                observed,
+                            },
+                            phase: Phase::Stopping,
+                        });
+                    }
                     Err(fault) => break Err(fault),
                 }
             }

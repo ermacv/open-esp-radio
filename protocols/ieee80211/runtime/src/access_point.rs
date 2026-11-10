@@ -319,11 +319,24 @@ pub enum ApEnd<F> {
     Unaccepted,
 }
 
-/// How far a call of [`ApRunner::finish_stop`] watched the radio's stop.
+/// How far a call of [`ApRunner::finish_stop`] watched the radio's stop;
+/// `F` is the port's fault.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StopWatch {
+pub enum StopWatch<F> {
     /// The port confirmed the stop.
     Confirmed,
+    /// The port keeps a fault it could not take back
+    /// ([`DataPort::recover_for_stop`]) and its stop is unconfirmed, as it
+    /// observed: no stop of it can confirm, so the watch ended. Every
+    /// owner stays in the runner; the hardware may still use the ones the
+    /// port holds.
+    Faulted {
+        /// The last fault a port call of the runner answered, when one
+        /// did: the run's own, or one its stop's service answered.
+        fault: Option<F>,
+        /// What the port observed of the stop.
+        observed: StopUnconfirmed,
+    },
     /// The runner holds an item a port call could not keep
     /// ([`ApRunner::take_unkept`]): the watch made no port call after it
     /// and returned. Once the item is taken, the next call goes on
@@ -785,8 +798,15 @@ where
     cut_units: u32,
     /// The instant of the port's call the terminals belong to.
     now: Instant,
-    /// The run ended on a port fault: the stop takes it back first, once.
+    /// The run ended on a port fault, or the port lost its right to hand
+    /// out a submission's terminal: the stop takes it back first, once.
     faulted: bool,
+    /// The port kept a fault it could not take back: no stop of it can
+    /// confirm.
+    fault_kept: bool,
+    /// The last fault a port call answered the runner: the run's own, or
+    /// one its stop's service answered.
+    fault: Option<PortFault<'id, P>>,
     /// Units, terminals and commands taken from the port, counted for the
     /// progress of a turn.
     taken: u32,
@@ -1709,6 +1729,8 @@ where
                 cut_units: 0,
                 now,
                 faulted: false,
+                fault_kept: false,
+                fault: None,
                 taken: 0,
             },
         }
@@ -1880,15 +1902,18 @@ where
     /// their owners home. Each observation of the port that differs from
     /// the one before goes to `unconfirmed`; the stop is never asked for
     /// again, only watched. A port fault is taken back first when the port
-    /// can ([`DataPort::recover_for_stop`]). Nothing is sent and no command
-    /// goes meanwhile. It returns only once the port confirmed the stop.
+    /// can ([`DataPort::recover_for_stop`]), the run's at the first call
+    /// and each one the stop's service answers once. Nothing is sent and no
+    /// command goes meanwhile. It returns once the port confirmed the stop,
+    /// or once the port kept a fault it could not take back and observed
+    /// its stop unconfirmed ([`StopWatch::Faulted`]): no stop of such a
+    /// port confirms, and the runner keeps every owner.
     ///
     /// A call returns before the confirmation once the runner holds an item
     /// a port call could not keep ([`StopWatch::Unkept`]), at once when it
     /// already holds one: the watch makes no port call while it does. Its
     /// owner takes it ([`ApRunner::take_unkept`]) and calls again, and the
-    /// watch goes on from the port's state; the port's fault is taken back
-    /// at the first call only.
+    /// watch goes on from the port's state; a fault is taken back once.
     ///
     /// # Errors
     ///
@@ -1899,11 +1924,11 @@ where
         &mut self,
         clock: &T,
         mut unconfirmed: impl FnMut(StopUnconfirmed),
-    ) -> Result<StopWatch, ReceiveAccounting> {
-        // The port is asked to take its fault back once: a later call of
-        // the same stop asks nothing again.
-        if core::mem::take(&mut self.homes.faulted) {
-            let _recovered: bool = self.port.recover_for_stop();
+    ) -> Result<StopWatch<PortFault<'id, P>>, ReceiveAccounting> {
+        // The port is asked to take the run's fault back once: a later call
+        // of the same stop asks nothing again for it.
+        if core::mem::take(&mut self.homes.faulted) && !self.port.recover_for_stop() {
+            self.homes.fault_kept = true;
         }
         self.homes.stop = true;
         self.homes.phase = Phase::StoppingRadio;
@@ -1915,8 +1940,16 @@ where
                 false
             })
             .await;
-        if let Err(Unwatched::Unkept) = watched {
-            return Ok(StopWatch::Unkept);
+        match watched {
+            Err(Unwatched::Unkept) => return Ok(StopWatch::Unkept),
+            // Only a kept fault ends this watch unconfirmed.
+            Err(Unwatched::Unconfirmed(observed)) => {
+                return Ok(StopWatch::Faulted {
+                    fault: self.homes.fault,
+                    observed,
+                });
+            }
+            Ok(()) => {}
         }
         match self.homes.unrecycled.as_ref() {
             Some(refused) => Err(refused.fault),
@@ -1931,7 +1964,10 @@ where
     /// not reported again. A deadline the watch served at does not wake it
     /// again, nor do the very facts it just served. The watch ends at once
     /// while the runner holds an item a port call could not keep, and
-    /// after the service that returned one: no port call follows it.
+    /// after the service that returned one: no port call follows it. A
+    /// fault the service answers is taken back once
+    /// ([`DataPort::recover_for_stop`]); once the port kept one, its next
+    /// unconfirmed answer ends the watch whatever `ends` says.
     async fn watch_stop<T: Timer>(
         &mut self,
         clock: &T,
@@ -1956,12 +1992,21 @@ where
                 // A fault of this service is the stop's to name: its answer
                 // below says it. The place is empty here (checked above);
                 // an item the port could not keep ends the watch.
-                let (_served, unkept) = crate::answered(self.port.service_tx(
+                let (served, unkept) = crate::answered(self.port.service_tx(
                     facts.tx.unwrap_or(TxFacts::DUE),
                     facts.tbtt,
                     now,
                     &mut self.homes,
                 ));
+                if let Input::Accepted(Err(fault)) = served {
+                    self.homes.fault = Some(fault);
+                    if !self.port.recover_for_stop() {
+                        self.homes.fault_kept = true;
+                        // The kept fault's answer is reported, even one
+                        // equal to the last.
+                        reported = None;
+                    }
+                }
                 if unkept.is_some() {
                     self.homes.unkept = unkept;
                     return Err(Unwatched::Unkept);
@@ -2026,7 +2071,7 @@ where
                     return Ok(());
                 }
                 Woke::Stopped(Err(observed)) => {
-                    if ends(observed) {
+                    if ends(observed) || self.homes.fault_kept {
                         return Err(Unwatched::Unconfirmed(observed));
                     }
                 }
@@ -2065,6 +2110,7 @@ where
         match halt {
             Halt::Faulted(fault) => {
                 self.homes.faulted = true;
+                self.homes.fault = Some(fault);
                 ApEnd::Faulted(fault)
             }
             Halt::Contract(contract) => ApEnd::Contract(contract),
@@ -2077,7 +2123,12 @@ where
             Halt::Refused(refusal) => ApEnd::Refused(refusal),
             Halt::Unrecycled(fault) => ApEnd::Unrecycled(fault),
             Halt::Unkept => ApEnd::Unkept,
-            Halt::Unaccepted => ApEnd::Unaccepted,
+            // The port no longer holds the right it refused the attempt
+            // for: the stop asks it to take that fault back first.
+            Halt::Unaccepted => {
+                self.homes.faulted = true;
+                ApEnd::Unaccepted
+            }
         }
     }
 

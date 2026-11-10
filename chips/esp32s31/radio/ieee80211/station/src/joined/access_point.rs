@@ -269,6 +269,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                     ended.push_str(match finished {
                         Ok(StopWatch::Confirmed) => ", stop confirmed",
                         Ok(StopWatch::Unkept) => ", an item unkept",
+                        Ok(StopWatch::Faulted { .. }) => ", stop unconfirmed, a fault kept",
                         Err(_) => ", stop confirmed, a unit unrecycled",
                     });
                 }
