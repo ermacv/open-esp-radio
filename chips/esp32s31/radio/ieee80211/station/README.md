@@ -138,7 +138,9 @@ owners and is `Reinstall(Cleanup)` or `ReleaseFailed(Cleanup)`, and
 nothing runs it again. The cleanup's sink takes only the removal receipt:
 a completion the driver still kept, which the cleanup brings home, is
 refused there and stays in the port's store, so the port does not retire
-and the release ends `ReleaseFailed(NotStopped)` with the port unfinished.
+and the release ends `ReleaseFailed(Held)` with the port unfinished. A
+release names an unconfirmed stop (`StopUnconfirmed`) apart from a
+confirmed stop whose port still holds owners (`Held`).
 After an ordinary stop the actor's task takes the stopped device's Wi-Fi
 frontier and membership cell and releases the radio. The station's exit is
 published only after that release, or once the stop's drain passed first:
@@ -165,20 +167,28 @@ two ways:
 A port that refuses its installation installs nothing and hands back
 every input it was given (`Esp32s31Port::install`'s `InstallRefused`: the
 parts, the minted installation, the driver's place): the station's
-datapath task returns them as `DatapathEnd::Refused(RefusedInstall<W>)`
-and the access point's as `AccessPointEnd::Refused`, after the started
-radio left from the device. A stage before it that refused (no first
-installation minted, the radio's start refused, an access point's
-settings) returns the registry and the minted installation it had taken
-(`DatapathEnd::NotInstalled`, `AccessPointEnd::NotInstalled`:
-`NotInstalledOf`); a started radio leaves first, as before.
+datapath task returns them as `DatapathEnd::Refused` (`RefusedInstall<W>`,
+with its ends of the queues and to the network) and the access point's as
+`AccessPointEnd::Refused`, after the started radio left from the device. A
+stage before it that refused (no registry or first installation, the
+radio's start refused, an access point's settings, a stop before the
+access point's start) returns the registry and the minted installation it
+had taken (`NotInstalledOf`) and every other input: the boot whole, or
+what the refused install left of it once a started radio left
+(`BootLeft`), and the station's queue and network ends
+(`DatapathEnd::NotInstalled`, `DatapathInputs`) or the access point's
+network end, nonces, settings and its peers' and beacon storage or the
+service and beacon built on them (`AccessPointEnd::NotInstalled`,
+`ApInputs`). Owners a refused step inside the install consumed (a receive
+path that did not bind, a descriptor that did not pin) end there.
 
 The station's installation has two halves, and an unfinished one returns
 both. The datapath task returns `DatapathEnd` (`Retired`, `NotInstalled`,
 `Refused`, or `Unfinished(UnfinishedDatapath<W>)`: the installation
 (`UnfinishedStationOf<W>`, cause `DatapathCause`), the actor's ends of the
 queues to the lifecycle (`ActorQueues`) with every owner in transit in
-them, and the installation registry): a fault of the actor or the
+them, its ends to the network stack (`NetworkSide`), and the
+installation registry): a fault of the actor or the
 lifecycle's end without retiring it (`Lifecycle`: a stop or retune that
 proved nothing, a broken contract), each in the phase the actor's radio
 read (`Actor::radio_phase`: a stop asked for and not confirmed is
@@ -191,17 +201,31 @@ release or the restart's reinstall completed, its lifecycle's half
 contexts, the lifecycle's ends of the queues (`LifecycleQueues`) with
 every owner in transit in them, and the actor task's news after the
 lifecycle stopped waiting). A lifecycle that ends without retiring the
-actor tells the actor's task once and waits until its run stopped
-(`News::Abandoned`); only then do its ends go out, so no producer runs
-while either half collects its queues, and each owner in transit is in its
-queue once, in order. The half's operations read its queues (`queues`),
-its events' sink (`events`) and the actor task's late end (`late_end`:
-`LateEnd`, kept once read; an out-of-order installation's commands and
-tokens through `take_installed`), and finish it once the datapath half
-retired (`finish`, on `DatapathRetired`, which only a completed release
-makes): the retired lifecycle's owners end, and the late end, the queues
-with every owner still in transit and any kept installation come back
-(`FinishedLifecycle`). A release that completed after the stop's drain
+actor tells the actor's task once and waits for a news that ends the
+actor's task (`News::Abandoned`, or the fault, release or refused
+reinstall it ended on first); a news of an installation before it is no
+such confirmation: its commands and tokens are kept in the half and the
+wait goes on (a second one breaks the mailbox's order: `LateEnd::OutOfOrder`,
+both kept). Only then do its ends go out, so no producer runs while either
+half collects its queues, and each owner in transit is in its queue once,
+in order. The half's operations read its queues (`queues`), its events'
+sink (`events`), the retired station (`station`), its places (`places`)
+and the issuer (`issuer`), take the arbiter (`take_arbiter`), a waiting
+context (`take_context`) and the rejected owner (`take_rejected`), read
+the actor task's late end (`late_end`: `LateEnd`, kept once read) and
+take a kept installation's commands, tokens and name (`take_installed`),
+and finish it once its own datapath half retired (`finish`, on
+`DatapathRetired`, which only a completed release makes for the
+installation it retired: branded by the slot identity and naming the
+installation's generation, so a proof of another identity does not
+type-check and one of another generation, a later installation in the same
+places included, comes back with the half unused, `ForeignProof`): the
+retired lifecycle's owners end, and the late end, the queues with every
+owner still in transit and any kept installation come back
+(`FinishedLifecycle`). After a completed retire each side's ends of the
+queues are checked once their producers stopped: empty ones end with the
+installation, and ones that still hold an owner come back
+(`RetiredDatapath::in_transit`, `StationEnd::in_transit`). A release that completed after the stop's drain
 passed keeps both actual outcomes (the lifecycle's exit and the late end)
 and the half ends without a second release (the application's
 `StationInstallationEnd::finish_late_retire`). A fault the actor would
@@ -222,7 +246,13 @@ each watch of the stop and after each watch that returned with one
 (`StopWatch::Unkept`), to a free place of the retire's home
 (`UNKEPT_ITEMS`), so the stop's watch goes on serving the port; a further
 item that finds the home full stays with the runner and ends the retire in
-`Stopping`. With the stop confirmed and items out no release runs
+`Stopping`. The watch takes the run's port fault back once and each fault
+its stop's service answers once (`DataPort::recover_for_stop`); a port
+that keeps one never confirms a stop, so its next unconfirmed answer ends
+the watch (`StopWatch::Faulted`) and the retire ends in `Stopping`
+(`ApExitOf::StopFaulted`: the cause, the last fault and the port's
+observation) with every owner. A stop confirmed before is not watched
+again. With the stop confirmed and items out no release runs
 (`Stopped`); a refusal the release does not repeat ends in `Releasing`.
 
 The application's `wifi::Station::installation_end` (both halves, once
