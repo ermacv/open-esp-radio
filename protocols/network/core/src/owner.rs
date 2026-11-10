@@ -11,9 +11,9 @@ use crate::block::{Block, CoreBrand, Group, Pool};
 use crate::interface::Interface;
 use crate::loans::Loan;
 use crate::machine::{
-    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Eviction, FillFailed,
-    Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal, SendRefused,
-    SocketId, StaleSocket, WorkId,
+    CommandId, CommandState, Configuration, Core, Datagram, Declined, Demand, Ends, Eviction,
+    FillFailed, Grant, NetEvent, OpenRefused, Queued, Remote, RetiredResults, SendRefusal,
+    SendRefused, SocketId, StaleSocket, WorkId,
 };
 
 /// What a retired core hands on, each to its own owner.
@@ -341,12 +341,13 @@ impl<
         self.port.take_notice()
     }
 
-    /// Make `cx` the one the port wakes.
-    pub fn register_port(&mut self, cx: &mut Context<'_>)
+    /// Make `cx` the one the port wakes, and say whether the port has
+    /// something already ([`FrameSource::register`]).
+    pub fn register_port(&mut self, cx: &mut Context<'_>) -> bool
     where
         P: FrameSource,
     {
-        self.port.register(cx);
+        self.port.register(cx)
     }
 
     /// See [`Core::open`].
@@ -464,6 +465,11 @@ impl<
     /// See [`Core::take_result`].
     pub fn take_result(&mut self, command: CommandId<B>) -> CommandState<B> {
         self.core.take_result(command)
+    }
+
+    /// See [`Core::next_end`].
+    pub fn next_end(&mut self, ends: &Ends<B>) -> Option<WorkId> {
+        self.core.next_end(ends)
     }
 
     /// See [`Core::drop_observer`].

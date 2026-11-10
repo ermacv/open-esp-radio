@@ -128,7 +128,9 @@ impl oer_protocols_network_port::FrameSource for Port {
             })
     }
 
-    fn register(&mut self, _: &mut core::task::Context<'_>) {}
+    fn register(&mut self, _: &mut core::task::Context<'_>) -> bool {
+        !self.received.is_empty()
+    }
 }
 
 impl FramePort for Port {
@@ -1813,5 +1815,6 @@ fn a_new_datagram_after_a_rejected_request_asks_anew() {
 
 mod dhcp;
 mod echo;
+mod ends;
 mod lending;
 mod produced;

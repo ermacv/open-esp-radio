@@ -148,7 +148,8 @@ the air, shared at least.
   nothing, and an unconfirmed change is never retried. A station's own
   limits end with the station. A monitor capture needs the router held
   exclusively: it streams one channel's pcap as the operation's output
-  alone, until the operation stops (`oer-tools-lab-router::monitor`); an
+  alone, until the operation stops, and tells its client `Ready` (a reply
+  apart from the bytes) once `tcpdump` listens (`oer-tools-lab-router::monitor`); an
   output its client does not take ends it, and the bytes refused are
   reported lost. The service
   probes the equipment it reaches over SSH (the router, the air observer)

@@ -31,6 +31,15 @@ cancelled; `take` consumes the observer, so a result is read once and a credit's
 next command is out of its reach. Dropping an observer gives up the result, and
 the credit frees when the command has ended, whichever comes last.
 
+The service finds results only where the core tells them (`next_end`, see the
+core's README, "Work records"): a running command is never looked at to learn
+that it did not end. The service keeps, at each command's place in the core,
+the right to its result (`CommandId`) and the credit's tag it answers. A
+credit's tag and its command's place free at different times, so they need not
+be equal. A told end is matched by place and generation; one that is not this
+right's command leaves the right where it is. The result goes to its tag's
+place once, as before. A producer's works are kept and matched in the same way.
+
 A socket's lanes wake through waker cells, so today a socket and its service
 share a hart.
 
@@ -87,14 +96,53 @@ Dropping a `LateSocket` or a `Service` with commands in a request lane still str
 what those hold: that has no contract yet.
 
 A turn first reads the port's link into the core, then takes commands (four a
-lane), received frames (eight) and the port's notices (up to 64, a Block Ack's
-whole ends), then, once it has
+lane), the returns, received frames (eight) and the port's notices (up to 64, a
+Block Ack's whole ends), then, once it has
 read them all, asks its producer for offers, chooses work and publishes it (eight),
 evicts under memory pressure, then hands results and datagrams back. Each part is bounded, so no lane and no port
 starves the others, and sockets waiting for blocks take turns. Every exit of a
 turn goes through that last part, a fault's too: after a policy or port fault the
 turn publishes nothing more, and only hands back what it knows, so at an await
 each open work truly was not published.
+
+## Returns and waiting
+
+Returns are what others publish back to the service: lent buffers back with
+their port (each `Lent`'s drop counts one), blocks in the return lane, and what
+adopted sockets give back. Servicing them is a short owner operation: take what
+was published as one batch and give it to the pool and the loans' account, so a
+credit frees before the next frame needs it. It runs no command, reads no frame,
+chooses no work and builds no frame. Loan accounting stays with the service: an
+application only publishes a count. A batch whose blocks came home while a
+socket waits for one marks work, and a turn grants it. A turn takes the returns
+too, before it reads frames.
+
+After a turn, the service waits, unless the turn left work that no wake
+names: a spent budget of frames or publications, notices still untold, a block
+evicted, a producer's hold or open budget freed by the turn's own delivery, a
+declining fill that kept the producer's flow out of the rest of the turn, or a
+refused publication of the address. Then it yields and turns again. A useful
+turn is never followed by an empty one only to find nothing.
+
+Each pass of the wait registers every source and reads its readiness from
+that registration, so whatever comes after a registration wakes the next pass,
+and ordinary work is known apart from returns:
+
+| Source | Ready when the pass registers |
+| --- | --- |
+| stop, each lane | a message waits; a blocked receive lane has room |
+| port (`FrameSource::register`) | its return value: a frame or a notice not yet taken, a link changed since the last registration, room for the frame it last refused |
+| producer (`Produce::register`) | with offers wanted, its return value (data `offer` has not handed out); always, a generation the service has not checked yet, or a hold no longer current, which the service reads itself |
+| returns | taken at once, as above: ready only if a block came home for a socket that waits for one |
+| time | the deadline (the core's, memory pressure's, the producer's) has come |
+
+A registration returns readiness; it does not wake the caller for it. A pass
+with nothing ready waits on, whatever woke it, so a return never swallows
+another source's wake, and a stray wake costs one pass and no turn. A wait that
+is over at its first poll, by a ready source or by a time already due, yields
+before the next turn, so one poll holds at most one turn after a wait. A source
+that says it is ready for good therefore costs a turn a poll, and it cannot
+hold the executor.
 
 ## Lending sockets
 
@@ -116,7 +164,7 @@ check leaves no room for.
 Dropping a `Lent` gives its buffer back to the port first and only then
 counts its loan back, so a credit frees once its memory has, never at a stop
 or a new installation. The service gives the loan to the account at its next
-turn. A stop does not wait for lent buffers: the service ends with loans
+pass, with no turn (see "Returns and waiting"). A stop does not wait for lent buffers: the service ends with loans
 out, its `LateSocket` keeps them, and whoever holds the pool by then takes
 each late return, through `Ended::collect` or the next service's `adopt`.
 The account outlives the core with its pool, so a loan of an earlier
@@ -216,8 +264,9 @@ frames are unsettled than there are buffers. It shows a lent received frame as
 lendable and hands its buffer over when the reader keeps it; a frame the
 device copied stays the device's, with its copy's reason. Each
 registration asks the transmit half for the memory the device returned, so that
-memory comes home whether or not the service sends; only a refused frame waiting for
-room is woken by room. `give_back` ends the exchange before the port ends: it gives
+memory comes home whether or not the service sends. It returns whether a
+received frame, a link change, a notice or, for a refused frame only, the room
+or buffer that frame waits for is there. `give_back` ends the exchange before the port ends: it gives
 back every frame the device's queue holds and takes back the memory the device
 returned, as the device's queues outlive the port, and leaves no refused frame
 waiting, so a next service over the same port starts idle. `serve_returns` is the

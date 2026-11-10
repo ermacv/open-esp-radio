@@ -115,6 +115,9 @@ struct State {
     /// Notices taken.
     taken: u64,
     waker: Option<Waker>,
+    /// A peer fell asleep or woke since the last registration: what the
+    /// policy may choose changed, as a link change would.
+    changed: bool,
 }
 
 impl State {
@@ -329,6 +332,7 @@ impl Medium {
             notices: VecDeque::new(),
             taken: 0,
             waker: None,
+            changed: false,
         })))
     }
 
@@ -376,6 +380,7 @@ impl Medium {
         if let Some(peer) = state.peers.get_mut(peer) {
             peer.asleep = asleep;
         }
+        state.changed = true;
         state.wake();
     }
 
@@ -507,12 +512,11 @@ impl FrameSource for Medium {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
+    fn register(&mut self, cx: &mut Context<'_>) -> bool {
         let mut state = self.0.borrow_mut();
         state.waker = Some(cx.waker().clone());
-        if !state.received.is_empty() || !state.notices.is_empty() {
-            cx.waker().wake_by_ref();
-        }
+        let changed = core::mem::take(&mut state.changed);
+        changed || !state.received.is_empty() || !state.notices.is_empty()
     }
 }
 

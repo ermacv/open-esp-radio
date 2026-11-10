@@ -85,7 +85,9 @@ impl FrameSource for Port {
             epoch: 1,
         }
     }
-    fn register(&mut self, _: &mut Context<'_>) {}
+    fn register(&mut self, _: &mut Context<'_>) -> bool {
+        !self.0.borrow().is_empty()
+    }
 }
 type TestService = wifi::Served<Port>;
 fn turn(service: &mut TestService, clock: &VirtualClock) {

@@ -134,11 +134,17 @@ impl Process for FakeProcess {
 struct FakeSink {
     bytes: Vec<u8>,
     writes: usize,
+    /// The writes made before each readiness.
+    readied: Vec<usize>,
     cancel_after: Option<usize>,
     fail_at: Option<usize>,
 }
 
 impl Sink for FakeSink {
+    fn ready(&mut self) {
+        self.readied.push(self.writes);
+    }
+
     fn write(&mut self, bytes: &[u8]) -> Result<()> {
         self.writes += 1;
         if self.fail_at == Some(self.writes) {
@@ -157,6 +163,7 @@ fn sink() -> FakeSink {
     FakeSink {
         bytes: Vec::new(),
         writes: 0,
+        readied: Vec::new(),
         cancel_after: None,
         fail_at: None,
     }
@@ -202,6 +209,8 @@ fn a_cancelled_capture_streams_only_pcap_and_tears_down_in_order() {
     let report = capture(&mut host, 13, &mut sink, &clock::ManualClock::new()).unwrap();
     assert_eq!(sink.bytes, b"pcap-headerrecord");
     assert_eq!(report.bytes, 17);
+    // Ready once, after the readiness and before the first byte.
+    assert_eq!(sink.readied, [0]);
     assert_eq!(report.interface, INTERFACE);
     assert!(report.diagnostics.contains("listening"));
     let mut expected = vec![
@@ -292,12 +301,15 @@ fn a_process_that_does_not_start_or_listen_is_stopped_and_its_interface_removed(
         ready_fails: true,
         ..Script::default()
     });
+    let mut unready = sink();
     assert!(
-        capture(&mut host, 13, &mut sink(), &clock::ManualClock::new())
+        capture(&mut host, 13, &mut unready, &clock::ManualClock::new())
             .unwrap_err()
             .contains("ready failed")
     );
     assert!(log_of(&log).ends_with(&TEARDOWN.map(str::to_owned)));
+    // A capture that never listened is never reported ready.
+    assert!(unready.readied.is_empty());
 }
 
 #[test]
@@ -388,3 +400,51 @@ fn a_listing_names_the_radio_and_every_interface() {
 
 mod clock;
 mod real;
+
+#[test]
+fn tcpdumps_recorded_listening_line_is_its_readiness() {
+    // tcpdump's stderr on the lab router, recorded in lease #1316.
+    const RECORDED: &str = "tcpdump: listening on oercap0, link-type IEEE802_11_RADIO \
+                            (802.11 plus radiotap header), snapshot length 262144 bytes";
+    assert!(announces_listening(RECORDED));
+    assert!(announces_listening(
+        "listening on oercap0, link-type IEEE802_11_RADIO"
+    ));
+    for other in [
+        "tcpdump: data link type IEEE802_11_RADIO",
+        "oer-capture-pid 14183",
+        "1 packet captured",
+        "tcpdump: oercap0: No such device exists",
+    ] {
+        assert!(!announces_listening(other), "{other}");
+    }
+}
+
+#[test]
+fn tcpdumps_recorded_stderr_names_its_process_and_its_readiness_unchanged() {
+    // The capture's whole stderr in lease #1316, as the service logged it.
+    const STDERR: &str = "oer-capture-pid 14183\n\
+                          tcpdump: data link type IEEE802_11_RADIO\n\
+                          tcpdump: listening on oercap0, link-type IEEE802_11_RADIO (802.11 plus \
+                          radiotap header), snapshot length 262144 bytes\n\
+                          1 packet captured\n\
+                          1 packet received by filter\n\
+                          0 packets dropped by kernel\n";
+    let pid = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let (announce, ready) = std::sync::mpsc::sync_channel(1);
+    let seen = pid.clone();
+    let reader = StderrReader::spawn(STDERR.as_bytes(), move |line| {
+        ssh::observe(line, &seen, &announce);
+    });
+    let diagnostics = reader.join();
+    assert_eq!(ready.try_recv(), Ok(()));
+    assert_eq!(*pid.lock().unwrap(), Some(14183));
+    // The diagnostics are the stderr as read, unchanged.
+    assert_eq!(
+        diagnostics,
+        Diagnostics {
+            text: STDERR.to_owned(),
+            error: None
+        }
+    );
+}

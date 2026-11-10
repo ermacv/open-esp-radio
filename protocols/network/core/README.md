@@ -23,6 +23,41 @@ its own after a failed fill ends the work by the fill's cause. Every end at
 publication, a frame taken or refused for good, passes the turn to the next
 socket.
 
+## Work records
+
+Each work of a socket has one record, its command place: the data source (a
+block, or a producer's declared length), the generation (the command's
+serial, which never returns) and the state (free, sending, declared,
+finished). Nothing else in the core holds the work. Each place but the
+close's is on exactly one of three chains while it is free, running or
+ended and not yet told, and on none once its end was told and its result
+waits for its holder. The chain follows the state, and only a state
+transition moves it, so readiness, results and free places are found
+without walking every place:
+
+| Transition | Chain change |
+| --- | --- |
+| `send` or `declare` accepts work | free (or a never-used place) → running, at its tail |
+| commit, reject, decline, withdraw, eviction, close, `Unreachable`, `Readdressed` | running → ended, at its tail; an unobserved work frees instead |
+| `next_end` tells an end | ended → none: the result stays in the place |
+| `take_result`, or `drop_observer` of a finished work | ended or none → free |
+| `close` | the close's place → ended, after every running end it caused |
+| `retire` | every place → `RetiredResults`, a running one as `Retired` |
+
+So a place is never on two chains, and an end is told once: only a running
+work goes to the ended chain. A chain holds places, not owners. `demands`, the
+neighbors a work protects, `queued` and eviction walk the running chain,
+oldest acceptance first. That is the order `demands` enumerates a socket's
+work in, subject to readiness and policy: it is no send order. A datagram
+whose neighbor is not yet known is not ready, so a later one that is ready
+goes before it, and the egress policy chooses among what is ready. `next_end(&ends)` tells a socket's ends, oldest first, the close's
+among them, as a `WorkId`, which is a place and its generation. It is no right
+to the result: that waits in its place for whoever holds the `CommandId`
+(`CommandId::work` is the same value), and `take_result` checks the
+generation. `SocketId::ends` gives the socket's `Ends`, which outlive its
+close. A socket opened again in the same core slot has another serial, so an
+earlier socket's `Ends` tells none of its ends.
+
 A local producer's work is declared, not sent: `declare` takes a command place
 with `send`'s refusals and no block, and `open_local` gives the producer a
 send-only socket, whose port's datagrams are dropped before any block

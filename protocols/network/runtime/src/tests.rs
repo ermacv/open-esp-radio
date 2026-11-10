@@ -81,6 +81,8 @@ struct Wire {
     /// Ended frames, by ticket.
     ended: VecDeque<u32>,
     waker: Option<Waker>,
+    /// The last frame was refused for room.
+    refused: bool,
     /// How the port holds what it shows: lendable buffers, or its copies.
     holding: Option<Holding>,
     /// Buffers the port lent and has not got back.
@@ -150,6 +152,7 @@ impl FramePort for WirePort {
         fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
     ) -> Result<u32, Unpublished<bool, E>> {
         let mut wire = self.0.borrow_mut();
+        wire.refused = wire.full;
         if wire.full {
             return Err(Unpublished::Port(false));
         }
@@ -216,12 +219,10 @@ impl FrameSource for WirePort {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) {
+    fn register(&mut self, cx: &mut Context<'_>) -> bool {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
-        if !wire.incoming.is_empty() {
-            cx.waker().wake_by_ref();
-        }
+        !wire.incoming.is_empty() || !wire.ended.is_empty() || (wire.refused && !wire.full)
     }
 }
 
@@ -730,6 +731,30 @@ fn two_commands_on_one_credit_keep_their_own_results() {
             assert_eq!(result_of(observer).await, Sent::Ended(Outcome::Accepted));
         }
         assert_eq!(datagrams(&wire.0.borrow()).len(), 2 * CREDITS);
+    });
+}
+
+/// A credit's tag and its command's place in the core free at different
+/// times, so they part: each end still reaches its own observer, once.
+#[test]
+fn an_end_reaches_its_own_observer_when_its_tag_is_not_its_place() {
+    brand!(Net);
+    let _ended = run(bench::<Net>(), async |socket, wire| {
+        open_port(wire, true);
+        // Tag 0 in place 0, tag 1 in place 1.
+        let first = send(socket, b"first").await;
+        let second = send(socket, b"second").await;
+        settle().await;
+        open_port(wire, false);
+        // Both places free, the first first; only tag 1 frees, as its result
+        // is read.
+        assert_eq!(result_of(second).await, Sent::Ended(Outcome::Accepted));
+        // Tag 1 runs in place 0.
+        let third = send(socket, b"third").await;
+        assert_eq!(result_of(third).await, Sent::Ended(Outcome::Accepted));
+        assert_eq!(result_of(first).await, Sent::Ended(Outcome::Accepted));
+        let sent = datagrams(&wire.0.borrow());
+        assert_eq!(sent, [&b"first"[..], b"second", b"third"]);
     });
 }
 
