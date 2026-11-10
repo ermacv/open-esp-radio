@@ -1502,6 +1502,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
         let owner = OwnedRxBuffer {
             identity: PhantomData,
+            header: oer_protocols_ieee80211_wire::frame::CheckedHeader::check(&bytes),
             bytes,
             recycled: false,
             air: Rc::downgrade(&air),

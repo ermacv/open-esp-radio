@@ -400,7 +400,8 @@ impl<'a> DecodedHeader<'a> {
 /// fields that decide its variable length and the frame's place. It gives
 /// its [`DecodedHeader`] again for those same bytes only, reading the fixed
 /// fields with no second decode of the variable layout; any other slice,
-/// another frame's or the same buffer after its start moved, gets none.
+/// another frame's or the same buffer after its start moved, gets none, and
+/// so do the same bytes rewritten: the kept fields are compared with them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CheckedHeader {
     control: FrameControl,
@@ -436,6 +437,22 @@ impl CheckedHeader {
     /// against.
     pub fn of<'a>(&self, frame: &'a [u8]) -> Option<DecodedHeader<'a>> {
         if frame.as_ptr().addr() != self.at || frame.len() != usize::from(self.length) {
+            return None;
+        }
+        // What decided the layout must still be in the bytes: a rewrite of
+        // the frame in place is another frame.
+        let field = |at: usize| -> Option<u16> {
+            Some(u16::from_le_bytes(*frame.get(at..)?.first_chunk::<2>()?))
+        };
+        let qos_at = if self.control.is_four_address() {
+            30
+        } else {
+            24
+        };
+        if field(0)? != self.control.get()
+            || field(22)? != self.sequence_control
+            || (self.has_qos && field(qos_at)? != self.qos)
+        {
             return None;
         }
         let address =

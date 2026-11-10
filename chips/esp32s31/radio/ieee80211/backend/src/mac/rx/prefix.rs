@@ -123,17 +123,36 @@ pub fn view_normalized_rx_frame<'frame>(
     segment: &RxSegment<'frame>,
     config: RxIngressConfig,
 ) -> Result<NormalizedRxFrame<'frame>, RxError> {
-    view_normalized_rx_frame_with_layout(segment, config).map(|(frame, _)| frame)
+    normalize_segment(segment, config).map(|normalized| normalized.frame)
 }
 
-/// [`view_normalized_rx_frame`], with the first segment's layout it read:
-/// a later view of the same segment, a CCMP one, takes it instead of reading
-/// the geometry again.
+/// A segment normalized under a configuration: its frame view, and the
+/// first segment's layout the normalization read, kept with the segment and
+/// the configuration they came from. Only [`normalize_segment`] makes one,
+/// so a later view of the segment (a CCMP one) reads that layout, never one
+/// of another segment's.
+#[derive(Clone, Copy, Debug)]
+pub struct NormalizedSegment<'frame> {
+    pub(super) segment: RxSegment<'frame>,
+    pub(super) config: RxIngressConfig,
+    pub(super) layout: RxFirstSegmentLayout,
+    frame: NormalizedRxFrame<'frame>,
+}
+
+impl<'frame> NormalizedSegment<'frame> {
+    /// The normalized frame view.
+    pub const fn frame(&self) -> NormalizedRxFrame<'frame> {
+        self.frame
+    }
+}
+
+/// [`view_normalized_rx_frame`], kept with its segment, configuration and
+/// the layout it read.
 #[inline(always)]
-pub fn view_normalized_rx_frame_with_layout<'frame>(
+pub fn normalize_segment<'frame>(
     segment: &RxSegment<'frame>,
     config: RxIngressConfig,
-) -> Result<(NormalizedRxFrame<'frame>, RxFirstSegmentLayout), RxError> {
+) -> Result<NormalizedSegment<'frame>, RxError> {
     if !segment.descriptor_word0.rx_done() {
         return Err(RxError::Chain);
     }
@@ -146,8 +165,11 @@ pub fn view_normalized_rx_frame_with_layout<'frame>(
         .map_or(first.frame, |(mpdu, _)| mpdu);
     let prefix = WifiRxControlPrefix::new(first.prefix);
     let metadata = normalized_metadata(prefix);
-    Ok((
-        NormalizedRxFrame {
+    Ok(NormalizedSegment {
+        segment: *segment,
+        config,
+        layout: first.layout,
+        frame: NormalizedRxFrame {
             mpdu,
             mpdu_offset: first.layout.frame_offset,
             metadata,
@@ -155,8 +177,7 @@ pub fn view_normalized_rx_frame_with_layout<'frame>(
             logical_length: first.layout.expected_frame_length,
             stamp: Some(prefix.timestamp().value()),
         },
-        first.layout,
-    ))
+    })
 }
 
 /// The bytes the hardware wrote into `segment`'s buffer, when its

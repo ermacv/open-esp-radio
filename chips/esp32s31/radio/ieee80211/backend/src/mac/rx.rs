@@ -1072,15 +1072,12 @@ pub fn view_ccmp_data<'frame>(
 
 oer_chips_esp32s31_hal::place_rx_hot_path! {
 /// [`view_ccmp_data`] or [`view_ccmp_data_fragment`], as the frame's own
-/// fragmentation names, over `layout`, the segment's layout a normalized
-/// view of it read already ([`view_normalized_rx_frame_with_layout`]): the
-/// same checks and refusals, in the same order, without reading the
-/// geometry again.
+/// fragmentation names, of the segment `normalized` holds, under its
+/// configuration and over the layout its normalization read: the same checks
+/// and refusals, in the same order, without reading the geometry again.
 #[inline(never)]
 pub fn view_ccmp_data_in<'frame>(
-    segment: &RxSegment<'frame>,
-    config: RxIngressConfig,
-    layout: RxFirstSegmentLayout,
+    normalized: &NormalizedSegment<'frame>,
     fragmented: bool,
 ) -> Result<RxCcmpDataView<'frame>, RxError> {
     let admission = if fragmented {
@@ -1088,8 +1085,8 @@ pub fn view_ccmp_data_in<'frame>(
     } else {
         CcmpFragmentAdmission::Unfragmented
     };
-    ccmp_admitted(segment, config)?;
-    ccmp_view_of(segment, layout, admission)
+    ccmp_admitted(&normalized.segment, normalized.config)?;
+    ccmp_view_of(&normalized.segment, normalized.layout, admission)
 }}
 
 oer_chips_esp32s31_hal::place_rx_hot_path! {
@@ -1276,8 +1273,8 @@ pub mod sig_b;
 
 use prefix::segment_valid;
 pub use prefix::{
-    decode_normalized_rx_metadata, decode_rx_local_timestamp, decode_rx_phy_info,
-    first_segment_layout, view_normalized_rx_frame, view_normalized_rx_frame_with_layout,
+    NormalizedSegment, decode_normalized_rx_metadata, decode_rx_local_timestamp,
+    decode_rx_phy_info, first_segment_layout, normalize_segment, view_normalized_rx_frame,
 };
 
 impl NormalizedRxFrame<'_> {

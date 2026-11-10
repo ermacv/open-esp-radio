@@ -342,3 +342,30 @@ fn a_checked_header_gives_its_own_frame_s_decode_and_no_other_s() {
         "truncated"
     );
 }
+
+/// The same bytes rewritten in place hold another frame: a header checked
+/// against the earlier one gives none, as a QoS frame overwritten by one
+/// without QoS, or by another sequence or QoS field, shows.
+#[test]
+fn a_checked_header_gives_none_once_its_bytes_are_rewritten() {
+    let mut frame = std::vec![0_u8; 24 + 2 + 8];
+    frame[..2].copy_from_slice(&[0x88, 0x02]);
+    frame[22..24].copy_from_slice(&[0x10, 0x00]);
+    frame[24..26].copy_from_slice(&[0x05, 0x00]);
+    let checked = CheckedHeader::check(&frame).unwrap();
+    assert!(checked.of(&frame).is_some());
+    let rewrites: [(usize, [u8; 2]); 3] =
+        [(0, [0x08, 0x02]), (22, [0x20, 0x00]), (24, [0x06, 0x00])];
+    for (at, octets) in rewrites {
+        let mut other = frame.clone();
+        other[at..at + 2].copy_from_slice(&octets);
+        frame.copy_from_slice(&other);
+        assert!(checked.of(&frame).is_none(), "rewritten at {at}");
+        let original = CheckedHeader::check(&other).map(|_| ());
+        assert!(original.is_some(), "the rewrite is a frame of its own");
+        frame[..2].copy_from_slice(&[0x88, 0x02]);
+        frame[22..24].copy_from_slice(&[0x10, 0x00]);
+        frame[24..26].copy_from_slice(&[0x05, 0x00]);
+        assert!(checked.of(&frame).is_some(), "the same frame again");
+    }
+}
