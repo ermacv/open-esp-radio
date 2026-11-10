@@ -475,7 +475,10 @@ its own. Every producer obtains it before it takes the owner an item
 carries (through `DriverEnv::vacancy` in the driver's steps); a given or
 kept item gives the right back, a held one ends it there. A submission
 without the right takes nothing of its attempt and returns it whole
-(`SubmitHalt::NotAccepted`). Without the right the owner stays where it is: queued withdrawals
+(`SubmitHalt::NotAccepted`); a call that ends with neither the right nor
+an item lost it, which the port records as its permanent fault
+(`Fault::RightLost`). Without the right the owner stays where it is:
+queued withdrawals
 and a late beacon stay queued, completions the core already gave wait in
 the driver and come home first at the next call (no sink takes the core's
 completions meanwhile), after the first refusal the rest of a batch stays

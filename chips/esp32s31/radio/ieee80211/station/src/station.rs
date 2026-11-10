@@ -318,16 +318,17 @@ pub(crate) type RetiredOf<W> = RetiredLifecycle<
 /// the lifecycle stopped waiting. The place the lifecycle ran in is free
 /// once the half left it; the half stays here for good.
 #[must_use = "the lifecycle's half holds the station's owners of the installation"]
-pub struct UnfinishedLifecycle<W: Binding>(
-    crate::station_end::UnfinishedLifecycleOf<
-        'static,
-        Placed<'static, RetiredOf<W>>,
-        radio::LifecycleQueues<W>,
-        radio::Commands<W>,
-        radio::Tokens<W>,
-        InitializationError,
-    >,
-);
+pub struct UnfinishedLifecycle<W: Binding>(HalfOf<W>);
+
+/// The generic half of `W`'s lifecycle.
+type HalfOf<W> = crate::station_end::UnfinishedLifecycleOf<
+    'static,
+    Placed<'static, RetiredOf<W>>,
+    radio::LifecycleQueues<W>,
+    radio::Commands<W>,
+    radio::Tokens<W>,
+    InitializationError,
+>;
 
 /// What a finished lifecycle half of `W` hands back.
 pub type FinishedLifecycle<W> = crate::station_end::FinishedLifecycleOf<

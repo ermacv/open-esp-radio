@@ -534,7 +534,7 @@ fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
         oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation::Missing,
     );
     let mut transit = WakingSpscQueue::<u8, 8>::new();
-    let (to_lifecycle, mut in_transit) = transit.split();
+    let (to_lifecycle, in_transit) = transit.split();
     let mut abandon_place = WakingSpscQueue::<LifecycleFailure, 1>::new();
     let (mut abandon_end, mut abandoned) = abandon_place.split();
     let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
@@ -645,7 +645,7 @@ fn a_late_retire_finishes_the_lifecycles_half_without_a_second_release() {
     assert_eq!(half.late_end(), stopped, "kept once read");
     assert!(half.take_installed().is_none());
     assert_eq!(lifecycle.all(), [0; 4]);
-    let mut finished = half.finish(proof);
+    let finished = half.finish(proof);
     assert_eq!(finished.late, stopped);
     assert_eq!(
         finished.queues.try_receive(),
