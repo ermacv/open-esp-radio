@@ -311,6 +311,34 @@ pub(crate) type RetiredOf<W> = RetiredLifecycle<
     <W as Binding>::Sink,
 >;
 
+/// The retired station's bank of `W`.
+pub type RetiredStationOf<W> = oer_protocols_ieee80211_core_roles_sta::machine::RetiredStation<
+    'static,
+    oer_protocols_ieee80211_runtime::lifecycle::LifecycleTokens<'static, radio::ActorPort<W>, 1>,
+    Caps,
+    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
+>;
+
+/// The gate path of `W`'s actor port.
+type GatePathOf<W> =
+    oer_protocols_ieee80211_runtime::datapath::ActorGatePath<'static, radio::ActorPort<W>>;
+
+/// The places `W`'s retired station returned.
+pub type StationPlacesOf<W> =
+    oer_protocols_ieee80211_core_arbiter::StationPlaceReturns<'static, GatePathOf<W>>;
+
+/// The retired arbiter's bank of `W`.
+pub type RetiredArbiterOf<W> = oer_protocols_ieee80211_core_arbiter::RetiredArbiter<
+    'static,
+    Caps,
+    oer_protocols_ieee80211_core_arbiter::NoReservation,
+    GatePathOf<W>,
+>;
+
+/// The first owner a broken contract left in `W`'s lifecycle.
+pub type RejectedOf<W> =
+    oer_protocols_ieee80211_runtime::lifecycle::Rejected<'static, radio::ActorPort<W>>;
+
 /// The station lifecycle's half of an installation that did not retire:
 /// its retired lifecycle, whole, in the place that keeps it for the
 /// application, the lifecycle's ends of the queues to the actor with every
@@ -358,6 +386,46 @@ impl<W: Binding> UnfinishedLifecycle<W> {
     /// The events' sink the retired lifecycle keeps.
     pub fn events(&mut self) -> &mut W::Sink {
         &mut self.0.retired_mut().events
+    }
+
+    /// The retired station's bank: its configuration, callbacks and the
+    /// tokens it held.
+    pub fn station(&mut self) -> &mut RetiredStationOf<W> {
+        &mut self.0.retired_mut().station
+    }
+
+    /// The places the station returned.
+    pub fn places(&mut self) -> &mut StationPlacesOf<W> {
+        &mut self.0.retired_mut().places
+    }
+
+    /// The arbiter's bank, once: `None` once taken, or when a broken
+    /// contract ended the lifecycle while it moved the arbiter.
+    pub fn take_arbiter(&mut self) -> Option<RetiredArbiterOf<W>> {
+        self.0.retired_mut().arbiter.take()
+    }
+
+    /// The installation's commands issuer the lifecycle held.
+    pub fn issuer(&mut self) -> &mut radio::Commands<W> {
+        &mut self.0.retired_mut().issuer
+    }
+
+    /// The context still waiting at the place of ticket `ticket`, once:
+    /// `None` once taken or when none waits there (or no such place).
+    pub fn take_context(
+        &mut self,
+        ticket: usize,
+    ) -> Option<LifecycleTxContext<'static, radio::ActorPort<W>>> {
+        self.0
+            .retired_mut()
+            .tx_contexts
+            .get_mut(ticket)
+            .and_then(Option::take)
+    }
+
+    /// The first owner a broken contract left, once.
+    pub fn take_rejected(&mut self) -> Option<RejectedOf<W>> {
+        self.0.retired_mut().rejected.take()
     }
 
     /// How the actor's task ended after the lifecycle stopped waiting for
