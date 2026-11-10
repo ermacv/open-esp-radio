@@ -39,6 +39,9 @@ use oer_protocols_network_runtime::{
 use oer_protocols_network_testing_model::{Medium, PeerKey, PeerSpec, Spent, Ticket};
 use oer_protocols_network_wire::ip::Dscp;
 
+#[path = "scenarios/work.rs"]
+mod work;
+
 const SIZE: usize = 1200;
 const SOCKETS: usize = 4;
 const CREDITS: usize = 4;
