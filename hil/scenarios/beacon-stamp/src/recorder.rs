@@ -3,10 +3,22 @@
 //! flushed, before it hands the stream's complete lines to whoever waits for
 //! a marker. A wait that gives up (a timeout, a result before its marker,
 //! the console's end) loses no byte: the file already holds everything the
-//! stream delivered. Every ending cancels the operation and joins the
-//! worker, and keeps four results apart: the file's write, the bytes the
-//! service dropped for a slow reader, the stream's own read, and the
-//! operation's end.
+//! stream delivered. A file that refuses a write stops the record: the
+//! worker cancels the operation and every wait from then on fails with that
+//! write, never with a line the file does not hold.
+//!
+//! A console opened on a running board holds a prefix of an earlier boot
+//! before the boot it was opened for. The waits count only the lines of
+//! the boot observed starting in the stream: its start is the ROM's reset
+//! line (`oer_tools_lab_model::rom::is_reset_line`). Lines before it are
+//! kept in the file and never read as this boot's; a second reset line is
+//! another boot, and every wait from then on is refused.
+//!
+//! Every ending cancels the operation and joins the worker, and keeps four
+//! results apart: the file's write, the bytes the service dropped for a
+//! slow reader, the stream's own read, and the operation's end. What the
+//! worker observed stays known if it fails; what it could not observe is
+//! recorded as unknown.
 
 use crate::{
     result::{ProbeResult, parse},
@@ -14,8 +26,9 @@ use crate::{
 };
 use oer_tools_lab_client::client::Event;
 use std::{
+    cell::Cell,
     io::Write,
-    sync::mpsc,
+    sync::{Arc, Mutex, PoisonError, mpsc},
     thread::JoinHandle,
     time::{Duration, Instant},
 };
@@ -25,51 +38,141 @@ use std::{
 /// operation's own end is unknown.
 const SERVICE_GONE: &str = "the LAB service closed the connection";
 
+/// One result of a recording: as observed, or not observed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Outcome {
+    Ok,
+    Failed(String),
+    /// Not observed: why it stays unknown.
+    Unknown(String),
+}
+
+impl Outcome {
+    fn record(&self) -> serde_json::Value {
+        match self {
+            Self::Ok => serde_json::json!({ "ok": true }),
+            Self::Failed(error) => serde_json::json!({ "ok": false, "detail": error }),
+            Self::Unknown(why) => serde_json::json!({ "ok": null, "detail": why }),
+        }
+    }
+}
+
+/// The operation's end as the service reported it, or not reported.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum End {
+    Reported(Result<serde_json::Value, String>),
+    Unknown(String),
+}
+
 /// What one recorded console left, each result its own.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Recording {
-    /// Bytes the file took.
+    /// Bytes the file confirmed taking.
     pub written: u64,
-    /// The file's first failed write; the bytes after it are not in it.
-    pub write: Result<(), String>,
+    /// The file's write: a failure stops the record (the bytes after it are
+    /// not in it); unknown while a write was under way when the worker
+    /// failed.
+    pub write: Outcome,
     /// Bytes the service dropped for a slow reader (`Event::Lost`).
     pub lost: u64,
-    /// The stream's read: the service gone before the operation's end, or
-    /// the worker failed.
-    pub read: Result<(), String>,
-    /// The operation's end, as the service reported it; `None` when the
-    /// read failed before it.
-    pub end: Option<Result<serde_json::Value, String>>,
+    /// The stream's read: failed when the service went away before the
+    /// operation's end or the worker failed.
+    pub read: Outcome,
+    pub end: End,
+    /// The finish's cancel of the operation.
+    pub cancel: Outcome,
 }
 
 impl Recording {
+    fn new() -> Self {
+        Self {
+            written: 0,
+            write: Outcome::Ok,
+            lost: 0,
+            read: Outcome::Unknown("the stream was not read to its end".to_owned()),
+            end: End::Unknown("not reported".to_owned()),
+            cancel: Outcome::Ok,
+        }
+    }
+
     /// The recording as the run's outcome records it.
     pub fn record(&self, file: &str) -> serde_json::Value {
-        let result = |result: &Result<(), String>| match result {
-            Ok(()) => serde_json::json!({ "ok": true }),
-            Err(error) => serde_json::json!({ "ok": false, "detail": error }),
-        };
         serde_json::json!({
             "file": file,
             "written": self.written,
-            "write": result(&self.write),
+            "write": self.write.record(),
             "lost": self.lost,
-            "read": result(&self.read),
+            "read": self.read.record(),
+            "cancel": self.cancel.record(),
             "end": match &self.end {
-                None => serde_json::json!({ "ok": false, "detail": "not reported" }),
-                Some(Ok(value)) => serde_json::json!({ "ok": true, "detail": value }),
-                Some(Err(error)) => serde_json::json!({ "ok": false, "detail": error }),
+                End::Unknown(why) => serde_json::json!({ "ok": null, "detail": why }),
+                End::Reported(Ok(value)) => serde_json::json!({ "ok": true, "detail": value }),
+                End::Reported(Err(error)) => serde_json::json!({ "ok": false, "detail": error }),
             },
         })
     }
+
+    /// Whether nothing of the console is missing or unknown and its
+    /// operation ended as asked; otherwise every cause, apart.
+    pub fn clean(&self) -> Result<(), String> {
+        let mut causes = Vec::new();
+        for (name, outcome) in [
+            ("write", &self.write),
+            ("read", &self.read),
+            ("cancel", &self.cancel),
+        ] {
+            match outcome {
+                Outcome::Ok => {}
+                Outcome::Failed(error) => causes.push(format!("{name}: {error}")),
+                Outcome::Unknown(why) => causes.push(format!("{name}: unknown, {why}")),
+            }
+        }
+        if self.lost > 0 {
+            causes.push(format!("lost: {} bytes", self.lost));
+        }
+        match &self.end {
+            End::Reported(Ok(_)) => {}
+            End::Reported(Err(error)) => causes.push(format!("end: {error}")),
+            End::Unknown(why) => causes.push(format!("end: unknown, {why}")),
+        }
+        if causes.is_empty() {
+            Ok(())
+        } else {
+            Err(causes.join("; "))
+        }
+    }
+}
+
+/// What the worker hands the waits.
+enum Message {
+    Line(String),
+    /// The file refused a write: the record stops here.
+    Failed(String),
+}
+
+/// Where the waits are in the stream's boots.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Boot {
+    /// No reset line yet: every line is an earlier boot's prefix.
+    Before,
+    /// After the first reset line: the current boot's lines.
+    Current,
+    /// A second reset line came: another boot.
+    Again,
 }
 
 pub struct Recorder<C: Cancel + Send + 'static> {
     /// The image whose result line ends a result wait.
     image: &'static str,
-    lines: mpsc::Receiver<String>,
+    lines: mpsc::Receiver<Message>,
+    boot: Cell<Boot>,
     cancel: C,
-    worker: Option<JoinHandle<Recording>>,
+    observed: Arc<Mutex<Recording>>,
+    worker: Option<JoinHandle<()>>,
+}
+
+fn observe(observed: &Mutex<Recording>, update: impl FnOnce(&mut Recording)) {
+    update(&mut observed.lock().unwrap_or_else(PoisonError::into_inner));
 }
 
 impl<C: Cancel + Send + 'static> Recorder<C> {
@@ -81,53 +184,75 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
     ) -> Self {
         let cancel = operation.canceller();
         let (send, lines) = mpsc::channel();
+        let observed = Arc::new(Mutex::new(Recording::new()));
+        let recording = observed.clone();
         let worker = std::thread::spawn(move || {
-            let mut recording = Recording {
-                written: 0,
-                write: Ok(()),
-                lost: 0,
-                read: Ok(()),
-                end: None,
-            };
             let mut line = Vec::new();
+            let mut recorded = true;
             loop {
                 match operation.event() {
                     Event::Output(bytes) => {
-                        if recording.write.is_ok() {
-                            recording.write = file
-                                .write_all(&bytes)
-                                .and_then(|()| file.flush())
-                                .map_err(|error| format!("the console file: {error}"));
-                            if recording.write.is_ok() {
-                                recording.written =
-                                    recording.written.saturating_add(bytes.len() as u64);
-                            } else {
-                                // The record has a gap from here: stop it.
+                        if !recorded {
+                            continue;
+                        }
+                        let length = bytes.len() as u64;
+                        observe(&recording, |recording| {
+                            recording.write = Outcome::Unknown(format!(
+                                "the recorder stopped during a write of {length} bytes"
+                            ));
+                        });
+                        let written = file.write_all(&bytes).and_then(|()| file.flush());
+                        match written {
+                            Ok(()) => observe(&recording, |recording| {
+                                recording.write = Outcome::Ok;
+                                recording.written = recording.written.saturating_add(length);
+                            }),
+                            Err(error) => {
+                                let error = format!("the console file: {error}");
+                                observe(&recording, |recording| {
+                                    recording.write = Outcome::Failed(error.clone());
+                                });
+                                // The record has a gap from here: stop it,
+                                // and every wait hears why.
+                                recorded = false;
                                 let _ = operation.cancel();
+                                let _ = send.send(Message::Failed(error));
+                                continue;
                             }
                         }
-                        // In the file first, then to the waiter.
+                        // In the file first, then to the waits.
                         for byte in bytes {
                             if byte == b'\n' {
                                 let text = String::from_utf8_lossy(&line).trim_end().to_owned();
-                                let _ = send.send(text);
+                                let _ = send.send(Message::Line(text));
                                 line.clear();
                             } else {
                                 line.push(byte);
                             }
                         }
                     }
-                    Event::Lost(bytes) => recording.lost = recording.lost.saturating_add(bytes),
+                    Event::Lost(bytes) => observe(&recording, |recording| {
+                        recording.lost = recording.lost.saturating_add(bytes);
+                    }),
                     Event::Ready => {}
                     Event::Finished(result) => {
-                        if !line.is_empty() {
-                            let _ = send.send(String::from_utf8_lossy(&line).trim_end().to_owned());
+                        if recorded && !line.is_empty() {
+                            let text = String::from_utf8_lossy(&line).trim_end().to_owned();
+                            let _ = send.send(Message::Line(text));
                         }
-                        match result {
-                            Err(error) if error == SERVICE_GONE => recording.read = Err(error),
-                            result => recording.end = Some(result),
-                        }
-                        return recording;
+                        observe(&recording, |recording| match result {
+                            Err(error) if error == SERVICE_GONE => {
+                                recording.read = Outcome::Failed(error);
+                                recording.end = End::Unknown(
+                                    "the service went away before the operation's end".to_owned(),
+                                );
+                            }
+                            result => {
+                                recording.read = Outcome::Ok;
+                                recording.end = End::Reported(result);
+                            }
+                        });
+                        return;
                     }
                 }
             }
@@ -135,31 +260,58 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
         Self {
             image,
             lines,
+            boot: Cell::new(Boot::Before),
             cancel,
+            observed,
             worker: Some(worker),
         }
     }
 
-    /// The next line within `deadline` (none: no deadline), or why none
-    /// came.
+    /// The next line of the current boot within `deadline` (none: no
+    /// deadline), or why none came: a failed file, the console's end, the
+    /// timeout, or another boot.
     fn line(&self, deadline: Option<Instant>, waiting: &str) -> Result<String, String> {
         let ended = || format!("the console ended before {waiting}");
-        match deadline {
-            None => self.lines.recv().map_err(|_| ended()),
-            Some(deadline) => {
-                let left = deadline.saturating_duration_since(Instant::now());
-                self.lines.recv_timeout(left).map_err(|error| match error {
-                    mpsc::RecvTimeoutError::Timeout => {
-                        format!("no {waiting} within the console timeout")
-                    }
-                    mpsc::RecvTimeoutError::Disconnected => ended(),
-                })
+        loop {
+            if self.boot.get() == Boot::Again {
+                return Err(format!("the board booted again before {waiting}"));
             }
+            let message = match deadline {
+                None => self.lines.recv().map_err(|_| ended())?,
+                Some(deadline) => {
+                    let left = deadline.saturating_duration_since(Instant::now());
+                    self.lines.recv_timeout(left).map_err(|error| match error {
+                        mpsc::RecvTimeoutError::Timeout => {
+                            format!("no {waiting} within the console timeout")
+                        }
+                        mpsc::RecvTimeoutError::Disconnected => ended(),
+                    })?
+                }
+            };
+            let line = match message {
+                Message::Failed(error) => {
+                    return Err(format!(
+                        "the console record stopped before {waiting}: {error}"
+                    ));
+                }
+                Message::Line(line) => line,
+            };
+            if oer_tools_lab_model::rom::is_reset_line(line.trim()) {
+                self.boot.set(match self.boot.get() {
+                    Boot::Before => Boot::Current,
+                    Boot::Current | Boot::Again => Boot::Again,
+                });
+                continue;
+            }
+            if self.boot.get() == Boot::Current {
+                return Ok(line);
+            }
+            // An earlier boot's prefix: kept in the file, never this boot's.
         }
     }
 
-    /// Wait until a line holds `marker`, within `timeout`; a result line
-    /// before it is an error naming that result.
+    /// Wait until a line of the current boot holds `marker`, within
+    /// `timeout`; a result line before it is an error naming that result.
     pub fn wait_for(&self, marker: &str, timeout: Duration) -> Result<(), String> {
         let deadline = Instant::now().checked_add(timeout);
         let waiting = format!("`{marker}` line");
@@ -177,7 +329,7 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
         }
     }
 
-    /// Wait for the image's result line within `timeout`.
+    /// Wait for the current boot's result line within `timeout`.
     pub fn result(&self, timeout: Duration) -> Result<ProbeResult, String> {
         let deadline = Instant::now().checked_add(timeout);
         let waiting = format!("{} result line", self.image);
@@ -202,27 +354,22 @@ impl<C: Cancel + Send + 'static> Recorder<C> {
                 .join()
                 .map_err(|_| "the console recorder failed".to_owned()),
         };
-        match (joined, cancelled) {
-            (Ok(recording), Ok(())) => recording,
-            (Ok(mut recording), Err(error)) => {
-                let read = recording.read.clone().err();
-                recording.read = Err(match read {
-                    Some(read) => format!("{read}; the cancel failed: {error}"),
-                    None => format!("the cancel failed: {error}"),
-                });
-                recording
-            }
-            (Err(error), cancelled) => Recording {
-                written: 0,
-                write: Ok(()),
-                lost: 0,
-                read: Err(match cancelled {
-                    Ok(()) => error,
-                    Err(cancel) => format!("{error}; the cancel failed: {cancel}"),
-                }),
-                end: None,
-            },
+        let mut recording = self
+            .observed
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Err(error) = joined {
+            // The worker failed: its read did, whatever it had seen.
+            recording.read = Outcome::Failed(match &recording.read {
+                Outcome::Failed(read) => format!("{read}; {error}"),
+                Outcome::Ok | Outcome::Unknown(_) => error,
+            });
         }
+        if let Err(error) = cancelled {
+            recording.cancel = Outcome::Failed(error);
+        }
+        recording
     }
 }
 
@@ -230,33 +377,6 @@ impl<C: Cancel + Send + 'static> Drop for Recorder<C> {
     fn drop(&mut self) {
         if self.worker.is_some() {
             let _ = self.end();
-        }
-    }
-}
-
-impl Recording {
-    /// Whether nothing of the console is missing and its operation ended
-    /// as asked; otherwise every cause, apart.
-    pub fn clean(&self) -> Result<(), String> {
-        let mut causes = Vec::new();
-        if let Err(error) = &self.write {
-            causes.push(format!("write: {error}"));
-        }
-        if self.lost > 0 {
-            causes.push(format!("lost: {} bytes", self.lost));
-        }
-        if let Err(error) = &self.read {
-            causes.push(format!("read: {error}"));
-        }
-        match &self.end {
-            Some(Ok(_)) => {}
-            Some(Err(error)) => causes.push(format!("end: {error}")),
-            None => causes.push("end: not reported".to_owned()),
-        }
-        if causes.is_empty() {
-            Ok(())
-        } else {
-            Err(causes.join("; "))
         }
     }
 }
@@ -334,10 +454,9 @@ impl<C: Cancel + Send + 'static> Consoles<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
 
     /// An operation fed by the test a step at a time; the service gone once
-    /// the sender drops, as the LAB client reports it. Its cancel is
+    /// the sender drops, as the LAB client reports it. Its cancels are
     /// reported on `cancels`.
     struct Fed {
         events: mpsc::Receiver<Event>,
@@ -372,17 +491,28 @@ mod tests {
         }
     }
 
-    /// A file the test reads while the recorder writes it, or one that
-    /// refuses every write.
+    /// A file the test reads while the recorder writes it: it refuses its
+    /// writes from write number `refuses_from` on, or panics at write
+    /// number `panics_at`.
     #[derive(Clone, Default)]
     struct File {
         bytes: Arc<Mutex<Vec<u8>>>,
-        refuses: bool,
+        writes: Arc<Mutex<usize>>,
+        refuses_from: Option<usize>,
+        panics_at: Option<usize>,
     }
 
     impl Write for File {
         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            if self.refuses {
+            let write = {
+                let mut writes = self.writes.lock().unwrap();
+                *writes += 1;
+                *writes
+            };
+            if self.panics_at == Some(write) {
+                panic!("the test's file panics at write {write}");
+            }
+            if self.refuses_from.is_some_and(|from| write >= from) {
                 return Err(std::io::Error::other("disk full"));
             }
             self.bytes.lock().unwrap().extend_from_slice(bytes);
@@ -421,20 +551,25 @@ mod tests {
         Event::Output(text.as_bytes().to_vec())
     }
 
+    /// The ROM's lines of a boot's start, its reset line among them.
+    const ROM: &str = "ESP-ROM:esp32s31-20251218\nBuild:Dec 18 2025\n\
+                       rst:0x17 (CHIP_USB_UART_RESET),boot:0x58 (SPI_FAST_FLASH_BOOT)\n";
+
     #[test]
     fn every_byte_is_in_the_file_before_its_line_is_read() {
         let file = File::default();
         let (recorder, events, cancels) = record(&file);
-        // A line split across chunks, then the start of the next one.
+        // An earlier boot's fragment, the ROM, a line split across chunks,
+        // then the start of the next one.
         events
-            .send(output("ESP-ROM:esp32s31\nSTAMP v1 be"))
+            .send(output(&format!("I (195) esp_image{ROM}STAMP v1 be")))
             .unwrap();
         events.send(output("gin run=1\nSTAMP roun")).unwrap();
         assert_eq!(recorder.wait_for("STAMP v1 begin", Duration::MAX), Ok(()));
         // The unfinished tail is in the file already, never read as a line.
         assert_eq!(
             file.text(),
-            "ESP-ROM:esp32s31\nSTAMP v1 begin run=1\nSTAMP roun"
+            format!("I (195) esp_image{ROM}STAMP v1 begin run=1\nSTAMP roun")
         );
         events
             .send(Event::Finished(Ok(serde_json::json!("receipt"))))
@@ -442,16 +577,22 @@ mod tests {
         let recording = recorder.finish();
         assert_eq!(cancels.try_recv(), Ok(()));
         assert_eq!(recording.written, file.text().len() as u64);
-        assert_eq!(recording.write, Ok(()));
-        assert_eq!((recording.lost, recording.read.clone()), (0, Ok(())));
-        assert_eq!(recording.end, Some(Ok(serde_json::json!("receipt"))));
+        assert_eq!(recording.write, Outcome::Ok);
+        assert_eq!((recording.lost, recording.read.clone()), (0, Outcome::Ok));
+        assert_eq!(
+            recording.end,
+            End::Reported(Ok(serde_json::json!("receipt")))
+        );
+        assert!(recording.clean().is_ok());
     }
 
     #[test]
     fn a_wait_that_gives_up_keeps_the_tail_and_the_end_still_joins() {
         let file = File::default();
         let (recorder, events, cancels) = record(&file);
-        events.send(output("STAMP boot\nhalf a li")).unwrap();
+        events
+            .send(output(&format!("{ROM}STAMP boot\nhalf a li")))
+            .unwrap();
         // No marker: the wait gives up at once; the tail is not lost.
         let refused = recorder.wait_for("ACKRESP listening", Duration::ZERO);
         assert!(refused.unwrap_err().contains("no `ACKRESP listening` line"));
@@ -463,9 +604,9 @@ mod tests {
             .send(Event::Finished(Err("cancelled".into())))
             .unwrap();
         let recording = finisher.join().unwrap();
-        assert_eq!(file.text(), "STAMP boot\nhalf a line\n");
-        assert_eq!(recording.end, Some(Err("cancelled".into())));
-        assert_eq!(recording.read, Ok(()));
+        assert_eq!(file.text(), format!("{ROM}STAMP boot\nhalf a line\n"));
+        assert_eq!(recording.end, End::Reported(Err("cancelled".into())));
+        assert_eq!(recording.read, Outcome::Ok);
     }
 
     #[test]
@@ -473,7 +614,9 @@ mod tests {
         let file = File::default();
         let (recorder, events, _cancels) = record(&file);
         events
-            .send(output("OER-RESULT: fail beacon-stamp clocks\n"))
+            .send(output(&format!(
+                "{ROM}OER-RESULT: fail beacon-stamp clocks\n"
+            )))
             .unwrap();
         let refused = recorder
             .wait_for("STAMP v1 begin", Duration::MAX)
@@ -481,21 +624,36 @@ mod tests {
         assert!(refused.contains("ended before"), "{refused}");
         drop(events);
         let recording = recorder.finish();
-        assert_eq!(file.text(), "OER-RESULT: fail beacon-stamp clocks\n");
+        assert!(
+            file.text()
+                .ends_with("OER-RESULT: fail beacon-stamp clocks\n")
+        );
         // The service gone: the read failed, the end is unknown.
-        assert_eq!(recording.read, Err(SERVICE_GONE.to_owned()));
-        assert_eq!(recording.end, None);
+        assert_eq!(recording.read, Outcome::Failed(SERVICE_GONE.to_owned()));
+        assert!(matches!(recording.end, End::Unknown(_)));
     }
 
     #[test]
-    fn a_file_that_refuses_a_write_cancels_and_keeps_its_cause_apart() {
+    fn the_owners_disk_full_refuses_the_marker_wait_and_keeps_its_cause_apart() {
         let file = File {
-            refuses: true,
+            refuses_from: Some(1),
             ..File::default()
         };
         let (recorder, events, cancels) = record(&file);
-        events.send(output("STAMP v1 begin\n")).unwrap();
-        // The worker cancels the operation it can no longer record.
+        events
+            .send(output(&format!("{ROM}STAMP v1 begin\n")))
+            .unwrap();
+        // The marker came, but the file does not hold it: the wait fails
+        // with the write.
+        let refused = recorder
+            .wait_for("STAMP v1 begin", Duration::MAX)
+            .unwrap_err();
+        assert!(
+            refused.contains("record stopped") && refused.contains("disk full"),
+            "{refused}"
+        );
+        // The worker cancelled the operation it can no longer record; the
+        // finish and the other results still go on.
         assert_eq!(cancels.recv(), Ok(()));
         events.send(Event::Lost(7)).unwrap();
         events
@@ -503,20 +661,102 @@ mod tests {
             .unwrap();
         let recording = recorder.finish();
         assert_eq!(recording.written, 0);
-        assert!(recording.write.unwrap_err().contains("disk full"));
+        assert!(matches!(&recording.write, Outcome::Failed(error) if error.contains("disk full")));
         assert_eq!(recording.lost, 7);
-        assert_eq!(recording.read, Ok(()));
+        assert_eq!(recording.read, Outcome::Ok);
         assert_eq!(
             recording.end,
-            Some(Err("the operation was cancelled".into()))
+            End::Reported(Err("the operation was cancelled".into()))
         );
+    }
+
+    #[test]
+    fn the_owners_old_result_prefix_is_not_the_new_boots_result() {
+        let file = File::default();
+        let (recorder, events, _cancels) = record(&file);
+        // The earlier boot's result, then the ROM and a new boot that has
+        // not ended.
+        events
+            .send(output(&format!(
+                "OER-RESULT: pass beacon-stamp\n{ROM}STAMP v1 begin run=2\n"
+            )))
+            .unwrap();
+        drop(events);
+        let refused = recorder.result(Duration::MAX).unwrap_err();
+        assert!(refused.contains("ended before"), "{refused}");
+        // The prefix stays in the file, raw.
+        assert!(file.text().starts_with("OER-RESULT: pass beacon-stamp\n"));
+        drop(recorder);
+    }
+
+    #[test]
+    fn a_second_boot_refuses_every_wait() {
+        let file = File::default();
+        let (recorder, events, _cancels) = record(&file);
+        events
+            .send(output(&format!(
+                "{ROM}STAMP v1 begin\n{ROM}OER-RESULT: pass beacon-stamp\n"
+            )))
+            .unwrap();
+        assert_eq!(recorder.wait_for("STAMP v1 begin", Duration::MAX), Ok(()));
+        let refused = recorder.result(Duration::MAX).unwrap_err();
+        assert!(refused.contains("booted again"), "{refused}");
+        assert!(
+            recorder
+                .wait_for("anything", Duration::MAX)
+                .unwrap_err()
+                .contains("booted again")
+        );
+        drop(events);
+        drop(recorder);
+    }
+
+    #[test]
+    fn a_console_without_a_boot_start_answers_no_wait() {
+        let file = File::default();
+        let (recorder, events, _cancels) = record(&file);
+        events
+            .send(output("STAMP v1 begin\nOER-RESULT: pass beacon-stamp\n"))
+            .unwrap();
+        drop(events);
+        assert!(recorder.wait_for("STAMP v1 begin", Duration::MAX).is_err());
+        drop(recorder);
+    }
+
+    #[test]
+    fn the_owners_worker_panic_keeps_what_was_observed_and_marks_the_rest_unknown() {
+        let file = File {
+            panics_at: Some(2),
+            ..File::default()
+        };
+        let (recorder, events, _cancels) = record(&file);
+        // Six bytes confirmed written, seven lost, then a write that panics.
+        events.send(output("rst:x\n")).unwrap();
+        events.send(Event::Lost(7)).unwrap();
+        events.send(output("STAMP\n")).unwrap();
+        let ended = recorder.wait_for("STAMP", Duration::MAX).unwrap_err();
+        assert!(ended.contains("ended before"), "{ended}");
+        let recording = recorder.finish();
+        assert_eq!(recording.written, 6);
+        assert_eq!(recording.lost, 7);
+        assert!(
+            matches!(&recording.write, Outcome::Unknown(why) if why.contains("during a write of 6 bytes")),
+            "{:?}",
+            recording.write
+        );
+        assert!(
+            matches!(&recording.read, Outcome::Failed(error) if error.contains("recorder failed"))
+        );
+        assert!(matches!(recording.end, End::Unknown(_)));
+        assert!(recording.clean().is_err());
+        drop(events);
     }
 
     #[test]
     fn a_console_that_ends_before_its_marker_ends_the_wait() {
         let file = File::default();
         let (recorder, events, _cancels) = record(&file);
-        events.send(output("STAMP boot")).unwrap();
+        events.send(output(&format!("{ROM}STAMP boot"))).unwrap();
         events
             .send(Event::Finished(Err(
                 "the console failed: broken pipe".into()
@@ -527,10 +767,10 @@ mod tests {
             .unwrap_err();
         assert!(refused.contains("the console ended before"), "{refused}");
         let recording = recorder.finish();
-        assert_eq!(file.text(), "STAMP boot");
+        assert_eq!(file.text(), format!("{ROM}STAMP boot"));
         assert_eq!(
             recording.end,
-            Some(Err("the console failed: broken pipe".into()))
+            End::Reported(Err("the console failed: broken pipe".into()))
         );
     }
 
@@ -554,7 +794,9 @@ mod tests {
         let mut consoles = Consoles::new();
         consoles.add("preflight", "p.log".into(), first);
         consoles.add("responder", "r.log".into(), second);
-        first_events.send(output("STAMP v1 begin\n")).unwrap();
+        first_events
+            .send(output(&format!("{ROM}STAMP v1 begin\n")))
+            .unwrap();
         first_events
             .send(Event::Finished(Ok(serde_json::json!("receipt"))))
             .unwrap();
