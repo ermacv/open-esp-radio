@@ -13,6 +13,7 @@
 //! under the old key are withdrawn from the arenas that have not published
 //! them.
 
+use super::queues::QueueId;
 use super::turn::Failed;
 use super::*;
 use oer_protocols_ieee80211_contracts_port::arena::{ArenaFormat, PublishError, TxArena};
@@ -156,7 +157,7 @@ where
                     priority,
                 };
                 let tid = plane.tid(priority).unwrap_or(priority);
-                if let Err(msdu) = queues.push(tid, msdu) {
+                if let Err(msdu) = queues.push(QueueId::of_tid(tid), msdu) {
                     // The room was checked: a full pool keeps it quarantined.
                     let _quarantined = core::mem::ManuallyDrop::new(msdu);
                 }
@@ -167,30 +168,32 @@ where
                 // the next arena starts from the queue the MAC chooses. The
                 // held TID's data waits for the request that names its next
                 // number.
-                let tid = match plane.standby_tid() {
-                    Some(tid) if queues.ready(tid) && Some(tid) != *sequence_hold => tid,
+                let hold = sequence_hold.map(QueueId::of_tid);
+                let queue = match plane.standby_tid().map(QueueId::of_tid) {
+                    Some(queue) if queues.ready(queue) && Some(queue) != hold => queue,
                     Some(_) => break,
-                    None => match queues.select(*sequence_hold) {
-                        Some(tid) => tid,
+                    None => match queues.select(hold) {
+                        Some(queue) => queue,
                         None => break,
                     },
                 };
-                let Some(msdu) = queues.pop(tid) else {
+                let Some(msdu) = queues.pop(queue) else {
                     break;
                 };
                 taken = taken.saturating_add(1);
                 match plane.intake(&mut arena, msdu, link.numbers_mut(), now) {
                     Intake::Taken(tid) => *tid.select_mut(&mut tids) = true,
                     Intake::Wait(msdu, waits) => {
-                        let tid = plane.tid(msdu.priority).unwrap_or(msdu.priority);
-                        if let Err(msdu) = queues.push_front(tid, msdu) {
+                        let queue =
+                            QueueId::of_tid(plane.tid(msdu.priority).unwrap_or(msdu.priority));
+                        if let Err(msdu) = queues.push_front(queue, msdu) {
                             // The place it left takes it back.
                             let _quarantined = core::mem::ManuallyDrop::new(msdu);
                         }
                         match waits {
                             // Only this TID waits for its window: another
                             // may start the arena.
-                            Waits::Window => queues.block(tid),
+                            Waits::Window => queues.block(queue),
                             Waits::Arena | Waits::Standby => break,
                         }
                     }
@@ -342,7 +345,7 @@ where
             Err(SettleError::Fault(fault)) => return Err(ActorFault::Port(fault)),
         };
         // One charge for the attempt; its end may move the windows.
-        queues.charge(settled.tid, settled.cost);
+        queues.charge(QueueId::of_tid(settled.tid), settled.cost);
         queues.unblock();
         if let Some(lesson) = settled.lesson {
             lesson.teach(*now, rates, D::arena_ack);

@@ -326,13 +326,20 @@ fn the_network_reaches_only_an_authorized_peer_and_the_group() {
     let mut output = [0; 512];
     assert_eq!(
         engine
-            .encapsulate(PEER, AP, 0x0800, &[0x45], &mut output)
+            .encapsulate(PEER, AP, 0x0800, &[0x45], WmmUserPriority::UP0, &mut output)
             .unwrap(),
         None,
         "the peer is not authorized"
     );
     let group = engine
-        .encapsulate([0xff; 6], AP, 0x0806, &[1, 2], &mut output)
+        .encapsulate(
+            [0xff; 6],
+            AP,
+            0x0806,
+            &[1, 2],
+            WmmUserPriority::UP0,
+            &mut output,
+        )
         .unwrap()
         .unwrap();
     assert_eq!(group.kind, ApFrameKind::Group);
@@ -570,4 +577,24 @@ mod handshake {
             ApReceived::Msdu(_)
         ));
     }
+}
+
+/// A group frame's queue is the group's, best effort; a destination that is
+/// no authorized peer has no queue: its MSDU does not go.
+#[test]
+fn a_frame_s_queue_is_its_authorized_peer_s_or_the_group_s() {
+    let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
+    let mut engine = engine(&mut storage, &mut beacon);
+    assert_eq!(
+        engine.queue_of([0xff; 6], WmmUserPriority::UP6),
+        Some((None, WmmUserPriority::UP0)),
+        "the group goes as best effort"
+    );
+    assert_eq!(engine.queue_of(PEER, WmmUserPriority::UP6), None, "no peer");
+    associate(&mut engine);
+    assert_eq!(
+        engine.queue_of(PEER, WmmUserPriority::UP6),
+        None,
+        "associated, not authorized"
+    );
 }

@@ -93,8 +93,8 @@ use oer_protocols_ieee80211_contracts_port::{
     RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopCause,
     StopObservations, StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower,
     SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory,
-    TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection,
-    TxSource, Unconsumed, UnconsumedRefused,
+    TxBufferPool, TxCompleted, TxEstimate, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower,
+    TxProtection, TxSource, Unconsumed, UnconsumedRefused,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
     ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
@@ -110,7 +110,9 @@ use oer_protocols_ieee80211_core_upper_mac::{
     receive::Integrity,
 };
 
-use network::ApNetworkEnd;
+use crate::datapath::queues::{QueueId, TxQueues};
+use network::{AP_TX_DEPTH, ApMemory, ApNetworkEnd};
+use oer_protocols_ieee80211_core_roles_sta::data::plane::OutboundMsdu;
 
 /// The tickets the runner holds at most.
 pub const AP_TICKETS: usize = 8;
@@ -126,6 +128,11 @@ const RECEIVE_BUDGET: usize = 16;
 
 /// The network frames one turn carries at most.
 const TRANSMIT_BUDGET: usize = 8;
+
+/// The peers the transmit queues name: each client's slot, and the group.
+const AP_QUEUE_PEERS: usize = oer_protocols_ieee80211_core_roles_ap::AP_MAX_CLIENTS + 1;
+/// The group's peer among the transmit queues.
+const GROUP_PEER: u8 = oer_protocols_ieee80211_core_roles_ap::AP_MAX_CLIENTS as u8;
 
 /// The received units the runner holds at once: one at a time.
 const RECEIVE_ROOM: u8 = 1;
@@ -661,8 +668,8 @@ enum Purpose {
     Eapol(ApEapolTxContext),
     /// A step of a peer's teardown.
     Teardown(ApTeardown, ApPeerDisconnectKind),
-    /// A data MSDU.
-    Data,
+    /// A data MSDU of this queue.
+    Data(QueueId),
     /// The beacon.
     Beacon(ApBeaconTxContext),
 }
@@ -760,6 +767,8 @@ where
         <Ty<'id, P> as PortTypes<'id>>::TicketPath,
     >,
     buffers: heapless::Vec<Buffer<'id, P, C>, AP_BUFFERS>,
+    /// The network's frames by peer and TID, until each goes.
+    queues: TxQueues<ApMemory, AP_TX_DEPTH, AP_QUEUE_PEERS>,
     purposes: [Option<Purpose>; 32],
     configure: Option<Configure<'id, P>>,
     /// The access point's association, home while no pairwise removal
@@ -1544,7 +1553,10 @@ where
                     self.refuse();
                 }
             }
-            Purpose::Response(_) | Purpose::Data => {}
+            Purpose::Response(_) => {}
+            // One charge for the attempt: a single MPDU's completion names no
+            // modelled cost, so it is charged as unknown, never nothing.
+            Purpose::Data(queue) => self.queues.charge(queue, TxEstimate::Unknown),
             Purpose::Eapol(context) => {
                 // A context the handshake no longer names returns as
                 // superseded; a refusal counts, and the handshake's own
@@ -1654,7 +1666,7 @@ where
             Purpose::Beacon(context) => {
                 let _release: Option<_> = context.complete(ApBeaconTxOutcome::Unsent);
             }
-            Purpose::Response(_) | Purpose::Data => {}
+            Purpose::Response(_) | Purpose::Data(_) => {}
         }
         Ok(())
     }
@@ -1722,6 +1734,7 @@ where
                 tickets,
                 access,
                 buffers,
+                queues: TxQueues::new(),
                 purposes: [const { None }; 32],
                 configure: Some(configure),
                 association: Some(association),
@@ -2556,38 +2569,94 @@ where
     }
 
     /// Carry the network's frames into the BSS while tickets and buffers
-    /// last.
+    /// last. The network's queue is the transport: its frames go into
+    /// their peers' TIDs' queues at once, and each transmission starts from
+    /// the queue the MAC chooses, its frame written with that TID's
+    /// priority and number.
     fn transmit_network(&mut self, now: Instant) -> Result<(), Halt<'id, P, C, PortFault<'id, P>>> {
+        let homes = &mut self.homes;
+        let frames = homes.network.frames();
+        while homes.queues.has_room() {
+            let Some(outgoing) = homes.network.take() else {
+                break;
+            };
+            let queue = frames
+                .read(&outgoing.memory, |frame| frame.parts().destination)
+                .and_then(|destination| homes.engine.queue_of(destination, outgoing.priority));
+            let Some((peer, tid)) = queue else {
+                // No authorized peer of that destination: it does not go.
+                homes.network.give_back(outgoing.memory);
+                continue;
+            };
+            let msdu = OutboundMsdu {
+                memory: outgoing.memory,
+                length: usize::from(outgoing.length),
+                priority: tid,
+            };
+            match QueueId::new(peer.unwrap_or(GROUP_PEER), tid) {
+                Some(queue) => {
+                    if let Err(msdu) = homes.queues.push(queue, msdu) {
+                        homes.network.give_back(msdu.memory);
+                    }
+                }
+                None => homes.network.give_back(msdu.memory),
+            }
+        }
         for _ in 0..TRANSMIT_BUDGET {
             let homes = &mut self.homes;
-            if homes.tickets.is_empty() || homes.buffers.is_empty() || !homes.network.waiting() {
+            if homes.tickets.is_empty() || homes.buffers.is_empty() {
                 break;
             }
-            let Some(frame) = homes.network.take() else {
+            let Some(queue) = homes.queues.select(None) else {
+                break;
+            };
+            let Some(msdu) = homes.queues.pop(queue) else {
                 break;
             };
             let Some(mut buffer) = homes.buffers.pop() else {
+                if let Err(msdu) = homes.queues.push_front(queue, msdu) {
+                    homes.network.give_back(msdu.memory);
+                }
                 break;
             };
-            let parts = frame.parts();
             let written = match buffer.bytes_mut() {
-                Ok(bytes) => homes.engine.encapsulate(
-                    parts.destination,
-                    parts.source,
-                    parts.ether_type,
-                    parts.payload,
-                    bytes,
-                ),
+                Ok(bytes) => frames
+                    .read(&msdu.memory, |frame| {
+                        let parts = frame.parts();
+                        homes.engine.encapsulate(
+                            parts.destination,
+                            parts.source,
+                            parts.ether_type,
+                            parts.payload,
+                            queue.tid(),
+                            bytes,
+                        )
+                    })
+                    .unwrap_or(Ok(None)),
                 // The port still holds its memory: the step stops on it.
-                Err(_) => return Err(Halt::Kept(ApContract::BufferClass, Kept::Buffer(buffer))),
+                Err(_) => {
+                    if let Err(msdu) = homes.queues.push_front(queue, msdu) {
+                        homes.network.give_back(msdu.memory);
+                    }
+                    return Err(Halt::Kept(ApContract::BufferClass, Kept::Buffer(buffer)));
+                }
             };
+            // The frame is in the port's buffer: the network's is free.
+            homes.network.give_back(msdu.memory);
             match written {
                 Ok(Some(written)) => {
-                    self.submit(buffer, written, Purpose::Data, TxOperation::Data, None, now)?;
+                    self.submit(
+                        buffer,
+                        written,
+                        Purpose::Data(queue),
+                        TxOperation::Data,
+                        None,
+                        now,
+                    )?;
                 }
                 // No authorized peer of that destination, or a frame the
                 // BSS cannot carry: it does not go.
-                Ok(None) | Err(_) => homes.give_buffer(buffer)?,
+                Ok(None) | Err(_) => self.homes.give_buffer(buffer)?,
             }
         }
         Ok(())

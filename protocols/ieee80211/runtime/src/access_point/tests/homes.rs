@@ -88,7 +88,10 @@ fn a_terminal_without_a_home_of_the_runners_is_refused_whole_and_stays_with_the_
         );
         assert_eq!(runner.homes.tickets.len(), tickets);
         // Once the ticket has its purpose, the homes take it whole, once.
-        runner.homes.purposes[usize::from(index)] = Some(Purpose::Data);
+        runner.homes.purposes[usize::from(index)] =
+            Some(Purpose::Data(crate::datapath::queues::QueueId::of_tid(
+                oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority::UP0,
+            )));
         assert_eq!(
             runner.port.take_unconsumed(&mut runner.homes),
             Ok(Unconsumed::None)
@@ -144,7 +147,10 @@ fn owners_an_operation_stopped_on_hold_every_later_terminal_in_the_port_and_leav
         let Ok(admitted) = runner.admit(ticket, buffer, frame, TxOperation::Data, None) else {
             panic!("the frame is admitted");
         };
-        runner.homes.purposes[usize::from(index)] = Some(Purpose::Data);
+        runner.homes.purposes[usize::from(index)] =
+            Some(Purpose::Data(crate::datapath::queues::QueueId::of_tid(
+                oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority::UP0,
+            )));
         assert!(
             runner
                 .port

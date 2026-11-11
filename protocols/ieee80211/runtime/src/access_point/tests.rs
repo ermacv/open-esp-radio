@@ -214,7 +214,8 @@ macro_rules! fixture {
             GroupKeyId::new(GROUP_KEY_ID).unwrap(),
         );
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
-        let ($device, _transmit, end) = network.split::<Infallible>();
+        let ($device, _transmit, end) =
+            network.split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame>();
         let mut $runner = ApRunner::new(
             port,
             commands,

@@ -65,7 +65,7 @@
 
 mod data;
 mod messages;
-mod queues;
+pub(crate) mod queues;
 mod rx;
 mod station_tx;
 mod turn;
@@ -470,7 +470,7 @@ struct Stage<'id, D: DatapathPort<'id>> {
 /// TIDs' queues of the network's MSDUs and the network's freed memory.
 struct DataTx<M> {
     plane: Option<DataPlane>,
-    queues: queues::TxQueues<M, HELD>,
+    queues: queues::TxQueues<M, HELD, 1>,
     freed: heapless::Deque<TxEnded<M>, HELD>,
 }
 

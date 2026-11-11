@@ -423,7 +423,7 @@ pub type ApNetwork = ApNetDevice<'static>;
 /// device and sending path for the stack's frames `F`, and its task, which
 /// waits for the control's start. `config` holds the radio's regulatory
 /// configuration until the start names the one it runs on.
-pub fn access_point<W: Binding, F>(
+pub fn access_point<W: Binding, F: oer_protocols_network_port::EthernetFrame>(
     resources: Resources<W>,
     config: Config,
     storage: &'static mut AccessPointStorage,

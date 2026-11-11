@@ -670,6 +670,13 @@ pub struct ApPeerBinding {
 }
 
 impl ApPeerBinding {
+    /// The peer's slot in the table, below the clients there are.
+    pub const fn index(&self) -> u8 {
+        self.index
+    }
+}
+
+impl ApPeerBinding {
     pub const fn address(self) -> [u8; 6] {
         self.address
     }

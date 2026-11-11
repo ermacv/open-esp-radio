@@ -196,8 +196,9 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
             key_id,
         );
-        let (_device, _transmit, end) =
-            leak(ApNetworkStorage::new()).split::<core::convert::Infallible>();
+        let (_device, _transmit, end) = leak(ApNetworkStorage::new())
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame>(
+        );
         let mut runner = ApRunner::new(
             port,
             commands,

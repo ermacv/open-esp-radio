@@ -672,17 +672,36 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
     }
 }
 
+/// What a network's transmit end reads of its link: whether it is up.
+pub trait LinkView {
+    fn snapshot(&self) -> LinkSnapshot;
+}
+
+impl<W: oer_portable_memory::QueueNotify> LinkView for super::NetworkLink<W> {
+    fn snapshot(&self) -> LinkSnapshot {
+        super::NetworkLink::snapshot(self)
+    }
+}
+
 /// The Wi-Fi implementation of the neutral Ethernet contract's transmit
-/// half. `P` is the network stack's packet a transmission hands over and
-/// `S` the memory its frame goes into for the station.
-pub struct DeviceTransmit<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies = SameHart> {
+/// half, for a station's or an access point's MAC. `P` is the network
+/// stack's packet a transmission hands over, `S` the memory its frame goes
+/// into for the MAC and `K` the link it reads.
+pub struct DeviceTransmit<
+    'c,
+    P,
+    S: TxSupply<P>,
+    const TX: usize,
+    N: Notifies = SameHart,
+    K: LinkView + 'c = super::NetworkLink<<N as Notifies>::NetworkWaker>,
+> {
     /// The frames for the station, each in the network's memory, where the
     /// station writes its MPDU header in place.
     transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
     /// The memory the station gave back, free for the next frames.
     returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
     supply: S,
-    link: &'c super::NetworkLink<N::NetworkWaker>,
+    link: &'c K,
     packet: core::marker::PhantomData<fn(P)>,
 }
 impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, S, TX, N> {
@@ -694,11 +713,24 @@ impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, 
         supply: S,
         state: &'c State<N>,
     ) -> Self {
+        Self::with_link(transmit, returned, supply, state.network_link())
+    }
+}
+impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies, K: LinkView + 'c>
+    DeviceTransmit<'c, P, S, TX, N, K>
+{
+    /// The network end over a MAC's transmit channels and `link`.
+    pub fn with_link(
+        transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
+        returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
+        supply: S,
+        link: &'c K,
+    ) -> Self {
         Self {
             transmit,
             returned,
             supply,
-            link: state.network_link(),
+            link,
             packet: core::marker::PhantomData,
         }
     }
@@ -710,8 +742,14 @@ impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, 
         }
     }
 }
-impl<P: oer_protocols_network_port::EthernetFrame, S: TxSupply<P>, const TX: usize, N: Notifies>
-    NetTransmit for DeviceTransmit<'_, P, S, TX, N>
+impl<
+    'c,
+    P: oer_protocols_network_port::EthernetFrame,
+    S: TxSupply<P>,
+    const TX: usize,
+    N: Notifies,
+    K: LinkView + 'c,
+> NetTransmit for DeviceTransmit<'c, P, S, TX, N, K>
 {
     type Frame = P;
     fn reclaim(&mut self) {

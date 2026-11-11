@@ -25,6 +25,7 @@ use oer_protocols_ieee80211_core_upper_mac::{
     ccmp::{CcmpRxReplayEpoch, InstalledCcmpTxKey},
     receive::{AdmittedData, Integrity, RxDropReason},
 };
+use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::{
     address::{AddressFlags, Bssid, IndividualAddress},
     ap::{
@@ -955,6 +956,32 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         Ok(())
     }
 
+    /// The queue an MSDU to `destination` that requests `priority` goes
+    /// in: its authorized peer's slot and the TID it goes as, a QoS peer's
+    /// requested one and any other's best effort; a group frame has no
+    /// peer and goes as best effort. `None` when the destination is no
+    /// authorized peer: the MSDU does not go.
+    pub fn queue_of(
+        &self,
+        destination: [u8; 6],
+        priority: WmmUserPriority,
+    ) -> Option<(Option<u8>, WmmUserPriority)> {
+        if AddressFlags::from_bytes([destination[0]]).group() {
+            return Some((None, WmmUserPriority::UP0));
+        }
+        let binding = self.service.bind_peer(destination)?;
+        let status = self.service.bound_peer_status(binding)?;
+        if status.phase != ApPeerPhase::Authorized {
+            return None;
+        }
+        let tid = if status.qos_supported {
+            priority
+        } else {
+            WmmUserPriority::UP0
+        };
+        Some((Some(binding.index()), tid))
+    }
+
     /// Write one MSDU of the network into `output` as a protected data
     /// frame: to its authorized destination under the pairwise key, or to
     /// the BSS under the group key. The caller numbers the frame's packet
@@ -970,6 +997,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         source: [u8; 6],
         ether_type: u16,
         payload: &[u8],
+        tid: WmmUserPriority,
         output: &mut [u8],
     ) -> Result<Option<ApFrame>, ApEngineError> {
         let group = AddressFlags::from_bytes([destination[0]]).group();
@@ -994,9 +1022,12 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 },
             )
         };
+        // A QoS peer's frame goes under its TID, numbered in that TID's
+        // space; any other frame as best effort, in the shared space.
+        let tid = if qos { tid } else { WmmUserPriority::UP0 };
         let sequence = if qos {
             self.service
-                .next_qos_sequence(peer, 0)
+                .next_qos_sequence(peer, tid.value())
                 .ok_or(ApServiceError::UnknownPeer)?
         } else {
             self.service.next_data_sequence()
@@ -1005,7 +1036,7 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
             access_point: self.address(),
             peer,
             sequence_number: sequence,
-            user_priority: 0,
+            user_priority: tid.value(),
             peer_qos: qos,
             more_data: false,
             // The transmitter writes the CCMP header from the packet
