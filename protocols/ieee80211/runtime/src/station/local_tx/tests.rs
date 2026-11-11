@@ -135,10 +135,12 @@ fn a_frame_goes_to_the_station_with_its_length_and_the_priority_its_marking_requ
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(128),
         state.network_link(),
     );
@@ -184,10 +186,12 @@ fn a_frame_that_is_not_ip_requests_best_effort() {
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(64),
         state.network_link(),
     );
@@ -206,10 +210,12 @@ fn a_down_link_refuses_before_any_buffer_or_fill() {
     let state = State::new();
     let (sender, mut receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(64),
         state.network_link(),
     );
@@ -232,10 +238,12 @@ fn a_frame_the_station_cannot_carry_is_refused_before_any_fill() {
     up(&state);
     let (sender, _receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(4096),
         state.network_link(),
     );
@@ -251,10 +259,12 @@ fn a_frame_the_station_cannot_carry_is_refused_before_any_fill() {
     let mut back = Back::new();
     let (sender, _receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(32),
         state.network_link(),
     );
@@ -274,10 +284,12 @@ fn no_buffer_or_a_full_queue_refuses_before_the_frame_is_written() {
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(64),
         state.network_link(),
     );
@@ -304,10 +316,12 @@ fn a_failed_fill_comes_back_as_the_fill_s_and_keeps_the_buffer() {
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(64),
         state.network_link(),
     );
@@ -334,10 +348,12 @@ fn a_buffer_frees_only_when_its_end_is_handed_on() {
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (mut returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(64),
         state.network_link(),
     );
@@ -390,10 +406,12 @@ fn a_buffer_the_pool_loses_is_told_lost_and_never_comes_back() {
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool { loses: true },
+        &mut kept,
         buffers(64),
         state.network_link(),
     );
@@ -425,10 +443,12 @@ fn a_buffer_keeps_the_run_its_last_frame_left() {
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (mut returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers_of(1, 64),
         state.network_link(),
     );
@@ -474,10 +494,12 @@ fn room_is_ready_only_with_a_free_buffer_and_room_to_hand_it_on() {
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (mut returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(64),
         state.network_link(),
     );
@@ -556,8 +578,9 @@ fn every_buffer_given_is_held() {
             dropped: dropped.clone(),
         })
         .collect();
+    let mut kept = LocalTxState::<Tracked, SLOTS>::new();
     let mut tx: LocalTx<'_, Kept, SLOTS, TX, SameHart> =
-        LocalTx::new(sender, back, Kept, slots, state.network_link());
+        LocalTx::new(sender, back, Kept, &mut kept, slots, state.network_link());
     assert_eq!(dropped.load(Ordering::SeqCst), 0, "no buffer is dropped");
     assert_eq!(tx.buffers(), SLOTS, "every buffer is the network's");
     let mut places = Vec::new();
@@ -593,10 +616,12 @@ fn a_burst_holds_the_places_it_read_until_its_end() {
     up(&state);
     let (sender, mut receiver) = queue.split(|| None);
     let (mut returned, back) = back.split(|| None);
+    let mut kept = LocalTxState::new();
     let mut tx: Tx<'_> = LocalTx::new(
         sender,
         back,
         Pool::default(),
+        &mut kept,
         buffers(64),
         state.network_link(),
     );

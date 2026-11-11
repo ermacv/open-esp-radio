@@ -449,6 +449,9 @@ pub struct Storage<W: Binding> {
     /// the network the rest ([`crate::NetworkTx`]).
     pub(crate) pool:
         static_cell::StaticCell<oer_chips_esp32s31_radio_ieee80211_backend::port::TxPool<TX>>,
+    /// The network's own transmit end's buffers ([`crate::LocalEnd`]):
+    /// they stay here while the network's service moves as it is built.
+    pub(crate) tx_state: crate::supply::LocalTxState,
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) actor: radio::ActorStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
@@ -472,6 +475,7 @@ where
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
             pool: static_cell::StaticCell::new(),
+            tx_state: crate::supply::LocalTxState::new(),
         }
     }
 }
@@ -485,6 +489,7 @@ impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
             pool: static_cell::StaticCell::new(),
+            tx_state: crate::supply::LocalTxState::new(),
         }
     }
 }
@@ -608,9 +613,12 @@ pub fn station<W: Binding>(
         .unwrap_or_else(|| W::fail(InitializationError::Storage));
     let pool: &'static _ = pool;
     let memory = crate::NetworkTx::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx));
+    let tx_state = &mut storage.tx_state;
     let (mut control, network, network_transmit, stopper, connection) = storage
         .channels
-        .split(|queues| <W::TxEnd as crate::NetworkTxEnd<W::Notifies>>::end(queues, memory))
+        .split(|queues| {
+            <W::TxEnd as crate::NetworkTxEnd<W::Notifies>>::end(queues, memory, tx_state)
+        })
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
     let crate::Connection {
         service: connection,

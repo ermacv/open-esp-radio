@@ -214,8 +214,17 @@ pub trait NetworkTxSupply: TxSupply<Self::Packet, Memory = TxMemory> + 'static {
 pub trait NetworkTxEnd<N: crate::Notifies>: 'static {
     /// The transmit end the station's start hands the network.
     type End;
-    fn end(queues: crate::TxQueues<'static, N, TxMemory>, memory: NetworkTx) -> Self::End;
+    /// The end over `queues` and `memory`; an end that holds the network's
+    /// buffers keeps them in `state`, the station's place for them.
+    fn end(
+        queues: crate::TxQueues<'static, N, TxMemory>,
+        memory: NetworkTx,
+        state: &'static mut LocalTxState,
+    ) -> Self::End;
 }
+
+/// The place the network's own transmit end keeps its buffers in.
+pub type LocalTxState = runtime::LocalTxState<TxSlot, NETWORK_BUFFERS>;
 
 /// The network's transmit end over the memory `S`, which takes the network
 /// stack's packets and puts each in a buffer.
@@ -223,7 +232,12 @@ pub struct SupplyEnd<S>(core::marker::PhantomData<S>);
 
 impl<N: crate::Notifies, S: NetworkTxSupply> NetworkTxEnd<N> for SupplyEnd<S> {
     type End = crate::NetworkTransmit<'static, N, S::Packet, S>;
-    fn end(queues: crate::TxQueues<'static, N, TxMemory>, memory: NetworkTx) -> Self::End {
+    /// The memory `S` holds the buffers: the place stays unused.
+    fn end(
+        queues: crate::TxQueues<'static, N, TxMemory>,
+        memory: NetworkTx,
+        _state: &'static mut LocalTxState,
+    ) -> Self::End {
         crate::NetworkTransmit::over(queues, S::new(memory))
     }
 }
@@ -243,12 +257,17 @@ pub type LocalTransmit<'a, N> = runtime::LocalTx<
 
 impl<N: crate::Notifies> NetworkTxEnd<N> for LocalEnd {
     type End = LocalTransmit<'static, N>;
-    fn end(queues: crate::TxQueues<'static, N, TxMemory>, memory: NetworkTx) -> Self::End {
+    fn end(
+        queues: crate::TxQueues<'static, N, TxMemory>,
+        memory: NetworkTx,
+        state: &'static mut LocalTxState,
+    ) -> Self::End {
         let (publisher, slots) = memory.into_owned();
         runtime::LocalTx::new(
             queues.transmit,
             queues.returned,
             publisher,
+            state,
             slots,
             queues.state.network_link(),
         )

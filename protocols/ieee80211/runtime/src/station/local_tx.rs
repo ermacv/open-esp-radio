@@ -61,6 +61,37 @@ struct Right<S> {
     place: u8,
 }
 
+/// What the network's transmit end keeps of its buffers, in a place of its
+/// own: the service that holds the end moves by value while it is built,
+/// and this does not move with it. One end holds it at a time
+/// ([`LocalTx::new`]), and empties it when it ends.
+pub struct LocalTxState<S, const SLOTS: usize> {
+    /// The buffers no frame holds.
+    free: heapless::Vec<S, SLOTS>,
+    /// What the station gave back, each with its frame's end, until its
+    /// notice is handed on: only then is the buffer free again.
+    ended: Completions<S, u8, SLOTS>,
+    /// The run of one octet each buffer holds from the last frame written
+    /// into it, by its place.
+    held: [Option<Held>; SLOTS],
+}
+
+impl<S, const SLOTS: usize> LocalTxState<S, SLOTS> {
+    pub const fn new() -> Self {
+        Self {
+            free: heapless::Vec::new(),
+            ended: Completions::new(),
+            held: [None; SLOTS],
+        }
+    }
+}
+
+impl<S, const SLOTS: usize> Default for LocalTxState<S, SLOTS> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The network's end of the station's transmit path over the pool `P`, of
 /// `SLOTS` buffers and a queue of `TX` frames.
 pub struct LocalTx<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> {
@@ -70,14 +101,8 @@ pub struct LocalTx<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifi
     /// The memory the station gave back.
     returned: SlotReceiver<'c, Option<TxEnded<P::Memory>>, TX, N::Network, N::Station>,
     pool: P,
-    /// The buffers no frame holds.
-    free: heapless::Vec<P::Slot, SLOTS>,
-    /// What the station gave back, each with its frame's end, until its
-    /// notice is handed on: only then is the buffer free again.
-    ended: Completions<P::Slot, u8, SLOTS>,
-    /// The run of one octet each buffer holds from the last frame written
-    /// into it, by its place.
-    held: [Option<Held>; SLOTS],
+    /// The buffers, their ends and their runs.
+    state: &'c mut LocalTxState<P::Slot, SLOTS>,
     /// Places in the queue to the station this burst still holds the right
     /// to: read once when it ran out, and given back at the burst's end
     /// ([`OwnedTransmit::flush`]). Only this owner fills the queue and the
@@ -88,23 +113,26 @@ pub struct LocalTx<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifi
 
 impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c, P, SLOTS, TX, N> {
     /// The network's end over the station's transmit channels, `pool` and
-    /// its free buffers `slots`, and `state`'s link. The network holds at
-    /// most `SLOTS` buffers, as the type of `slots` bounds them: every one
-    /// given is held.
+    /// its free buffers `free`, kept in `state`, and the station's `link`.
+    /// The network holds at most `SLOTS` buffers, as the type of `free`
+    /// bounds them: every one given is held. What `state` held is the
+    /// previous end's, which emptied it when it ended.
     pub fn new(
         transmit: SlotSender<'c, Option<Outgoing<P::Memory>>, TX, N::Station, N::Network>,
         returned: SlotReceiver<'c, Option<TxEnded<P::Memory>>, TX, N::Network, N::Station>,
         pool: P,
+        state: &'c mut LocalTxState<P::Slot, SLOTS>,
         free: heapless::Vec<P::Slot, SLOTS>,
         link: &'c super::NetworkLink<N::NetworkWaker>,
     ) -> Self {
+        state.free = free;
+        state.ended = Completions::new();
+        state.held = [None; SLOTS];
         Self {
             transmit,
             returned,
             pool,
-            free,
-            ended: Completions::new(),
-            held: [None; SLOTS],
+            state,
             places: 0,
             link,
         }
@@ -113,7 +141,10 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
     /// The buffers the network holds: free ones, and those the station gave
     /// back whose end waits to be handed on.
     pub fn buffers(&self) -> usize {
-        self.free.len().saturating_add(self.ended.buffers())
+        self.state
+            .free
+            .len()
+            .saturating_add(self.state.ended.buffers())
     }
 
     /// Take back every memory the station returned: each waits with its
@@ -124,7 +155,7 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
             let place = P::place(&slot);
             // One end a buffer, and this holds an end for every buffer: no
             // end is refused. Were one, its buffer is free again at once.
-            if let Err(slot) = self.ended.returned(slot, place, ended.end) {
+            if let Err(slot) = self.state.ended.returned(slot, place, ended.end) {
                 self.give(slot);
             }
         }
@@ -133,7 +164,7 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
     /// `slot` is free again.
     fn give(&mut self, slot: P::Slot) {
         // The vector holds every buffer the network does.
-        let _more_than_the_pool_holds = self.free.push(slot);
+        let _more_than_the_pool_holds = self.state.free.push(slot);
     }
 
     /// The right to one frame, or why there is none.
@@ -142,13 +173,23 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
             // The burst's places ran out: the queue's room now, once.
             self.places = self.transmit.free_capacity();
         }
-        if self.places == 0 || self.free.is_empty() {
+        if self.places == 0 || self.state.free.is_empty() {
             return Err(PortRefusal::NoRoom);
         }
-        let slot = self.free.pop().ok_or(PortRefusal::NoRoom)?;
+        let slot = self.state.free.pop().ok_or(PortRefusal::NoRoom)?;
         self.places = self.places.saturating_sub(1);
         let place = P::place(&slot);
         Ok(Right { slot, place })
+    }
+}
+
+/// The end's buffers end with it, as they did when it held them by value.
+impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> Drop
+    for LocalTx<'_, P, SLOTS, TX, N>
+{
+    fn drop(&mut self) {
+        self.state.free.clear();
+        self.state.ended = Completions::new();
     }
 }
 
@@ -183,7 +224,7 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
                 return Err(Unpublished::Port(refusal));
             }
         };
-        let held = self.held.get_mut(usize::from(place));
+        let held = self.state.held.get_mut(usize::from(place));
         // A frame longer than a buffer is the port's refusal, before any
         // fill; a fill's own failure stays the fill's.
         let written = match (slot.bytes_mut().get_mut(..meta.length), held) {
@@ -215,7 +256,7 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
                 // The station took it and lost its buffer: its notice says
                 // so, and the buffer stays out of reach for good. This
                 // holds an end for every buffer, so none is refused.
-                let _held = self.ended.lost(place);
+                let _held = self.state.ended.lost(place);
                 return Ok(place);
             }
         };
@@ -243,11 +284,11 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
 
     fn take_notice(&mut self) -> Option<Self::Notice> {
         let link = self.link.snapshot();
-        let taken = match self.ended.take_notice(link) {
+        let taken = match self.state.ended.take_notice(link) {
             Some(taken) => taken,
             None => {
                 self.take_returned();
-                self.ended.take_notice(link)?
+                self.state.ended.take_notice(link)?
             }
         };
         let (notice, slot) = taken;
@@ -258,7 +299,7 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
     }
 
     fn notice_waiting(&self) -> bool {
-        self.ended.waiting(self.link.snapshot())
+        self.state.ended.waiting(self.link.snapshot())
     }
 
     fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
@@ -268,7 +309,7 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
                 break;
             }
         }
-        if self.free.is_empty() {
+        if self.state.free.is_empty() {
             // A buffer frees only when its end is handed on, which the
             // returned memory above wakes for.
             return Poll::Pending;

@@ -1063,6 +1063,7 @@ async fn run<'s, T: 'static>(
         stack,
         returned,
         ModelPool(free.clone()),
+        Box::leak(Box::new(runtime::LocalTxState::new())),
         slots,
         state.network_link(),
     );
@@ -1510,6 +1511,7 @@ mod rate_wake {
             stack,
             returned,
             ModelPool(free.clone()),
+            Box::leak(Box::new(runtime::LocalTxState::new())),
             slots,
             state.network_link(),
         );

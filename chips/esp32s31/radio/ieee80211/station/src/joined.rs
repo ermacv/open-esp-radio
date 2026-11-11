@@ -876,7 +876,9 @@ fn joined_with<T: 'static>(
         let (control, network, transmit, stopper, connection) = channels
             .split(|queues| {
                 <crate::supply::LocalEnd as crate::supply::NetworkTxEnd<Joined>>::end(
-                    queues, network_tx,
+                    queues,
+                    network_tx,
+                    leak(crate::supply::LocalTxState::new()),
                 )
             })
             .ok()
