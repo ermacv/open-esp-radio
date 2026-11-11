@@ -465,10 +465,10 @@ impl<'registers> WifiMacHal<'registers> {
         }
     }
 
-    /// Observe key-table validity without exposing the table owner.
-    pub fn ccmp_entry_is_valid(&self, index: u8) -> Option<bool> {
-        MacKeyEntryIndex::new(u32::from(index))
-            .map(|index| self.pac().mac_key_entry_is_valid(index))
+    /// Observe one key-table entry's validity without exposing the table
+    /// owner. The entry's index lies in the table by its type.
+    pub fn ccmp_entry_is_valid(&self, index: MacKeyEntryIndex) -> bool {
+        self.pac().mac_key_entry_is_valid(index)
     }
 
     /// Stop the access-point TSF using the complete reviewed vendor leaf.

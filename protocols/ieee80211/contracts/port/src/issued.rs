@@ -25,9 +25,9 @@
 //!
 //! ```
 //! use oer_protocols_ieee80211_contracts_port::{IssuedSlot, IssuedSlots};
-//! use oer_protocols_radio_port::Mint;
+//! use oer_protocols_radio_port::{Mint, Slots};
 //! enum Kind {}
-//! fn issue<'id>(mint: Mint<'id, IssuedSlots<Kind, 2>>) -> [IssuedSlot<'id, Kind>; 2] {
+//! fn issue<'id>(mint: Mint<'id, IssuedSlots<Kind, 2>>) -> [IssuedSlot<'id, Slots<Kind, 2>>; 2] {
 //!     mint.into_pools().issue(3)
 //! }
 //! ```
@@ -35,7 +35,7 @@
 use core::marker::PhantomData;
 
 use oer_protocols_radio_port::{
-    BodyLoan, LocalId, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots,
+    BodyLoan, LocalId, Place, PoolBuilder, PoolPath, PoolSet, Root, Slot, Slots,
 };
 
 /// A pool component of `N` issued slots of the kind `Kind`.
@@ -55,18 +55,19 @@ impl<Kind, const N: usize> PoolSet for IssuedSlots<Kind, N> {
 /// installation.
 #[must_use = "the backend issues the grant to its installation"]
 pub struct SlotGrant<'id, Kind, const N: usize, Path: PoolPath = Root<LocalId<'id>>> {
-    slots: [Slot<'id, Kind, Path>; N],
+    slots: [Slot<'id, Slots<Kind, N>, Path>; N],
 }
 
 impl<'id, Kind, const N: usize, Path: PoolPath> SlotGrant<'id, Kind, N, Path> {
     /// Issue every slot to the installation `generation`.
-    pub fn issue(self, generation: u32) -> [IssuedSlot<'id, Kind, Path>; N] {
+    pub fn issue(self, generation: u32) -> [IssuedSlot<'id, Slots<Kind, N>, Path>; N] {
         self.slots.map(|slot| IssuedSlot { slot, generation })
     }
 }
 
 /// One slot of kind `Kind` and the generation of the installation that
-/// issued it.
+/// issued it. An [`IssuedSlots<Kind, N>`] issues kind `Slots<Kind, N>`, so its
+/// [`place`](Self::place) is below `N` by its type.
 #[must_use = "a slot is capacity; dropping it loses it until the next install"]
 pub struct IssuedSlot<'id, Kind, Path: PoolPath = Root<LocalId<'id>>> {
     slot: Slot<'id, Kind, Path>,
@@ -82,6 +83,13 @@ impl<Kind, Path: PoolPath> IssuedSlot<'_, Kind, Path> {
     /// The generation of the installation that issued it.
     pub const fn generation(&self) -> u32 {
         self.generation
+    }
+}
+
+impl<Kind, const N: usize, Path: PoolPath> IssuedSlot<'_, Slots<Kind, N>, Path> {
+    /// The slot's place in its pool of `N`.
+    pub const fn place(&self) -> Place<N> {
+        self.slot.place()
     }
 }
 

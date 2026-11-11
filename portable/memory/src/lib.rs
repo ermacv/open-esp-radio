@@ -114,7 +114,9 @@ pub use static_ref::StaticRef;
 pub use volatile::{read_volatile, write_volatile};
 pub use volatile_cell::VolatileCell;
 pub use waking_spsc::{
-    QueueNotify, WakingSpscQueue, WakingSpscReceiver, WakingSpscSendPermit, WakingSpscSender,
+    ClosingSpscClosed, ClosingSpscQueue, ClosingSpscReceiver, ClosingSpscReceptionClosed,
+    ClosingSpscSendError, ClosingSpscSendPermit, ClosingSpscSender, QueueNotify, WakingSpscQueue,
+    WakingSpscReceiver, WakingSpscSendPermit, WakingSpscSender,
 };
 
 /// Authority to prepare registers for one retained, software-owned TX chain.
@@ -176,6 +178,8 @@ pub struct StableDmaRange<'storage> {
 
 impl<'storage> StableDmaRange<'storage> {
     /// Bind the complete allocation to its DMA address and return its owner.
+    /// An allocation whose extent is empty, or does not fit the DMA address
+    /// width from `start`, binds nothing and comes back as the error.
     ///
     /// The extent comes from the storage itself. Returning the unique borrow
     /// lets the audited owner continue its CPU/DMA handovers without retaining
@@ -196,10 +200,14 @@ impl<'storage> StableDmaRange<'storage> {
     pub unsafe fn from_owner<T: ?Sized>(
         owner: &'storage mut T,
         start: u32,
-    ) -> Option<(&'storage mut T, Self)> {
-        let len = u32::try_from(core::mem::size_of_val(owner)).ok()?;
-        start.checked_add(len)?;
-        (len != 0).then_some((
+    ) -> Result<(&'storage mut T, Self), &'storage mut T> {
+        let Ok(len) = u32::try_from(core::mem::size_of_val(owner)) else {
+            return Err(owner);
+        };
+        if len == 0 || start.checked_add(len).is_none() {
+            return Err(owner);
+        }
+        Ok((
             owner,
             Self {
                 start,

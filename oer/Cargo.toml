@@ -14,6 +14,9 @@ description = "The Espressif family's application entry: peripherals, drivers an
 esp32s31 = ["dep:oer-chips-esp32s31-app"]
 ## The Wi-Fi station and its IP service.
 wifi = ["oer-chips-esp32s31-app?/wifi"]
+## The Wi-Fi access point and its IP service (`wifi::AccessPoint`), a
+## WPA2-Personal BSS on the radio the station would take.
+access-point = ["wifi", "oer-chips-esp32s31-app?/access-point"]
 ## The USB Serial/JTAG console as the application's byte stream.
 console = ["oer-chips-esp32s31-app?/console"]
 ## A task group beside the application (`entry!(main, group = setup)`):

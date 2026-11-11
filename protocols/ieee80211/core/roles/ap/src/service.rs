@@ -811,6 +811,27 @@ pub enum AccessPointSecurityMaterial {
     },
 }
 
+/// A refused [`AccessPointService`] construction: why, and every input it
+/// consumed, unchanged: the security material and the peer storage (its
+/// contents and generation as they were).
+#[must_use = "a refused construction returns its security material and peer storage"]
+pub struct ApServiceRefused<'peers> {
+    /// Why it was refused.
+    pub error: ApServiceError,
+    /// The security material it was given.
+    pub security: AccessPointSecurityMaterial,
+    /// The peer storage it was given.
+    pub peer_storage: AccessPointPeers<'peers>,
+}
+
+impl core::fmt::Debug for ApServiceRefused<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ApServiceRefused")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
 impl<'peers, S: SppScope> AccessPointService<'peers, S> {
     /// A WPA2-Personal epoch announcing `gtk`, installed by the GTK's owner
     /// as generation `gtk_generation`.
@@ -822,7 +843,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
-    ) -> Result<Self, ApServiceError> {
+    ) -> Result<Self, ApServiceRefused<'peers>> {
         Self::with_security(
             address,
             AccessPointSecurityMaterial::Wpa2Personal {
@@ -846,7 +867,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
-    ) -> Result<Self, ApServiceError> {
+    ) -> Result<Self, ApServiceRefused<'peers>> {
         Self::with_security(
             address,
             AccessPointSecurityMaterial::Wpa3Personal {
@@ -865,7 +886,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
-    ) -> Result<Self, ApServiceError> {
+    ) -> Result<Self, ApServiceRefused<'peers>> {
         Self::with_security(
             address,
             AccessPointSecurityMaterial::Open,
@@ -881,12 +902,16 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         client_limit: AccessPointClientLimit,
         inactive_timeout: AccessPointInactiveTimeout,
         peer_storage: AccessPointPeers<'peers>,
-    ) -> Result<Self, ApServiceError> {
-        let generation = peer_storage
-            .storage
-            .generation
-            .checked_add(1)
-            .ok_or(ApServiceError::GenerationExhausted)?;
+    ) -> Result<Self, ApServiceRefused<'peers>> {
+        // Checked before anything changes: a refusal returns the storage as
+        // it was.
+        let Some(generation) = peer_storage.storage.generation.checked_add(1) else {
+            return Err(ApServiceRefused {
+                error: ApServiceError::GenerationExhausted,
+                security,
+                peer_storage,
+            });
+        };
         peer_storage.storage.clear();
         peer_storage.storage.generation = generation;
         let group_management = match &security {

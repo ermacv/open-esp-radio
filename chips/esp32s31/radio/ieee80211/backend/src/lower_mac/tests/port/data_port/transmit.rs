@@ -8,7 +8,8 @@ use oer_protocols_ieee80211_wire::{
     qos::WmmAccessCategory,
 };
 
-type Access<'id, Id> = TerminalAccess<'id, Tickets, radio::Child<radio::Root<Id>, 2>>;
+type Access<'id, Id> =
+    TerminalAccess<'id, radio::Slots<Tickets, TX_TICKETS>, radio::Child<radio::Root<Id>, 2>>;
 type Closed<'id, Id> = GateClosed<'id, radio::Child<radio::Root<Id>, 1>>;
 type Outcome = SingleOutcome<Ack, Infallible>;
 type TestSent<'id, Id> = Sent<'id, Id, TestDevice, 512, Draws>;
@@ -37,6 +38,7 @@ macro_rules! submit {
         $fixture
             .port
             .submit(attempt, now, &mut $fixture.outbox)
+            .unwrap()
             .ok()
             .expect("submitted");
         ticket
@@ -556,7 +558,8 @@ fn a_collided_mpdu_withdrawn_behind_a_gate_goes_again_without_the_retry_bit() {
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox),
+                .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox)
+                .unwrap(),
             Ok(CommandProgress::Done)
         ));
         fixture.hold_air(false);
@@ -647,14 +650,18 @@ fn settings_during_a_configuration_wait_for_its_end() {
             receive: StationReceive::Off,
         };
         assert!(matches!(
-            fixture.port.command(command, now, &mut fixture.outbox),
+            fixture
+                .port
+                .command(command, now, &mut fixture.outbox)
+                .unwrap(),
             Ok(CommandProgress::Done)
         ));
         let edca = SupportedEdca::new(EdcaParameterSet::STANDARD_DEFAULT).expect("EDCA");
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::SetEdca(edca), now, &mut fixture.outbox),
+                .command(PortCommand::SetEdca(edca), now, &mut fixture.outbox)
+                .unwrap(),
             Ok(CommandProgress::Done)
         ));
         fixture.turns(2);
@@ -748,7 +755,10 @@ fn barrier_order(barrier: Barrier) {
         };
         let now = fixture.now();
         assert!(matches!(
-            fixture.port.command(command, now, &mut fixture.outbox),
+            fixture
+                .port
+                .command(command, now, &mut fixture.outbox)
+                .unwrap(),
             Ok(CommandProgress::Done)
         ));
         fixture.turns(4);
@@ -864,7 +874,11 @@ fn withdrawal_order(kind: Withdrawal) {
         } else {
             let removal = PortCommand::RemovePairwise { association, key };
             let now = fixture.now();
-            let removal = match fixture.port.command(removal, now, &mut fixture.outbox) {
+            let removal = match fixture
+                .port
+                .command(removal, now, &mut fixture.outbox)
+                .unwrap()
+            {
                 Ok(CommandProgress::Held(removal)) => removal,
                 _ => panic!("{kind:?}: the removal waits behind the published head"),
             };
@@ -957,7 +971,8 @@ fn a_sent_mpdu_retransmitted_after_reopening_runs_its_own_plan() {
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox),
+                .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox)
+                .unwrap(),
             Ok(CommandProgress::Done)
         ));
         fixture.hold_air(false);
@@ -1060,7 +1075,8 @@ fn a_held_best_effort_head_keeps_its_queue_while_voice_and_video_complete() {
                 assert!(matches!(
                     fixture
                         .port
-                        .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox),
+                        .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox)
+                        .unwrap(),
                     Ok(CommandProgress::Done)
                 ));
             }
@@ -1158,12 +1174,16 @@ fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keep
             let waker = fixture.waker();
             let now = fixture.now();
             let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
-            if let Err(found) = fixture.port.service_tx(
-                facts.tx.unwrap_or(TxFacts::DUE),
-                facts.tbtt,
-                now,
-                &mut fixture.outbox,
-            ) {
+            if let Err(found) = fixture
+                .port
+                .service_tx(
+                    facts.tx.unwrap_or(TxFacts::DUE),
+                    facts.tbtt,
+                    now,
+                    &mut fixture.outbox,
+                )
+                .unwrap()
+            {
                 fault = Some(found);
                 break;
             }
@@ -1190,9 +1210,9 @@ fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keep
                 .port
                 .poll_stop(&mut Context::from_waker(&waker), now),
             Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device,
+                cause: StopCause::Device(found),
                 ..
-            }))
+            })) if found == fault
         ));
         assert_eq!(fixture.publications(), 1);
     });
@@ -1243,19 +1263,383 @@ fn a_port_without_its_registers_faults_without_publishing() {
         fixture.start();
         fixture.observed.borrow_mut().hardware_unavailable = true;
         fixture.submit_mpdu(Spec::open(1));
-        assert_eq!(fixture.port.fault(), Some(Fault::HardwareUnavailable));
+        let refused = Fault::Unpublished(crate::port::Unpublished::Registers);
+        assert_eq!(fixture.port.fault(), Some(refused));
         fixture.observed.borrow_mut().hardware_unavailable = false;
         let now = fixture.now();
+        // No retry under the recorded refusal, even with the registers
+        // back: only a stop recovers from it.
         assert!(matches!(
             fixture
                 .port
-                .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox),
-            Err(Fault::HardwareUnavailable)
+                .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox).unwrap(),
+            Err(fault) if fault == refused
         ));
         assert!(
             fixture.events(access).is_empty(),
             "the quarantine keeps the attempt"
         );
         assert_eq!(fixture.publications(), 0);
+    });
+}
+
+/// A service's whole answer.
+type Served<'id, Id> = oer_protocols_ieee80211_contracts_port::PortAnswer<
+    'id,
+    Family<Id>,
+    (),
+    Result<
+        Option<oer_protocols_ieee80211_contracts_port::PortCompleted<'id, Port<'id, Id>>>,
+        Fault,
+    >,
+>;
+
+/// One service of `fixture`'s port on its facts, with its whole answer.
+fn serve_once<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &mut Fixture<'id, Id>,
+) -> Served<'id, Id> {
+    let waker = fixture.waker();
+    let now = fixture.now();
+    let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
+    fixture.port.service_tx(
+        facts.tx.unwrap_or(TxFacts::DUE),
+        facts.tbtt,
+        now,
+        &mut fixture.outbox,
+    )
+}
+
+/// A completion whose terminal the sink refuses and the store cannot keep
+/// halts the service: the terminal comes back beside the service's answer,
+/// and the call takes no further owner, so the queued tails the stop
+/// withdraws stay queued. The next call withdraws them, in their order.
+#[test]
+fn a_terminal_the_port_cannot_keep_halts_the_service_and_the_rest_wait_for_the_next_call() {
+    with_access(|fixture, _access| {
+        fixture.start();
+        fixture.hold_air(true);
+        let head = fixture.submit_mpdu(Spec::open(1));
+        fixture.turns(1);
+        assert_eq!(fixture.publications(), 1);
+        let tail = fixture.submit_mpdu(Spec::open(2));
+        let last = fixture.submit_mpdu(Spec::open(3));
+        let waker = fixture.waker();
+        let now = fixture.now();
+        assert!(
+            fixture
+                .port
+                .poll_stop(&mut Context::from_waker(&waker), now)
+                .is_pending()
+        );
+        fixture.hold_air(false);
+        fixture.outbox.refuse = 1;
+        fixture.port.refuse_keeps_for_test(1);
+        let mut halted = None;
+        for _ in 0..16 {
+            match serve_once(fixture) {
+                Ok(served) => assert!(served.is_ok()),
+                Err(unkeeping) => {
+                    halted = Some(unkeeping);
+                    break;
+                }
+            }
+        }
+        let Some(oer_protocols_ieee80211_contracts_port::Unkeeping {
+            unkept:
+                oer_protocols_ieee80211_contracts_port::Unkept::Terminal(LowerMacTerminal::TxCompleted(
+                    TxCompleted::Single(completed),
+                )),
+            input: oer_protocols_ieee80211_contracts_port::Input::Accepted(Ok(_)),
+        }) = halted
+        else {
+            panic!("the head's terminal comes back unkept beside the answer");
+        };
+        assert_eq!(completed.ticket_index(), head);
+        assert!(
+            fixture.outbox.terminals.is_empty(),
+            "the halted call withdrew nothing"
+        );
+        assert_eq!(
+            fixture.port.waiting_for_test(),
+            (2, 0),
+            "the tails stay queued"
+        );
+        // The next call goes on from there.
+        assert!(matches!(serve_once(fixture), Ok(Ok(_))));
+        let withdrawn: Vec<_> = fixture
+            .outbox
+            .terminals
+            .iter()
+            .map(|terminal| match terminal {
+                LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
+                    (completed.ticket_index(), *completed.outcome())
+                }
+                _ => panic!("only the tails end"),
+            })
+            .collect();
+        assert_eq!(
+            withdrawn,
+            std::vec![
+                (tail, TxOutcome::Withdrawn(WithdrawCause::Disabled)),
+                (last, TxOutcome::Withdrawn(WithdrawCause::Disabled)),
+            ]
+        );
+    });
+}
+
+/// Two completions of one service, the first unkept: the second is taken
+/// from the core but not brought home by the halted call; it waits in the
+/// driver, and the next call brings it home before anything else.
+#[test]
+fn a_completion_the_halted_call_took_waits_in_the_driver_and_comes_home_first() {
+    with_access(|fixture, _access| {
+        fixture.start();
+        fixture.hold_air(true);
+        let best_effort = fixture.submit_mpdu(Spec::open(1));
+        let voice = fixture.submit_mpdu(Spec {
+            category: WmmAccessCategory::Voice,
+            ..Spec::open(2)
+        });
+        fixture.turns(1);
+        assert_eq!(fixture.publications(), 2);
+        fixture.hold_air(false);
+        fixture.outbox.refuse = 1;
+        fixture.port.refuse_keeps_for_test(1);
+        let mut halted = None;
+        for _ in 0..16 {
+            match serve_once(fixture) {
+                Ok(served) => assert!(served.is_ok()),
+                Err(unkeeping) => {
+                    halted = Some(unkeeping);
+                    break;
+                }
+            }
+        }
+        let Some(oer_protocols_ieee80211_contracts_port::Unkeeping {
+            unkept:
+                oer_protocols_ieee80211_contracts_port::Unkept::Terminal(LowerMacTerminal::TxCompleted(
+                    TxCompleted::Single(first),
+                )),
+            ..
+        }) = halted
+        else {
+            panic!("the first terminal comes back unkept");
+        };
+        assert!(fixture.outbox.terminals.is_empty());
+        assert_eq!(
+            fixture.port.waiting_for_test(),
+            (0, 1),
+            "the other completion waits in the driver"
+        );
+        assert!(matches!(serve_once(fixture), Ok(Ok(_))));
+        assert_eq!(fixture.port.waiting_for_test(), (0, 0));
+        let [LowerMacTerminal::TxCompleted(TxCompleted::Single(second))] =
+            fixture.outbox.terminals.as_slice()
+        else {
+            panic!("the waiting completion comes home");
+        };
+        let mut both = [first.ticket_index(), second.ticket_index()];
+        both.sort_unstable();
+        let mut sent = [best_effort, voice];
+        sent.sort_unstable();
+        assert_eq!(both, sent);
+    });
+}
+
+/// Completions left with the driver when the radio stopped: the stopped
+/// port's cleanup brings them home under the place's right. A refused one
+/// fills the place and the rest stay with the driver for the next
+/// cleanup; nothing is published again. The model device completes no
+/// MPDU inside the core's disable, where a halted call leaves completions
+/// behind a confirmed stop on the chip, so the stop is marked confirmed
+/// through a test seam after a halted service left two with the driver.
+#[test]
+fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
+    use oer_protocols_ieee80211_contracts_port::{Input, Unkeeping, Unkept};
+    with_access(|fixture, _access| {
+        fixture.start();
+        fixture.hold_air(true);
+        let sent = [
+            fixture.submit_mpdu(Spec::open(1)),
+            fixture.submit_mpdu(Spec {
+                category: WmmAccessCategory::Voice,
+                ..Spec::open(2)
+            }),
+            fixture.submit_mpdu(Spec {
+                category: WmmAccessCategory::Video,
+                ..Spec::open(3)
+            }),
+        ];
+        fixture.turns(1);
+        assert_eq!(fixture.publications(), 3);
+        fixture.hold_air(false);
+        fixture.outbox.refuse = 3;
+        fixture.port.refuse_keeps_for_test(3);
+        let mut halted = None;
+        for _ in 0..16 {
+            match serve_once(fixture) {
+                Ok(served) => assert!(served.is_ok()),
+                Err(unkeeping) => {
+                    halted = Some(unkeeping);
+                    break;
+                }
+            }
+        }
+        let Some(Unkeeping {
+            unkept: Unkept::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(first))),
+            input: Input::Accepted(Ok(_)),
+        }) = halted
+        else {
+            panic!("the first completion comes back unkept");
+        };
+        assert_eq!(fixture.port.waiting_for_test(), (0, 2));
+        fixture.port.confirm_stop_for_test();
+        // The first cleanup's first delivery is refused: it fills the
+        // place and the other stays with the driver.
+        fixture.outbox.refuse = 1;
+        fixture.port.refuse_keeps_for_test(1);
+        let Err(Unkeeping {
+            unkept: Unkept::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(held))),
+            input: Input::Accepted(Ok(())),
+        }) = fixture.port.clean_stopped(&mut fixture.outbox)
+        else {
+            panic!("the refused completion comes back beside the cleanup");
+        };
+        assert_eq!(fixture.port.waiting_for_test(), (0, 1));
+        assert!(fixture.outbox.terminals.is_empty());
+        fixture.outbox.refuse = 0;
+        fixture.port.refuse_keeps_for_test(0);
+        assert!(matches!(
+            fixture.port.clean_stopped(&mut fixture.outbox),
+            Ok(Ok(()))
+        ));
+        assert_eq!(fixture.port.waiting_for_test(), (0, 0));
+        assert_eq!(fixture.publications(), 3, "nothing is published again");
+        let mut all: Vec<_> = fixture
+            .outbox
+            .terminals
+            .iter()
+            .map(|terminal| match terminal {
+                LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
+                    completed.ticket_index()
+                }
+                _ => panic!("only the completions end"),
+            })
+            .chain([first.ticket_index(), held.ticket_index()])
+            .collect();
+        all.sort_unstable();
+        let mut sent = sent.to_vec();
+        sent.sort_unstable();
+        assert_eq!(all, sent, "every ticket comes back once");
+    });
+}
+
+/// The call place's right exists once: made with the empty place and
+/// again only by a settle that emptied it. A place whose right was lost
+/// takes no submission (the attempt comes back whole, unaccepted, nothing
+/// published or handed out), records the permanent fault of the lost right,
+/// and no later call makes a right of its own: the next submission is
+/// refused the same way.
+#[test]
+fn a_submission_without_the_places_right_comes_back_whole_and_no_call_makes_one() {
+    with_access(|fixture, _access| {
+        fixture.start();
+        fixture.port.lose_right_for_test();
+        for _ in 0..2 {
+            let now = fixture.now();
+            let attempt = fixture.station_mpdu().expect("attempt");
+            let ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&attempt);
+            let Err(oer_protocols_ieee80211_contracts_port::SubmitHalt::NotAccepted(attempt)) =
+                fixture.port.submit(attempt, now, &mut fixture.outbox)
+            else {
+                panic!("without its right the port takes no attempt");
+            };
+            assert_eq!(
+                <Fixture<'_, _> as DataPortHarness<'_>>::identity(&attempt),
+                ticket,
+                "the attempt comes back whole"
+            );
+            drop(attempt);
+            // The lost right is the port's permanent fault: a later call
+            // answers it and makes no right of its own.
+            assert!(matches!(
+                serve_once(fixture),
+                Ok(Err(crate::port::Fault::RightLost))
+            ));
+            assert!(fixture.outbox.terminals.is_empty());
+        }
+        assert_eq!(fixture.publications(), 0);
+    });
+}
+
+/// Three completions of one service, none of which the sink takes or the
+/// store keeps: the first fills the call's place and ends its right, so the
+/// other two never leave the driver (no further item has a place to be
+/// dropped from). They wait there, and the next call brings both home.
+#[test]
+fn a_third_item_of_a_halted_call_stays_with_the_driver() {
+    with_access(|fixture, _access| {
+        fixture.start();
+        fixture.hold_air(true);
+        let best_effort = fixture.submit_mpdu(Spec::open(1));
+        let voice = fixture.submit_mpdu(Spec {
+            category: WmmAccessCategory::Voice,
+            ..Spec::open(2)
+        });
+        let video = fixture.submit_mpdu(Spec {
+            category: WmmAccessCategory::Video,
+            ..Spec::open(3)
+        });
+        fixture.turns(1);
+        assert_eq!(fixture.publications(), 3);
+        fixture.hold_air(false);
+        fixture.outbox.refuse = 3;
+        fixture.port.refuse_keeps_for_test(3);
+        let mut halted = None;
+        for _ in 0..16 {
+            match serve_once(fixture) {
+                Ok(served) => assert!(served.is_ok()),
+                Err(unkeeping) => {
+                    halted = Some(unkeeping);
+                    break;
+                }
+            }
+        }
+        let Some(oer_protocols_ieee80211_contracts_port::Unkeeping {
+            unkept:
+                oer_protocols_ieee80211_contracts_port::Unkept::Terminal(LowerMacTerminal::TxCompleted(
+                    TxCompleted::Single(first),
+                )),
+            input: oer_protocols_ieee80211_contracts_port::Input::Accepted(Ok(_)),
+        }) = halted
+        else {
+            panic!("the first terminal comes back unkept beside the answer");
+        };
+        assert!(fixture.outbox.terminals.is_empty());
+        assert_eq!(
+            fixture.port.waiting_for_test(),
+            (0, 2),
+            "the second and the third completion wait in the driver"
+        );
+        fixture.outbox.refuse = 0;
+        fixture.port.refuse_keeps_for_test(0);
+        assert!(matches!(serve_once(fixture), Ok(Ok(_))));
+        assert_eq!(fixture.port.waiting_for_test(), (0, 0));
+        let mut all: Vec<_> = fixture
+            .outbox
+            .terminals
+            .iter()
+            .map(|terminal| match terminal {
+                LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
+                    completed.ticket_index()
+                }
+                _ => panic!("only the completions end"),
+            })
+            .chain([first.ticket_index()])
+            .collect();
+        all.sort_unstable();
+        let mut sent = std::vec![best_effort, voice, video];
+        sent.sort_unstable();
+        assert_eq!(all, sent, "every ticket comes back once");
     });
 }

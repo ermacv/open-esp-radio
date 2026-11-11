@@ -47,6 +47,34 @@ enum Refusal {
     NoNetwork,
 }
 
+/// What a frame for the lifecycle's lane is, besides the frame itself.
+enum LaneFrame<'id, D: DatapathPort<'id>> {
+    /// A frame for the station, with what the hardware observed of it.
+    Received(ActorRxMeta<'id, D>),
+    /// An EAPOL frame of the link.
+    Eapol {
+        payload: core::ops::Range<u16>,
+        protection: EapolProtection,
+    },
+}
+
+impl<'id, D: DatapathPort<'id>> LaneFrame<'id, D> {
+    /// The lane's message for `frame`.
+    fn message(self, frame: ActorRxBuffer<'id, D>) -> FromActor<'id, D> {
+        match self {
+            Self::Received(meta) => FromActor::Received { frame, meta },
+            Self::Eapol {
+                payload,
+                protection,
+            } => FromActor::Eapol {
+                frame,
+                payload,
+                protection,
+            },
+        }
+    }
+}
+
 fn count(refused: &mut RxMsdusRefused, refusal: Option<Refusal>) {
     match refusal {
         Some(Refusal::TooLong) => refused.too_long = refused.too_long.saturating_add(1),
@@ -223,9 +251,9 @@ where
                         pulled = pulled.saturating_add(1);
                         self.progressed = true;
                         D::received(frame.bytes(), &meta);
-                        if matches!(self.radio, Radio::Stopping { .. }) {
+                        if matches!(self.radio, Radio::Stopping { .. } | Radio::Unstopped) {
                             // A stopping radio's units go back unread.
-                            self.port.recycle(frame);
+                            self.recycle(frame)?;
                             report(&mut self.events, || {
                                 ServiceEvent::RxFrameDropped(RxDrop::Draining)
                             });
@@ -268,7 +296,7 @@ where
     fn radio_receives(&self) -> bool {
         matches!(
             self.radio,
-            Radio::Running | Radio::Stopping { .. } | Radio::Retuning { .. }
+            Radio::Running | Radio::Stopping { .. } | Radio::Unstopped | Radio::Retuning { .. }
         )
     }
 
@@ -349,11 +377,11 @@ where
                 RxDisposition::Retained => return self.release_ready(lifecycle, network),
                 RxDisposition::Recycle(frame) => {
                     // A BlockAckReq may have released frames.
-                    self.port.recycle(frame);
+                    self.recycle(frame)?;
                     return self.release_ready(lifecycle, network);
                 }
                 RxDisposition::Capacity(frame) => {
-                    self.port.recycle(frame);
+                    self.recycle(frame)?;
                     report(&mut self.events, || ActorEvent::ReorderFull);
                     return Ok(());
                 }
@@ -366,7 +394,7 @@ where
                 Parked::Waiting => Ok(()),
                 Parked::Deliver((frame, meta)) => self.route(frame, meta, lifecycle, network),
                 Parked::Capacity(frame) => {
-                    self.port.recycle(frame);
+                    self.recycle(frame)?;
                     report(&mut self.events, || ActorEvent::ReorderFull);
                     Ok(())
                 }
@@ -376,34 +404,42 @@ where
     }
 
     /// Give a frame to the lifecycle while its lane has room; otherwise it
-    /// goes back to the ring, counted.
+    /// goes back to the ring, counted. A closed reception takes nothing:
+    /// the frame goes back to the ring and the run ends on it
+    /// ([`ActorViolation::LifecycleClosed`]).
     fn hand_to_lifecycle<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
-        message: FromActor<'id, D>,
-        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
-    ) {
-        let lane = usize::from(self.frames_out) < LIFECYCLE_FRAMES;
-        let refused = if lane {
-            match lifecycle.from_actor.try_send(message) {
+        frame: ActorRxBuffer<'id, D>,
+        lane: LaneFrame<'id, D>,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+    ) -> Result<(), Failed<'id, D>> {
+        let free = usize::from(self.frames_out) < LIFECYCLE_FRAMES;
+        let closed = if lifecycle.from_actor.is_closed() {
+            true
+        } else if !free {
+            false
+        } else if let Some(permit) = lifecycle.from_actor.try_reserve() {
+            // The frame and what names it come back whole on a closed
+            // reception, never the message built of them.
+            match permit.send_with((frame, lane), |(frame, lane)| lane.message(frame)) {
                 Ok(()) => {
                     self.frames_out = self.frames_out.saturating_add(1);
-                    return;
+                    return Ok(());
                 }
-                Err(refused) => refused.0,
+                Err(ClosingSpscClosed((frame, _lane))) => {
+                    self.recycle(frame)?;
+                    return Err(ActorFault::Contract(ActorViolation::LifecycleClosed));
+                }
             }
         } else {
-            message
+            lifecycle.from_actor.is_closed()
         };
-        match refused {
-            FromActor::Received { frame, .. } | FromActor::Eapol { frame, .. } => {
-                self.port.recycle(frame);
-            }
-            // Only frames take the lane.
-            other => {
-                let _quarantined = core::mem::ManuallyDrop::new(other);
-            }
+        self.recycle(frame)?;
+        if closed {
+            return Err(ActorFault::Contract(ActorViolation::LifecycleClosed));
         }
         report(&mut self.events, || ActorEvent::LaneFull);
+        Ok(())
     }
 
     /// Hand on one frame in delivery order: the link admits its data to the
@@ -426,8 +462,7 @@ where
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
         let Some(link) = self.link.as_mut() else {
-            self.hand_to_lifecycle(FromActor::Received { frame, meta }, lifecycle);
-            return Ok(());
+            return self.hand_to_lifecycle(frame, LaneFrame::Received(meta), lifecycle);
         };
         // Delivery runs for every sink; only an enabled one counts.
         let counted = <O as EventSink<ServiceEvent>>::ENABLED;
@@ -477,8 +512,7 @@ where
         };
         let result = match routed {
             LinkRx::Station => {
-                self.hand_to_lifecycle(FromActor::Received { frame, meta }, lifecycle);
-                return Ok(());
+                return self.hand_to_lifecycle(frame, LaneFrame::Received(meta), lifecycle);
             }
             LinkRx::Taken(result) => result,
         };
@@ -493,16 +527,16 @@ where
                     }
                 }
                 self.hand_to_lifecycle(
-                    FromActor::Eapol {
-                        frame,
+                    frame,
+                    LaneFrame::Eapol {
                         payload,
                         protection,
                     },
                     lifecycle,
-                );
+                )?;
             }
             None => match first {
-                None => self.port.recycle(frame),
+                None => self.recycle(frame)?,
                 Some(plan) => {
                     let refusal = match self.port.lend(frame) {
                         Ok(lent) => queue_lent(network, lent, plan),
@@ -513,7 +547,7 @@ where
                             buffer,
                             reason: LendRefusal::Capacity,
                         }) => {
-                            self.port.recycle(buffer);
+                            self.recycle(buffer)?;
                             Some(Refusal::Pressure)
                         }
                         // A backend that lends nothing now: a copy.
@@ -526,7 +560,7 @@ where
                             if counted {
                                 copied.kept = copied.kept.saturating_add(1);
                             }
-                            self.port.recycle(buffer);
+                            self.recycle(buffer)?;
                             refusal
                         }
                     };

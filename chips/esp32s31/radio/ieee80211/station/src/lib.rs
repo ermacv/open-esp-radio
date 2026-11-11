@@ -391,10 +391,15 @@ impl<N: Notifies> NetDevice for Network<'_, N> {
         self.inner.read_copied(copied.0, read)
     }
 }
-/// Caller-owned queues, valid before a port installation exists.
+/// Why the station did not start.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StartError {
-    Unavailable,
+    /// The radio's start refused: its typed cause, and how the owners the
+    /// refusal returned ended.
+    #[cfg(target_arch = "riscv32")]
+    Unavailable(failure::Unavailable<InitializationError>),
+    /// The station's runner ended before its start completed.
+    RunnerLost,
 }
 /// The station's restarts since its service began.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -452,14 +457,14 @@ impl StartGuard<'_> {
 impl Drop for StartGuard<'_> {
     fn drop(&mut self) {
         if self.0.result.get().is_none() {
-            self.complete(Err(StartError::Unavailable));
+            self.complete(Err(StartError::RunnerLost));
         }
     }
 }
 /// The station's stop request to the network side and its answer. The two
 /// sides may run on different harts: the flags are atomic, and each side
 /// waits on its own notify (`N`'s wakers).
-struct NetworkStopState<N: Notifies> {
+pub struct NetworkStopState<N: Notifies> {
     requested: AtomicBool,
     stopped: AtomicBool,
     lost: AtomicBool,
@@ -746,6 +751,8 @@ mod air;
 #[cfg(any(test, target_arch = "riscv32"))]
 pub use air::S31Ceiling;
 #[cfg(target_arch = "riscv32")]
+pub mod access_point;
+#[cfg(target_arch = "riscv32")]
 mod chip;
 #[cfg(target_arch = "riscv32")]
 mod dma;
@@ -761,9 +768,23 @@ pub use supply::{
     FRAME_WORD_OFFSET, NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, TxMemory, TxPublishRefused,
     TxPublisher, TxSlot,
 };
+#[cfg(any(test, target_arch = "riscv32"))]
+mod prepare;
+#[cfg(target_arch = "riscv32")]
+pub use prepare::{PreparationRefused, Stage, Step, Steps};
 mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod release;
+#[cfg(target_arch = "riscv32")]
+pub use release::Freed;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod station_end;
+#[cfg(target_arch = "riscv32")]
+pub use station_end::StationExitOf;
+#[cfg(any(test, target_arch = "riscv32"))]
+mod access_point_end;
+
+pub mod unfinished;
 #[cfg(oer_fault_injection)]
 pub use oer_chips_esp32s31_radio_ieee80211_backend::port::debug::refuse_next_publication;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
@@ -849,6 +870,22 @@ pub use chip::{
     Bell, Binding, Config, Datapath, DriverExecutor, Event, Events, InitializationError,
     InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner,
     Storage, station,
+};
+#[cfg(target_arch = "riscv32")]
+pub use radio::{
+    ActorQueues, Boot, BootLeft, DatapathEnd, DatapathInputs, LifecycleQueues, NetworkSide,
+    NotInstalled, Prepared, RetiredDatapath, UnfinishedDatapath, UnfinishedStationOf,
+};
+#[cfg(target_arch = "riscv32")]
+pub use station::{
+    FinishedLifecycle, RefusedProofOf, RejectedOf, RetiredArbiterOf, RetiredStationOf, StationEnd,
+    StationPlacesOf, UnfinishedLifecycle,
+};
+#[cfg(any(test, target_arch = "riscv32"))]
+pub use station_end::{
+    DatapathCause, DatapathRetired, EndHalf, EndHalves, FinishedLifecycleOf, InstallationOf,
+    KeptFull, LateEnd, LateRead, NotInstalledOf, ProofRefusal, RefusedProof, UnfinishedLifecycleOf,
+    UnfinishedStation,
 };
 
 /// Bind the facade's backing to this image's concrete interrupt entries.
@@ -1116,7 +1153,7 @@ mod tests {
         assert!(wakes.0.load(Ordering::Relaxed) > 0);
         assert_eq!(
             waiting.as_mut().poll(&mut cx),
-            Poll::Ready(Err(StartError::Unavailable))
+            Poll::Ready(Err(StartError::RunnerLost))
         );
     }
 }
