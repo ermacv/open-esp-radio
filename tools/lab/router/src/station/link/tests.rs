@@ -192,3 +192,45 @@ fn the_router_reads_only_the_target_station_and_filters_its_identity() {
         "only the target's queues: {script}"
     );
 }
+
+/// A queue file whose last line has no line break: the script ends every
+/// file it prints with one, so the next section starts on its own line and
+/// the file's last value reads whole; output that glues a section's name to
+/// a value (a file printed without it) refuses the observation rather than
+/// reading a damaged number.
+#[test]
+fn a_queue_file_without_a_final_line_break_ends_before_the_next_section() {
+    let mut router = Answer(None, include_str!("ht40.txt"));
+    let target = Mac::parse("02:00:00:00:00:01").unwrap();
+    let _link = link(&mut router, "phy0-ap0", target).unwrap();
+    let script = router.0.unwrap();
+    assert!(
+        script.contains("cat \"$phy/aqm\"; echo; fi"),
+        "the radio file ends with its own line break: {script}"
+    );
+    assert!(
+        script.contains("cat \"$aqm\"; echo; fi"),
+        "the station file too: {script}"
+    );
+    // The script's own output for such a file: the break it adds, then the
+    // next section.
+    let complete = include_str!("ht40.txt");
+    let unbroken = complete.replace(
+        "RW fq_quantum 300\n[radio]\n",
+        "RW fq_quantum 300\n\n[radio]\n",
+    );
+    let link = parse_link(&unbroken).unwrap();
+    assert_eq!(
+        link.radio_queues
+            .as_ref()
+            .map(|queues| queues.raw.lines.len()),
+        parse_link(complete)
+            .unwrap()
+            .radio_queues
+            .as_ref()
+            .map(|queues| queues.raw.lines.len())
+    );
+    // Glued, the value is damaged: refused, never read as a number.
+    let glued = complete.replace("RW fq_quantum 300\n[radio]\n", "RW fq_quantum 30[radio]\n");
+    assert!(parse_link(&glued).is_err());
+}

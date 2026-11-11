@@ -35,7 +35,8 @@ pub fn link(remote: &mut dyn Remote, interface: &str, target: Mac) -> Result<Sta
 
 /// The router's script: its sections, each after its `[name]` line. A
 /// debugfs file is printed whole after a `clock:` line, the boot clock
-/// just before its read.
+/// just before its read, and a line break after it: a file whose last line
+/// has none must not glue the next section's name to its last value.
 fn script(interface: &str, target: Mac) -> Result<String> {
     Ok(format!(
         "set -e\niface={}\nmac={}\n\
@@ -55,9 +56,9 @@ fn script(interface: &str, target: Mac) -> Result<String> {
          phy=/sys/kernel/debug/ieee80211/phy$(printf '%s\\n' \"$info\" | awk '$1 == \"wiphy\" {{ print $2 }}')\n\
          echo '[station-aqm]'\n\
          aqm=\"$phy/netdev:$iface/stations/$mac/aqm\"\n\
-         if test -r \"$aqm\"; then echo \"clock: $(clock)\"; cat \"$aqm\"; fi\n\
+         if test -r \"$aqm\"; then echo \"clock: $(clock)\"; cat \"$aqm\"; echo; fi\n\
          echo '[radio-aqm]'\n\
-         if test -r \"$phy/aqm\"; then echo \"clock: $(clock)\"; cat \"$phy/aqm\"; fi\n\
+         if test -r \"$phy/aqm\"; then echo \"clock: $(clock)\"; cat \"$phy/aqm\"; echo; fi\n\
          echo '[radio]'\n\
          for counter in \"$phy\"/statistics/*; do\n\
          if test -r \"$counter\"; then echo \"${{counter##*/}}: $(cat \"$counter\")\"; fi\n\
