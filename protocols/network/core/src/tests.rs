@@ -1906,6 +1906,7 @@ fn a_new_datagram_after_a_rejected_request_asks_anew() {
 }
 
 mod counted;
+mod demands;
 mod dhcp;
 mod echo;
 mod ends;

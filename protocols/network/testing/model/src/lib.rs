@@ -536,7 +536,7 @@ impl PeerAir for Medium {
         self.0.borrow().version
     }
 
-    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<PeerKey>> {
+    fn candidate(&self, _view: &Self::View, ready: &Ready) -> Option<AirtimeCandidate<PeerKey>> {
         let state = self.0.borrow();
         let (key, peer) = if ready.peer == BROADCAST {
             (BROADCAST_KEY, None)

@@ -27,9 +27,11 @@ pub trait PeerAir {
     /// The view now.
     fn view(&self) -> Self::View;
 
-    /// The account `ready` spends and its least useful grant, or `None` while
-    /// this work may not go: its peer sleeps or has left.
-    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<Self::Key>>;
+    /// The account `ready` spends and its least useful grant under `view`,
+    /// what [`Self::view`] read, or `None` while this work may not go: its
+    /// peer sleeps or has left. A collection reads the view once and asks
+    /// each work's candidate under it.
+    fn candidate(&self, view: &Self::View, ready: &Ready) -> Option<AirtimeCandidate<Self::Key>>;
 
     /// The most `ready` can cost, every retry at the lowest rate included. A
     /// frame whose cost is not known is charged this, so no peer gains by not
@@ -430,7 +432,7 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
             }),
         };
         for work in ready() {
-            let Some(candidate) = self.air.candidate(work.ready()) else {
+            let Some(candidate) = self.air.candidate(&plan.view, work.ready()) else {
                 continue;
             };
             plan.count(candidate);
@@ -460,7 +462,7 @@ impl<'o, A: PeerAir, T: Copy + Into<usize>, const PEERS: usize, const RESERVATIO
             plan.account = Some(first);
             plan.turns.restart(self.last_flow(first));
             for work in ready() {
-                if let Some(candidate) = self.air.candidate(work.ready())
+                if let Some(candidate) = self.air.candidate(&plan.view, work.ready())
                     && candidate.key == first
                 {
                     let described = *work.ready();

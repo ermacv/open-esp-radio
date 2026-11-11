@@ -106,6 +106,7 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
     }
 
     /// The replies owed, oldest first.
+    #[cfg(test)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Owed<'m, B, SIZE>> + Clone + '_ {
         let mut oldest = [None; ECHOES];
         for (place, owed) in oldest.iter_mut().zip(self.owed.iter()) {
@@ -116,6 +117,16 @@ impl<'m, B, const SIZE: usize> Echoes<'m, B, SIZE> {
             .into_iter()
             .flatten()
             .filter_map(move |serial| self.get(serial))
+    }
+
+    /// The oldest reply owed after `after`'s serial, as [`Self::iter`]
+    /// orders them; with `None`, the oldest.
+    pub(crate) fn next_after(&self, after: Option<u64>) -> Option<&Owed<'m, B, SIZE>> {
+        self.owed
+            .iter()
+            .flatten()
+            .filter(|owed| after.is_none_or(|after| owed.serial > after))
+            .min_by_key(|owed| owed.serial)
     }
 
     pub(crate) fn get(&self, serial: u64) -> Option<&Owed<'m, B, SIZE>> {

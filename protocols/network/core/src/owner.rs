@@ -298,6 +298,17 @@ impl<
         self.core.demands(now, count)
     }
 
+    /// The ready work as the chain of iterators it was, for the test that
+    /// compares the walk with it.
+    #[cfg(test)]
+    pub(crate) fn demands_chain<'s, C: Count + ?Sized>(
+        &'s self,
+        now: Instant,
+        count: &'s C,
+    ) -> impl Iterator<Item = Demand<B>> + Clone + 's {
+        self.core.demands_chain(now, count)
+    }
+
     /// See [`Core::poll_demand`].
     pub fn poll_demand(&self, now: Instant) -> Option<Demand<B>> {
         self.core.poll_demand(now)

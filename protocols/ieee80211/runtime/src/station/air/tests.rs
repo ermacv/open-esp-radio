@@ -43,10 +43,10 @@ const fn up(epoch: u64) -> LinkSnapshot {
 fn an_association_is_one_account_keyed_by_its_epoch_and_a_down_link_serves_none() {
     let link = NetworkLink::new();
     let air = StationAir::new(&link, Fixed(1_000));
-    assert_eq!(air.candidate(&ready(1514)), None, "down");
+    assert_eq!(air.candidate(&air.view(), &ready(1514)), None, "down");
     link.publish(up(3), FLOOR);
-    let first = air.candidate(&ready(1514)).unwrap();
-    let small = air.candidate(&ready(64)).unwrap();
+    let first = air.candidate(&air.view(), &ready(1514)).unwrap();
+    let small = air.candidate(&air.view(), &ready(64)).unwrap();
     assert_eq!((first.key, small.key), (3, 3), "every peer, one account");
     assert_eq!(
         (first.minimum_micros.get(), small.minimum_micros.get()),
@@ -54,7 +54,7 @@ fn an_association_is_one_account_keyed_by_its_epoch_and_a_down_link_serves_none(
         "each frame's least grant"
     );
     link.publish(up(4), FLOOR);
-    assert_eq!(air.candidate(&ready(1514)).unwrap().key, 4);
+    assert_eq!(air.candidate(&air.view(), &ready(1514)).unwrap().key, 4);
     assert_eq!(air.ceiling(&ready(1514)).get(), 2_514);
 }
 
@@ -213,16 +213,16 @@ fn the_least_grant_goes_at_the_association_s_last_reported_rate() {
     link.publish(up(1), FLOOR);
     let asked = Asked::default();
     let mut air = StationAir::new(&link, &asked);
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     air.reported(1, ht(7, true));
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     // The same epoch and length, another guard interval: its own rate.
     air.reported(1, ht(7, false));
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     link.publish(up(2), FLOOR);
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     air.reported(2, ht(0, false));
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     let floor = FLOOR.unwrap();
     assert_eq!(
         *asked.0.borrow(),
@@ -248,12 +248,18 @@ fn reviewer_a_changed_cost_input_updates_the_grant_within_the_same_association()
     let value = core::cell::Cell::new(100);
     let air = StationAir::new(&link, ReviewerChanging(&value));
     assert_eq!(
-        air.candidate(&ready(1514)).unwrap().minimum_micros.get(),
+        air.candidate(&air.view(), &ready(1514))
+            .unwrap()
+            .minimum_micros
+            .get(),
         100
     );
     value.set(200);
     assert_eq!(
-        air.candidate(&ready(1514)).unwrap().minimum_micros.get(),
+        air.candidate(&air.view(), &ready(1514))
+            .unwrap()
+            .minimum_micros
+            .get(),
         200
     );
 }
@@ -307,10 +313,10 @@ fn a_late_completion_of_an_earlier_association_leaves_the_current_rate() {
     air.reported(1, ht(7, true));
     link.publish(up(2), FLOOR);
     air.reported(1, ht(3, true));
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     air.reported(2, ht(5, false));
     air.reported(1, ht(1, false));
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     assert_eq!(*asked.0.borrow(), [FLOOR.unwrap(), ht(5, false)]);
 }
 
@@ -366,9 +372,9 @@ fn an_ofdm_only_association_starts_at_its_own_slowest_rate() {
     link.publish(up(1), Some(legacy(LegacyRate::Ofdm6M)));
     let asked = Asked::default();
     let mut air = StationAir::new(&link, &asked);
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     air.reported(1, ht(7, true));
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     assert_eq!(*asked.0.borrow(), [legacy(LegacyRate::Ofdm6M), ht(7, true)]);
 }
 
@@ -382,9 +388,9 @@ fn two_associations_without_reports_ask_at_their_own_slowest_rates() {
     let asked = Asked::default();
     let air = StationAir::new(&link, &asked);
     link.publish(up(1), Some(legacy(LegacyRate::Dsss1M)));
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     link.publish(up(2), Some(legacy(LegacyRate::Ofdm6M)));
-    air.candidate(&ready(1514)).unwrap();
+    air.candidate(&air.view(), &ready(1514)).unwrap();
     assert_eq!(
         *asked.0.borrow(),
         [legacy(LegacyRate::Dsss1M), legacy(LegacyRate::Ofdm6M)]
@@ -405,7 +411,10 @@ fn a_link_up_without_its_association_s_rate_offers_no_account() {
     let mut storage = AirtimeStorage::<StationKey, 2, 2>::new(NonZeroU32::new(10_000).unwrap());
     let mut egress =
         AirtimeEgress::<'_, _, u8, 2, 2>::new(&mut storage, StationAir::new(&link, &asked));
-    assert_eq!(egress.air().candidate(&ready(1514)), None);
+    assert_eq!(
+        egress.air().candidate(&egress.air().view(), &ready(1514)),
+        None
+    );
     assert!(
         egress
             .first_choice([Frame(ready(1514))].into_iter())

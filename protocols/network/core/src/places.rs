@@ -502,6 +502,18 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         None
     }
 
+    /// The oldest running command's place: the running chain's head.
+    pub(crate) const fn first_running(&self) -> Option<u8> {
+        self.running.head
+    }
+
+    /// The running command after `number`'s on the running chain, with
+    /// `number`'s place.
+    pub(crate) fn running_at(&self, number: u8) -> Option<(&Place<'m, B, SIZE, T>, Option<u8>)> {
+        let place = self.get(number)?;
+        Some((place, place.next))
+    }
+
     /// The running commands, oldest first.
     pub(crate) fn running(
         &self,
