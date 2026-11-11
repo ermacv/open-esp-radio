@@ -161,6 +161,20 @@ impl Due {
 }
 
 impl Woken {
+    /// These facts and `left`'s, the time from these.
+    const fn with(self, left: Self) -> Self {
+        Self {
+            port: PortReady {
+                frames: self.port.frames || left.port.frames,
+                notices: self.port.notices || left.port.notices,
+                link: self.port.link || left.port.link,
+                room: self.port.room || left.port.room,
+            },
+            lanes: self.lanes || left.lanes,
+            due: self.due,
+        }
+    }
+
     /// Nothing known: every stage runs.
     const ALL: Self = Self {
         port: PortReady {
@@ -188,6 +202,8 @@ struct Turned {
     /// evicted, a producer's hold or budget freed, a refused publication of
     /// the address.
     again: bool,
+    /// The sources a spent budget left work in: frames, notices, commands.
+    carry: Woken,
 }
 
 /// What one batch of returns did.
@@ -1004,16 +1020,18 @@ impl<
                 continue;
             }
             let turned = self.turn(clock.now(), woken, events);
-            woken = Woken::ALL;
             if self.owner.port_broken() {
                 self.ended = Some(EndCause::PortContract);
             } else if self.fault.is_some() {
                 self.ended = Some(EndCause::Egress);
             } else if turned.again {
                 // The turn left work no wake will name: the next turn
-                // takes it, once the executor had its turn.
+                // takes it, once the executor had its turn, with what every
+                // source says then: continuous work never hides a new
+                // source's.
                 report(events, || ServiceEvent::Yielded);
                 yield_now().await;
+                woken = self.look(events).await.with(turned.carry);
             } else {
                 let (at_once, said) = self.wait(clock, events).await;
                 woken = said;
@@ -1048,10 +1066,17 @@ impl<
         if woken.port.link || woken.due.by(now) {
             self.owner.tick(now, events);
         }
+        let mut carry = Woken::NONE;
         if woken.lanes {
             for index in 0..SOCKETS {
                 self.commands(now, index, events);
             }
+            // A budget spent leaves requests for the next turn.
+            carry.lanes = self
+                .bound
+                .iter()
+                .flatten()
+                .any(|bound| !bound.end.requests.is_empty());
         }
         tally.stage(Stage::Intake, &mut self.diagnostics);
         self.take_returns(&mut tally);
@@ -1076,6 +1101,7 @@ impl<
         }
         seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
         again |= intake_full;
+        carry.port.frames = intake_full;
         tally.stage(Stage::Receive, &mut self.diagnostics);
         let mut told_all = false;
         for _ in 0..TURN_NOTICES {
@@ -1123,7 +1149,9 @@ impl<
         self.turn_ended(events);
         tally.stage(Stage::Settle, &mut self.diagnostics);
         tally.end(&mut self.diagnostics);
-        Turned { again }
+        // Notices the budget left untold come first next turn.
+        carry.port.notices = !told_all;
+        Turned { again, carry }
     }
 
     /// The lent buffers back with their port whose loans the service has not
@@ -1600,36 +1628,22 @@ impl<
             ..Woken::NONE
         });
         let ready = poll_fn(|cx| {
-            let mut ready = pin!(stop.ready()).poll(cx).is_ready();
-            let port = owner.register_port(cx);
-            ready |= port.any();
-            ready |= local.register(cx, events);
-            let mut returned = false;
-            let mut lanes = false;
-            for bound in bound.iter_mut().flatten() {
-                lanes |= bound.poll_lanes(cx);
-                returned |= bound.poll_returns(cx);
-            }
-            ready |= lanes;
+            let (ready, port, lanes) = Self::register_sources(
+                cx,
+                owner,
+                bound,
+                stop,
+                adopted,
+                returns,
+                local,
+                diagnostics,
+                events,
+            );
             said.set(Woken {
                 port,
                 lanes,
                 ..said.get()
             });
-            for late in adopted.iter_mut().flatten() {
-                returned |= late.poll(cx);
-            }
-            if let Some(returns) = returns.as_ref() {
-                returned |= returns.poll_waiting(cx);
-            }
-            if returned {
-                let mut tally = Tally::begin(diagnostics);
-                let taken = Self::returns_of(owner, bound, returns.as_ref(), adopted, &mut tally);
-                tally.stage(Stage::Waiting, diagnostics);
-                tally.end(diagnostics);
-                report(events, || ServiceEvent::Returned { work: taken.work });
-                ready |= taken.work;
-            }
             report(events, || ServiceEvent::Waited { ready });
             if ready {
                 Poll::Ready(())
@@ -1652,6 +1666,106 @@ impl<
         })
         .await;
         (polls == 1, said.get())
+    }
+
+    /// Register every source and say what each has, as a wait's pass does,
+    /// with no wait: what a turn after a yield runs on, beside what the turn
+    /// before left. Returns that came are taken, as the wait takes them.
+    async fn look(&mut self, events: &mut impl EventSink<ServiceEvent>) -> Woken {
+        let deadline = [
+            self.owner.poll_deadline(),
+            self.pressure_at,
+            self.local.deadline(),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
+        let Self {
+            owner,
+            bound,
+            stop,
+            adopted,
+            returns,
+            local,
+            diagnostics,
+            ..
+        } = self;
+        poll_fn(|cx| {
+            let (_, port, lanes) = Self::register_sources(
+                cx,
+                owner,
+                bound,
+                stop,
+                adopted,
+                returns,
+                local,
+                diagnostics,
+                events,
+            );
+            Poll::Ready(Woken {
+                port,
+                lanes,
+                due: deadline.map_or(Due::Never, Due::At),
+            })
+        })
+        .await
+    }
+
+    /// One registration of every source: whether any has work, the port's
+    /// facts and whether a socket's lanes hold work. Returns that came are
+    /// taken here, as one batch.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the service's sources, borrowed apart"
+    )]
+    fn register_sources(
+        cx: &mut Context<'_>,
+        owner: &mut NetworkOwner<
+            'm,
+            B,
+            SIZE,
+            SOCKETS,
+            CREDITS,
+            RECEIVED,
+            NEIGHBORS,
+            BLOCKS,
+            P,
+            L::Tag,
+        >,
+        bound: &mut [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>; SOCKETS],
+        stop: &mut WakingSpscReceiver<'a, (), 1>,
+        adopted: &mut [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
+        returns: &mut Option<ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
+        local: &mut L,
+        diagnostics: &mut D,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> (bool, PortReady, bool) {
+        let mut ready = pin!(stop.ready()).poll(cx).is_ready();
+        let port = owner.register_port(cx);
+        ready |= port.any();
+        ready |= local.register(cx, events);
+        let mut returned = false;
+        let mut lanes = false;
+        for bound in bound.iter_mut().flatten() {
+            lanes |= bound.poll_lanes(cx);
+            returned |= bound.poll_returns(cx);
+        }
+        ready |= lanes;
+        for late in adopted.iter_mut().flatten() {
+            returned |= late.poll(cx);
+        }
+        if let Some(returns) = returns.as_ref() {
+            returned |= returns.poll_waiting(cx);
+        }
+        if returned {
+            let mut tally = Tally::begin(diagnostics);
+            let taken = Self::returns_of(owner, bound, returns.as_ref(), adopted, &mut tally);
+            tally.stage(Stage::Waiting, diagnostics);
+            tally.end(diagnostics);
+            report(events, || ServiceEvent::Returned { work: taken.work });
+            ready |= taken.work;
+        }
+        (ready, port, lanes)
     }
 
     /// End: nothing more is published, every known result goes to its place,
