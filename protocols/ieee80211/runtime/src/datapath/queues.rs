@@ -313,6 +313,27 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
         }
     }
 
+    /// Hand every MSDU of `peer`'s queues to `returned` and start its
+    /// accounts anew: what an association that ended left, which no later
+    /// one of its place may send or be charged for.
+    pub(crate) fn drain_peer(&mut self, peer: u8, mut returned: impl FnMut(OutboundMsdu<M>)) {
+        for tid in WmmUserPriority::ALL {
+            let Some(queue) = QueueId::new(peer, tid) else {
+                continue;
+            };
+            while let Some(msdu) = self.pop(queue) {
+                returned(msdu);
+            }
+        }
+        self.blocked &= !Self::peer_mask(peer);
+        if let Some(tids) = self.served.get_mut(usize::from(peer)) {
+            *tids = [0; TIDS];
+        }
+        if let Some(served) = self.peer_served.get_mut(usize::from(peer)) {
+            *served = 0;
+        }
+    }
+
     /// Hand every queued MSDU to `returned`, every queue emptied.
     pub(crate) fn drain(&mut self, mut returned: impl FnMut(OutboundMsdu<M>)) {
         while let Some(msdu) = self.pop_any() {

@@ -145,7 +145,13 @@ only once the port gave the room.
   `datapath::queues`) keeps one logical queue per radio peer and TID over
   one bounded pool of the network's MSDUs, which the network's buffers
   bound. The station has one peer, its access point; the access point's
-  runner keeps a queue per authorized client and one for the group.
+  runner keeps a queue per authorized client and one for the group. A
+  client place's queues belong to one association
+  (`ApAssociationIdentity`, its address, AID and epoch): a later
+  association of the place takes them over and the earlier one's frames go
+  back to the network, a frame goes only while its association is current
+  (`association_is_current`, checked before it is written), and a
+  completion charges its queue only while its own association owns it.
 - **Choice.** The next transmission starts from the highest access category
   any ready queue holds; of the peers with a ready queue of it, the one that
   had the least air; of that peer's queues of it, the one that had the least

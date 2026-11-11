@@ -49,9 +49,9 @@ pub use oer_protocols_ieee80211_wire::{
 use crate::beacon::{ApBeacon, ApBeaconTxContext};
 use crate::limits::AP_MAX_CLIENTS;
 use crate::service::{
-    AccessPointService, ApAssociationCapabilities, ApEapolTransmit, ApGroupTransmitKey,
-    ApMlmeAction, ApPeerClose, ApPeerPhase, ApServiceError, ApWpa2Error, ApWpa2Progress,
-    ApWpa2RetryProgress,
+    AccessPointService, ApAssociationCapabilities, ApAssociationIdentity, ApEapolTransmit,
+    ApGroupTransmitKey, ApMlmeAction, ApPeerClose, ApPeerPhase, ApServiceError, ApWpa2Error,
+    ApWpa2Progress, ApWpa2RetryProgress,
 };
 
 /// The EAPOL-Key frames the engine carries.
@@ -956,16 +956,18 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         Ok(())
     }
 
-    /// The queue an MSDU to `destination` that requests `priority` goes
-    /// in: its authorized peer's slot and the TID it goes as, a QoS peer's
-    /// requested one and any other's best effort; a group frame has no
-    /// peer and goes as best effort. `None` when the destination is no
-    /// authorized peer: the MSDU does not go.
+    /// The queue an MSDU of the network to `destination`, asking `priority`,
+    /// goes in: its authorized peer's association, which names the queue's
+    /// place and fences it from a later association of that place or that
+    /// address, and the TID it goes as, a QoS peer's requested one and any
+    /// other's best effort; a group frame has no association and goes as
+    /// best effort. `None` when the destination is no authorized peer: the
+    /// MSDU does not go.
     pub fn queue_of(
         &self,
         destination: [u8; 6],
         priority: WmmUserPriority,
-    ) -> Option<(Option<u8>, WmmUserPriority)> {
+    ) -> Option<(Option<ApAssociationIdentity>, WmmUserPriority)> {
         if AddressFlags::from_bytes([destination[0]]).group() {
             return Some((None, WmmUserPriority::UP0));
         }
@@ -979,7 +981,13 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         } else {
             WmmUserPriority::UP0
         };
-        Some((Some(binding.index()), tid))
+        Some((Some(status.association_identity()), tid))
+    }
+
+    /// Whether `association` is still its peer's authorized one: what a
+    /// queued frame of it checks before it goes.
+    pub fn association_is_current(&self, association: ApAssociationIdentity) -> bool {
+        self.service.association_is_current(association)
     }
 
     /// Write one MSDU of the network into `output` as a protected data

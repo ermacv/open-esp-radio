@@ -136,6 +136,14 @@ fn sent_controls(air: &oer_protocols_ieee80211_testing_model::ModelAir) -> Vec<u
         .collect()
 }
 
+/// The access point's data frames on the air.
+fn sent_data(air: &oer_protocols_ieee80211_testing_model::ModelAir) -> Vec<u8> {
+    sent_controls(air)
+        .into_iter()
+        .filter(|control| control & 0x0c == 0x08)
+        .collect()
+}
+
 /// Build a runner over the model's port of `$claim` on `$clock`: binds
 /// `$runner`, its `$air`, its network `$device` and the shared `$shared`.
 macro_rules! fixture {
@@ -1106,5 +1114,98 @@ fn a_stop_returns_the_network_frames_it_never_carried() {
             super::network::AP_TX_DEPTH,
             "every frame came home: {why:?}"
         );
+    }));
+}
+
+/// A client place's queues belong to one association. A later one of the
+/// same address in the same place (its epoch advanced) takes the place
+/// over: the earlier one's frames go back to the network, none of them on
+/// the air, and its late completions charge nothing to the new owner. A
+/// frame of an association no longer current goes back before it is
+/// written.
+#[test]
+fn a_client_place_s_queues_belong_to_one_association() {
+    use crate::datapath::queues::QueueId;
+    use oer_protocols_ieee80211_core_roles_ap::ApAssociationIdentity;
+    use oer_protocols_ieee80211_core_roles_sta::data::plane::OutboundMsdu;
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts, WmmUserPriority};
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, _shared);
+        let frame = || {
+            let mut frame = EthernetFrame::empty();
+            frame
+                .set_parts(MsduParts {
+                    destination: STATION,
+                    source: ACCESS_POINT,
+                    ether_type: 0x0800,
+                    payload: &[0x45; 28],
+                })
+                .unwrap();
+            frame
+        };
+        // The network's frames, taken from its transport as a turn would.
+        runner.homes.network.set_link(true);
+        let mut send = |count: usize| {
+            for _ in 0..count {
+                assert!(transmit.try_transmit(frame()).is_ok());
+            }
+            transmit.flush();
+        };
+        send(2);
+        let old = ApAssociationIdentity::new(STATION, 1, 7).unwrap();
+        let new = ApAssociationIdentity::new(STATION, 1, 8).unwrap();
+        let place = runner.homes.place_of(old).unwrap();
+        let queue = QueueId::new(place, WmmUserPriority::UP0).unwrap();
+        while let Some(outgoing) = runner.homes.network.take() {
+            let msdu = OutboundMsdu {
+                memory: outgoing.memory,
+                length: usize::from(outgoing.length),
+                priority: WmmUserPriority::UP0,
+            };
+            assert!(runner.homes.queues.push(queue, msdu).is_ok());
+        }
+        assert!(runner.homes.owns(queue, Some(old)));
+        // The same address reassociates in the same place.
+        assert_eq!(runner.homes.place_of(new), Some(place));
+        assert!(runner.homes.queues.is_empty(), "the old frames went back");
+        assert!(
+            !runner.homes.owns(queue, Some(old)),
+            "a late completion charges nothing"
+        );
+        assert!(runner.homes.owns(queue, Some(new)));
+        transmit.reclaim();
+        let mut free = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            free += 1;
+        }
+        assert_eq!(
+            free,
+            super::network::AP_TX_DEPTH,
+            "each old frame came home once"
+        );
+        transmit.flush();
+        // Queued under `new`, which the engine never authorized: before any
+        // frame is written, the place's frames go back.
+        while let Some(outgoing) = runner.homes.network.take() {
+            let msdu = OutboundMsdu {
+                memory: outgoing.memory,
+                length: usize::from(outgoing.length),
+                priority: WmmUserPriority::UP0,
+            };
+            assert!(runner.homes.queues.push(queue, msdu).is_ok());
+        }
+        let now = oer_portable_time::Clock::now(&*counted.clock);
+        assert!(runner.transmit_network(now).is_ok());
+        assert!(runner.homes.queues.is_empty());
+        assert!(!runner.homes.owns(queue, Some(new)), "the place is free");
+        assert!(sent_data(&air).is_empty(), "nothing went on the air");
+        transmit.reclaim();
+        let mut again = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            again += 1;
+        }
+        assert_eq!(again, super::network::AP_TX_DEPTH, "every frame came home");
     }));
 }

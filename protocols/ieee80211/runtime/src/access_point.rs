@@ -97,7 +97,8 @@ use oer_protocols_ieee80211_contracts_port::{
     TxProtection, TxSource, Unconsumed, UnconsumedRefused,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
-    ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
+    AP_MAX_CLIENTS, ApAssociationIdentity, ApEapolTransmit, ApEapolTxContext,
+    ApGroupKeyInstallation, ApGroupTransmitKey,
     beacon::{ApBeaconTxContext, ApBeaconTxOutcome},
     engine::{
         AP_EAPOL_CAPACITY, ApAfter, ApDue, ApEapol, ApEngine, ApEngineError, ApFrame, ApFrameKind,
@@ -130,9 +131,9 @@ const RECEIVE_BUDGET: usize = 16;
 const TRANSMIT_BUDGET: usize = 8;
 
 /// The peers the transmit queues name: each client's slot, and the group.
-const AP_QUEUE_PEERS: usize = oer_protocols_ieee80211_core_roles_ap::AP_MAX_CLIENTS + 1;
+const AP_QUEUE_PEERS: usize = AP_MAX_CLIENTS + 1;
 /// The group's peer among the transmit queues.
-const GROUP_PEER: u8 = oer_protocols_ieee80211_core_roles_ap::AP_MAX_CLIENTS as u8;
+const GROUP_PEER: u8 = AP_MAX_CLIENTS as u8;
 
 /// The received units the runner holds at once: one at a time.
 const RECEIVE_ROOM: u8 = 1;
@@ -668,8 +669,10 @@ enum Purpose {
     Eapol(ApEapolTxContext),
     /// A step of a peer's teardown.
     Teardown(ApTeardown, ApPeerDisconnectKind),
-    /// A data MSDU of this queue.
-    Data(QueueId),
+    /// A data MSDU of this queue, of this association (none for the
+    /// group's): its attempt is charged only while the association still
+    /// owns the queue.
+    Data(QueueId, Option<ApAssociationIdentity>),
     /// The beacon.
     Beacon(ApBeaconTxContext),
 }
@@ -769,6 +772,9 @@ where
     buffers: heapless::Vec<Buffer<'id, P, C>, AP_BUFFERS>,
     /// The network's frames by peer and TID, until each goes.
     queues: TxQueues<ApMemory, AP_TX_DEPTH, AP_QUEUE_PEERS>,
+    /// The association each client place's queues belong to: a frame goes,
+    /// and an attempt is charged, only under its own one.
+    owners: [Option<ApAssociationIdentity>; AP_MAX_CLIENTS],
     purposes: [Option<Purpose>; 32],
     configure: Option<Configure<'id, P>>,
     /// The access point's association, home while no pairwise removal
@@ -1568,7 +1574,11 @@ where
             Purpose::Response(_) => {}
             // One charge for the attempt: a single MPDU's completion names no
             // modelled cost, so it is charged as unknown, never nothing.
-            Purpose::Data(queue) => self.queues.charge(queue, TxEstimate::Unknown),
+            Purpose::Data(queue, association) => {
+                if self.owns(queue, association) {
+                    self.queues.charge(queue, TxEstimate::Unknown);
+                }
+            }
             Purpose::Eapol(context) => {
                 // A context the handshake no longer names returns as
                 // superseded; a refusal counts, and the handshake's own
@@ -1657,7 +1667,60 @@ where
         }
         self.installs.retain(|waiting| *waiting != peer);
         self.held_message3.retain(|held| held.peer != peer);
+        // Its frames go with it: none goes under a later association.
+        for place in 0..AP_MAX_CLIENTS {
+            let gone = self
+                .owners
+                .get(place)
+                .copied()
+                .flatten()
+                .is_some_and(|owner| owner.address() == peer);
+            if gone {
+                self.release_place(place);
+            }
+        }
         Ok(())
+    }
+
+    /// Whether `association` still owns `queue`: the group's queue has
+    /// none, a client place's its current one.
+    fn owns(&self, queue: QueueId, association: Option<ApAssociationIdentity>) -> bool {
+        if queue.peer() == GROUP_PEER {
+            return association.is_none();
+        }
+        association.is_some()
+            && self
+                .owners
+                .get(usize::from(queue.peer()))
+                .copied()
+                .flatten()
+                == association
+    }
+
+    /// Hand the network back what client place `place`'s ended association
+    /// left in its queues, and start the place's accounts anew.
+    fn release_place(&mut self, place: usize) {
+        let Some(peer) = u8::try_from(place).ok() else {
+            return;
+        };
+        let network = &mut self.network;
+        self.queues
+            .drain_peer(peer, |msdu| network.give_back(msdu.memory));
+        if let Some(owner) = self.owners.get_mut(place) {
+            *owner = None;
+        }
+    }
+
+    /// The queue place of `association`, its queues taken over from an
+    /// earlier association of the place, whose frames go back.
+    fn place_of(&mut self, association: ApAssociationIdentity) -> Option<u8> {
+        let place = usize::from(association.association_id().checked_sub(1)?);
+        let owner = *self.owners.get(place)?;
+        if owner != Some(association) {
+            self.release_place(place);
+            *self.owners.get_mut(place)? = Some(association);
+        }
+        u8::try_from(place).ok()
     }
 
     /// A frame of `purpose` did not go: what its terminal would have done
@@ -1678,7 +1741,7 @@ where
             Purpose::Beacon(context) => {
                 let _release: Option<_> = context.complete(ApBeaconTxOutcome::Unsent);
             }
-            Purpose::Response(_) | Purpose::Data(_) => {}
+            Purpose::Response(_) | Purpose::Data(..) => {}
         }
         Ok(())
     }
@@ -1747,6 +1810,7 @@ where
                 access,
                 buffers,
                 queues: TxQueues::new(),
+                owners: [None; AP_MAX_CLIENTS],
                 purposes: [const { None }; 32],
                 configure: Some(configure),
                 association: Some(association),
@@ -2596,17 +2660,21 @@ where
             let queue = frames
                 .read(&outgoing.memory, |frame| frame.parts().destination)
                 .and_then(|destination| homes.engine.queue_of(destination, outgoing.priority));
-            let Some((peer, tid)) = queue else {
+            let Some((association, tid)) = queue else {
                 // No authorized peer of that destination: it does not go.
                 homes.network.give_back(outgoing.memory);
                 continue;
+            };
+            let place = match association {
+                Some(association) => homes.place_of(association),
+                None => Some(GROUP_PEER),
             };
             let msdu = OutboundMsdu {
                 memory: outgoing.memory,
                 length: usize::from(outgoing.length),
                 priority: tid,
             };
-            match QueueId::new(peer.unwrap_or(GROUP_PEER), tid) {
+            match place.and_then(|place| QueueId::new(place, tid)) {
                 Some(queue) => {
                     if let Err(msdu) = homes.queues.push(queue, msdu) {
                         homes.network.give_back(msdu.memory);
@@ -2622,6 +2690,24 @@ where
             }
             let Some(queue) = homes.queues.select(None) else {
                 break;
+            };
+            // A client queue's frames go only under the association they
+            // came for: one that ended leaves them to the network.
+            let association = if queue.peer() == GROUP_PEER {
+                None
+            } else {
+                let owner = homes
+                    .owners
+                    .get(usize::from(queue.peer()))
+                    .copied()
+                    .flatten();
+                match owner.filter(|owner| homes.engine.association_is_current(*owner)) {
+                    Some(owner) => Some(owner),
+                    None => {
+                        homes.release_place(usize::from(queue.peer()));
+                        continue;
+                    }
+                }
             };
             let Some(msdu) = homes.queues.pop(queue) else {
                 break;
@@ -2661,7 +2747,7 @@ where
                     self.submit(
                         buffer,
                         written,
-                        Purpose::Data(queue),
+                        Purpose::Data(queue, association),
                         TxOperation::Data,
                         None,
                         now,

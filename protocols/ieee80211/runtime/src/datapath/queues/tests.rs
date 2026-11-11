@@ -262,3 +262,31 @@ fn a_category_s_accounts_stay_small_beside_a_starved_lower_one() {
         "{served:?}"
     );
 }
+
+/// A peer's drain returns its MSDUs once, starts its accounts anew and
+/// leaves the other peer's queues as they were.
+#[test]
+fn a_peer_s_drain_returns_its_msdus_and_only_its_own() {
+    let mut queues = TxQueues::<u32, 8, 2>::new();
+    assert!(queues.push(of(0, BE), msdu(1, BE)).is_ok());
+    assert!(queues.push(of(0, BE3), msdu(2, BE3)).is_ok());
+    assert!(queues.push(of(1, BE), msdu(3, BE)).is_ok());
+    queues.charge(of(0, BE), estimated(5_000));
+    queues.block(of(0, BE3));
+    let mut back = Vec::new();
+    queues.drain_peer(0, |msdu| back.push(msdu.memory));
+    back.sort_unstable();
+    assert_eq!(back, [1, 2]);
+    assert_eq!(
+        queues.select(None),
+        Some(of(1, BE)),
+        "the other peer's stays"
+    );
+    // A later association in the place starts with no debt and no block.
+    assert!(queues.push(of(0, BE3), msdu(4, BE3)).is_ok());
+    assert!(queues.ready(of(0, BE3)));
+    let mut rest = Vec::new();
+    queues.drain(|msdu| rest.push(msdu.memory));
+    rest.sort_unstable();
+    assert_eq!(rest, [3, 4], "each MSDU once");
+}
