@@ -469,12 +469,13 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotReceiver<'_, T, 
     /// End a burst of reads: free its slots at once for the producer and
     /// wake it if it waits.
     pub fn commit(&mut self) {
+        // The filled indices read are freed first: a free index the
+        // producer fills comes back filled, which needs their cells. A read
+        // a broken queue lost frees its cell all the same.
+        self.filled.release();
         if self.free.staged() == 0 {
             return;
         }
-        // The filled indices read are freed first: a free index the
-        // producer fills comes back filled, which needs their cells.
-        self.filled.release();
         self.free.publish();
         let producer = self.producer;
         wake_waiting(self.waits.producer, || producer.notify());

@@ -33,25 +33,39 @@ pub trait SpscCursor: cursor_sealed::Sealed + Send + Sync {
     fn counter(&self) -> &AtomicUsize;
     #[doc(hidden)]
     fn counter_mut(&mut self) -> &mut AtomicUsize;
+    /// The values its endpoint moved past this cursor and has not yet
+    /// passed it over: staged by the producer, taken by the consumer.
+    /// Only its endpoint writes it; an exclusive owner settles it.
+    #[doc(hidden)]
+    fn pending(&self) -> &AtomicUsize;
+    #[doc(hidden)]
+    fn pending_mut(&mut self) -> &mut AtomicUsize;
 }
 
 /// One cache line per cursor, the default queue layout.
 #[repr(align(64))]
-pub struct CachedSpscCursor(AtomicUsize);
+pub struct CachedSpscCursor(AtomicUsize, AtomicUsize);
 /// Unpadded atomic cursor for a same-core priority handoff.
-pub struct CompactSpscCursor(AtomicUsize);
+pub struct CompactSpscCursor(AtomicUsize, AtomicUsize);
 
 macro_rules! cursor {
     ($layout:ty) => {
         impl cursor_sealed::Sealed for $layout {}
         impl SpscCursor for $layout {
-            const NEW: Self = Self(AtomicUsize::new(0));
+            const NEW: Self = Self(AtomicUsize::new(0), AtomicUsize::new(0));
             #[inline(always)]
             fn counter(&self) -> &AtomicUsize {
                 &self.0
             }
             fn counter_mut(&mut self) -> &mut AtomicUsize {
                 &mut self.0
+            }
+            #[inline(always)]
+            fn pending(&self) -> &AtomicUsize {
+                &self.1
+            }
+            fn pending_mut(&mut self) -> &mut AtomicUsize {
+                &mut self.1
             }
         }
     };
@@ -125,8 +139,8 @@ impl<T, const DEPTH: usize> AffineSpscQueue<T, DEPTH> {
             storage,
             Self {
                 values: [const { UnsafeCell::new(MaybeUninit::uninit()) }; DEPTH],
-                producer: CachedSpscCursor(AtomicUsize::new(0)),
-                consumer: CachedSpscCursor(AtomicUsize::new(0)),
+                producer: CachedSpscCursor(AtomicUsize::new(0), AtomicUsize::new(0)),
+                consumer: CachedSpscCursor(AtomicUsize::new(0), AtomicUsize::new(0)),
             }
         )
     }
@@ -162,18 +176,30 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscQueue<T, DEPTH, C> {
         AffineSpscSender<'_, T, DEPTH, C>,
         AffineSpscReceiver<'_, T, DEPTH, C>,
     ) {
+        self.settle();
         (
             AffineSpscSender {
                 queue: self,
-                staged: Cell::new(0),
                 _not_sync: PhantomData,
             },
             AffineSpscReceiver {
                 queue: self,
-                taken: Cell::new(0),
                 _not_sync: PhantomData,
             },
         )
+    }
+
+    /// End the batches of an earlier endpoint pair, which ended without
+    /// ending them: what its producer staged is published, in order, and
+    /// the cells its consumer took values out of are freed. No value is
+    /// seen again, and none is lost.
+    fn settle(&mut self) {
+        let taken = core::mem::take(self.consumer.pending_mut().get_mut());
+        let consumer = *self.consumer.counter_mut().get_mut();
+        *self.consumer.counter_mut().get_mut() = Self::advance_by(consumer, taken);
+        let staged = core::mem::take(self.producer.pending_mut().get_mut());
+        let producer = *self.producer.counter_mut().get_mut();
+        *self.producer.counter_mut().get_mut() = Self::advance_by(producer, staged);
     }
 
     fn len(&self) -> usize {
@@ -207,9 +233,16 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscQueue<T, DEPTH, C> {
         }
     }
 
-    /// The cursor `count` cells past `cursor`, `count` at most `DEPTH`.
+    /// The cursor `count` cells past `cursor`, `count` at most `DEPTH`. A
+    /// cursor stays below `DEPTH * 2`, which fits `usize`
+    /// ([`Self::check_capacity`]): neither step can overflow.
     const fn advance_by(cursor: usize, count: usize) -> usize {
-        (cursor + count) % (DEPTH * 2)
+        let room = DEPTH * 2 - cursor;
+        if count >= room {
+            count - room
+        } else {
+            cursor + count
+        }
     }
 
     fn vacant_slot(&self) -> Option<AffineSpscSendPermit<'_, T, DEPTH, C>> {
@@ -263,6 +296,9 @@ impl<T, const DEPTH: usize, C: SpscCursor> Default for AffineSpscQueue<T, DEPTH,
 
 impl<T, const DEPTH: usize, C: SpscCursor> Drop for AffineSpscQueue<T, DEPTH, C> {
     fn drop(&mut self) {
+        // A batch no endpoint ended: staged values are published here and
+        // dropped below, taken ones moved out already and freed.
+        self.settle();
         let mut consumer = *self.consumer.counter_mut().get_mut();
         let producer = *self.producer.counter_mut().get_mut();
         while consumer != producer {
@@ -284,9 +320,6 @@ impl<T, const DEPTH: usize, C: SpscCursor> Drop for AffineSpscQueue<T, DEPTH, C>
 /// The only producer endpoint for one [`AffineSpscQueue`] ownership epoch.
 pub struct AffineSpscSender<'queue, T, const DEPTH: usize, C: SpscCursor = CachedSpscCursor> {
     queue: &'queue AffineSpscQueue<T, DEPTH, C>,
-    /// Values written past the published producer cursor
-    /// ([`Self::stage`]), not yet published.
-    staged: Cell<usize>,
     // Moving the endpoint is valid, but safe code must not share one endpoint
     // between concurrent producers and violate the SPSC cursor proof.
     _not_sync: PhantomData<Cell<()>>,
@@ -317,10 +350,9 @@ impl<'queue, T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'queue, T, D
     /// assert_eq!(receiver.try_receive(), Ok(2));
     /// ```
     ///
-    /// Only a `Copy` value is staged: an endpoint that ends before its
-    /// publication leaves no owner behind, only cells the next publication
-    /// of this queue writes again. Whoever stages owns what a lost value
-    /// names, and publishes before it ends.
+    /// Only a `Copy` value is staged. An endpoint that ends before its
+    /// publication leaves its values staged in the queue: the next
+    /// [`AffineSpscQueue::split`], or the queue's drop, publishes them.
     ///
     /// # Errors
     /// [`AffineSpscTrySendError`]: every cell is published or staged; the
@@ -329,7 +361,7 @@ impl<'queue, T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'queue, T, D
     where
         T: Copy,
     {
-        let staged = self.staged.get();
+        let staged = self.queue.producer.pending().load(Ordering::Relaxed);
         let producer = self.queue.producer.counter().load(Ordering::Relaxed);
         let consumer = self.queue.consumer.counter().load(Ordering::Acquire);
         if AffineSpscQueue::<T, DEPTH, C>::cursor_distance(consumer, producer)
@@ -351,16 +383,20 @@ impl<'queue, T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'queue, T, D
         unsafe {
             (*self.queue.slot(cursor).get()).write(value);
         }
-        self.staged.set(staged.saturating_add(1));
+        self.queue
+            .producer
+            .pending()
+            .store(staged.saturating_add(1), Ordering::Relaxed);
         Ok(())
     }
 
     /// Publish every staged value at once, in its order.
     pub fn publish(&self) {
-        let staged = self.staged.replace(0);
+        let staged = self.queue.producer.pending().load(Ordering::Relaxed);
         if staged == 0 {
             return;
         }
+        self.queue.producer.pending().store(0, Ordering::Relaxed);
         let producer = self.queue.producer.counter().load(Ordering::Relaxed);
         self.queue.producer.counter().store(
             AffineSpscQueue::<T, DEPTH, C>::advance_by(producer, staged),
@@ -370,7 +406,7 @@ impl<'queue, T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'queue, T, D
 
     /// Values staged and not yet published.
     pub fn staged(&self) -> usize {
-        self.staged.get()
+        self.queue.producer.pending().load(Ordering::Relaxed)
     }
 
     /// Reserve one vacant cell, exclusively borrowing the producer until
@@ -415,7 +451,7 @@ impl<'queue, T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'queue, T, D
     pub fn free_capacity(&self) -> usize {
         DEPTH
             .saturating_sub(self.len())
-            .saturating_sub(self.staged.get())
+            .saturating_sub(self.staged())
     }
 }
 
@@ -455,9 +491,6 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscSendPermit<'_, T, DEPTH, C>
 /// The only consumer endpoint for one [`AffineSpscQueue`] ownership epoch.
 pub struct AffineSpscReceiver<'queue, T, const DEPTH: usize, C: SpscCursor = CachedSpscCursor> {
     queue: &'queue AffineSpscQueue<T, DEPTH, C>,
-    /// Values moved out past the published consumer cursor
-    /// ([`Self::take`]), their cells not yet released.
-    taken: Cell<usize>,
     // Moving the endpoint is valid, but safe code must not share one endpoint
     // between concurrent consumers and violate the SPSC cursor proof.
     _not_sync: PhantomData<Cell<()>>,
@@ -473,9 +506,10 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscReceiver<'_, T, DEPTH, C> {
 
     /// Move the next published value out without freeing its cell: the
     /// producer may write the cell again only after [`Self::release`]. A
-    /// batch of values frees its cells once. An endpoint that ends before
-    /// its release moved its values out already: its cells stay taken
-    /// until the next consumer of this queue releases them.
+    /// batch of values frees its cells once. Only a `Copy` value is taken.
+    /// An endpoint that ends before its release leaves its cells taken in
+    /// the queue: the next [`AffineSpscQueue::split`], or the queue's
+    /// drop, frees them, and no value is received again.
     ///
     /// ```
     /// use oer_portable_memory::AffineSpscQueue;
@@ -490,8 +524,20 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscReceiver<'_, T, DEPTH, C> {
     /// receiver.release();
     /// assert!(sender.try_send(3).is_ok());
     /// ```
-    pub fn take(&mut self) -> Option<T> {
-        let taken = self.taken.get();
+    ///
+    /// A value with an owner is received whole, never taken:
+    ///
+    /// ```compile_fail,E0277
+    /// use oer_portable_memory::AffineSpscQueue;
+    /// let mut queue = AffineSpscQueue::<Box<u8>, 2>::new();
+    /// let (_sender, mut receiver) = queue.split();
+    /// let _ = receiver.take();
+    /// ```
+    pub fn take(&mut self) -> Option<T>
+    where
+        T: Copy,
+    {
+        let taken = self.queue.consumer.pending().load(Ordering::Relaxed);
         let consumer = self.queue.consumer.counter().load(Ordering::Relaxed);
         let producer = self.queue.producer.counter().load(Ordering::Acquire);
         if AffineSpscQueue::<T, DEPTH, C>::cursor_distance(consumer, producer) <= taken {
@@ -508,16 +554,20 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscReceiver<'_, T, DEPTH, C> {
         // cell only once the consumer cursor passes it, which waits for
         // `release`; this endpoint is the sole consumer, borrowed mutably.
         let value = unsafe { (*self.queue.slot(cursor).get()).assume_init_read() };
-        self.taken.set(taken.saturating_add(1));
+        self.queue
+            .consumer
+            .pending()
+            .store(taken.saturating_add(1), Ordering::Relaxed);
         Some(value)
     }
 
     /// Free every cell taken, at once, for the producer.
     pub fn release(&self) {
-        let taken = self.taken.replace(0);
+        let taken = self.queue.consumer.pending().load(Ordering::Relaxed);
         if taken == 0 {
             return;
         }
+        self.queue.consumer.pending().store(0, Ordering::Relaxed);
         let consumer = self.queue.consumer.counter().load(Ordering::Relaxed);
         self.queue.consumer.counter().store(
             AffineSpscQueue::<T, DEPTH, C>::advance_by(consumer, taken),
@@ -527,7 +577,9 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscReceiver<'_, T, DEPTH, C> {
 
     /// Published values not yet taken.
     pub fn len(&self) -> usize {
-        self.queue.len().saturating_sub(self.taken.get())
+        self.queue
+            .len()
+            .saturating_sub(self.queue.consumer.pending().load(Ordering::Relaxed))
     }
 
     pub fn is_empty(&self) -> bool {

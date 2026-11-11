@@ -290,15 +290,6 @@ fn cached_placement_transfers_received_owners_and_drops_only_the_queued_owner() 
     assert_eq!(dropped[1].load(Ordering::SeqCst), 1);
 }
 
-/// A value whose drops are counted, to show each owner ends once.
-struct Counted(u8, Arc<AtomicUsize>);
-
-impl Drop for Counted {
-    fn drop(&mut self) {
-        self.1.fetch_add(1, Ordering::SeqCst);
-    }
-}
-
 /// Staged values stay unseen until one publication, which shows them all
 /// in order; a short batch stops at the free cells and hands the value
 /// back; around the ring's end the cursors keep their order.
@@ -354,26 +345,6 @@ fn single_operations_follow_the_batches_before_them() {
     assert_eq!(sender.free_capacity(), 4);
 }
 
-/// Every owner ends once: a value taken is moved out once and the queue
-/// drops only what stays published and untaken.
-#[test]
-fn taken_owners_end_once() {
-    let drops = Arc::new(AtomicUsize::new(0));
-    let mut queue = AffineSpscQueue::<Counted, 3>::new();
-    {
-        let (sender, mut receiver) = queue.split();
-        assert!(sender.try_send(Counted(1, drops.clone())).is_ok());
-        assert!(sender.try_send(Counted(2, drops.clone())).is_ok());
-        let first = receiver.take().map(|value| value.0);
-        assert_eq!(first, Some(1));
-        assert_eq!(drops.load(Ordering::SeqCst), 1, "the taken value ended");
-        receiver.release();
-    }
-    assert_eq!(drops.load(Ordering::SeqCst), 1, "the second is the queue's");
-    drop(queue);
-    assert_eq!(drops.load(Ordering::SeqCst), 2, "and ends with it, once");
-}
-
 /// A producer and a consumer on two threads, each in batches: every value
 /// arrives once and in order.
 #[test]
@@ -406,4 +377,33 @@ fn batches_across_threads_deliver_every_value_once_in_order() {
             }
         });
     });
+}
+
+/// Endpoints that end in a batch leave it to the queue: the next split
+/// publishes what was staged, once, and frees the taken cells, whose values
+/// are not received again.
+#[test]
+fn a_batch_left_by_ended_endpoints_ends_at_the_next_split() {
+    let mut queue = AffineSpscQueue::<u8, 4>::new();
+    {
+        let (mut sender, mut receiver) = queue.split();
+        assert!(sender.try_send(1).is_ok());
+        assert!(sender.try_send(2).is_ok());
+        assert_eq!(receiver.take(), Some(1));
+        assert!(sender.stage(3).is_ok());
+        // Both end here, the take unreleased and the stage unpublished.
+    }
+    let (sender, receiver) = queue.split();
+    assert_eq!(
+        receiver.try_receive(),
+        Ok(2),
+        "the taken value is not seen again"
+    );
+    assert_eq!(
+        receiver.try_receive(),
+        Ok(3),
+        "the staged one is published once"
+    );
+    assert!(receiver.try_receive().is_err());
+    assert_eq!(sender.free_capacity(), 4, "every cell is free");
 }

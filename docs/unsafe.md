@@ -767,10 +767,11 @@ Release store publishes them in order. The consumer moves published values
 out past its own cursor, and one Release store frees their cells. The
 Acquire load of the other end's cursor proves each cell vacant or initialized
 for this endpoint alone, as the single-value permit does. A single
-operation or a local loan first ends the batch before it. An endpoint that
-ends unpublished leaves no owner behind, because staged values are `Copy`
-and taken values are already moved out. Its cells are left to the next
-endpoint pair. Whoever stages names the owners and publishes before it awaits:
+operation or a local loan first ends the batch before it. Each cursor keeps
+its endpoint's batch count beside it, and the queue's exclusive `split` and
+its drop end a batch an ended endpoint left: staged values are published
+once and taken cells freed, so no value is received or dropped twice. Only
+`Copy` values are staged or taken. Whoever stages publishes before it awaits:
 `SlotSender::ready` and `SlotReceiver::ready_at_least` end their bursts before
 they wait.
 Its sealed cursor layouts retain the default cache-line-separated counters
