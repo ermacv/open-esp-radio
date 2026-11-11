@@ -106,6 +106,25 @@ impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
     }
 }
 
+/// What a frame the port did not take left to its publishing.
+#[derive(Clone, Copy, Debug)]
+struct AfterUnsent {
+    /// Its work moved: it ended, or the producer's flow sat out.
+    moved: bool,
+    /// The plan's turns after it are not the choice's.
+    stale: bool,
+    /// Publishing ends here.
+    end: Option<PublishEnd>,
+}
+
+impl AfterUnsent {
+    const STALE: Self = Self {
+        moved: true,
+        stale: true,
+        end: None,
+    };
+}
+
 /// What a turn did.
 #[derive(Clone, Copy, Debug)]
 struct Turned {
@@ -1111,7 +1130,15 @@ impl<
         if pool.free() != 0 {
             return false;
         }
-        let pool = &*pool;
+        self.relieve_full(now, after)
+    }
+
+    /// [`Self::relieve`] once the pool has no free block: rare, and apart
+    /// from the turn's own path.
+    #[cold]
+    #[inline(never)]
+    fn relieve_full(&mut self, now: Instant, after: Duration) -> bool {
+        let pool = &*self.owner.pool();
         // The pool's accounts, not the sockets': a group holds blocks with or
         // without a socket here.
         let Some((source, most)) = pool.heaviest() else {
@@ -1142,6 +1169,9 @@ impl<
         self.owner.evict(oldest, Eviction::MemoryPressure)
     }
 
+    // Each socket's commands, rare beside the frames: apart from the turn's
+    // own path.
+    #[inline(never)]
     fn commands(
         &mut self,
         now: Instant,
@@ -1267,6 +1297,7 @@ impl<
     /// ends with publishing: it reserved nothing beyond its frames. Where the
     /// core is certainly idle no collection is made: the policy takes the
     /// step of one over no work ([`Egress::nothing_ready`]).
+    #[inline(never)]
     fn publish(
         &mut self,
         now: Instant,
@@ -1359,41 +1390,17 @@ impl<
                     let answer = self.egress.accepted(reservation, ticket);
                     self.note(answer);
                 }
-                // The work ended or is other work: the plan's turns after it
-                // are not the choice's.
-                Err(Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort) => {
-                    moved = true;
-                    live = false;
-                    let answer = self.egress.refused(reservation);
-                    self.note(answer);
-                }
-                // One declining fill a turn: the producer's flow is out of
-                // the rest of it, so its declines never stop another's work.
-                Err(Unsent::Declined) => {
-                    moved = true;
-                    live = false;
-                    report(events, || ServiceEvent::Local(LocalEvent::Declined));
-                    self.local.declined();
-                    let answer = self.egress.refused(reservation);
-                    self.note(answer);
-                }
-                // The port took nothing, by its word, and is at fault: the
-                // work ended by its fill's cause, and the service ends.
-                Err(Unsent::FillMisreported(_)) => {
-                    moved = true;
-                    let answer = self.egress.refused(reservation);
-                    self.note(answer);
-                    break PublishEnd::Fault;
-                }
-                Err(Unsent::Port(_)) => {
-                    let answer = self.egress.refused(reservation);
-                    self.note(answer);
-                    break PublishEnd::Refused;
-                }
-                Err(Unsent::PortContract) => {
-                    let answer = self.egress.unknown(reservation);
-                    self.note(answer);
-                    break PublishEnd::Fault;
+                // Every other answer ends the plan or the publishing: rare,
+                // and apart from the frames' own path.
+                Err(unsent) => {
+                    let after = self.unsent(unsent, reservation, events);
+                    moved |= after.moved;
+                    if after.stale {
+                        live = false;
+                    }
+                    if let Some(end) = after.end {
+                        break end;
+                    }
                 }
             }
             if self.fault.is_some() {
@@ -1405,6 +1412,66 @@ impl<
             self.owner.flush();
         }
         end
+    }
+
+    /// What a frame the port did not take does to its reservation, its
+    /// work, the plan and the publishing. Kept out of the frames' own path,
+    /// which only an accepted frame takes.
+    #[cold]
+    #[inline(never)]
+    fn unsent(
+        &mut self,
+        unsent: Unsent<P::Refusal>,
+        reservation: E::Reservation,
+        events: &mut impl EventSink<ServiceEvent>,
+    ) -> AfterUnsent {
+        match unsent {
+            // The work ended or is other work: the plan's turns after it
+            // are not the choice's.
+            Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort => {
+                let answer = self.egress.refused(reservation);
+                self.note(answer);
+                AfterUnsent::STALE
+            }
+            // One declining fill a turn: the producer's flow is out of the
+            // rest of it, so its declines never stop another's work.
+            Unsent::Declined => {
+                report(events, || ServiceEvent::Local(LocalEvent::Declined));
+                self.local.declined();
+                let answer = self.egress.refused(reservation);
+                self.note(answer);
+                AfterUnsent::STALE
+            }
+            // The port took nothing, by its word, and is at fault: the work
+            // ended by its fill's cause, and the service ends.
+            Unsent::FillMisreported(_) => {
+                let answer = self.egress.refused(reservation);
+                self.note(answer);
+                AfterUnsent {
+                    moved: true,
+                    stale: false,
+                    end: Some(PublishEnd::Fault),
+                }
+            }
+            Unsent::Port(_) => {
+                let answer = self.egress.refused(reservation);
+                self.note(answer);
+                AfterUnsent {
+                    moved: false,
+                    stale: false,
+                    end: Some(PublishEnd::Refused),
+                }
+            }
+            Unsent::PortContract => {
+                let answer = self.egress.unknown(reservation);
+                self.note(answer);
+                AfterUnsent {
+                    moved: false,
+                    stale: false,
+                    end: Some(PublishEnd::Fault),
+                }
+            }
+        }
     }
 
     /// Wait for anything to do: the port, a lane, the producer, a stop or a

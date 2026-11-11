@@ -235,10 +235,17 @@ impl Frame<'_> {
         room: &mut Slot<'_>,
         produce: impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined>,
     ) -> Result<(), FillFailed> {
-        let short = |_| FillFailed::SlotTooShort;
         let (slot, kept) = room.open();
         match self {
-            Self::Arp(frame) => Writer::new(slot).write(frame).map_err(short),
+            // Control frames are rare beside data: their writes stay apart
+            // from data's own path.
+            Self::Arp(frame) => write_arp(slot, frame),
+            Self::Dhcp { headers, message } => write_dhcp(slot, headers, message),
+            Self::Echo {
+                headers,
+                reply,
+                data,
+            } => write_echo(slot, headers, reply, data),
             Self::Datagram { headers, data } => {
                 let (head, rest, sum) = headers.open(slot)?;
                 // One read of the stored data: its copy and its sum.
@@ -278,28 +285,50 @@ impl Frame<'_> {
                 }));
                 Ok(())
             }
-            Self::Dhcp { headers, message } => {
-                let (head, rest, sum) = headers.open(slot)?;
-                let data = rest
-                    .get_mut(..message.length())
-                    .ok_or(FillFailed::SlotTooShort)?;
-                message.write(&mut Writer::new(data)).map_err(short)?;
-                headers.close(head, sum.with(data))
-            }
-            Self::Echo {
-                headers,
-                reply,
-                data,
-            } => {
-                let mut writer = Writer::new(slot);
-                writer
-                    .write(headers)
-                    .and_then(|()| writer.write(reply))
-                    .and_then(|()| writer.write(data))
-                    .map_err(short)
-            }
         }
     }
+}
+
+/// Write an ARP frame into `slot`.
+#[cold]
+#[inline(never)]
+fn write_arp(slot: &mut [u8], frame: &[u8; ARP_FRAME]) -> Result<(), FillFailed> {
+    Writer::new(slot)
+        .write(frame)
+        .map_err(|_| FillFailed::SlotTooShort)
+}
+
+/// Write the DHCP client's message into `slot` behind its headers, the UDP
+/// checksum last.
+#[cold]
+#[inline(never)]
+fn write_dhcp(slot: &mut [u8], headers: &UdpHeaders, message: &Outgoing) -> Result<(), FillFailed> {
+    let (head, rest, sum) = headers.open(slot)?;
+    let data = rest
+        .get_mut(..message.length())
+        .ok_or(FillFailed::SlotTooShort)?;
+    message
+        .write(&mut Writer::new(data))
+        .map_err(|_| FillFailed::SlotTooShort)?;
+    headers.close(head, sum.with(data))
+}
+
+/// Write an echo reply into `slot`: the request's identity and data under
+/// new headers.
+#[cold]
+#[inline(never)]
+fn write_echo(
+    slot: &mut [u8],
+    headers: &[u8; ECHO_HEADERS],
+    reply: &[u8; icmp::ECHO_HEADER_LEN],
+    data: &[u8],
+) -> Result<(), FillFailed> {
+    let mut writer = Writer::new(slot);
+    writer
+        .write(headers)
+        .and_then(|()| writer.write(reply))
+        .and_then(|()| writer.write(data))
+        .map_err(|_| FillFailed::SlotTooShort)
 }
 
 /// A UDP datagram's Ethernet, IPv4 and UDP headers, as their fields: each
@@ -1684,16 +1713,8 @@ impl<
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
         events: &mut impl EventSink<NetEvent>,
     ) {
-        if let Some(client) = &mut self.dhcp {
-            let mut serial = self.serial;
-            let before = client.state();
-            let change = client.tick(now, &mut serial);
-            let moved = change.is_some() || client.state() != before;
-            self.serial = serial;
-            if moved {
-                self.configured();
-            }
-            self.apply(change, pool, events);
+        if self.dhcp.is_some() {
+            self.tick_dhcp(now, pool, events);
         }
         let mut serial = self.serial;
         let mut changes = self.neighbor_changes;
@@ -1747,6 +1768,29 @@ impl<
             changes = changes.wrapping_add(1);
         });
         self.neighbor_changes = changes;
+    }
+
+    /// The DHCP client's part of [`Self::tick`]: its timers, rarely due, kept
+    /// apart from the turn's own path.
+    #[inline(never)]
+    fn tick_dhcp<const BLOCKS: usize>(
+        &mut self,
+        now: Instant,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+        events: &mut impl EventSink<NetEvent>,
+    ) {
+        let Some(client) = &mut self.dhcp else {
+            return;
+        };
+        let mut serial = self.serial;
+        let before = client.state();
+        let change = client.tick(now, &mut serial);
+        let moved = change.is_some() || client.state() != before;
+        self.serial = serial;
+        if moved {
+            self.configured();
+        }
+        self.apply(change, pool, events);
     }
 
     /// When [`Self::tick`] has work: a request's time, the end of the life
@@ -1990,6 +2034,8 @@ impl<
             .ok()
     }
 
+    #[cold]
+    #[inline(never)]
     fn dhcp_frame(&self, now: Instant, serial: u64, peer: [u8; 6]) -> Option<Frame<'_>> {
         let client = self.dhcp.as_ref()?;
         if self.dhcp_peer(now, client)? != peer {
@@ -2028,6 +2074,8 @@ impl<
         Some(Frame::Dhcp { headers, message })
     }
 
+    #[cold]
+    #[inline(never)]
     fn echo_frame(
         &self,
         now: Instant,
@@ -2056,6 +2104,8 @@ impl<
         })
     }
 
+    #[cold]
+    #[inline(never)]
     fn arp_frame(
         &self,
         operation: Operation,
@@ -2212,6 +2262,8 @@ impl<
     /// The echo reply of `serial` ends at its publication, taken or refused
     /// for good: its block goes home, and the neighbor it protected may serve
     /// a new send, which [`Self::neighbors_changed`] tells.
+    #[cold]
+    #[inline(never)]
     fn end_echo<const BLOCKS: usize>(&mut self, serial: u64, pool: &mut Pool<'m, B, SIZE, BLOCKS>) {
         if let Some(owed) = self.echoes.take(serial) {
             pool.give(owed.block);
@@ -2222,6 +2274,8 @@ impl<
 
     /// The port took the client's message of `serial`: its next try comes at
     /// its time.
+    #[cold]
+    #[inline(never)]
     fn dhcp_sent(&mut self, now: Instant, serial: u64) {
         if let Some(client) = &mut self.dhcp {
             client.sent(now, serial);
@@ -2232,6 +2286,8 @@ impl<
     /// `grant`'s producer declined its fill: the work ends
     /// [`Outcome::Declined`], and, as a reject, the next socket's turn moves
     /// past its socket. Only a declared work's frame has a producer's fill.
+    #[cold]
+    #[inline(never)]
     pub(crate) fn decline<const BLOCKS: usize>(
         &mut self,
         grant: &Grant<B>,
