@@ -298,6 +298,25 @@ impl<const N: usize> Neighbors<N> {
     }
 
     /// The requests owed: each entry with its address and resolution.
+    /// The first entry from `from` on that owes a request, as
+    /// [`Self::owed_requests`] gives it, with the index after it.
+    pub(crate) fn owed_request_from(&self, from: usize) -> Option<((u8, [u8; 4], u64), usize)> {
+        let rest = self.entries.get(from..)?;
+        rest.iter()
+            .zip(from..)
+            .find_map(|(entry, index)| match *entry {
+                Entry::Asking {
+                    address,
+                    serial,
+                    owed: true,
+                    ..
+                } => u8::try_from(index)
+                    .ok()
+                    .map(|place| ((place, address, serial), index.saturating_add(1))),
+                _ => None,
+            })
+    }
+
     pub(crate) fn owed_requests(&self) -> impl Iterator<Item = (u8, [u8; 4], u64)> + Clone + '_ {
         self.entries
             .iter()

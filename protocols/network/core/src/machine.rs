@@ -1857,6 +1857,22 @@ impl<
         &'s self,
         now: Instant,
         count: &'s C,
+    ) -> Demands<'s, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, T, C> {
+        Demands {
+            core: self,
+            now,
+            count,
+            at: DemandAt::Replies(0),
+        }
+    }
+
+    /// [`Self::demands`] as the chain of iterators it was: the reference a
+    /// test compares the cursor with.
+    #[cfg(test)]
+    pub(crate) fn demands_chain<'s, C: Count + ?Sized>(
+        &'s self,
+        now: Instant,
+        count: &'s C,
     ) -> impl Iterator<Item = Demand<B>> + Clone + 's {
         let brand = self.brand;
         let replies = self.replies.iter().map(move |reply| Demand {
@@ -2483,6 +2499,220 @@ impl<
             },
             CoreBrand { brand, serial },
         )
+    }
+}
+
+/// Where a walk of the ready work stands: each source in turn, each read in
+/// its own state, so the walk holds a few indices and no adapters.
+#[derive(Clone, Copy, Debug)]
+enum DemandAt {
+    /// The next ARP reply owed, by its place in the list.
+    Replies(usize),
+    /// The next neighbor entry to look at for an owed request.
+    Requests(usize),
+    /// The DHCP client's owed message.
+    Dhcp,
+    /// The next echo reply owed after this serial (`None`: the oldest).
+    Echoes(Option<u64>),
+    /// The `offset`-th socket from the core's cursor, at running place `at`
+    /// (`None`: its chain's head is next).
+    Datagrams {
+        offset: usize,
+        at: Option<u8>,
+    },
+    Done,
+}
+
+/// Every piece of work ready now, as [`Core::demands`] walks it: control
+/// first (ARP replies, requests, the DHCP message, echo replies), then
+/// datagrams from the socket whose turn it is.
+pub struct Demands<
+    's,
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const NEIGHBORS: usize,
+    T,
+    C: ?Sized,
+> {
+    core: &'s Core<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, T>,
+    now: Instant,
+    count: &'s C,
+    at: DemandAt,
+}
+
+// A walk holds references and indices: a copy of one goes on from where it
+// stood, with no bound on what it walks.
+impl<
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const NEIGHBORS: usize,
+    T,
+    C: ?Sized,
+> Clone for Demands<'_, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, T, C>
+{
+    fn clone(&self) -> Self {
+        Self {
+            core: self.core,
+            now: self.now,
+            count: self.count,
+            at: self.at,
+        }
+    }
+}
+
+impl<
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const NEIGHBORS: usize,
+    T: Copy,
+    C: Count + ?Sized,
+> Iterator for Demands<'_, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, T, C>
+{
+    type Item = Demand<B>;
+
+    fn next(&mut self) -> Option<Demand<B>> {
+        let core = self.core;
+        let brand = core.brand;
+        let control = |length: usize, peer: [u8; 6], work: Work| Demand {
+            ready: Ready {
+                class: Class::Control,
+                length,
+                peer,
+                flow: None,
+                dscp: BEST_EFFORT,
+            },
+            work,
+            brand,
+        };
+        // Each step takes one source's next work or moves to the next
+        // source: at most every source and every place once a call.
+        loop {
+            match self.at {
+                DemandAt::Replies(index) => match core.replies.get(index) {
+                    Some(reply) => {
+                        self.at = DemandAt::Replies(index.saturating_add(1));
+                        return Some(control(
+                            ARP_FRAME,
+                            reply.hardware,
+                            Work::Reply {
+                                serial: reply.serial,
+                            },
+                        ));
+                    }
+                    None => self.at = DemandAt::Requests(0),
+                },
+                DemandAt::Requests(from) => match core.neighbors.owed_request_from(from) {
+                    Some(((neighbor, _, serial), after)) => {
+                        self.at = DemandAt::Requests(after);
+                        return Some(control(
+                            ARP_FRAME,
+                            BROADCAST_HARDWARE,
+                            Work::Request { neighbor, serial },
+                        ));
+                    }
+                    None => self.at = DemandAt::Dhcp,
+                },
+                DemandAt::Dhcp => {
+                    self.at = DemandAt::Echoes(None);
+                    let owed = core.dhcp.as_ref().and_then(|client| {
+                        let serial = client.owed()?;
+                        let peer = core.dhcp_peer(self.now, client)?;
+                        let length = client.message(self.now, serial)?.length();
+                        Some((serial, peer, length))
+                    });
+                    if let Some((serial, peer, length)) = owed {
+                        return Some(control(
+                            HEADERS.saturating_add(length),
+                            peer,
+                            Work::Dhcp { serial },
+                        ));
+                    }
+                }
+                DemandAt::Echoes(after) => match core.echoes.next_after(after) {
+                    Some(owed) => {
+                        self.at = DemandAt::Echoes(Some(owed.serial));
+                        // An echo whose neighbor is not known waits, as a
+                        // datagram does.
+                        if let Some(found) = core.neighbors.find(self.now, owed.hop) {
+                            return Some(control(
+                                ECHO_HEADERS.saturating_add(owed.block.octets().len()),
+                                found.hardware,
+                                Work::Echo {
+                                    serial: owed.serial,
+                                    found: found.holds(),
+                                },
+                            ));
+                        }
+                    }
+                    None => {
+                        self.at = DemandAt::Datagrams {
+                            offset: 0,
+                            at: None,
+                        }
+                    }
+                },
+                DemandAt::Datagrams { offset, at } => {
+                    if offset >= SOCKETS {
+                        self.at = DemandAt::Done;
+                        continue;
+                    }
+                    let socket = core
+                        .cursor
+                        .wrapping_add(offset)
+                        .checked_rem(SOCKETS)
+                        .and_then(|index| Some((index, core.sockets.get(index)?)));
+                    let Some((index, socket)) = socket else {
+                        self.at = DemandAt::Datagrams {
+                            offset: offset.saturating_add(1),
+                            at: None,
+                        };
+                        continue;
+                    };
+                    let number = match at {
+                        Some(number) => Some(number),
+                        None => socket.places.first_running(),
+                    };
+                    let Some((number, (place, next))) =
+                        number.and_then(|number| Some((number, socket.places.running_at(number)?)))
+                    else {
+                        self.at = DemandAt::Datagrams {
+                            offset: offset.saturating_add(1),
+                            at: None,
+                        };
+                        continue;
+                    };
+                    self.at = match next {
+                        Some(next) => DemandAt::Datagrams {
+                            offset,
+                            at: Some(next),
+                        },
+                        None => DemandAt::Datagrams {
+                            offset: offset.saturating_add(1),
+                            at: None,
+                        },
+                    };
+                    counted(self.count, Count::walked);
+                    if let Some(demand) =
+                        core.datagram_demand(self.now, index, socket, number, place)
+                    {
+                        return Some(demand);
+                    }
+                }
+                DemandAt::Done => return None,
+            }
+        }
     }
 }
 
