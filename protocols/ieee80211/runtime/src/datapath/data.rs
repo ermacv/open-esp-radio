@@ -144,7 +144,7 @@ where
             while taken < TX_DEPTH {
                 let msdu = match deferred.take() {
                     Some(msdu) => msdu,
-                    None => match network.transmit.try_receive_with(Option::take) {
+                    None => match network.transmit.try_receive_held_with(Option::take) {
                         Ok(Some(Outgoing {
                             memory,
                             length,
@@ -194,6 +194,8 @@ where
                 }
             }
         }
+        // The burst's slots go back to the network at once.
+        network.transmit.commit();
         // The budget ran out while the network still has MSDUs the standby
         // may take.
         if (yielded || taken >= TX_DEPTH) && self.accepts() && !network.transmit.is_empty() {
@@ -457,11 +459,11 @@ where
     }
 
     /// Give the network the memory of ended frames while its queue has
-    /// room, as one burst: a network waiting for its first return is told
-    /// once, after the burst's last ([`SlotSender::try_send_held_with`]),
+    /// room, as one burst: the burst is published at once at its end
+    /// ([`SlotSender::try_stage_with`]), which tells a waiting network once,
     /// so its turn finds all of them, a whole Block Ack's when the queue
-    /// holds it. The burst's end tells a network that armed meanwhile; one
-    /// that armed before any fill rechecks the queue at its arming.
+    /// holds it. One that armed before the publication rechecks the queue
+    /// at its arming.
     pub(super) fn return_freed<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -484,7 +486,7 @@ where
                 break;
             };
             let mut memory = Some(memory);
-            let _sent = network.returned.try_send_held_with(|slot| {
+            let _sent = network.returned.try_stage_with(|slot| {
                 *slot = memory.take();
                 Ok::<_, core::convert::Infallible>(())
             });

@@ -150,7 +150,7 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
     /// Take back every memory the station returned: each waits with its
     /// frame's end until that end is handed on.
     fn take_returned(&mut self) {
-        while let Ok(Some(ended)) = self.returned.try_receive_with(Option::take) {
+        while let Ok(Some(ended)) = self.returned.try_receive_held_with(Option::take) {
             let slot = self.pool.slot(ended.memory);
             let place = P::place(&slot);
             // One end a buffer, and this holds an end for every buffer: no
@@ -159,6 +159,8 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
                 self.give(slot);
             }
         }
+        // The read slots go back to the station at once.
+        self.returned.commit();
     }
 
     /// `slot` is free again.
@@ -270,7 +272,7 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
             length,
             priority,
         });
-        let _sent = self.transmit.try_send_held_with(|place| {
+        let _sent = self.transmit.try_stage_with(|place| {
             *place = outgoing.take();
             Ok::<_, core::convert::Infallible>(())
         });

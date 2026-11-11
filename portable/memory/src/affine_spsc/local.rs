@@ -41,6 +41,8 @@ impl<T, const DEPTH: usize, C: SpscCursor> LocalSpscSender<'_, T, DEPTH, C> {
 impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscSender<'_, T, DEPTH, C> {
     /// Lend synchronous local publications while suspending this endpoint.
     pub fn borrow_local(&mut self) -> LocalSpscSender<'_, T, DEPTH, C> {
+        // A local publication follows every value this endpoint staged.
+        self.publish();
         LocalSpscSender {
             queue: self.queue,
             local: PhantomData,
@@ -65,6 +67,8 @@ impl<T, const DEPTH: usize, C: SpscCursor> LocalSpscReceiver<'_, T, DEPTH, C> {
 impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscReceiver<'_, T, DEPTH, C> {
     /// Lend the single local consumer while suspending this endpoint.
     pub fn borrow_local(&mut self) -> LocalSpscReceiver<'_, T, DEPTH, C> {
+        // A local read follows every cell this endpoint took, freed first.
+        self.release();
         LocalSpscReceiver {
             queue: self.queue,
             local: PhantomData,

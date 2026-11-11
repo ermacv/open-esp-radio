@@ -289,3 +289,121 @@ fn cached_placement_transfers_received_owners_and_drops_only_the_queued_owner() 
     assert_eq!(dropped[0].load(Ordering::SeqCst), 1);
     assert_eq!(dropped[1].load(Ordering::SeqCst), 1);
 }
+
+/// A value whose drops are counted, to show each owner ends once.
+struct Counted(u8, Arc<AtomicUsize>);
+
+impl Drop for Counted {
+    fn drop(&mut self) {
+        self.1.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// Staged values stay unseen until one publication, which shows them all
+/// in order; a short batch stops at the free cells and hands the value
+/// back; around the ring's end the cursors keep their order.
+#[test]
+fn a_staged_batch_publishes_once_in_order_around_the_ring() {
+    let mut queue = AffineSpscQueue::<u8, 4>::new();
+    let (mut sender, mut receiver) = queue.split();
+    for round in 0_u8..10 {
+        let base = round * 10;
+        // Three in, so each round's cells wrap past the ring's end.
+        for n in 0..3 {
+            assert!(sender.stage(base + n).is_ok());
+        }
+        assert_eq!(sender.staged(), 3);
+        assert_eq!(sender.free_capacity(), 1, "staged cells are not free");
+        assert!(receiver.is_empty(), "nothing is seen before publication");
+        sender.publish();
+        assert_eq!(receiver.len(), 3);
+        for n in 0..3 {
+            assert_eq!(receiver.take(), Some(base + n));
+        }
+        assert_eq!(receiver.take(), None);
+        // Until released, the taken cells are not the producer's.
+        assert_eq!(sender.free_capacity(), 1);
+        receiver.release();
+        assert_eq!(sender.free_capacity(), 4);
+    }
+    // A short batch: four cells, a fifth value comes back unstaged.
+    for n in 0..4 {
+        assert!(sender.stage(n).is_ok());
+    }
+    assert_eq!(sender.stage(9).unwrap_err().0, 9);
+    sender.publish();
+    assert_eq!(receiver.try_receive(), Ok(0));
+}
+
+/// Ordinary sends and receives keep the order of staged and taken ones: a
+/// send publishes what was staged before it, a receive frees what was
+/// taken before it, and so do local loans.
+#[test]
+fn single_operations_follow_the_batches_before_them() {
+    let mut queue = AffineSpscQueue::<u8, 4>::new();
+    let (mut sender, mut receiver) = queue.split();
+    assert!(sender.stage(1).is_ok());
+    assert!(sender.try_send(2).is_ok());
+    assert_eq!(receiver.take(), Some(1));
+    assert_eq!(receiver.try_receive(), Ok(2));
+    assert_eq!(sender.free_capacity(), 4, "the taken cell was freed first");
+    assert!(sender.stage(3).is_ok());
+    assert!(sender.borrow_local().try_send(4).is_ok());
+    assert_eq!(receiver.take(), Some(3));
+    assert_eq!(receiver.borrow_local().try_receive(), Ok(4));
+    assert_eq!(sender.free_capacity(), 4);
+}
+
+/// Every owner ends once: a value taken is moved out once and the queue
+/// drops only what stays published and untaken.
+#[test]
+fn taken_owners_end_once() {
+    let drops = Arc::new(AtomicUsize::new(0));
+    let mut queue = AffineSpscQueue::<Counted, 3>::new();
+    {
+        let (sender, mut receiver) = queue.split();
+        assert!(sender.try_send(Counted(1, drops.clone())).is_ok());
+        assert!(sender.try_send(Counted(2, drops.clone())).is_ok());
+        let first = receiver.take().map(|value| value.0);
+        assert_eq!(first, Some(1));
+        assert_eq!(drops.load(Ordering::SeqCst), 1, "the taken value ended");
+        receiver.release();
+    }
+    assert_eq!(drops.load(Ordering::SeqCst), 1, "the second is the queue's");
+    drop(queue);
+    assert_eq!(drops.load(Ordering::SeqCst), 2, "and ends with it, once");
+}
+
+/// A producer and a consumer on two threads, each in batches: every value
+/// arrives once and in order.
+#[test]
+fn batches_across_threads_deliver_every_value_once_in_order() {
+    let queue = std::boxed::Box::leak(std::boxed::Box::new(AffineSpscQueue::<u32, 8>::new()));
+    let (mut sender, mut receiver) = queue.split();
+    const VALUES: u32 = 20_000;
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            let mut next = 0_u32;
+            while next < VALUES {
+                let mut batch = 0;
+                while batch < 5 && next < VALUES && sender.stage(next).is_ok() {
+                    next += 1;
+                    batch += 1;
+                }
+                sender.publish();
+                std::thread::yield_now();
+            }
+        });
+        scope.spawn(move || {
+            let mut expect = 0_u32;
+            while expect < VALUES {
+                while let Some(value) = receiver.take() {
+                    assert_eq!(value, expect, "in order, once");
+                    expect += 1;
+                }
+                receiver.release();
+                std::thread::yield_now();
+            }
+        });
+    });
+}

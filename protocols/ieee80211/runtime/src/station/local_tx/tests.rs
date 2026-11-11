@@ -162,6 +162,7 @@ fn a_frame_goes_to_the_station_with_its_length_and_the_priority_its_marking_requ
         ),
     ] {
         let ticket = tx.publish(meta, fill).unwrap();
+        tx.flush();
         let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
             panic!("the frame went to the station");
         };
@@ -196,6 +197,7 @@ fn a_frame_that_is_not_ip_requests_best_effort() {
         state.network_link(),
     );
     tx.publish(plain(42), octets).unwrap();
+    tx.flush();
     let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
         panic!("the frame went to the station");
     };
@@ -227,6 +229,7 @@ fn a_down_link_refuses_before_any_buffer_or_fill() {
     // Both buffers are still free.
     tx.publish(plain(42), octets).unwrap();
     tx.publish(plain(42), octets).unwrap();
+    tx.flush();
     assert!(receiver.try_receive_with(Option::take).is_ok());
 }
 
@@ -301,6 +304,7 @@ fn no_buffer_or_a_full_queue_refuses_before_the_frame_is_written() {
         Err(Unpublished::Port(PortRefusal::NoRoom))
     );
     // The station takes one frame: room in the queue, still no buffer.
+    tx.flush();
     assert!(receiver.try_receive_with(Option::take).is_ok());
     assert_eq!(
         tx.publish(plain(42), unreachable_fill("no buffer")),
@@ -329,6 +333,7 @@ fn a_failed_fill_comes_back_as_the_fill_s_and_keeps_the_buffer() {
         tx.publish(plain(42), |_| Err(Declined)),
         Err(Unpublished::Fill(Declined))
     );
+    tx.flush();
     assert!(matches!(
         receiver.try_receive_with(Option::take),
         Err(_) | Ok(None)
@@ -361,6 +366,7 @@ fn a_buffer_frees_only_when_its_end_is_handed_on() {
     let second = tx.publish(plain(42), octets).unwrap();
     assert_ne!(first, second);
     for _ in 0..2 {
+        tx.flush();
         let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
             panic!("the frame went to the station");
         };
@@ -416,6 +422,7 @@ fn a_buffer_the_pool_loses_is_told_lost_and_never_comes_back() {
         state.network_link(),
     );
     let lost = tx.publish(plain(42), octets).unwrap();
+    tx.flush();
     assert!(
         matches!(receiver.try_receive_with(Option::take), Err(_) | Ok(None)),
         "nothing reaches the station"
@@ -465,6 +472,7 @@ fn a_buffer_keeps_the_run_its_last_frame_left() {
             Ok::<_, Declined>(())
         })
         .unwrap();
+    tx.flush();
     let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
         panic!("the frame went to the station");
     };
@@ -508,6 +516,7 @@ fn room_is_ready_only_with_a_free_buffer_and_room_to_hand_it_on() {
     tx.publish(plain(42), octets).unwrap();
     tx.publish(plain(42), octets).unwrap();
     assert!(tx.poll_room(&mut cx).is_pending());
+    tx.flush();
     let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
         panic!("the frame went to the station");
     };
@@ -594,6 +603,7 @@ fn every_buffer_given_is_held() {
             .map(|place| u8::try_from(place).unwrap())
             .collect::<Vec<_>>()
     );
+    tx.flush();
     while receiver
         .try_receive_with(Option::take)
         .is_ok_and(|frame| frame.is_some())
@@ -635,6 +645,7 @@ fn a_burst_holds_the_places_it_read_until_its_end() {
     tx.flush();
     // The station takes both and gives them back.
     for _ in 0..TX {
+        tx.flush();
         let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
             panic!("the frame went to the station");
         };
