@@ -61,9 +61,9 @@ pub trait Binding: Sized + 'static {
     /// [`crate::AcrossHarts`] with the executor signals the two harts raise
     /// for the network's task and the datapath actor.
     type Notifies: crate::Notifies;
-    /// The network end's transmit memory over the pool buffers the port
-    /// does not hold, and the network stack's packets it takes.
-    type TxSupply: crate::NetworkTxSupply;
+    /// The network's transmit end over the pool buffers the port does not
+    /// hold.
+    type TxEnd: crate::NetworkTxEnd<Self::Notifies>;
     /// The minting authority of the port's installations, once.
     fn take_installations() -> Option<radio::Installations<Self>>;
     /// The image records why the station restarted; the chip runs on.
@@ -557,13 +557,9 @@ pub(crate) struct ServiceRunner<W: Binding> {
 pub type StationExit = crate::station_end::StationExitOf<InitializationError>;
 /// The station's link and receive end.
 pub type StationNetwork<W> = Network<'static, <W as Binding>::Notifies>;
-/// The station's transmit end over `W`'s transmit memory and its packets.
-pub type StationTransmit<W> = crate::NetworkTransmit<
-    'static,
-    <W as Binding>::Notifies,
-    <<W as Binding>::TxSupply as crate::NetworkTxSupply>::Packet,
-    <W as Binding>::TxSupply,
->;
+/// The station's transmit end `W` takes.
+pub type StationTransmit<W> =
+    <<W as Binding>::TxEnd as crate::NetworkTxEnd<<W as Binding>::Notifies>>::End;
 #[allow(
     clippy::type_complexity,
     reason = "the five ends of the station's start"
@@ -611,12 +607,10 @@ pub fn station<W: Binding>(
         )
         .unwrap_or_else(|| W::fail(InitializationError::Storage));
     let pool: &'static _ = pool;
-    let supply = <W::TxSupply as crate::NetworkTxSupply>::new(
-        crate::NetworkTx::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx)),
-    );
+    let memory = crate::NetworkTx::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx));
     let (mut control, network, network_transmit, stopper, connection) = storage
         .channels
-        .split(supply)
+        .split(|queues| <W::TxEnd as crate::NetworkTxEnd<W::Notifies>>::end(queues, memory))
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
     let crate::Connection {
         service: connection,

@@ -194,9 +194,10 @@ only after the policy chose it and the port gave the room.
   MCS 0, 4x HE-LTF, 3.2 us GI), then the largest single plan of any rate
   record (32) at 1 Mb/s DSSS. It is a margin, not a statement of accuracy.
 - **Return and settlement are two events.** The station's buffer comes back
-  with its frame's cost (`TxSupply::give`) and waits with that end in
-  `Completions`; the buffer is free again only when the port hands the end
-  on to the policy (`TxBuffers::take_notice`). So no more frames are
+  with its frame's cost and waits with that end in `Completions`, both in
+  the network's one transmit owner (`LocalTx`); the buffer is free again
+  only when the port hands the end on to the policy
+  (`OwnedTransmit::take_notice`). So no more frames are
   unsettled than there are buffers, which is the policy's reservation
   bound (`NETWORK_BUFFERS`). A frame's ticket is its buffer's place among
   the network's (`TxSlot::place`, below `NETWORK_BUFFERS`), and the policy

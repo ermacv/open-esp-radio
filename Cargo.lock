@@ -2807,6 +2807,7 @@ dependencies = [
  "oer-protocols-ieee80211-testing-model",
  "oer-protocols-ieee80211-wire",
  "oer-protocols-network-port",
+ "oer-protocols-network-wire",
  "oer-protocols-radio-port",
  "oer-protocols-radio-regulatory",
  "oer-tools-test-ui-cases",

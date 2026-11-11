@@ -35,24 +35,19 @@
 //! first one.
 
 use super::*;
-use core::task::{Context as TaskContext, Poll};
 use oer_portable_memory::WakingSpscSender;
-use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeStorage;
 use oer_protocols_ieee80211_runtime::egress::{AirtimeEgress, RadioNotice};
-use oer_protocols_ieee80211_runtime::station::{Completions, StationKey, TxRefused, TxSupply};
+use oer_protocols_ieee80211_runtime::station::StationKey;
 use oer_protocols_network_core::{
     ClaimRefused, Group, Interface, InterfaceError, NetworkOwner, OpenRefused, Retired, claim,
 };
-use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, TransmitError, TransmitRefused, TxStorage, Unpublished,
-};
 use oer_protocols_network_runtime::ConfigurationWatch;
 use oer_protocols_network_runtime::{
-    DevicePort, EndCause, Ended, LocalRefused, MemoryPolicy, PortRefusal, Producer, Service,
-    SocketLanes, StopLane, TxBuffers,
+    DevicePort, EndCause, Ended, LocalRefused, MemoryPolicy, Producer, Service, SocketLanes,
+    StopLane,
 };
-use oer_protocols_network_wire::ethernet::{EthernetHeader, HEADER_LEN};
+use oer_protocols_network_wire::ethernet::HEADER_LEN;
 use oer_protocols_network_wire::ip::{Dscp, IPV4_HEADER_LEN};
 use oer_protocols_network_wire::transport::UDP_HEADER_LEN;
 use static_cell::ConstStaticCell;
@@ -66,7 +61,6 @@ pub use oer_protocols_network_core::{
 };
 /// Why a lent buffer no longer holds what the station showed.
 pub use oer_protocols_network_port::FrameLengthError;
-use oer_protocols_network_port::{Held, Slot};
 pub use oer_protocols_network_runtime::{
     Interest, LocalEnd, Next, Observer, Offer, Produce, RESERVE_AHEAD, Refusal, Refused,
     SocketClosed, WatchRefused, Work,
@@ -121,7 +115,7 @@ pub type Delivered =
 pub type NetworkBlock = Block<'static, Brand, BLOCK>;
 
 /// The port of the service over the station.
-type Port = DevicePort<wifi::Network<'static, Notifies>, Transmit, WifiBuffers>;
+type Port = DevicePort<wifi::Network<'static, Notifies>, Transmit>;
 
 /// Names a frame in the station's transmit buffers: its buffer's place
 /// among the network's ([`wifi::TxSlot::place`]), below
@@ -476,256 +470,10 @@ static MEMORY: ConstStaticCell<Memory> = ConstStaticCell::new(Memory {
 });
 static STOP: ConstStaticCell<StopLane> = ConstStaticCell::new(StopLane::new());
 
-/// The transmit buffers no frame holds, and the ends of the frames the
-/// station gave back, in one cell: the supply, which takes back what the
-/// station gave back, and the port, which writes the buffers and hands the
-/// ends on, both run in the network's task, so a lend is never refused for
-/// another's, and one lend serves each step.
-struct FreeSlots {
-    state: ClaimCell<SlotState>,
-    freed: AtomicWaker,
-}
-
-/// What [`FreeSlots`] holds.
-struct SlotState {
-    slots: heapless::Vec<wifi::TxSlot, { wifi::NETWORK_BUFFERS }>,
-    /// What the station gave back, each with its frame's end, until the port
-    /// hands the end on: only then is the buffer free again.
-    ended: Completions<wifi::TxSlot, TxTicket, { wifi::NETWORK_BUFFERS }>,
-}
-
-impl FreeSlots {
-    fn any(&self) -> bool {
-        self.state
-            .lend(|state| !state.slots.is_empty())
-            .unwrap_or(false)
-    }
-
-    fn take(&self) -> Option<wifi::TxSlot> {
-        self.state.lend(|state| state.slots.pop()).ok().flatten()
-    }
-
-    /// The station gave `slot` back, its frame ended so (`end`): it waits
-    /// with that end for the port.
-    fn ended(&self, slot: wifi::TxSlot, end: TxEnd) {
-        let ticket = slot.place();
-        let mut slot = Some(slot);
-        // Only the network's task lends this, so a lend is never refused.
-        // One end a buffer, and this holds an end for every buffer: no end
-        // is refused. Were one, its buffer would be free again at once.
-        let _held = self.state.lend(|state| {
-            let refused = slot
-                .take()
-                .and_then(|slot| state.ended.returned(slot, ticket, end).err());
-            if let Some(slot) = refused {
-                let _more_than_the_pool_holds = state.slots.push(slot);
-            }
-        });
-        self.freed.wake();
-    }
-
-    /// The station took the frame of `ticket` and lost its buffer.
-    fn lost(&self, ticket: TxTicket) {
-        let _held = self.state.lend(|state| state.ended.lost(ticket));
-        self.freed.wake();
-    }
-
-    /// The next end for the egress policy, the link now `link`: its buffer is
-    /// free again from here, in the same lend.
-    fn take_notice(&self, link: oer_protocols_network_port::LinkSnapshot) -> Option<TxNotice> {
-        let notice = self
-            .state
-            .lend(|state| {
-                let (notice, slot) = state.ended.take_notice(link)?;
-                if let Some(slot) = slot {
-                    let _more_than_the_pool_holds = state.slots.push(slot);
-                }
-                Some(notice)
-            })
-            .ok()
-            .flatten()?;
-        self.freed.wake();
-        Some(notice)
-    }
-
-    /// Whether an end waits for the port.
-    fn notice_waiting(&self, link: oer_protocols_network_port::LinkSnapshot) -> bool {
-        self.state
-            .lend(|state| state.ended.waiting(link))
-            .unwrap_or(false)
-    }
-
-    /// A slot a refusal here drops goes back to the station's pool.
-    fn give(&self, slot: wifi::TxSlot) {
-        let mut slot = Some(slot);
-        let _held = self.state.lend(|state| {
-            if let Some(slot) = slot.take() {
-                let _more_than_the_pool_holds = state.slots.push(slot);
-            }
-        });
-        self.freed.wake();
-    }
-}
-
-static FREE: FreeSlots = FreeSlots {
-    state: ClaimCell::new(),
-    freed: AtomicWaker::new(),
-};
-
-/// A frame written in a transmit buffer, from its start.
-pub struct WrittenFrame {
-    slot: wifi::TxSlot,
-    length: usize,
-}
-
-impl EthernetFrame for WrittenFrame {
-    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        let bytes = self
-            .slot
-            .bytes_mut()
-            .get(..self.length)
-            .ok_or(FrameLengthError::OutsideStorage)?;
-        let (header, payload) =
-            EthernetHeader::parse(bytes).map_err(|_| FrameLengthError::TooShort)?;
-        Ok(EthernetFrameView {
-            destination: header.destination,
-            source: header.source,
-            ether_type: header.ether_type.value(),
-            payload,
-        })
-    }
-}
-
-/// The packet a transmission hands the station.
-pub(super) type TxPacket = WrittenFrame;
-
-/// The station's end of the transmit buffers.
-pub struct WifiTx {
-    publisher: wifi::TxPublisher,
-}
-
-impl wifi::NetworkTxSupply for WifiTx {
-    type Packet = TxPacket;
-    fn new(tx: wifi::NetworkTx) -> Self {
-        let (publisher, slots) = tx.into_parts();
-        let mut free = heapless::Vec::new();
-        for slot in slots {
-            // The vector holds every buffer the network does.
-            let _more_than_the_pool_holds = free.push(slot);
-        }
-        // One station's start per boot: a second keeps the first's state.
-        let _installed = FREE.state.install(SlotState {
-            slots: free,
-            ended: Completions::new(),
-        });
-        Self { publisher }
-    }
-}
-
-impl TxSupply<TxPacket> for WifiTx {
-    type Memory = wifi::TxMemory;
-    /// A frame comes in its own buffer, so this says whether the next one has
-    /// any: the transmit end's room covers the buffers.
-    fn available(&self) -> bool {
-        FREE.any()
-    }
-    fn write(&mut self, frame: TxPacket) -> Result<wifi::TxMemory, TxRefused<TxPacket>> {
-        let WrittenFrame { slot, length } = frame;
-        let ticket = slot.place();
-        self.publisher
-            .publish(slot, 0, length)
-            .map_err(|refused| match refused {
-                wifi::TxPublishRefused::Range(slot) => TxRefused::Kept(TransmitRefused {
-                    frame: WrittenFrame { slot, length },
-                    reason: TransmitError::InvalidLength(FrameLengthError::TooLong),
-                }),
-                wifi::TxPublishRefused::Lost => {
-                    // The port took it: its reservation settles as lost,
-                    // and its buffer stays out of reach for good.
-                    FREE.lost(ticket);
-                    TxRefused::Lost
-                }
-            })
-    }
-    fn give(&mut self, memory: wifi::TxMemory, end: TxEnd) {
-        FREE.ended(self.publisher.slot(memory), end);
-    }
-}
-
-/// The port's end of the transmit buffers, and the link the station
-/// publishes, whose epoch keys its air. Its name is public only for the
-/// sealed bind of a [`ReceiveMode`]; nothing outside makes one.
-#[doc(hidden)]
-pub struct WifiBuffers {
-    link: &'static wifi::NetworkLinkSource<Notifies>,
-    /// The run of one octet each buffer holds from the last frame written
-    /// into it, by its place, which runs to that frame's end. Nothing else
-    /// writes a run's octets: the station writes its MPDU header in front of
-    /// the frame's payload, and on a shorter header moves the payload down
-    /// in place, which moves octets of a run ending at the frame's end onto
-    /// octets of it (`write_mpdu`,
-    /// `protocols/ieee80211/core/roles/sta/src/data/plane.rs`); the
-    /// hardware's MIC and FCS room lies behind the frame, and a retry goes
-    /// from the octets as they are.
-    held: [Option<Held>; wifi::NETWORK_BUFFERS],
-}
-
-impl TxBuffers for WifiBuffers {
-    type Frame = WrittenFrame;
-    type Ticket = TxTicket;
-    type Notice = TxNotice;
-    fn ticket(&self, frame: &WrittenFrame) -> TxTicket {
-        frame.slot.place()
-    }
-    fn take_notice(&mut self) -> Option<TxNotice> {
-        FREE.take_notice(self.link.snapshot())
-    }
-    fn notice_waiting(&self) -> bool {
-        FREE.notice_waiting(self.link.snapshot())
-    }
-    fn available(&self) -> bool {
-        FREE.any()
-    }
-    fn poll_free(&mut self, cx: &mut TaskContext<'_>) -> Poll<()> {
-        FREE.freed.register(cx.waker());
-        if FREE.any() {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
-    }
-    fn write<E>(
-        &mut self,
-        length: usize,
-        fill: impl FnOnce(&mut Slot<'_>) -> Result<(), E>,
-    ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
-        let mut slot = FREE.take().ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
-        let held = self.held.get_mut(usize::from(slot.place()));
-        // A frame longer than a buffer is the port's refusal, before any
-        // fill; a fill's own failure stays the fill's.
-        let written = match (slot.bytes_mut().get_mut(..length), held) {
-            (Some(bytes), Some(held)) => {
-                let mut room = Slot::new(bytes, held.take());
-                let filled = fill(&mut room).map_err(Unpublished::Fill);
-                // Whatever the fill did, the buffer holds what the room says.
-                *held = room.held();
-                filled
-            }
-            (Some(bytes), None) => fill(&mut Slot::new(bytes, None)).map_err(Unpublished::Fill),
-            (None, _) => Err(Unpublished::Port(PortRefusal::BadFrame)),
-        };
-        match written {
-            Ok(()) => Ok(WrittenFrame { slot, length }),
-            Err(unpublished) => {
-                FREE.give(slot);
-                Err(unpublished)
-            }
-        }
-    }
-    fn restore(&mut self, frame: WrittenFrame) {
-        FREE.give(frame.slot);
-    }
-}
+/// The station's transmit end the network takes: it owns the network's
+/// transmit buffers, and the network stack writes each frame in the buffer
+/// it goes to the station in.
+pub(super) type TxEnd = wifi::LocalEnd;
 
 /// The ports a network's sockets hold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -814,14 +562,7 @@ impl<P: Produce + 'static, M: TransmitMode, R: ReceiveMode> Network<P, M, R> {
         let (end, watch): (&'static LocalEnd, &'static ConfigurationWatch) = (end, watch);
         let (stop, stopping) = stop.split();
         let link = network.link_source();
-        let port = DevicePort::new(
-            network,
-            transmit,
-            WifiBuffers {
-                link,
-                held: [None; wifi::NETWORK_BUFFERS],
-            },
-        );
+        let port = DevicePort::new(network, transmit);
         let owner = NetworkOwner::new(brand, interface, pool, port);
         let running = service.insert(
             Service::with_producer(

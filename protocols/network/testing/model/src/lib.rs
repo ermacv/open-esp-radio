@@ -447,9 +447,10 @@ impl FramePort for Medium {
 
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<Ticket, Unpublished<NoRoom, E>> {
+        let length = meta.length;
         let mut state = self.0.borrow_mut();
         if state.refusals > 0 {
             state.refusals = state.refusals.saturating_sub(1);

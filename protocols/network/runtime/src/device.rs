@@ -1,99 +1,38 @@
 //! The port of the new stack over a device of the Ethernet contract.
 
-use core::task::{Context, Poll};
+use core::task::Context;
 
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FramePort, FrameSource, Holding, Keep, LentFrame,
-    LinkSnapshot, NetDevice, NetTransmit, ReceivedFrame, Taken, TransmitError, Unpublished,
+    EthernetFrameView, FrameMeta, FramePort, FrameSource, Holding, Keep, LentFrame, LinkSnapshot,
+    NetDevice, OwnedTransmit, PortRefusal, ReceivedFrame, Taken, Unpublished,
 };
-
-/// The memory frames are written in, in the device's own transmit buffers, so a
-/// frame goes out where it was written.
-pub trait TxBuffers {
-    /// A written frame, as the device takes it.
-    type Frame: EthernetFrame;
-    /// Names one frame the device took.
-    type Ticket;
-    /// The end of a frame the device took, as the egress policy hears it.
-    type Notice;
-
-    /// Whether a buffer is free.
-    fn available(&self) -> bool;
-
-    /// As [`Self::available`], registering `cx` for the next free buffer.
-    fn poll_free(&mut self, cx: &mut Context<'_>) -> Poll<()>;
-
-    /// Write a frame of `length` octets by `fill` in a free buffer.
-    ///
-    /// # Errors
-    /// [`Unpublished`]: a [`PortRefusal`], or the error `fill` returned; the
-    /// buffer stays free. With no free buffer, [`PortRefusal::NoRoom`]
-    /// before any fill.
-    fn write<E>(
-        &mut self,
-        length: usize,
-        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
-    ) -> Result<Self::Frame, Unpublished<PortRefusal, E>>;
-
-    /// A frame the device did not take: its buffer is free again.
-    fn restore(&mut self, frame: Self::Frame);
-
-    /// The ticket of `frame`, which the device is about to take: it names
-    /// the frame's end in a later [`Self::Notice`].
-    fn ticket(&self, frame: &Self::Frame) -> Self::Ticket;
-
-    /// The next end of a frame the device took, for the egress policy. A
-    /// buffer the device gave back is free again only here, when its end is
-    /// handed on: so no more frames are unsettled than there are buffers.
-    fn take_notice(&mut self) -> Option<Self::Notice>;
-
-    /// Whether [`Self::take_notice`] has one.
-    fn notice_waiting(&self) -> bool;
-}
-
-/// Why a frame did not go to the device.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PortRefusal {
-    /// No free buffer, or a full queue: the work stays ready, and the buffer
-    /// or the room wakes the service.
-    NoRoom,
-    /// The link is down: the work stays ready, and a change of link wakes the
-    /// service.
-    LinkDown,
-    /// The frame does not fit a buffer, or the device reads it as malformed:
-    /// the same frame would meet the same, so this is final for it.
-    BadFrame,
-}
 
 /// What a refused frame needs before it is worth another try.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Waiting {
     Nothing,
-    /// A free buffer.
-    Buffer,
-    /// Room in the device's queue.
+    /// A free buffer and room to hand it on.
     Room,
     /// A change of link, which the port always hears.
     Link,
 }
 
-/// A device and its transmit half as the port of a service.
-pub struct DevicePort<D, T, X> {
+/// A device and the transmit half that owns its buffers, as the port of a
+/// service.
+pub struct DevicePort<D, X> {
     device: D,
-    transmit: T,
-    buffers: X,
+    transmit: X,
     /// What the last refused frame needs.
     waiting: Waiting,
     /// Frames the device handed over and could not show.
     unreadable: u32,
 }
 
-impl<D, T, X> DevicePort<D, T, X> {
-    pub const fn new(device: D, transmit: T, buffers: X) -> Self {
+impl<D, X> DevicePort<D, X> {
+    pub const fn new(device: D, transmit: X) -> Self {
         Self {
             device,
             transmit,
-            buffers,
             waiting: Waiting::Nothing,
             unreadable: 0,
         }
@@ -105,7 +44,7 @@ impl<D, T, X> DevicePort<D, T, X> {
     }
 }
 
-impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
+impl<D: NetDevice, X: OwnedTransmit> DevicePort<D, X> {
     /// Give back every frame the device's queue holds and take back the
     /// memory the device returned, each frame's end freeing its buffer with
     /// no policy to settle it: the service that published it ended, its
@@ -117,7 +56,7 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
         self.transmit.reclaim();
         // The service whose policy those frames' ends settle has ended, its
         // account with it: each end frees its buffer and goes to no policy.
-        while self.buffers.take_notice().is_some() {}
+        while self.transmit.take_notice().is_some() {}
         // The exchange ended: no refused frame waits for anything, so a next
         // service over this port is not woken for one.
         self.waiting = Waiting::Nothing;
@@ -143,64 +82,27 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> DevicePort<D, T, X> {
     }
 }
 
-impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort<D, T, X> {
+impl<D, X: OwnedTransmit> FramePort for DevicePort<D, X> {
     type Refusal = PortRefusal;
-    /// The buffers' name of the frame, which their notice of its end
-    /// carries.
+    /// The transmit half's name of the frame, which its notice of the
+    /// frame's end carries.
     type Ticket = X::Ticket;
 
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<X::Ticket, Unpublished<PortRefusal, E>> {
-        // What the device returned is taken back only when the room runs
-        // out: it may be what is asked for. A buffer's own lack the write
-        // says, before any fill.
-        let mut room = self.transmit.has_room();
-        if !room {
-            self.transmit.reclaim();
-            room = self.transmit.has_room();
-        }
-        if !room {
-            self.waiting = Waiting::Room;
-            return Err(Unpublished::Port(PortRefusal::NoRoom));
-        }
-        let frame = match self.buffers.write(length, fill) {
-            Ok(frame) => frame,
-            Err(unpublished) => {
-                if matches!(unpublished, Unpublished::Port(PortRefusal::NoRoom)) {
-                    self.transmit.reclaim();
-                }
-                // A failed fill is the frame's, not the port's: it waits for
-                // nothing.
-                self.waiting = match unpublished {
-                    Unpublished::Port(PortRefusal::NoRoom) => Waiting::Buffer,
-                    Unpublished::Port(PortRefusal::LinkDown) => Waiting::Link,
-                    Unpublished::Port(PortRefusal::BadFrame) | Unpublished::Fill(_) => {
-                        Waiting::Nothing
-                    }
-                };
-                return Err(unpublished);
+        let published = self.transmit.publish(meta, fill);
+        // A failed fill is the frame's, not the port's: it waits for nothing.
+        self.waiting = match &published {
+            Err(Unpublished::Port(PortRefusal::NoRoom)) => Waiting::Room,
+            Err(Unpublished::Port(PortRefusal::LinkDown)) => Waiting::Link,
+            Ok(_) | Err(Unpublished::Port(PortRefusal::BadFrame) | Unpublished::Fill(_)) => {
+                Waiting::Nothing
             }
         };
-        let ticket = self.buffers.ticket(&frame);
-        match self.transmit.try_transmit(frame) {
-            Ok(()) => {
-                self.waiting = Waiting::Nothing;
-                Ok(ticket)
-            }
-            Err(refused) => {
-                self.buffers.restore(refused.frame);
-                let (waiting, refusal) = match refused.reason {
-                    TransmitError::LinkDown => (Waiting::Link, PortRefusal::LinkDown),
-                    TransmitError::QueueFull => (Waiting::Room, PortRefusal::NoRoom),
-                    TransmitError::InvalidLength(_) => (Waiting::Nothing, PortRefusal::BadFrame),
-                };
-                self.waiting = waiting;
-                Err(Unpublished::Port(refusal))
-            }
-        }
+        published
     }
 
     fn is_final(refusal: &PortRefusal) -> bool {
@@ -212,7 +114,7 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
     }
 }
 
-impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T, X> {
+impl<D: NetDevice, X: OwnedTransmit> FrameSource for DevicePort<D, X> {
     /// The buffers' notice of a frame's end.
     type Notice = X::Notice;
 
@@ -250,13 +152,7 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
     }
 
     fn take_notice(&mut self) -> Option<X::Notice> {
-        // The notices held come first; once they are out, what the device
-        // returned since becomes the next ones.
-        if let Some(notice) = self.buffers.take_notice() {
-            return Some(notice);
-        }
-        self.transmit.reclaim();
-        self.buffers.take_notice()
+        self.transmit.take_notice()
     }
 
     fn link(&self) -> LinkSnapshot {
@@ -271,15 +167,11 @@ impl<D: NetDevice, T: NetTransmit, X: TxBuffers> FrameSource for DevicePort<D, T
         // memory comes home too. Its room wakes only a refused frame that
         // waits for room.
         let has_room = self.transmit.poll_room(cx).is_ready();
-        let ended = self.buffers.notice_waiting();
-        // Only what a refused frame needs: a free queue with the link down
-        // or no buffer would wake the service to the same refusal, for ever,
-        // and an idle port needs nothing.
-        let room = match self.waiting {
-            Waiting::Nothing | Waiting::Link => false,
-            Waiting::Room => has_room,
-            Waiting::Buffer => self.buffers.poll_free(cx).is_ready(),
-        };
+        let ended = self.transmit.notice_waiting();
+        // Only what a refused frame needs: room with the link down would
+        // wake the service to the same refusal, for ever, and an idle port
+        // needs nothing.
+        let room = self.waiting == Waiting::Room && has_room;
         received || link || room || ended
     }
 }

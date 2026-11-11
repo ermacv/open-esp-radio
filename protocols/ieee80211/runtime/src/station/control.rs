@@ -102,6 +102,13 @@ impl<N: Notifies> State<N> {
         self.status.set(status);
         self.network.publish(status.link, self.floor.get());
     }
+    /// Publish `link` as the station's, as its service does.
+    #[cfg(test)]
+    pub(crate) fn set_link(&self, link: LinkSnapshot) {
+        let mut status = self.status.get();
+        status.link = link;
+        self.set_status(status);
+    }
     /// The service retired or its lifecycle was lost.
     fn ended(&self) -> bool {
         self.status.get().stopped || self.tasks.is_poisoned()

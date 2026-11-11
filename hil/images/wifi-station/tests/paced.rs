@@ -78,9 +78,10 @@ impl FramePort for Port {
 
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<(), E>> {
+        let length = meta.length;
         let mut frame = vec![0; length];
         fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None))
             .map_err(Unpublished::Fill)?;

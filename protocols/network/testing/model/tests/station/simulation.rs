@@ -64,7 +64,7 @@ use oer_protocols_ieee80211_runtime::lifecycle::{
 };
 use oer_protocols_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
 use oer_protocols_ieee80211_runtime::station::{
-    self as runtime, Control, DeviceTransmit, FrameCost, OperationEnd, Outgoing, RX_COPIED_DEPTH,
+    self as runtime, Control, FrameCost, OperationEnd, Outgoing, RX_COPIED_DEPTH,
     Received as StationReceived, ReconnectPolicy, RxBlockAckStorage, ServiceCommand, ServiceOutput,
     State, StationAir, StopPolicy, TxEnded,
 };
@@ -76,20 +76,17 @@ use oer_protocols_ieee80211_wire::address::{IndividualAddress, OwnAddress};
 use oer_protocols_ieee80211_wire::station::AssociationCapabilities;
 use oer_protocols_network_core::{Configuration, Group, Interface, NetworkOwner, Remote, claim};
 use oer_protocols_network_port::{
-    EthernetFrameView, FramePort, FrameSource, LinkSnapshot, Unpublished,
+    EthernetFrameView, FramePort, FrameSource, LinkSnapshot, PortRefusal, Unpublished,
 };
 use oer_protocols_network_runtime::{
     ConfigurationWatch, DevicePort, EndCause, Ended, LendingLanes, LendingSocket, MemoryPolicy,
-    Observer, PortRefusal, Received as Delivered, Sent, Service, Socket, SocketLanes, StopLane,
+    Observer, Received as Delivered, Sent, Service, Socket, SocketLanes, StopLane,
 };
 use oer_protocols_network_wire::ip::Dscp;
 use oer_protocols_radio_port::{Installations, LocalId, with_local_slot};
 
 use access_point::{AccessPoint, ApConfig, PMK, SSID};
-use composition::{
-    Buffers, Counts, FreeMemory, Memory, NetworkStopState, Observed, StationPort, Supply,
-    WrittenFrame,
-};
+use composition::{Counts, FreeMemory, Memory, ModelPool, NetworkStopState, Observed, StationPort};
 use wired::{DhcpServer, Wired};
 
 /// The station's own address.
@@ -137,8 +134,9 @@ type StationLifecycle<'s> =
     Lifecycle<'s, P<'s>, Callbacks, Issuer<'s>, TxContexts<'s>, GROUPS, Observed>;
 pub type StationControl<'c> = Control<'c, ModelCaps24, COMMANDS>;
 type Device<'c> = runtime::Device<'c, ModelLentRx, RX_DEPTH>;
-type StationTransmit<'c> = DeviceTransmit<'c, WrittenFrame, Supply, TX_DEPTH>;
-type Inner<'c> = DevicePort<Device<'c>, StationTransmit<'c>, Buffers<'c>>;
+type StationTransmit<'c> =
+    runtime::LocalTx<'c, ModelPool, NETWORK_BUFFERS, TX_DEPTH, runtime::SameHart>;
+type Inner<'c> = DevicePort<Device<'c>, StationTransmit<'c>>;
 /// The queued egress, as the product's `Queued` network: the station's air
 /// as one account per association, frames in flight bounded by the
 /// network's buffers.
@@ -578,20 +576,21 @@ impl Idle {
 
 /// The service's port, which the network's task drops at its end while the
 /// rest of the retired service stays for the harness's account.
-pub struct Held<I>(Option<I>);
+/// It counts the ends it hands on, for the harness.
+pub struct Held<I>(Option<I>, Rc<FreeMemory>);
 
 impl<I: FramePort<Refusal = PortRefusal>> FramePort for Held<I> {
     type Refusal = PortRefusal;
     type Ticket = I::Ticket;
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<I::Ticket, Unpublished<PortRefusal, E>> {
         self.0
             .as_mut()
             .ok_or(Unpublished::Port(PortRefusal::LinkDown))?
-            .publish(length, fill)
+            .publish(meta, fill)
     }
     fn is_final(refusal: &PortRefusal) -> bool {
         I::is_final(refusal)
@@ -603,7 +602,7 @@ impl<I: FramePort<Refusal = PortRefusal>> FramePort for Held<I> {
     }
 }
 
-impl<I: FrameSource> FrameSource for Held<I> {
+impl<I: FrameSource<Notice = composition::Notice>> FrameSource for Held<I> {
     type Notice = I::Notice;
     type Held = I::Held;
     fn take_frame(
@@ -620,7 +619,9 @@ impl<I: FrameSource> FrameSource for Held<I> {
             })
     }
     fn take_notice(&mut self) -> Option<I::Notice> {
-        self.0.as_mut().and_then(FrameSource::take_notice)
+        let notice = self.0.as_mut().and_then(FrameSource::take_notice)?;
+        self.1.settle(&notice);
+        Some(notice)
     }
     fn link(&self) -> LinkSnapshot {
         self.0
@@ -1055,18 +1056,17 @@ async fn run<'s, T: 'static>(
         receive_copied: copies_end,
         network: &network_stop,
     };
-    let free = FreeMemory::new(NETWORK_BUFFERS);
+    let (free, slots) = FreeMemory::new(NETWORK_BUFFERS);
     let device = Device::new(delivered, copies, &state);
-    let transmit = DeviceTransmit::new(stack, returned, Supply(free.clone()), &state);
     let link = device.link_source();
-    let mut port = Some(DevicePort::new(
-        device,
-        transmit,
-        Buffers {
-            free: free.clone(),
-            link,
-        },
-    ));
+    let transmit = runtime::LocalTx::new(
+        stack,
+        returned,
+        ModelPool(free.clone()),
+        slots,
+        state.network_link(),
+    );
+    let mut port = Some(DevicePort::new(device, transmit));
 
     // The network's memory, claimed once for every session's core.
     let memory = Box::leak(Box::new([[0_u8; BLOCK]; BLOCKS]));
@@ -1183,7 +1183,7 @@ async fn run<'s, T: 'static>(
         let (pool, brand) = network.take().expect("the network's pool and brand");
         let seed = setup.seed.wrapping_add(index as u64);
         let interface = Interface::dhcp(STATION, MTU, seed).expect("the interface");
-        let owner = NetworkOwner::new(brand, interface, pool, Held(port.take()));
+        let owner = NetworkOwner::new(brand, interface, pool, Held(port.take(), free.clone()));
         let (stop_lane, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let airtime = Box::leak(Box::new(AirtimeStorage::new(
             core::num::NonZeroU32::new(1_000).expect("a quantum"),
@@ -1503,25 +1503,24 @@ mod rate_wake {
         let (_control, runner) = Control::new(application, &state)
             .map_err(|refused| refused.reason)
             .expect("the control");
-        let free = FreeMemory::new(NETWORK_BUFFERS);
+        let (free, slots) = FreeMemory::new(NETWORK_BUFFERS);
         let device = Device::new(delivered, copies, &state);
-        let transmit = DeviceTransmit::new(stack, returned, Supply(free.clone()), &state);
         let link = device.link_source();
-        let port = DevicePort::new(
-            device,
-            transmit,
-            Buffers {
-                free: free.clone(),
-                link,
-            },
+        let transmit = runtime::LocalTx::new(
+            stack,
+            returned,
+            ModelPool(free.clone()),
+            slots,
+            state.network_link(),
         );
+        let port = DevicePort::new(device, transmit);
         let memory = Box::leak(Box::new([[0_u8; BLOCK]; BLOCKS]));
         let (pool, brand) = claim::<Net, BLOCK, BLOCKS>(memory)
             .map_err(|refused| refused.reason)
             .expect("the network's brand");
         let interface =
             Interface::new(STATION, [192, 0, 2, 100], 24, None, MTU).expect("the interface");
-        let owner = NetworkOwner::new(brand, interface, pool, Held(Some(port)));
+        let owner = NetworkOwner::new(brand, interface, pool, Held(Some(port), free.clone()));
         let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
         let airtime = Box::leak(Box::new(AirtimeStorage::new(
             core::num::NonZeroU32::new(1_000).expect("a quantum"),

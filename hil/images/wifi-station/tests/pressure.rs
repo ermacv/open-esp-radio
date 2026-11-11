@@ -43,7 +43,7 @@ impl FramePort for Port {
     type Ticket = ();
     fn publish<E>(
         &mut self,
-        _: usize,
+        _: oer_protocols_network_port::FrameMeta,
         _: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<(), E>> {
         Err(Unpublished::Port(()))

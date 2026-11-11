@@ -349,9 +349,10 @@ impl FramePort for LocalPort {
 
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<u32, Unpublished<(), E>> {
+        let length = meta.length;
         let mut line = self.0.borrow_mut();
         line.publishes += 1;
         if let Some((clock, at)) = line.elapse

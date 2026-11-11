@@ -158,9 +158,10 @@ impl FramePort for WirePort {
 
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<u32, Unpublished<bool, E>> {
+        let length = meta.length;
         let mut wire = self.0.borrow_mut();
         wire.refused = wire.full;
         if wire.full {

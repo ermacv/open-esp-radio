@@ -9,7 +9,8 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
 use oer_protocols_network_port::{
-    Candidate, Class, CopyReason, EthernetFrameView, Holding, LinkSnapshot, LinkState, Ready,
+    Candidate, Class, CopyReason, EthernetFrameView, FrameMeta, Holding, LinkSnapshot, LinkState,
+    Ready,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
@@ -205,6 +206,24 @@ pub enum FillFailed {
 }
 
 impl<T: Copy> Frame<'_, T> {
+    /// What the port is told of the frame before it is written: its length,
+    /// and the DSCP its IP header carries, the same field the write puts
+    /// there.
+    pub(crate) fn meta(&self) -> FrameMeta {
+        let dscp = match self {
+            Self::Arp(_) => None,
+            Self::Datagram { headers, .. }
+            | Self::Produced { headers, .. }
+            | Self::Dhcp { headers, .. } => Some(Dscp::from_field(headers.ip.services.dscp())),
+            // An echo reply's header is written best effort.
+            Self::Echo { .. } => Some(BEST_EFFORT),
+        };
+        FrameMeta {
+            length: self.length(),
+            dscp,
+        }
+    }
+
     pub(crate) fn length(&self) -> usize {
         match self {
             Self::Arp(frame) => frame.len(),

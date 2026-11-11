@@ -307,6 +307,40 @@ pub type StationAir<'a, N> =
 pub struct NetworkTransmit<'a, N: Notifies, P, S: runtime::TxSupply<P>> {
     inner: runtime::DeviceTransmit<'a, P, S, TX_DEPTH, Ch<N>>,
 }
+impl<'a, N: Notifies, P, S: runtime::TxSupply<P>> NetworkTransmit<'a, N, P, S> {
+    /// The transmit end over `queues` and the free memory `supply`, which
+    /// takes the stack's packets `P`.
+    pub fn over(queues: TxQueues<'a, N, S::Memory>, supply: S) -> Self {
+        Self {
+            inner: runtime::DeviceTransmit::new(
+                queues.transmit,
+                queues.returned,
+                supply,
+                queues.state,
+            ),
+        }
+    }
+}
+/// The network's ends of the station's transmit queues, and the link they
+/// serve: the queue a frame goes to the station by, the queue its memory
+/// comes back by.
+pub struct TxQueues<'a, N: Notifies, M> {
+    pub transmit: oer_portable_memory::SlotSender<
+        'a,
+        Option<runtime::Outgoing<M>>,
+        TX_DEPTH,
+        Station<N>,
+        Net<N>,
+    >,
+    pub returned: oer_portable_memory::SlotReceiver<
+        'a,
+        Option<runtime::TxEnded<M>>,
+        TX_DEPTH,
+        Net<N>,
+        Station<N>,
+    >,
+    pub state: &'a runtime::State<Ch<N>>,
+}
 impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSupply<P>> NetTransmit
     for NetworkTransmit<'_, N, P, S>
 {
@@ -548,11 +582,7 @@ impl<N: Notifies> NetworkStopper<'_, N> {
     /// The composition has no network side: it gives up the station's
     /// network end, the station delivers no frame (each received MSDU's
     /// buffer goes back at once), and its stop needs no answer.
-    pub fn no_network<P, S: runtime::TxSupply<P>>(
-        self,
-        network: Network<'_, N>,
-        transmit: NetworkTransmit<'_, N, P, S>,
-    ) {
+    pub fn no_network<E>(self, network: Network<'_, N>, transmit: E) {
         drop((network, transmit));
         self.state.absent.store(true, Ordering::Release);
         self.report(|state| &state.stopped);
@@ -640,31 +670,35 @@ where
     }
 }
 impl<N: Notifies, M> Channels<N, M> {
-    /// The five ends, the network's transmit end over the free memory
-    /// `supply` and the stack's packets `P`.
+    /// The five ends, the network's transmit end built by `transmit` over
+    /// the network's ends of the transmit queues.
     #[allow(clippy::type_complexity, reason = "the five ends of one split")]
-    pub fn split<P, S: runtime::TxSupply<P, Memory = M>>(
-        &mut self,
-        supply: S,
+    pub fn split<'s, E>(
+        &'s mut self,
+        transmit: impl FnOnce(TxQueues<'s, N, M>) -> E,
     ) -> Result<
         (
-            Control<'_, N>,
-            Network<'_, N>,
-            NetworkTransmit<'_, N, P, S>,
-            NetworkStopper<'_, N>,
-            Connection<'_, N, M>,
+            Control<'s, N>,
+            Network<'s, N>,
+            E,
+            NetworkStopper<'s, N>,
+            Connection<'s, N, M>,
         ),
         runtime::ControlCreateError,
     > {
         self.network_stop.reset();
         let (send, commands) = self.commands.split();
-        let (tx, transmit) = self.tx.split(|| None);
+        let (tx, station_transmit) = self.tx.split(|| None);
         let (returned, back) = self.returned.split(|| None);
         let (receive, rx) = self.rx.split();
         let (receive_copied, rx_copied) = self.rx_copied.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
         let network = runtime::Device::new(rx, rx_copied, &self.state);
-        let transmit_end = runtime::DeviceTransmit::new(tx, back, supply, &self.state);
+        let transmit_end = transmit(TxQueues {
+            transmit: tx,
+            returned: back,
+            state: &self.state,
+        });
         Ok((
             Control {
                 inner: control,
@@ -673,9 +707,7 @@ impl<N: Notifies, M> Channels<N, M> {
                 stop: &self.stop,
             },
             Network { inner: network },
-            NetworkTransmit {
-                inner: transmit_end,
-            },
+            transmit_end,
             NetworkStopper {
                 state: &self.network_stop,
             },
@@ -688,7 +720,7 @@ impl<N: Notifies, M> Channels<N, M> {
                 },
                 actor: ActorConnection {
                     network_stop: &self.network_stop,
-                    transmit,
+                    transmit: station_transmit,
                     returned,
                     receive,
                     receive_copied,
@@ -765,8 +797,8 @@ pub mod policy;
 mod supply;
 #[cfg(target_arch = "riscv32")]
 pub use supply::{
-    FRAME_WORD_OFFSET, NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, TxMemory, TxPublishRefused,
-    TxPublisher, TxSlot,
+    FRAME_WORD_OFFSET, LocalEnd, LocalTransmit, NETWORK_BUFFERS, NetworkTx, NetworkTxEnd,
+    NetworkTxSupply, SupplyEnd, TxMemory, TxPublishRefused, TxPublisher, TxSlot,
 };
 #[cfg(any(test, target_arch = "riscv32"))]
 mod prepare;
@@ -869,7 +901,7 @@ pub fn mac_counters() -> MacCounters {
 pub use chip::{
     Bell, Binding, Config, Datapath, DriverExecutor, Event, Events, InitializationError,
     InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner,
-    Storage, station,
+    StationTransmit, Storage, station,
 };
 #[cfg(target_arch = "riscv32")]
 pub use radio::{
@@ -893,25 +925,25 @@ pub use station_end::{
 #[cfg(target_arch = "riscv32")]
 #[macro_export]
 macro_rules! bind_station {
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail,restarted:$restarted}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx:$tx:ty,fail:$fail:path,restarted:$restarted:path $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx:$tx,fail:$fail,restarted:$restarted}
    notifies: $crate::SameHart, storage: $crate::Storage::new());
  };
  // The network end runs on another hart: `network` raises the network
  // task's signal, `actor` the datapath actor's, each a notify of the type
  // it names.
- ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path,across_harts:{network:$nt:ty=$network:expr,actor:$at:ty=$actor:expr $(,)?} $(,)?})=>{
-  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx_supply:$tx_supply,fail:$fail,restarted:$restarted}
+ ($vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx:$tx:ty,fail:$fail:path,restarted:$restarted:path,across_harts:{network:$nt:ty=$network:expr,actor:$at:ty=$actor:expr $(,)?} $(,)?})=>{
+  $crate::bind_station!(@bind $vis mod $name {wifi:$wifi,driver:$driver_entry,callbacks:$callbacks,observer:$observer,driver_observer:$driver_observer,sink:$sink,events:$events,tx:$tx,fail:$fail,restarted:$restarted}
    notifies: $crate::AcrossHarts<$nt,$at>, storage: $crate::Storage::across_harts($network,$actor));
  };
- (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx_supply:$tx_supply:ty,fail:$fail:path,restarted:$restarted:path} notifies: $notifies:ty, storage: $storage:expr)=>{
+ (@bind $vis:vis mod $name:ident {wifi:$wifi:ty,driver:$driver_entry:ty,callbacks:$callbacks:ty,observer:$observer:ty,driver_observer:$driver_observer:ty,sink:$sink:ty,events:$events:ty,tx:$tx:ty,fail:$fail:path,restarted:$restarted:path} notifies: $notifies:ty, storage: $storage:expr)=>{
   $vis mod $name {
    use super::*;
    pub struct Binding;
    oer_chips_family_platform_executor::declare_installations!(pub slot);
    impl $crate::Binding for Binding {
     type Id=slot::Id;type Wifi=$wifi;type DriverEntry=$driver_entry;type Callbacks=$callbacks;type Observer=$observer;type DriverObserver=$driver_observer;type Sink=$sink;type Events=$events;
-    type Notifies=$notifies;type TxSupply=$tx_supply;
+    type Notifies=$notifies;type TxEnd=$tx;
     fn take_installations()->Option<$crate::radio::Installations<Self>>{slot::take_static()}
     fn fail(error:$crate::InitializationError)->!{$fail(error)}
     fn restarted(failure:&$crate::failure::LifecycleFailure){$restarted(failure)}
@@ -1021,7 +1053,9 @@ mod tests {
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
         state.reset();
         let mut channels = Channels::<SameHart, ()>::new();
-        let (_, network, transmit, _, _) = channels.split::<Packet, _>(NoMemory).unwrap();
+        let (_, network, transmit, _, _) = channels
+            .split(|queues| NetworkTransmit::<_, Packet, _>::over(queues, NoMemory))
+            .unwrap();
         assert!(state.takes_frames());
         NetworkStopper { state: &state }.no_network(network, transmit);
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
@@ -1038,8 +1072,9 @@ mod tests {
     fn control_and_neutral_device_exist_before_installation_without_minting_a_link_or_consuming_refused_owners()
      {
         let mut channels = Channels::new();
-        let (mut control, mut net, mut transmit, _stopper, connection) =
-            channels.split(NoMemory).unwrap();
+        let (mut control, mut net, mut transmit, _stopper, connection) = channels
+            .split(|queues| NetworkTransmit::<_, Packet, _>::over(queues, NoMemory))
+            .unwrap();
         assert_eq!(control.link(), LinkSnapshot::DOWN);
         assert_eq!(net.link(), LinkSnapshot::DOWN);
         let dropped = Rc::new(Cell::new(0));
@@ -1140,8 +1175,9 @@ mod tests {
         let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
         let waker = core::task::Waker::from(wakes.clone());
         let mut channels = Channels::<SameHart, ()>::new();
-        let (mut control, _network, _transmit, _stopper, connection) =
-            channels.split::<Packet, _>(NoMemory).unwrap();
+        let (mut control, _network, _transmit, _stopper, connection) = channels
+            .split(|queues| NetworkTransmit::<_, Packet, _>::over(queues, NoMemory))
+            .unwrap();
         let mut cx = Context::from_waker(&waker);
         {
             let mut waiting = core::pin::pin!(control.wait_started());

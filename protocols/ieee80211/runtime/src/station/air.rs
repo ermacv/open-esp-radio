@@ -193,6 +193,13 @@ impl<B, T, const N: usize> Completions<B, T, N> {
         self.ended.len()
     }
 
+    /// The buffers the ends waiting hold: a lost frame's holds none.
+    pub fn buffers(&self) -> usize {
+        self.ended
+            .iter()
+            .filter(|completed| completed.buffer.is_some())
+            .count()
+    }
     /// Whether no end waits.
     pub fn is_empty(&self) -> bool {
         self.ended.is_empty()

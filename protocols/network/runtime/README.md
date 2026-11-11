@@ -363,10 +363,13 @@ turn's tally stays on the task's stack either way.
 
 ## The device port
 
-`DevicePort` is a service's port over a `NetDevice` and its `NetTransmit`. It
-publishes into the device's own transmit buffers (`TxBuffers`). A frame the
-device took carries the buffers' ticket, and the buffers' notices are those
-frames' ends, which the egress policy settles its reservations by: a buffer
+`DevicePort` is a service's port over a `NetDevice` and the transmit half
+that owns the device's transmit buffers (`OwnedTransmit`). It publishes into
+those buffers: the transmit half takes a buffer and the room to hand the
+frame on together, once, before any fill, and reads the frame's length and
+DSCP from the `FrameMeta` its publisher gives, not from the written frame. A
+frame the device took carries the transmit half's ticket, and its notices
+are those frames' ends, which the egress policy settles its reservations by: a buffer
 the device gave back is free again only when its end is handed on, so no more
 frames are unsettled than there are buffers. It shows a lent received frame as
 lendable and hands its buffer over when the reader keeps it; a frame the

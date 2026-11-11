@@ -35,6 +35,7 @@ oer-protocols-ieee80211-core-security-rsn = { path = "../core/security/rsn" }
 
 [dev-dependencies]
 oer-protocols-ieee80211-wire = { path = "../wire" }
+oer-protocols-network-wire = { path = "../../network/wire" }
 oer-portable-wire = { path = "../../../portable/wire" }
 oer-protocols-ieee80211-contracts-security = { path = "../contracts/security" }
 oer-portable-crypto = { path = "../../../portable/crypto", features = ["test-support"] }

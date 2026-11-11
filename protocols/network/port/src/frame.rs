@@ -1,12 +1,84 @@
 //! The contract of a port frames are published to and taken from in place, and
 //! of the egress policy that chooses what goes to it.
 
-use core::task::Context;
+use core::task::{Context, Poll};
 
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::device::{EthernetFrame, EthernetFrameView, LinkSnapshot};
 use crate::slot::Slot;
+
+/// Why a port took no frame, which names what it waits for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PortRefusal {
+    /// No free buffer, or a full queue: the work stays ready, and the buffer
+    /// or the room wakes the service.
+    NoRoom,
+    /// The link is down: the work stays ready, and a change of link wakes the
+    /// service.
+    LinkDown,
+    /// The frame does not fit a buffer, or the device reads it as malformed:
+    /// the same frame would meet the same, so this is final for it.
+    BadFrame,
+}
+
+/// The transmit half of one affine Ethernet port that owns the memory its
+/// frames are written in: its free buffers, the queue a frame goes to the
+/// device by, and the ends the device gives back, as one owner on the
+/// network's executor. A frame is written where the device sends it from.
+pub trait OwnedTransmit {
+    /// Names one frame the device took.
+    type Ticket;
+    /// The end of a frame the device took, as the egress policy hears it.
+    type Notice;
+
+    /// Write the frame `meta` describes by `fill` in a free buffer and hand
+    /// it to the device. The buffer and the room to hand it on are taken
+    /// together, once, before any fill; `Ok` says the device took the frame,
+    /// or took it and lost it with its buffer, which its notice says.
+    ///
+    /// # Errors
+    /// [`Unpublished`]: a [`PortRefusal`] before any fill, or the error
+    /// `fill` returned; the buffer stays free.
+    fn publish<E>(
+        &mut self,
+        meta: FrameMeta,
+        fill: impl FnOnce(&mut Slot<'_>) -> Result<(), E>,
+    ) -> Result<Self::Ticket, Unpublished<PortRefusal, E>>;
+
+    /// The next end of a frame the device took, what the device returned
+    /// taken back first when none waits. A buffer the device gave back is
+    /// free again only here, when its end is handed on: so no more frames
+    /// are unsettled than there are buffers.
+    fn take_notice(&mut self) -> Option<Self::Notice>;
+
+    /// Whether [`Self::take_notice`] has one without taking anything back.
+    fn notice_waiting(&self) -> bool;
+
+    /// Take back what the device returned, registering `cx` for its next
+    /// return and for room before observing them: ready when a publication
+    /// would find a free buffer and room to hand it on.
+    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()>;
+
+    /// End a burst of publications: a frame it took may wait for this call
+    /// before its device acts on it.
+    fn flush(&mut self);
+
+    /// Take back what the device returned, without registering anything.
+    fn reclaim(&mut self);
+}
+
+/// What a publisher knows of a frame before it is written: its octets, and
+/// for an IP frame the DSCP its header carries (RFC 2474, clause 3). A port
+/// that prioritises frames by their marking reads it here, not from the
+/// written frame; the publisher writes the same DSCP it names.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FrameMeta {
+    /// The frame's octets, from its Ethernet header to its last.
+    pub length: usize,
+    /// The DSCP of its IP header; `None` for a frame that is not IP.
+    pub dscp: Option<Dscp>,
+}
 
 /// Where a frame goes out, and the one answer to it. Whoever publishes keeps
 /// its own record of what `fill` did, and a port whose answer contradicts that
@@ -18,7 +90,7 @@ pub trait FramePort {
     /// Names one accepted frame, for its later completion.
     type Ticket;
 
-    /// Take room for `length` octets, let `fill` write the frame there and
+    /// Take room for the frame `meta` describes, let `fill` write it there and
     /// accept it. `Ok` says the frame is the port's, and only follows a
     /// `fill` that returned `Ok`. The room comes as a [`Slot`] with the run
     /// the port knows its buffer holds, if it keeps one; what run the room
@@ -36,7 +108,7 @@ pub trait FramePort {
     ///     type Ticket = ();
     ///     fn publish<E>(
     ///         &mut self,
-    ///         _: usize,
+    ///         _: oer_protocols_network_port::FrameMeta,
     ///         _: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ///     ) -> Result<(), Unpublished<(), E>> {
     ///         Err(Unpublished::Fill(Short))
@@ -48,7 +120,7 @@ pub trait FramePort {
     /// [`Unpublished`]: the port accepted nothing.
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: FrameMeta,
         fill: impl FnOnce(&mut Slot<'_>) -> Result<(), E>,
     ) -> Result<Self::Ticket, Unpublished<Self::Refusal, E>>;
 

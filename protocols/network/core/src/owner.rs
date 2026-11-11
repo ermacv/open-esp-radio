@@ -202,7 +202,7 @@ impl<
         }
         let frame = self.core.frame(now, &grant).ok_or(Unsent::Stale)?;
         let mut filled = Filled::Never;
-        let published = self.port.publish(frame.length(), |slot| {
+        let published = self.port.publish(frame.meta(), |slot| {
             let result = frame.write(slot, produce);
             filled = match result {
                 Ok(()) => {

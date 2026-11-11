@@ -35,6 +35,8 @@
 
 mod air;
 pub use air::{Completions, FrameCost, StationAir, StationKey};
+mod local_tx;
+pub use local_tx::{LocalTx, PoolRefused, TxPool};
 mod commands;
 pub mod contract;
 mod events;

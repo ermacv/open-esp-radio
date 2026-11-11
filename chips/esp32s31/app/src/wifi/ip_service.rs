@@ -23,6 +23,10 @@ static TX_SLOTS: TxSlots<wifi::TxSlot, { wifi::NETWORK_BUFFERS - 1 }> = TxSlots:
 /// in [`TX_SLOTS`], where the IP stack writes its packets, and the spare
 /// that a packet from elsewhere is copied into. A packet goes to the
 /// station in the buffer it was written in.
+/// The station's transmit end the IP service takes: it parks or copies
+/// each packet into a transmit buffer.
+pub(super) type TxEnd = wifi::SupplyEnd<WifiTx>;
+
 pub struct WifiTx {
     publisher: wifi::TxPublisher,
     parked: ParkedTx<wifi::TxSlot, { wifi::NETWORK_BUFFERS - 1 }>,
