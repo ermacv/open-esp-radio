@@ -1010,11 +1010,23 @@ where
         self.phase = Phase::TearingDown;
         self.status.running = false;
         self.network.set_link(false);
+        self.return_network_frames();
         while let Some(teardown) = self.engine.stopping_peer() {
             self.teardown(teardown)?;
         }
         self.advance_stop();
         Ok(())
+    }
+
+    /// Hand the network back every frame it gave and none went: those in
+    /// the queues and those still in its transport. Nothing carries them
+    /// once the access point stops serving.
+    fn return_network_frames(&mut self) {
+        let network = &mut self.network;
+        self.queues.drain(|msdu| network.give_back(msdu.memory));
+        while let Some(outgoing) = self.network.take() {
+            self.network.give_back(outgoing.memory);
+        }
     }
 
     /// Queue a teardown of `peer`.
@@ -2183,6 +2195,7 @@ where
     ) -> ApEnd<PortFault<'id, P>> {
         self.homes.status.running = false;
         self.homes.network.set_link(false);
+        self.homes.return_network_frames();
         shared.publish(self.homes.status);
         match halt {
             Halt::Faulted(fault) => {

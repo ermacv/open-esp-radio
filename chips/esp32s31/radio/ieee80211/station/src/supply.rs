@@ -21,6 +21,12 @@ use oer_protocols_network_port::{EthernetFrame, TxStorage};
 pub(crate) const PORT_BUFFERS: u8 = 4;
 /// The pool buffers the network holds.
 pub const NETWORK_BUFFERS: usize = TX_BUFFERS - PORT_BUFFERS as usize;
+const _: () = {
+    // Every network buffer the actor holds at a stop has its place home.
+    if NETWORK_BUFFERS > oer_protocols_ieee80211_runtime::datapath::NETWORK_MEMORY_HELD {
+        panic!("the actor's queues and returns hold every network buffer");
+    }
+};
 /// Where a frame starts in a pool buffer: behind the radio's metadata,
 /// where the data machine reads its Ethernet header.
 const ETHERNET_AT: usize = TX_METADATA_SIZE + MSDU_ETHERNET_OFFSET;

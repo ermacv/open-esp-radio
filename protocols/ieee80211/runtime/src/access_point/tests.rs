@@ -140,6 +140,9 @@ fn sent_controls(air: &oer_protocols_ieee80211_testing_model::ModelAir) -> Vec<u
 /// `$runner`, its `$air`, its network `$device` and the shared `$shared`.
 macro_rules! fixture {
     ($claim:ident, $clock:expr => $runner:ident, $air:ident, $device:ident, $shared:ident) => {
+        fixture!($claim, $clock => $runner, $air, $device, _transmit, $shared);
+    };
+    ($claim:ident, $clock:expr => $runner:ident, $air:ident, $device:ident, $transmit:ident, $shared:ident) => {
         let mut installations = Installations::claim($claim);
         let (install, $air) = Port::install(
             &mut installations,
@@ -214,7 +217,7 @@ macro_rules! fixture {
             GroupKeyId::new(GROUP_KEY_ID).unwrap(),
         );
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
-        let ($device, _transmit, end) =
+        let ($device, mut $transmit, end) =
             network.split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame>();
         let mut $runner = ApRunner::new(
             port,
@@ -1054,4 +1057,54 @@ mod homes;
 #[test]
 fn a_port_with_the_callers_timestamp_rule_serves_beacons() {
     assert_eq!(serves_beacons::<ModelCaps24>(), Ok(()));
+}
+
+/// Frames the network gave and none carried come home when the access point
+/// stops: the transport's places free again, every frame once.
+#[test]
+fn a_stop_returns_the_network_frames_it_never_carried() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, _shared);
+        let frame = || {
+            let mut frame = EthernetFrame::empty();
+            frame
+                .set_parts(MsduParts {
+                    destination: [0x02, 0, 0, 0, 0, 0x09],
+                    source: ACCESS_POINT,
+                    ether_type: 0x0800,
+                    payload: &[0x45; 28],
+                })
+                .unwrap();
+            frame
+        };
+        runner.homes.network.set_link(true);
+        let mut sent = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            sent += 1;
+        }
+        assert_eq!(sent, super::network::AP_TX_DEPTH, "every place taken");
+        // The burst is the access point's once published.
+        transmit.flush();
+        assert!(runner.homes.begin_stop().is_ok());
+        // Up again, as a later run would be: every place is free.
+        runner.homes.network.set_link(true);
+        // The network takes its returns as its turn does.
+        transmit.reclaim();
+        let mut again = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            again += 1;
+        }
+        let why = transmit
+            .try_transmit(frame())
+            .err()
+            .map(|refused| refused.reason);
+        assert_eq!(
+            again,
+            super::network::AP_TX_DEPTH,
+            "every frame came home: {why:?}"
+        );
+    }));
 }

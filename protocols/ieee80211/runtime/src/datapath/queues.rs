@@ -296,17 +296,34 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
         if let Some(served) = self.peer_served.get_mut(peer) {
             *served = served.saturating_add(micros);
         }
-        // Accounts are compared with each other only: keep them small.
+        // Accounts are compared with each other only, and an idle one is
+        // raised to the least active one when it starts: keep them small by
+        // the least active account, idle ones going to nothing.
         if self.peer_served.iter().any(|served| *served > u32::MAX / 2) {
-            let least = self.peer_served.iter().copied().min().unwrap_or(0);
+            let active = self.active;
+            let least = (0..PEERS)
+                .filter(|other| {
+                    u8::try_from(*other).is_ok_and(|other| active & Self::peer_mask(other) != 0)
+                })
+                .filter_map(|other| self.peer_served.get(other).copied())
+                .min()
+                .unwrap_or(u32::MAX);
             for served in &mut self.peer_served {
                 *served = served.saturating_sub(least);
             }
         }
+        let active = self.active;
         if let Some(tids) = self.served.get_mut(peer)
             && tids.iter().any(|served| *served > u32::MAX / 2)
         {
-            let least = tids.iter().copied().min().unwrap_or(0);
+            let least = WmmUserPriority::ALL
+                .into_iter()
+                .filter(|tid| {
+                    QueueId::new(queue.peer(), *tid).is_some_and(|other| active & other.bit() != 0)
+                })
+                .filter_map(|tid| tids.get(usize::from(tid.value())).copied())
+                .min()
+                .unwrap_or(u32::MAX);
             for served in tids {
                 *served = served.saturating_sub(least);
             }

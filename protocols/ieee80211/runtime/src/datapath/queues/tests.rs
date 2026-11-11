@@ -203,3 +203,31 @@ fn a_full_pool_refuses_and_a_drain_returns_every_msdu_once() {
     }
     assert_eq!(any, [0, 1, 2, 3]);
 }
+
+/// A queue that took the air alone for long keeps its account small, so a
+/// queue of its category that starts later shares the air with it rather
+/// than lose every tie to it: accounts never saturate.
+#[test]
+fn a_long_lone_queue_s_account_stays_small_and_a_later_one_shares_the_air() {
+    let mut queues = Station::new();
+    assert!(queues.push(q(BE), msdu(0, BE)).is_ok());
+    for _ in 0..64 {
+        queues.charge(q(BE), estimated(u32::MAX / 8));
+    }
+    for tag in 1..5 {
+        assert!(queues.push(q(BE), msdu(tag, BE)).is_ok());
+        assert!(queues.push(q(BE3), msdu(10 + tag, BE3)).is_ok());
+    }
+    let mut served = Vec::new();
+    for _ in 0..6 {
+        let queue = queues.select(None).unwrap();
+        served.push(queue);
+        let _msdu = queues.pop(queue);
+        queues.charge(queue, estimated(1000));
+    }
+    assert_eq!(
+        served.iter().filter(|queue| **queue == q(BE3)).count(),
+        3,
+        "{served:?}"
+    );
+}
