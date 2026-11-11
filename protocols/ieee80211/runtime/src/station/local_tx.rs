@@ -78,6 +78,11 @@ pub struct LocalTx<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifi
     /// The run of one octet each buffer holds from the last frame written
     /// into it, by its place.
     held: [Option<Held>; SLOTS],
+    /// Places in the queue to the station this burst still holds the right
+    /// to: read once when it ran out, and given back at the burst's end
+    /// ([`OwnedTransmit::flush`]). Only this owner fills the queue and the
+    /// station only empties it, so the places counted stay free until used.
+    places: usize,
     link: &'c super::NetworkLink<N::NetworkWaker>,
 }
 
@@ -100,6 +105,7 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
             free,
             ended: Completions::new(),
             held: [None; SLOTS],
+            places: 0,
             link,
         }
     }
@@ -132,10 +138,15 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
 
     /// The right to one frame, or why there is none.
     fn right(&mut self) -> Result<Right<P::Slot>, PortRefusal> {
-        if self.transmit.free_capacity() == 0 {
+        if self.places == 0 {
+            // The burst's places ran out: the queue's room now, once.
+            self.places = self.transmit.free_capacity();
+        }
+        if self.places == 0 || self.free.is_empty() {
             return Err(PortRefusal::NoRoom);
         }
         let slot = self.free.pop().ok_or(PortRefusal::NoRoom)?;
+        self.places = self.places.saturating_sub(1);
         let place = P::place(&slot);
         Ok(Right { slot, place })
     }
@@ -188,15 +199,19 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
         };
         if let Err(unpublished) = written {
             self.give(slot);
+            // Nothing went into the queue: its place stays the burst's.
+            self.places = self.places.saturating_add(1);
             return Err(unpublished);
         }
         let memory = match self.pool.publish(slot, meta.length) {
             Ok(memory) => memory,
             Err(PoolRefused::Range(slot)) => {
                 self.give(slot);
+                self.places = self.places.saturating_add(1);
                 return Err(Unpublished::Port(PortRefusal::BadFrame));
             }
             Err(PoolRefused::Lost) => {
+                self.places = self.places.saturating_add(1);
                 // The station took it and lost its buffer: its notice says
                 // so, and the buffer stays out of reach for good. This
                 // holds an end for every buffer, so none is refused.
@@ -262,6 +277,9 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
     }
 
     fn flush(&mut self) {
+        // The burst ends: its unused places go back, and the next burst
+        // reads the queue's room again.
+        self.places = 0;
         self.transmit.flush();
     }
 

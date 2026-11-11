@@ -581,3 +581,53 @@ fn every_buffer_given_is_held() {
         "the station took each one"
     );
 }
+
+/// A burst reads the queue's room once and holds its places until its end:
+/// a burst that met a full queue refuses for want of room until the burst
+/// ends, and the next burst sees the room the station made.
+#[test]
+fn a_burst_holds_the_places_it_read_until_its_end() {
+    let mut queue = Queue::new();
+    let mut back = Back::new();
+    let state = State::new();
+    up(&state);
+    let (sender, mut receiver) = queue.split(|| None);
+    let (mut returned, back) = back.split(|| None);
+    let mut tx: Tx<'_> = LocalTx::new(
+        sender,
+        back,
+        Pool::default(),
+        buffers(64),
+        state.network_link(),
+    );
+    // A refused fill gives its place back to the burst: both places stay.
+    assert_eq!(
+        tx.publish(plain(42), |_| Err(Declined)),
+        Err(Unpublished::Fill(Declined))
+    );
+    tx.publish(plain(42), octets).unwrap();
+    tx.publish(plain(42), octets).unwrap();
+    tx.flush();
+    // The station takes both and gives them back.
+    for _ in 0..TX {
+        let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
+            panic!("the frame went to the station");
+        };
+        assert!(
+            returned
+                .try_send_with(|slot| {
+                    *slot = Some(ended(outgoing.memory));
+                    Ok::<_, ()>(())
+                })
+                .is_ok()
+        );
+    }
+    while tx.take_notice().is_some() {}
+    // The next burst reads the room again: both places are free.
+    tx.publish(plain(42), octets).unwrap();
+    tx.publish(plain(42), octets).unwrap();
+    assert_eq!(
+        tx.publish(plain(42), unreachable_fill("the queue is full")),
+        Err(Unpublished::Port(PortRefusal::NoRoom))
+    );
+}
