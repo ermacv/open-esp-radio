@@ -50,7 +50,7 @@ pub enum PoolRefused<S> {
     /// The frame reaches past the buffer; the buffer stays the network's.
     Range(S),
     /// The pool refused the buffer it published to the station: the buffer
-    /// left the network's reach, quarantined.
+    /// left the network's reach, quarantined, and the station never got it.
     Lost,
 }
 
@@ -72,6 +72,10 @@ pub struct LocalTxState<S, const SLOTS: usize> {
     /// The run of one octet each buffer holds from the last frame written
     /// into it, by its place.
     held: [Option<Held>; SLOTS],
+    /// The places whose buffer the pool refused after a frame was written
+    /// in it ([`PortRefusal::BufferLost`]): out of the network's reach for
+    /// good, kept across ends for the owner to read.
+    lost: [bool; SLOTS],
 }
 
 impl<S, const SLOTS: usize> LocalTxState<S, SLOTS> {
@@ -79,7 +83,17 @@ impl<S, const SLOTS: usize> LocalTxState<S, SLOTS> {
         Self {
             free: heapless::Vec::new(),
             held: [None; SLOTS],
+            lost: [false; SLOTS],
         }
+    }
+
+    /// The places whose buffer is lost for good.
+    pub fn lost(&self) -> impl Iterator<Item = u8> + '_ {
+        self.lost
+            .iter()
+            .enumerate()
+            .filter(|(_, lost)| **lost)
+            .filter_map(|(place, _)| u8::try_from(place).ok())
     }
 }
 
@@ -137,6 +151,12 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c
     /// The buffers the network holds free.
     pub fn buffers(&self) -> usize {
         self.state.free.len()
+    }
+
+    /// The places whose buffer the pool refused after a frame was written
+    /// in it: lost for good.
+    pub fn lost(&self) -> impl Iterator<Item = u8> + '_ {
+        self.state.lost()
     }
 
     /// Take back every memory the station returned: its buffer is free
@@ -244,11 +264,15 @@ impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
                 return Err(Unpublished::Port(PortRefusal::BadFrame));
             }
             Err(PoolRefused::Lost) => {
+                // Nothing went into the queue: its place stays the burst's.
                 self.places = self.places.saturating_add(1);
-                // The station took it and lost its buffer: the frame is
-                // accepted and lost, as one lost on the air, and the buffer
-                // stays out of reach for good.
-                return Ok(place);
+                // The station never saw the frame; the buffer is out of reach
+                // for good, and its place is kept for the owner. A fault of
+                // the port: the frame is not tried again.
+                if let Some(lost) = self.state.lost.get_mut(usize::from(place)) {
+                    *lost = true;
+                }
+                return Err(Unpublished::Port(PortRefusal::BufferLost { place }));
             }
         };
         // The frame's marking requests a priority; the station decides the

@@ -98,15 +98,21 @@ impl<D, X: OwnedTransmit> FramePort for DevicePort<D, X> {
         self.waiting = match &published {
             Err(Unpublished::Port(PortRefusal::NoRoom)) => Waiting::Room,
             Err(Unpublished::Port(PortRefusal::LinkDown)) => Waiting::Link,
-            Ok(_) | Err(Unpublished::Port(PortRefusal::BadFrame) | Unpublished::Fill(_)) => {
-                Waiting::Nothing
-            }
+            Ok(_)
+            | Err(
+                Unpublished::Port(PortRefusal::BadFrame | PortRefusal::BufferLost { .. })
+                | Unpublished::Fill(_),
+            ) => Waiting::Nothing,
         };
         published
     }
 
     fn is_final(refusal: &PortRefusal) -> bool {
         *refusal == PortRefusal::BadFrame
+    }
+
+    fn is_fault(refusal: &PortRefusal) -> bool {
+        matches!(refusal, PortRefusal::BufferLost { .. })
     }
 
     fn flush(&mut self) {

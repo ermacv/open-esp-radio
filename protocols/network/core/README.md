@@ -22,7 +22,10 @@ the fill's own error, never as a port refusal, and ends a datagram
 `Outcome::Rejected`, or a producer's declined work `Outcome::Declined`. A port whose answer contradicts that record stops all
 publishing until the core retires: `Ok` after a failed or missing fill ends the
 work `Outcome::Unknown`, not repeated, whatever the fill's error, and a refusal of
-its own after a failed fill ends the work by the fill's cause. Every end at
+its own after a failed fill ends the work by the fill's cause. A port fault
+after a whole fill (`FramePort::is_fault`, such as a buffer its memory refused)
+ends the work `Outcome::Rejected`, since the frame did not go, not repeated,
+and stops publishing the same way (`Unsent::PortFault`, `Broken::Fault`). Every end at
 publication, a frame taken or refused for good, passes the turn to the next
 socket.
 

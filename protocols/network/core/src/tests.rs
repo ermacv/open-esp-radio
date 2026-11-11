@@ -146,6 +146,10 @@ impl FramePort for Port {
         *refusal == "rejected"
     }
 
+    fn is_fault(refusal: &&'static str) -> bool {
+        *refusal == "lost"
+    }
+
     fn publish<E>(
         &mut self,
         meta: oer_protocols_network_port::FrameMeta,
@@ -658,6 +662,30 @@ fn a_refusal_after_a_written_frame_is_the_port_s_own() {
         assert_eq!(finished(stack.take_result(command)), Outcome::Rejected);
         assert!(!stack.port_broken());
         assert_eq!(stack.pool().free(), BLOCKS);
+    });
+}
+
+/// A port that fails after the fill: the frame did not go, so the work
+/// ends rejected, with no repeat, its block home; the port is not trusted
+/// again, every later frame refused as the broken port's, and the owner
+/// learns it was a fault, not a contradiction.
+#[test]
+fn a_port_fault_after_the_fill_ends_the_work_unrepeated_and_breaks_the_port() {
+    world!(|stack| {
+        knows_peer(stack);
+        let socket = stack.open(5000, best_effort()).unwrap();
+        let block = filled(stack.pool(), b"hello");
+        let command = stack.send(at(1), &socket, peer(), block).unwrap();
+        stack.port_mut().after_fill = Some("lost");
+        assert_eq!(send_next(stack, at(1)), Err(Unsent::PortFault("lost")));
+        assert_eq!(finished(stack.take_result(command)), Outcome::Rejected);
+        assert!(stack.poll_demand(at(1)).is_none(), "not sent again");
+        assert_eq!(stack.broken(), Some(crate::Broken::Fault));
+        let block = filled(stack.pool(), b"later");
+        let _later = stack.send(at(2), &socket, peer(), block).unwrap();
+        stack.port_mut().after_fill = None;
+        assert_eq!(send_next(stack, at(2)), Err(Unsent::PortContract));
+        assert_eq!(stack.port_mut().sent.len(), 0, "nothing went");
     });
 }
 

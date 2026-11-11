@@ -384,10 +384,12 @@ fn a_buffer_frees_when_the_station_returns_it() {
     assert!(!tx.notice_waiting());
 }
 
-/// A buffer the pool loses is accepted and lost: it never comes back, and
-/// the network's buffers are one fewer.
+/// A buffer the pool refuses after its frame was written is the port's
+/// fault, never a success: the station sees nothing, the publication names
+/// the lost place, which the state keeps for the owner, and the place's
+/// queue room stays the burst's. Nothing is tried again on its own.
 #[test]
-fn a_buffer_the_pool_loses_never_comes_back() {
+fn a_buffer_the_pool_loses_is_a_named_fault_and_never_a_success() {
     let mut queue = Queue::new();
     let mut back = Back::new();
     let state = State::new();
@@ -395,26 +397,29 @@ fn a_buffer_the_pool_loses_never_comes_back() {
     let (sender, mut receiver) = queue.split(|| None);
     let (_returned, back) = back.split(|| None);
     let mut kept = LocalTxState::new();
-    let mut tx: Tx<'_> = LocalTx::new(
-        sender,
-        back,
-        Pool { loses: true },
-        &mut kept,
-        buffers(64),
-        state.network_link(),
-    );
-    let _lost = tx.publish(plain(42), octets).unwrap();
-    tx.flush();
-    assert!(
-        matches!(receiver.try_receive_with(Option::take), Err(_) | Ok(None)),
-        "nothing reaches the station"
-    );
-    // One buffer is left, then none.
-    tx.publish(plain(42), octets).unwrap();
-    assert_eq!(
-        tx.publish(plain(42), unreachable_fill("both buffers are gone")),
-        Err(Unpublished::Port(PortRefusal::NoRoom))
-    );
+    {
+        let mut tx: Tx<'_> = LocalTx::new(
+            sender,
+            back,
+            Pool { loses: true },
+            &mut kept,
+            buffers(64),
+            state.network_link(),
+        );
+        let lost = tx.publish(plain(42), octets);
+        let Err(Unpublished::Port(PortRefusal::BufferLost { place })) = lost else {
+            panic!("a lost buffer is the port's fault: {lost:?}");
+        };
+        tx.flush();
+        assert!(
+            matches!(receiver.try_receive_with(Option::take), Err(_) | Ok(None)),
+            "nothing reaches the station"
+        );
+        assert_eq!(tx.lost().collect::<Vec<_>>(), [place]);
+        assert_eq!(tx.buffers(), SLOTS - 1, "the lost buffer is not free");
+    }
+    // The owner still reads the place once the end is gone.
+    assert_eq!(kept.lost().count(), 1);
 }
 
 /// Each buffer keeps the run its last frame left in it, for the next frame

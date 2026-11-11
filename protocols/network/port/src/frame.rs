@@ -20,6 +20,11 @@ pub enum PortRefusal {
     /// The frame does not fit a buffer, or the device reads it as malformed:
     /// the same frame would meet the same, so this is final for it.
     BadFrame,
+    /// The port's memory refused the buffer the frame was written in, after
+    /// the fill: the frame never reached the device, and the buffer of
+    /// `place` left the port's reach for good. A fault of the port, not of
+    /// the frame ([`FramePort::is_fault`]).
+    BufferLost { place: u8 },
 }
 
 /// The transmit half of one affine Ethernet port that owns the memory its
@@ -127,6 +132,15 @@ pub trait FramePort {
     /// Whether `refusal` is final for that frame: no wake will change it, so
     /// the work ends instead of waiting.
     fn is_final(refusal: &Self::Refusal) -> bool {
+        let _ = refusal;
+        false
+    }
+
+    /// Whether `refusal` is a fault of the port itself: the frame did not go,
+    /// and the port can no longer be trusted to publish. Its work ends, and
+    /// nothing more is published until the owner retires the core and takes
+    /// the port back.
+    fn is_fault(refusal: &Self::Refusal) -> bool {
         let _ = refusal;
         false
     }

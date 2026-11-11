@@ -10,9 +10,9 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, Intake, LentDatagram,
-    LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool, Retired, SocketId,
-    Unsent,
+    Broken, CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, Intake,
+    LentDatagram, LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool,
+    Retired, SocketId, Unsent,
 };
 use oer_protocols_network_port::{FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
@@ -120,6 +120,11 @@ pub enum EndCause {
     /// The others end `Outcome::Retired`, and the port goes back to its owner
     /// in [`Ended::retired`].
     PortContract,
+    /// The port failed after a fill (`Unsent::PortFault`): the frame did not
+    /// go and its command ends `Outcome::Rejected`, not tried again. The
+    /// others end `Outcome::Retired`, and the port goes back to its owner in
+    /// [`Ended::retired`] with what it knows of its loss.
+    PortFault,
 }
 
 /// What a service's end hands on. Dropping it strands what is still on its way
@@ -855,8 +860,11 @@ impl<
             };
             let turned = self.turn(now, kind, events);
             only_frames = turned.packets;
-            if self.owner.port_broken() {
-                self.ended = Some(EndCause::PortContract);
+            if let Some(broken) = self.owner.broken() {
+                self.ended = Some(match broken {
+                    Broken::Contract => EndCause::PortContract,
+                    Broken::Fault => EndCause::PortFault,
+                });
             } else if turned.again {
                 // The turn left work no wake will name: the next turn
                 // takes it, once the executor had its turn.
@@ -1329,6 +1337,11 @@ impl<
             },
             Unsent::PortContract => AfterUnsent {
                 moved: false,
+                end: Some(PublishEnd::Fault),
+            },
+            // The work ended; the port is not trusted again.
+            Unsent::PortFault(_) => AfterUnsent {
+                moved: true,
                 end: Some(PublishEnd::Fault),
             },
         }

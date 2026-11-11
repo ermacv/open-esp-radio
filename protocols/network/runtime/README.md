@@ -275,7 +275,8 @@ yielded or waited. The sink counts; the service keeps nothing and reads no clock
 it. A disabled sink, `()` among them, hears nothing and builds no event.
 
 `Service::run` ends at the first look after a stop, or at once when the port
-contradicts itself, and returns the cause. Nothing is published from then on.
+contradicts itself (`EndCause::PortContract`) or fails after a fill
+(`EndCause::PortFault`), and returns the cause. Nothing is published from then on.
 `Service::retire` returns `Ended`: the cause, the core's `Retired`, a
 `LateSocket` per socket and the producer. Every result the service knows goes to its place, the request lane goes to its socket, and only then
 does `stopped` show: what still waits there the service never saw, so those

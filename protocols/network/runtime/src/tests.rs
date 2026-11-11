@@ -76,6 +76,8 @@ struct Wire {
     contradicts: bool,
     /// The port refuses every frame for good.
     rejects: bool,
+    /// The port loses the buffer of every frame written.
+    loses: bool,
     /// The next frames the port refuses for good.
     rejections: usize,
     /// The port gives less room than a frame needs.
@@ -147,33 +149,47 @@ enum AfterFailedFill {
 #[derive(Clone, Default)]
 struct WirePort(Rc<RefCell<Wire>>);
 
+/// Why the wire took no frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Refused {
+    /// No room: the work waits.
+    Room,
+    /// For good.
+    Final,
+    /// The port lost the buffer the frame was written in: its fault.
+    Lost,
+}
+
 impl FramePort for WirePort {
-    /// Whether this refusal is for good.
-    type Refusal = bool;
+    type Refusal = Refused;
     type Ticket = u32;
 
-    fn is_final(refusal: &bool) -> bool {
-        *refusal
+    fn is_final(refusal: &Refused) -> bool {
+        *refusal == Refused::Final
+    }
+
+    fn is_fault(refusal: &Refused) -> bool {
+        *refusal == Refused::Lost
     }
 
     fn publish<E>(
         &mut self,
         meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
-    ) -> Result<u32, Unpublished<bool, E>> {
+    ) -> Result<u32, Unpublished<Refused, E>> {
         let length = meta.length;
         let mut wire = self.0.borrow_mut();
         wire.refused = wire.full;
         if wire.full {
             wire.refusals += 1;
-            return Err(Unpublished::Port(false));
+            return Err(Unpublished::Port(Refused::Room));
         }
         if wire.rejects {
-            return Err(Unpublished::Port(true));
+            return Err(Unpublished::Port(Refused::Final));
         }
         if wire.rejections > 0 {
             wire.rejections -= 1;
-            return Err(Unpublished::Port(true));
+            return Err(Unpublished::Port(Refused::Final));
         }
         if wire.contradicts {
             return Ok(0);
@@ -182,9 +198,13 @@ impl FramePort for WirePort {
         if let Err(error) = fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None)) {
             return match wire.after_failed_fill {
                 AfterFailedFill::Fill => Err(Unpublished::Fill(error)),
-                AfterFailedFill::Refusal => Err(Unpublished::Port(false)),
+                AfterFailedFill::Refusal => Err(Unpublished::Port(Refused::Room)),
                 AfterFailedFill::Yes => Ok(0),
             };
+        }
+        if wire.loses {
+            // Written, then lost with its buffer: it never went.
+            return Err(Unpublished::Port(Refused::Lost));
         }
         let reply = wire.answers.then(|| answer_of(&frame)).flatten();
         wire.sent.push(frame);
@@ -2805,6 +2825,32 @@ fn a_yes_after_a_failed_fill_is_unknown_and_the_port_s_fault() {
     assert_eq!(end.sent, Sent::Ended(Outcome::Unknown));
     assert_eq!(end.next, None);
     assert_eq!(end.cause, EndCause::PortContract);
+}
+
+/// A port that loses the buffer a datagram was written in is at fault: the
+/// datagram did not go and ends rejected, not tried again, and the service
+/// ends with the port's fault, every block home.
+#[test]
+fn a_port_that_loses_a_written_buffer_ends_the_service_with_its_fault() {
+    brand!(Net);
+    let (mut ended, mut socket, (sent, sent_before)) = run(bench::<Net>(), async |socket, wire| {
+        send_one(socket, b"resolved").await;
+        let before = wire.0.borrow().sent.len();
+        wire.0.borrow_mut().loses = true;
+        let sent = send_one(socket, b"lost").await;
+        while !socket.closed() {
+            yield_now().await;
+        }
+        (sent, before)
+    });
+    assert_eq!(sent, Sent::Ended(Outcome::Rejected));
+    assert_eq!(ended.cause, EndCause::PortFault);
+    assert_eq!(
+        ended.retired.port.0.borrow().sent.len(),
+        sent_before,
+        "nothing more went"
+    );
+    returned(&mut ended, &mut socket);
 }
 
 /// A run cancelled after its datagram went keeps what the port took: the

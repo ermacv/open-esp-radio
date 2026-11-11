@@ -114,6 +114,12 @@ pub enum Unsent<R> {
     /// Every later `transmit` answers this too, for ARP as well, until the
     /// owner retires the core and takes the port back.
     PortContract,
+    /// The port failed after the fill ([`FramePort::is_fault`]): the frame
+    /// did not go, so the work ended [`Outcome::Rejected`](crate::Outcome::Rejected),
+    /// and it is not tried again. Every later `transmit` answers
+    /// [`Self::PortContract`] until the owner retires the core and takes the
+    /// port back with what it knows of its loss.
+    PortFault(R),
 }
 
 /// What the owner saw of a fill: its own record, which decides what a port's
@@ -145,9 +151,18 @@ pub struct NetworkOwner<
     core: Core<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, T>,
     pool: Pool<'m, B, SIZE, BLOCKS>,
     port: P,
-    /// The port contradicted itself: nothing is published until it is
-    /// replaced, by a retirement.
-    broken: bool,
+    /// The port contradicted itself or failed: nothing is published until it
+    /// is replaced, by a retirement.
+    broken: Option<Broken>,
+}
+
+/// How the port broke.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Broken {
+    /// Its answer contradicted its fill.
+    Contract,
+    /// It failed after a fill ([`FramePort::is_fault`]).
+    Fault,
 }
 
 impl<
@@ -173,7 +188,7 @@ impl<
             core: Core::new(brand, interface),
             pool,
             port,
-            broken: false,
+            broken: None,
         }
     }
 
@@ -197,7 +212,7 @@ impl<
         produce: impl FnOnce(WorkId, T, &mut Payload<'_>) -> Result<(), Declined>,
         count: &C,
     ) -> Result<Transmitted<P::Ticket, T>, Unsent<P::Refusal>> {
-        if self.broken {
+        if self.broken.is_some() {
             return Err(Unsent::PortContract);
         }
         let frame = self.core.frame(now, &grant).ok_or(Unsent::Stale)?;
@@ -220,7 +235,7 @@ impl<
                 if written {
                     Ok(Transmitted { ticket, ended })
                 } else {
-                    self.broken = true;
+                    self.broken = Some(Broken::Contract);
                     Err(Unsent::PortContract)
                 }
             }
@@ -240,8 +255,15 @@ impl<
                 } else {
                     self.core.decline(&grant, &mut self.pool);
                 }
-                self.broken = true;
+                self.broken = Some(Broken::Contract);
                 Err(Unsent::FillMisreported(refusal))
+            }
+            // The frame was whole and did not go; the port is not to be
+            // trusted again, and the work is not repeated.
+            Err(Unpublished::Port(refusal)) if P::is_fault(&refusal) => {
+                self.core.reject(now, &grant, &mut self.pool);
+                self.broken = Some(Broken::Fault);
+                Err(Unsent::PortFault(refusal))
             }
             Err(Unpublished::Port(refusal)) if P::is_final(&refusal) => {
                 self.core.reject(now, &grant, &mut self.pool);
@@ -555,8 +577,14 @@ impl<
         &self.port
     }
 
-    /// Whether the port contradicted itself, which stops publishing.
+    /// Whether the port contradicted itself or failed, which stops
+    /// publishing.
     pub const fn port_broken(&self) -> bool {
+        self.broken.is_some()
+    }
+
+    /// How the port broke, if it did.
+    pub const fn broken(&self) -> Option<Broken> {
         self.broken
     }
 
