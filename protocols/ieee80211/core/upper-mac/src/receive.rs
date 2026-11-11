@@ -108,6 +108,59 @@ impl<'a> AdmittedData<'a> {
             protected: control.protected(),
         })
     }
+    /// Admit one uplink of an access point's BSS: a To-DS data MPDU from
+    /// `peer` addressed to the BSS. A protected MPDU requires explicit
+    /// integrity evidence and the peer's replay owner, which checking
+    /// advances once, under its pairwise lane; a peer sends nothing under
+    /// the group key. Null, QoS Null and other subtypes without an MSDU are
+    /// rejected before replay admission.
+    pub fn admit_uplink(
+        header: DecodedHeader<'a>,
+        bssid: Bssid,
+        peer: [u8; 6],
+        integrity: Integrity,
+        replay: Option<&mut CcmpRxReplayEpoch>,
+    ) -> Result<Self, RxDropReason> {
+        let control = header.control();
+        let fields = FrameControlFields::from_raw(control.get());
+        if !control.is_data() || fields.no_data() || fields.from_ds() || !fields.to_ds() {
+            return Err(RxDropReason::FrameKind);
+        }
+        if header.receiver() != bssid.get() || header.transmitter() != peer {
+            return Err(RxDropReason::Address);
+        }
+        if control.more_fragments()
+            || SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment() != 0
+        {
+            return Err(RxDropReason::Fragmented);
+        }
+        let mut payload = header.body();
+        if control.protected() {
+            if integrity != Integrity::DecryptedAndVerified {
+                return Err(RxDropReason::Integrity);
+            }
+            let replay = replay.ok_or(RxDropReason::Protection)?;
+            let (bytes, rest) = payload
+                .split_first_chunk::<{ oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN }>()
+                .ok_or(RxDropReason::Header)?;
+            let ccmp = CcmpHeader::parse(*bytes).map_err(|_| RxDropReason::Header)?;
+            replay
+                .check(
+                    CcmpRxProtection::Pairwise,
+                    header
+                        .qos()
+                        .map(|qos| QosControl::from_bytes(qos.to_le_bytes()).tid().get()),
+                    ccmp,
+                )
+                .map_err(|_| RxDropReason::Replay)?;
+            payload = rest;
+        }
+        Ok(Self {
+            header,
+            payload,
+            protected: control.protected(),
+        })
+    }
     /// Whether this MPDU passed CCMP integrity and replay admission.
     pub const fn protected(&self) -> bool {
         self.protected
@@ -176,6 +229,97 @@ mod tests {
             Some(replay),
         )
     }
+    /// An uplink of `peer` [4; 6] to the BSS [2; 6] for [6; 6].
+    fn uplink(protected: bool, number: u64) -> Vec<u8> {
+        let mut frame = std::vec![0; 24];
+        let control: u16 = 0x0108 | if protected { 0x4000 } else { 0 };
+        frame[..2].copy_from_slice(&control.to_le_bytes());
+        frame[4..10].copy_from_slice(&[2; 6]);
+        frame[10..16].copy_from_slice(&[4; 6]);
+        frame[16..22].copy_from_slice(&[6; 6]);
+        if protected {
+            frame.extend_from_slice(
+                &CcmpHeader::new(
+                    CcmpPacketNumber::new(number).unwrap(),
+                    CcmpKeyId::new(0).unwrap(),
+                )
+                .encode(),
+            );
+        }
+        frame.extend_from_slice(&[0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x00, 9, 8]);
+        frame
+    }
+
+    fn admit_uplink<'a>(
+        frame: &'a [u8],
+        peer: [u8; 6],
+        integrity: Integrity,
+        replay: Option<&mut CcmpRxReplayEpoch>,
+    ) -> Result<AdmittedData<'a>, RxDropReason> {
+        AdmittedData::admit_uplink(
+            DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?,
+            Bssid::new(IndividualAddress::new([2; 6]).unwrap()).unwrap(),
+            peer,
+            integrity,
+            replay,
+        )
+    }
+
+    #[test]
+    fn an_uplink_names_its_peer_and_the_bss_and_passes_its_replay_owner_once() {
+        let mut replay =
+            CcmpRxReplayEpoch::new([0; 8], GroupKeyId::new(1).unwrap(), [0; 8]).unwrap();
+        let frame = uplink(true, 5);
+        // Another transmitter, a downlink and an unverified frame are refused.
+        assert!(matches!(
+            admit_uplink(
+                &frame,
+                [5; 6],
+                Integrity::DecryptedAndVerified,
+                Some(&mut replay)
+            ),
+            Err(RxDropReason::Address)
+        ));
+        assert!(matches!(
+            admit_uplink(
+                &packet(false, false, false),
+                [4; 6],
+                Integrity::Unverified,
+                None
+            ),
+            Err(RxDropReason::FrameKind)
+        ));
+        assert!(matches!(
+            admit_uplink(&frame, [4; 6], Integrity::Unverified, Some(&mut replay)),
+            Err(RxDropReason::Integrity)
+        ));
+        let admitted = admit_uplink(
+            &frame,
+            [4; 6],
+            Integrity::DecryptedAndVerified,
+            Some(&mut replay),
+        )
+        .unwrap();
+        assert!(admitted.protected());
+        let msdu = admitted.msdus().unwrap().next().unwrap().unwrap();
+        assert_eq!(msdu.ether_type, 0x0800);
+        assert_eq!(msdu.payload, [9, 8]);
+        assert_eq!(msdu.destination, [6; 6]);
+        assert_eq!(msdu.source, [4; 6]);
+        // The same packet number again is a replay.
+        assert!(matches!(
+            admit_uplink(
+                &frame,
+                [4; 6],
+                Integrity::DecryptedAndVerified,
+                Some(&mut replay)
+            ),
+            Err(RxDropReason::Replay)
+        ));
+        // An open uplink needs no replay owner.
+        assert!(admit_uplink(&uplink(false, 0), [4; 6], Integrity::Unverified, None).is_ok());
+    }
+
     #[test]
     fn eapol_follows_the_checked_qos_ht_and_ccmp_boundary() {
         for (qos, ht) in [(false, false), (true, false), (true, true)] {

@@ -173,6 +173,27 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscSender<'_,
         })
     }
 
+    /// Poll for a free cell without reserving one: ready while a cell is
+    /// free. Otherwise this endpoint's one producer registration is armed as
+    /// [`Self::ready`] arms it (register, mark the wait, fence, then check
+    /// the queue again), so a cell freed after that check wakes the task,
+    /// and nothing else does. It takes no cell and publishes nothing; the
+    /// caller keeps its value. The exclusive borrow keeps one waiter per
+    /// endpoint: no [`Self::ready`] wait is outstanding meanwhile.
+    pub fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        // As in `SendReady`: a reclamation before the flag is found by the
+        // check below; one after it sees the flag and wakes this
+        // registration.
+        self.producer.register(cx);
+        self.producer_waits.store(true, Ordering::SeqCst);
+        fence(Ordering::SeqCst);
+        if self.sender.free_capacity() == 0 {
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
+    }
+
     /// Wait for capacity while retaining the sole producer wake registration.
     /// The returned permit keeps the exclusive sender borrow and publishes
     /// without another capacity check. The caller owns its value until send;
@@ -338,6 +359,12 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'
         .await;
     }
 }
+
+mod closing;
+pub use closing::{
+    ClosingSpscClosed, ClosingSpscQueue, ClosingSpscReceiver, ClosingSpscReceptionClosed,
+    ClosingSpscSendError, ClosingSpscSendPermit, ClosingSpscSender,
+};
 
 #[cfg(test)]
 mod tests;

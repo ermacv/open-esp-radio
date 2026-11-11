@@ -3,7 +3,7 @@ use oer_protocols_ieee80211_contracts_port::{
     Attempt, Protection, Station, SupportedPower, TxOperation, TxPower,
 };
 use oer_protocols_ieee80211_testing_model::{
-    ModelBackend, ModelCaps, ModelPool, ModelPrepared, ModelTickets,
+    ModelBackend, ModelCaps, ModelPool, ModelPrepared, ModelTickets, MODEL_TICKETS,
 };
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_radio_port::{Slot, StaticId};
@@ -16,8 +16,8 @@ type Prepared<'k, 'p, 'a> = ModelPrepared<'k, 'p, 'a, Station, ModelCaps, ModelB
 // ticket.
 pub fn seal<'k, 'p, 'a, 'b>(
     prepared: Prepared<'k, 'p, 'a>,
-    own: Slot<'a, ModelTickets, ModelPool<StaticId<Source>, 1>>,
-    foreign: Slot<'b, ModelTickets, ModelPool<StaticId<Target>, 1>>,
+    own: Slot<'a, oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>, ModelPool<StaticId<Source>, 1>>,
+    foreign: Slot<'b, oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>, ModelPool<StaticId<Target>, 1>>,
 ) {
     #[cfg(ui_reject)]
     let ticket = foreign;

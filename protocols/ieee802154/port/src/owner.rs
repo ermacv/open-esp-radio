@@ -270,6 +270,7 @@ use core::{cell::RefCell, future::Future, marker::PhantomData};
 
 use oer_protocols_radio_port::{
     Child, Line, Permit, PermitPool, PermitSupply, Poisoned, PoolPath, Root, Seat, Slot,
+    SlotLayout, Slots,
 };
 use oer_protocols_radio_port::{PortBackend, PortPhase};
 
@@ -631,11 +632,11 @@ pub struct InterfaceResources<
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
     /// The slot [`Ieee802154Interfaces::configure`] takes.
-    pub interface: Slot<'id, InterfaceKind<I>, Child<Path, 0>>,
+    pub interface: Slot<'id, Slots<InterfaceKind<I>, 1>, Child<Path, 0>>,
     /// The slots of short source addresses.
-    pub short: [Slot<'id, ShortPending<I>, Child<Path, 1>>; P],
+    pub short: [Slot<'id, Slots<ShortPending<I>, P>, Child<Path, 1>>; P],
     /// The slots of extended source addresses.
-    pub extended: [Slot<'id, ExtendedPending<I>, Child<Path, 2>>; P],
+    pub extended: [Slot<'id, Slots<ExtendedPending<I>, P>, Child<Path, 2>>; P],
 }
 
 /// The complete pool layout of interface `I` for capabilities `K`.
@@ -1058,7 +1059,7 @@ pub trait Ieee802154Interfaces<'id>: RadioSettings {
     /// the interface exists and is not configured.
     fn configure<const I: u8>(
         &mut self,
-        slot: Slot<'id, InterfaceKind<I>, Child<Self::InterfacePath<I>, 0>>,
+        slot: Slot<'id, Slots<InterfaceKind<I>, 1>, Child<Self::InterfacePath<I>, 0>>,
     ) -> Self::Configured<I>;
 
     /// Remove interface `I`, giving its slot back. In a running phase its
@@ -1068,7 +1069,7 @@ pub trait Ieee802154Interfaces<'id>: RadioSettings {
     fn remove<const I: u8>(
         &mut self,
         interface: Self::Configured<I>,
-    ) -> Slot<'id, InterfaceKind<I>, Child<Self::InterfacePath<I>, 0>>;
+    ) -> Slot<'id, Slots<InterfaceKind<I>, 1>, Child<Self::InterfacePath<I>, 0>>;
 }
 
 /// The disabled owner's settings of an IEEE 802.15.4 port: the radio-wide
@@ -1120,6 +1121,12 @@ pub trait Ieee802154Client<'id, const I: u8>:
     type OperationPath: PoolPath;
     /// Pool component containing this interface's pending-table slots.
     type InterfacePath: PoolPath;
+    /// The layout of the interface's short-address pending slots,
+    /// `Slots<ShortPending<I>, P>` of its [`InterfacePool`].
+    type ShortSlots: SlotLayout<Kind = ShortPending<I>>;
+    /// The layout of the interface's extended-address pending slots,
+    /// `Slots<ExtendedPending<I>, P>` of its [`InterfacePool`].
+    type ExtendedSlots: SlotLayout<Kind = ExtendedPending<I>>;
     /// An installed short-address pending entry of interface `I`; removing
     /// it gives its slot back.
     type ShortEntry;
@@ -1166,14 +1173,14 @@ pub trait Ieee802154Client<'id, const I: u8>:
     /// Mark `address` as having pending data, in `slot`.
     fn add_pending_short(
         &self,
-        slot: Slot<'id, ShortPending<I>, Child<Self::InterfacePath, 1>>,
+        slot: Slot<'id, Self::ShortSlots, Child<Self::InterfacePath, 1>>,
         address: [u8; 2],
     ) -> Self::ShortEntry;
 
     /// Mark `address` as having pending data, in `slot`.
     fn add_pending_extended(
         &self,
-        slot: Slot<'id, ExtendedPending<I>, Child<Self::InterfacePath, 2>>,
+        slot: Slot<'id, Self::ExtendedSlots, Child<Self::InterfacePath, 2>>,
         address: [u8; 8],
     ) -> Self::ExtendedEntry;
 
@@ -1181,13 +1188,13 @@ pub trait Ieee802154Client<'id, const I: u8>:
     fn remove_pending_short(
         &self,
         entry: Self::ShortEntry,
-    ) -> Slot<'id, ShortPending<I>, Child<Self::InterfacePath, 1>>;
+    ) -> Slot<'id, Self::ShortSlots, Child<Self::InterfacePath, 1>>;
 
     /// Clear `entry`, giving its slot back.
     fn remove_pending_extended(
         &self,
         entry: Self::ExtendedEntry,
-    ) -> Slot<'id, ExtendedPending<I>, Child<Self::InterfacePath, 2>>;
+    ) -> Slot<'id, Self::ExtendedSlots, Child<Self::InterfacePath, 2>>;
 
     /// Ask to receive on `channel`: the request replaces the interface's
     /// previous wish at once (a window included), so it no longer receives

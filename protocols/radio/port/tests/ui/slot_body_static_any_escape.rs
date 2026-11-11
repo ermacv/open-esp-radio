@@ -10,7 +10,7 @@ use oer_protocols_radio_port::{
 pub enum Declaration {}
 pub type Id = StaticId<Declaration>;
 pub struct Owner;
-type Token<'p> = Slot<'p, (), Root<Id>>;
+type Token<'p> = Slot<'p, Slots<(), 1>, Root<Id>>;
 
 impl SlotOwner<Id> for Owner {
     type Vacant = ();

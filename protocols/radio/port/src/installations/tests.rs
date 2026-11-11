@@ -19,7 +19,7 @@ fn the_first_installation_is_minted_once_with_its_whole_pool_set() {
     let Some(Minted { mint, installation }) = installations.first() else {
         panic!("the first installation is minted");
     };
-    let [first, second]: [Slot<'static, Tokens, _>; 2] = mint.into_pools();
+    let [first, second]: [Slot<'static, Layout, _>; 2] = mint.into_pools();
     assert_eq!((first.index(), second.index()), (0, 1));
     assert_eq!(installation.generation(), 0);
     assert!(
@@ -97,8 +97,8 @@ fn a_local_identity_lends_its_owned_tokens_within_its_scope_under_any_backend_ta
         let Minted { mint, installation } = installations.first().expect("first");
         let loan: BodyLoan<'scope, _, Backend> = installation.loan();
         let [first, second] = mint.into_pools();
-        let first: Slot<'scope, Tokens, _> = loan.lend_slot(first);
-        let second: Slot<'static, Tokens, _> = loan.reclaim_slot(loan.lend_slot(second));
+        let first: Slot<'scope, Layout, _> = loan.lend_slot(first);
+        let second: Slot<'static, Layout, _> = loan.reclaim_slot(loan.lend_slot(second));
         [first.index(), second.index()]
     }
     let indices = lent(SlotClaim::<LocalId<'_>> {
