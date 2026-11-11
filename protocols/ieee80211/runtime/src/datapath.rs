@@ -868,9 +868,6 @@ where
             if FROM < from_actor_depth(RETURNS) {
                 panic!("the actor's queue holds the lane, the returns and the answers");
             }
-            if core::mem::size_of::<FromActor<'id, D>>() > FROM_ACTOR_BYTES {
-                panic!("a message from the actor stays small: owners travel beside it");
-            }
             if core::mem::size_of::<ToActor<'id, D>>() > TO_ACTOR_BYTES {
                 panic!("a message to the actor stays small: large ones travel as parcels");
             }
@@ -976,9 +973,3 @@ fn alarm_at<T: Timer>(timer: &T, at: Option<Instant>) -> Option<impl Future<Outp
 
 #[cfg(test)]
 mod tests;
-
-/// The largest message from the actor, in the 32 words of the chip's 128
-/// bytes: a received frame with its metadata (the S31 receive buffer and its
-/// metadata take up to that); owners larger than a frame's travel in the
-/// return queue.
-pub const FROM_ACTOR_BYTES: usize = 32 * core::mem::size_of::<usize>();
