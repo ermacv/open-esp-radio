@@ -2033,3 +2033,123 @@ fn a_producer_s_offer_after_turns_with_nothing_ready_is_collected_and_goes() {
     assert_eq!(line.produced(), [data_of(tag(0, 0), 16)]);
     assert!(policy.0.borrow().plans > 0, "the offer was collected");
 }
+
+/// Every service event, in order, where the test reads it while the service
+/// runs.
+#[derive(Clone, Default)]
+struct Tape(Rc<RefCell<Vec<ServiceEvent>>>);
+
+impl EventSink<ServiceEvent> for Tape {
+    fn event(&mut self, event: ServiceEvent) {
+        self.0.borrow_mut().push(event);
+    }
+}
+
+impl EventSink<NetEvent> for Tape {
+    fn event(&mut self, _: NetEvent) {}
+}
+
+/// Each turn `events` tell: whether it took only the frames, and the
+/// requests it took.
+fn turn_kinds(events: &[ServiceEvent]) -> Vec<(bool, usize)> {
+    let mut turns = Vec::new();
+    for event in events {
+        match event {
+            ServiceEvent::TurnBegan => turns.push((false, 0)),
+            ServiceEvent::PacketTurn => {
+                if let Some(turn) = turns.last_mut() {
+                    turn.0 = true;
+                }
+            }
+            ServiceEvent::Took(_) => {
+                if let Some(turn) = turns.last_mut() {
+                    turn.1 += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    turns
+}
+
+/// Frames that are always ready move in packet turns, which leave the
+/// control steps out, at most `PACKET_TURNS` in a row; a full turn comes
+/// between them.
+#[test]
+fn frames_always_ready_take_packet_turns_with_a_full_turn_between() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        script,
+        clock,
+        line,
+        ..
+    } = direct::<Net>();
+    for index in 0..200 {
+        script.push(tag(0, index), broadcast(), 40);
+    }
+    let tape = Tape::default();
+    let mut events = tape.clone();
+    {
+        let mut run = pin!(service.run(clock, &mut events));
+        let cx = &mut Context::from_waker(Waker::noop());
+        while line.sent() < 200 {
+            assert!(poll(&mut run, cx).is_pending());
+        }
+    }
+    let turns = turn_kinds(&tape.0.borrow());
+    let packets = turns.iter().filter(|turn| turn.0).count();
+    assert!(packets > 0, "frames always ready take packet turns");
+    let mut in_a_row = 0;
+    for turn in &turns {
+        in_a_row = if turn.0 { in_a_row + 1 } else { 0 };
+        assert!(
+            in_a_row <= crate::service::PACKET_TURNS,
+            "a full turn comes after {} packet turns",
+            crate::service::PACKET_TURNS
+        );
+    }
+    assert_eq!(script.filled(), 200, "every frame went, each once");
+}
+
+/// A socket's command while frames are always ready takes the very next
+/// turn whole: control work pending ends the packet turns at once.
+#[test]
+fn a_command_while_frames_are_always_ready_takes_the_next_turn_whole() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        mut socket,
+        script,
+        clock,
+        ..
+    } = direct::<Net>();
+    for index in 0..200 {
+        script.push(tag(0, index), broadcast(), 40);
+    }
+    let tape = Tape::default();
+    let mut events = tape.clone();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let mut run = pin!(service.run(clock, &mut events));
+    // Into the packet turns.
+    let mut polls = 0;
+    while !tape.0.borrow().contains(&ServiceEvent::PacketTurn) {
+        assert!(poll(&mut run, cx).is_pending());
+        polls += 1;
+        assert!(polls < 64, "frames always ready reach a packet turn");
+    }
+    let mut reserve = pin!(socket.reserve());
+    assert!(
+        reserve.as_mut().poll(cx).is_pending(),
+        "the request waits for a turn"
+    );
+    let before = turn_kinds(&tape.0.borrow()).len();
+    assert!(poll(&mut run, cx).is_pending());
+    let turns = turn_kinds(&tape.0.borrow());
+    let next = turns.get(before).copied();
+    assert_eq!(
+        next,
+        Some((false, 1)),
+        "the next turn is whole and takes the request"
+    );
+}

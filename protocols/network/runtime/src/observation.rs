@@ -81,6 +81,9 @@ pub struct TurnEnd {
 pub enum ServiceEvent {
     /// A turn begins.
     TurnBegan,
+    /// The turn that began takes only the frames: no control work was
+    /// pending, and the last turn left only frames.
+    PacketTurn,
     /// The turn took this request from a socket's lane.
     Took(RequestKind),
     /// A socket's lane still held requests once the turn had taken its budget

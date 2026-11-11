@@ -41,6 +41,12 @@ pub(crate) const TURN_FRAMES: usize = 8;
 /// turn publishes again. A notice is one settlement of one frame, so this
 /// bounds the turn's work as [`TURN_FRAMES`] does.
 pub(crate) const TURN_NOTICES: usize = 64;
+/// Packet turns in a row at most: a turn that only moves frames, with no
+/// control work pending, takes the next one without the control steps, and
+/// the control steps run again after this many. It bounds how long a socket's
+/// command, a return of lent memory or a block's eviction waits behind
+/// frames that are always ready, as [`TURN_FRAMES`] bounds a turn.
+pub(crate) const PACKET_TURNS: usize = 4;
 
 /// The egress with no policy: the first ready work goes, no account is kept and
 /// a completion says nothing. Its plan is the list's own turns: control first,
@@ -132,6 +138,22 @@ struct Turned {
     /// evicted, a producer's hold or budget freed, a refused publication of
     /// the address.
     again: bool,
+    /// Only frames are left: a budget of intake or publication spent, or
+    /// a flow left out after a declining fill. The next turn may take only
+    /// the frames ([`Turn::Packets`]).
+    packets: bool,
+}
+
+/// Which steps a turn takes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Turn {
+    /// Every step: time, commands, returns, blocks, frames, eviction and
+    /// configuration.
+    Full,
+    /// The frames only, over the same state: intake, notices, offers and
+    /// publication, then delivery. Taken only when no control work is
+    /// pending ([`Service::control_pending`]).
+    Packets,
 }
 
 /// What one batch of returns did.
@@ -943,6 +965,8 @@ impl<
         clock: &T,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> EndCause {
+        // Packet turns since the last full one, while only frames are left.
+        let mut packet_turns = None::<usize>;
         loop {
             if let Some(cause) = self.ended {
                 return cause;
@@ -951,7 +975,17 @@ impl<
                 self.ended = Some(EndCause::Stopped);
                 continue;
             }
-            let turned = self.turn(clock.now(), events);
+            let now = clock.now();
+            let kind = match packet_turns {
+                Some(taken) if taken < PACKET_TURNS && !self.control_pending(now) => Turn::Packets,
+                _ => Turn::Full,
+            };
+            let turned = self.turn(now, kind, events);
+            packet_turns = match (turned.packets, kind) {
+                (false, _) => None,
+                (true, Turn::Full) => Some(0),
+                (true, Turn::Packets) => packet_turns.map(|taken| taken.saturating_add(1)),
+            };
             if self.owner.port_broken() {
                 self.ended = Some(EndCause::PortContract);
             } else if self.fault.is_some() {
@@ -978,20 +1012,33 @@ impl<
     fn turn(
         &mut self,
         now: Instant,
+        kind: Turn,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> Turned {
+        // What only frames leave, and what more than frames leaves.
+        let mut packets = false;
         let mut again = false;
         let mut tally = Tally::turn(&mut self.diagnostics);
         report(events, || ServiceEvent::TurnBegan);
+        if kind == Turn::Packets {
+            report(events, || ServiceEvent::PacketTurn);
+        }
         self.local.turn_begins();
+        // A link that changed ends what was prepared for the old one: every
+        // turn sees it before a frame moves.
         self.owner.observe_link(now);
-        self.owner.tick(now, events);
-        for index in 0..SOCKETS {
-            self.commands(now, index, events);
+        if kind == Turn::Full {
+            self.owner.tick(now, events);
+            for index in 0..SOCKETS {
+                self.commands(now, index, events);
+            }
         }
         tally.stage(Stage::Intake, &mut self.diagnostics);
+        // Lent memory coming back is the frames' own: every turn takes it.
         self.take_returns(&mut tally);
-        self.give_blocks();
+        if kind == Turn::Full {
+            self.give_blocks();
+        }
         tally.stage(Stage::Returns, &mut self.diagnostics);
         let mut intake_full = true;
         for _ in 0..TURN_FRAMES {
@@ -1011,7 +1058,7 @@ impl<
             report(events, || ServiceEvent::FrameTaken);
         }
         seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
-        again |= intake_full;
+        packets |= intake_full;
         tally.stage(Stage::Receive, &mut self.diagnostics);
         let mut told_all = false;
         for _ in 0..TURN_NOTICES {
@@ -1036,7 +1083,7 @@ impl<
             let end = self.publish(now, events, &mut tally);
             // More may be ready past the budget; a declining fill kept the
             // producer's flow out of the rest of this turn only.
-            again |= end == PublishEnd::Budget || self.local.filtered().is_some();
+            packets |= end == PublishEnd::Budget || self.local.filtered().is_some();
         } else {
             // A policy chooses knowing all the port has said: a later notice
             // may free what the choice needs. So publishing waits for the
@@ -1047,19 +1094,43 @@ impl<
         tally.stage(Stage::Publish, &mut self.diagnostics);
         // Eviction ends commands too, so it comes before the delivery: the
         // epilogue's delivery is the turn's last step that can learn a result.
-        if self.fault.is_none() && !self.owner.port_broken() {
+        if kind == Turn::Full && self.fault.is_none() && !self.owner.port_broken() {
             // An evicted block is granted by the next turn.
             again |= self.relieve(now);
         }
         self.deliver(events, &tally);
         // What the delivery freed may release the producer's hold or budget,
-        // which no wake of its own names.
-        again |= self.local.again(&self.owner);
-        again |= self.publish_configuration();
+        // which no wake of its own names: more frames.
+        packets |= self.local.again(&self.owner);
+        if kind == Turn::Full {
+            again |= self.publish_configuration();
+        }
         self.turn_ended(events);
         tally.stage(Stage::Settle, &mut self.diagnostics);
         tally.end(&mut self.diagnostics);
-        Turned { again }
+        Turned {
+            again: again || packets,
+            packets: packets && !again,
+        }
+    }
+
+    /// Whether control work is pending that a packet turn would leave: a
+    /// socket's request or abandon, a due time of the core, the producer or
+    /// the pool's pressure. Read from each source's own head, once a turn.
+    fn control_pending(&self, now: Instant) -> bool {
+        let due = [
+            self.owner.poll_deadline(),
+            self.pressure_at,
+            self.local.deadline(),
+        ]
+        .into_iter()
+        .flatten()
+        .any(|at| at <= now);
+        due || self
+            .bound
+            .iter()
+            .flatten()
+            .any(|bound| !bound.end.requests.is_empty() || !bound.end.abandon.is_empty())
     }
 
     /// The lent buffers back with their port whose loans the service has not
