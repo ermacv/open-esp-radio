@@ -607,9 +607,8 @@ fn an_abandon_stops_the_actor_before_the_lifecycles_ends_go_out() {
             assert!(poll_once(datapath.as_mut()).is_pending());
         }
         let lifecycle = async {
-            let half = UnfinishedLifecycleOf::new((), (), installation(0), news, None)
-                .abandoned(failure, &mut abandon_end)
-                .await;
+            let mut half = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
+            half.abandoned(failure, &mut abandon_end).await;
             // The lifecycle's ends go out here.
             (alive.get(), half)
         };
@@ -655,22 +654,24 @@ fn a_queued_installation_does_not_end_the_abandons_wait() {
             .try_send(News::Installed(5, 6, installation(1)))
             .is_ok()
     );
-    let half = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
-    let mut wait = pin!(half.abandoned(failure, &mut abandon_end));
-    assert!(
-        poll_once(wait.as_mut()).is_pending(),
-        "an installation's news confirms nothing"
-    );
-    assert_eq!(
-        abandoned.try_receive(),
-        Some(failure),
-        "the abandon is still in its queue while the wait goes on"
-    );
-    assert!(poll_once(wait.as_mut()).is_pending());
-    assert!(mailbox.try_send(News::Abandoned).is_ok());
-    let Poll::Ready(mut half) = poll_once(wait.as_mut()) else {
-        panic!("the actor's end confirms the stop");
-    };
+    let mut half = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
+    {
+        let mut wait = pin!(half.abandoned(failure, &mut abandon_end));
+        assert!(
+            poll_once(wait.as_mut()).is_pending(),
+            "an installation's news confirms nothing"
+        );
+        assert_eq!(
+            abandoned.try_receive(),
+            Some(failure),
+            "the abandon is still in its queue while the wait goes on"
+        );
+        assert!(poll_once(wait.as_mut()).is_pending());
+        assert!(mailbox.try_send(News::Abandoned).is_ok());
+        let Poll::Ready(()) = poll_once(wait.as_mut()) else {
+            panic!("the actor's end confirms the stop");
+        };
+    }
     assert_eq!(half.late_end(), LateRead::Ended(LateEnd::Abandoned));
     assert!(
         matches!(half.take_installed(), Some((5, 6, kept)) if kept == installation(1)),
@@ -694,22 +695,24 @@ fn two_installation_news_are_kept_and_only_the_end_ends_the_wait() {
             .try_send(News::Installed(1, 2, installation(1)))
             .is_ok()
     );
-    let half = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
-    let mut wait = pin!(half.abandoned(LifecycleFailure::Mailbox, &mut abandon_end));
-    assert!(poll_once(wait.as_mut()).is_pending());
-    assert!(
-        mailbox
-            .try_send(News::Installed(3, 4, installation(2)))
-            .is_ok()
-    );
-    assert!(
-        poll_once(wait.as_mut()).is_pending(),
-        "a second installation's news confirms nothing"
-    );
-    assert!(mailbox.try_send(News::Abandoned).is_ok());
-    let Poll::Ready(mut half) = poll_once(wait.as_mut()) else {
-        panic!("the actor's end confirms the stop");
-    };
+    let mut half = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
+    {
+        let mut wait = pin!(half.abandoned(LifecycleFailure::Mailbox, &mut abandon_end));
+        assert!(poll_once(wait.as_mut()).is_pending());
+        assert!(
+            mailbox
+                .try_send(News::Installed(3, 4, installation(2)))
+                .is_ok()
+        );
+        assert!(
+            poll_once(wait.as_mut()).is_pending(),
+            "a second installation's news confirms nothing"
+        );
+        assert!(mailbox.try_send(News::Abandoned).is_ok());
+        let Poll::Ready(()) = poll_once(wait.as_mut()) else {
+            panic!("the actor's end confirms the stop");
+        };
+    }
     assert_eq!(half.late_end(), LateRead::Ended(LateEnd::Abandoned));
     assert!(matches!(half.take_installed(), Some((1, 2, _))));
     assert!(matches!(half.take_installed(), Some((3, 4, _))));
@@ -972,30 +975,32 @@ fn full_places_never_confirm_the_end_and_the_half_reads_on_once_one_is_taken() {
     let (mut abandon_end, _abandoned) = abandon_place.split();
     let mut mailbox_place = WakingSpscQueue::<TestNews, 1>::new();
     let (mailbox, news) = mailbox_place.split();
-    let half = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
-    let mut wait = pin!(half.abandoned(LifecycleFailure::Mailbox, &mut abandon_end));
-    let mut ended = None;
-    for next in 0..INSTALLED as u8 {
-        assert!(
-            mailbox
-                .try_send(News::Installed(next, next, installation(1)))
-                .is_ok()
-        );
-        match poll_once(wait.as_mut()) {
-            Poll::Ready(half) => {
-                assert_eq!(
-                    usize::from(next) + 1,
-                    INSTALLED,
-                    "only once every place is full"
-                );
-                ended = Some(half);
+    let mut half = UnfinishedLifecycleOf::new((), (), installation(0), news, None);
+    {
+        let mut wait = pin!(half.abandoned(LifecycleFailure::Mailbox, &mut abandon_end));
+        let mut ended = None;
+        for next in 0..INSTALLED as u8 {
+            assert!(
+                mailbox
+                    .try_send(News::Installed(next, next, installation(1)))
+                    .is_ok()
+            );
+            match poll_once(wait.as_mut()) {
+                Poll::Ready(()) => {
+                    assert_eq!(
+                        usize::from(next) + 1,
+                        INSTALLED,
+                        "only once every place is full"
+                    );
+                    ended = Some(());
+                }
+                Poll::Pending => assert!(usize::from(next) + 1 < INSTALLED),
             }
-            Poll::Pending => assert!(usize::from(next) + 1 < INSTALLED),
         }
+        let Some(()) = ended else {
+            panic!("full places stop the wait");
+        };
     }
-    let Some(mut half) = ended else {
-        panic!("full places stop the wait");
-    };
     assert!(mailbox.try_send(News::Abandoned).is_ok());
     assert_eq!(half.late_end(), LateRead::Full, "nothing is confirmed");
     assert_eq!(ready(half.confirm_end()), Err(KeptFull), "nor read");
