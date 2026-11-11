@@ -2801,3 +2801,47 @@ fn a_voice_frame_goes_ahead_of_a_best_effort_backlog() {
         assert!(voice <= 2, "voice waited for the backlog: {tids:?}");
     });
 }
+
+/// A link that goes while a TID's frames wait for its window and another
+/// TID's wait behind the air: every MSDU's memory comes home once, whether
+/// its frame ended on the air or the link's end gave it back, and none
+/// comes again after.
+#[test]
+fn a_link_that_goes_returns_every_queued_msdu_once() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link_with_window());
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.settle();
+        // TID 0's next wait for its window, TID 3's for the air.
+        bench.send_msdu(msdu(0, &[2; 8]));
+        bench.send_msdu(msdu(0, &[3; 8]));
+        bench.send_msdu(msdu(3, &[4; 8]));
+        bench.settle();
+        let mut back = 0;
+        let count = |bench: &mut Bench<'_, '_>, back: &mut usize| {
+            while bench.returned.try_receive_with(Option::take).is_ok() {
+                *back += 1;
+            }
+        };
+        bench.send(ToActor::Disconnect);
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, false);
+        for _ in 0..8 {
+            bench.settle();
+            bench.advance(1);
+            count(bench, &mut back);
+        }
+        assert_eq!(back, 4, "each MSDU's memory once");
+        for _ in 0..8 {
+            bench.settle();
+            bench.advance(1);
+            count(bench, &mut back);
+        }
+        assert_eq!(back, 4, "and none again");
+    });
+}
