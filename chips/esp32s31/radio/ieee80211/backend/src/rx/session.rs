@@ -418,6 +418,11 @@ where
         Poll::Ready(Ok(()))
     }
 
+    /// Whether a freeze began: its mask was asked for or confirmed.
+    pub(crate) fn port_freeze_begun(&self) -> bool {
+        self.port_mask_started.is_some() || self.port_masked
+    }
+
     /// Resume a frozen ingress: the radio handler activates a fresh epoch
     /// (its stale events cleared), then receive reopens and the MAC runtime
     /// resumes.

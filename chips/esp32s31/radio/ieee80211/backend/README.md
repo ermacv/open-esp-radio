@@ -68,12 +68,31 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   every protected protocol RX frame. This validation path has a 1056-byte
   additional SRAM placement budget; other SRAM sections and allocated stacks
   retain their existing limits.
-- **GTK replacement.** The station keeps one physical group-key slot. A key
-  table write failure is the port's named fault even when an internal
-  rollback restores the old material; the port keeps the command, and no
-  success terminal or reusable old GTK is returned.
+- **GTK replacement.** The station keeps one physical group-key slot. A
+  replacement the key table refuses before it changes, or whose new write
+  the hardware rejects and whose rollback restores the previous entry,
+  returns its command whole beside `Fault::GroupReplacement` (`Refused`,
+  `RolledBack`): the previous key stands with its identity, and the core
+  runs on. A replacement whose rollback fails keeps the command's owners in
+  the port with both causes (`RollbackFailed`); the previous key is not
+  live, and the port does not retire. After the confirmed stop the
+  lifecycle owner's cleanup (`DataPort::clean_stopped`) clears the entry
+  once, ever, and reads it back; the stopped port's `service_tx` does not
+  run it. Read cleared: the key's removal (which writes the entry no more)
+  returns the slot and the permission, once (`KeyRemoved`). Read valid:
+  `CleanupRefused::Held(GroupEntryHeld)`, a hold: the slot and the
+  permission stay with the port, the previous key stays inactive, the port
+  does not retire, and each later call of the owner only reads the table
+  again. The read always answers: the entry's index lies in the key table
+  by its type (`MacKeyEntryIndex`). Registers missing before the clear:
+  `CleanupRefused::Unavailable`, nothing written, and the clear waits for
+  the owner's next call. None of these is the port's recorded fault.
+  Nothing repeats the clear, releases the owners on a timeout or resets: a
+  hold that never clears leaves the owner a stopped port with the hold's
+  cause. Running the station on without that slot is not a transition the
+  port offers.
   The receive handle retains zeroizing rollback material until removal or
-  reset. Recovery starts a new association.
+  reset.
 - **Station TSF.** An update that would cross 2^64 is refused before any TSF
   write; a beacon whose TSF the station cannot follow is dropped whole.
 - **HE service.** The lower-MAC port accepts caller-selected HE SU attempts,
@@ -99,9 +118,33 @@ development dependencies on the upper MAC and `oer-portable-embassy-net`.
   decrypts air frames at capture against its key table and drains
   captured hardware, DMA and interrupt frames through the RX cut. A
   publication is identified by its program's PSDU length: every host DMA
-  allocation has the same model descriptor address. Not run: air denial
-  (no device model) and the access point's role, which the station-only
-  data port does not issue.
+  allocation has the same model descriptor address. The shared
+  access-point cases (`access_point::check`) run against the same port and
+  model (`lower_mac/tests/port/data_port/access_point`): both roles on one
+  port, each role's configuration barrier, beacons and their expiry, stale
+  tokens, keys and stops. Not run: air denial (no device model).
+- **Access point.** The port implements `AccessPointPort` with its own
+  commands: a configuration withdraws the access point's queued attempts,
+  holds while one of its own is on the air or the core configures, and
+  restarts or stops the AP TSF; while the core configures the access
+  point, the station's attempts still publish (`ConfiguringView::other_interface`).
+  Its group key installs and removes through the same RX cut as the
+  station's. A beacon queued on VO past its deadline ends `Expired` with
+  its permission (`expire_beacons`). No Timestamp rule is declared
+  (`AccessPointServices::beacon_timestamp` is `None`), so no `BeaconStamp`
+  exists for the S31 and the port takes no beacon: the vendor's beacon path
+  writes the MAC's local-time count, not the access point's TSF, into the
+  frame in software, no timestamp-insertion control is known, and whether
+  the hardware replaces the field at transmission is not established. The
+  access point's runner writes the Timestamp itself (`Caller`): over this
+  port it ends `ApEnd::Unsupported` before the radio starts, and the S31
+  composition's start refuses `StartRefused::Unsupported` with its
+  settings before anything starts. Should the field turn out to be the
+  transmitter's (`Transmitter`), the runner needs that rule's support
+  before the S31 can serve an access point. On the S31 the access-point
+  suite's beacon cases end `Fixture`, which is no coverage; its two stops
+  run over ordinary access-point frames (`StopsAloneFrames`,
+  `SharedStopFrames`).
 - **Publication observations.** `Esp32s31Port`'s last parameter `O` is
   the port's observation receiver (`port::Observations`, an
   `oer_portable_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is
@@ -392,6 +435,68 @@ an MPDU of that category waits for the arena's end. A stop serves a
 published arena to its end (its watchdog's timeout abort when the
 hardware gives no completion) before it disables the core. A station
 pairwise key removal waits while an arena holds a key right.
+
+A key removal whose key still has an admitted use when its command runs
+is done for its command (`Done`): the core clears the key once its last
+use returns and keeps the receipt in the removal's core place (every
+sink refuses receipts), and the port keeps the command's rights in the
+key's own table place, which the removal emptied (`KeyPlace::Removing`):
+no second removal can name that place while they wait there, and no
+installation reuses it. Each later service, a stopped port's
+included, takes each finished receipt from its own place and ends that
+removal once with those rights (`deliver_removals`); a receipt of another
+key never answers the command at hand. A port with a waiting removal does
+not retire.
+
+A removal names its slot kind in its types: the core keeps each removal
+in a place of its key's slot kind (`RemovalPlace<S>`, one array per kind,
+as long as that kind's pool) and its receipt is of that kind
+(`KeyRemoved<S>`); the port's rights of each kind (`RemovalRights`) take
+only a receipt of their own kind. A key of another kind than the rights
+is refused before anything is taken (`RemovalMismatch`, the command back
+whole).
+
+A terminal or a cut unit the caller's sink refuses stays with the port
+(`port/unconsumed.rs`): a terminal in the place of its token (its ticket,
+the gate, its interface's configure permission, its pairwise key slot or
+its group permission), a unit in one of `RX_HELD` places, one relative
+sequence over both. While the radio has not confirmed a stop the port
+offers them again, oldest first, at the start of `service_tx`, `submit`,
+`command` and `access_point_command`, and a newer terminal waits behind
+them; after a confirmed stop only `take_unconsumed` offers them. Nothing
+the port keeps makes its deadline due or raises a fact, and a port that
+keeps one does not retire. An item the store cannot keep (a taken or
+missing place: a token that was not unique) goes to the call's one unkept
+place and comes back beside the call's answer (`Unkeeping`). The place has
+one right to fill it (`unconsumed::Vacancy`, neither `Clone` nor `Copy`):
+the first is made with the empty place, and a later one only by the
+`settle` that took a held item out beside an answer; no call makes one of
+its own. Every producer obtains it before it takes the owner an item
+carries (through `DriverEnv::vacancy` in the driver's steps); a given or
+kept item gives the right back, a held one ends it there. A submission
+without the right takes nothing of its attempt and returns it whole
+(`SubmitHalt::NotAccepted`); a call that ends with neither the right nor
+an item lost it, which the port records as its permanent fault
+(`Fault::RightLost`). Without the right the owner stays where it is:
+queued withdrawals
+and a late beacon stay queued, completions the core already gave wait in
+the driver and come home first at the next call (no sink takes the core's
+completions meanwhile), after the first refusal the rest of a batch stays
+in the driver, waiting removals, the configuration and gate terminals, a
+key command (held) and the receive cut wait for the next call. A second
+item of one call never reaches a delivery, so none is dropped. The stopped
+port's cleanup (`clean_stopped`) first brings home the completions the
+driver still keeps, under the same right and without a hardware call; a
+refused one comes back beside the cleanup and the rest stay in the
+driver.
+
+A station group key mutation and an access point's are commands of their
+own role (`StationGroupCommand`, `AccessPointGroupCommand`). A step of
+the driver that refuses, and a replacement the hardware rolled back,
+return the command whole: the engine converts it back to the caller's
+form and the frozen receive cut resumes. Only a replacement whose
+rollback failed keeps its owners in the port (`retained_group`) until the
+stopped port's cleanup above.
 
 The port exposes ordinary MPDUs, the station's data arenas (with their
 A-MPDU rates) and RX BlockAck agreements. It does not expose beacon

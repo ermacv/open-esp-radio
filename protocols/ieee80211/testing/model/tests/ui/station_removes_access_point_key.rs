@@ -10,7 +10,7 @@ type Composition = ModelBackend<Id>;
 type Role = Station;
 #[cfg(ui_reject)]
 type Role = AccessPoint;
-type Permission<'id> = IssuedSlot<'id, oer_protocols_ieee80211_testing_model::ModelGroupPermission<Station>, ModelPool<Id, 8>>;
+type Permission<'id> = IssuedSlot<'id, oer_protocols_radio_port::Slots<oer_protocols_ieee80211_testing_model::ModelGroupPermission<Station>, 1>, ModelPool<Id, 8>>;
 
 pub fn remove<'id>(permission: Permission<'id>, key: ModelGroupKey<'id, Composition, Role>) -> PortCommand<'id, ModelTypes<Composition>, ModelCaps> {
     PortCommand::RemoveGroup { permission, key } // ui-error: E0308

@@ -59,11 +59,37 @@ impl<T> DmaStatic<T> {
     }
 }
 
+/// Why [`Placed::bind_dma`] refused: the allocation's address in the space,
+/// or the caller's binding.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DmaBindRefusal<E> {
+    /// The allocation has no DMA range in the space.
+    Address,
+    /// The caller's binding refused.
+    Bind(E),
+}
+
+impl<E> DmaBindRefusal<E> {
+    /// The caller's cause, `address` for an address refusal.
+    pub(crate) fn cause(self, address: E) -> E {
+        match self {
+            Self::Address => address,
+            Self::Bind(cause) => cause,
+        }
+    }
+}
+
 /// A value placed in the DMA window, claimed once from its [`DmaStatic`]:
 /// every address inside it lies in the window, off an address with zero low
 /// DMA address bits.
 pub struct Placed<T: 'static> {
     value: &'static mut T,
+}
+
+impl<T: 'static> core::fmt::Debug for Placed<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("Placed")
+    }
 }
 
 impl<T: 'static> Placed<T> {
@@ -81,23 +107,50 @@ impl<T: 'static> Placed<T> {
         Self { value }
     }
 
-    /// Retain the allocation and its complete DMA range in space `S`.
+    /// Bind the allocation in space `S`: its complete DMA range and its
+    /// projection, then `bind`'s binding computed from them. A refusal of
+    /// the address, or of `bind`, returns the placement whole: the same
+    /// allocation, which `bind` saw only through a borrow, and nothing was
+    /// published to hardware. A refusal's cause is `Copy`, so it carries no
+    /// range proof of the allocation out beside the placement.
     #[allow(unsafe_code, reason = "the consumed Placed proves static DMA storage")]
-    pub(crate) fn into_dma_parts<S: crate::radio::ieee80211::dma::space::DmaSpace>(
+    pub(crate) fn bind_dma<S: crate::radio::ieee80211::dma::space::DmaSpace, R, E: Copy>(
         self,
-    ) -> Option<(
-        &'static mut T,
-        oer_portable_memory::StableDmaRange<'static>,
-        crate::system::memory::dma_address::PlacementProjection,
-    )> {
+        bind: impl FnOnce(
+            &mut T,
+            &oer_portable_memory::StableDmaRange<'static>,
+            &crate::system::memory::dma_address::PlacementProjection,
+        ) -> Result<R, E>,
+    ) -> Result<
+        (
+            &'static mut T,
+            oer_portable_memory::StableDmaRange<'static>,
+            crate::system::memory::dma_address::PlacementProjection,
+            R,
+        ),
+        (DmaBindRefusal<E>, Self),
+    > {
         let (storage, projection) =
-            crate::system::memory::dma_address::PlacementProjection::take::<S, _>(self).ok()?;
-        let start = projection.address(storage).ok()?.get();
+            match crate::system::memory::dma_address::PlacementProjection::take::<S, _>(self) {
+                Ok(taken) => taken,
+                Err((_, placed)) => return Err((DmaBindRefusal::Address, placed)),
+            };
+        let start = match projection.address(storage) {
+            Ok(start) => start.get(),
+            Err(_) => return Err((DmaBindRefusal::Address, Self { value: storage })),
+        };
         // SAFETY: Placed owns this unique static allocation in the DMA window.
         // The returned storage owner must synchronize access for its complete
         // DMA lifecycle; the proof contains no reference aliasing that owner.
-        unsafe { oer_portable_memory::StableDmaRange::from_owner(storage, start) }
-            .map(|(storage, range)| (storage, range, projection))
+        let (storage, range) =
+            match unsafe { oer_portable_memory::StableDmaRange::from_owner(storage, start) } {
+                Ok(bound) => bound,
+                Err(storage) => return Err((DmaBindRefusal::Address, Self { value: storage })),
+            };
+        match bind(storage, &range, &projection) {
+            Ok(binding) => Ok((storage, range, projection, binding)),
+            Err(refused) => Err((DmaBindRefusal::Bind(refused), Self { value: storage })),
+        }
     }
 
     pub(crate) fn as_ref(&self) -> &T {

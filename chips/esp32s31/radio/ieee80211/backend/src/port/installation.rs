@@ -22,10 +22,10 @@ pub type InstallationPools = (
 
 /// The tokens of one installation, under the brand its tasks share.
 pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    pub tickets: [Slot<'p, Tickets, Part<Id, 2>>; TX_TICKETS],
-    pub terminal_access: TerminalAccess<'p, Tickets, Part<Id, 2>>,
+    pub tickets: [Slot<'p, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>; TX_TICKETS],
+    pub terminal_access: TerminalAccess<'p, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
     pub buffers: [Buffer<'p, Id, D, B, O>; TX_BUFFERS],
-    pub connection_epoch: Slot<'p, ConnectionEpochKind, Part<Id, 4>>,
+    pub connection_epoch: Slot<'p, radio::Slots<ConnectionEpochKind, 1>, Part<Id, 4>>,
     pub station_association: core_mac::association::VacantStationAssociation<'p, CorePath<Id>>,
     pub access_point_association:
         core_mac::association::VacantAccessPointAssociation<'p, CorePath<Id>>,
@@ -42,10 +42,10 @@ pub struct Resources<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Obse
 /// receive Block Ack slots, whose agreements the datapath actor keeps, and
 /// the access point's, which a station-only composition leaves unused.
 pub struct StationTokens<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    pub tickets: [Slot<'p, Tickets, Part<Id, 2>>; TX_TICKETS],
-    pub terminal_access: TerminalAccess<'p, Tickets, Part<Id, 2>>,
+    pub tickets: [Slot<'p, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>; TX_TICKETS],
+    pub terminal_access: TerminalAccess<'p, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
     pub buffers: [Buffer<'p, Id, D, B, O>; TX_BUFFERS],
-    pub connection_epoch: Slot<'p, ConnectionEpochKind, Part<Id, 4>>,
+    pub connection_epoch: Slot<'p, radio::Slots<ConnectionEpochKind, 1>, Part<Id, 4>>,
     pub station_association: core_mac::association::VacantStationAssociation<'p, CorePath<Id>>,
     pub station_commands: InterfacePermissions<'p, Station, Part<Id, 8>>,
     pub station_group_permission: keys::StaPermission<'p, Id>,

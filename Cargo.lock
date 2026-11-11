@@ -1645,6 +1645,7 @@ dependencies = [
  "oer-portable-trace",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-core-arbiter",
+ "oer-protocols-ieee80211-core-roles-ap",
  "oer-protocols-ieee80211-core-roles-sta",
  "oer-protocols-ieee80211-core-security-rsn",
  "oer-protocols-ieee80211-core-upper-mac",
@@ -1989,6 +1990,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-images-wifi-access-point"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer",
+ "oer-hil-agent",
+ "oer-hil-services-wifi-access-point",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "postcard",
+ "static_cell",
+]
+
+[[package]]
 name = "oer-hil-images-wifi-station"
 version = "0.1.0"
 dependencies = [
@@ -2234,6 +2249,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-hil-scenarios-wifi-access-point"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-hil-services-wifi-access-point",
+ "oer-protocols-hil-agent",
+ "oer-tools-hil-harness",
+ "oer-tools-lab-model",
+ "serde_json",
+]
+
+[[package]]
 name = "oer-hil-scenarios-wifi-load"
 version = "0.1.0"
 dependencies = [
@@ -2309,6 +2336,18 @@ dependencies = [
 
 [[package]]
 name = "oer-hil-services-sdk-station"
+version = "0.1.0"
+dependencies = [
+ "heapless",
+ "oer-protocols-hil-agent",
+ "oer-protocols-hil-protocol",
+ "postcard",
+ "postcard-schema",
+ "serde",
+]
+
+[[package]]
+name = "oer-hil-services-wifi-access-point"
 version = "0.1.0"
 dependencies = [
  "heapless",
@@ -2657,6 +2696,7 @@ dependencies = [
  "oer-portable-crypto",
  "oer-portable-time",
  "oer-portable-wire",
+ "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-core-security-cipher",
  "oer-protocols-ieee80211-core-security-rsn",
@@ -2754,10 +2794,12 @@ dependencies = [
  "oer-portable-sync",
  "oer-portable-time",
  "oer-portable-time-virtual",
+ "oer-portable-wire",
  "oer-protocols-bridges-ieee80211-ethernet",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-core-arbiter",
+ "oer-protocols-ieee80211-core-roles-ap",
  "oer-protocols-ieee80211-core-roles-sta",
  "oer-protocols-ieee80211-core-security-cipher",
  "oer-protocols-ieee80211-core-security-rsn",

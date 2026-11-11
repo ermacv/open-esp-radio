@@ -324,3 +324,106 @@ trait NowOrNever: Future + Sized {
 }
 
 impl<F: Future> NowOrNever for F {}
+
+/// A producer notify that lets another thread free a cell while the
+/// producer's registration is being armed.
+struct ArmingNotify<'b> {
+    waker: AtomicWaker,
+    /// Whether the next registration meets the other thread.
+    meet: core::sync::atomic::AtomicBool,
+    barrier: &'b std::sync::Barrier,
+}
+
+impl QueueNotify for ArmingNotify<'_> {
+    fn register(&self, cx: &mut Context<'_>) {
+        self.waker.register(cx.waker());
+        if self.meet.swap(false, Ordering::SeqCst) {
+            // The other thread frees a cell between these two meetings.
+            self.barrier.wait();
+            self.barrier.wait();
+        }
+    }
+    fn notify(&self) {
+        self.waker.wake();
+    }
+}
+
+#[test]
+fn room_freed_before_the_wait_is_found_without_a_wake() {
+    let mut queue = WakingSpscQueue::<u8, 1>::new();
+    let (mut sender, receiver) = queue.split();
+    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut cx = Context::from_waker(&waker);
+    sender.try_send(1).unwrap();
+    assert_eq!(receiver.try_receive(), Some(1));
+    assert!(sender.poll_room(&mut cx).is_ready());
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
+    // The poll took no cell: the room is still there for a send.
+    assert!(sender.try_send(2).is_ok());
+}
+
+#[test]
+fn room_freed_after_the_wait_is_armed_wakes_it_once() {
+    let mut queue = WakingSpscQueue::<u8, 1>::new();
+    let (mut sender, receiver) = queue.split();
+    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut cx = Context::from_waker(&waker);
+    sender.try_send(1).unwrap();
+    assert!(sender.poll_room(&mut cx).is_pending());
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
+    assert_eq!(receiver.try_receive(), Some(1));
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
+    assert!(sender.poll_room(&mut cx).is_ready());
+    assert!(sender.try_send(2).is_ok());
+}
+
+#[test]
+fn room_freed_while_the_wait_is_armed_is_found_by_its_check() {
+    let barrier = std::sync::Barrier::new(2);
+    let mut queue = WakingSpscQueue::<u8, 1, AtomicWaker, ArmingNotify<'_>>::across_harts(
+        AtomicWaker::new(),
+        ArmingNotify {
+            waker: AtomicWaker::new(),
+            meet: core::sync::atomic::AtomicBool::new(false),
+            barrier: &barrier,
+        },
+    );
+    let (mut sender, receiver) = queue.split();
+    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut cx = Context::from_waker(&waker);
+    sender.try_send(1).unwrap();
+    sender.producer.meet.store(true, Ordering::SeqCst);
+    let meeting = &barrier;
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            meeting.wait();
+            assert_eq!(receiver.try_receive(), Some(1));
+            meeting.wait();
+        });
+        // The cell is freed after the registration and before the wait is
+        // marked: the check after the fence finds it.
+        assert!(sender.poll_room(&mut cx).is_ready());
+    });
+    assert!(wakes.0.load(Ordering::Relaxed) <= 1);
+    assert!(sender.try_send(2).is_ok());
+}
+
+#[test]
+fn a_permanently_full_queue_never_wakes_a_room_wait() {
+    let mut queue = WakingSpscQueue::<u8, 1>::new();
+    let (mut sender, receiver) = queue.split();
+    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+    let waker = Waker::from(Arc::clone(&wakes));
+    let mut cx = Context::from_waker(&waker);
+    sender.try_send(1).unwrap();
+    for _ in 0..4 {
+        assert!(sender.poll_room(&mut cx).is_pending());
+    }
+    // Sends that find no cell and a consumer that takes nothing wake none.
+    assert!(sender.try_send(2).is_err());
+    assert_eq!(receiver.len(), 1);
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
+}

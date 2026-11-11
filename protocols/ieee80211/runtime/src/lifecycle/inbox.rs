@@ -1,6 +1,7 @@
 //! The actor's messages: frames for the station, the owners it gives back
 //! and its answers, each taken in the order the actor sent it.
 
+use super::outbox::Messages;
 use super::*;
 use crate::station::{ControlTerminal, PendingTerminal, RxDrop};
 use oer_protocols_ieee80211_contracts_port::{
@@ -13,8 +14,26 @@ use oer_protocols_ieee80211_core_roles_sta::machine::{StaEapol, StaInput, StaTra
 
 use crate::datapath::{RetuneFailed, StopOutcome};
 
-/// The messages taking one of the actor's messages sends at most.
+/// The messages taking one of the actor's messages sends at most: the
+/// actor's queue is checked for this room before each.
 const ANSWER_MESSAGES: usize = 2;
+
+/// What taking one of the actor's messages owes: its answers to the actor,
+/// and the end a confirmed stop told.
+struct Answer<'id, D: DatapathPort<'id>, F> {
+    messages: Messages<'id, D>,
+    stopped: Option<LifecycleEnd<F>>,
+}
+
+impl<'id, D: DatapathPort<'id>, F> Answer<'id, D, F> {
+    /// Its answers alone.
+    const fn of(messages: Messages<'id, D>) -> Self {
+        Self {
+            messages,
+            stopped: None,
+        }
+    }
+}
 
 impl<'id, D, C, X, T, const GROUPS: usize, O> Lifecycle<'id, D, C, X, T, GROUPS, O>
 where
@@ -46,10 +65,25 @@ where
                 self.inner.blocked = true;
                 return;
             }
-            let Some(message) = actor.from_actor.try_receive() else {
+            // The right to answer comes before the message is taken.
+            let Some(right) = self.inner.sending.take() else {
                 return;
             };
-            self.message(actor, io, message);
+            let Some(message) = actor.from_actor.try_receive() else {
+                self.inner.give_back(right);
+                return;
+            };
+            let answer = self.message(actor, io, message);
+            self.inner
+                .flush(actor, right, Outbox::of(None, answer.messages));
+            // A refused answer names the end; what the stop confirmed stays
+            // beside it.
+            if let Some(end) = answer.stopped {
+                match self.inner.end {
+                    None => self.inner.end = Some(end),
+                    Some(_) => self.inner.confirmed = Some(end),
+                }
+            }
             // The station owes its actions before its next input, as it
             // would after any input.
             if self.stepping() {
@@ -70,9 +104,9 @@ where
         actor: &mut ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
         io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
         message: FromActor<'id, D>,
-    ) {
+    ) -> Answer<'id, D, super::PortFault<'id, D>> {
         let now = self.inner.now;
-        match message {
+        let messages = match message {
             FromActor::Received { frame, meta } => {
                 let received =
                     self.station
@@ -82,7 +116,7 @@ where
                         ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
                     });
                 }
-                self.inner.send(actor, ToActor::Recycle(frame));
+                Messages::One(Unsent::ToActor(ToActor::Recycle(frame)))
             }
             FromActor::Eapol {
                 frame,
@@ -99,85 +133,115 @@ where
                             .into(),
                     ),
                 };
+                let recycle = ToActor::Recycle(frame);
                 match taken {
-                    Ok(StaEapol::Taken) => {}
-                    Ok(StaEapol::Faulted) => self.inner.send(actor, ToActor::EapolFaulted),
-                    Err(reason) => report(&mut self.inner.events, || {
-                        ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
-                    }),
+                    Ok(StaEapol::Taken) => Messages::One(Unsent::ToActor(recycle)),
+                    Ok(StaEapol::Faulted) => {
+                        Messages::Two(Unsent::ToActor(ToActor::EapolFaulted), recycle)
+                    }
+                    Err(reason) => {
+                        report(&mut self.inner.events, || {
+                            ServiceEvent::RxFrameDropped(RxDrop::Station(reason))
+                        });
+                        Messages::One(Unsent::ToActor(recycle))
+                    }
                 }
-                self.inner.send(actor, ToActor::Recycle(frame));
             }
             FromActor::Returned => match actor.returns.try_receive() {
-                Some(returned) => self.returned(actor, io, returned),
-                None => self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::Missing)),
+                Some(returned) => Messages::to_actor(self.returned(actor, io, returned)),
+                None => {
+                    self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::Missing));
+                    Messages::None
+                }
             },
             // The station keeps its own schedule.
-            FromActor::Tbtt(_) => {}
-            FromActor::BarOwed { tid, head } => self.station.tx_block_ack_request(tid, head),
+            FromActor::Tbtt(_) => Messages::None,
+            FromActor::BarOwed { tid, head } => {
+                self.station.tx_block_ack_request(tid, head);
+                Messages::None
+            }
             FromActor::TxTraffic { tid, next } => {
                 // The step after this message takes what the traffic owes.
                 let _owed: StaTraffic = self.station.tx_traffic(tid, next, now);
+                Messages::None
             }
-            FromActor::BlockAckReply(reply) => self.inner.reply = Some(reply),
+            FromActor::BlockAckReply(reply) => {
+                self.inner.reply = Some(reply);
+                Messages::None
+            }
             FromActor::MsduRefused { reason, count } => {
                 for _ in 0..count {
                     io.output.emit(ServiceOutput::MsduRefused { reason });
                 }
+                Messages::None
             }
-            FromActor::LinkReturned => match actor.link_return.try_receive() {
-                Some(link) => {
-                    self.station.link_returned(link);
-                    self.inner.link.lent = false;
-                    self.inner.link.returning = false;
-                    self.inner.link.epoch = None;
+            FromActor::LinkReturned => {
+                match actor.link_return.try_receive() {
+                    Some(link) => {
+                        self.station.link_returned(link);
+                        self.inner.link.lent = false;
+                        self.inner.link.returning = false;
+                        self.inner.link.epoch = None;
+                    }
+                    None => {
+                        self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::Missing))
+                    }
                 }
-                None => self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::Missing)),
-            },
-            FromActor::TxSequence { tid, next } => self.station.tx_sequence(tid, next),
+                Messages::None
+            }
+            FromActor::TxSequence { tid, next } => {
+                self.station.tx_sequence(tid, next);
+                Messages::None
+            }
             FromActor::PairwiseReturned(key) => {
                 self.station.key_returned(key);
                 self.inner.link.key = false;
                 self.inner.link.loan = false;
+                Messages::None
             }
             FromActor::GateOpened(open) => {
                 if let Some(ArbiterCell::Running(arbiter)) = self.inner.arbiter.as_mut() {
                     arbiter.gate_opened(open);
                 }
+                Messages::None
             }
-            FromActor::Started(Ok(())) => self.inner.radio = Radio::Running,
+            FromActor::Started(Ok(())) => {
+                self.inner.radio = Radio::Running;
+                Messages::None
+            }
             FromActor::Started(Err(refused)) => {
                 // The radio never ran: nothing to take back but the stop.
                 self.inner.ending =
                     Some((Ending::StartRefused(refused), now, super::EndStage::Begin));
+                Messages::None
             }
-            FromActor::Retuned(result) => self.retuned(actor, io, result),
-            FromActor::Stopped(outcome) => self.stopped(actor, outcome),
-            FromActor::Faulted(fault) => self.inner.end = Some(LifecycleEnd::Faulted(fault)),
-            FromActor::Recovering(fault) => self
-                .inner
-                .begin_end(Ending::Restart(StationFailure::Fault(fault)), io),
-        }
+            FromActor::Retuned(result) => Messages::to_actor(self.retuned(io, result)),
+            FromActor::Stopped(outcome) => return self.stopped(outcome),
+            FromActor::Faulted(fault) => {
+                self.inner.end = Some(LifecycleEnd::Faulted(fault));
+                Messages::None
+            }
+            FromActor::Recovering(fault) => {
+                self.inner
+                    .begin_end(Ending::Restart(StationFailure::Fault(fault)), io);
+                Messages::None
+            }
+        };
+        Answer::of(messages)
     }
 
-    /// The radio's move ended: the arbiter hears it.
-    fn retuned<
-        const TO: usize,
-        const FROM: usize,
-        const RETURNS: usize,
-        const COMMAND_DEPTH: usize,
-        N: Notifies,
-    >(
+    /// The radio's move ended: the arbiter hears it. A refused start asked
+    /// for another move: its message.
+    fn retuned<const COMMAND_DEPTH: usize, N: Notifies>(
         &mut self,
-        actor: &ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
         io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
         result: Result<(), RetuneFailed<super::PortFault<'id, D>>>,
-    ) {
+    ) -> Option<ToActor<'id, D>> {
         let Some(pending) = self.inner.retune.take() else {
             self.inner.end = Some(LifecycleEnd::Contract(
                 LifecycleViolation::RetuneWithoutRequest,
             ));
-            return;
+            return None;
         };
         match result {
             Ok(()) => {
@@ -199,10 +263,10 @@ where
                         let channel = next.channel();
                         self.inner.arbiter = Some(ArbiterCell::Running(arbiter));
                         self.inner.retune = Some(next);
-                        self.inner.send(actor, ToActor::Retune(channel));
                         // A stopped radio receives only notices: the return
                         // came with its own token.
                         self.arbiter_notices(io);
+                        return Some(ToActor::Retune(channel));
                     }
                     RetuneRefused::Failed(failed) => {
                         self.inner.arbiter = Some(ArbiterCell::Retired(
@@ -224,6 +288,7 @@ where
                 }
             },
         }
+        None
     }
 
     /// Hand the arbiter's notices to the station.
@@ -248,19 +313,19 @@ where
         }
     }
 
-    /// The radio's stop ended: a confirmed one ends the actor's run.
-    fn stopped<const TO: usize, const FROM: usize, const RETURNS: usize>(
+    /// The radio's stop ended: a confirmed one ends the actor's run, by its
+    /// message and the end it tells once that message went.
+    fn stopped(
         &mut self,
-        actor: &ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
-        outcome: StopOutcome,
-    ) {
+        outcome: StopOutcome<super::PortFault<'id, D>>,
+    ) -> Answer<'id, D, super::PortFault<'id, D>> {
         let Some((why, _, super::EndStage::Radio)) = self.inner.ending else {
             self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::Missing));
-            return;
+            return Answer::of(Messages::None);
         };
         if let StopOutcome::Unconfirmed(observed) = outcome {
             self.inner.end = Some(LifecycleEnd::StopUnconfirmed(observed));
-            return;
+            return Answer::of(Messages::None);
         }
         let (message, end) = match (why, outcome) {
             // The radio stopped; the actor retires once the network's late
@@ -279,9 +344,9 @@ where
             }
             (Ending::Restart(failure), _) => (ToActor::Reinstall, LifecycleEnd::Restart(failure)),
         };
-        self.inner.send(actor, message);
-        if self.inner.end.is_none() {
-            self.inner.end = Some(end);
+        Answer {
+            messages: Messages::One(Unsent::ToActor(message)),
+            stopped: Some(end),
         }
     }
 
@@ -297,7 +362,7 @@ where
         actor: &mut ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
         io: &mut LifecycleIo<'_, D::Caps, impl ServiceOutputSink<D::Caps>, COMMAND_DEPTH, N>,
         returned: Returned<'id, D>,
-    ) {
+    ) -> Option<ToActor<'id, D>> {
         match returned {
             Returned::Terminal { terminal, grouped } => {
                 let group = if grouped {
@@ -306,13 +371,13 @@ where
                         None => {
                             self.inner
                                 .reject(Rejected::Terminal(terminal), LifecycleViolation::Missing);
-                            return;
+                            return None;
                         }
                     }
                 } else {
                     None
                 };
-                self.terminal(actor, terminal, group);
+                return self.terminal(terminal, group);
             }
             Returned::Command {
                 command,
@@ -342,7 +407,7 @@ where
                         None => {
                             self.inner
                                 .reject(Rejected::Command(command), LifecycleViolation::Missing);
-                            return;
+                            return None;
                         }
                     }
                 }
@@ -355,6 +420,26 @@ where
                     io,
                 );
             }
+            Returned::Unrun { command, grouped } => {
+                // The fault's own message ends or restarts the run: the
+                // command is never issued again, and its owners stay with
+                // the lifecycle beside the first a broken contract left.
+                if grouped {
+                    match actor.groups.try_receive() {
+                        // A token of the faulted installation: it ends with
+                        // the run's end or restart.
+                        Some(group) => drop(group),
+                        None => {
+                            self.inner
+                                .reject(Rejected::Command(command), LifecycleViolation::Missing);
+                            return None;
+                        }
+                    }
+                }
+                if self.inner.rejected.is_none() {
+                    self.inner.rejected = Some(Rejected::Command(command));
+                }
+            }
             Returned::Station {
                 ticket,
                 buffer,
@@ -366,6 +451,7 @@ where
                 self.station_returned(ticket, buffer, Err(reason));
             }
         }
+        None
     }
 
     /// A station frame's end: its rate lesson, when its terminal came, and
@@ -441,13 +527,13 @@ where
             .input(self.inner.now, input, &mut self.inner.events);
     }
 
-    /// One terminal of the port.
-    fn terminal<const TO: usize, const FROM: usize, const RETURNS: usize>(
+    /// One terminal of the port; a station frame's rate lesson, for the
+    /// actor.
+    fn terminal(
         &mut self,
-        actor: &ActorEnds<'_, 'id, D, TO, FROM, RETURNS>,
         terminal: ActorTerminal<'id, D>,
         group: Option<GroupPending<'id, ActorEpochPath<'id, D>>>,
-    ) {
+    ) -> Option<ToActor<'id, D>> {
         let now = self.inner.now;
         let control = match &terminal {
             LowerMacTerminal::GateClosed(_) => Some(ControlTerminal::GateClosed),
@@ -474,7 +560,7 @@ where
                     PendingTerminal::Control(control),
                 )),
             );
-            return;
+            return None;
         }
         match terminal {
             LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal)) => {
@@ -490,14 +576,11 @@ where
                 }
                 self.station_returned(ticket, buffer, Ok(outcome));
                 if let Some((rates, current, outcome)) = self.inner.lesson.take() {
-                    self.inner.send(
-                        actor,
-                        ToActor::Learn {
-                            rates,
-                            current,
-                            outcome,
-                        },
-                    );
+                    return Some(ToActor::Learn {
+                        rates,
+                        current,
+                        outcome,
+                    });
                 }
             }
             LowerMacTerminal::GateClosed(closed) => {
@@ -542,7 +625,7 @@ where
                             PendingTerminal::Control(ControlTerminal::PairwiseInstall),
                         )),
                     );
-                    return;
+                    return None;
                 };
                 match request.installed(key) {
                     Ok(key) => self.station.input(
@@ -585,6 +668,7 @@ where
                 );
             }
         }
+        None
     }
 
     /// A group key change's terminal, with the station's token the actor
