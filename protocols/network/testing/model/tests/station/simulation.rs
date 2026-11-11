@@ -28,6 +28,7 @@
 
 pub mod access_point;
 pub mod composition;
+pub mod stream;
 pub mod wired;
 
 use std::cell::{Cell, RefCell, RefMut};
@@ -79,14 +80,16 @@ use oer_protocols_network_port::{
     EthernetFrameView, FramePort, FrameSource, LinkSnapshot, PortRefusal, Unpublished,
 };
 use oer_protocols_network_runtime::{
-    ConfigurationWatch, DevicePort, EndCause, Ended, LendingLanes, LendingSocket, MemoryPolicy,
-    Observer, Received as Delivered, Sent, Service, Socket, SocketLanes, StopLane,
+    ConfigurationWatch, DevicePort, EndCause, Ended, LendingLanes, LendingSocket, LocalEnd,
+    MemoryPolicy, Observer, Producer, Received as Delivered, Sent, Service, Socket, SocketLanes,
+    StopLane,
 };
 use oer_protocols_network_wire::ip::Dscp;
 use oer_protocols_radio_port::{Installations, LocalId, with_local_slot};
 
 use access_point::{AccessPoint, ApConfig, PMK, SSID};
 use composition::{Counts, FreeMemory, Memory, ModelPool, NetworkStopState, Observed, StationPort};
+use stream::Stream;
 use wired::{DhcpServer, Wired};
 
 /// The station's own address.
@@ -113,7 +116,8 @@ const GROUPS: usize = 1;
 /// with the channel socket alone.
 pub const BLOCK: usize = 1472;
 pub const BLOCKS: usize = 64;
-const SOCKETS: usize = 1;
+/// The application's socket and the stream's.
+const SOCKETS: usize = 2;
 pub const CREDITS: usize = 32;
 const RECEIVED: usize = 8;
 pub const LANE: usize = 32;
@@ -174,7 +178,7 @@ impl FrameCost for ModelCeiling {
         core::num::NonZeroU32::new(micros.saturating_mul(64)).unwrap_or(core::num::NonZeroU32::MAX)
     }
 }
-type NetService<'c, T> = Service<
+type NetService<'c, T, L = ()> = Service<
     'static,
     'static,
     T,
@@ -188,8 +192,11 @@ type NetService<'c, T> = Service<
     LANE,
     Held<Inner<'c>>,
     Queued<'c>,
+    L,
 >;
-type NetEnded<'c, T> = Ended<
+/// The network's local producer: the case's stream.
+type StreamProducer<T> = Producer<'static, T, Stream, CREDITS>;
+type NetEnded<'c, T, R = (), U = ()> = Ended<
     'static,
     'static,
     T,
@@ -202,6 +209,8 @@ type NetEnded<'c, T> = Ended<
     Held<Inner<'c>>,
     Queued<'c>,
     AirtimeFault,
+    R,
+    U,
 >;
 /// The application's socket.
 pub type Sock<T> = Socket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS>;
@@ -371,6 +380,12 @@ pub struct Setup {
     pub pmk: [u8; 32],
     /// The application's socket lends ([`LEND_CREDIT`]) instead of copying.
     pub lending: bool,
+    /// The network's local producer, bound to its port: a stream of
+    /// datagrams the service sends in its packet turns.
+    pub stream: Option<(u16, Stream)>,
+    /// The station's receive buffers, out with the port's caller at once:
+    /// the model's own by default.
+    pub rx_buffers: Option<usize>,
 }
 
 impl Default for Setup {
@@ -382,6 +397,8 @@ impl Default for Setup {
             seed: 0x5eed,
             pmk: PMK,
             lending: false,
+            stream: None,
+            rx_buffers: None,
         }
     }
 }
@@ -984,6 +1001,14 @@ async fn run<'s, T: 'static>(
         clock.clone(),
     )
     .expect("the first installation");
+    if let Some(buffers) = setup.rx_buffers {
+        air.set_rx_limits(oer_protocols_ieee80211_testing_model::ModelRxLimits {
+            ring: usize::MAX,
+            held: buffers,
+            lent: buffers,
+        })
+        .expect("the model holds that many");
+    }
     let ModelInstall {
         port,
         commands: issuer,
@@ -1190,12 +1215,38 @@ async fn run<'s, T: 'static>(
             core::num::NonZeroU32::new(1_000).expect("a quantum"),
         )));
         let egress = AirtimeEgress::new(airtime, StationAir::new(link, ModelCeiling));
-        let mut service: NetService<'_, T> =
-            Service::new(owner, egress, MemoryPolicy::KEEP, stopping);
+        let (stream_port, stream) = setup.stream.clone().unwrap_or_else(|| {
+            (
+                0,
+                Stream::new(
+                    Remote {
+                        address: [0; 4],
+                        port: 0,
+                    },
+                    0,
+                    0,
+                ),
+            )
+        });
+        let mut service: NetService<'_, T, StreamProducer<T>> = Service::with_producer(
+            owner,
+            egress,
+            MemoryPolicy::KEEP,
+            stopping,
+            stream,
+            Box::leak(Box::new(LocalEnd::new())),
+        );
+        if setup.stream.is_some() {
+            service
+                .bind_local(stream_port, Dscp::default())
+                .expect("the stream's port opens");
+        }
         let watch: &'static ConfigurationWatch = Box::leak(Box::new(ConfigurationWatch::new()));
         service.watch(watch).expect("the first publication");
         let socket = if setup.lending {
-            let lent = oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS;
+            let lent = setup
+                .rx_buffers
+                .unwrap_or(oer_protocols_ieee80211_testing_model::MODEL_RX_EVENTS);
             service
                 .lend_from(lent, lent - LEND_CREDIT)
                 .expect("the account fits the model's lend count");
@@ -1251,7 +1302,7 @@ async fn run<'s, T: 'static>(
         // The four tasks.
         let actor_end = RefCell::new(None);
         let lifecycle_end = RefCell::new(None);
-        let network_end: RefCell<Option<NetEnded<'_, T>>> = RefCell::new(None);
+        let network_end: RefCell<Option<NetEnded<'_, T, Stream, u32>>> = RefCell::new(None);
         let station_done = Signal::default();
         {
             let running = lifecycle.take().expect("the session's lifecycle");

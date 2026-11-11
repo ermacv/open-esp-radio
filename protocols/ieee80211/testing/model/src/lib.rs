@@ -329,6 +329,9 @@ pub const MODEL_TERMINALS: usize = MODEL_TICKETS
     + InterfaceCommandPool::<AccessPoint>::TERMINAL_CAPACITY;
 /// The event queue additionally reserves the bounded RX owners.
 pub const MODEL_EVENTS: usize = MODEL_TERMINALS + MODEL_RX_EVENTS;
+/// The most received units an air's limits let a caller hold
+/// ([`ModelAir::set_rx_limits`]).
+pub const MODEL_RX_HELD_MAX: usize = 32;
 
 /// A queue of the contract's capacity: an overflow is a broken promise and
 /// poisons the install while retaining every owner.
@@ -1890,6 +1893,11 @@ pub struct ModelAir {
     air_fault: Cell<Option<AirTimeError>>,
     /// The limits of the receive path.
     rx_limits: Cell<ModelRxLimits>,
+    /// The receive buffers out with the port's caller now, queued or held,
+    /// and the most ever out at once, lent ones included.
+    rx_out: Cell<(usize, usize)>,
+    /// The current installation's count of buffers lent to the network.
+    rx_network: Cell<Option<alloc::sync::Arc<ModelNetwork>>>,
     /// The subframes one data arena holds.
     arena_frames: Cell<u8>,
     /// The station interface's HE association, as the last
@@ -1950,6 +1958,8 @@ impl ModelAir {
                 held: MODEL_RX_EVENTS,
                 lent: MODEL_RX_EVENTS,
             }),
+            rx_out: Cell::new((0, 0)),
+            rx_network: Cell::new(None),
             arena_frames: Cell::new(arena::MODEL_ARENA_FRAMES as u8),
         }
     }
@@ -2659,6 +2669,41 @@ impl ModelAir {
         self.rx.len()
     }
 
+    /// Set the receive path's limits of an untimed air. A caller may hold
+    /// at most [`MODEL_RX_HELD_MAX`] units: more is refused, and nothing
+    /// changes.
+    ///
+    /// # Errors
+    /// The limits, back.
+    pub fn set_rx_limits(&self, limits: ModelRxLimits) -> Result<(), ModelRxLimits> {
+        if limits.held > MODEL_RX_HELD_MAX {
+            return Err(limits);
+        }
+        self.rx_limits.set(limits);
+        Ok(())
+    }
+
+    /// The receive buffers out of the port now, queued, held or lent, and
+    /// the most ever out at once.
+    pub fn rx_out(&self) -> (usize, usize) {
+        let (out, peak) = self.rx_out.get();
+        (out.saturating_add(self.rx_lent()), peak)
+    }
+
+    fn rx_lent(&self) -> usize {
+        let network = self.rx_network.take();
+        let lent = network.as_ref().map_or(0, |network| network.held());
+        self.rx_network.set(network);
+        lent
+    }
+
+    /// `out` are with the caller after a charge, a lend or a recycle.
+    fn note_rx_out(&self, out: usize) {
+        let (_, peak) = self.rx_out.get();
+        let total = out.saturating_add(self.rx_lent());
+        self.rx_out.set((out, peak.max(total)));
+    }
+
     fn next_answer(&self, default: AirAnswer) -> AirAnswer {
         #[cfg(feature = "test-support")]
         if self.absent_peer.get() {
@@ -2951,6 +2996,7 @@ impl<'id, B: ModelComposition> ModelHeld<'id, B> {
         match out.checked_add(1) {
             Some(out) => {
                 self.rx_out.set(out);
+                self.air.note_rx_out(out);
                 true
             }
             None => {
@@ -2978,6 +3024,7 @@ impl<'id, B: ModelComposition> ModelHeld<'id, B> {
             });
         };
         self.rx_out.set(out);
+        self.air.note_rx_out(out);
         Ok(())
     }
 }

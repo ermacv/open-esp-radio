@@ -74,12 +74,16 @@ pub(super) fn installation_parts<B: ModelComposition>(
     air.stream.set(ModelStream::Running);
     air.receive_agreements.take().clear();
     air.associations.set(InterfaceAssociations::default());
+    let network = alloc::sync::Arc::<ModelNetwork>::default();
+    air.rx_network.set(Some(network.clone()));
     let held = ModelHeld {
         air: air.clone(),
-        events: Bounded::new(MODEL_EVENTS, "event"),
+        // Every received unit the caller may hold can queue as an event,
+        // up to the most an air's limits allow.
+        events: Bounded::new(MODEL_TERMINALS + MODEL_RX_HELD_MAX, "event"),
         quarantined: Bounded::new(1, "answer shape rejection"),
         rx_out: Cell::new(0),
-        network: Default::default(),
+        network,
         gate_issuer,
         draining: Cell::new(false),
         arenas: core::cell::RefCell::new(arena::StationArenas::new()),

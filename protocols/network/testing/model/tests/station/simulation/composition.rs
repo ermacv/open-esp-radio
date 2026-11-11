@@ -108,6 +108,18 @@ pub struct Counts {
     pub rx_pressure: usize,
     /// A lending socket's datagrams the network dropped for want of credit.
     pub no_credit: usize,
+    /// The network service's turns, and those of them that took only the
+    /// frames.
+    pub turns: usize,
+    pub packet_turns: usize,
+    /// Received frames the network's turns took in, and the turns that took
+    /// their whole budget of them.
+    pub frames_taken: usize,
+    pub intake_full: usize,
+    /// Frames the network's port accepted.
+    pub accepted: usize,
+    /// Passes of the network's wait that took returns home with no turn.
+    pub returned_in_wait: usize,
 }
 
 impl Observed {
@@ -137,7 +149,19 @@ impl EventSink<NetEvent> for Observed {
     }
 }
 impl EventSink<oer_protocols_network_runtime::ServiceEvent> for Observed {
-    fn event(&mut self, _: oer_protocols_network_runtime::ServiceEvent) {}
+    fn event(&mut self, event: oer_protocols_network_runtime::ServiceEvent) {
+        use oer_protocols_network_runtime::ServiceEvent as Event;
+        let mut counts = self.0.borrow_mut();
+        match event {
+            Event::TurnBegan => counts.turns += 1,
+            Event::PacketTurn => counts.packet_turns += 1,
+            Event::FrameTaken => counts.frames_taken += 1,
+            Event::IntakeFull => counts.intake_full += 1,
+            Event::Accepted => counts.accepted += 1,
+            Event::Returned { .. } => counts.returned_in_wait += 1,
+            _ => {}
+        }
+    }
 }
 impl EventSink<StaEvent> for Observed {
     fn event(&mut self, event: StaEvent) {
