@@ -81,15 +81,14 @@ impl<N: QueueNotify, C: FrameCost> PeerAir for StationAir<'_, N, C> {
     /// its association's slowest rate, which the lifecycle publishes with
     /// the association; a link up with no rate resolved offers no account,
     /// so no frame is charged at a rate the association was not given.
-    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<StationKey>> {
-        let (link, floor) = self.link.read();
+    fn candidate(&self, view: &Self::View, ready: &Ready) -> Option<AirtimeCandidate<StationKey>> {
+        let ((link, floor), last) = *view;
         if link.state != LinkState::Up {
             return None;
         }
         // Another association's rate says nothing of this one's air; the
         // association's own slowest rate stands until it reports one.
-        let rate = self
-            .last
+        let rate = last
             .filter(|(key, _)| *key == link.epoch)
             .map(|(_, rate)| rate)
             .or(floor)?;

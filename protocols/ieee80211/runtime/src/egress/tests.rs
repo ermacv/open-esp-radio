@@ -68,7 +68,7 @@ impl PeerAir for Air {
             .fold(0, |view, peer| view | 1 << (peer % 64))
     }
 
-    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<u8>> {
+    fn candidate(&self, _view: &Self::View, ready: &Ready) -> Option<AirtimeCandidate<u8>> {
         let key = ready.peer[5];
         (!self.asleep.contains(&key)).then(|| AirtimeCandidate {
             key,
@@ -504,7 +504,7 @@ impl PeerAir for Counting {
 
     fn view(&self) {}
 
-    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<u8>> {
+    fn candidate(&self, _view: &Self::View, ready: &Ready) -> Option<AirtimeCandidate<u8>> {
         self.asked.set(self.asked.get() + 1);
         Some(AirtimeCandidate {
             key: ready.peer[5],
@@ -816,7 +816,7 @@ impl PeerAir for Lengths {
         self.view
     }
 
-    fn candidate(&self, ready: &Ready) -> Option<AirtimeCandidate<u8>> {
+    fn candidate(&self, _view: &Self::View, ready: &Ready) -> Option<AirtimeCandidate<u8>> {
         Some(AirtimeCandidate {
             key: ready.peer[5],
             minimum_micros: micros(u32::try_from(ready.length).unwrap()),
