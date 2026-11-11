@@ -2705,3 +2705,99 @@ fn a_closed_lifecycle_reception_ends_the_actor_named_and_retries_nothing() {
         );
     });
 }
+
+/// The TID of a QoS data frame the air saw.
+fn tid_of(frame: &AirFrame) -> u8 {
+    frame.plaintext[24] & 0x0f
+}
+
+/// A link whose best-effort TID 0 has a window of one frame: its second
+/// frame waits for the first one's settlement.
+fn link_with_window<'s>() -> ActorLink<'s, P<'s>> {
+    let address = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
+    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    let mut windows = [None; 8];
+    windows[0] = Some(
+        oer_protocols_ieee80211_core_roles_sta::data::plane::TxWindow {
+            head: oer_protocols_ieee80211_wire::sequence::SequenceNumber::from_low_bits(0),
+            size: 1,
+        },
+    );
+    let data = DataLink {
+        header: StaDataHeaderTemplate::new(address, bssid, true, LinkProtection::Open).unwrap(),
+        admission: AcAdmission::OPEN,
+        retry: None,
+        ht: None,
+        windows,
+        protection: Default::default(),
+    };
+    LinkHandover::for_test(1, address, bssid, false, true, None, Some(data))
+}
+
+/// A TID whose window holds its next frame holds only its own queue: the
+/// other best-effort TID's frame takes the next arena meanwhile, and the
+/// held one goes once its window moves.
+#[test]
+fn a_tid_held_by_its_window_does_not_hold_the_other_tid_of_its_category() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link_with_window());
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.settle();
+        let _traffic = bench.next();
+        // TID 0's next waits for its window; TID 3's is ready.
+        bench.send_msdu(msdu(0, &[2; 8]));
+        bench.send_msdu(msdu(3, &[3; 8]));
+        bench.settle();
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, false);
+        for _ in 0..8 {
+            bench.settle();
+            if bench.data_sent().len() >= 3 {
+                break;
+            }
+        }
+        let tids: Vec<u8> = bench.data_sent().iter().map(tid_of).collect();
+        assert_eq!(tids, [0, 3, 0], "TID 3 went before TID 0's held frame");
+    });
+}
+
+/// A voice frame that comes behind a best-effort backlog goes in the next
+/// arena, ahead of the backlog's rest.
+#[test]
+fn a_voice_frame_goes_ahead_of_a_best_effort_backlog() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, true);
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.settle();
+        let _traffic = bench.next();
+        for tag in 2..6 {
+            bench.send_msdu(msdu(0, &[tag; 8]));
+        }
+        bench.send_msdu(msdu(6, &[9; 8]));
+        bench.settle();
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, false);
+        for _ in 0..16 {
+            bench.settle();
+            if bench.data_sent().len() >= 6 {
+                break;
+            }
+        }
+        let tids: Vec<u8> = bench.data_sent().iter().map(tid_of).collect();
+        assert_eq!(tids.len(), 6, "{tids:?}");
+        // The standby took best effort's next before voice came; voice goes
+        // in the arena after it, ahead of the backlog's rest.
+        let voice = tids.iter().position(|tid| *tid == 6).unwrap();
+        assert!(voice <= 2, "voice waited for the backlog: {tids:?}");
+    });
+}
