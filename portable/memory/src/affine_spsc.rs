@@ -42,17 +42,38 @@ pub trait SpscCursor: cursor_sealed::Sealed + Send + Sync {
     fn pending_mut(&mut self) -> &mut AtomicUsize;
 }
 
-/// One cache line per cursor, the default queue layout.
-#[repr(align(64))]
-pub struct CachedSpscCursor(AtomicUsize, AtomicUsize);
+/// One cache line per cursor, the default queue layout. Its endpoint's
+/// batch count lies on a line of its own: the other end reads the cursor
+/// at each of its operations, never the count.
+#[repr(C)]
+pub struct CachedSpscCursor(CacheLine, CacheLine);
 /// Unpadded atomic cursor for a same-core priority handoff.
 pub struct CompactSpscCursor(AtomicUsize, AtomicUsize);
 
+/// One counter alone on its cache line.
+#[doc(hidden)]
+#[repr(align(64))]
+pub struct CacheLine(AtomicUsize);
+
+impl core::ops::Deref for CacheLine {
+    type Target = AtomicUsize;
+    #[inline(always)]
+    fn deref(&self) -> &AtomicUsize {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for CacheLine {
+    fn deref_mut(&mut self) -> &mut AtomicUsize {
+        &mut self.0
+    }
+}
+
 macro_rules! cursor {
-    ($layout:ty) => {
+    ($layout:ty, $word:expr) => {
         impl cursor_sealed::Sealed for $layout {}
         impl SpscCursor for $layout {
-            const NEW: Self = Self(AtomicUsize::new(0), AtomicUsize::new(0));
+            const NEW: Self = Self($word, $word);
             #[inline(always)]
             fn counter(&self) -> &AtomicUsize {
                 &self.0
@@ -70,8 +91,8 @@ macro_rules! cursor {
         }
     };
 }
-cursor!(CachedSpscCursor);
-cursor!(CompactSpscCursor);
+cursor!(CachedSpscCursor, CacheLine(AtomicUsize::new(0)));
+cursor!(CompactSpscCursor, AtomicUsize::new(0));
 
 /// Full value returned when a bounded SPSC publication finds no free slot.
 #[derive(Debug)]
@@ -139,8 +160,8 @@ impl<T, const DEPTH: usize> AffineSpscQueue<T, DEPTH> {
             storage,
             Self {
                 values: [const { UnsafeCell::new(MaybeUninit::uninit()) }; DEPTH],
-                producer: CachedSpscCursor(AtomicUsize::new(0), AtomicUsize::new(0)),
-                consumer: CachedSpscCursor(AtomicUsize::new(0), AtomicUsize::new(0)),
+                producer: CachedSpscCursor::NEW,
+                consumer: CachedSpscCursor::NEW,
             }
         )
     }
