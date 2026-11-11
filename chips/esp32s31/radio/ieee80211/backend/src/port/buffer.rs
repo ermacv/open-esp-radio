@@ -10,7 +10,7 @@ impl<const B: usize> TxBufferClass for BufferClass<B> {
 
 /// Affine memory owner. Only MPDU octets are lent to the portable core.
 pub struct Buffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    pub(super) place: Slot<'id, Buffers, Part<Id, 3>>,
+    pub(super) place: Slot<'id, radio::Slots<Buffers, TX_BUFFERS>, Part<Id, 3>>,
     pub(super) dma: ReturnableBuffer<B>,
     pub(super) admission: Option<Instant>,
     pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>,
@@ -198,8 +198,11 @@ pub struct Prepared<
     loan: BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>,
     proof: PhantomData<(&'k (), fn(&'p ()) -> (&'p (), R, K))>,
 }
-pub struct Execution {
+pub struct Execution<Id: SlotIdentity> {
     pub(super) plan: RetryPlan<PhyRate>,
+    /// A beacon's permission, which its terminal returns, and the instant
+    /// it must be published by.
+    pub(super) beacon: Option<(BeaconPermission<'static, Part<Id, 10>>, Instant)>,
 }
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, R, K>
     PreparedTx<'id> for Prepared<'_, '_, 'id, Id, D, B, O, R, K>
@@ -208,24 +211,27 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations,
     type Backend = Esp32s31Backend<Id, D, B, O>;
     type OwnedContext = D::OwnedContext<Id>;
     type OwnedPayload = Mpdu<'static, Id, D, B, O>;
-    type Execution = Execution;
+    type Execution = Execution<Id>;
     fn into_admission(
         self,
         context: D::Context<'id, Id>,
-        ticket: Slot<'id, Tickets, Part<Id, 2>>,
+        ticket: Slot<'id, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
         _: Admission<Self>,
     ) -> AdmissionOwners<
         Self::OwnedContext,
-        Slot<'static, Tickets, Part<Id, 2>>,
+        Slot<'static, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
         Self::OwnedPayload,
-        Execution,
+        Execution<Id>,
     > {
         let loan = self.loan;
         AdmissionOwners {
             context: context.enclose().into_owned(&loan),
             ticket: loan.reclaim_slot(ticket),
             payload: self.mpdu.into_owned(&loan),
-            execution: Execution { plan: self.plan },
+            execution: Execution {
+                plan: self.plan,
+                beacon: None,
+            },
         }
     }
     fn into_parts(self) -> (AnyBuffer<'id, Id, D, B, O>, Option<D::Body>) {
@@ -380,6 +386,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // The MPDU and its PN end here; `renew_msdu` releases its admission.
         (buffer.mpdu.buffer, buffer.mpdu.body)
     }
+    fn class_of(mpdu: &Mpdu<'id, Id, D, B, O>) -> Option<TxBufferForm> {
+        // The installation's one class: its MPDU comes back as its
+        // `into_parts` returns it.
+        Some(if mpdu.published {
+            TxBufferForm::Sent
+        } else {
+            TxBufferForm::Fresh
+        })
+    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> PortTypes<'id>
@@ -401,7 +416,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = Prepared<'k, 'p, 'id, Id, D, B, O, R, K>;
     type KeyIdentity = keys::KeyIdentity<'id, Id>;
     type TxBody = D::Body;
-    type TicketKind = Tickets;
+    type TicketKind = radio::Slots<Tickets, TX_TICKETS>;
     type AckEvidence = Ack;
     type BlockAckEvidence = BlockAckAnswer;
     type AirDenied = Infallible;

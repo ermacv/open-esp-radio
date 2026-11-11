@@ -15,6 +15,7 @@ fn wifi_rows_name_their_events_and_data_takes_none() {
         Some(wifi_events::BEACON)
     );
     assert_eq!(wifi_event(Operation::Transmit(TxOperation::Data)), None);
+    assert_eq!(wifi_event(Operation::Transmit(TxOperation::Beacon)), None);
     assert_eq!(
         wifi_event(Operation::Transmit(TxOperation::Connection(
             ConnectionFrame::ProbeRequest

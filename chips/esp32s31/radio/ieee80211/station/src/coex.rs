@@ -6,8 +6,8 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 
 /// The shared-table event an IEEE 802.11 operation requests, or `None` for
-/// a data frame, which takes the MAC's static per-access-category priority
-/// and requests no event.
+/// a data frame and a beacon, which take the MAC's static per-access-category
+/// priority and request no event: no beacon transmit event is recovered.
 ///
 /// - `BeaconWindow`: event 0, `coex_pti_get(0)` that Wi-Fi's power
 ///   management reads on every beacon.
@@ -21,7 +21,7 @@ use oer_protocols_ieee80211_contracts_port::{
 pub const fn wifi_event(operation: WifiOperation) -> Option<CoexEventId> {
     match operation {
         WifiOperation::BeaconWindow => Some(wifi_events::BEACON),
-        WifiOperation::Transmit(TxOperation::Data) => None,
+        WifiOperation::Transmit(TxOperation::Data | TxOperation::Beacon) => None,
         WifiOperation::Transmit(TxOperation::Connection(ConnectionFrame::ProbeRequest)) => {
             Some(wifi_events::PROBE_REQUEST)
         }

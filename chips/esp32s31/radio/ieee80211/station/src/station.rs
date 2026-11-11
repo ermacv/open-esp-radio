@@ -10,8 +10,8 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_runtime::datapath::ActorRxMeta;
 use oer_protocols_ieee80211_runtime::lifecycle::{
-    ActorEnds, Lifecycle, LifecycleArbiter, LifecycleCompleted, LifecycleEnd, LifecycleIo,
-    LifecycleTxContext, RetiredLifecycle,
+    Lifecycle, LifecycleArbiter, LifecycleCompleted, LifecycleEnd, LifecycleIo, LifecycleTxContext,
+    RetiredLifecycle,
 };
 
 use oer_portable_memory::{Placed, StaticPlace};
@@ -299,22 +299,234 @@ type CompletedOf<W> = LifecycleCompleted<
     1,
     <W as Binding>::Sink,
 >;
+/// The retired lifecycle of `W`: the station, its places, the arbiter, the
+/// issuer, the contexts, a rejected owner and the events' sink.
+pub(crate) type RetiredOf<W> = RetiredLifecycle<
+    'static,
+    radio::ActorPort<W>,
+    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
+    radio::Commands<W>,
+    Contexts<W>,
+    1,
+    <W as Binding>::Sink,
+>;
+
+/// The retired station's bank of `W`.
+pub type RetiredStationOf<W> = oer_protocols_ieee80211_core_roles_sta::machine::RetiredStation<
+    'static,
+    oer_protocols_ieee80211_runtime::lifecycle::LifecycleTokens<'static, radio::ActorPort<W>, 1>,
+    Caps,
+    crate::chip::CoreCallbacks<<W as Binding>::Callbacks>,
+>;
+
+/// The gate path of `W`'s actor port.
+type GatePathOf<W> =
+    oer_protocols_ieee80211_runtime::datapath::ActorGatePath<'static, radio::ActorPort<W>>;
+
+/// The places `W`'s retired station returned.
+pub type StationPlacesOf<W> =
+    oer_protocols_ieee80211_core_arbiter::StationPlaceReturns<'static, GatePathOf<W>>;
+
+/// The retired arbiter's bank of `W`.
+pub type RetiredArbiterOf<W> = oer_protocols_ieee80211_core_arbiter::RetiredArbiter<
+    'static,
+    Caps,
+    oer_protocols_ieee80211_core_arbiter::NoReservation,
+    GatePathOf<W>,
+>;
+
+/// The first owner a broken contract left in `W`'s lifecycle.
+pub type RejectedOf<W> =
+    oer_protocols_ieee80211_runtime::lifecycle::Rejected<'static, radio::ActorPort<W>>;
+
+/// The station lifecycle's half of an installation that did not retire:
+/// its retired lifecycle, whole, in the place that keeps it for the
+/// application, the lifecycle's ends of the queues to the actor with every
+/// owner in transit in them, and the actor task's news that came after
+/// the lifecycle stopped waiting. The place the lifecycle ran in is free
+/// once the half left it; the half stays here for good.
+#[must_use = "the lifecycle's half holds the station's owners of the installation"]
+pub struct UnfinishedLifecycle<W: Binding>(HalfOf<W>);
+
+/// The generic half of `W`'s lifecycle.
+type HalfOf<W> = crate::station_end::UnfinishedLifecycleOf<
+    'static,
+    Placed<'static, RetiredOf<W>>,
+    radio::LifecycleQueues<W>,
+    radio::Commands<W>,
+    radio::Tokens<W>,
+    InitializationError,
+    <W as Binding>::Id,
+>;
+
+/// What a finished lifecycle half of `W` hands back.
+pub type FinishedLifecycle<W> = crate::station_end::FinishedLifecycleOf<
+    radio::LifecycleQueues<W>,
+    radio::Commands<W>,
+    radio::Tokens<W>,
+    InitializationError,
+    <W as Binding>::Id,
+>;
+
+/// One installation of `W`'s port.
+pub type InstallationOf<W> = crate::station_end::InstallationOf<<W as Binding>::Id>;
+
+/// A proof that `W`'s lifecycle half refused: the half and the proof,
+/// unchanged, and why.
+pub type RefusedProofOf<W> =
+    crate::station_end::RefusedProof<UnfinishedLifecycle<W>, <W as Binding>::Id>;
+
+impl<W: Binding> UnfinishedLifecycle<W> {
+    /// The lifecycle's ends of the queues to the actor: the owners the
+    /// actor sent and the lifecycle had not taken, each once, in order.
+    pub fn queues(&mut self) -> &mut radio::LifecycleQueues<W> {
+        self.0.queues()
+    }
+
+    /// The events' sink the retired lifecycle keeps.
+    pub fn events(&mut self) -> &mut W::Sink {
+        &mut self.0.retired_mut().events
+    }
+
+    /// The retired station's bank: its configuration, callbacks and the
+    /// tokens it held.
+    pub fn station(&mut self) -> &mut RetiredStationOf<W> {
+        &mut self.0.retired_mut().station
+    }
+
+    /// The places the station returned.
+    pub fn places(&mut self) -> &mut StationPlacesOf<W> {
+        &mut self.0.retired_mut().places
+    }
+
+    /// The arbiter's bank, once: `None` once taken, or when a broken
+    /// contract ended the lifecycle while it moved the arbiter.
+    pub fn take_arbiter(&mut self) -> Option<RetiredArbiterOf<W>> {
+        self.0.retired_mut().arbiter.take()
+    }
+
+    /// The installation's commands issuer the lifecycle held.
+    pub fn issuer(&mut self) -> &mut radio::Commands<W> {
+        &mut self.0.retired_mut().issuer
+    }
+
+    /// The context still waiting at the place of ticket `ticket`, once:
+    /// `None` once taken or when none waits there (or no such place).
+    pub fn take_context(
+        &mut self,
+        ticket: usize,
+    ) -> Option<LifecycleTxContext<'static, radio::ActorPort<W>>> {
+        self.0
+            .retired_mut()
+            .tx_contexts
+            .get_mut(ticket)
+            .and_then(Option::take)
+    }
+
+    /// The first owner a broken contract left, once.
+    pub fn take_rejected(&mut self) -> Option<RejectedOf<W>> {
+        self.0.retired_mut().rejected.take()
+    }
+
+    /// How far the actor task's end after the lifecycle stopped waiting for
+    /// it (a release past the stop's drain, the stop after an abandon, a
+    /// refused reinstall) is read, kept once read
+    /// ([`crate::station_end::LateRead`]).
+    pub fn late_end(&mut self) -> crate::station_end::LateRead<InitializationError> {
+        self.0.late_end()
+    }
+
+    /// Wait until the actor's task tells how it ended: the continuation of
+    /// an abandon whose wait stopped on full places, once a kept news was
+    /// taken ([`Self::take_installed`]).
+    ///
+    /// # Errors
+    ///
+    /// Every place for installations' news is full: nothing more was read.
+    pub async fn confirm_end(
+        &mut self,
+    ) -> Result<crate::station_end::LateEnd<InitializationError>, crate::station_end::KeptFull>
+    {
+        self.0.confirm_end().await
+    }
+
+    /// The commands, tokens and installation a late news of an
+    /// installation carried, each once, in order.
+    pub fn take_installed(
+        &mut self,
+    ) -> Option<(radio::Commands<W>, radio::Tokens<W>, InstallationOf<W>)> {
+        self.0.take_installed()
+    }
+
+    /// The installation the actor's task runs on now, as far as its news
+    /// was read: only its proof finishes the half.
+    pub fn installation(&self) -> InstallationOf<W> {
+        self.0.installation()
+    }
+
+    /// Finish the half of an installation whose datapath half retired
+    /// ([`radio::DatapathEnd::Retired`]): the retired lifecycle's owners end
+    /// with the retired installation and no release runs again. The actual
+    /// end of the actor's task, beside the exit the station's task
+    /// returned, and every owner still in transit come back.
+    ///
+    /// # Errors
+    ///
+    /// The proof names another installation: the half and the proof come
+    /// back unchanged.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refused finish returns the half and the proof whole, by value"
+    )]
+    pub fn finish(
+        self,
+        retired: crate::station_end::DatapathRetired<<W as Binding>::Id>,
+    ) -> Result<FinishedLifecycle<W>, RefusedProofOf<W>> {
+        self.0
+            .finish(retired)
+            .map_err(|refused| crate::station_end::RefusedProof {
+                half: Self(refused.half),
+                proof: refused.proof,
+                cause: refused.cause,
+            })
+    }
+}
+
+/// How the station's lifecycle task ended: its exit, which Control keeps,
+/// and the lifecycle's half of an installation that did not retire. Its
+/// datapath half comes from the actor's task
+/// ([`crate::radio::DatapathEnd`]).
+#[must_use = "an unfinished installation's lifecycle half holds its owners"]
+pub struct StationEnd<W: Binding> {
+    pub exit: StationExit,
+    pub lifecycle: Option<UnfinishedLifecycle<W>>,
+    /// After a completed retire, the lifecycle's ends of the queues to the
+    /// actor when an owner was still in transit in them once the actor's
+    /// task had ended: the owners, each once, in order. `None` when the
+    /// queues were empty (they end with the retired installation) or the
+    /// half holds them.
+    pub in_transit: Option<radio::LifecycleQueues<W>>,
+}
+
 /// The station's configuration and callbacks, which every installation's
 /// station takes again.
 type StationConfig<W> =
     machine::StaConfig<Caps, crate::chip::CoreCallbacks<<W as Binding>::Callbacks>>;
 
 /// The lifecycle's places: one lifecycle and its end at a time, reused by
-/// every installation.
+/// every installation once the previous one's end settled, and the home
+/// of an unfinished installation's lifecycle half.
 pub(crate) struct ServiceStorage<W: Binding> {
     lifecycle: StaticPlace<LifecycleOf<W>>,
     completed: StaticPlace<CompletedOf<W>>,
+    unfinished: StaticPlace<RetiredOf<W>>,
 }
 impl<W: Binding> ServiceStorage<W> {
     pub(crate) const fn new() -> Self {
         Self {
             lifecycle: StaticPlace::new(),
             completed: StaticPlace::new(),
+            unfinished: StaticPlace::new(),
         }
     }
 }
@@ -424,33 +636,73 @@ fn poll_news<W: Binding>(
 /// The station lifecycle's task: it builds the station on each
 /// installation the actor's task hands it, runs the lifecycle, and on a
 /// restart waits for the next installation. The exit is published to
-/// Control once final: after an ordinary stop, once the radio's release
-/// ended.
-pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) -> StationExit {
+/// Control once final: after a stop or a refused start, once the radio's
+/// release ended. Each lifecycle's retired half stays in its place until
+/// the actor's task told how its end settled: a confirmed release or
+/// reinstall ends it, and only then is the place reused; any other end
+/// moves it, whole, to the home it leaves in.
+pub async fn serve<W: Binding>(runner: StationRunner<W>, profile: Profile<W>) -> StationEnd<W> {
     let StationRunner {
         service,
-        mut actor,
-        news: mut mailbox,
+        actor,
+        news: mailbox,
+        abandon,
         stop,
     } = runner;
-    let exit = lifecycles::<W>(service, &mut actor, &mut mailbox, profile).await;
-    stop.publish(exit);
-    exit
+    let end = lifecycles::<W>(service, actor, mailbox, abandon, profile).await;
+    stop.publish(end.exit);
+    end
+}
+
+/// The actor task's news to the station's task.
+type Mailbox<W> = oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>;
+
+/// `retired`, which ran on `installation`, moved whole to `home`, with the
+/// lifecycle's ends of the queues and the mailbox: the half of an
+/// installation that did not retire, for the application.
+fn unfinished<W: Binding>(
+    retired: Placed<'_, RetiredOf<W>>,
+    home: &'static mut MaybeUninit<RetiredOf<W>>,
+    queues: radio::LifecycleQueues<W>,
+    installation: InstallationOf<W>,
+    mailbox: Mailbox<W>,
+    late: Option<crate::station_end::LateEnd<InitializationError>>,
+) -> UnfinishedLifecycle<W> {
+    UnfinishedLifecycle(crate::station_end::UnfinishedLifecycleOf::new(
+        retired.move_to(home),
+        queues,
+        installation,
+        mailbox,
+        late,
+    ))
+}
+
+/// The end of a lifecycle that ended on `failure` without retiring the
+/// actor: the actor's task hears it once and ends with its half
+/// ([`crate::station_end::DatapathCause::Lifecycle`]); once it told that
+/// its task ended, `retired` and the lifecycle's ends of the queues go out
+/// whole beside it.
+async fn abandoned<W: Binding>(
+    failure: crate::failure::LifecycleFailure,
+    half: UnfinishedLifecycle<W>,
+    abandon: &mut radio::Abandon,
+) -> StationEnd<W> {
+    let UnfinishedLifecycle(half) = half;
+    StationEnd {
+        exit: StationExit::Failed(failure),
+        lifecycle: Some(UnfinishedLifecycle(half.abandoned(failure, abandon).await)),
+        in_transit: None,
+    }
 }
 
 async fn lifecycles<W: Binding>(
     service: ServiceRunner<W>,
-    actor: &mut ActorEnds<
-        'static,
-        'static,
-        radio::ActorPort<W>,
-        { radio::TO },
-        { radio::FROM },
-        { radio::RETURNS },
-    >,
-    mailbox: &mut oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
+    mut actor: radio::LifecycleQueues<W>,
+    mut mailbox: Mailbox<W>,
+    mut abandon: radio::Abandon,
     profile: Profile<W>,
-) -> StationExit {
+) -> StationEnd<W> {
+    use crate::station_end::LifecycleHalf;
     let ServiceRunner {
         config,
         connection,
@@ -472,30 +724,33 @@ async fn lifecycles<W: Binding>(
     let ServiceStorage {
         lifecycle: lifecycle_place,
         completed: completed_place,
+        unfinished: home,
     } = storage;
     let lifecycle_place = lifecycle_place.uninit();
     let completed_place = completed_place.uninit();
+    let home = home.uninit();
     let Profile {
         station: mut station_config,
         mut sink,
     } = profile;
     let mut start = Some(start);
+    let mut next = match crate::station_end::installed(news(&mut mailbox).await) {
+        Ok(installed) => installed,
+        Err(exit) => {
+            if let StationExit::Unavailable(error) = exit
+                && let Some(start) = start.take()
+            {
+                start.complete(Err(crate::StartError::Unavailable(error)));
+            }
+            return StationEnd {
+                exit,
+                lifecycle: None,
+                in_transit: None,
+            };
+        }
+    };
     loop {
-        let (issuer, tokens) = match news(mailbox).await {
-            radio::News::Installed(issuer, tokens) => (issuer, tokens),
-            radio::News::Unavailable(error) => {
-                if let Some(start) = start.take() {
-                    start.complete(Err(crate::StartError::Unavailable));
-                }
-                return StationExit::Unavailable(error);
-            }
-            radio::News::Reinstall(cause) => {
-                return StationExit::Failed(crate::failure::LifecycleFailure::Reinstall(cause));
-            }
-            radio::News::Released { .. } => {
-                return StationExit::Failed(crate::failure::LifecycleFailure::Mailbox);
-            }
-        };
+        let (issuer, tokens, installation) = next;
         let lifecycle = initialize::<W>(
             &mut *lifecycle_place,
             station_config,
@@ -510,7 +765,7 @@ async fn lifecycles<W: Binding>(
         let completed = LifecycleOf::<W>::run_placed(
             lifecycle,
             &mut *completed_place,
-            actor,
+            &mut actor,
             &mut io,
             &EmbassyClock,
         )
@@ -518,95 +773,142 @@ async fn lifecycles<W: Binding>(
         let (end, retired) =
             oer_portable_memory::unpack_placed!(completed, LifecycleCompleted { end, retired });
         let end = end.read();
-        match end {
-            LifecycleEnd::Stopped => {
-                drop(retired);
-                // The exit is published only after the radio's release
-                // ended, or once the stop's drain passed first.
-                let deadline =
-                    oer_portable_time::Clock::now(&EmbassyClock).saturating_add(config.stop.drain);
-                let released = crate::release::within(&EmbassyClock, Some(deadline), |cx| {
-                    poll_news(mailbox, cx)
-                })
-                .await;
-                return match released {
-                    Some(radio::News::Released {
-                        result,
-                        network_lost,
-                    }) => released_exit(result, network_lost),
-                    None => StationExit::ReleaseFailed(crate::failure::ReleaseCause::Deadline),
-                    Some(
-                        radio::News::Installed(..)
-                        | radio::News::Unavailable(_)
-                        | radio::News::Reinstall(_),
-                    ) => StationExit::Failed(crate::failure::LifecycleFailure::Mailbox),
-                };
-            }
-            // The radio stopped. The network returned late
-            // (`StoppedReturning`), or its stop participant was lost
-            // (`StoppedNetworkLost`): the deadline ended the lifecycle's wait,
-            // not the return. The actor retires once the station's share of
-            // the network came home and the radio's release follows: the
-            // exit waits for both, with no deadline of its own, as no radio
-            // owner is unconfirmed.
-            LifecycleEnd::StoppedReturning(_) | LifecycleEnd::StoppedNetworkLost(_) => {
-                drop(retired);
-                return match news(mailbox).await {
-                    radio::News::Released {
-                        result,
-                        network_lost,
-                    } => released_exit(result, network_lost),
-                    radio::News::Installed(..)
-                    | radio::News::Unavailable(_)
-                    | radio::News::Reinstall(_) => {
-                        StationExit::Failed(crate::failure::LifecycleFailure::Mailbox)
-                    }
-                };
-            }
+        // The actor retired (a stop, a refused start): the exit and the
+        // half wait for the radio's release, or for the stop's drain
+        // first. A network that returned late or was lost waits without a
+        // deadline of its own, as no radio owner is unconfirmed.
+        let (deadline, failure) = match end {
+            LifecycleEnd::Stopped => (Some(config.stop.drain), None),
+            LifecycleEnd::StoppedReturning(_) | LifecycleEnd::StoppedNetworkLost(_) => (None, None),
+            LifecycleEnd::StartRefused(refused) => (
+                Some(config.stop.drain),
+                Some(crate::failure::LifecycleFailure::StartRefused(
+                    crate::failure::convert::start_refused(refused),
+                )),
+            ),
             LifecycleEnd::Restart(failure) => {
                 let failure = crate::failure::convert::restart(failure);
                 restarts.record(failure);
                 if let Some(failure) = failure {
                     W::restarted(&failure);
                 }
-                // The next installation's station takes the configuration
-                // and the events' sink back; this installation's owners
-                // drop with the retired banks.
-                let (station, _places, _arbiter, _issuer, _contexts, _rejected, events) = oer_portable_memory::unpack_placed!(
-                    retired,
-                    RetiredLifecycle {
-                        station,
-                        places,
-                        arbiter,
-                        issuer,
-                        tx_contexts,
-                        rejected,
-                        events
+                // The retired half stays whole until the reinstall's
+                // answer: a refusal sends it out with the actor's half.
+                match crate::station_end::installed(news(&mut mailbox).await) {
+                    Ok(installed) => {
+                        // The next installation's station takes the
+                        // configuration and the events' sink back; this
+                        // installation's other owners end with it, and
+                        // its place is free.
+                        let (
+                            station,
+                            _places,
+                            _arbiter,
+                            _issuer,
+                            _contexts,
+                            _rejected,
+                            _unsent,
+                            _confirmed,
+                            events,
+                        ) = oer_portable_memory::unpack_placed!(
+                            retired,
+                            RetiredLifecycle {
+                                station,
+                                places,
+                                arbiter,
+                                issuer,
+                                tx_contexts,
+                                rejected,
+                                unsent,
+                                confirmed,
+                                events
+                            }
+                        );
+                        station_config = station.read().into_config();
+                        sink = events.read();
+                        next = installed;
+                        continue;
                     }
+                    // The news read is the actor task's end: the half
+                    // keeps it too.
+                    Err(exit) => {
+                        return StationEnd {
+                            exit,
+                            lifecycle: Some(unfinished(
+                                retired,
+                                home,
+                                actor,
+                                installation,
+                                mailbox,
+                                Some(crate::station_end::LateEnd::Ended(exit)),
+                            )),
+                            in_transit: None,
+                        };
+                    }
+                }
+            }
+            // The lifecycle ended without retiring the actor: the actor's
+            // task ends with its half, and this one goes out beside it.
+            LifecycleEnd::StopUnconfirmed(observed) => {
+                let failure = crate::failure::LifecycleFailure::StopUnconfirmed(
+                    crate::failure::convert::stop_observed(observed),
                 );
-                station_config = station.read().into_config();
-                sink = events.read();
+                let half = unfinished(retired, home, actor, installation, mailbox, None);
+                return abandoned(failure, half, &mut abandon).await;
             }
-            end => {
+            LifecycleEnd::RetuneUnconfirmed(unconfirmed) => {
+                let failure = crate::failure::LifecycleFailure::RetuneUnconfirmed(
+                    crate::failure::convert::stop_unconfirmed(unconfirmed),
+                );
+                let half = unfinished(retired, home, actor, installation, mailbox, None);
+                return abandoned(failure, half, &mut abandon).await;
+            }
+            LifecycleEnd::Faulted(fault) => {
+                let failure = crate::failure::convert::actor_fault(fault);
+                let half = unfinished(retired, home, actor, installation, mailbox, None);
+                return abandoned(failure, half, &mut abandon).await;
+            }
+            LifecycleEnd::Contract(violation) => {
+                let failure = crate::failure::LifecycleFailure::Contract(violation);
+                let half = unfinished(retired, home, actor, installation, mailbox, None);
+                return abandoned(failure, half, &mut abandon).await;
+            }
+        };
+        let news = match deadline {
+            Some(drain) => {
+                let deadline = oer_portable_time::Clock::now(&EmbassyClock).saturating_add(drain);
+                crate::release::within(&EmbassyClock, Some(deadline), |cx| {
+                    poll_news(&mut mailbox, cx)
+                })
+                .await
+            }
+            None => Some(news(&mut mailbox).await),
+        };
+        let (exit, half, late) = crate::station_end::release_settled(news, failure);
+        return match half {
+            // The actor's task ended with its release: nothing produces
+            // into the queues any more, and an owner still in them comes
+            // back.
+            LifecycleHalf::Retired => {
                 drop(retired);
-                return match crate::failure::convert::lifecycle(end) {
-                    Some(failure) => StationExit::Failed(failure),
-                    None => StationExit::Stopped,
-                };
+                StationEnd {
+                    exit,
+                    lifecycle: None,
+                    in_transit: crate::station_end::in_transit(actor).await,
+                }
             }
-        }
-    }
-}
-
-/// The exit of a released radio: its release's result, and the loss of the
-/// last stop's network participant, which a stopped exit records.
-fn released_exit(
-    result: Result<(), crate::failure::ReleaseCause>,
-    network_lost: bool,
-) -> StationExit {
-    match (result, network_lost) {
-        (Ok(()), false) => StationExit::Stopped,
-        (Ok(()), true) => StationExit::StoppedNetworkLost,
-        (Err(cause), _) => StationExit::ReleaseFailed(cause),
+            LifecycleHalf::Unfinished => StationEnd {
+                exit,
+                lifecycle: Some(unfinished(
+                    retired,
+                    home,
+                    actor,
+                    installation,
+                    mailbox,
+                    late,
+                )),
+                in_transit: None,
+            },
+        };
     }
 }

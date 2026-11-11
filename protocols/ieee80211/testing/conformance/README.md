@@ -18,6 +18,7 @@ observations.
 | TX arena (`arena::check`) | Intake until full, release order, withdrawal, publish refusals; partial BlockAck retention, protection-failure republication and a fault in the model only |
 | GTK receive cut (`group_keys::verify`) | The old key's delayed DMA, interrupt and software ingress before the mutation's terminal, the returned installation's identity, slot and counter, the command bound |
 | EDCA (`edca::parameters`) | Distinct complete tables a fixture installs per interface |
+| Access point (`access_point::check`) | One port for both roles; each role's configuration barrier holds only its own role; the beacon permission's one beacon, its expiry at its deadline, and no beacon on a stopped TSF; an earlier installation's configure permission, beacon permission, key slots, removals and frame keys refused with their owners; key installs and removals; the access point's stop alone, with held commands, and a shared stop |
 
 Each arena and receive-cut case exposes `execution()`: `Hardware` or
 `ModelOnly(reason)`. Runners take `Environment::Model` to exercise everything,

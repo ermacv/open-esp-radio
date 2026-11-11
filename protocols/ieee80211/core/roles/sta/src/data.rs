@@ -14,6 +14,7 @@
 
 use oer_protocols_ieee80211_contracts_port::{RxCryptoStatus, RxEvidence, RxMeta};
 /// The access category of a data frame.
+pub use oer_protocols_ieee80211_wire::data::MsduParts;
 pub use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 /// The TID of a data frame.
 pub use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
