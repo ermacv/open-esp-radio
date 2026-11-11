@@ -25,7 +25,7 @@ where
     pub(super) fn station_tx<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         transmit: StationTx<'id, D>,
-        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
     ) -> Result<(), Failed<'id, D>> {
         let StationTx {
             ticket,
@@ -174,15 +174,33 @@ where
         // its terminal returns the owners to the lifecycle like any other,
         // and the station hears the frame did not go.
         let mut outbox = super::turn::Outbox {
-            from_actor: &lifecycle.from_actor,
-            returns: &lifecycle.returns,
+            from_actor: &mut lifecycle.from_actor,
+            returns: &mut lifecycle.returns,
             stage: &mut self.stage,
             grouped: false,
         };
-        let _refused = self.port.submit(admitted, self.now, &mut outbox);
-        match self.stage.overflow.take() {
-            Some(violation) => Err(ActorFault::Contract(violation)),
-            None => Ok(()),
+        // A refusal's terminal is in the outbox. No turn runs while an
+        // unkept item is kept: its place is empty here.
+        let answer = match self.port.submit(admitted, self.now, &mut outbox) {
+            Ok(answer) => Ok(answer),
+            Err(oer_protocols_ieee80211_contracts_port::SubmitHalt::Unkeeping(unkeeping)) => {
+                Err(unkeeping)
+            }
+            // The port had no right to hand out the attempt's terminal: the
+            // attempt stays with the actor, which ends on it.
+            Err(oer_protocols_ieee80211_contracts_port::SubmitHalt::NotAccepted(attempt)) => {
+                self.retained.unaccepted = Some(attempt);
+                return Err(ActorFault::Unaccepted);
+            }
+        };
+        let (submitted, unkept) = crate::answered(answer);
+        let Some(unkept) = unkept else {
+            return Ok(());
+        };
+        self.retained.unkept = Some(unkept);
+        if let oer_protocols_ieee80211_contracts_port::Input::NotAccepted(attempt) = submitted {
+            self.retained.unaccepted = Some(attempt);
         }
+        Err(ActorFault::Unkept)
     }
 }

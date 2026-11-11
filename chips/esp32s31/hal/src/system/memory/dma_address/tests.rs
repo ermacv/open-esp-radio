@@ -60,8 +60,8 @@ fn allocation() -> (
     let placed = crate::system::memory::dma_static::Placed::host(std::boxed::Box::leak(
         std::boxed::Box::new(([const { WifiTxDmaDescriptor::zeroed() }; 2], [0; 16])),
     ));
-    let (storage, _, projection) = placed
-        .into_dma_parts::<crate::radio::ieee80211::dma::space::HostDma>()
+    let (storage, _, projection, ()) = placed
+        .bind_dma::<crate::radio::ieee80211::dma::space::HostDma, _, ()>(|_, _, _| Ok(()))
         .expect("host allocation has a DMA range");
     (storage, projection)
 }
@@ -127,4 +127,30 @@ fn refusing_a_projection_returns_the_exact_unchanged_placement() {
     assert_eq!(error, super::ProjectionError::OutsideAllocation);
     assert_eq!(core::ptr::from_ref(returned.as_ref()).addr(), original);
     assert_eq!(*returned.into_inner(), [7; 4]);
+}
+
+/// A binding that refuses returns the placement whole: the same
+/// allocation binds again.
+#[test]
+fn a_refused_binding_returns_the_same_placement() {
+    let storage = std::boxed::Box::leak(std::boxed::Box::new([0_u8; 16]));
+    let address = core::ptr::from_ref(&*storage).addr();
+    let placed = crate::system::memory::dma_static::Placed::host(storage);
+    let Err((refusal, placed)) = placed
+        .bind_dma::<crate::radio::ieee80211::dma::space::HostDma, (), u8>(|storage, _, _| {
+            storage[0] = 1;
+            Err(7)
+        })
+    else {
+        panic!("the binding refuses");
+    };
+    assert_eq!(
+        refusal,
+        crate::system::memory::dma_static::DmaBindRefusal::Bind(7)
+    );
+    let (storage, _, _, ()) = placed
+        .bind_dma::<crate::radio::ieee80211::dma::space::HostDma, _, ()>(|_, _, _| Ok(()))
+        .expect("it binds again");
+    assert_eq!(core::ptr::from_ref(&*storage).addr(), address);
+    assert_eq!(storage[0], 1, "what the refused binding wrote stays");
 }

@@ -51,18 +51,37 @@ struct Sink<'s> {
     received: Vec<(ModelRxBuffer<'s, LocalId<'s>>, ModelRxMeta)>,
     tbtt: usize,
     order: Vec<Put>,
+    /// How many of the next terminals and units it refuses.
+    refuse: usize,
 }
 impl<'s> PortSink<'s, Types<'s>> for Sink<'s> {
-    fn terminal(&mut self, terminal: LowerMacTerminal<'s, Types<'s>>) {
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'s, Types<'s>>,
+    ) -> Result<(), LowerMacTerminal<'s, Types<'s>>> {
+        if let Some(left) = self.refuse.checked_sub(1) {
+            self.refuse = left;
+            return Err(terminal);
+        }
         self.terminals.push(terminal);
         self.order.push(Put::Terminal);
+        Ok(())
     }
     fn tbtt(&mut self, _: oer_protocols_ieee80211_contracts_port::TbttEvent) {
         self.tbtt += 1;
     }
-    fn received(&mut self, frame: ModelRxBuffer<'s, LocalId<'s>>, meta: ModelRxMeta) {
+    fn received(
+        &mut self,
+        frame: ModelRxBuffer<'s, LocalId<'s>>,
+        meta: ModelRxMeta,
+    ) -> Result<(), (ModelRxBuffer<'s, LocalId<'s>>, ModelRxMeta)> {
+        if let Some(left) = self.refuse.checked_sub(1) {
+            self.refuse = left;
+            return Err((frame, meta));
+        }
         self.received.push((frame, meta));
         self.order.push(Put::Received);
+        Ok(())
     }
 }
 
@@ -79,7 +98,7 @@ type GroupTokens<'s> = (
         MODEL_KEY_SLOTS],
     oer_protocols_ieee80211_contracts_port::IssuedSlot<
         's,
-        ModelGroupPermission<Station>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
         ModelPool<LocalId<'s>, 8>,
     >,
     [PairwiseKeySlot<'s, Station, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, ModelPool<LocalId<'s>, 5>>;
@@ -93,9 +112,19 @@ struct Harness<'s> {
     port: Port<'s>,
     commands: ModelCommands<'s, LocalId<'s>>,
     sink: Sink<'s>,
-    tickets: Vec<Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>>,
+    tickets: Vec<
+        Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
+    >,
     small: Vec<ModelBuffer<'s, B<'s>, ModelSmall>>,
-    terminal_access: TerminalAccess<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+    terminal_access: TerminalAccess<
+        's,
+        oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+        ModelPool<LocalId<'s>, 1>,
+    >,
     configure: Option<
         ConfigurePermission<
             's,
@@ -112,7 +141,11 @@ struct Harness<'s> {
     /// The station MPDU the last station terminal returned `Sent`, kept for a
     /// retransmission.
     station: Option<(
-        Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         ModelSent<'s, B<'s>, ModelSmall>,
     )>,
 }
@@ -171,6 +204,7 @@ impl<'s> Harness<'s> {
                 received: Vec::new(),
                 tbtt: 0,
                 order: Vec::new(),
+                refuse: 0,
             },
             tickets,
             small,
@@ -198,7 +232,11 @@ impl<'s> Harness<'s> {
     /// admitted by the port.
     fn admitted(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
     ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
         self.admitted_under(ticket, buffer, None)
@@ -206,7 +244,11 @@ impl<'s> Harness<'s> {
 
     fn admitted_under(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: Option<&ModelPairwiseKey<'s, B<'s>, Station>>,
     ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
@@ -216,7 +258,11 @@ impl<'s> Harness<'s> {
     /// The station's protected data frame under `key`, numbered `number`.
     fn admitted_under_number(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: &ModelPairwiseKey<'s, B<'s>, Station>,
         number: u64,
@@ -226,7 +272,11 @@ impl<'s> Harness<'s> {
 
     fn admitted_numbered(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: Option<(&ModelPairwiseKey<'s, B<'s>, Station>, u64)>,
     ) -> ModelAdmitted<LocalId<'s>, ModelCaps, ()> {
@@ -236,7 +286,11 @@ impl<'s> Harness<'s> {
     /// The station's data frame under one stage of `transmissions`.
     fn admitted_planned(
         &mut self,
-        ticket: Slot<'s, ModelTickets, ModelPool<LocalId<'s>, 1>>,
+        ticket: Slot<
+            's,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<LocalId<'s>, 1>,
+        >,
         mut buffer: ModelBuffer<'s, B<'s>, ModelSmall>,
         key: Option<(&ModelPairwiseKey<'s, B<'s>, Station>, u64)>,
         transmissions: NonZeroU8,
@@ -318,6 +372,7 @@ impl<'s> Harness<'s> {
                 &mut self.sink,
             )
             .unwrap()
+            .unwrap()
     }
 
     fn start(&mut self) {
@@ -329,14 +384,17 @@ impl<'s> Harness<'s> {
         command: PortCommand<'s, Types<'s>, ModelCaps>,
     ) -> CommandProgress<'s, Types<'s>, ModelCaps> {
         let now = self.clock.now();
-        self.port.command(command, now, &mut self.sink).unwrap()
+        self.port
+            .command(command, now, &mut self.sink)
+            .unwrap()
+            .unwrap()
     }
 
     fn recycle_received(&mut self) -> usize {
         let frames = core::mem::take(&mut self.sink.received);
         let count = frames.len();
         for (frame, _) in frames {
-            self.port.recycle(frame);
+            assert!(self.port.recycle(frame).is_ok());
         }
         count
     }
@@ -522,6 +580,7 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         let now = self.clock.now();
         self.port
             .submit(attempt, now, &mut self.sink)
+            .unwrap()
             .map_err(|_| cases::Violation::Refusal)
     }
     fn take_station(&mut self) -> Option<cases::StationSent> {
@@ -657,6 +716,7 @@ fn refusals_before_the_start_return_every_owner_unchanged() {
         let refused = harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .err()
             .unwrap();
         assert_eq!(refused, SubmitRefusal::NotEnabled);
@@ -748,16 +808,18 @@ fn no_data_port_call_wakes_its_caller() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness
             .port
             .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .unwrap()
             .unwrap();
         let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
             panic!("a delivered unit");
         };
-        harness.port.recycle(frame);
+        assert!(harness.port.recycle(frame).is_ok());
         let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
             panic!("the second unit");
         };
@@ -782,6 +844,44 @@ fn no_data_port_call_wakes_its_caller() {
 }
 
 #[test]
+fn a_recycle_its_count_refuses_comes_back_whole_and_the_count_stays() {
+    use oer_protocols_ieee80211_contracts_port::{ReceiveAccounting, ReceiveOperation, RxBuffer};
+    with_harness(|harness| {
+        harness.start();
+        harness.deliver(1);
+        let now = harness.clock.now();
+        let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
+            panic!("one unit");
+        };
+        let bytes = frame.bytes().to_vec();
+        harness.air.refuse_recycles(1);
+        let Err(refused) = harness.port.recycle(frame) else {
+            panic!("the count refuses it");
+        };
+        assert_eq!(
+            refused.fault,
+            ReceiveAccounting {
+                operation: ReceiveOperation::Recycle,
+                held: 1,
+                requested: 1,
+            }
+        );
+        assert_eq!(refused.unit.bytes(), bytes.as_slice());
+        // Nothing was taken: the held unit still fills the room, and no
+        // fault was recorded.
+        assert!(matches!(
+            harness.port.receive(1, now).unwrap(),
+            RxPull::Empty
+        ));
+        assert!(harness.port.recycle(refused.unit).is_ok());
+        assert!(matches!(
+            harness.port.receive(1, now).unwrap(),
+            RxPull::Empty
+        ));
+    });
+}
+
+#[test]
 fn a_receive_pull_takes_one_unit_within_the_callers_room() {
     with_harness(|harness| {
         harness.start();
@@ -799,11 +899,11 @@ fn a_receive_pull_takes_one_unit_within_the_callers_room() {
             1,
             "the other unit waits in the ring"
         );
-        harness.port.recycle(first);
+        assert!(harness.port.recycle(first).is_ok());
         let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
             panic!("the waiting unit");
         };
-        harness.port.recycle(frame);
+        assert!(harness.port.recycle(frame).is_ok());
         assert!(matches!(
             harness.port.receive(1, now).unwrap(),
             RxPull::Empty
@@ -1048,8 +1148,8 @@ fn the_receive_limits_bind_each_at_its_own_place() {
         assert!(!harness.port.lend_room());
         let refused = harness.port.lend(units.pop().unwrap()).err().unwrap();
         assert_eq!(refused.reason, LendRefusal::Capacity);
-        harness.port.recycle(refused.buffer);
-        harness.port.recycle(units.pop().unwrap());
+        assert!(harness.port.recycle(refused.buffer).is_ok());
+        assert!(harness.port.recycle(units.pop().unwrap()).is_ok());
         drop(lent);
         assert!(harness.port.lend_room());
         harness.recycle_received();
@@ -1113,12 +1213,12 @@ fn the_model_holds_its_receive_bound_and_keeps_the_rest_in_the_ring() {
         assert_eq!(held.len(), MODEL_RX_EVENTS);
         assert_eq!(harness.air.pending_rx(), 1);
         for frame in held {
-            harness.port.recycle(frame);
+            assert!(harness.port.recycle(frame).is_ok());
         }
         let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
             panic!("room again");
         };
-        harness.port.recycle(frame);
+        assert!(harness.port.recycle(frame).is_ok());
     });
 }
 
@@ -1133,6 +1233,7 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
         harness
             .port
             .submit(attempt, admitted, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         let lifetime = harness
@@ -1162,6 +1263,7 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         assert_eq!(
@@ -1191,6 +1293,7 @@ fn a_configuration_is_held_behind_a_published_station_mpdu_then_runs() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1296,39 +1399,40 @@ fn old_group_key_ingress_at_every_stage_reaches_the_sink_before_the_replacements
 }
 
 #[test]
-fn a_held_command_past_its_bound_is_a_named_fault_that_keeps_its_owners() {
+fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop_completes() {
     with_harness(|harness| {
         harness.start();
         let install = group_install(harness);
         harness.air.hold_group_commands(true);
-        let since = harness.clock.now();
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("held");
         };
         harness.advance(MODEL_HELD_COMMAND_BOUND);
         let now = harness.clock.now();
-        let fault = harness
+        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) = harness
             .port
             .command(install, now, &mut harness.sink)
-            .err()
-            .unwrap();
-        assert_eq!(
-            fault,
-            ModelPortFault::CommandStalled {
-                kind: CommandKind::InstallGroup,
-                since,
-            }
-        );
-        assert_eq!(harness.port.retained.len(), 1, "the port keeps the command");
-        // Every later fallible call reports the same fault.
+            .unwrap()
+        else {
+            panic!("an expired command comes back refused");
+        };
+        assert!(harness.sink.terminals.is_empty(), "it did not run");
+        assert_eq!(harness.port.deadline(), None, "no held command's bound");
+        // The port runs on: the same command runs once the air lets it.
+        harness.air.hold_group_commands(false);
+        assert!(matches!(harness.command(install), CommandProgress::Done));
+        assert!(matches!(
+            harness.sink.terminals.as_slice(),
+            [LowerMacTerminal::GroupKeyInstalled(_)]
+        ));
+        let waker = harness.waker();
         let now = harness.clock.now();
-        assert_eq!(
+        assert!(matches!(
             harness
                 .port
-                .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
-                .err(),
-            Some(fault)
-        );
+                .poll_stop(&mut Context::from_waker(&waker), now),
+            Poll::Ready(Ok(()))
+        ));
     });
 }
 
@@ -1380,6 +1484,7 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1392,6 +1497,7 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
         let fault = harness
             .port
             .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .unwrap()
             .err()
             .unwrap();
         assert_eq!(
@@ -1409,7 +1515,7 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
             }
         );
         assert_eq!(harness.port.fault(), Some(fault));
-        harness.port.recycle(frame);
+        assert!(harness.port.recycle(frame).is_ok());
     });
 }
 
@@ -1429,6 +1535,7 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         let waker = harness.waker();
@@ -1515,6 +1622,7 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1567,6 +1675,7 @@ fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbe
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1618,6 +1727,7 @@ fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbe
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1646,6 +1756,7 @@ fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbe
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         harness.service();
@@ -1666,12 +1777,14 @@ fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication(
         harness
             .port
             .submit(attempt, now, &mut harness.sink)
+            .unwrap()
             .ok()
             .unwrap();
         let now = harness.clock.now();
         let fault = harness
             .port
             .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .unwrap()
             .err()
             .unwrap();
         assert!(matches!(
@@ -1688,3 +1801,120 @@ fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication(
 
 mod access_point;
 mod station_stale;
+
+/// Stop the harness's radio, serving and moving time until it confirms.
+fn stop_radio(harness: &mut Harness<'_>) {
+    for _ in 0..64 {
+        let (now, waker) = harness.now_wake();
+        match harness
+            .port
+            .poll_stop(&mut Context::from_waker(&waker), now)
+        {
+            Poll::Ready(result) => return result.unwrap(),
+            Poll::Pending => {
+                let _arena = harness.service();
+                harness.advance(oer_portable_time::Duration::from_millis(10));
+            }
+        }
+    }
+    panic!("the stop confirms");
+}
+
+/// The tickets of the single-MPDU terminals the sink holds, in its order.
+fn completed_tickets(harness: &Harness<'_>) -> Vec<u8> {
+    harness
+        .sink
+        .terminals
+        .iter()
+        .filter_map(|terminal| match terminal {
+            LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
+                Some(completed.ticket_index())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_refused_terminal_is_kept_and_offered_again_first_once_the_sink_has_room() {
+    with_harness(|harness| {
+        harness.start();
+        let now = harness.now();
+        let first = harness.mpdu().unwrap();
+        let second = harness.mpdu().unwrap();
+        let (first_ticket, second_ticket) = (
+            <Harness<'_> as DataPortHarness<'_>>::identity(&first),
+            <Harness<'_> as DataPortHarness<'_>>::identity(&second),
+        );
+        assert!(harness.port.submit(first, now, &mut harness.sink).is_ok());
+        assert!(harness.port.submit(second, now, &mut harness.sink).is_ok());
+        harness.sink.refuse = 1;
+        for _ in 0..8 {
+            if harness.sink.refuse == 0 {
+                break;
+            }
+            let _arena = harness.service();
+            harness.advance(oer_portable_time::Duration::from_millis(1));
+        }
+        assert_eq!(harness.sink.refuse, 0, "the sink refused a terminal");
+        // The first terminal was refused: it and the one behind it wait.
+        assert!(harness.sink.terminals.is_empty());
+        // What the port keeps makes nothing due: the sink owns the wake.
+        let now = harness.now();
+        assert!(harness.port.deadline().is_none_or(|at| at > now));
+        // Before a confirmed stop the port offers them itself.
+        assert_eq!(
+            harness.port.take_unconsumed(&mut harness.sink),
+            Err(UnconsumedRefused::NotStopped)
+        );
+        for _ in 0..8 {
+            let _arena = harness.service();
+            harness.advance(oer_portable_time::Duration::from_millis(1));
+        }
+        assert_eq!(completed_tickets(harness), [first_ticket, second_ticket]);
+        assert_eq!(harness.take_completed(), 2);
+    });
+}
+
+#[test]
+fn terminals_kept_at_a_confirmed_stop_leave_only_through_take_unconsumed_each_once() {
+    with_harness(|harness| {
+        harness.start();
+        let now = harness.now();
+        let attempt = harness.mpdu().unwrap();
+        let ticket = <Harness<'_> as DataPortHarness<'_>>::identity(&attempt);
+        assert!(harness.port.submit(attempt, now, &mut harness.sink).is_ok());
+        harness.sink.refuse = 1;
+        for _ in 0..8 {
+            if harness.sink.refuse == 0 {
+                break;
+            }
+            let _arena = harness.service();
+            harness.advance(oer_portable_time::Duration::from_millis(1));
+        }
+        assert_eq!(harness.sink.refuse, 0, "the sink refused a terminal");
+        assert!(harness.sink.terminals.is_empty());
+        stop_radio(harness);
+        // After the confirmed stop the port's other calls offer nothing it
+        // keeps.
+        let _arena = harness.service();
+        assert!(harness.sink.terminals.is_empty());
+        // Refused again, it stays; then it leaves once.
+        harness.sink.refuse = 1;
+        assert_eq!(
+            harness.port.take_unconsumed(&mut harness.sink),
+            Ok(Unconsumed::Kept)
+        );
+        assert!(harness.sink.terminals.is_empty());
+        assert_eq!(
+            harness.port.take_unconsumed(&mut harness.sink),
+            Ok(Unconsumed::None)
+        );
+        assert_eq!(completed_tickets(harness), [ticket]);
+        assert_eq!(
+            harness.port.take_unconsumed(&mut harness.sink),
+            Ok(Unconsumed::None)
+        );
+        assert_eq!(harness.take_completed(), 1);
+    });
+}

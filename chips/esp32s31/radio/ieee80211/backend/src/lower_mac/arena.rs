@@ -230,18 +230,18 @@ enum Phase<'core, Path: PoolPath> {
     },
 }
 
-struct Chain<'core, 'slot, L, Path: PoolPath, const SLOTS: usize> {
+struct Chain<'core, 'slot, L, Path: PoolPath, const SLOTS: usize, const TICKETS: usize> {
     owner: Esp32s31AmpduOwner<'slot, L, SLOTS>,
     /// The batch the owner holds while it is not free.
     cookie: TxCookie,
     /// The arena's ticket, or the key right it became.
-    admission: Option<TxAdmission<'core, Path>>,
+    admission: Option<TxAdmission<'core, Path, TICKETS>>,
     phase: Phase<'core, Path>,
     len: u8,
 }
 
-impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
-    Chain<'core, 'slot, L, Path, SLOTS>
+impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize, const TICKETS: usize>
+    Chain<'core, 'slot, L, Path, SLOTS, TICKETS>
 {
     /// Whether every frame position to publish carries a Protected bit
     /// matching `encrypted`.
@@ -269,8 +269,15 @@ struct AggregateProgram {
 }
 
 /// The S31's two TX arenas over two retained A-MPDU chains.
-pub struct Esp32s31TxArena<'core, 'slot, L, Path: PoolPath, const SLOTS: usize> {
-    chains: [Chain<'core, 'slot, L, Path, SLOTS>; 2],
+pub struct Esp32s31TxArena<
+    'core,
+    'slot,
+    L,
+    Path: PoolPath,
+    const SLOTS: usize,
+    const TICKETS: usize,
+> {
+    chains: [Chain<'core, 'slot, L, Path, SLOTS, TICKETS>; 2],
     claimed: bool,
     fault: Option<ArenaFault>,
     /// Gone with any change the core's policy may have seen
@@ -279,13 +286,13 @@ pub struct Esp32s31TxArena<'core, 'slot, L, Path: PoolPath, const SLOTS: usize> 
 }
 
 /// The chains and tickets an [`Esp32s31TxArena`] is made of.
-pub type ArenaParts<'core, 'slot, L, Path, const SLOTS: usize> = (
+pub type ArenaParts<'core, 'slot, L, Path, const SLOTS: usize, const TICKETS: usize> = (
     [Esp32s31AmpduOwner<'slot, L, SLOTS>; 2],
-    [TxTicket<'core, Path>; 2],
+    [TxTicket<'core, Path, TICKETS>; 2],
 );
 
-impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
-    Esp32s31TxArena<'core, 'slot, L, Path, SLOTS>
+impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize, const TICKETS: usize>
+    Esp32s31TxArena<'core, 'slot, L, Path, SLOTS, TICKETS>
 {
     /// The slots of each arena.
     pub const CAPACITY: u8 = {
@@ -305,8 +312,8 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
     #[allow(clippy::result_large_err, reason = "the parts go back by value")]
     pub fn new(
         chains: [Esp32s31AmpduOwner<'slot, L, SLOTS>; 2],
-        tickets: [TxTicket<'core, Path>; 2],
-    ) -> Result<Self, ArenaParts<'core, 'slot, L, Path, SLOTS>> {
+        tickets: [TxTicket<'core, Path, TICKETS>; 2],
+    ) -> Result<Self, ArenaParts<'core, 'slot, L, Path, SLOTS, TICKETS>> {
         let _capacity = Self::CAPACITY;
         let [mut first, mut second] = chains;
         let idle = [&mut first, &mut second].into_iter().all(|owner| {
@@ -358,7 +365,7 @@ impl<'core, 'slot, L: PlacedBacking, Path: PoolPath, const SLOTS: usize>
     ///
     /// The arenas, unchanged.
     #[allow(clippy::result_large_err, reason = "the arenas go back by value")]
-    pub fn into_parts(self) -> Result<ArenaParts<'core, 'slot, L, Path, SLOTS>, Self> {
+    pub fn into_parts(self) -> Result<ArenaParts<'core, 'slot, L, Path, SLOTS, TICKETS>, Self> {
         if !self.returnable() {
             return Err(self);
         }
@@ -513,13 +520,13 @@ pub struct ArenaPort<
     const TICKETS: usize,
     const SLOTS: usize,
 > {
-    pub arenas: &'a mut Esp32s31TxArena<'core, 'slot, L, Path, SLOTS>,
+    pub arenas: &'a mut Esp32s31TxArena<'core, 'slot, L, Path, SLOTS, TICKETS>,
     pub(in crate::lower_mac) core:
         &'a mut LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
     pub hardware: &'a mut H,
-    /// The free EDCA queues by hardware index; a publication holds its
+    /// The free EDCA queues at their own places; a publication holds its
     /// category's until its completion.
-    pub queues: &'a mut [Option<FreeQueue<'core, Path>>; LOWER_MAC_TX_QUEUES],
+    pub queues: &'a mut super::QueueBank<'core, Path>,
     /// The interface the arenas transmit for.
     pub role: VifRole,
     /// The interface's installed pairwise key.
@@ -554,13 +561,13 @@ impl<
     /// interface `role` and its installed `pairwise` key.
     #[allow(clippy::too_many_arguments, reason = "every part the arenas borrow")]
     pub fn new(
-        arenas: &'a mut Esp32s31TxArena<'core, 'slot, L, Path, SLOTS>,
+        arenas: &'a mut Esp32s31TxArena<'core, 'slot, L, Path, SLOTS, TICKETS>,
         core: super::ArenaCore<
             'a,
             LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>,
         >,
         hardware: &'a mut H,
-        queues: &'a mut [Option<FreeQueue<'core, Path>>; LOWER_MAC_TX_QUEUES],
+        queues: &'a mut super::QueueBank<'core, Path>,
         role: VifRole,
         pairwise: Option<&'a KeyHandle<'core, Path>>,
         sink: &'a mut S,
@@ -731,7 +738,7 @@ where
     T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     H: HtAmpduHardware + CcmpKeyHardware,
-    S: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+    S: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     O: EventSink<ContentionDraw>,
     L: PlacedBacking,
     K: Ieee80211Capabilities,
@@ -749,7 +756,7 @@ where
     }
 
     fn capacity(&self) -> u8 {
-        Esp32s31TxArena::<'core, 'slot, L, Path, SLOTS>::CAPACITY
+        Esp32s31TxArena::<'core, 'slot, L, Path, SLOTS, TICKETS>::CAPACITY
     }
 
     fn push(
@@ -789,9 +796,7 @@ where
         }
         let id = publication.arena.id();
         let category = publication.access_category;
-        let index = usize::from(LegacyTxQueue::from_access_category(category).hardware_index());
-        let busy =
-            self.arenas.on_air().is_some() || self.queues.get(index).is_none_or(Option::is_none);
+        let busy = self.arenas.on_air().is_some() || !self.queues.is_home(category);
         let encrypted = publication.encryption == MpduProtection::Ccmp;
         let Ok(rate) = TxPhyRate::try_from(publication.format.rate()) else {
             let fault = self.arenas.quarantine(ArenaFault::State);
@@ -911,7 +916,7 @@ where
                 }
             }
         }
-        let Some(queue) = self.queues.get_mut(index).and_then(Option::take) else {
+        let Some(queue) = self.queues.take(category) else {
             return Err(PublishError::Fault(
                 self.arenas.quarantine(ArenaFault::State),
             ));
@@ -1115,13 +1120,8 @@ where
             queue, arena, role, ..
         } = on_air;
         let category = queue.category();
-        let Some(place @ None) = self.queues.get_mut(index) else {
-            // No place takes the queue back: it stays quarantined with the
-            // completed arena's right.
-            let _quarantined = core::mem::ManuallyDrop::new((queue, arena));
-            return Err(self.arenas.quarantine(ArenaFault::State));
-        };
-        *place = Some(queue);
+        // The queue's place returns to its own home.
+        self.queues.put(queue);
         self.core.reset_contention(role, category);
         Ok(Some(Completion::new(arena, chain.len, end, cost)))
     }
@@ -1222,7 +1222,7 @@ fn republish_single<
     const TICKETS: usize,
     const SLOTS: usize,
 >(
-    chain: &mut Chain<'core, 'slot, L, Path, SLOTS>,
+    chain: &mut Chain<'core, 'slot, L, Path, SLOTS, TICKETS>,
     core: &mut LowerMacCore<'core, 'slot, P, E, T, C, N, Path, TICKETS>,
     hardware: &mut H,
     observations: &mut O,
@@ -1317,7 +1317,7 @@ fn release_key<
     const TICKETS: usize,
     const SLOTS: usize,
 >(
-    chain: &mut Chain<'core, 'slot, L, Path, SLOTS>,
+    chain: &mut Chain<'core, 'slot, L, Path, SLOTS, TICKETS>,
     core: &mut LowerMacCore<'core, 'slot, P, E, T, C, N, Path, TICKETS>,
     hardware: &mut H,
     sink: &mut S,
@@ -1327,7 +1327,7 @@ fn release_key<
     T: oer_portable_time::Timer,
     C: RadioCoexPriorities,
     H: CcmpKeyHardware,
-    S: LowerMacSink<'core, 'slot, N, Path>,
+    S: LowerMacSink<'core, 'slot, N, Path, TICKETS>,
     Path: PoolPath,
 {
     chain.admission = match chain.admission.take() {

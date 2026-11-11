@@ -111,7 +111,7 @@ pub struct BlockAckSlot<
     const N: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
-    slot: Slot<'id, K, Path>,
+    slot: Slot<'id, Slots<K, N>, Path>,
 }
 
 impl<K, const N: usize, Path: PoolPath> BlockAckSlot<'_, K, N, Path> {
@@ -119,6 +119,11 @@ impl<K, const N: usize, Path: PoolPath> BlockAckSlot<'_, K, N, Path> {
     /// agreement.
     pub fn index(&self) -> u8 {
         self.slot.index()
+    }
+
+    /// The slot's place in its pool of `N`.
+    pub const fn place(&self) -> oer_protocols_radio_port::Place<N> {
+        self.slot.place()
     }
 }
 
@@ -232,7 +237,7 @@ pub struct AssociationStart<
     const G: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
-    _owner: IssuedSlot<'id, OwnerKind<R, P, G>, Child<Path, 0>>,
+    _owner: IssuedSlot<'id, Slots<OwnerKind<R, P, G>, 1>, Child<Path, 0>>,
 }
 
 /// One immutable SPP decision. Its brand also identifies every key slot.
@@ -270,7 +275,7 @@ pub struct PairwiseKeySlot<
     const G: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
-    slot: IssuedSlot<'id, PairwiseKind<R, P, G>, Child<Path, 1>>,
+    slot: IssuedSlot<'id, Slots<PairwiseKind<R, P, G>, P>, Child<Path, 1>>,
 }
 /// A vacant GTK slot, from the same association domain as its PTK slots.
 #[must_use]
@@ -281,7 +286,7 @@ pub struct GroupKeySlot<
     const G: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
 > {
-    slot: IssuedSlot<'id, GroupKind<R, P, G>, Child<Path, 2>>,
+    slot: IssuedSlot<'id, Slots<GroupKind<R, P, G>, G>, Child<Path, 2>>,
 }
 
 /// The complete bank, never a count, mask, sparse array or partial collection.
@@ -414,6 +419,11 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
         self.slot.index()
     }
 
+    /// The slot's place in its domain's pool of `P` PTK slots.
+    pub const fn place(&self) -> oer_protocols_radio_port::Place<P> {
+        self.slot.place()
+    }
+
     /// The generation of the installation that issued the slot.
     pub const fn generation(&self) -> u32 {
         self.slot.generation()
@@ -425,6 +435,11 @@ impl<R: InterfaceRole, const P: usize, const G: usize, Path: PoolPath>
     /// Position within this domain's slot bank.
     pub const fn index(&self) -> u8 {
         self.slot.index()
+    }
+
+    /// The slot's place in its domain's pool of `G` GTK slots.
+    pub const fn place(&self) -> oer_protocols_radio_port::Place<G> {
+        self.slot.place()
     }
 
     /// The generation of the installation that issued the slot.

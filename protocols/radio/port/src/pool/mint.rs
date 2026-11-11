@@ -40,7 +40,7 @@ pub type Pools<'id, P, Path = Root<crate::LocalId<'id>>> = <P as PoolSet>::Pools
 /// ```
 /// use oer_protocols_radio_port::{Mint, Slot, Slots};
 /// enum Keys {}
-/// fn once<'id>(mint: Mint<'id, Slots<Keys, 2>>) -> [Slot<'id, Keys>; 2] {
+/// fn once<'id>(mint: Mint<'id, Slots<Keys, 2>>) -> [Slot<'id, Slots<Keys, 2>>; 2] {
 ///     mint.into_pools()
 /// }
 /// ```
@@ -128,7 +128,9 @@ impl<'id, Path: PoolPath> PoolBuilder<'id, Path> {
     }
 }
 
-/// A layout of `N` synchronously owned slots of kind `Kind`.
+/// A layout of `N` synchronously owned slots of kind `Kind`. Its slots
+/// name the layout as their kind (`Slot<'id, Slots<Kind, N>, Path>`), so
+/// each slot's [`place`](Slot::place) is below `N` by its type.
 ///
 /// Slot indices fit in one byte; larger layouts fail at instantiation:
 ///
@@ -142,7 +144,7 @@ impl<'id, Path: PoolPath> PoolBuilder<'id, Path> {
 pub struct Slots<Kind, const N: usize>(PhantomData<fn() -> Kind>);
 
 impl<Kind, const N: usize> PoolSet for Slots<Kind, N> {
-    type Pools<'id, Path: PoolPath> = [Slot<'id, Kind, Path>; N];
+    type Pools<'id, Path: PoolPath> = [Slot<'id, Self, Path>; N];
 
     fn build<'id, Path: PoolPath>(builder: PoolBuilder<'id, Path>) -> Self::Pools<'id, Path> {
         const {
@@ -156,6 +158,26 @@ impl<Kind, const N: usize> PoolSet for Slots<Kind, N> {
             kind: PhantomData,
         })
     }
+}
+
+mod layout {
+    pub trait Sealed {}
+}
+
+/// A slot pool's layout, implemented only by [`Slots`]: a generic contract
+/// names a pool whose size its implementer chooses as an associated type
+/// bounded by this trait, and its slots as `Slot<'id, L, Path>`.
+pub trait SlotLayout: layout::Sealed {
+    /// The slots' semantic kind.
+    type Kind;
+    /// The pool's size.
+    const LEN: usize;
+}
+
+impl<Kind, const N: usize> layout::Sealed for Slots<Kind, N> {}
+impl<Kind, const N: usize> SlotLayout for Slots<Kind, N> {
+    type Kind = Kind;
+    const LEN: usize = N;
 }
 
 /// A layout of `N` awaited permits and the `S` seats of their line.

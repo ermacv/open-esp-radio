@@ -17,6 +17,9 @@ pub(crate) fn backend_fault(
             oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Key => {
                 UnpublishedCause::Key
             }
+            oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Registers => {
+                UnpublishedCause::Registers
+            }
             oer_chips_esp32s31_radio_ieee80211_backend::port::Unpublished::Step(step) => {
                 UnpublishedCause::Step(publish_step(step))
             }
@@ -25,15 +28,13 @@ pub(crate) fn backend_fault(
         Source::Abandoned => BackendFault::Abandoned,
         Source::Arena(v0) => BackendFault::Arena(arena_fault(v0)),
         Source::TuneNotRecorded => BackendFault::TuneNotRecorded,
+        Source::RightLost => BackendFault::RightLost,
         Source::HardwareUnavailable => BackendFault::HardwareUnavailable,
         Source::CoreViewUnavailable(op) => BackendFault::CoreViewUnavailable(core_operation(op)),
         Source::Publish { queue, step } => BackendFault::Publish {
             queue,
             step: publish_step(step),
         },
-        Source::DuplicateCompletion { queue } => BackendFault::DuplicateCompletion { queue },
-        Source::RemovalOverflow => BackendFault::RemovalOverflow,
-        Source::RemovalMissing => BackendFault::RemovalMissing,
         Source::RemovalMismatch => BackendFault::RemovalMismatch,
         Source::GroupKeyIdRange => BackendFault::GroupKeyIdRange,
         Source::ConfigurationRefused => BackendFault::ConfigurationRefused,
@@ -46,15 +47,32 @@ pub(crate) fn backend_fault(
         Source::ReceiveOverflow => BackendFault::ReceiveOverflow,
         Source::ReceiveRange => BackendFault::ReceiveRange,
         Source::ReceiveLost => BackendFault::ReceiveLost,
-        Source::ArenaCoreContract => BackendFault::ArenaCoreContract,
         Source::InstallationResources => BackendFault::InstallationResources,
         Source::EdcaUnsupported => BackendFault::EdcaUnsupported,
         Source::ChannelNotPermitted => BackendFault::ChannelNotPermitted,
         Source::ChannelUnsupported => BackendFault::ChannelUnsupported,
         Source::KeySlotMissing(op) => BackendFault::KeySlotMissing(key_operation(op)),
         Source::ReceiveAccounting => BackendFault::ReceiveAccounting,
-        Source::CommandExpired(kind) => BackendFault::CommandExpired(command_kind(kind)),
         Source::HeAssociationRange => BackendFault::HeAssociationRange,
+        Source::GroupReplacement(ended) => BackendFault::GroupReplacement(group_replacement(ended)),
+        Source::GroupEntryHeld => BackendFault::GroupEntryHeld,
+    }
+}
+
+fn group_replacement(
+    value: oer_chips_esp32s31_radio_ieee80211_backend::port::GroupReplacement,
+) -> GroupReplacement {
+    use oer_chips_esp32s31_radio_ieee80211_backend::port::GroupReplacement as Source;
+    match value {
+        Source::Refused => GroupReplacement::Refused,
+        Source::RolledBack(cause) => GroupReplacement::RolledBack(crypto_key_error(cause)),
+        Source::RollbackFailed {
+            replacement,
+            rollback,
+        } => GroupReplacement::RollbackFailed {
+            replacement: crypto_key_error(replacement),
+            rollback: crypto_key_error(rollback),
+        },
     }
 }
 
@@ -64,12 +82,68 @@ pub(crate) fn start_refused(
         oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
     >,
 ) -> oer_protocols_ieee80211_contracts_port::StartRefused<BackendFault> {
+    use oer_protocols_ieee80211_contracts_port::StartFailure as Failure;
     use oer_protocols_ieee80211_contracts_port::StartRefused as Source;
     match value {
         Source::Running => Source::Running,
         Source::Retune(cause) => Source::Retune(backend_fault(cause)),
         Source::Deadline => Source::Deadline,
         Source::Device => Source::Device,
+        Source::Unstopped { cause, stop } => Source::Unstopped {
+            cause: match cause {
+                Failure::Retune(cause) => Failure::Retune(backend_fault(cause)),
+                Failure::Deadline => Failure::Deadline,
+                Failure::Device => Failure::Device,
+            },
+            stop: stop_unconfirmed(stop),
+        },
+    }
+}
+
+/// A port's unconfirmed stop, with the device's fault it met.
+pub(crate) fn stop_unconfirmed(
+    value: oer_protocols_ieee80211_contracts_port::StopUnconfirmed<
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
+    >,
+) -> oer_protocols_ieee80211_contracts_port::StopUnconfirmed<BackendFault> {
+    use oer_protocols_ieee80211_contracts_port::StopCause as Source;
+    oer_protocols_ieee80211_contracts_port::StopUnconfirmed {
+        cause: match value.cause {
+            Source::Deadline => Source::Deadline,
+            Source::Device(fault) => Source::Device(backend_fault(fault)),
+            Source::CoreEnabled => Source::CoreEnabled,
+        },
+        observations: value.observations,
+    }
+}
+
+/// What a stop still held when it ended unconfirmed, with the port's
+/// report converted.
+#[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
+pub(crate) fn stop_observed(
+    value: oer_protocols_ieee80211_runtime::datapath::StopObserved<
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
+    >,
+) -> oer_protocols_ieee80211_runtime::datapath::StopObserved<BackendFault> {
+    let oer_protocols_ieee80211_runtime::datapath::StopObserved {
+        port,
+        deadline,
+        arena_on_air,
+        frames_out,
+        network_running,
+        network_lost,
+        lent,
+        memory_held,
+    } = value;
+    oer_protocols_ieee80211_runtime::datapath::StopObserved {
+        port: port.map(stop_unconfirmed),
+        deadline,
+        arena_on_air,
+        frames_out,
+        network_running,
+        network_lost,
+        lent,
+        memory_held,
     }
 }
 
@@ -116,25 +190,6 @@ pub(super) fn key_operation(
         Source::Remove => KeyOperation::Remove,
         Source::Replace => KeyOperation::Replace,
         Source::Select => KeyOperation::Select,
-    }
-}
-
-pub(super) fn command_kind(
-    value: oer_protocols_ieee80211_contracts_port::CommandKind,
-) -> PortCommandKind {
-    use oer_protocols_ieee80211_contracts_port::CommandKind as Source;
-    match value {
-        Source::InstallPairwise => PortCommandKind::InstallPairwise,
-        Source::InstallGroup => PortCommandKind::InstallGroup,
-        Source::ReplaceGroup => PortCommandKind::ReplaceGroup,
-        Source::SelectGroup => PortCommandKind::SelectGroup,
-        Source::RemovePairwise => PortCommandKind::RemovePairwise,
-        Source::RemoveGroup => PortCommandKind::RemoveGroup,
-        Source::Configure => PortCommandKind::Configure,
-        Source::CloseGate => PortCommandKind::CloseGate,
-        Source::SetEdca => PortCommandKind::SetEdca,
-        Source::SetBssColor => PortCommandKind::SetBssColor,
-        Source::SetHe => PortCommandKind::SetHe,
     }
 }
 
@@ -782,27 +837,21 @@ pub(crate) fn still_active(
     ReleaseCause::StillActive(maintenance_error(error))
 }
 
-/// The terminal cause of a lifecycle's end; `None` for an ordinary stop
-/// and a restart, which the facade serves itself.
+/// The station's form of the fault the datapath actor ended on.
 #[cfg(target_arch = "riscv32")]
-pub(crate) fn lifecycle(
-    end: oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd<
+pub(crate) fn actor_fault(
+    fault: oer_protocols_ieee80211_runtime::datapath::ActorFault<
         oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
     >,
-) -> Option<LifecycleFailure> {
+) -> LifecycleFailure {
     use oer_protocols_ieee80211_runtime::datapath::ActorFault;
-    use oer_protocols_ieee80211_runtime::lifecycle::LifecycleEnd as End;
-    Some(match end {
-        End::Stopped | End::StoppedReturning(_) | End::StoppedNetworkLost(_) | End::Restart(_) => {
-            return None;
-        }
-        End::StartRefused(refused) => LifecycleFailure::StartRefused(start_refused(refused)),
-        End::StopUnconfirmed(observed) => LifecycleFailure::StopUnconfirmed(observed),
-        End::RetuneUnconfirmed(unconfirmed) => LifecycleFailure::RetuneUnconfirmed(unconfirmed),
-        End::Faulted(ActorFault::Port(fault)) => LifecycleFailure::Port(backend_fault(fault)),
-        End::Faulted(ActorFault::Contract(violation)) => LifecycleFailure::Actor(violation),
-        End::Contract(violation) => LifecycleFailure::Contract(violation),
-    })
+    match fault {
+        ActorFault::Port(fault) => LifecycleFailure::Port(backend_fault(fault)),
+        ActorFault::Contract(violation) => LifecycleFailure::Actor(violation),
+        ActorFault::Receive(fault) => LifecycleFailure::Receive(fault),
+        ActorFault::Unkept => LifecycleFailure::Unkept,
+        ActorFault::Unaccepted => LifecycleFailure::Unaccepted,
+    }
 }
 
 /// The broken contract a restart of the station came from, if one did.
@@ -819,7 +868,25 @@ pub(crate) fn restart(
             Some(LifecycleFailure::Port(backend_fault(fault)))
         }
         Failure::Fault(ActorFault::Contract(violation)) => Some(LifecycleFailure::Actor(violation)),
+        Failure::Fault(ActorFault::Receive(fault)) => Some(LifecycleFailure::Receive(fault)),
+        Failure::Fault(ActorFault::Unkept) => Some(LifecycleFailure::Unkept),
+        Failure::Fault(ActorFault::Unaccepted) => Some(LifecycleFailure::Unaccepted),
         _ => None,
+    }
+}
+
+/// The station's form of a cleanup the port did not finish.
+pub(crate) fn cleanup(
+    refused: oer_protocols_ieee80211_contracts_port::CleanupRefused<
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
+    >,
+) -> CleanupCause {
+    use oer_protocols_ieee80211_contracts_port::CleanupRefused as Source;
+    match refused {
+        Source::NotStopped => CleanupCause::NotStopped,
+        Source::Faulted(fault) => CleanupCause::Faulted(backend_fault(fault)),
+        Source::Unavailable(fault) => CleanupCause::Unavailable(backend_fault(fault)),
+        Source::Held(fault) => CleanupCause::Held(backend_fault(fault)),
     }
 }
 

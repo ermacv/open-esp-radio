@@ -61,7 +61,11 @@
 //! typed cause for the image to record ([`LifecycleEnd`]).
 
 mod inbox;
+mod outbox;
 mod step;
+
+use outbox::{Messages, Sending, UnitRight};
+pub use outbox::{Outbox, UNSENT, Unsent, UnsentUnit};
 
 #[cfg(test)]
 mod tests;
@@ -71,7 +75,9 @@ use core::pin::Pin;
 use core::task::{Context, Poll};
 
 use oer_portable_events::report;
-use oer_portable_memory::{WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{
+    ClosingSpscReceiver, ClosingSpscSendError, ClosingSpscSender, WakingSpscReceiver,
+};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     CommandKind, CommandRefusal, KeyTypes, PoolMpdu, PortCommands, PortTypes, StartRefused,
@@ -160,19 +166,19 @@ pub struct ActorEnds<
     const RETURNS: usize,
 > {
     /// The lifecycle's messages.
-    pub to_actor: WakingSpscSender<'c, ToActor<'id, D>, TO>,
+    pub to_actor: ClosingSpscSender<'c, ToActor<'id, D>, TO>,
     /// The lifecycle's large messages.
-    pub parcels: WakingSpscSender<'c, Parcel<'id, D>, PARCELS>,
+    pub parcels: ClosingSpscSender<'c, Parcel<'id, D>, PARCELS>,
     /// The actor's messages.
-    pub from_actor: WakingSpscReceiver<'c, FromActor<'id, D>, FROM>,
+    pub from_actor: ClosingSpscReceiver<'c, FromActor<'id, D>, FROM>,
     /// The owners the actor gives back, each announced in `from_actor`.
-    pub returns: WakingSpscReceiver<'c, Returned<'id, D>, RETURNS>,
+    pub returns: ClosingSpscReceiver<'c, Returned<'id, D>, RETURNS>,
     /// The station's group tokens, back with their change's end.
-    pub groups: WakingSpscReceiver<'c, GroupPending<'id, ActorEpochPath<'id, D>>, 1>,
+    pub groups: ClosingSpscReceiver<'c, GroupPending<'id, ActorEpochPath<'id, D>>, 1>,
     /// The link the station hands over.
-    pub link: WakingSpscSender<'c, ActorLink<'id, D>, 1>,
+    pub link: ClosingSpscSender<'c, ActorLink<'id, D>, 1>,
     /// The link the actor gives back.
-    pub link_return: WakingSpscReceiver<'c, LinkReturn, 1>,
+    pub link_return: ClosingSpscReceiver<'c, LinkReturn, 1>,
 }
 
 /// The lifecycle's ends to the application.
@@ -274,6 +280,10 @@ pub enum LifecycleViolation {
     Missing,
     /// The actor's queue had no room the lifecycle had checked.
     QueueFull,
+    /// The actor's reception closed while the lifecycle ran: the lifecycle
+    /// sends nothing more, and what it did not send is in
+    /// [`RetiredLifecycle::unsent`].
+    ActorClosed,
     /// The arbiter's move was refused while no move was pending.
     RetuneWithoutRequest,
 }
@@ -303,9 +313,9 @@ pub enum LifecycleEnd<F> {
     /// The radio did not start on its first channel; the actor retired.
     StartRefused(StartRefused<F>),
     /// A stop proved nothing by its deadline.
-    StopUnconfirmed(StopObserved),
+    StopUnconfirmed(StopObserved<F>),
     /// A retune's stop proved nothing.
-    RetuneUnconfirmed(StopUnconfirmed),
+    RetuneUnconfirmed(StopUnconfirmed<F>),
     /// The actor ended on a broken contract.
     Faulted(ActorFault<F>),
     /// The actor returned an owner the lifecycle did not send.
@@ -482,6 +492,12 @@ struct Inner<'id, D: DatapathPort<'id>, X, T, O> {
     ending: Option<(Ending<PortFault<'id, D>>, Instant, EndStage)>,
     /// The first owner a broken contract left, and its cause.
     rejected: Option<Rejected<'id, D>>,
+    /// The right to send a unit's messages, or a refused unit's remainder.
+    sending: Sending<'id, D>,
+    /// A confirmed stop's end whose message to the actor was refused.
+    confirmed: Option<
+        LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>,
+    >,
     end: Option<
         LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>,
     >,
@@ -525,6 +541,17 @@ pub struct RetiredLifecycle<
     pub tx_contexts: T,
     /// The first owner a broken contract left.
     pub rejected: Option<Rejected<'id, D>>,
+    /// The unit whose message the actor's queues refused: the refusal's
+    /// cause ([`LifecycleViolation::QueueFull`],
+    /// [`LifecycleViolation::ActorClosed`]), and that message with the
+    /// unit's later ones, whole and in order.
+    pub unsent: Option<UnsentUnit<'id, D>>,
+    /// The end the radio's confirmed stop told, when its message to the
+    /// actor was refused: the lifecycle ended on the refusal
+    /// ([`LifecycleCompleted::end`]), and what the stop confirmed is kept.
+    pub confirmed: Option<
+        LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>,
+    >,
     /// The events' sink.
     pub events: O,
 }
@@ -596,6 +623,8 @@ where
                 reply: None,
                 ending: None,
                 rejected: None,
+                sending: Sending::new(),
+                confirmed: None,
                 end: None,
                 lesson: None,
                 stop: false,
@@ -643,12 +672,11 @@ where
         timer: &impl Timer,
     ) -> LifecycleEnd<<D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault>
     {
-        if actor
-            .to_actor
-            .try_send(ToActor::Start(self.inner.channel))
-            .is_err()
-        {
-            self.inner.end = Some(LifecycleEnd::Contract(LifecycleViolation::QueueFull));
+        // The lifecycle sent nothing yet: the right is open.
+        if let Some(right) = self.inner.sending.take() {
+            let start = ToActor::Start(self.inner.channel);
+            self.inner
+                .flush(actor, right, Outbox::of(Some(start), Messages::None));
         }
         let arm = |at: Option<Instant>| alarm_at(timer, at);
         let mut alarm = core::pin::pin!(arm(None));
@@ -714,6 +742,8 @@ where
                         reply: None,
                         ending: None,
                         rejected: None,
+                        sending: Sending::new(),
+                        confirmed: None,
                         end: None,
                         lesson: None,
                         stop: false,
@@ -781,6 +811,8 @@ where
             _reply,
             _ending,
             rejected,
+            sending,
+            confirmed,
             _end,
             _lesson,
             _stop,
@@ -807,6 +839,8 @@ where
                 reply,
                 ending,
                 rejected,
+                sending,
+                confirmed,
                 end,
                 lesson,
                 stop,
@@ -837,6 +871,8 @@ where
                         issuer: issuer.read(),
                         tx_contexts: tx_contexts.read(),
                         rejected: rejected.read(),
+                        unsent: sending.read().into_unsent(),
+                        confirmed: confirmed.read(),
                         events: events.read(),
                     })
                 },
@@ -954,8 +990,16 @@ where
         {
             again = true;
         }
-        if self.inner.blocked && core::pin::pin!(actor.to_actor.ready()).poll(cx).is_ready() {
-            again = true;
+        if self.inner.blocked {
+            match core::pin::pin!(actor.to_actor.ready()).poll(cx) {
+                // No room comes: the lifecycle ends, and nothing retries.
+                Poll::Ready(Err(_)) => {
+                    self.inner.closed();
+                    again = true;
+                }
+                Poll::Ready(Ok(_)) => again = true,
+                Poll::Pending => {}
+            }
         }
         if self.accepts_commands() {
             if core::pin::pin!(io.commands.ready()).poll(cx).is_ready()
@@ -1173,9 +1217,28 @@ where
         let Some((stage, message)) = next else {
             return;
         };
-        if actor.to_actor.try_send(message).is_err() {
-            self.inner.blocked = true;
+        // A refused unit holds the right: nothing more is sent.
+        let Some(right) = self.inner.sending.take() else {
             return;
+        };
+        match actor.to_actor.try_send(message) {
+            Ok(()) => self.inner.sending = Sending::Open(right),
+            // The end's message, which moves no owner, waits for the actor's
+            // room.
+            Err(ClosingSpscSendError::Full(_)) => {
+                self.inner.sending = Sending::Open(right);
+                self.inner.blocked = true;
+                return;
+            }
+            // No room comes: the message is kept and the lifecycle ends.
+            Err(ClosingSpscSendError::Closed(message)) => {
+                self.inner.keep(
+                    right,
+                    Outbox::of(Some(message), Messages::None),
+                    LifecycleViolation::ActorClosed,
+                );
+                return;
+            }
         }
         if stage == EndStage::Link {
             self.inner.link.asked = false;
@@ -1201,6 +1264,8 @@ where
             tx_contexts,
             events,
             rejected,
+            sending,
+            confirmed,
             ..
         } = inner;
         let (reason, arbiter_end) = Self::reasons(&end);
@@ -1233,6 +1298,8 @@ where
                 issuer,
                 tx_contexts,
                 rejected,
+                unsent: sending.into_unsent(),
+                confirmed,
                 events,
             },
         }
