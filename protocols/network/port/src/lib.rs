@@ -29,8 +29,8 @@ pub use device::{
 };
 
 pub use frame::{
-    Candidate, Class, Egress, FramePort, FrameSource, Holding, Keep, NeverHeld, Ready, Taken,
-    Unpublished,
+    Candidate, Class, Egress, FramePort, FrameSource, Holding, Keep, NeverHeld, PortReady, Ready,
+    Taken, Unpublished,
 };
 pub use plan::{Next, PlanStop, QUANTUM, Turns};
 pub use slot::{Held, Slot};

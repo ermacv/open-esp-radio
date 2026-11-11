@@ -1526,7 +1526,7 @@ impl<
         } = self;
         let ready = poll_fn(|cx| {
             let mut ready = pin!(stop.ready()).poll(cx).is_ready();
-            ready |= owner.register_port(cx);
+            ready |= owner.register_port(cx).any();
             ready |= local.register(cx, events);
             let mut returned = false;
             for bound in bound.iter_mut().flatten() {

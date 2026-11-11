@@ -518,11 +518,17 @@ impl FrameSource for Medium {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
+    fn register(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
         let mut state = self.0.borrow_mut();
         state.waker = Some(cx.waker().clone());
         let changed = core::mem::take(&mut state.changed);
-        changed || !state.received.is_empty() || !state.notices.is_empty()
+        oer_protocols_network_port::PortReady {
+            frames: !state.received.is_empty(),
+            notices: !state.notices.is_empty(),
+            // A change here is the medium's: room or a link alike.
+            link: changed,
+            room: changed,
+        }
     }
 }
 

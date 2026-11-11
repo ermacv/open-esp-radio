@@ -380,7 +380,7 @@ impl<
 
     /// Make `cx` the one the port wakes, and say whether the port has
     /// something already ([`FrameSource::register`]).
-    pub fn register_port(&mut self, cx: &mut Context<'_>) -> bool
+    pub fn register_port(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady
     where
         P: FrameSource,
     {

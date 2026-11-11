@@ -292,6 +292,11 @@ fn unreachable_fill(
 /// Whether registering says the port has something now. Registration
 /// reports it and never wakes the caller for it.
 fn ready_at_once(port: &mut Port) -> bool {
+    facts_at_once(port).any()
+}
+
+/// Which facts registering says the port has now.
+fn facts_at_once(port: &mut Port) -> oer_protocols_network_port::PortReady {
     let woken = std::sync::Arc::new(Woken::default());
     let waker = Waker::from(woken.clone());
     let ready = port.register(&mut Context::from_waker(&waker));
@@ -458,7 +463,14 @@ fn room_wakes_only_a_frame_that_met_none() {
     assert!(!ready_at_once(&mut port), "still no room");
     assert_eq!(port.transmit.room_polls, 1, "it asked");
     port.transmit.full = false;
-    assert!(ready_at_once(&mut port));
+    assert_eq!(
+        facts_at_once(&mut port),
+        oer_protocols_network_port::PortReady {
+            room: true,
+            ..oer_protocols_network_port::PortReady::NONE
+        },
+        "room, and only room"
+    );
     port.publish(4, octets).unwrap();
     assert!(!ready_at_once(&mut port), "that frame went");
 }
@@ -467,10 +479,24 @@ fn room_wakes_only_a_frame_that_met_none() {
 fn a_received_frame_and_a_link_change_wake_at_once() {
     let mut port = port();
     port.device.incoming.push_back(lent(b"in"));
-    assert!(ready_at_once(&mut port));
+    assert_eq!(
+        facts_at_once(&mut port),
+        oer_protocols_network_port::PortReady {
+            frames: true,
+            ..oer_protocols_network_port::PortReady::NONE
+        },
+        "a frame, and only a frame"
+    );
     port.device.incoming.clear();
     port.device.link_changed = true;
-    assert!(ready_at_once(&mut port));
+    assert_eq!(
+        facts_at_once(&mut port),
+        oer_protocols_network_port::PortReady {
+            link: true,
+            ..oer_protocols_network_port::PortReady::NONE
+        },
+        "a link change, and only that"
+    );
     assert!(!ready_at_once(&mut port));
 }
 

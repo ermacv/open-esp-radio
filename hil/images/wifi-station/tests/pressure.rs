@@ -85,8 +85,11 @@ impl FrameSource for Port {
             epoch: 1,
         }
     }
-    fn register(&mut self, _: &mut Context<'_>) -> bool {
-        !self.0.borrow().is_empty()
+    fn register(&mut self, _: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
+        oer_protocols_network_port::PortReady {
+            frames: !self.0.borrow().is_empty(),
+            ..oer_protocols_network_port::PortReady::NONE
+        }
     }
 }
 type TestService = wifi::Served<Port>;

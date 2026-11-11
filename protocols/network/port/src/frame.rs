@@ -91,13 +91,42 @@ pub trait FrameSource {
     fn link(&self) -> LinkSnapshot;
 
     /// Make `cx` the one the next received frame, notice, change of link or
-    /// room for a refused frame wakes, and return whether one is here
-    /// already: a frame or a notice not yet taken, a link changed since the
-    /// last registration, or room for the frame the port last refused. This
-    /// is the caller's readiness, checked after registering, so nothing that
-    /// comes between the two is missed. A `true` is not also a wake: `cx` is
-    /// woken for what comes after this call.
-    fn register(&mut self, cx: &mut Context<'_>) -> bool;
+    /// room for a refused frame wakes, and return which is here already: a
+    /// frame or a notice not yet taken, a link changed since the last
+    /// registration, or room for the frame the port last refused. This is
+    /// the caller's readiness, checked after registering, so nothing that
+    /// comes between the two is missed. A fact present is not also a wake:
+    /// `cx` is woken for what comes after this call.
+    fn register(&mut self, cx: &mut Context<'_>) -> PortReady;
+}
+
+/// What a port has for its caller at a registration ([`FrameSource::register`]),
+/// each fact apart, so the caller runs the stage each one needs.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PortReady {
+    /// A received frame not yet taken.
+    pub frames: bool,
+    /// A notice not yet taken.
+    pub notices: bool,
+    /// The link changed since the last registration.
+    pub link: bool,
+    /// Room for the frame the port last refused.
+    pub room: bool,
+}
+
+impl PortReady {
+    /// Nothing is here.
+    pub const NONE: Self = Self {
+        frames: false,
+        notices: false,
+        link: false,
+        room: false,
+    };
+
+    /// Whether any fact is here.
+    pub const fn any(self) -> bool {
+        self.frames || self.notices || self.link || self.room
+    }
 }
 
 /// The buffer of a port that lends none: it cannot be.

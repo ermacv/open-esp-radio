@@ -137,10 +137,13 @@ impl FrameSource for Port {
             epoch: 1,
         }
     }
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
+    fn register(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
-        !wire.incoming.is_empty()
+        oer_protocols_network_port::PortReady {
+            frames: !wire.incoming.is_empty(),
+            ..oer_protocols_network_port::PortReady::NONE
+        }
     }
 }
 

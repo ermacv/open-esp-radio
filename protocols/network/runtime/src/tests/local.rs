@@ -431,10 +431,15 @@ impl FrameSource for LocalPort {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
+    fn register(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
         let mut line = self.0.borrow_mut();
         line.waker = Some(cx.waker().clone());
-        !line.incoming.is_empty() || !line.notices.is_empty() || (line.refused && !line.full)
+        oer_protocols_network_port::PortReady {
+            frames: !line.incoming.is_empty(),
+            notices: !line.notices.is_empty(),
+            link: false,
+            room: line.refused && !line.full,
+        }
     }
 }
 

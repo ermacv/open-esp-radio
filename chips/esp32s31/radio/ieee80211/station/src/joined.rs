@@ -592,8 +592,12 @@ impl FrameSource for Counted {
             .as_ref()
             .map_or(LinkSnapshot::DOWN, FrameSource::link)
     }
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
-        self.inner.as_mut().is_some_and(|inner| inner.register(cx))
+    fn register(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
+        self.inner
+            .as_mut()
+            .map_or(oer_protocols_network_port::PortReady::NONE, |inner| {
+                inner.register(cx)
+            })
     }
 }
 

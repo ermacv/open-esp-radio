@@ -231,10 +231,15 @@ impl FrameSource for WirePort {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
+    fn register(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
-        !wire.incoming.is_empty() || !wire.ended.is_empty() || (wire.refused && !wire.full)
+        oer_protocols_network_port::PortReady {
+            frames: !wire.incoming.is_empty(),
+            notices: !wire.ended.is_empty(),
+            link: false,
+            room: wire.refused && !wire.full,
+        }
     }
 }
 
