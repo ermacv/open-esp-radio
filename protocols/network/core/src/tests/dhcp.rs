@@ -1539,6 +1539,56 @@ fn a_prepared_neighbor_no_work_needs_takes_the_reserve_like_any_other() {
     });
 }
 
+/// With a DHCP client keeping its reserve, what a socket prepared stays
+/// its own while it holds: bursts of declarations, and declarations each
+/// sent before the next, prepare once.
+#[test]
+fn a_prepared_remote_is_prepared_once_under_the_dhcp_reserve() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let now = secs(10);
+        stack.input(
+            now,
+            &arp_frame(Operation::Reply, (PEER, PEER_IP), OFFERED),
+            &mut (),
+        );
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let before = stack.prepares();
+        let mut tag = 0;
+        // Four bursts of declarations, as many as the socket's places, each
+        // burst sent whole.
+        for _ in 0..4 {
+            for _ in 0..2 {
+                tag += 1;
+                stack.declare(now, &socket, peer(), 16, tag).unwrap();
+            }
+            while let Some(demand) = stack.poll_demand(now) {
+                let _sent = stack.transmit(
+                    now,
+                    demand.grant(),
+                    |_, _, data| data.repeat(0, 16).map_err(|_| crate::Declined::Unwritable),
+                    &(),
+                );
+            }
+        }
+        assert_eq!(stack.prepares() - before, 1, "bursts");
+        // Four declarations, each sent before the next: nothing of the
+        // socket's runs at the next one.
+        for _ in 0..4 {
+            tag += 1;
+            stack.declare(now, &socket, peer(), 16, tag).unwrap();
+            let demand = stack.poll_demand(now).unwrap();
+            let _sent = stack.transmit(
+                now,
+                demand.grant(),
+                |_, _, data| data.repeat(0, 16).map_err(|_| crate::Declined::Unwritable),
+                &(),
+            );
+        }
+        assert_eq!(stack.prepares() - before, 1, "one at a time");
+    });
+}
+
 #[test]
 fn warm_data_neighbors_cannot_keep_the_renewal_from_its_server() {
     leasing!(|stack| {

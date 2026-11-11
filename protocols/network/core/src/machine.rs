@@ -905,6 +905,9 @@ pub struct Core<
     /// end at publication, a commit or a reject, moves it past its socket.
     cursor: usize,
     identification: u16,
+    /// How often a socket's datagrams were prepared.
+    #[cfg(test)]
+    prepares: usize,
     /// The last serial given: 2^64 of them outlast any device.
     serial: u64,
     /// Moves whenever a neighbor entry may have become free for a new send:
@@ -962,6 +965,8 @@ impl<
             sockets: [const { Socket::new() }; SOCKETS],
             cursor: 0,
             identification: 0,
+            #[cfg(test)]
+            prepares: 0,
             serial: brand.serial,
             neighbor_changes: 0,
             ipv4,
@@ -1290,17 +1295,20 @@ impl<
         let number = open.places.vacant().ok_or(SendRefusal::NoPlace)?;
         let ipv4 = usable.ok_or(SendRefusal::NoAddress)?;
         // What the last datagram to this remote prepared holds: its route
-        // and its neighbor are this one's. Its neighbor is one this socket's
-        // running work needs, or no DHCP client keeps a reserve: a resolve
-        // would find it known and take nothing.
+        // and its neighbor are this one's, and the neighbor is known, so a
+        // resolve takes nothing. Only the data's share of the table is
+        // asked again, the same as a resolve asks it, unless no DHCP client
+        // keeps a reserve or this socket's own work already needs it.
         if let Some(prepared) = &open.prepared
             && prepared.serves(remote, prepared.hop, self.version, &self.neighbors, now)
-            && (self.dhcp.is_none() || prepared.hop.is_none_or(|hop| open.needs(hop)))
         {
-            return Ok(Admitted {
-                number,
-                hop: prepared.hop,
-            });
+            let hop = prepared.hop;
+            let reserved = self.dhcp.is_some()
+                && hop.is_some_and(|hop| !open.needs(hop) && !self.data_may_resolve(hop));
+            if reserved {
+                return Err(SendRefusal::NeighborsFull);
+            }
+            return Ok(Admitted { number, hop });
         }
         let (hop, known) = if self.is_broadcast(remote.address) {
             (None, true)
@@ -1361,6 +1369,16 @@ impl<
             destination: remote.port,
         };
         open.prepared = Prepared::new(remote, version, hop, found, &ethernet, &ip, ports);
+        #[cfg(test)]
+        {
+            self.prepares = self.prepares.wrapping_add(1);
+        }
+    }
+
+    /// How often a socket's datagrams were prepared.
+    #[cfg(test)]
+    pub(crate) const fn prepares(&self) -> usize {
+        self.prepares
     }
 
     /// Run what `run` makes in the place `admitted` found free.

@@ -274,6 +274,12 @@ impl<
         self.core.configuration_changes()
     }
 
+    /// How often a socket's datagrams were prepared.
+    #[cfg(test)]
+    pub(crate) const fn prepares(&self) -> usize {
+        self.core.prepares()
+    }
+
     /// See [`Core::address_version`].
     pub const fn address_version(&self) -> u32 {
         self.core.address_version()
