@@ -73,6 +73,9 @@ struct Observed {
     /// Times the driver rearmed units the network returned.
     returned: usize,
     hold_start: bool,
+    /// The device's start begins (its receive path runs) before it holds
+    /// or fails.
+    begin_start: bool,
     /// The next start fails with this fault, as a refused retune does.
     fail_start: Option<Fault>,
     hold_completion: bool,
@@ -82,6 +85,10 @@ struct Observed {
     fail_poll: Option<Fault>,
     /// Key writes the hardware rejects from the next register access on.
     reject_key_writes: usize,
+    /// The key table reads every entry valid however it was cleared.
+    key_entries_stuck: bool,
+    /// The receive Block Ack banks refuse every agreement.
+    reject_rx_block_acks: bool,
     /// Frames on air with the material byte they are protected under (0
     /// for none). Capture decrypts each against the key table at once;
     /// a frame whose material is not installed is dropped.
@@ -92,6 +99,8 @@ struct Observed {
     captured: std::collections::VecDeque<TestReceive>,
     /// Material writes the key table has seen.
     key_writes: usize,
+    /// Key places the registers cleared.
+    key_clears: usize,
     /// The next publication ends in the hardware's TX-timeout edge instead
     /// of a completion.
     timeout_edge: bool,
@@ -104,8 +113,12 @@ struct Observed {
     /// A held cut waits for units the network holds.
     cut_by_units: bool,
     hold_stop: bool,
+    /// The device's next stop poll answers this fault, once.
+    fail_stop: Option<Fault>,
     cut_calls: usize,
     resumed_cuts: usize,
+    /// Cuts ended for a mutation that did not run.
+    abandoned_cuts: usize,
     backoffs: Vec<u16>,
     /// Each HT publication's backoff and AIFSN, in order.
     ht_contention: Vec<(u16, u8)>,
@@ -223,6 +236,7 @@ impl TestDevice {
             .iter()
             .filter(|operation| matches!(operation, super::CryptoOperation::Install(_)))
             .count();
+        observed.key_clears = self.hardware.cleared_keys.len();
         while let Some((frame, material)) = observed.air.pop_front() {
             if material == 0
                 || self
@@ -297,11 +311,15 @@ impl Device<512> for TestDevice {
     type ConfigureContext<'p, Id: radio::SlotIdentity + 'p> = Tag;
     fn hardware(&mut self) -> Result<&mut Hardware, Fault> {
         self.assert_task_context();
+        // The clears every earlier call wrote.
+        self.observed.borrow_mut().key_clears = self.hardware.cleared_keys.len();
         if self.observed.borrow().hardware_unavailable {
             return Err(Fault::HardwareUnavailable);
         }
         self.hardware.reject_key_writes +=
             core::mem::take(&mut self.observed.borrow_mut().reject_key_writes);
+        self.hardware.reject_rx_block_acks = self.observed.borrow().reject_rx_block_acks;
+        self.hardware.key_entries_stuck = self.observed.borrow().key_entries_stuck;
         Ok(&mut self.hardware)
     }
     fn next_deadline(&self) -> Option<Instant> {
@@ -333,6 +351,9 @@ impl Device<512> for TestDevice {
         channel: oer_protocols_ieee80211_wire::channel::Ghz2_4Channel,
     ) -> Poll<Result<(), Fault>> {
         self.assert_task_context();
+        if self.observed.borrow().begin_start {
+            self.stopped = false;
+        }
         if self.observed.borrow().hold_start {
             return Poll::Pending;
         }
@@ -348,6 +369,9 @@ impl Device<512> for TestDevice {
         self.assert_task_context();
         if self.observed.borrow().hold_stop {
             return Poll::Pending;
+        }
+        if let Some(fault) = self.observed.borrow_mut().fail_stop.take() {
+            return Poll::Ready(Err(fault));
         }
         if !self.stopped {
             self.observed.borrow_mut().stops += 1;
@@ -475,6 +499,11 @@ impl Device<512> for TestDevice {
         self.assert_task_context();
         self.observed.borrow_mut().resumed_cuts += 1;
         Ok(())
+    }
+    fn poll_abandon_rx_cut(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Fault>> {
+        self.assert_task_context();
+        self.observed.borrow_mut().abandoned_cuts += 1;
+        Poll::Ready(Ok(()))
     }
     fn returns_quiet(&mut self, _held: usize, _returned: bool) -> bool {
         self.observed.borrow().rx_continuation.is_some()

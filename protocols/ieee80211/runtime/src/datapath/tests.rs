@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::vec::Vec;
 
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
+use oer_portable_memory::{ClosingSpscQueue, WakingSlotQueue, WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::Clock;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{
@@ -190,11 +190,11 @@ struct Bench<'b, 's> {
     events: Recorder,
     end: Option<ActorEnd<ModelPortFault>>,
     polls: usize,
-    to_actor: WakingSpscSender<'b, ToActor<'s, P<'s>>, TO>,
-    from_actor: WakingSpscReceiver<'b, FromActor<'s, P<'s>>, FROM>,
-    returns: WakingSpscReceiver<'b, Returned<'s, P<'s>>, RETURNS>,
-    link: WakingSpscSender<'b, ActorLink<'s, P<'s>>, 1>,
-    link_return: WakingSpscReceiver<'b, LinkReturn, 1>,
+    to_actor: ClosingSpscSender<'b, ToActor<'s, P<'s>>, TO>,
+    from_actor: ClosingSpscReceiver<'b, FromActor<'s, P<'s>>, FROM>,
+    returns: ClosingSpscReceiver<'b, Returned<'s, P<'s>>, RETURNS>,
+    link: ClosingSpscSender<'b, ActorLink<'s, P<'s>>, 1>,
+    link_return: ClosingSpscReceiver<'b, LinkReturn, 1>,
     transmit: SlotSender<'b, Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>,
     returned: SlotReceiver<'b, Option<TxEnded<ModelNetworkMemory>>, TX_DEPTH>,
     receive: WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>,
@@ -410,8 +410,20 @@ impl<'s> Bench<'_, 's> {
     }
 }
 
+/// The actor a bench ran, once its run is gone.
+type BenchActor<'s> = Actor<'s, P<'s>, EspressifRateSelection<ModelCaps24>, Recorder>;
+
 /// Run `test` against a fresh actor on the model.
 fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
+    bench_then(test, |_, _| {});
+}
+
+/// Run `test` against a fresh actor on the model; then hand `after` the
+/// actor and the end of one poll of a new run of it.
+fn bench_then(
+    test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>),
+    after: impl for<'s> FnOnce(&mut BenchActor<'s>, Poll<ActorEnd<ModelPortFault>>),
+) {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Clocked {
             inner: Rc::new(VirtualClock::new()),
@@ -464,14 +476,14 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
             storage.view(),
             events.clone(),
         );
-        let mut to_queue = WakingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
-        let mut parcel_queue = WakingSpscQueue::<Parcel<'_, P<'_>>, PARCELS>::new();
-        let mut from_queue = WakingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
-        let mut return_queue = WakingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
-        let mut link_queue = WakingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+        let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+        let mut parcel_queue = ClosingSpscQueue::<Parcel<'_, P<'_>>, PARCELS>::new();
+        let mut from_queue = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+        let mut return_queue = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+        let mut link_queue = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
         let mut group_queue =
-            WakingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
-        let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
+            ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+        let mut link_return_queue = ClosingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue =
             WakingSlotQueue::<Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>::new();
         let mut returned_queue =
@@ -506,33 +518,43 @@ fn bench(test: impl for<'b, 's> FnOnce(&mut Bench<'b, 's>)) {
             receive_copied: copies_end,
             network: &network_side,
         };
-        let run = actor.run(&mut lifecycle, &mut network, &clock);
-        let mut run = core::pin::pin!(run);
-        let mut bench = Bench {
-            clock: &clock,
-            network: &network_side,
-            air,
-            run: run.as_mut(),
-            counter: Arc::new(Counter(AtomicUsize::new(0))),
-            events,
-            end: None,
-            polls: 0,
-            to_actor,
-            from_actor,
-            returns,
-            link,
-            link_return,
-            transmit,
-            returned,
-            receive,
-            tickets,
-            small,
-            commands,
-            association: Some(station_association),
-            pairwise: Some(station_pairwise),
+        {
+            let run = actor.run(&mut lifecycle, &mut network, &clock);
+            let mut run = core::pin::pin!(run);
+            let mut bench = Bench {
+                clock: &clock,
+                network: &network_side,
+                air,
+                run: run.as_mut(),
+                counter: Arc::new(Counter(AtomicUsize::new(0))),
+                events,
+                end: None,
+                polls: 0,
+                to_actor,
+                from_actor,
+                returns,
+                link,
+                link_return,
+                transmit,
+                returned,
+                receive,
+                tickets,
+                small,
+                commands,
+                association: Some(station_association),
+                pairwise: Some(station_pairwise),
+            };
+            bench.settle();
+            test(&mut bench);
+        }
+        let rerun = {
+            let run = actor.run(&mut lifecycle, &mut network, &clock);
+            let mut run = core::pin::pin!(run);
+            let waker = Waker::from(Arc::new(Counter(AtomicUsize::new(0))));
+            run.as_mut()
+                .poll(&mut core::task::Context::from_waker(&waker))
         };
-        bench.settle();
-        test(&mut bench);
+        after(&mut actor, rerun);
     }));
 }
 
@@ -1117,6 +1139,78 @@ fn a_command_before_the_start_comes_back_refused() {
 }
 
 #[test]
+fn a_command_the_faulted_port_gives_back_returns_unrun_and_the_port_recovers() {
+    bench(|bench| {
+        bench.start();
+        bench.air.allow_recovery();
+        bench.air.poison();
+        // The command's call is the first to meet the fault: the port gives
+        // it back beside the fault, and keeps nothing a stop cannot return.
+        let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+        bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+        assert!(matches!(
+            bench.returned(),
+            Some(Returned::Unrun {
+                command: PortCommand::SetBssColor(_),
+                grouped: false,
+            })
+        ));
+        assert!(bench.end.is_none(), "the actor stays for the stop");
+        let mut recovering = false;
+        while let Some(message) = bench.next() {
+            recovering |= matches!(message, FromActor::Recovering(ActorFault::Port(_)));
+        }
+        assert!(recovering, "the port recovered for the stop");
+    });
+}
+
+#[test]
+fn a_recycle_the_port_refuses_ends_the_actor_and_its_unit_comes_back_once() {
+    let fault = oer_protocols_ieee80211_contracts_port::ReceiveAccounting {
+        operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+        held: 1,
+        requested: 1,
+    };
+    bench_then(
+        |bench| {
+            bench.start();
+            bench.connect(link(true, None));
+            bench.air.refuse_recycles(1);
+            bench.air.receive(&foreign_data(1), meta());
+            bench.settle();
+            assert_eq!(
+                bench.end,
+                Some(ActorEnd::Faulted(ActorFault::Receive(fault)))
+            );
+            let mut faulted = false;
+            while let Some(message) = bench.next() {
+                assert!(
+                    !matches!(message, FromActor::Recovering(_)),
+                    "a refused recycle asks for no restart"
+                );
+                faulted |= matches!(message, FromActor::Faulted(ActorFault::Receive(_)));
+            }
+            assert!(faulted, "the lifecycle hears the count");
+        },
+        |actor, rerun| {
+            // No turn runs while the unit is kept.
+            assert_eq!(
+                rerun,
+                Poll::Ready(ActorEnd::Faulted(ActorFault::Receive(fault)))
+            );
+            let refused = actor.take_unrecycled().expect("the unit");
+            assert_eq!(refused.fault, fault);
+            assert_eq!(
+                oer_protocols_ieee80211_contracts_port::RxBuffer::bytes(&refused.unit),
+                foreign_data(1).as_slice()
+            );
+            assert!(actor.take_unrecycled().is_none(), "once");
+            assert!(actor.port_mut().recycle(refused.unit).is_ok());
+        },
+    );
+}
+
+#[test]
 fn a_port_fault_ends_the_actor_and_tells_the_lifecycle() {
     bench(|bench| {
         bench.start();
@@ -1167,6 +1261,35 @@ fn a_fault_the_port_stops_past_asks_for_a_restart_and_the_next_ends_the_actor() 
         bench.advance(1);
         bench.settle();
         assert!(matches!(bench.end, Some(ActorEnd::Faulted(_))));
+    });
+}
+
+/// A fault the port could stop past, after the lifecycle's last message
+/// (a retire of a radio still running): the lifecycle ended and waits only
+/// for the actor task's end, so no restart follows. The run ends on the
+/// fault, told once, instead of recovering unheard.
+#[test]
+fn a_fault_after_the_lifecycles_last_message_ends_the_actor_without_a_recovery() {
+    bench(|bench| {
+        bench.start();
+        while bench.next().is_some() {}
+        bench.air.allow_recovery();
+        bench.send(ToActor::Retire);
+        assert_eq!(
+            bench.end,
+            Some(ActorEnd::Faulted(ActorFault::Contract(
+                ActorViolation::RetireRunning
+            )))
+        );
+        let mut told = Vec::new();
+        while let Some(message) = bench.next() {
+            told.push(matches!(message, FromActor::Faulted(_)));
+            assert!(
+                !matches!(message, FromActor::Recovering(_)),
+                "no recovery after the lifecycle's end"
+            );
+        }
+        assert_eq!(told, [true], "the fault is told once");
     });
 }
 
@@ -2132,6 +2255,155 @@ fn a_lost_network_settles_only_once_every_ended_frame_s_memory_went_home() {
     });
 }
 
+#[test]
+fn a_terminal_the_full_lifecycle_refuses_waits_in_the_port_and_comes_once_its_room_frees() {
+    bench(|bench| {
+        // The lifecycle takes nothing back: refused settings before the
+        // start fill its return queue.
+        let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+        for _ in 0..RETURNS {
+            bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+        }
+        bench.send(ToActor::Start(supported()));
+        bench.connect(link(true, None));
+        let transmit = station_frame_under(bench, 0, false);
+        bench.send(ToActor::StationTx(transmit));
+        for _ in 0..4 {
+            bench.advance(1_000);
+            bench.settle();
+        }
+        // The frame went; its terminal found no room: the port keeps it,
+        // the run goes on and the actor sleeps.
+        assert_eq!(bench.data_sent().len(), 1);
+        assert!(bench.end.is_none(), "{:?}", bench.end);
+        let wakes = bench.wakes();
+        bench.settle();
+        assert_eq!(bench.wakes(), wakes, "a full lifecycle wakes nobody");
+        // One return taken frees one cell: the actor wakes and the port
+        // offers the kept terminal again.
+        assert!(matches!(
+            bench.returns.try_receive(),
+            Some(Returned::Command { .. })
+        ));
+        assert!(bench.wakes() > wakes, "the freed cell wakes the actor");
+        bench.settle();
+        let mut terminals = 0;
+        let mut commands = 0;
+        while let Some(returned) = bench.returns.try_receive() {
+            match returned {
+                Returned::Terminal { terminal, .. } => {
+                    assert!(matches!(
+                        terminal,
+                        LowerMacTerminal::TxCompleted(
+                            oer_protocols_ieee80211_contracts_port::TxCompleted::Single(_)
+                        )
+                    ));
+                    terminals += 1;
+                }
+                Returned::Command { .. } => commands += 1,
+                _ => {}
+            }
+        }
+        assert_eq!(commands, RETURNS - 1);
+        assert_eq!(terminals, 1, "the terminal comes exactly once");
+        for _ in 0..4 {
+            bench.advance(1_000);
+            bench.settle();
+        }
+        assert!(bench.returns.try_receive().is_none(), "nothing comes again");
+        assert!(bench.end.is_none());
+    });
+}
+
+/// The station path's end with a terminal kept: the frame's terminal finds
+/// the lifecycle full and stays in the port; the stop confirms with it kept;
+/// only then does a freed cell let the actor take it through
+/// `take_unconsumed`, once, with the ticket the frame went with; nothing
+/// comes again, the actor retires and the port retires after it.
+#[test]
+fn a_terminal_kept_through_the_confirmed_stop_comes_once_and_the_port_retires() {
+    bench_then(
+        |bench| {
+            let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+            for _ in 0..RETURNS {
+                bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+            }
+            bench.send(ToActor::Start(supported()));
+            bench.connect(link(true, None));
+            let transmit = station_frame_under(bench, 0, false);
+            let ticket = transmit.ticket.index();
+            bench.send(ToActor::StationTx(transmit));
+            for _ in 0..4 {
+                bench.advance(1_000);
+                bench.settle();
+            }
+            assert_eq!(bench.data_sent().len(), 1);
+            while bench.next().is_some() {}
+            // The stop confirms while the port keeps the terminal.
+            let deadline = bench
+                .clock
+                .inner
+                .now()
+                .saturating_add(oer_portable_time::Duration::from_millis(50));
+            bench.send(ToActor::Stop {
+                deadline,
+                network: NetworkEnd::Stays,
+            });
+            bench.advance(1);
+            bench.settle();
+            let mut confirmed = false;
+            while let Some(message) = bench.next() {
+                confirmed |= matches!(message, FromActor::Stopped(StopOutcome::Confirmed));
+            }
+            assert!(confirmed, "the stop confirms with the terminal kept");
+            // A freed cell: the stopped port gives the terminal only through
+            // `take_unconsumed`, once.
+            assert!(matches!(
+                bench.returns.try_receive(),
+                Some(Returned::Command { .. })
+            ));
+            bench.settle();
+            let mut terminals = std::vec::Vec::new();
+            let mut commands = 1;
+            while let Some(returned) = bench.returns.try_receive() {
+                match returned {
+                    Returned::Terminal {
+                        terminal:
+                            LowerMacTerminal::TxCompleted(
+                                oer_protocols_ieee80211_contracts_port::TxCompleted::Single(
+                                    completed,
+                                ),
+                            ),
+                        ..
+                    } => terminals.push(completed.ticket_index()),
+                    Returned::Command { .. } => commands += 1,
+                    _ => panic!("only the commands and the one terminal come back"),
+                }
+            }
+            assert_eq!(commands, RETURNS);
+            assert_eq!(
+                terminals,
+                [ticket],
+                "the terminal comes once, with its ticket"
+            );
+            for _ in 0..4 {
+                bench.advance(1_000);
+                bench.settle();
+            }
+            assert!(bench.returns.try_receive().is_none(), "nothing comes again");
+            bench.send(ToActor::Retire);
+            assert_eq!(bench.end, Some(ActorEnd::Retired));
+        },
+        |actor, _| {
+            assert_eq!(
+                actor.port().retirable(),
+                Ok(()),
+                "nothing stays with the port"
+            );
+        },
+    );
+}
+
 /// Each burst of returned memory tells what it queued, the queue before and
 /// after it and what stayed with the actor: a full queue holds the rest
 /// back, and the burst after the network emptied it carries them, from an
@@ -2226,4 +2498,197 @@ fn freed_memory_goes_back_as_one_burst_with_one_wake() {
             }
         });
     }
+}
+
+/// A stop that ends unconfirmed halts the radio: the actor's phase reads
+/// the stop, not a confirmed stop, until a start begins.
+#[test]
+fn an_unconfirmed_stop_reads_the_stopping_phase() {
+    bench_then(
+        |bench| {
+            bench.start();
+            bench.connect(link(true, None));
+            bench
+                .air
+                .hold_completion(WmmAccessCategory::BestEffort, true);
+            bench.send_msdu(msdu(0, &[1; 8]));
+            bench.settle();
+            let deadline = bench.clock.inner.now();
+            bench.send(ToActor::Stop {
+                deadline,
+                network: NetworkEnd::Stays,
+            });
+            let mut unconfirmed = false;
+            for _ in 0..4 {
+                bench.advance(1);
+                bench.settle();
+                while let Some(message) = bench.next() {
+                    unconfirmed |=
+                        matches!(message, FromActor::Stopped(StopOutcome::Unconfirmed(_)));
+                }
+                if unconfirmed {
+                    break;
+                }
+            }
+            assert!(unconfirmed, "the stop ends unconfirmed");
+        },
+        |actor, _| {
+            assert_eq!(actor.radio_phase(), RadioPhase::Stopping);
+        },
+    );
+}
+
+/// An item the port cannot keep, found while a stop the lifecycle asked
+/// for waits on a published MPDU: the actor ends on it, and its radio
+/// reads the stop, not a running radio.
+#[test]
+fn an_unkept_item_during_a_stop_ends_the_actor_in_the_stopping_phase() {
+    bench_then(
+        |bench| {
+            // The lifecycle's returns are full: the station frame's
+            // terminal finds no room there.
+            let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+            for _ in 0..RETURNS {
+                bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+            }
+            bench.send(ToActor::Start(supported()));
+            bench.connect(link(true, None));
+            for category in [
+                WmmAccessCategory::BestEffort,
+                WmmAccessCategory::Background,
+                WmmAccessCategory::Video,
+                WmmAccessCategory::Voice,
+            ] {
+                bench.air.hold_completion(category, true);
+            }
+            let transmit = station_frame_under(bench, 0, false);
+            bench.send(ToActor::StationTx(transmit));
+            bench.settle();
+            assert_eq!(bench.data_sent().len(), 1);
+            let deadline = bench
+                .clock
+                .inner
+                .now()
+                .saturating_add(oer_portable_time::Duration::from_millis(50));
+            bench.send(ToActor::Stop {
+                deadline,
+                network: NetworkEnd::Stays,
+            });
+            bench.settle();
+            assert!(bench.end.is_none(), "the stop waits on the air");
+            bench
+                .air
+                .unkeep_next(oer_protocols_ieee80211_testing_model::ModelUnkeep::AtDrain);
+            for category in [
+                WmmAccessCategory::BestEffort,
+                WmmAccessCategory::Background,
+                WmmAccessCategory::Video,
+                WmmAccessCategory::Voice,
+            ] {
+                bench.air.hold_completion(category, false);
+            }
+            for _ in 0..4 {
+                if bench.end.is_some() {
+                    break;
+                }
+                bench.advance(1);
+                bench.settle();
+            }
+            assert_eq!(bench.end, Some(ActorEnd::Faulted(ActorFault::Unkept)));
+        },
+        |actor, rerun| {
+            assert_eq!(rerun, Poll::Ready(ActorEnd::Faulted(ActorFault::Unkept)));
+            assert_eq!(actor.radio_phase(), RadioPhase::Stopping);
+            assert!(actor.take_unkept().is_some());
+        },
+    );
+}
+
+/// A terminal the full lifecycle refuses and the port cannot keep comes
+/// back beside the port's answer: the actor keeps it in its one place and
+/// ends, asks for no restart, runs no turn while it keeps it, and hands it
+/// out once.
+#[test]
+fn an_item_the_port_cannot_keep_ends_the_actor_and_comes_out_once() {
+    bench_then(
+        |bench| {
+            let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
+            for _ in 0..RETURNS {
+                bench.send(ToActor::Port(PortCommand::SetBssColor(color)));
+            }
+            bench.send(ToActor::Start(supported()));
+            bench.connect(link(true, None));
+            bench
+                .air
+                .unkeep_next(oer_protocols_ieee80211_testing_model::ModelUnkeep::AtDrain);
+            let transmit = station_frame_under(bench, 0, false);
+            bench.send(ToActor::StationTx(transmit));
+            for _ in 0..4 {
+                if bench.end.is_some() {
+                    break;
+                }
+                bench.advance(1_000);
+                bench.settle();
+            }
+            assert_eq!(bench.data_sent().len(), 1);
+            assert_eq!(bench.end, Some(ActorEnd::Faulted(ActorFault::Unkept)));
+            let mut faulted = false;
+            while let Some(message) = bench.next() {
+                assert!(
+                    !matches!(message, FromActor::Recovering(_)),
+                    "an unkept item asks for no restart"
+                );
+                faulted |= matches!(message, FromActor::Faulted(ActorFault::Unkept));
+            }
+            assert!(faulted, "the lifecycle hears it");
+            // Nothing of it went to the lifecycle.
+            while let Some(returned) = bench.returns.try_receive() {
+                assert!(
+                    matches!(returned, Returned::Command { .. }),
+                    "the terminal does not come from the port"
+                );
+            }
+        },
+        |actor, rerun| {
+            assert_eq!(rerun, Poll::Ready(ActorEnd::Faulted(ActorFault::Unkept)));
+            assert!(matches!(
+                actor.take_unkept(),
+                Some(oer_protocols_ieee80211_contracts_port::Unkept::Terminal(
+                    LowerMacTerminal::TxCompleted(
+                        oer_protocols_ieee80211_contracts_port::TxCompleted::Single(_)
+                    )
+                ))
+            ));
+            assert!(actor.take_unkept().is_none(), "once");
+        },
+    );
+}
+
+/// A closed reception of the lifecycle is its own refusal: the owners the
+/// actor could not give back stay with it, and the run ends named instead
+/// of waiting for the lifecycle's room.
+#[test]
+fn a_closed_lifecycle_reception_ends_the_actor_named_and_retries_nothing() {
+    bench(|bench| {
+        bench.start();
+        embassy_futures::block_on(bench.from_actor.close());
+        embassy_futures::block_on(bench.returns.close());
+        let tickets = bench.tickets.len();
+        let transmit = station_frame(bench, 0);
+        bench.send(ToActor::StationTx(transmit));
+        assert_eq!(
+            bench.end,
+            Some(ActorEnd::Faulted(ActorFault::Contract(
+                ActorViolation::LifecycleClosed
+            )))
+        );
+        // The refused frame's owners did not go into the closed queues.
+        assert!(bench.returns.try_receive().is_none());
+        assert!(bench.from_actor.try_receive().is_none());
+        assert_eq!(
+            bench.tickets.len(),
+            tickets - 1,
+            "the ticket stays with the actor"
+        );
+    });
 }

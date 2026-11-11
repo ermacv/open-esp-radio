@@ -30,7 +30,8 @@
 //! [`LendRefused`](crate::LendRefused), [`StartRefused`]) changed nothing
 //! and returns every owner. [`DataPort::Fault`] names a broken contract of
 //! the backend's own state; it keeps its observations, and the backend
-//! keeps the owners it holds.
+//! keeps the owners it holds. A command the port did not take comes back
+//! beside its fault ([`CommandFailed::Returned`]).
 //!
 //! # Rates
 //!
@@ -64,7 +65,7 @@ use oer_protocols_radio_port::ClockError;
 use crate::{
     AdmittedAttempt, AmpduCapabilities, AmpduRate, Channel, CommandTypes, GateClosed, GateOpen,
     Ieee80211Capabilities, Ieee80211Instant, LendRefused, LowerMacTerminal, PhyRate,
-    PortBlockAckSlot, PortCommand, PortRate, PortTypes, Station, SupportedBlockAck,
+    PortBlockAckSlot, PortCommand, PortRate, PortTypes, RecycleRefused, Station, SupportedBlockAck,
     SupportedChannel, TbttEvent,
     arena::{ArenaCompleted, TxArena},
 };
@@ -159,17 +160,191 @@ pub enum RxPull<F, M> {
 }
 
 /// Where the port puts what a call produced besides its return value, in
-/// the order it produced it: the turn's outbox. A sink takes every value;
-/// one it cannot hold it keeps and reports itself, so the port never gets
-/// an owner back.
+/// the order it produced it: the turn's outbox.
+///
+/// A sink may refuse a terminal or a unit it has no room for now: it comes
+/// back, and the port keeps it, with every owner and its outcome, in a
+/// place of its own token. The port offers what it keeps again, oldest
+/// first and before anything newer, at its next call with a sink while the
+/// radio has not confirmed a stop, and after a confirmed stop only through
+/// [`DataPort::take_unconsumed`]. The port signals nothing for what it
+/// keeps: a sink that refuses registers its own wake for room, then checks
+/// its room again, before its task sleeps, and its task then makes a call
+/// with a sink.
 pub trait PortSink<'id, T: PortTypes<'id>> {
     /// A command's or a single MPDU's terminal.
-    fn terminal(&mut self, terminal: LowerMacTerminal<'id, T>);
+    ///
+    /// # Errors
+    ///
+    /// The sink has no room for it now: the terminal, whole, which the port
+    /// keeps.
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'id, T>,
+    ) -> Result<(), LowerMacTerminal<'id, T>>;
     /// A TBTT of the station's schedule.
     fn tbtt(&mut self, event: TbttEvent);
     /// A unit a group mutation's receive cut drained: it precedes the
     /// mutation's terminal.
-    fn received(&mut self, frame: T::RxBuffer, meta: T::RxMeta);
+    ///
+    /// # Errors
+    ///
+    /// The sink has no room for it now: the unit and its metadata, which
+    /// the port keeps, counted among the caller's held units.
+    fn received(
+        &mut self,
+        frame: T::RxBuffer,
+        meta: T::RxMeta,
+    ) -> Result<(), (T::RxBuffer, T::RxMeta)>;
+}
+
+/// A terminal or a received unit a port call could neither give its sink
+/// nor keep, whole: the call took no further owner after it, and what it
+/// had not taken stays in its place for a later call.
+pub enum Unkept<'id, T: PortTypes<'id>> {
+    /// A terminal, with every owner it carries.
+    Terminal(LowerMacTerminal<'id, T>),
+    /// A received unit and its metadata, still owed to a recycle.
+    Received(T::RxBuffer, T::RxMeta),
+}
+
+/// What became of a call's input beside an [`Unkept`].
+pub enum Input<I, R> {
+    /// The call found the unkept item before it accepted its input: the
+    /// input, whole, with every owner it carries.
+    NotAccepted(I),
+    /// The call had accepted its input: its own answer.
+    Accepted(R),
+}
+
+/// A port call that stopped on an [`Unkept`], and its input's state. A
+/// separate error from the port's `Copy` fault: the port records no fault
+/// for it.
+#[must_use = "an unkept item and an unaccepted input hold owners"]
+pub struct Unkeeping<'id, T: PortTypes<'id>, I, R> {
+    /// The item the call could not keep.
+    pub unkept: Unkept<'id, T>,
+    /// The call's input, whole, or its answer.
+    pub input: Input<I, R>,
+}
+
+/// Names the item, not its owners, which carry no `Debug`.
+impl<'id, T: PortTypes<'id>> core::fmt::Debug for Unkept<'id, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Terminal(_) => "Unkept::Terminal",
+            Self::Received(..) => "Unkept::Received",
+        })
+    }
+}
+
+/// Names the input's state, not its owners.
+impl<I, R> core::fmt::Debug for Input<I, R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::NotAccepted(_) => "Input::NotAccepted",
+            Self::Accepted(_) => "Input::Accepted",
+        })
+    }
+}
+
+impl<'id, T: PortTypes<'id>, I, R> core::fmt::Debug for Unkeeping<'id, T, I, R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Unkeeping")
+            .field("unkept", &self.unkept)
+            .field("input", &self.input)
+            .finish()
+    }
+}
+
+/// The answer of a producing port call with the input `I`: its own answer
+/// `R`, or the [`Unkept`] it stopped on beside its input.
+pub type PortAnswer<'id, T, I, R> = Result<R, Unkeeping<'id, T, I, R>>;
+
+/// The answer of [`DataPort::service_tx`] of the port `P`. Its input is
+/// the call itself (`()`): [`Input::NotAccepted`] says the call served
+/// nothing, as it found an item an earlier call could not keep.
+pub type ServiceAnswer<'id, P> = PortAnswer<
+    'id,
+    <P as DataPort<'id>>::Types,
+    (),
+    Result<Option<PortCompleted<'id, P>>, <P as DataPort<'id>>::Fault>,
+>;
+
+/// The answer of [`DataPort::command`] of the port `P`.
+pub type CommandAnswer<'id, P> = PortAnswer<
+    'id,
+    <P as DataPort<'id>>::Types,
+    PortCommand<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
+    Result<
+        CommandProgress<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
+        PortCommandFailed<'id, P>,
+    >,
+>;
+
+/// Why [`DataPort::submit`] gave no answer of its own: the [`Unkept`] it
+/// stopped on beside its attempt or its answer, or its attempt, never
+/// accepted, when the port had no right to hand out the attempt's
+/// terminal.
+#[must_use = "an unkept item and an unaccepted attempt hold owners"]
+pub enum SubmitHalt<'id, T: PortTypes<'id>, A> {
+    /// The call stopped on an item it could neither give its sink nor keep.
+    Unkeeping(Unkeeping<'id, T, A, Result<(), SubmitRefusal>>),
+    /// The port held no right to hand out the attempt's terminal, so it did
+    /// not accept the attempt: the attempt, whole, with every owner it
+    /// carries. Nothing ran and the port keeps nothing new.
+    NotAccepted(A),
+}
+
+/// Names the halt, not its owners.
+impl<'id, T: PortTypes<'id>, A> core::fmt::Debug for SubmitHalt<'id, T, A> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Unkeeping(unkeeping) => f.debug_tuple("Unkeeping").field(unkeeping).finish(),
+            Self::NotAccepted(_) => f.write_str("SubmitHalt::NotAccepted"),
+        }
+    }
+}
+
+/// The answer of [`DataPort::submit`] with the attempt `A`: its own answer,
+/// or why it gave none ([`SubmitHalt`]).
+pub type SubmitAnswer<'id, T, A> = Result<Result<(), SubmitRefusal>, SubmitHalt<'id, T, A>>;
+
+/// What [`DataPort::take_unconsumed`] left with the port.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Unconsumed {
+    /// The port keeps nothing a sink refused.
+    None,
+    /// The sink refused the oldest again: it and everything newer stay
+    /// with the port, in order.
+    Kept,
+}
+
+/// Why [`DataPort::take_unconsumed`] offered nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnconsumedRefused {
+    /// The radio has not confirmed a stop: the port offers what it keeps at
+    /// its calls with a sink.
+    NotStopped,
+}
+
+/// Why [`DataPort::clean_stopped`] did not finish the cleanup the stop
+/// left to the port.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CleanupRefused<F> {
+    /// The radio has not confirmed a stop: nothing was done.
+    NotStopped,
+    /// The port holds the backend's contract fault: the cleanup wrote
+    /// nothing to the hardware, and the port does not retire.
+    Faulted(F),
+    /// The cleanup's next step cannot run now, for the backend's cause:
+    /// that step wrote nothing, and a later call takes it.
+    Unavailable(F),
+    /// The cleanup's one hardware write was issued and the hardware still
+    /// holds what that write releases, the backend's cause: the port keeps
+    /// the owners it concerns and does not retire. A later call reads the
+    /// hardware again and writes nothing; nothing repeats the write.
+    Held(F),
 }
 
 /// How far [`DataPort::command`] took one command.
@@ -205,7 +380,75 @@ pub enum CommandRefusal {
         /// The port's installation.
         installation: u32,
     },
+    /// The command waited at its barrier past the backend's command bound
+    /// and did not run: what its barrier began (a key's removal barrier,
+    /// a receive cut, a held configuration) is undone, attempts its
+    /// barrier already withdrew keep their terminals, and the command
+    /// comes back with every owner. Final for this issue: the caller
+    /// issues it again or ends.
+    Expired,
 }
+
+/// Why [`DataPort::command`] or
+/// [`AccessPointPort::access_point_command`](crate::AccessPointPort::access_point_command)
+/// failed: the port's fault, and the command when the port did not take it.
+pub enum CommandFailed<C, F> {
+    /// The port did not take the command's owners: they come back whole
+    /// beside the fault, a port that faulted before the call included, so
+    /// the port keeps no command for its quarantine. A step of the command
+    /// may have begun before the fault, with an unknown end: the caller
+    /// never issues it again automatically.
+    Returned {
+        /// The command, with every owner.
+        command: C,
+        /// The port's fault.
+        fault: F,
+    },
+    /// The port took the command's owners before it faulted; they stay
+    /// with the port's quarantine.
+    Taken(F),
+}
+
+impl<C, F> CommandFailed<C, F> {
+    /// The port's fault.
+    pub const fn fault(&self) -> F
+    where
+        F: Copy,
+    {
+        match self {
+            Self::Returned { fault, .. } | Self::Taken(fault) => *fault,
+        }
+    }
+
+    /// The same failure with its fault mapped by `map`, the command kept
+    /// where it was.
+    pub fn map_fault<G>(self, map: impl FnOnce(F) -> G) -> CommandFailed<C, G> {
+        match self {
+            Self::Returned { command, fault } => CommandFailed::Returned {
+                command,
+                fault: map(fault),
+            },
+            Self::Taken(fault) => CommandFailed::Taken(map(fault)),
+        }
+    }
+}
+
+/// The fault, and whether the command came back; a command carries no
+/// `Debug` of its own.
+impl<C, F: core::fmt::Debug> core::fmt::Debug for CommandFailed<C, F> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Returned { fault, .. } => f.debug_tuple("Returned").field(fault).finish(),
+            Self::Taken(fault) => f.debug_tuple("Taken").field(fault).finish(),
+        }
+    }
+}
+
+/// A failed [`DataPort::command`] of the port `P`.
+pub type PortCommandFailed<'id, P> = CommandFailed<
+    PortCommand<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
+    <P as DataPort<'id>>::Fault,
+>;
 
 /// Why [`DataPort::submit`] refused an attempt.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -226,13 +469,37 @@ pub enum SubmitRefusal {
     },
 }
 
-/// Why [`DataPort::poll_start`] did not start the radio. Nothing runs;
-/// the port stays stopped and can start again. `F` is the port's
-/// [`DataPort::Fault`], which names why the front end did not tune.
+/// Why [`DataPort::poll_start`] did not start the radio. `F` is the port's
+/// [`DataPort::Fault`], which names why the front end did not tune. Except
+/// for [`Self::Unstopped`], nothing runs: the port is stopped and can start
+/// again.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum StartRefused<F> {
-    /// The radio runs already.
+    /// The radio runs already, or its stop has not confirmed yet.
     Running,
+    /// The radio front end did not tune the channel, for the port's cause.
+    Retune(F),
+    /// The start did not end within the backend's command bound.
+    Deadline,
+    /// The device refused the start.
+    Device,
+    /// The start failed for `cause` after it began on the device or the
+    /// MAC, and the stop of what it began is not confirmed (`stop`): the
+    /// port is stopping, not stopped. [`DataPort::poll_stop`] goes on with
+    /// that stop, and the port refuses a start
+    /// ([`Self::Running`]) until the stop confirms.
+    Unstopped {
+        /// Why the start failed.
+        cause: StartFailure<F>,
+        /// What the stop of the begun start observed.
+        stop: StopUnconfirmed<F>,
+    },
+}
+
+/// Why a start that began failed: the subset of [`StartRefused`] a start's
+/// own steps produce.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum StartFailure<F> {
     /// The radio front end did not tune the channel, for the port's cause.
     Retune(F),
     /// The start did not end within the backend's command bound.
@@ -241,24 +508,39 @@ pub enum StartRefused<F> {
     Device,
 }
 
+impl<F> From<StartFailure<F>> for StartRefused<F> {
+    fn from(failure: StartFailure<F>) -> Self {
+        match failure {
+            StartFailure::Retune(cause) => Self::Retune(cause),
+            StartFailure::Deadline => Self::Deadline,
+            StartFailure::Device => Self::Device,
+        }
+    }
+}
+
 /// The radio did not confirm its stop: the backend cannot prove the MAC,
-/// its DMA and its interrupt work quiet. The observations say what it
-/// still held.
+/// its DMA and its interrupt work quiet. The cause names the port's fault
+/// `F` the stop met, and the observations say what it still held.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct StopUnconfirmed {
+pub struct StopUnconfirmed<F> {
     /// Why the stop ended unconfirmed.
-    pub cause: StopCause,
+    pub cause: StopCause<F>,
     /// What the port held when it gave up.
     pub observations: StopObservations,
 }
 
-/// Why a stop ended unconfirmed.
+/// Why a stop ended unconfirmed; `F` is the port's fault.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum StopCause {
-    /// The stop did not end by its deadline.
+pub enum StopCause<F> {
+    /// The stop did not end by its deadline, or its confirmation has not
+    /// come yet: the stop goes on, and a later poll can confirm it.
     Deadline,
-    /// The device refused or failed the stop.
-    Device,
+    /// The device refused or failed the stop, for the port's fault: the
+    /// very fault the stop met, never one an earlier call answered.
+    Device(F),
+    /// A failed start had enabled the MAC: the port's next service
+    /// disables it, and [`DataPort::poll_stop`] goes on from there.
+    CoreEnabled,
 }
 
 /// What a port held when its stop ended unconfirmed.
@@ -352,7 +634,7 @@ pub trait DataPort<'id> {
     /// A broken contract of the backend's own state, named with its
     /// observations. The backend keeps every owner it holds; the caller
     /// ends the installation.
-    type Fault: Copy + core::fmt::Debug;
+    type Fault: Copy + core::fmt::Debug + Eq;
     /// A station MPDU the port accepted from its sealed attempt
     /// ([`Self::admit`]), carrying no borrow of the port.
     type Admitted;
@@ -401,16 +683,21 @@ pub trait DataPort<'id> {
     /// terminals, expired queued ones end, the next queued ones publish.
     /// A published data arena's end returns here.
     ///
+    /// The answer is the backend's contract fault, or the arena's end.
+    ///
     /// # Errors
     ///
-    /// The backend's contract fault.
+    /// An item the call could neither give `sink` nor keep, beside its
+    /// answer ([`Unkeeping`]); nothing more was taken after it. An item an
+    /// earlier call left refuses this one before it serves anything:
+    /// [`Input::NotAccepted`] of `()`.
     fn service_tx(
         &mut self,
         tx: TxFacts,
         tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault>;
+    ) -> ServiceAnswer<'id, Self>;
 
     /// Serve the published data arena alone on the completion events
     /// `tx`, for a caller that publishes the next arena before anything
@@ -437,18 +724,25 @@ pub trait DataPort<'id> {
     /// Queue an accepted station MPDU; it publishes when its queue is free,
     /// and its terminal returns its owners.
     ///
-    /// # Errors
-    ///
-    /// Why the port did not take the attempt: the radio does not run or
-    /// stops. The attempt ended at once, withdrawn and never published
+    /// The answer's refusal says why the port did not take the attempt: the
+    /// radio does not run or stops. The attempt ended at once, withdrawn
+    /// and never published
     /// ([`TxOutcome::Withdrawn`](crate::TxOutcome::Withdrawn)), and its
     /// terminal, with its context, ticket and fresh buffer, is in `sink`.
+    ///
+    /// # Errors
+    ///
+    /// An item the call could neither give `sink` nor keep
+    /// ([`SubmitHalt::Unkeeping`]): found before the attempt was accepted,
+    /// the attempt comes back whole; after, the answer. A port without the
+    /// right to hand out the attempt's terminal returns the attempt whole,
+    /// unaccepted ([`SubmitHalt::NotAccepted`]).
     fn submit(
         &mut self,
         attempt: Self::Admitted,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<(), SubmitRefusal>;
+    ) -> SubmitAnswer<'id, Self::Types, Self::Admitted>;
 
     /// One received unit, while the caller holds fewer than `room`.
     ///
@@ -457,8 +751,19 @@ pub trait DataPort<'id> {
     /// The backend's contract fault.
     fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, Self::Fault>;
 
-    /// Return a received unit to the ring.
-    fn recycle(&mut self, unit: PortRxBuffer<'id, Self>);
+    /// Return a received unit to the ring. The port checks its count of
+    /// the caller's units before it touches the unit.
+    ///
+    /// # Errors
+    ///
+    /// The port holds fewer of the caller's units than one: the unit,
+    /// unchanged, with the count
+    /// ([`ReceiveAccounting`](crate::ReceiveAccounting)). Nothing was taken
+    /// and no fault recorded; the caller keeps the unit.
+    fn recycle(
+        &mut self,
+        unit: PortRxBuffer<'id, Self>,
+    ) -> Result<(), RecycleRefused<PortRxBuffer<'id, Self>>>;
 
     /// Move a received unit to the network without copying it.
     ///
@@ -516,18 +821,28 @@ pub trait DataPort<'id> {
 
     /// Run one command, or hold it at its barrier.
     ///
+    /// The answer's failure is the backend's contract fault, with the
+    /// command when the port did not take its owners ([`CommandFailed`]).
+    ///
     /// # Errors
     ///
-    /// The backend's contract fault; the command's owners stay with it.
+    /// An item the call could neither give `sink` nor keep ([`Unkeeping`]):
+    /// found before the command was accepted, the command comes back whole;
+    /// after, the answer.
     fn command(
         &mut self,
         command: PortCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<CommandProgress<'id, Self::Types, Self::Caps>, Self::Fault>;
+    ) -> CommandAnswer<'id, Self>;
 
     /// Start the stopped radio on `channel`, within the backend's command
-    /// bound from the first call.
+    /// bound from the first call. A start that fails after the device began
+    /// it stops what it began before it answers the refusal; a stop that
+    /// does not confirm, and a start that enabled the MAC before it failed,
+    /// leave the port stopping: the answer is [`StartRefused::Unstopped`]
+    /// with the start's cause, and [`Self::poll_stop`] goes on with the
+    /// stop.
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
@@ -542,7 +857,43 @@ pub trait DataPort<'id> {
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed>>;
+    ) -> Poll<Result<(), StopUnconfirmed<Self::Fault>>>;
+
+    /// After the radio's confirmed stop: offer what a sink refused and the
+    /// port keeps to `sink`, oldest first, each once, until the sink refuses
+    /// one again, which stays with everything newer. Each terminal and unit
+    /// leaves the port once, with its own outcome and owners.
+    ///
+    /// # Errors
+    ///
+    /// The stop is not confirmed: nothing is offered here; the port offers
+    /// what it keeps at its calls with a sink.
+    fn take_unconsumed(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<Unconsumed, UnconsumedRefused>;
+
+    /// After the radio's confirmed stop: the cleanup the stop leaves to the
+    /// port (a backend's write that releases hardware a failed operation
+    /// left in use), by the lifecycle owner that stopped it, whether or not
+    /// the datapath actor still runs. The owners the cleanup frees leave
+    /// through their terminals in `sink`, each once; a terminal the sink
+    /// refuses stays with the port for [`Self::take_unconsumed`]. A port
+    /// whose cleanup did not finish does not retire. Nothing calls it on
+    /// its own: each call is the owner's.
+    ///
+    /// The answer's refusal says why the cleanup did not finish
+    /// ([`CleanupRefused`]).
+    ///
+    /// # Errors
+    ///
+    /// A freed terminal the call could neither give `sink` nor keep, beside
+    /// its answer ([`Unkeeping`]). An item an earlier call left refuses
+    /// this one before it cleans anything: [`Input::NotAccepted`] of `()`.
+    fn clean_stopped(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>>;
 
     /// Take back the fault the port last reported, so that a stop can run
     /// and return the owners it holds: whether it can. From then on the port

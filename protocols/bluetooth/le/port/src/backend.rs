@@ -3,13 +3,16 @@ use super::*;
 
 /// Durable session owner, fixed before the invariant body loan is introduced.
 pub struct OwnedSession<P: PoolPath, S> {
-    slot: Slot<'static, DtmSessionKind, Child<P, 1>>,
+    slot: Slot<'static, oer_protocols_radio_port::Slots<DtmSessionKind, 1>, Child<P, 1>>,
     epoch: u64,
     state: PhantomData<S>,
 }
 impl<P: PoolPath, S> OwnedSession<P, S> {
     /// Wrap one of the backend's originally minted session slots.
-    pub fn new(slot: Slot<'static, DtmSessionKind, Child<P, 1>>, epoch: u64) -> Self {
+    pub fn new(
+        slot: Slot<'static, oer_protocols_radio_port::Slots<DtmSessionKind, 1>, Child<P, 1>>,
+        epoch: u64,
+    ) -> Self {
         Self {
             slot,
             epoch,

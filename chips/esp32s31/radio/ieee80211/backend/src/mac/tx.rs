@@ -3143,7 +3143,8 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         let dma =
             TxDmaStorage::pin::<oer_chips_esp32s31_hal::radio::ieee80211::dma::space::HostDma, _>(
                 oer_chips_esp32s31_hal::system::memory::dma_static::Placed::host(storage),
-            )?;
+            )
+            .map_err(|(error, _host)| error)?;
         Ok(Self::from_dma(dma))
     }
 

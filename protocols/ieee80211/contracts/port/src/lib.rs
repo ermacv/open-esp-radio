@@ -68,7 +68,8 @@ mod issued;
 pub use issued::{IssuedSlot, IssuedSlots, SlotGrant, first_stale};
 pub mod access_point;
 pub use access_point::{
-    AccessPointCapabilities, AccessPointCommand, AccessPointCommandKind, AccessPointCommands,
+    AccessPointCapabilities, AccessPointCommand, AccessPointCommandAnswer,
+    AccessPointCommandFailed, AccessPointCommandKind, AccessPointCommands,
     AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
     AccessPointRefusal, AccessPointServices, AccessPointSubmission, AccessPointTypes,
     AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant, BeaconParts,
@@ -87,9 +88,11 @@ mod command;
 pub use command::{CommandKind, CommandTypes, PairwiseIssue, PortCommand, PortCommands};
 mod data_port;
 pub use data_port::{
-    CommandProgress, CommandRefusal, DataPort, Facts, PortArena, PortCompleted, PortRxBuffer,
-    PortRxPull, PortSink, RxPull, StartRefused, StationSubmission, StopCause, StopObservations,
-    StopUnconfirmed, SubmitRefusal, TxFacts,
+    CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, Input,
+    PortAnswer, PortArena, PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
+    RxPull, StartFailure, StartRefused, StationSubmission, StopCause, StopObservations,
+    StopUnconfirmed, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts, Unconsumed,
+    UnconsumedRefused, Unkeeping, Unkept,
 };
 mod layout;
 pub use layout::{
@@ -173,8 +176,9 @@ pub use interface_commands::{
     ConfigurePermission, Configured, InterfaceCommandPool, InterfaceGrant, InterfacePermissions,
 };
 pub use rx::{
-    AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, RxBuffer, RxCryptoStatus,
-    RxEvidence, RxMeta, RxMetadata, SignalMetadata,
+    AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, ReceiveAccounting,
+    ReceiveOperation, RecycleRefused, RxBuffer, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata,
+    SignalMetadata,
 };
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
@@ -188,7 +192,7 @@ pub use types::{
     PoolMpdu, PoolPreparation, PoolSource, PortBlockAckSlot, PortSingleOutcome, PortTypes,
     PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
     RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
-    TxBufferClass, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
+    TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
 };
 
 #[cfg(test)]

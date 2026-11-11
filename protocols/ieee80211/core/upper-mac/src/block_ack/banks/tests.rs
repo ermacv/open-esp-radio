@@ -84,8 +84,10 @@ enum Call {
     Recycle(Vec<u8>),
 }
 
+/// The port's calls. `Some(n)` refuses the recycle after the next `n`
+/// with the count, the frame given back, once.
 #[derive(Default)]
-struct Recording(Vec<Call>);
+struct Recording(Vec<Call>, Option<usize>);
 
 impl RxBlockAckPort<Types> for Recording {
     type Caps = Caps;
@@ -103,8 +105,25 @@ impl RxBlockAckPort<Types> for Recording {
         running.0
     }
 
-    fn recycle(&mut self, frame: Frame) {
+    fn recycle(&mut self, frame: Frame) -> Result<(), RecycleRefused<Frame>> {
+        match self.1 {
+            Some(0) => {
+                self.1 = None;
+                return Err(RecycleRefused {
+                    unit: frame,
+                    fault: ReceiveAccounting {
+                        operation:
+                            oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+                        held: 0,
+                        requested: 1,
+                    },
+                });
+            }
+            Some(after) => self.1 = Some(after - 1),
+            None => {}
+        }
         self.0.push(Call::Recycle(frame.0));
+        Ok(())
     }
 }
 
@@ -426,7 +445,7 @@ fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
     ));
     view.tick(now(20_000), &mut port, &mut events);
     assert!(view.pop_ready().is_some());
-    view.clear(&mut port, &mut events);
+    view.clear(&mut port, &mut events).unwrap();
     let events = events.0;
     assert_eq!(
         events
@@ -651,7 +670,7 @@ fn parking_beyond_the_retained_frames_is_a_capacity_fault() {
     ));
     // Clearing returns every parked frame through the port.
     let mut port = Recording::default();
-    view.clear(&mut port, &mut ());
+    view.clear(&mut port, &mut ()).unwrap();
     assert_eq!(
         port.0
             .iter()
@@ -659,6 +678,59 @@ fn parking_beyond_the_retained_frames_is_a_capacity_fault() {
             .count(),
         2
     );
+}
+
+#[test]
+fn a_recycle_the_port_refuses_keeps_its_frame_and_the_rest_in_place_and_the_clear_incomplete() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 3>::new([10], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
+        .unwrap();
+    for sequence in 0..3 {
+        assert!(matches!(
+            view.park(qos_data(0, sequence), meta()),
+            Parked::Waiting
+        ));
+    }
+    let recycled = |port: &Recording| -> Vec<Vec<u8>> {
+        port.0
+            .iter()
+            .filter_map(|call| match call {
+                Call::Recycle(bytes) => Some(bytes.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    // The second frame's recycle is refused: the clear stops there.
+    port.1 = Some(1);
+    let refused = view.clear(&mut port, &mut ());
+    assert_eq!(
+        refused,
+        Err(ReceiveAccounting {
+            operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+            held: 0,
+            requested: 1,
+        })
+    );
+    assert_eq!(recycled(&port), [qos_data(0, 0).0]);
+    // Not complete: the association stays, and a new one's Action is not
+    // taken while the port refuses.
+    assert_eq!(view.association(), Some(7));
+    port.1 = Some(0);
+    assert!(matches!(
+        view.offer(now(2), 8, bssid(), addba(0, 0), true, &mut port, &mut ()),
+        Err(RxBlockAckRefused::Clear(_))
+    ));
+    assert_eq!(view.association(), Some(7));
+    // Once the port takes them, each frame went back exactly once, in
+    // its order.
+    view.clear(&mut port, &mut ()).unwrap();
+    assert_eq!(
+        recycled(&port),
+        [qos_data(0, 0).0, qos_data(0, 1).0, qos_data(0, 2).0]
+    );
+    assert_eq!(view.association(), None);
 }
 
 /// An ADDBA Request for `tid` asking for `window`, zero included, which the
@@ -788,7 +860,7 @@ fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outc
     assert!(!view.can_receive_management());
     assert_eq!(
         offer(&mut view, request_for(20, 3, 0), false),
-        Err(RxBlockAckCapacity)
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
     );
     let records = requested(&events.0);
     assert_eq!(

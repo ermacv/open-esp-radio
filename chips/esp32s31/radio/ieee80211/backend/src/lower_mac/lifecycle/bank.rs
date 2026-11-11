@@ -60,6 +60,8 @@ pub enum CoreRetained {
     NotDisabled,
     /// The transmitter still holds an attempt or a published slot.
     Publications,
+    /// The core keeps a key removal, or a result its sink refused.
+    Results,
 }
 impl<C> CoreOwner<C> {
     /// Empty storage before initial preparation or after dismantling.
@@ -233,6 +235,78 @@ impl<
     }
 }
 
+impl<
+    'core,
+    'slot,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_portable_time::Timer,
+    C: RadioCoexPriorities,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> CoreView<'_, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+{
+    /// Return an admission never published, in whichever phase the core
+    /// is: its key use goes back first, then its ticket comes out. A vacant
+    /// slot holds no core and so no key counts; its admission's ticket
+    /// comes out alone.
+    pub fn return_admission<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
+        self,
+        hardware: &mut H,
+        admission: TxAdmission<'core, Path, TICKETS>,
+        sink: &mut K,
+    ) -> TxTicket<'core, Path, TICKETS> {
+        match self.arena_core() {
+            Some(core) => core.core.return_admission(hardware, admission, sink),
+            None => admission.into_ticket(),
+        }
+    }
+}
+
+impl<
+    'core,
+    'slot,
+    P: WifiTxPowerProfile,
+    E: WifiTxEntropy,
+    T: oer_portable_time::Timer,
+    C: RadioCoexPriorities,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath,
+    const TICKETS: usize,
+> CoreView<'_, LowerMacCore<'core, 'slot, P, E, T, C, BUFFER_SIZE, Path, TICKETS>>
+{
+    /// The finished receipt of the removal at `place`, in whichever phase
+    /// the core is.
+    ///
+    /// # Errors
+    ///
+    /// It waits for a use, or the phase holds no core: the place comes
+    /// back.
+    pub fn take_removed<S: crate::lower_mac::RemovableSlot<'core, Path>>(
+        self,
+        place: crate::lower_mac::RemovalPlace<'core, Path, S>,
+    ) -> Result<KeyRemoved<'core, Path, S>, crate::lower_mac::RemovalPlace<'core, Path, S>> {
+        match self.arena_core() {
+            Some(core) => core.core.take_removed(place),
+            None => Err(place),
+        }
+    }
+
+    /// Whether the removal at `place` finished and its receipt waits, in
+    /// whichever phase the core is.
+    pub fn removed_ready<S: crate::lower_mac::RemovableSlot<'core, Path>>(
+        self,
+        place: &crate::lower_mac::RemovalPlace<'core, Path, S>,
+    ) -> bool {
+        self.arena_core()
+            .is_some_and(|core| core.core.removed_ready(place))
+    }
+}
+
 /// A vacant slot can be prepared once before any lifecycle transition.
 #[must_use]
 pub struct VacantView<'view, C> {
@@ -300,6 +374,10 @@ impl<
             self.bank = Some(prepared);
             return Err(CoreRetained::NotDisabled);
         }
+        if prepared.core.keeps_results() {
+            self.bank = Some(prepared);
+            return Err(CoreRetained::Results);
+        }
         let Prepared { mut core, phase } = prepared;
         match core.tx.into_idle() {
             Ok(tx) => Ok(LowerMacCoreParts {
@@ -352,7 +430,7 @@ impl<
     #[inline(never)]
     pub(super) fn disable_in_place<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -372,7 +450,7 @@ impl<
     #[inline(never)]
     pub(super) fn advance_configuration_in_place<
         H: LowerMacHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -388,12 +466,16 @@ impl<
         true
     }
     #[inline(never)]
-    pub(super) fn finish_disable_in_place<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub(super) fn finish_disable_in_place<
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &mut self,
         sink: &mut K,
         gate: GateMode,
     ) -> bool {
-        let core = &self.core;
+        let core = &mut self.core;
+        // A completion its sink refused before ends here, at the latest.
+        core.offer_kept(sink);
         if core.fault.is_some() || core.attempts().next().is_some() {
             return false;
         }
