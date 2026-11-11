@@ -113,8 +113,22 @@ impl<P: LentNotifies> NetworkCredit<P> {
     }
 
     /// Lends since the last call, for the port's receive count.
+    #[cfg(test)]
     pub(super) fn take_transferred(&self) -> usize {
         self.transferred.swap(0, Ordering::AcqRel)
+    }
+
+    /// Lends not yet settled against the port's receive count.
+    pub(super) fn transferred(&self) -> usize {
+        self.transferred.load(Ordering::Acquire)
+    }
+
+    /// Settle `lends` the port's receive count just gave up; a lend counted
+    /// since they were read stays for the next settlement.
+    pub(super) fn settle_transferred(&self, lends: usize) {
+        // `lends` were read from this count and only a settlement lowers
+        // it, so it holds them: the subtraction does not wrap.
+        self.transferred.fetch_sub(lends, Ordering::AcqRel);
     }
 
     /// Whether a lent unit was dropped since [`Self::take_returned`].

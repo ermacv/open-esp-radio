@@ -1,6 +1,6 @@
 #![no_std]
 use oer_chips_esp32s31_radio_ieee80211_backend::{
-    lower_mac::{KeyHandle, ReceiveKeyHandle, LowerMacCore, LowerMacHardware, LowerMacSink, TxTicket},
+    lower_mac::{association::StationGroupSlot, KeyHandle, ReceiveKeyHandle, LowerMacCore, LowerMacHardware, LowerMacSink, TxTicket},
     ordinary_tx::{WifiTxEntropy, WifiTxPowerProfile},
 };
 use oer_portable_time::Timer;
@@ -17,5 +17,7 @@ pub fn receive_only<'core, 'slot, P: WifiTxPowerProfile, E: WifiTxEntropy, T: Ti
     let _admission = core.admit_key(&receive, ticket); // ui-error: E0308
     #[cfg(not(ui_reject))]
     let _admission = core.admit_key(&transmit, ticket);
-    core.remove_checked_key(hardware, receive, sink);
+    let _place = receive
+        .into_removing::<StationGroupSlot<'core>>()
+        .map(|removing| core.remove_checked_key(hardware, removing, sink));
 }

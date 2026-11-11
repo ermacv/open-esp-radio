@@ -28,6 +28,11 @@ pub enum TxOperation {
     Data,
     /// A frame of the connection's setup or keys.
     Connection(ConnectionFrame),
+    /// The access point's Beacon ([`BeaconAttempt`](crate::BeaconAttempt)
+    /// names no other operation). Its class is
+    /// [`AirClass::PtiOnly`]: a beacon has no hard deadline on the shared
+    /// air until its target, tolerated lateness and miss outcome are stated.
+    Beacon,
 }
 
 /// An operation of the IEEE 802.11 port on the shared air.
@@ -67,6 +72,7 @@ mod tests {
         for operation in [
             TxOperation::Data,
             TxOperation::Connection(ConnectionFrame::Authentication),
+            TxOperation::Beacon,
         ] {
             assert_eq!(Operation::from(operation).class(), AirClass::PtiOnly);
         }

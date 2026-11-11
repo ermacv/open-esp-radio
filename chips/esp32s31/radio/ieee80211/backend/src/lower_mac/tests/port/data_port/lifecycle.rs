@@ -11,6 +11,7 @@ use oer_portable_time::Duration;
 use oer_protocols_ieee80211_contracts_port::arena::{
     AttemptEnd, FrameMask, PublishError, PublishRefused,
 };
+use oer_protocols_ieee80211_contracts_port::{CommandFailed, StartFailure, SupportedBlockAck};
 use oer_protocols_ieee80211_wire::phy::{
     FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
 };
@@ -133,7 +134,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             .poll_start(&mut Context::from_waker(&waker), supported(wifi), now)
     }
 
-    fn poll_stop_now(&mut self) -> Poll<Result<(), StopUnconfirmed>> {
+    fn poll_stop_now(&mut self) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         let waker = self.waker();
         let now = self.now();
         self.port.poll_stop(&mut Context::from_waker(&waker), now)
@@ -144,7 +145,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn stop_keeping(
         &mut self,
         step: Duration,
-    ) -> (Result<(), StopUnconfirmed>, Vec<Completed<'id, Id>>) {
+    ) -> (Result<(), StopUnconfirmed<Fault>>, Vec<Completed<'id, Id>>) {
         let mut ended = Vec::new();
         for _ in 0..64 {
             match self.poll_stop_now() {
@@ -309,6 +310,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let now = self.now();
         self.port
             .submit(attempt, now, &mut self.outbox)
+            .unwrap()
             .expect("submitted");
     }
 
@@ -703,7 +705,10 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         drop(key);
         fixture.port.uninstall_keys_for_test();
         let now = fixture.now();
-        let _ = fixture.port.submit(attempt, now, &mut fixture.outbox);
+        let _ = fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .unwrap();
         assert_eq!(
             fixture.port.fault(),
             Some(Fault::Unpublished(crate::port::Unpublished::Key))
@@ -718,7 +723,11 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         let attempt = fixture.mpdu(None).expect("attempt");
         let now = fixture.now();
         assert_eq!(
-            fixture.port.submit(attempt, now, &mut fixture.outbox).err(),
+            fixture
+                .port
+                .submit(attempt, now, &mut fixture.outbox)
+                .unwrap()
+                .err(),
             Some(oer_protocols_ieee80211_contracts_port::SubmitRefusal::Stopping)
         );
         assert_eq!(fixture.take_completed(), 1, "a new one is refused back");
@@ -737,6 +746,7 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         second
             .port
             .submit(attempt, now, &mut second.outbox)
+            .unwrap()
             .ok()
             .expect("the new installation publishes");
         let _ = second.turn();
@@ -747,7 +757,7 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
 }
 
 #[test]
-fn a_publication_refused_past_its_attachment_gives_every_owner_back_to_the_restart() {
+fn a_publication_refused_past_its_attachment_ends_withdrawn_with_every_owner_and_no_fault() {
     with_installations(|mut fixture, installations| {
         fixture.start();
         let (association, _, slot) = fixture.association();
@@ -768,22 +778,29 @@ fn a_publication_refused_past_its_attachment_gives_every_owner_back_to_the_resta
         assert_eq!(before.1, Some(0));
         fixture.port.refuse_values_for_test();
         let now = fixture.now();
-        let _ = fixture.port.submit(attempt, now, &mut fixture.outbox);
-        assert_eq!(
-            fixture.port.fault(),
-            Some(Fault::Unpublished(crate::port::Unpublished::Step(
-                crate::port::PublishStep::Values
-            )))
+        assert!(
+            fixture
+                .port
+                .submit(attempt, now, &mut fixture.outbox)
+                .unwrap()
+                .is_ok()
         );
+        assert_eq!(fixture.port.fault(), None, "an own refusal is no fault");
         assert_eq!(
             fixture.port.admissions_for_test(),
             before,
             "the ticket and the key's use came back"
         );
-
-        assert!(fixture.port.recover_for_stop());
-        fixture.stop();
+        assert!(matches!(
+            fixture.outbox.terminals.last(),
+            Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)))
+                if matches!(
+                    completed.outcome(),
+                    TxOutcome::Withdrawn(WithdrawCause::Unpublishable)
+                )
+        ));
         assert_eq!(fixture.take_completed(), 1, "the MPDU came back withdrawn");
+        fixture.stop();
 
         // The retire refuses a descriptor that is missing or still holds
         // its buffer.
@@ -796,6 +813,7 @@ fn a_publication_refused_past_its_attachment_gives_every_owner_back_to_the_resta
         second
             .port
             .submit(attempt, now, &mut second.outbox)
+            .unwrap()
             .ok()
             .expect("the new installation publishes");
         let _ = second.turn();
@@ -917,11 +935,15 @@ fn a_pairwise_removal_waits_until_the_last_arena_frame_its_key_encrypted_leaves(
             .unwrap_or_else(|_| panic!("retained"));
         // The retained frame keeps the key: its removal is held.
         let now = fixture.now();
-        let removal = match fixture.port.command(
-            PortCommand::RemovePairwise { association, key },
-            now,
-            &mut fixture.outbox,
-        ) {
+        let removal = match fixture
+            .port
+            .command(
+                PortCommand::RemovePairwise { association, key },
+                now,
+                &mut fixture.outbox,
+            )
+            .unwrap()
+        {
             Ok(CommandProgress::Held(removal)) => removal,
             _ => panic!("the removal waits for the arena"),
         };
@@ -992,11 +1014,14 @@ fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
         fixture.start();
         let now = fixture.now();
         assert!(matches!(
-            fixture.port.command(
-                PortCommand::SetBssColor(BssColor::new(0x2a).expect("color")),
-                now,
-                &mut fixture.outbox,
-            ),
+            fixture
+                .port
+                .command(
+                    PortCommand::SetBssColor(BssColor::new(0x2a).expect("color")),
+                    now,
+                    &mut fixture.outbox,
+                )
+                .unwrap(),
             Ok(CommandProgress::Done)
         ));
         fixture.turn();
@@ -1040,7 +1065,8 @@ fn he_after(
             assert!(matches!(
                 fixture
                     .port
-                    .command(PortCommand::SetHe(he), now, &mut fixture.outbox),
+                    .command(PortCommand::SetHe(he), now, &mut fixture.outbox)
+                    .unwrap(),
                 Ok(CommandProgress::Done)
             ));
             fixture.turn();
@@ -1159,6 +1185,7 @@ fn an_arena_past_its_cancel_on_the_air_is_a_named_fault() {
         let Err(fault) = fixture
             .port
             .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox)
+            .unwrap()
         else {
             panic!("the last watchdog quarantines");
         };
@@ -1217,7 +1244,7 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         assert_eq!(fixture.observed.borrow().publications, 1);
         let frame = fixture.frame();
         fixture.observed.borrow_mut().received.push_back(frame);
-        fixture.observed.borrow_mut().fail_poll = Some(Fault::RemovalMissing);
+        fixture.observed.borrow_mut().fail_poll = Some(Fault::RemovalMismatch);
         let waker = fixture.waker();
         let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
         assert!(
@@ -1226,19 +1253,20 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         );
         assert_eq!(
             fixture.port.fault(),
-            Some(Fault::RemovalMissing),
+            Some(Fault::RemovalMismatch),
             "the fault by name"
         );
         let now = fixture.now();
         assert!(matches!(
             fixture
                 .port
-                .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox),
-            Err(Fault::RemovalMissing)
+                .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox)
+                .unwrap(),
+            Err(Fault::RemovalMismatch)
         ));
         assert!(matches!(
             fixture.port.receive(8, now),
-            Err(Fault::RemovalMissing)
+            Err(Fault::RemovalMismatch)
         ));
         // The quarantine keeps every owner: no MPDU ended, no body dropped,
         // the frame stays on the ring.
@@ -1249,7 +1277,11 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         let Poll::Ready(Err(unconfirmed)) = fixture.poll_stop_now() else {
             panic!("a faulted port cannot confirm its stop");
         };
-        assert_eq!(unconfirmed.cause, StopCause::Device);
+        assert_eq!(
+            unconfirmed.cause,
+            StopCause::Device(Fault::RemovalMismatch),
+            "the stop names the fault it met"
+        );
         assert_eq!(unconfirmed.observations.published, 1);
         assert_eq!(unconfirmed.observations.queued, 1);
         assert_eq!(fixture.now(), now, "no time passed for the answer");
@@ -1286,6 +1318,71 @@ fn a_stop_the_device_holds_wakes_at_the_devices_own_settle() {
             Some(settle),
             "the port sleeps until the device looks again, not to its bound"
         );
+    });
+}
+
+/// Poll the stop the first call asked for, serving a turn between polls
+/// and never moving time: the stop's answers in order, up to its first
+/// confirmation or `polls` answers.
+fn stop_answers<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &mut Fixture<'id, Id>,
+    polls: usize,
+) -> Vec<Result<(), StopUnconfirmed<Fault>>> {
+    let mut answers = Vec::new();
+    for _ in 0..64 {
+        if let Poll::Ready(answer) = fixture.poll_stop_now() {
+            let confirmed = answer.is_ok();
+            answers.push(answer);
+            if confirmed || answers.len() == polls {
+                return answers;
+            }
+        }
+        let _ = fixture.turn();
+    }
+    panic!("the stop answers");
+}
+
+/// A line mask the line's handler has not confirmed within its bound is a
+/// stop not confirmed yet, never a fault of the device: the stop's answer
+/// is `Deadline`, the port stays in the stop the first call began, and the
+/// device's later confirmation completes it at the next poll. No time
+/// passes: the device's own answers drive it.
+#[test]
+fn a_late_line_mask_is_a_stop_not_confirmed_yet_that_its_later_confirmation_completes() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.observed.borrow_mut().fail_stop =
+            Some(Fault::Receive(crate::rx::control::WifiRxCause::LineRefused));
+        let began = fixture.now();
+        let answers = stop_answers(&mut fixture, 2);
+        let [Err(late), Ok(())] = answers.as_slice() else {
+            panic!("a late mask, then the confirmation: {answers:?}");
+        };
+        assert_eq!(late.cause, StopCause::Deadline, "not a device fault");
+        assert_eq!(fixture.now(), began, "no time passed");
+        assert_eq!(fixture.observed.borrow().stops, 1, "the device stopped");
+        assert_eq!(fixture.port.fault(), None);
+        assert_eq!(
+            fixture.poll_stop_now(),
+            Poll::Ready(Ok(())),
+            "it stays stopped"
+        );
+    });
+}
+
+/// Every other failure of the device's stop is the device's fault, named by
+/// that very fault.
+#[test]
+fn another_failure_of_the_devices_stop_is_named_by_its_own_fault() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        let cause = Fault::Receive(crate::rx::control::WifiRxCause::ForeignExecutor);
+        fixture.observed.borrow_mut().fail_stop = Some(cause);
+        let answers = stop_answers(&mut fixture, 1);
+        let [Err(failed)] = answers.as_slice() else {
+            panic!("the device's failure: {answers:?}");
+        };
+        assert_eq!(failed.cause, StopCause::Device(cause));
     });
 }
 
@@ -1427,7 +1524,10 @@ fn a_refused_retune_refuses_the_start_with_its_cause_and_leaves_the_port_stopped
             let attempt = fixture.station_mpdu().expect("attempt");
             let now = fixture.now();
             assert_eq!(
-                fixture.port.submit(attempt, now, &mut fixture.outbox),
+                fixture
+                    .port
+                    .submit(attempt, now, &mut fixture.outbox)
+                    .unwrap(),
                 Err(SubmitRefusal::NotEnabled),
                 "the port stayed stopped"
             );
@@ -1440,6 +1540,228 @@ fn a_refused_retune_refuses_the_start_with_its_cause_and_leaves_the_port_stopped
             fixture.stop();
         });
     }
+}
+
+#[test]
+fn a_start_the_device_began_and_refused_stops_its_receive_path_before_the_refusal() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.stop();
+        let stops = fixture.observed.borrow().stops;
+        // A device that refuses its start before it began anything stops
+        // nothing.
+        let cause = Fault::Receive(crate::rx::control::WifiRxCause::LineRefused);
+        fixture.observed.borrow_mut().fail_start = Some(cause);
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Device))
+        );
+        assert_eq!(fixture.observed.borrow().stops, stops, "nothing began");
+        // One whose receive path began stops it first.
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.begin_start = true;
+            observed.fail_start = Some(cause);
+        }
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Device))
+        );
+        assert_eq!(fixture.observed.borrow().stops, stops + 1, "rolled back");
+        assert_eq!(fixture.port.fault(), None);
+        // A rollback the device holds answers once it stopped.
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.fail_start = Some(cause);
+            observed.hold_stop = true;
+        }
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.observed.borrow_mut().hold_stop = false;
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Device))
+        );
+        assert_eq!(fixture.observed.borrow().stops, stops + 2);
+        fixture.observed.borrow_mut().begin_start = false;
+        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+    });
+}
+
+#[test]
+fn a_started_device_whose_start_expires_stops_before_the_deadline_refusal() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.stop();
+        let stops = fixture.observed.borrow().stops;
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.begin_start = true;
+            observed.hold_start = true;
+        }
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.advance(COMMAND_BOUND);
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Deadline))
+        );
+        assert_eq!(fixture.observed.borrow().stops, stops + 1);
+        // A rollback the device never confirms leaves the port stopping: the
+        // answer keeps the start's cause beside the stop's, and the stop
+        // goes on with it.
+        fixture.observed.borrow_mut().hold_stop = true;
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.advance(COMMAND_BOUND);
+        // The rollback has its own bound from the start's.
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.advance(COMMAND_BOUND);
+        assert!(matches!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Unstopped {
+                cause: StartFailure::Deadline,
+                stop: StopUnconfirmed {
+                    cause: StopCause::Deadline,
+                    ..
+                },
+            }))
+        ));
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Running)),
+            "the port is not stopped"
+        );
+        assert_eq!(fixture.port.fault(), None);
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.hold_stop = false;
+            observed.hold_start = false;
+            observed.begin_start = false;
+        }
+        fixture.stop();
+        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+    });
+}
+
+#[test]
+fn a_rollback_the_device_refuses_is_unstopped_with_the_start_cause_and_the_stop_goes_on() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.stop();
+        let cause = Fault::Receive(crate::rx::control::WifiRxCause::LineRefused);
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.begin_start = true;
+            observed.fail_start = Some(cause);
+            observed.hold_stop = true;
+        }
+        assert!(fixture.poll_start_on(channel(6)).is_pending());
+        fixture.advance(COMMAND_BOUND);
+        assert!(matches!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Unstopped {
+                cause: StartFailure::Device,
+                stop: StopUnconfirmed {
+                    cause: StopCause::Deadline,
+                    ..
+                },
+            }))
+        ));
+        // No start runs before the stop confirms, and nothing retires.
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Running))
+        );
+        assert!(fixture.port.release().is_none());
+        assert_eq!(fixture.port.fault(), None);
+        {
+            let mut observed = fixture.observed.borrow_mut();
+            observed.hold_stop = false;
+            observed.begin_start = false;
+        }
+        fixture.stop();
+        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+    });
+}
+
+#[test]
+fn a_start_whose_block_ack_programming_fails_after_the_core_enabled_ends_unstopped_then_stops() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.stop();
+        // A receive agreement the stopped port applies at its next start.
+        let slot = fixture.block_acks.pop().expect("slot");
+        let agreement = SupportedBlockAck::<Caps>::new(
+            IndividualAddress::new(BSSID).expect("BSSID"),
+            oer_protocols_ieee80211_contracts_port::Tid::new(0).expect("TID"),
+            oer_protocols_ieee80211_wire::sequence::SequenceNumber::new(10).expect("sequence"),
+            8,
+        )
+        .expect("agreement");
+        let agreement = fixture.port.add_block_ack(slot, agreement);
+        fixture.observed.borrow_mut().reject_rx_block_acks = true;
+        let stops = fixture.observed.borrow().stops;
+        // The tune enabled the core before the banks refused the agreement:
+        // the refusal says the stop has not run yet.
+        assert!(matches!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Unstopped {
+                cause: StartFailure::Device,
+                stop: StopUnconfirmed {
+                    cause: StopCause::CoreEnabled,
+                    ..
+                },
+            }))
+        ));
+        assert_eq!(fixture.port.fault(), None, "a refused start is no fault");
+        assert_eq!(
+            fixture.poll_start_on(channel(6)),
+            Poll::Ready(Err(StartRefused::Running)),
+            "no start before the stop confirms"
+        );
+        assert!(fixture.port.release().is_none(), "the radio is not stopped");
+        // The ordinary stop disables the core in the next service and then
+        // stops the device.
+        fixture.stop();
+        assert_eq!(fixture.observed.borrow().stops, stops + 1);
+        fixture.observed.borrow_mut().reject_rx_block_acks = false;
+        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        fixture.stop();
+        let slot = fixture.port.remove_block_ack(agreement);
+        fixture.block_acks.push(slot);
+    });
+}
+
+#[test]
+fn a_station_command_offered_to_a_faulted_port_comes_back_and_the_port_recovers() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let fault = Fault::Unpublished(crate::port::Unpublished::Key);
+        fixture.port.fault_for_test(fault);
+        let now = fixture.now();
+        let command = PortCommand::Configure {
+            permission: fixture.configure.take().expect("permission"),
+            receive: StationReceive::Off,
+        };
+        let Err(CommandFailed::Returned {
+            command: PortCommand::Configure { permission, .. },
+            fault: found,
+        }) = fixture
+            .port
+            .command(command, now, &mut fixture.outbox)
+            .unwrap()
+        else {
+            panic!("the command comes back beside the fault");
+        };
+        assert_eq!(found, fault);
+        fixture.configure = Some(permission);
+        assert!(fixture.outbox.terminals.is_empty(), "it did not run");
+        // The port keeps no command: the fault yields to the stop.
+        assert!(fixture.port.recover_for_stop());
+        assert_eq!(fixture.port.fault(), None);
+        fixture.stop();
+    });
 }
 
 #[test]
@@ -1506,6 +1828,278 @@ fn installed_pairwise<'id, Id: radio::SlotIdentity + 'id>(
         Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) => key,
         _ => panic!("the installation terminal returns the key"),
     }
+}
+
+#[test]
+fn a_removal_the_registers_refuse_comes_back_and_leaves_the_key_installed() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(7),
+        );
+        assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) =
+            fixture.outbox.terminals.pop()
+        else {
+            panic!("the installation terminal returns the key");
+        };
+        let writes = fixture.observed.borrow().key_writes;
+        let place = fixture.port.key_place_for_test(&key);
+        assert!(place.is_some(), "the installed key has its place");
+        fixture.observed.borrow_mut().hardware_unavailable = true;
+        let now = fixture.now();
+        let Err(CommandFailed::Returned {
+            command: PortCommand::RemovePairwise { key, .. },
+            fault: Fault::HardwareUnavailable,
+        }) = fixture
+            .port
+            .command(
+                PortCommand::RemovePairwise { association, key },
+                now,
+                &mut fixture.outbox,
+            )
+            .unwrap()
+        else {
+            panic!("the removal comes back beside the fault");
+        };
+        assert!(fixture.outbox.terminals.is_empty(), "nothing was removed");
+        assert_eq!(fixture.observed.borrow().key_writes, writes);
+        assert_eq!(
+            fixture.port.key_place_for_test(&key),
+            place,
+            "the returned key is still installed in its own place"
+        );
+    });
+}
+
+/// A removal whose key's last use is out: its command is done and the port
+/// keeps the command's rights; the last use returns through a sink that
+/// takes no receipt, before or after the radio's stop; the next service
+/// ends the removal once with its rights, the key cleared once, and the
+/// stopped port retires.
+fn late_removal_receipt(after_stop: bool) {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(7),
+        );
+        assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) =
+            fixture.outbox.terminals.pop()
+        else {
+            panic!("the installation terminal returns the key");
+        };
+        let held = fixture.port.hold_key_use_for_test().expect("a key use");
+        let _ = fixture.turn();
+        let cleared = fixture.observed.borrow().key_clears;
+        let now = fixture.now();
+        assert!(matches!(
+            fixture
+                .port
+                .command(
+                    PortCommand::RemovePairwise { association, key },
+                    now,
+                    &mut fixture.outbox,
+                )
+                .unwrap(),
+            Ok(CommandProgress::Done)
+        ));
+        assert!(
+            fixture.outbox.terminals.is_empty(),
+            "its key is still in use"
+        );
+        assert!(fixture.port.removal_waits_for_test());
+        if after_stop {
+            fixture.stop();
+        }
+        fixture.port.return_key_use_for_test(held);
+        assert!(fixture.outbox.terminals.is_empty(), "refused, it waits");
+        assert!(fixture.port.removal_waits_for_test());
+        if after_stop {
+            assert!(
+                fixture.port.release().is_none(),
+                "a waiting removal holds the port"
+            );
+        }
+        // The next service ends it once.
+        let _ = fixture.turn();
+        let removed = |terminals: &mut Vec<_>| {
+            let before = terminals.len();
+            terminals.retain(|terminal| !matches!(terminal, LowerMacTerminal::KeyRemoved(_)));
+            before - terminals.len()
+        };
+        assert_eq!(
+            removed(&mut fixture.outbox.terminals),
+            1,
+            "one terminal with its rights"
+        );
+        assert!(!fixture.port.removal_waits_for_test());
+        let _ = fixture.turn();
+        assert_eq!(removed(&mut fixture.outbox.terminals), 0, "not again");
+        if !after_stop {
+            // The running port's device observes its registers at a turn.
+            assert_eq!(
+                fixture.observed.borrow().key_clears,
+                cleared + 1,
+                "cleared once"
+            );
+            fixture.stop();
+        }
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        drop(buffers);
+        assert!(port.release().is_some(), "the stopped port retires");
+    });
+}
+
+#[test]
+fn a_late_removal_receipt_ends_its_removal_once_and_the_port_retires() {
+    late_removal_receipt(false);
+}
+
+#[test]
+fn a_late_removal_receipt_after_the_stop_ends_its_removal_once_and_the_port_retires() {
+    late_removal_receipt(true);
+}
+
+/// The station's removal terminals among `terminals`: pairwise or group.
+fn removed_station<'id, T>(terminals: &[LowerMacTerminal<'id, T>], pairwise: bool) -> usize
+where
+    T: oer_protocols_ieee80211_contracts_port::PortTypes<'id>,
+{
+    terminals
+        .iter()
+        .filter(|terminal| match terminal {
+            LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Pairwise { .. })) => pairwise,
+            LowerMacTerminal::KeyRemoved(Removed::Station(RemovedKey::Group { .. })) => !pairwise,
+            _ => false,
+        })
+        .count()
+}
+
+/// A removal its command leaves waiting keeps its rights in its own key's
+/// table place: another key's removal meanwhile ends at once with its own
+/// rights, and the waiting one ends later, once, with its own.
+#[test]
+fn a_removal_beside_a_waiting_one_ends_with_its_own_rights_and_the_waiting_one_with_its_own() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        let (association, pairwise, group, permission) = fixture.installed_keys();
+        // The pairwise key's last use is out: its removal waits.
+        let held = fixture.port.hold_key_use_for_test().expect("a key use");
+        let _ = fixture.turn();
+        let now = fixture.now();
+        assert!(matches!(
+            fixture
+                .port
+                .command(
+                    PortCommand::RemovePairwise {
+                        association,
+                        key: pairwise,
+                    },
+                    now,
+                    &mut fixture.outbox,
+                )
+                .unwrap(),
+            Ok(CommandProgress::Done)
+        ));
+        assert!(fixture.outbox.terminals.is_empty(), "its key is in use");
+        assert!(fixture.port.removal_waits_for_test());
+        // The group key has no use: its removal ends at once, with the
+        // group's rights, and leaves the waiting one where it is.
+        assert!(matches!(
+            fixture.run(PortCommand::RemoveGroup {
+                permission,
+                key: group,
+            }),
+            Ok(CommandProgress::Done)
+        ));
+        assert_eq!(
+            removed_station(&fixture.outbox.terminals, false),
+            1,
+            "the group's own"
+        );
+        assert_eq!(
+            removed_station(&fixture.outbox.terminals, true),
+            0,
+            "still waits"
+        );
+        assert!(fixture.port.removal_waits_for_test());
+        fixture.outbox.terminals.clear();
+        // The last use returns: the next service ends the waiting removal
+        // once, with the pairwise rights.
+        fixture.port.return_key_use_for_test(held);
+        let _ = fixture.turn();
+        let _ = fixture.turn();
+        assert_eq!(removed_station(&fixture.outbox.terminals, true), 1, "once");
+        assert_eq!(
+            removed_station(&fixture.outbox.terminals, false),
+            0,
+            "not again"
+        );
+        assert!(!fixture.port.removal_waits_for_test());
+        fixture.stop();
+        let Fixture {
+            mut port, buffers, ..
+        } = fixture;
+        drop(buffers);
+        assert!(port.release().is_some(), "the stopped port retires");
+    });
+}
+
+/// Registers held elsewhere at a publication: every owner of the attempt
+/// goes back, the refusal recovers for a stop, and the stop ends the
+/// attempt once, withdrawn with its owners, through the port's real stop.
+#[test]
+fn a_publication_the_registers_refuse_ends_once_at_the_stop_with_its_owners() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let tickets = fixture.port.admissions_for_test().0;
+        fixture.observed.borrow_mut().hardware_unavailable = true;
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let now = fixture.now();
+        let _submitted = fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .unwrap();
+        let _served = fixture
+            .port
+            .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox)
+            .unwrap();
+        assert_eq!(
+            fixture.port.fault(),
+            Some(Fault::Unpublished(crate::port::Unpublished::Registers))
+        );
+        assert_eq!(fixture.take_completed(), 0, "no terminal yet");
+        assert_eq!(fixture.port.admissions_for_test().0, tickets, "ticket home");
+        // The registers come back; nothing publishes the attempt again.
+        fixture.observed.borrow_mut().hardware_unavailable = false;
+        let published = fixture.observed.borrow().publications;
+        let stops = fixture.observed.borrow().stops;
+        assert!(fixture.port.recover_for_stop(), "every owner is whole");
+        fixture.stop();
+        assert!(
+            fixture.observed.borrow().stops > stops,
+            "the device's own stop ran"
+        );
+        assert_eq!(fixture.observed.borrow().publications, published);
+        assert!(matches!(
+            last_outcome(fixture),
+            Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
+        ));
+        assert_eq!(fixture.take_completed(), 1, "exactly one terminal");
+        assert_eq!(fixture.port.admissions_for_test().0, tickets);
+        assert_eq!(fixture.port.fault(), None);
+    });
 }
 
 #[test]
@@ -1592,6 +2186,37 @@ impl<Id: radio::SlotIdentity> Fixture<'_, Id> {
     }
 }
 
+/// A publication that never reached the air (a collision ended it before
+/// its PPDU) adds nothing to its attempt's cost, and what the attempt's
+/// earlier publication cost stays: one publication's PPDU, SIFS and Ack.
+#[test]
+fn a_publication_that_never_reached_the_air_adds_no_cost_and_keeps_the_earlier() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().statuses = std::vec![ACK_TIMEOUT, COLLISION];
+        let [first, _second] = fixture.arenas();
+        fixture.fill(&first, &[10], plain);
+        fixture.publish_single(first, 2);
+        let done = fixture.arena_end();
+        // The attempt's end keeps the transmission its first publication
+        // made; the collided one made none.
+        assert!(
+            matches!(done.end(), AttemptEnd::Collision(Some(air)) if air.transmissions.get() == 1),
+            "the collided publication never reached the air"
+        );
+        // IEEE Std 802.11-2020 17.4.3, as for the summed cost above: the
+        // 30-octet MPDU at 24 Mb/s, its SIFS and an Ack at 6 Mb/s.
+        let psdu = 30 + 4;
+        let ppdu = 20 + 4 * (16 + 8 * psdu + 6_u32).div_ceil(96) + 6;
+        let ack = 10 + 20 + 4 * (16 + 8 * 14 + 6_u32).div_ceil(24) + 6;
+        assert_eq!(
+            done.cost(),
+            oer_protocols_ieee80211_contracts_port::TxEstimate::Estimated { micros: ppdu + ack }
+        );
+        let _first = fixture.port.arena().release(done, drop).expect("released");
+    });
+}
+
 /// An aborted publication may have reached the air, so its attempt's cost
 /// is unknown, never zero: first alone, and after a publication of known
 /// cost, which the unknown one makes unknown too.
@@ -1616,4 +2241,226 @@ fn an_aborted_publication_makes_its_attempt_s_cost_unknown() {
             let _first = fixture.port.arena().release(done, drop).expect("released");
         });
     }
+}
+
+/// Serve one transmit turn, whatever it answers.
+fn serve_once<'id, Id: radio::SlotIdentity + 'id>(fixture: &mut Fixture<'id, Id>) {
+    let waker = fixture.waker();
+    let now = fixture.now();
+    let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
+    let _served = fixture
+        .port
+        .service_tx(
+            facts.tx.unwrap_or(TxFacts::DUE),
+            facts.tbtt,
+            now,
+            &mut fixture.outbox,
+        )
+        .unwrap();
+}
+
+/// The single MPDU that ended last, and its outcome.
+fn last_outcome<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &Fixture<'id, Id>,
+) -> Option<oer_protocols_ieee80211_contracts_port::SingleOutcome<Ack, core::convert::Infallible>> {
+    match fixture.outbox.terminals.last() {
+        Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(completed))) => {
+            Some(*completed.outcome())
+        }
+        _ => None,
+    }
+}
+
+/// The attempts a faulted port's stop reports: queued, then published.
+fn stop_counts<'id, Id: radio::SlotIdentity + 'id>(fixture: &mut Fixture<'id, Id>) -> (u8, u8) {
+    let Poll::Ready(Err(unconfirmed)) = fixture.poll_stop_now() else {
+        panic!("a faulted port's stop is unconfirmed");
+    };
+    (
+        unconfirmed.observations.queued,
+        unconfirmed.observations.published,
+    )
+}
+
+#[test]
+fn a_submission_its_queue_refuses_ends_withdrawn_with_its_owners_beside_the_fault() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let before = fixture.port.admissions_for_test();
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::QueuePush);
+        let now = fixture.now();
+        let _submitted = fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .unwrap();
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::QueueFull { .. })
+        ));
+        assert!(matches!(
+            last_outcome(fixture),
+            Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
+        ));
+        assert_eq!(fixture.take_completed(), 1, "the attempt came back");
+        assert_eq!(fixture.port.admissions_for_test(), before, "no ticket left");
+        assert_eq!(stop_counts(fixture), (0, 0), "nothing stays behind");
+    });
+}
+
+#[test]
+fn a_refused_publication_its_queue_cannot_take_back_ends_withdrawn_beside_the_fault() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let key = installed_pairwise(fixture);
+        // The first MPDU holds the queue; the second waits behind it.
+        fixture.hold_air(true);
+        let first = fixture.station_mpdu().expect("first");
+        fixture.submit_now(first);
+        let second = fixture.protected_mpdu(&key).expect("second");
+        fixture.submit_now(second);
+        // The second's key is gone at its publication, which goes back to
+        // the queue: the queue refuses it.
+        fixture.port.uninstall_keys_for_test();
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::QueuePush);
+        fixture.hold_air(false);
+        serve_once(fixture);
+        serve_once(fixture);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::QueueFull { .. })
+        ));
+        assert!(matches!(
+            last_outcome(fixture),
+            Some(TxOutcome::Withdrawn(WithdrawCause::Disabled))
+        ));
+        assert_eq!(fixture.take_completed(), 2, "both MPDUs came back");
+        assert_eq!(stop_counts(fixture), (0, 0), "nothing stays behind");
+    });
+}
+
+#[test]
+fn a_retry_its_queue_refuses_stays_published_beside_the_fault() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().statuses = std::vec![ACK_TIMEOUT];
+        let attempt = fixture
+            .mpdu_of(None, core::num::NonZeroU8::new(2).expect("two"))
+            .expect("attempt");
+        fixture.submit_now(attempt);
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::QueuePush);
+        serve_once(fixture);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::QueueFull { .. })
+        ));
+        assert_eq!(fixture.take_completed(), 0, "no terminal");
+        assert_eq!(
+            stop_counts(fixture),
+            (0, 1),
+            "the attempt stays in its published place"
+        );
+    });
+}
+
+#[test]
+fn a_completion_whose_buffer_refuses_its_memory_keeps_the_attempt_published() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let before = fixture.port.admissions_for_test();
+        fixture.submit_now(attempt);
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::Return);
+        serve_once(fixture);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::ReturnRefused { .. })
+        ));
+        assert_eq!(fixture.take_completed(), 0, "no terminal");
+        assert_eq!(
+            fixture.port.admissions_for_test().0,
+            before.0,
+            "the completion's ticket went home"
+        );
+        assert_eq!(stop_counts(fixture), (0, 1), "the attempt stays published");
+    });
+}
+
+#[test]
+fn a_submission_the_core_refuses_goes_back_to_its_queue_with_its_ticket() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let before = fixture.port.admissions_for_test();
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::Submit);
+        let published = fixture.observed.borrow().publications;
+        let now = fixture.now();
+        let _submitted = fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .unwrap();
+        assert_eq!(
+            fixture.port.fault(),
+            Some(Fault::Core(crate::lower_mac::LowerMacFault::KeyUseMismatch))
+        );
+        assert_eq!(fixture.take_completed(), 0, "no terminal");
+        assert_eq!(
+            fixture.port.admissions_for_test(),
+            before,
+            "the ticket is back"
+        );
+        assert_eq!(fixture.observed.borrow().publications, published);
+        assert_eq!(
+            stop_counts(fixture),
+            (1, 0),
+            "the attempt waits at the head of its queue"
+        );
+    });
+}
+
+/// One service finds the first queue's MPDU delivered and the next
+/// queue's completion unreadable: the delivered one still comes back, and
+/// the service answers the core's fault.
+#[test]
+fn a_completion_ahead_of_a_faulting_queue_in_one_service_still_comes_back() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.observed.borrow_mut().statuses = std::vec![SUCCESS, (9, 0)];
+        fixture.hold_air(true);
+        let one = core::num::NonZeroU8::MIN;
+        let first = fixture
+            .mpdu_in(None, one, WmmAccessCategory::Voice)
+            .expect("first");
+        fixture.submit_now(first);
+        let second = fixture
+            .mpdu_in(None, one, WmmAccessCategory::Background)
+            .expect("second");
+        fixture.submit_now(second);
+        fixture.hold_air(false);
+        // Both completions latch before the one service reads them.
+        let waker = fixture.waker();
+        let _ = fixture.port.poll_facts(&mut Context::from_waker(&waker));
+        let _ = fixture.port.poll_facts(&mut Context::from_waker(&waker));
+        let now = fixture.now();
+        let served = fixture
+            .port
+            .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox)
+            .unwrap();
+        assert!(matches!(served, Err(Fault::Core(_))), "{served:?}");
+        assert!(matches!(
+            last_outcome(fixture),
+            Some(TxOutcome::Ended(SingleEnd::Delivered { .. }))
+        ));
+        assert_eq!(fixture.take_completed(), 1, "the delivered MPDU came back");
+    });
 }
