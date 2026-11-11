@@ -96,3 +96,30 @@ fn ipv4_fields_write_a_header_that_parses_and_verifies() {
     assert_eq!(header.addresses(), [192, 0, 2, 1, 192, 0, 2, 2]);
     assert!(!header.is_fragment());
 }
+
+/// A template's header is the one its fields make, whatever the length and
+/// identification, its checksum included.
+#[test]
+fn a_template_s_header_is_the_one_its_fields_make() {
+    let fields = Ipv4Fields {
+        services: Dscp::new(46).unwrap().field(),
+        total_length: 0,
+        identification: 0,
+        time_to_live: 64,
+        protocol: 17,
+        source: [192, 0, 2, 100],
+        destination: [198, 51, 100, 7],
+    };
+    let template = fields.template();
+    for (total_length, identification) in [(28, 0), (1500, 1), (0xffff, 0xffff), (576, 0x8000)] {
+        let whole = Ipv4Fields {
+            total_length,
+            identification,
+            ..fields
+        };
+        assert_eq!(
+            template.to_bytes(total_length, identification),
+            whole.to_bytes()
+        );
+    }
+}
