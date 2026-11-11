@@ -37,6 +37,10 @@ use oer_portable_embassy_time::EmbassyClock;
 use oer_protocols_ieee80211_runtime::station::contract::{CommandOutcome, Notice};
 use static_cell::StaticCell;
 
+#[cfg(feature = "access-point")]
+mod access_point;
+#[cfg(feature = "access-point")]
+pub use access_point::*;
 #[cfg(not(feature = "network"))]
 mod ip_service;
 #[cfg(not(feature = "network"))]
@@ -111,6 +115,9 @@ pub(crate) struct StationStart {
     nonces: &'static mut wifi::NonceSource,
     /// The accelerator the station unwraps its EAPOL-Key data with.
     aes: oer_chips_esp32s31_platform_runtime::crypto::AesEngine,
+    /// Where the lifecycle's half of an installation that did not retire
+    /// goes, or the owners still in transit to it after a retire.
+    home: EndSender<StationLifecycleLeft>,
 }
 
 /// The image keeps no trace observations.
@@ -244,22 +251,175 @@ async fn radio_actor(actor: &'static mut Actor) {
     observed!(RadioActor, actor.run()).await.reset()
 }
 
-/// The datapath actor, which owns the radio, on the station's executor.
-pub(crate) type Datapath = wifi::Datapath<binding::Binding>;
+/// The station lifecycle's half of an installation that did not retire.
+pub type StationLifecycleEnd = wifi::UnfinishedLifecycle<binding::Binding>;
 
-/// The datapath actor's task, on the station's executor. Its end needs no
-/// decision here: the station's task hears it and decides.
+/// What the station lifecycle's task leaves: the lifecycle's half of an
+/// installation that did not retire, or, after a completed retire, its
+/// ends of the queues to the actor when an owner was still in transit in
+/// them.
+pub(crate) struct StationLifecycleLeft {
+    lifecycle: Option<StationLifecycleEnd>,
+    in_transit: Option<wifi::LifecycleQueues<binding::Binding>>,
+}
+
+/// One half of how the station's installation ended, as it arrived
+/// ([`Station::installation_half`]).
+#[must_use = "an unfinished installation's half holds its owners"]
+pub enum StationEndHalf {
+    /// The datapath actor's half: a retire, no installation, or the
+    /// installation that did not retire, whole.
+    Datapath(wifi::DatapathEnd<binding::Binding>),
+    /// The station lifecycle's half.
+    Lifecycle {
+        /// Its retired lifecycle, when the installation did not retire.
+        lifecycle: Option<StationLifecycleEnd>,
+        /// After a completed retire, the lifecycle's ends of the queues to
+        /// the actor when an owner was still in transit in them.
+        in_transit: Option<wifi::LifecycleQueues<binding::Binding>>,
+    },
+}
+
+/// How the station's installation ended, both halves, as the application
+/// put them together from [`Station::installation_half`]: the datapath
+/// actor's (a retire, no installation, or the installation that did not
+/// retire, whole) and the station lifecycle's (its retired lifecycle when
+/// the installation did not retire).
+#[must_use = "an unfinished installation holds the port and its owners"]
+pub struct StationInstallationEnd {
+    /// The datapath actor's half.
+    pub datapath: wifi::DatapathEnd<binding::Binding>,
+    /// The lifecycle's half, when the installation did not retire.
+    pub lifecycle: Option<StationLifecycleEnd>,
+    /// After a completed retire, the lifecycle's ends of the queues to the
+    /// actor when an owner was still in transit in them.
+    pub in_transit: Option<wifi::LifecycleQueues<binding::Binding>>,
+}
+
+/// What finishing a late retire hands back: the finished lifecycle half,
+/// and the datapath half's ends of the queues (when they held owners) and
+/// to the network stack.
+#[must_use = "a finished late retire returns the owners still in transit"]
+pub struct LateRetireFinished {
+    /// The lifecycle's half, finished.
+    pub lifecycle: wifi::FinishedLifecycle<binding::Binding>,
+    /// The actor's ends of the queues to the lifecycle, when they held
+    /// owners.
+    pub in_transit: Option<wifi::ActorQueues<binding::Binding>>,
+    /// The actor's ends to the network stack.
+    pub network: wifi::NetworkSide<binding::Binding>,
+}
+
+impl StationInstallationEnd {
+    /// Finish an installation whose datapath half retired after its
+    /// lifecycle stopped waiting for the release (the stop's drain passed
+    /// first): the lifecycle's half ends with the retired installation and
+    /// no release runs again. The actual end of the actor's task, beside
+    /// the exit the station's task returned, the owners still in transit
+    /// and the datapath's network ends come back. Any other end, and a
+    /// proof the half refused, comes back unchanged.
+    #[allow(
+        clippy::result_large_err,
+        reason = "an end this does not finish comes back whole, by value"
+    )]
+    pub fn finish_late_retire(self) -> Result<LateRetireFinished, Self> {
+        match self {
+            Self {
+                datapath:
+                    wifi::DatapathEnd::Retired(wifi::RetiredDatapath {
+                        proof,
+                        in_transit,
+                        network,
+                    }),
+                lifecycle: Some(half),
+                // A half that went out holds the lifecycle's queues: none
+                // are in transit beside it.
+                in_transit: None,
+            } => match half.finish(proof) {
+                Ok(lifecycle) => Ok(LateRetireFinished {
+                    lifecycle,
+                    in_transit,
+                    network,
+                }),
+                Err(foreign) => Err(Self {
+                    datapath: wifi::DatapathEnd::Retired(wifi::RetiredDatapath {
+                        proof: foreign.proof,
+                        in_transit,
+                        network,
+                    }),
+                    lifecycle: Some(foreign.half),
+                    in_transit: None,
+                }),
+            },
+            other => Err(other),
+        }
+    }
+}
+
+/// Where an ended task leaves its installation for the application: one
+/// place, written once by the task and read once by the application's
+/// handle.
+type EndHome<T> = oer_portable_memory::WakingSpscQueue<T, 1>;
+/// The task's side of an [`EndHome`].
+type EndSender<T> = oer_portable_memory::WakingSpscSender<'static, T, 1>;
+/// The application's side of an [`EndHome`].
+pub(crate) type EndReceiver<T> = oer_portable_memory::WakingSpscReceiver<'static, T, 1>;
+
+static STATION_END: StaticCell<EndHome<wifi::DatapathEnd<binding::Binding>>> = StaticCell::new();
+static STATION_LIFECYCLE_END: StaticCell<EndHome<StationLifecycleLeft>> = StaticCell::new();
+
+/// Split a home for an ended task's installation out of `cell`.
+pub(crate) fn end_home<T>(
+    cell: &'static StaticCell<EndHome<T>>,
+) -> Result<(EndSender<T>, EndReceiver<T>), Error> {
+    let home = cell.try_init(EndHome::new()).ok_or(Error::Storage)?;
+    Ok(home.split())
+}
+
+/// Leave `end` in its home: the home's one place takes it, as the task
+/// sends once.
+pub(crate) async fn leave<T>(mut home: EndSender<T>, end: T) {
+    home.ready().await.send(end);
+}
+
+/// Wait for the installation an ended task left in its home, once.
+pub(crate) async fn ended<T>(home: &mut Option<EndReceiver<T>>) -> Option<T> {
+    let receiver = home.as_mut()?;
+    loop {
+        if let Some(end) = receiver.try_receive() {
+            *home = None;
+            return Some(end);
+        }
+        receiver.ready().await;
+    }
+}
+
+/// The datapath actor, which owns the radio, on the station's executor,
+/// and the home its end goes to.
+pub(crate) struct Datapath {
+    datapath: wifi::Datapath<binding::Binding>,
+    home: EndSender<wifi::DatapathEnd<binding::Binding>>,
+}
+
+/// The datapath actor's task, on the station's executor. The station's
+/// task hears its exit and decides; how the installation ended, an
+/// unfinished one whole, goes to the application's [`Station`]
+/// ([`Station::installation_half`]).
 pub(crate) async fn datapath(datapath: Datapath) {
-    observed!(
+    let Datapath { datapath, home } = datapath;
+    let end = observed!(
         Datapath,
         datapath.run(StationObserver::default(), STATION_SINK)
     )
     .await;
+    leave(home, end).await;
 }
 
-/// The station lifecycle's task: an ordinary stop ends it; a restart of
-/// the station stays inside the facade; every terminal exit records its
-/// typed cause and resets.
+/// The station lifecycle's task: a stop ends it; a restart of the station
+/// stays inside the facade. Every other end keeps its typed cause with the
+/// control ([`Station::stop`]) and resets nothing: an installation that
+/// did not retire comes back whole, the lifecycle's half from here and
+/// the actor's from the datapath task ([`Station::installation_half`]).
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
         runner,
@@ -267,25 +427,119 @@ pub(crate) async fn serve_station(start: StationStart) {
         address,
         nonces,
         aes,
+        home,
     } = start;
     let profile = wifi::Profile::new(&config, address, Callbacks(nonces), aes, STATION_SINK)
         .unwrap_or_else(|error| failure(error));
-    match observed!(Station, runner.run(profile)).await {
-        wifi::StationExit::Stopped => {}
-        // The radio stopped and every owner came back; the network's stop
-        // participant was lost. The exit, which the station's control
-        // keeps, records it ([`Station::stop`] answers it); nothing of the
-        // radio failed, so nothing resets.
-        wifi::StationExit::StoppedNetworkLost => {}
-        wifi::StationExit::Unavailable(error) => failure(error),
-        wifi::StationExit::Failed(failed) => super::fail_path(
-            oer_portable_diagnostics::name!("wifi-failed"; 32),
-            &oer_portable_diagnostics::DiagPath::of(&failed),
-        ),
-        wifi::StationExit::ReleaseFailed(_) => {
-            super::fail(oer_portable_diagnostics::name!("wifi-release"; 32))
-        }
+    let end = observed!(Station, runner.run(profile)).await;
+    leave(
+        home,
+        StationLifecycleLeft {
+            lifecycle: end.lifecycle,
+            in_transit: end.in_transit,
+        },
+    )
+    .await;
+}
+
+/// What a started radio hands the role that runs on it: the resources of
+/// its composition, its handshake nonces and the stack's seed.
+pub(crate) struct RadioStarted {
+    pub(crate) resources: wifi::Resources<binding::Binding>,
+    pub(crate) nonces: &'static mut wifi::NonceSource,
+    pub(crate) seed: u64,
+}
+
+/// Start the radio for a role on `wifi`: the radio executor and the radio
+/// actor, the timers, the Wi-Fi interrupt with its doorbell, the boot's
+/// identity and the handshake nonces.
+pub(crate) fn start_radio(wifi: WifiPeripheral, boot: &mut Boot) -> Result<RadioStarted, Error> {
+    let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
+    let timer = boot.timer.take().ok_or(Error::AlreadyStarted)?;
+    let app_alarm = boot.app_alarm.take().ok_or(Error::AlreadyStarted)?;
+    let dma = wifi::DmaResources::claim().map_err(|_| Error::Storage)?;
+    let identity = DeviceIdentity::read(wifi.efuse);
+    let address = identity.station_address();
+    let ap = identity.ap_address();
+    let resources =
+        wifi::RadioResources::new::<binding::Binding>(wifi.radio, wifi.clocks, &identity);
+    let pilot = PILOT.init(wifi.timg0_alarm, boot.router(), radio.phy);
+    let (actor, hardware) = resources.start(pilot, StationObserver::default());
+    let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
+    // The radio executor writes the system timer; the application
+    // executor publishes its deadlines to it.
+    let timers = oer_chips_esp32s31_platform_runtime::platform::timers(
+        timer,
+        boot.router(),
+        app_alarm,
+        radio.radio_alarm,
+    );
+    #[cfg(feature = "group")]
+    {
+        boot.timers = Some(timers);
     }
+    #[cfg(not(feature = "group"))]
+    let _ = timers;
+    let (line, lower) = DoorbellLine::<Esp32s31, 3>::split(radio.line3);
+    let bound = boot
+        .router()
+        .bind(
+            radio.wifi,
+            wifi::Interrupts::part(wifi.interrupts, radio.irq3, wifi::Lower(lower)),
+        )
+        .unwrap_or_else(|error| {
+            oer_chips_family_platform_runtime::interrupts::reset_binding::<
+                oer_chips_esp32s31_hal::system::platform::Port,
+                _,
+            >(error)
+        });
+    let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
+    let (hart, router) = boot.adopted.parts();
+    let executor = RadioExecutor::new(radio.line2)
+        .start(hart, router, radio.radio, radio.irq2, urgent)
+        .unwrap_or_else(|failure| failure.reset());
+    let entropy = boot.entropy.take().ok_or(Error::Entropy)?;
+    let mut rng =
+        oer_chips_esp32s31_platform_runtime::platform::Entropy::new(entropy, EmbassyClock);
+    if !rng.is_healthy() {
+        return Err(Error::Entropy);
+    }
+    // Every draw happens here, at boot: the generator stays with no
+    // runtime owner, so a failed health test is a typed boot error.
+    boot.boot_id = Some(super::draw_boot_id(&mut rng).map_err(|_| Error::Entropy)?);
+    let nonces =
+        wifi::NonceSource::from_entropy(|seed| rng.fill(seed)).map_err(|_| Error::Entropy)?;
+    let nonces = NONCES.try_init(nonces).ok_or(Error::Storage)?;
+    let mut words = [0; 12];
+    rng.fill(&mut words).map_err(|_| Error::Entropy)?;
+    let [t0, t1, t2, t3, s0, s1, s2, s3, s4, s5, s6, s7] = words;
+    let mut delay = [0; 4];
+    rng.fill(&mut delay).map_err(|_| Error::Entropy)?;
+    let resources = wifi::Resources {
+        events: ProductEvents,
+        storage: binding::storage(),
+        hardware,
+        delay_random: u32::from_le_bytes(delay),
+        address,
+        ap,
+        bound,
+        bell: wifi::Bell(bell),
+        entropy: u32::from_le_bytes([t0, t1, t2, t3]),
+        interrupts: &LINE,
+        mac: &MAC_SIGNAL,
+        receive: &MAC_RX_SIGNAL,
+        power: &POWER_SIGNAL,
+        dma,
+    };
+    if RadioTasks::radio_actor(&executor, actor).is_err() {
+        return Err(Error::AlreadyStarted);
+    }
+    boot.urgent = Some(urgent);
+    Ok(RadioStarted {
+        resources,
+        nonces,
+        seed: u64::from_le_bytes([s0, s1, s2, s3, s4, s5, s6, s7]),
+    })
 }
 
 /// The radio's owners: the station takes them all.
@@ -514,8 +768,10 @@ pub enum ConnectError {
     Failed(DisconnectReason),
     /// The station's command queue is full.
     Busy,
-    /// The station stopped or never started.
+    /// The station stopped.
     Stopped,
+    /// The station never started, for this typed cause.
+    NotStarted(wifi::StartError),
     /// The profile's credentials could not be prepared.
     Profile(ProfileError),
 }
@@ -535,6 +791,13 @@ impl oer_portable_diagnostics::DiagnosticPath for ConnectError {
             }
             Self::Busy => path.name("Busy"),
             Self::Stopped => path.name("Stopped"),
+            Self::NotStarted(error) => {
+                path.name("NotStarted");
+                path.name(match error {
+                    wifi::StartError::Unavailable(_) => "Unavailable",
+                    wifi::StartError::RunnerLost => "RunnerLost",
+                });
+            }
             Self::Profile(error) => {
                 path.name("Profile");
                 oer_portable_diagnostics::DiagnosticPath::push_path(error, path);
@@ -546,6 +809,9 @@ impl oer_portable_diagnostics::DiagnosticPath for ConnectError {
 /// A started Wi-Fi station: its control.
 pub struct Station {
     control: wifi::Control<'static, Notifies>,
+    /// Where the datapath task and the lifecycle's task leave their
+    /// halves of how the installation ended, each going out as it comes.
+    ends: wifi::EndHalves<'static, wifi::DatapathEnd<binding::Binding>, StationLifecycleLeft>,
     started: bool,
     address: [u8; 6],
     /// How long a stop gives the network to return its receive buffers.
@@ -555,9 +821,13 @@ pub struct Station {
 /// Why a stop did not end with the station stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StopError {
-    /// The station ended by a failure, which the library records before it
-    /// resets the chip.
+    /// The station ended by a failure, typed with the control; nothing
+    /// resets, and an installation that did not retire comes back whole
+    /// ([`Station::installation_half`]).
     Failed,
+    /// The station stopped, and its radio's release did not complete, for
+    /// this cause. A leave the release posted is never posted again.
+    ReleaseFailed(wifi::failure::ReleaseCause),
     /// The station stopped and every owner came back, but the network's
     /// stop participant was lost: its stop was never confirmed. The radio's
     /// stop was; nothing resets.
@@ -601,106 +871,35 @@ impl Station {
         boot: &mut Boot,
     ) -> Result<(Self, NetStatus), Error> {
         let aes = aes.engine(boot)?;
-        let radio = boot.radio.take().ok_or(Error::AlreadyStarted)?;
-        let timer = boot.timer.take().ok_or(Error::AlreadyStarted)?;
-        let app_alarm = boot.app_alarm.take().ok_or(Error::AlreadyStarted)?;
-        let dma = wifi::DmaResources::claim().map_err(|_| Error::Storage)?;
-        let identity = DeviceIdentity::read(wifi.efuse);
-        let address = identity.station_address();
-        let ap = identity.ap_address();
-        let resources =
-            wifi::RadioResources::new::<binding::Binding>(wifi.radio, wifi.clocks, &identity);
-        let pilot = PILOT.init(wifi.timg0_alarm, boot.router(), radio.phy);
-        let (actor, hardware) = resources.start(pilot, StationObserver::default());
-        let actor = ACTOR.try_init(actor).ok_or(Error::Storage)?;
-        // The radio executor writes the system timer; the application
-        // executor publishes its deadlines to it.
-        let timers = oer_chips_esp32s31_platform_runtime::platform::timers(
-            timer,
-            boot.router(),
-            app_alarm,
-            radio.radio_alarm,
-        );
-        #[cfg(feature = "group")]
-        {
-            boot.timers = Some(timers);
-        }
-        #[cfg(not(feature = "group"))]
-        let _ = timers;
-        let (line, lower) = DoorbellLine::<Esp32s31, 3>::split(radio.line3);
-        let bound = boot
-            .router()
-            .bind(
-                radio.wifi,
-                wifi::Interrupts::part(wifi.interrupts, radio.irq3, wifi::Lower(lower)),
-            )
-            .unwrap_or_else(|error| {
-                oer_chips_family_platform_runtime::interrupts::reset_binding::<
-                    oer_chips_esp32s31_hal::system::platform::Port,
-                    _,
-                >(error)
-            });
-        let (bell, urgent) = Doorbell::new::<FromCpu3Irq>(line, &bound);
-        let (hart, router) = boot.adopted.parts();
-        let executor = RadioExecutor::new(radio.line2)
-            .start(hart, router, radio.radio, radio.irq2, urgent)
-            .unwrap_or_else(|failure| failure.reset());
-        let entropy = boot.entropy.take().ok_or(Error::Entropy)?;
-        let mut rng =
-            oer_chips_esp32s31_platform_runtime::platform::Entropy::new(entropy, EmbassyClock);
-        if !rng.is_healthy() {
-            return Err(Error::Entropy);
-        }
-        // Every draw happens here, at boot: the generator stays with no
-        // runtime owner, so a failed health test is a typed boot error.
-        boot.boot_id = Some(super::draw_boot_id(&mut rng).map_err(|_| Error::Entropy)?);
-        let nonces =
-            wifi::NonceSource::from_entropy(|seed| rng.fill(seed)).map_err(|_| Error::Entropy)?;
-        let nonces = NONCES.try_init(nonces).ok_or(Error::Storage)?;
-        let mut words = [0; 12];
-        rng.fill(&mut words).map_err(|_| Error::Entropy)?;
-        let [t0, t1, t2, t3, s0, s1, s2, s3, s4, s5, s6, s7] = words;
-        let mut delay = [0; 4];
-        rng.fill(&mut delay).map_err(|_| Error::Entropy)?;
-        let (control, network, transmit, stopper, runners) = wifi::station(
-            wifi::Resources {
-                events: ProductEvents,
-                storage: binding::storage(),
-                hardware,
-                delay_random: u32::from_le_bytes(delay),
-                address,
-                ap,
-                bound,
-                bell: wifi::Bell(bell),
-                entropy: u32::from_le_bytes([t0, t1, t2, t3]),
-                interrupts: &LINE,
-                mac: &MAC_SIGNAL,
-                receive: &MAC_RX_SIGNAL,
-                power: &POWER_SIGNAL,
-                dma,
-            },
-            config.chip,
-        );
-        if RadioTasks::radio_actor(&executor, actor).is_err() {
-            return Err(Error::AlreadyStarted);
-        }
-        boot.urgent = Some(urgent);
-        boot.pending.datapath = Some(runners.datapath);
+        let (home, end) = end_home(&STATION_END)?;
+        let (lifecycle_home, lifecycle_end) = end_home(&STATION_LIFECYCLE_END)?;
+        let started = start_radio(wifi, boot)?;
+        let address = started.resources.address;
+        let nonces = started.nonces;
+        let seed = started.seed;
+        let (control, network, transmit, stopper, runners) =
+            wifi::station(started.resources, config.chip);
+        boot.pending.datapath = Some(Datapath {
+            datapath: runners.datapath,
+            home,
+        });
         boot.pending.station = Some(StationStart {
             runner: runners.station,
             config: config.chip,
             address,
             nonces,
             aes,
+            home: lifecycle_home,
         });
         boot.device = Some(Device {
             network: Some((network, transmit, stopper)),
             address,
-            seed: u64::from_le_bytes([s0, s1, s2, s3, s4, s5, s6, s7]),
+            seed,
         });
         Ok((
             Self {
                 control,
+                ends: wifi::EndHalves::new(end, lifecycle_end),
                 started: false,
                 address,
                 drain: config.drain,
@@ -724,7 +923,7 @@ impl Station {
             self.control
                 .wait_started()
                 .await
-                .map_err(|wifi::StartError::Unavailable| ConnectError::Stopped)?;
+                .map_err(ConnectError::NotStarted)?;
             self.started = true;
         }
         let credentials = profile.0.prepare().await.map_err(ConnectError::Profile)?;
@@ -771,6 +970,8 @@ impl Station {
     ///
     /// # Errors
     /// [`StopError::Failed`]: the station ended by a failure instead.
+    /// [`StopError::ReleaseFailed`]: the station stopped and its radio's
+    /// release failed, nothing reset.
     pub async fn stop(&mut self) -> Result<(), StopError> {
         let deadline = {
             use oer_portable_time::Clock as _;
@@ -779,9 +980,37 @@ impl Station {
         self.control.stop(deadline);
         match self.control.wait_stopped().await {
             Ok(wifi::StationExit::Stopped) => Ok(()),
+            Ok(wifi::StationExit::ReleaseFailed(cause)) => Err(StopError::ReleaseFailed(cause)),
             Ok(wifi::StationExit::StoppedNetworkLost) => Err(StopError::NetworkLost),
             Ok(_) | Err(wifi::RunnerLost) => Err(StopError::Failed),
         }
+    }
+
+    /// The next half of how the station's installation ended, as it
+    /// arrives, the lifecycle's first when both are there: the datapath
+    /// actor's half (a retire, no installation, or the installation that
+    /// did not retire, whole: [`wifi::DatapathEnd::Unfinished`], the actor
+    /// with its port, the item a port call could not keep, an attempt
+    /// returned unaccepted, the cleanup's receipt, the cause and the
+    /// phase) and the lifecycle's half of an installation that did not
+    /// retire (its station, places, arbiter, issuer and contexts), which
+    /// the application holds from here. `None` once both went out.
+    ///
+    /// Neither half waits for the other: the datapath's task may end only
+    /// after the application served the lifecycle's half (one whose places
+    /// for installations' news are full,
+    /// [`wifi::LateRead::Full`]). A wait that is dropped takes nothing.
+    pub async fn installation_half(&mut self) -> Option<StationEndHalf> {
+        Some(match self.ends.next().await? {
+            wifi::EndHalf::Datapath(datapath) => StationEndHalf::Datapath(datapath),
+            wifi::EndHalf::Lifecycle(StationLifecycleLeft {
+                lifecycle,
+                in_transit,
+            }) => StationEndHalf::Lifecycle {
+                lifecycle,
+                in_transit,
+            },
+        })
     }
 
     /// The link's state and epoch now.

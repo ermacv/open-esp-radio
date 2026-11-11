@@ -155,7 +155,12 @@ for the application's next connect, with the same or another profile.
 `linked()` names the access point and channel while the link is up.
 `stop()` leaves the network and stops the station for good: the future ends
 once the radio retired, with `StopError::Failed` when the station ended by
-a failure instead, and a later connect answers `ConnectError::Stopped`.
+a failure instead, `StopError::ReleaseFailed` with its typed cause when it
+stopped but its radio's release failed (nothing resets), and a later
+connect answers `ConnectError::Stopped`. A
+start the radio refused resets nothing: the first connect answers
+`ConnectError::NotStarted` with the refusal's typed cause and how its
+owners ended.
 `Station::start` returns the station and the IP service's status for the
 application (`NetStatus`), and keeps the station's network device for the
 group. `wifi::Net::start`, in the group,

@@ -74,18 +74,29 @@ impl TxDmaStorage {
     /// space `S` to a movable owner of `L` leases, once. The link keeps the
     /// placed storage in the DMA window, so its address needs no window
     /// check.
+    ///
+    /// # Errors
+    ///
+    /// The storage has no DMA address in space `S`: the placement comes
+    /// back whole beside the cause, nothing bound.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refused pin returns its placement whole"
+    )]
     pub fn pin<S: DmaSpace, L>(
         placed: Placed<Self>,
-    ) -> Result<PinnedTxDmaStorage<L>, TxDmaStorageError> {
-        let (storage, range, projection) = placed
-            .into_dma_parts::<S>()
-            .ok_or(TxDmaStorageError::Address)?;
-        let descriptor_head = projection
-            .link::<WifiTxDmaDescriptor>(storage.descriptor.layout())
-            .map_err(|_| TxDmaStorageError::Address)?;
-        let descriptor_range = range
-            .subrange(descriptor_head.bits(), DESCRIPTOR_BYTES)
-            .ok_or(TxDmaStorageError::Address)?;
+    ) -> Result<PinnedTxDmaStorage<L>, (TxDmaStorageError, Placed<Self>)> {
+        let (storage, _range, _projection, (descriptor_head, descriptor_range)) = placed
+            .bind_dma::<S, _, _>(|storage, range, projection| {
+                let head = projection
+                    .link::<WifiTxDmaDescriptor>(storage.descriptor.layout())
+                    .map_err(|_| TxDmaStorageError::Address)?;
+                let descriptor_range = range
+                    .subrange(head.bits(), DESCRIPTOR_BYTES)
+                    .ok_or(TxDmaStorageError::Address)?;
+                Ok((head, descriptor_range))
+            })
+            .map_err(|(refusal, placed)| (refusal.cause(TxDmaStorageError::Address), placed))?;
         Ok(PinnedTxDmaStorage {
             storage: Pin::static_mut(storage),
             binding: TxDmaBinding {

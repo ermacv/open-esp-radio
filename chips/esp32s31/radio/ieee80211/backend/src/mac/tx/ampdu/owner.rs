@@ -67,7 +67,8 @@ impl<'storage, const SLOTS: usize> HtAmpduTxResources<'storage, SLOTS> {
             metadata,
             AmpduDmaStorage::pin::<oer_chips_esp32s31_hal::radio::ieee80211::dma::space::HostDma>(
                 oer_chips_esp32s31_hal::system::memory::dma_static::Placed::host(dma),
-            )?,
+            )
+            .map_err(|(error, _host)| HtAmpduTxError::DmaStorage(error))?,
         )
     }
 }
@@ -80,19 +81,73 @@ impl<const SLOTS: usize> Deref for HtAmpduTxResources<'_, SLOTS> {
     }
 }
 
+/// The DMA arena of a refused [`HtAmpduTxResources::pin_static`], as far as
+/// it came.
+pub enum AmpduDmaLeft<const SLOTS: usize> {
+    /// It did not pin: the placement, whole.
+    Placed(oer_chips_esp32s31_hal::system::memory::dma_static::Placed<AmpduDmaStorage<SLOTS, 0>>),
+    /// It pinned, and was not free.
+    Pinned(PinnedAmpduDmaStorage<SLOTS, 0>),
+}
+
+/// A refused [`HtAmpduTxResources::pin_static`]: its cause and both inputs,
+/// the metadata pinned in its static place and the DMA arena as far as it
+/// came.
+pub struct HtAmpduPinRefused<const SLOTS: usize> {
+    /// Why.
+    pub error: HtAmpduTxError,
+    /// The metadata arena.
+    pub metadata: Pin<&'static mut HtAmpduTxStorage<SLOTS>>,
+    /// The DMA arena.
+    pub dma: AmpduDmaLeft<SLOTS>,
+}
+
 impl<const SLOTS: usize> HtAmpduTxResources<'static, SLOTS> {
     /// Bind the static metadata arena and the placed DMA arena at their
     /// final addresses.
+    ///
+    /// # Errors
+    ///
+    /// The DMA arena did not pin, or one arena is not free: every input
+    /// comes back ([`HtAmpduPinRefused`]).
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refused pin returns both arenas whole"
+    )]
     pub fn pin_static(
         metadata: &'static mut HtAmpduTxStorage<SLOTS>,
         dma: oer_chips_esp32s31_hal::system::memory::dma_static::Placed<AmpduDmaStorage<SLOTS, 0>>,
-    ) -> Result<Self, HtAmpduTxError> {
-        Self::new(
-            HtAmpduTxStorage::pin_static(metadata),
-            AmpduDmaStorage::pin::<oer_chips_esp32s31_hal::radio::ieee80211::dma::space::ChipDma>(
-                dma,
-            )?,
-        )
+    ) -> Result<Self, HtAmpduPinRefused<SLOTS>> {
+        let metadata = HtAmpduTxStorage::pin_static(metadata);
+        let dma = match AmpduDmaStorage::pin::<
+            oer_chips_esp32s31_hal::radio::ieee80211::dma::space::ChipDma,
+        >(dma)
+        {
+            Ok(dma) => dma,
+            Err((error, dma)) => {
+                return Err(HtAmpduPinRefused {
+                    error: HtAmpduTxError::DmaStorage(error),
+                    metadata,
+                    dma: AmpduDmaLeft::Placed(dma),
+                });
+            }
+        };
+        // As `new`, with both arenas back on a refusal.
+        if metadata.state() != TxDmaState::Free {
+            return Err(HtAmpduPinRefused {
+                error: HtAmpduTxError::NotFree(metadata.state()),
+                metadata,
+                dma: AmpduDmaLeft::Pinned(dma),
+            });
+        }
+        if dma.state() != AmpduDmaState::Free {
+            return Err(HtAmpduPinRefused {
+                error: HtAmpduTxError::DmaStorage(AmpduDmaStorageError::State),
+                metadata,
+                dma: AmpduDmaLeft::Pinned(dma),
+            });
+        }
+        Ok(Self { metadata, dma })
     }
 }
 

@@ -11,6 +11,8 @@ description = "The ESP32-S31's application entry: its boot sequence, interrupt l
 [features]
 ## The Wi-Fi station and its IP service.
 wifi = []
+## The Wi-Fi access point and its IP service (`wifi::AccessPoint`).
+access-point = ["wifi"]
 ## The USB Serial/JTAG console as the application's byte stream.
 console = []
 ## A task group beside the application (`entry!(main, group = setup)`):
