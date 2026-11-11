@@ -65,7 +65,7 @@ enum Step {
 /// [`Direct`]'s choice, with every collection and reservation and answer
 /// written down.
 #[derive(Clone, Debug, Default)]
-struct Planned(Rc<RefCell<Vec<Step>>>);
+struct Planned(Rc<RefCell<Vec<Step>>>, Rc<core::cell::Cell<usize>>);
 
 impl Planned {
     fn count(&self, step: Step) -> usize {
@@ -92,6 +92,10 @@ impl Egress<u32, u32> for Planned {
         plan: &'p mut Option<Turns<C, QUANTUM>>,
     ) -> Result<&'p mut Turns<C, QUANTUM>, Infallible> {
         self.0.borrow_mut().push(Step::Collected);
+        // A collection into a place a collection made before.
+        if plan.is_some() {
+            self.1.set(self.1.get() + 1);
+        }
         <Direct as Egress<u32, u32>>::plan(&mut Direct, ready, plan)
     }
 
@@ -319,6 +323,56 @@ fn a_refusal_in_the_middle_of_a_plan_reserves_nothing_more_and_loses_nothing() {
         wire.0.borrow().refusals,
         "a reservation only for a frame the port saw"
     );
+    home(&mut ended, &mut sockets);
+}
+
+/// A publication after another collects into the place the first made,
+/// and starts a plan of its own there: each publishing turn begins with a
+/// collection, and the frames go each once, the sockets in turn.
+#[test]
+fn every_publication_collects_anew_in_the_kept_place() {
+    brand!(Net);
+    let PlanBench {
+        service,
+        mut sockets,
+        wire,
+        policy,
+        stop,
+        clock,
+    } = plan_bench::<Net>();
+    let mut events = TurnMarks(policy.clone());
+    let drive = async {
+        let observers = queue_four_each(&mut sockets, &wire).await;
+        take_then_fill(&wire, 5);
+        settle().await;
+        open_port(&wire, false);
+        for observer in observers {
+            let _ = result_of(observer).await;
+        }
+        stop.try_send(()).ok().unwrap();
+    };
+    let serve = async {
+        let mut service = service;
+        let _cause = service.run(clock, &mut events).await;
+        service.retire()
+    };
+    let (mut ended, ()) = run_tasks(clock, serve, drive);
+    assert!(policy.1.get() >= 1, "a later collection reused the place");
+    assert_eq!(
+        policy.count(Step::Collected) - policy.1.get(),
+        1,
+        "the place is made once, by the first collection"
+    );
+    let steps = policy.0.borrow().clone();
+    for turn in steps.split(|step| *step == Step::Turn) {
+        if turn.contains(&Step::Accepted) {
+            assert_eq!(turn.first(), Some(&Step::Collected), "a new plan: {turn:?}");
+        }
+    }
+    let sent = datagrams(&wire.0.borrow());
+    assert_eq!(sent.len(), 9, "each datagram once");
+    in_turn(&sent[1..]);
+    assert_eq!(policy.open(), 0, "every reservation answered");
     home(&mut ended, &mut sockets);
 }
 

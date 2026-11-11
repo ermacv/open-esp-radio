@@ -11,9 +11,9 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, Intake, LentDatagram,
-    LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool, Retired, SocketId,
-    Unsent,
+    CommandId, CommandState, Count, Demand, Ends, Eviction, Group, GroupsFull, Intake,
+    LentDatagram, LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool,
+    Retired, SocketId, Unsent,
 };
 use oer_protocols_network_port::{
     Candidate, Egress, FramePort, FrameSource, Next, PlanStop, QUANTUM, Turns,
@@ -400,6 +400,10 @@ pub struct Service<
     adopted: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
     returns: Option<ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
     local: L,
+    /// The policy's plan's place, kept from one publication to the next:
+    /// each publication starts a new plan in it ([`Egress::plan`] empties
+    /// it), so no plan outlives its publication and its memory is made once.
+    plan: Option<E::Plan<Demand<B>>>,
     /// Where the interface's address is published, and the core's count of
     /// changes at the last publication.
     watch: Option<Watching<'a>>,
@@ -578,6 +582,7 @@ impl<
             adopted: [const { None }; SOCKETS],
             returns: None,
             local,
+            plan: None,
             watch: None,
             diagnostics: (),
         }
@@ -620,6 +625,7 @@ impl<
             adopted,
             returns,
             local,
+            plan,
             watch,
             diagnostics: (),
         } = self;
@@ -636,6 +642,7 @@ impl<
             adopted,
             returns,
             local,
+            plan,
             watch,
             diagnostics,
         }
@@ -1293,8 +1300,14 @@ impl<
 
     /// Keep the first fault of the policy.
     fn note(&mut self, answer: Result<(), E::Fault>) {
-        if let Err(fault) = answer {
-            self.fault.get_or_insert(fault);
+        Self::note_in(&mut self.fault, answer);
+    }
+
+    /// [`Self::note`] over the fault alone, for a caller that holds another
+    /// field of the service.
+    fn note_in(fault: &mut Option<E::Fault>, answer: Result<(), E::Fault>) {
+        if let Err(answer) = answer {
+            fault.get_or_insert(answer);
         }
     }
 
@@ -1320,9 +1333,8 @@ impl<
         let mut moved = false;
         let mut frames = 0_usize;
         let mut collections = 0_usize;
-        // The plan's storage, kept from one collection to the next: whether
-        // it holds the collection in hand is `live`.
-        let mut plan = None;
+        // Whether the plan's place holds this publication's collection: a
+        // publication starts none, and collects into the kept place.
         let mut live = false;
         // Frames the plan in hand sent: those after its first are its
         // continuations.
@@ -1331,7 +1343,7 @@ impl<
             if frames == TURN_FRAMES {
                 break PublishEnd::Budget;
             }
-            let current = match &mut plan {
+            let current = match &mut self.plan {
                 Some(current) if live => current,
                 _ => {
                     if collections == TURN_FRAMES {
@@ -1343,7 +1355,7 @@ impl<
                         match self.egress.nothing_ready() {
                             Ok(()) => break PublishEnd::Chose,
                             Err(fault) => {
-                                self.note(Err(fault));
+                                Self::note_in(&mut self.fault, Err(fault));
                                 break PublishEnd::Fault;
                             }
                         }
@@ -1360,13 +1372,13 @@ impl<
                             filtered.is_none_or(|flow| demand.ready().flow != Some(flow))
                         })
                     };
-                    match self.egress.plan(ready, &mut plan) {
+                    match self.egress.plan(ready, &mut self.plan) {
                         Ok(collected) => {
                             live = true;
                             collected
                         }
                         Err(fault) => {
-                            self.note(Err(fault));
+                            Self::note_in(&mut self.fault, Err(fault));
                             break PublishEnd::Fault;
                         }
                     }
