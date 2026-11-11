@@ -5,7 +5,8 @@ use std::cell::Cell;
 use std::vec::Vec;
 
 use super::*;
-use crate::{Declined, WorkId};
+use crate::{Declined, Payload, WorkId};
+use oer_protocols_network_port::Held;
 
 /// The data a producer writes for `work`: its place, then a count.
 fn pattern(length: usize) -> Vec<u8> {
@@ -13,15 +14,19 @@ fn pattern(length: usize) -> Vec<u8> {
 }
 
 /// A fill that writes [`pattern`] and counts its calls.
-fn writes(calls: &Cell<usize>) -> impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined> + '_ {
+fn writes(
+    calls: &Cell<usize>,
+) -> impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined> + '_ {
     move |_, data| {
         calls.set(calls.get() + 1);
-        data.copy_from_slice(&pattern(data.len()));
-        Ok(())
+        data.put(&pattern(data.remaining()))
+            .map_err(|_| Declined::Unwritable)
     }
 }
 
-fn declines(calls: &Cell<usize>) -> impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined> + '_ {
+fn declines(
+    calls: &Cell<usize>,
+) -> impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined> + '_ {
     move |_, _| {
         calls.set(calls.get() + 1);
         Err(Declined::Stale)
@@ -39,7 +44,7 @@ fn broadcast() -> Remote {
 fn produce_next<B>(
     stack: &mut Stack<B>,
     now: Instant,
-    fill: impl FnOnce(WorkId, &mut [u8]) -> Result<(), Declined>,
+    fill: impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined>,
 ) -> Result<(), Unsent<&'static str>> {
     let demand = stack.poll_demand(now).unwrap();
     stack.transmit(now, demand.grant(), fill, &())
@@ -53,11 +58,11 @@ fn a_declared_work_holds_a_place_and_no_block() {
         let work = stack.declare(at(0), &socket, broadcast(), 100).unwrap();
         assert_eq!(stack.pool().free(), BLOCKS, "no block");
         let demand = stack.poll_demand(at(0)).unwrap();
-        assert_eq!(demand.ready.class, Class::Data);
-        assert_eq!(demand.ready.length, 14 + 20 + 8 + 100);
-        assert_eq!(demand.ready.flow, Some(socket.flow()));
-        assert_eq!(demand.ready.dscp, dscp);
-        assert_eq!(demand.ready.peer, [0xFF; 6]);
+        assert_eq!(demand.ready().class, Class::Data);
+        assert_eq!(demand.ready().length, 14 + 20 + 8 + 100);
+        assert_eq!(demand.ready().flow, Some(socket.flow()));
+        assert_eq!(demand.ready().dscp, dscp);
+        assert_eq!(demand.ready().peer, [0xFF; 6]);
         assert!(
             stack.queued().next().is_none(),
             "nothing to evict: no block"
@@ -155,13 +160,166 @@ fn a_produced_frame_is_written_in_the_slot_and_its_checksum_verifies() {
     });
 }
 
+/// A producer's header and its filler, written as one pass with no read of
+/// the filler, go out as written, under a checksum that verifies.
+#[test]
+fn a_header_and_filler_go_out_whole_under_a_checksum_that_verifies() {
+    world!(|stack| {
+        knows_peer(stack);
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        for length in [1, 2, 28, 29, 1472] {
+            let work = stack.declare(at(1), &socket, peer(), length).unwrap();
+            let header: Vec<u8> = pattern(length.min(28));
+            let fill = |_, data: &mut Payload<'_>| {
+                data.put(&header).map_err(|_| Declined::Unwritable)?;
+                data.repeat(0x5a, data.remaining())
+                    .map_err(|_| Declined::Unwritable)
+            };
+            produce_next(stack, at(1), fill).unwrap();
+            assert_eq!(finished(stack.take_result(work)), Outcome::Accepted);
+            let frame = stack.port_mut().sent.pop().unwrap();
+            let (_, packet) = EthernetHeader::parse(&frame).unwrap();
+            let ip = Ipv4Header::parse(packet).unwrap();
+            let datagram = ip.payload();
+            let (udp, data) = UdpHeader::parse(datagram).unwrap();
+            let mut expected = header.clone();
+            expected.resize(length, 0x5a);
+            assert_eq!(data, expected, "{length} octets");
+            assert!(
+                Checksum::new()
+                    .with(&ipv4_pseudo_header(
+                        OUR_IP,
+                        PEER_IP,
+                        PROTOCOL_UDP,
+                        udp.length
+                    ))
+                    .with(datagram)
+                    .verifies(),
+                "{length} octets"
+            );
+        }
+    });
+}
+
+/// The load's datagram: a header of 28 octets, filler behind it.
+fn header_and_filler(_: WorkId, data: &mut Payload<'_>) -> Result<(), Declined> {
+    data.put(&[0xa1; 28]).map_err(|_| Declined::Unwritable)?;
+    data.repeat(0x5a, data.remaining())
+        .map_err(|_| Declined::Unwritable)
+}
+
+/// The UDP datagram of `frame`, and whether its checksum verifies.
+fn datagram_of(frame: &[u8]) -> (Vec<u8>, bool) {
+    let (_, packet) = EthernetHeader::parse(frame).unwrap();
+    let datagram = Ipv4Header::parse(packet).unwrap().payload();
+    let (udp, _) = UdpHeader::parse(datagram).unwrap();
+    let verifies = Checksum::new()
+        .with(&ipv4_pseudo_header(
+            OUR_IP,
+            PEER_IP,
+            PROTOCOL_UDP,
+            udp.length,
+        ))
+        .with(datagram)
+        .verifies();
+    (datagram.to_vec(), verifies)
+}
+
+/// The filler a buffer holds from its last frame is kept, not written again:
+/// the next frame of the same length goes whole under a checksum that
+/// verifies, and the buffer holds the run again. What the buffer holds is
+/// what goes: an octet changed there behind the port's back goes out as it
+/// is, which the checksum, summed for the run, then fails.
+#[test]
+fn a_filler_run_the_buffer_holds_is_kept_and_not_written_again() {
+    world!(|stack| {
+        knows_peer(stack);
+        stack.port_mut().keeps_buffer = true;
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let run = Held {
+            at: 42 + 28,
+            length: 72,
+            octet: 0x5a,
+        };
+        let first_work = stack.declare(at(1), &socket, peer(), 100).unwrap();
+        produce_next(stack, at(1), header_and_filler).unwrap();
+        assert_eq!(finished(stack.take_result(first_work)), Outcome::Accepted);
+        let (first, verifies) = datagram_of(&stack.port_mut().sent.pop().unwrap());
+        assert!(verifies);
+        assert_eq!(stack.port().buffer.as_ref().unwrap().1, Some(run));
+        let second_work = stack.declare(at(1), &socket, peer(), 100).unwrap();
+        produce_next(stack, at(1), header_and_filler).unwrap();
+        assert_eq!(finished(stack.take_result(second_work)), Outcome::Accepted);
+        let (second, verifies) = datagram_of(&stack.port_mut().sent.pop().unwrap());
+        assert!(verifies, "the kept run goes as written");
+        assert_eq!(second, first);
+        assert_eq!(stack.port().buffer.as_ref().unwrap().1, Some(run));
+        // The buffer changed behind the port's back, which still says it
+        // holds the run: the run is not written again.
+        stack.port_mut().buffer.as_mut().unwrap().0[100] = 0;
+        let third_work = stack.declare(at(1), &socket, peer(), 100).unwrap();
+        produce_next(stack, at(1), header_and_filler).unwrap();
+        assert_eq!(finished(stack.take_result(third_work)), Outcome::Accepted);
+        let (third, verifies) = datagram_of(&stack.port_mut().sent.pop().unwrap());
+        assert_eq!(third[100 - 34], 0, "the octet goes as the buffer held it");
+        assert!(!verifies);
+    });
+}
+
+/// A longer frame writes what the run did not cover; any other frame in the
+/// buffer leaves it holding no run.
+#[test]
+fn a_longer_frame_writes_past_the_run_and_another_frame_ends_it() {
+    world!(|stack| {
+        knows_peer(stack);
+        stack.port_mut().keeps_buffer = true;
+        let local = stack.open_local(6000, best_effort()).unwrap();
+        let channel = stack.open(5000, best_effort()).unwrap();
+        let short = stack.declare(at(1), &local, peer(), 40).unwrap();
+        produce_next(stack, at(1), header_and_filler).unwrap();
+        assert_eq!(finished(stack.take_result(short)), Outcome::Accepted);
+        let _ = stack.port_mut().sent.pop();
+        let long = stack.declare(at(1), &local, peer(), 300).unwrap();
+        produce_next(stack, at(1), header_and_filler).unwrap();
+        assert_eq!(finished(stack.take_result(long)), Outcome::Accepted);
+        let (long_datagram, verifies) = datagram_of(&stack.port_mut().sent.pop().unwrap());
+        assert!(verifies);
+        assert!(long_datagram[8 + 28..].iter().all(|octet| *octet == 0x5a));
+        let block = filled(stack.pool(), b"other");
+        let _sent = stack.send(at(1), &channel, peer(), block).unwrap();
+        let demand = stack.poll_demand(at(1)).unwrap();
+        stack
+            .transmit(at(1), demand.grant(), unproduced, &())
+            .unwrap();
+        assert_eq!(stack.port().buffer.as_ref().unwrap().1, None);
+    });
+}
+
+/// A fill that leaves part of its data unwritten is declined: its work ends
+/// declined and no frame goes, so nothing an earlier use of the slot left
+/// goes out.
+#[test]
+fn a_fill_that_writes_part_of_its_data_is_declined_and_sends_nothing() {
+    world!(|stack| {
+        knows_peer(stack);
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let work = stack.declare(at(1), &socket, peer(), 37).unwrap();
+        let short =
+            |_, data: &mut Payload<'_>| data.put(&[1, 2, 3]).map_err(|_| Declined::Unwritable);
+        assert_eq!(produce_next(stack, at(1), short), Err(Unsent::Declined));
+        assert_eq!(finished(stack.take_result(work)), Outcome::Declined);
+        assert!(stack.port().sent.is_empty());
+        assert!(!stack.port_broken());
+    });
+}
+
 #[test]
 fn a_declared_work_waits_for_its_neighbor_without_a_slot() {
     world!(|stack| {
         let socket = stack.open_local(6000, best_effort()).unwrap();
         let work = stack.declare(at(0), &socket, peer(), 8).unwrap();
         let demand = stack.poll_demand(at(0)).unwrap();
-        assert_eq!(demand.ready.class, Class::Control, "its neighbor first");
+        assert_eq!(demand.ready().class, Class::Control, "its neighbor first");
         let calls = Cell::new(0);
         stack
             .transmit(at(0), demand.grant(), writes(&calls), &())
@@ -218,7 +376,7 @@ fn a_declining_fill_ends_its_work_declined_and_passes_the_turn() {
         assert!(!stack.port_broken());
         let next = stack.poll_demand(at(0)).unwrap();
         assert_eq!(
-            next.ready.flow,
+            next.ready().flow,
             Some(channel.flow()),
             "the other socket goes first"
         );

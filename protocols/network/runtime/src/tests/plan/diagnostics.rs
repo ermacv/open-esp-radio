@@ -222,12 +222,13 @@ impl Egress<u32, u32> for StopsFor {
     type Fault = Infallible;
     type Plan<C: Candidate> = ();
 
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        _ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<(), Infallible> {
+        _ready: impl Fn() -> I,
+        plan: &'p mut Option<()>,
+    ) -> Result<&'p mut (), Infallible> {
         self.log.0.borrow_mut().push(Step::Collected);
-        Ok(())
+        Ok(plan.insert(()))
     }
 
     fn next<C: Candidate>(&mut self, (): &mut ()) -> Result<Next<C, ()>, Infallible> {

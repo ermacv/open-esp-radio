@@ -73,6 +73,14 @@ pub struct Turns<T, const Q: usize> {
     /// The first data work offered sets `last`.
     from_list: bool,
     planned: [Option<(Position, T)>; Q],
+    /// The works `planned` holds.
+    held: usize,
+    /// The places of `planned` in turn, from `next` on, while `ordered`:
+    /// set at the first take after an offer, so a plan is put in order once
+    /// and each take is then the next place.
+    order: [u8; Q],
+    next: usize,
+    ordered: bool,
     flows: [Option<Flow>; Q],
     listed: usize,
     /// Some ready work offered is not in the plan.
@@ -91,6 +99,10 @@ impl<T, const Q: usize> Turns<T, Q> {
             last,
             from_list: false,
             planned: [const { None }; Q],
+            held: 0,
+            order: [0; Q],
+            next: 0,
+            ordered: false,
             flows: [const { None }; Q],
             listed: 0,
             more: false,
@@ -104,9 +116,33 @@ impl<T, const Q: usize> Turns<T, Q> {
         turns
     }
 
+    /// Start again in place, as [`Self::after`] `last` starts: what it held
+    /// is gone, and nothing of it moves.
+    pub fn restart(&mut self, last: Option<u8>) {
+        self.last = last;
+        self.from_list = false;
+        for slot in &mut self.planned {
+            *slot = None;
+        }
+        self.held = 0;
+        self.ordered = false;
+        for flow in &mut self.flows {
+            *flow = None;
+        }
+        self.listed = 0;
+        self.more = false;
+    }
+
+    /// Start again in place, as [`Self::listed`] starts.
+    pub fn relist(&mut self) {
+        self.restart(None);
+        self.from_list = true;
+    }
+
     /// Offer one ready work, `item`, described by `ready`, in the order the
     /// ready work lists them.
     pub fn offer(&mut self, ready: &Ready, item: T) {
+        self.ordered = false;
         let listed = self.listed;
         self.listed = listed.saturating_add(1);
         let flow = ready.flow.unwrap_or(0);
@@ -184,6 +220,7 @@ impl<T, const Q: usize> Turns<T, Q> {
                 .is_some_and(|(position, _)| position.data && position.distance == gone)
             {
                 *slot = None;
+                self.held = self.held.saturating_sub(1);
             }
         }
         Some(0)
@@ -193,6 +230,7 @@ impl<T, const Q: usize> Turns<T, Q> {
     fn place(&mut self, position: Position, item: T) {
         if let Some(free) = self.planned.iter_mut().find(|slot| slot.is_none()) {
             *free = Some((position, item));
+            self.held = self.held.saturating_add(1);
             return;
         }
         self.more = true;
@@ -210,27 +248,55 @@ impl<T, const Q: usize> Turns<T, Q> {
         }
     }
 
-    fn first_place(&self) -> Option<usize> {
-        self.planned
-            .iter()
-            .enumerate()
-            .filter_map(|(place, slot)| slot.as_ref().map(|(at, _)| (*at, place)))
-            .min()
-            .map(|(_, place)| place)
+    /// Put the places it holds in turn, from the first.
+    fn order(&mut self) {
+        let mut count = 0_usize;
+        for place in 0..Q {
+            let Some((position, _)) = self.planned.get(place).and_then(Option::as_ref) else {
+                continue;
+            };
+            let position = *position;
+            // Insertion: the places before stay in turn, a later one moves up.
+            let mut at = count;
+            while let Some(before) = at.checked_sub(1)
+                && let Some(&earlier) = self.order.get(before)
+                && self
+                    .planned
+                    .get(usize::from(earlier))
+                    .and_then(Option::as_ref)
+                    .is_some_and(|(seen, _)| *seen > position)
+            {
+                if let Some(slot) = self.order.get_mut(at) {
+                    *slot = earlier;
+                }
+                at = before;
+            }
+            if let (Some(slot), Ok(place)) = (self.order.get_mut(at), u8::try_from(place)) {
+                *slot = place;
+            }
+            count = count.saturating_add(1);
+        }
+        self.next = 0;
+        self.held = count;
+        self.ordered = true;
     }
 
-    /// The work next in turn.
-    pub fn first(&self) -> Option<&T> {
-        let place = self.first_place()?;
-        self.planned
-            .get(place)
-            .and_then(Option::as_ref)
-            .map(|(_, item)| item)
+    /// Whether it holds no work: what its next take would find.
+    pub const fn is_empty(&self) -> bool {
+        self.held == 0
     }
 
     /// Take the work next in turn.
     pub fn take(&mut self) -> Option<T> {
-        let place = self.first_place()?;
+        if !self.ordered {
+            self.order();
+        }
+        if self.held == 0 {
+            return None;
+        }
+        let place = usize::from(*self.order.get(self.next)?);
+        self.next = self.next.saturating_add(1);
+        self.held = self.held.saturating_sub(1);
         self.planned
             .get_mut(place)
             .and_then(Option::take)

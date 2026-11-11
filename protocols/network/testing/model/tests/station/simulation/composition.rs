@@ -409,7 +409,7 @@ impl TxBuffers for Buffers<'_> {
     fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
         let mut memory = self
             .free
@@ -419,7 +419,8 @@ impl TxBuffers for Buffers<'_> {
             .checked_add(length)
             .and_then(|end| memory.get_mut(MSDU_ETHERNET_OFFSET..end))
         {
-            Some(bytes) => fill(bytes).map_err(Unpublished::Fill),
+            Some(bytes) => fill(&mut oer_protocols_network_port::Slot::new(bytes, None))
+                .map_err(Unpublished::Fill),
             None => Err(Unpublished::Port(PortRefusal::BadFrame)),
         };
         match written {

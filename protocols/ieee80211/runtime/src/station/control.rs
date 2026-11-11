@@ -736,8 +736,10 @@ impl<P: oer_protocols_network_port::EthernetFrame, S: TxSupply<P>, const TX: usi
     NetTransmit for DeviceTransmit<'_, P, S, TX, N>
 {
     type Frame = P;
-    fn has_room(&mut self) -> bool {
+    fn reclaim(&mut self) {
         self.take_returned();
+    }
+    fn has_room(&mut self) -> bool {
         self.supply.available() && self.transmit.free_capacity() != 0
     }
     fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {

@@ -246,6 +246,9 @@ pub struct ApNetTransmit<'a, F> {
 
 impl<F: oer_protocols_network_port::EthernetFrame> NetTransmit for ApNetTransmit<'_, F> {
     type Frame = F;
+    /// Nothing comes back: a sent frame is copied into the access point's
+    /// queue, whose room [`Self::has_room`] reads directly.
+    fn reclaim(&mut self) {}
     fn has_room(&mut self) -> bool {
         self.transmit.free_capacity() != 0
     }

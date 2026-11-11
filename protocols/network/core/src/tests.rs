@@ -63,6 +63,10 @@ struct Port {
     received: std::collections::VecDeque<(Vec<u8>, oer_protocols_network_port::Holding)>,
     /// Keeps no buffer it is asked to.
     keeps_nothing: bool,
+    /// Writes every frame into one buffer it keeps, and the run of one octet
+    /// that buffer holds, as a port that keeps its buffers' runs does.
+    keeps_buffer: bool,
+    buffer: Option<(Vec<u8>, Option<oer_protocols_network_port::Held>)>,
 }
 
 /// A frame the tests' port lent, in its own octets.
@@ -144,7 +148,7 @@ impl FramePort for Port {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<&'static str, E>> {
         if self.full {
             return Err(Unpublished::Port("full"));
@@ -155,8 +159,20 @@ impl FramePort for Port {
         if self.lazy {
             return Ok(());
         }
-        let mut slot = vec![0; self.room.unwrap_or(length)];
-        let written = fill(&mut slot);
+        let room = self.room.unwrap_or(length);
+        let (mut slot, held) = match self.buffer.take() {
+            Some((mut buffer, held)) => {
+                buffer.resize(room, 0);
+                (buffer, held)
+            }
+            None => (vec![0; room], None),
+        };
+        let mut room = oer_protocols_network_port::Slot::new(&mut slot, held);
+        let written = fill(&mut room);
+        let held = room.held();
+        if self.keeps_buffer {
+            self.buffer = Some((slot.clone(), held));
+        }
         if self.careless {
             return Ok(());
         }
@@ -334,7 +350,7 @@ fn filled<B>(pool: &mut Blocks<B>, data: &[u8]) -> Block<'static, B, SIZE> {
 
 /// The fill of a test whose work no producer declared: only a declared
 /// work's frame calls it.
-fn unproduced(_: crate::WorkId, _: &mut [u8]) -> Result<(), crate::Declined> {
+fn unproduced(_: crate::WorkId, _: &mut crate::Payload<'_>) -> Result<(), crate::Declined> {
     panic!("no work of this test is a producer's")
 }
 
@@ -390,7 +406,7 @@ fn a_datagram_to_an_unknown_neighbor_holds_a_block_and_no_port_room() {
         let _command = stack.send(at(0), &socket, peer(), block).unwrap();
         assert_eq!(stack.pool().free(), BLOCKS - 1);
         let demand = stack.poll_demand(at(0)).unwrap();
-        assert_eq!(demand.ready.class, Class::Control);
+        assert_eq!(demand.ready().class, Class::Control);
         stack
             .transmit(at(0), demand.grant(), unproduced, &())
             .unwrap();
@@ -414,10 +430,10 @@ fn a_reply_releases_the_datagram_and_its_frame_is_whole() {
         let reply = arp_frame(Operation::Reply, (PEER, PEER_IP), OUR_IP);
         stack.input(at(1), &reply, &mut ());
         let demand = stack.poll_demand(at(1)).unwrap();
-        assert_eq!(demand.ready.class, Class::Data);
-        assert_eq!(demand.ready.peer, PEER);
-        assert_eq!(demand.ready.flow, Some(0));
-        assert_eq!(demand.ready.dscp, dscp);
+        assert_eq!(demand.ready().class, Class::Data);
+        assert_eq!(demand.ready().peer, PEER);
+        assert_eq!(demand.ready().flow, Some(0));
+        assert_eq!(demand.ready().dscp, dscp);
         stack
             .transmit(at(1), demand.grant(), unproduced, &())
             .unwrap();
@@ -611,7 +627,7 @@ fn a_refusal_after_a_written_frame_is_the_port_s_own() {
         stack.port_mut().after_fill = Some("full");
         assert_eq!(send_next(stack, at(1)), Err(Unsent::Port("full")));
         let command = running(stack.take_result(command));
-        assert_eq!(stack.poll_demand(at(1)).unwrap().ready.class, Class::Data);
+        assert_eq!(stack.poll_demand(at(1)).unwrap().ready().class, Class::Data);
         stack.port_mut().after_fill = Some("rejected");
         assert_eq!(send_next(stack, at(1)), Err(Unsent::Rejected("rejected")));
         assert_eq!(finished(stack.take_result(command)), Outcome::Rejected);
@@ -678,12 +694,26 @@ fn a_changed_neighbor_reaches_a_datagram_that_waits() {
         let moved = arp_frame(Operation::Reply, (MOVED, PEER_IP), OUR_IP);
         stack.input(at(2), &moved, &mut ());
         let demand = stack.poll_demand(at(2)).unwrap();
-        assert_eq!(demand.ready.peer, MOVED);
+        assert_eq!(demand.ready().peer, MOVED);
         stack
             .transmit(at(2), demand.grant(), unproduced, &())
             .unwrap();
         let (header, _) = EthernetHeader::parse(&stack.port_mut().sent[0]).unwrap();
         assert_eq!(header.destination, MOVED);
+    });
+}
+
+/// An expired neighbor that no work needs is not asked again: a turn asks
+/// only for what some work goes through.
+#[test]
+fn a_neighbor_that_expires_with_no_work_is_not_asked_again() {
+    world!(|stack| {
+        knows_peer(stack);
+        let _socket = stack.open(5000, best_effort()).unwrap();
+        let later = at(0).saturating_add(Duration::from_secs(61));
+        stack.tick(later, &mut ());
+        assert!(stack.poll_demand(later).is_none(), "no request is owed");
+        assert!(stack.port().sent.is_empty());
     });
 }
 
@@ -703,7 +733,7 @@ fn a_neighbor_that_expires_under_a_datagram_is_asked_again() {
         );
         stack.tick(later, &mut ());
         assert_eq!(
-            stack.poll_demand(later).unwrap().ready.class,
+            stack.poll_demand(later).unwrap().ready().class,
             Class::Control
         );
         let command = running(stack.take_result(command));
@@ -734,9 +764,9 @@ fn every_ready_piece_of_work_is_listed_with_who_it_is_for() {
             .demands(at(1), &())
             .map(|demand| {
                 (
-                    demand.ready.flow,
-                    demand.ready.peer,
-                    demand.ready.dscp.value(),
+                    demand.ready().flow,
+                    demand.ready().peer,
+                    demand.ready().dscp.value(),
                 )
             })
             .collect();
@@ -892,7 +922,7 @@ fn a_grant_chosen_for_one_address_does_not_go_to_another() {
             Err(Unsent::Stale)
         );
         assert!(stack.port_mut().sent.is_empty());
-        assert_eq!(stack.poll_demand(at(2)).unwrap().ready.peer, MOVED);
+        assert_eq!(stack.poll_demand(at(2)).unwrap().ready().peer, MOVED);
     });
 }
 
@@ -908,7 +938,7 @@ fn a_neighbor_expiring_under_a_datagram_names_its_time() {
         assert!(stack.demands(expiry, &()).next().is_none(), "past its life");
         stack.tick(expiry, &mut ());
         assert_eq!(
-            stack.demands(expiry, &()).next().unwrap().ready.class,
+            stack.demands(expiry, &()).next().unwrap().ready().class,
             Class::Control
         );
     });
@@ -922,13 +952,13 @@ fn every_reply_owed_is_listed_and_any_can_be_chosen() {
         stack.input(at(0), &first, &mut ());
         stack.input(at(0), &second, &mut ());
         let chosen = stack.demands(at(0), &()).nth(1).unwrap();
-        assert_eq!(chosen.ready.peer, MOVED);
+        assert_eq!(chosen.ready().peer, MOVED);
         stack
             .transmit(at(0), chosen.grant(), unproduced, &())
             .unwrap();
         let left: Vec<_> = stack
             .demands(at(0), &())
-            .map(|demand| demand.ready.peer)
+            .map(|demand| demand.ready().peer)
             .collect();
         assert_eq!(left, [PEER]);
     });
@@ -1138,7 +1168,7 @@ fn an_arp_request_for_us_is_answered_and_control_goes_before_data() {
         let request = arp_frame(Operation::Request, (PEER, PEER_IP), OUR_IP);
         stack.input(at(1), &request, &mut ());
         let demand = stack.poll_demand(at(1)).unwrap();
-        assert_eq!(demand.ready.class, Class::Control);
+        assert_eq!(demand.ready().class, Class::Control);
         stack
             .transmit(at(1), demand.grant(), unproduced, &())
             .unwrap();
@@ -1148,7 +1178,7 @@ fn an_arp_request_for_us_is_answered_and_control_goes_before_data() {
         assert_eq!(reply.operation, Operation::Reply);
         assert_eq!(reply.sender_protocol, OUR_IP);
         assert_eq!(reply.target_protocol, PEER_IP);
-        assert_eq!(stack.poll_demand(at(1)).unwrap().ready.class, Class::Data);
+        assert_eq!(stack.poll_demand(at(1)).unwrap().ready().class, Class::Data);
     });
 }
 
@@ -1174,7 +1204,7 @@ fn an_arp_packet_for_another_makes_no_entry() {
         let block = filled(stack.pool(), b"x");
         let _command = stack.send(at(0), &socket, peer(), block).unwrap();
         assert_eq!(
-            stack.poll_demand(at(0)).unwrap().ready.class,
+            stack.poll_demand(at(0)).unwrap().ready().class,
             Class::Control
         );
     });
@@ -1302,7 +1332,7 @@ fn a_host_prefix_has_no_broadcast_of_its_own() {
         };
         let _command = stack.send(at(0), &socket, other, block).unwrap();
         assert_eq!(
-            stack.poll_demand(at(0)).unwrap().ready.class,
+            stack.poll_demand(at(0)).unwrap().ready().class,
             Class::Control
         );
     });
@@ -1350,7 +1380,7 @@ fn a_time_past_a_neighbors_life_asks_again() {
         let later = at(0).saturating_add(Duration::from_secs(61));
         let _command = stack.send(later, &socket, peer(), block).unwrap();
         assert_eq!(
-            stack.poll_demand(later).unwrap().ready.class,
+            stack.poll_demand(later).unwrap().ready().class,
             Class::Control
         );
     });
@@ -1423,7 +1453,7 @@ fn a_refused_datagram_keeps_its_turn() {
         }
         stack.port_mut().full = true;
         let demand = stack.poll_demand(at(1)).unwrap();
-        let flow = demand.ready.flow;
+        let flow = demand.ready().flow;
         assert!(
             stack
                 .transmit(at(1), demand.grant(), unproduced, &())
@@ -1431,11 +1461,11 @@ fn a_refused_datagram_keeps_its_turn() {
         );
         stack.port_mut().full = false;
         let demand = stack.poll_demand(at(1)).unwrap();
-        assert_eq!(demand.ready.flow, flow, "refused work stays first");
+        assert_eq!(demand.ready().flow, flow, "refused work stays first");
         stack
             .transmit(at(1), demand.grant(), unproduced, &())
             .unwrap();
-        assert_ne!(stack.poll_demand(at(1)).unwrap().ready.flow, flow);
+        assert_ne!(stack.poll_demand(at(1)).unwrap().ready().flow, flow);
     });
 }
 

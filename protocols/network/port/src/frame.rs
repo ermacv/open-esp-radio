@@ -6,6 +6,7 @@ use core::task::Context;
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::device::{EthernetFrame, EthernetFrameView, LinkSnapshot};
+use crate::slot::Slot;
 
 /// Where a frame goes out, and the one answer to it. Whoever publishes keeps
 /// its own record of what `fill` did, and a port whose answer contradicts that
@@ -19,7 +20,9 @@ pub trait FramePort {
 
     /// Take room for `length` octets, let `fill` write the frame there and
     /// accept it. `Ok` says the frame is the port's, and only follows a
-    /// `fill` that returned `Ok`.
+    /// `fill` that returned `Ok`. The room comes as a [`Slot`] with the run
+    /// the port knows its buffer holds, if it keeps one; what run the room
+    /// holds after `fill` is the buffer's for its next frame.
     ///
     /// The port is generic in `E`, so the only `E` it can hand back is the one
     /// `fill` returned: a port cannot claim a fill failed when it did not.
@@ -34,7 +37,7 @@ pub trait FramePort {
     ///     fn publish<E>(
     ///         &mut self,
     ///         _: usize,
-    ///         _: impl FnOnce(&mut [u8]) -> Result<(), E>,
+    ///         _: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ///     ) -> Result<(), Unpublished<(), E>> {
     ///         Err(Unpublished::Fill(Short))
     ///     }
@@ -46,7 +49,7 @@ pub trait FramePort {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut Slot<'_>) -> Result<(), E>,
     ) -> Result<Self::Ticket, Unpublished<Self::Refusal, E>>;
 
     /// Whether `refusal` is final for that frame: no wake will change it, so
@@ -195,15 +198,20 @@ pub trait Egress<Ticket, Notice> {
     /// What one collection of the ready work keeps for the frames after it.
     type Plan<C: Candidate>;
 
-    /// Collect a plan from `ready`, which holds every piece of ready work.
-    /// It reserves nothing.
+    /// Collect a plan into `plan`, in place, from the ready work: each call
+    /// of `ready` lists every piece of it, and a collection that needs a
+    /// second look calls it again. What `plan` held before is gone; it
+    /// reserves nothing. The caller keeps `plan`'s storage from one
+    /// collection to the next, so a collection moves no plan. Returns the
+    /// plan collected, in `plan`.
     ///
     /// # Errors
     /// [`Self::Fault`], which ends the service.
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Self::Plan<C>, Self::Fault>;
+        ready: impl Fn() -> I,
+        plan: &'p mut Option<Self::Plan<C>>,
+    ) -> Result<&'p mut Self::Plan<C>, Self::Fault>;
 
     /// The plan's next frame, reserved; [`Next::Idle`](crate::Next::Idle)
     /// until a port's wake or a notice if nothing may go now; or

@@ -1,4 +1,5 @@
 use super::*;
+mod equivalence;
 mod observation;
 
 fn us(value: u32) -> NonZeroU32 {
@@ -245,20 +246,17 @@ fn bulk_retirement_keeps_in_flight_old_generation_until_settled() {
 fn unfunded_internal_demand_returns_a_named_fault_with_its_cursor() {
     // Fault injection at the old `choose(...).expect(...)` boundary: no
     // funded owner is fabricated and the source account remains intact.
-    let mut accounts = [Some(Account {
-        key: 7,
-        balance: 2,
-        minimum: 3,
-        retired: false,
-        outstanding: 0,
-        outstanding_micros: 0,
-    })];
-    assert!(matches!(
-        funded_account(&mut accounts, 0),
+    // An account held at place 0 whose balance falls short of its least
+    // grant is not funded: the choice names the fault and its cursor.
+    assert_eq!(
+        funded_place(&[3], &[2], &[true], 0),
         Err(AirtimeError::UnfundedDemand { cursor: 0 })
-    ));
-    let account = accounts[0].unwrap();
-    assert_eq!((account.key, account.balance, account.minimum), (7, 2, 3));
+    );
+    assert_eq!(funded_place(&[3], &[3], &[true], 0), Ok(0));
+    assert_eq!(
+        funded_place(&[3], &[3], &[false], 0),
+        Err(AirtimeError::UnfundedDemand { cursor: 0 })
+    );
 }
 
 #[test]

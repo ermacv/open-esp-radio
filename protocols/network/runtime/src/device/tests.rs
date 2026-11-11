@@ -163,9 +163,11 @@ impl Transmit {
 
 impl NetTransmit for Transmit {
     type Frame = Written;
-    fn has_room(&mut self) -> bool {
+    fn reclaim(&mut self) {
         self.take_back();
         self.takes += 1;
+    }
+    fn has_room(&mut self) -> bool {
         !self.full
     }
     fn poll_room(&mut self, _: &mut Context<'_>) -> Poll<()> {
@@ -221,7 +223,7 @@ impl TxBuffers for Buffers {
     fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<Written, Unpublished<PortRefusal, E>> {
         if let Some(refusal) = self.refuse {
             return Err(Unpublished::Port(refusal));
@@ -233,7 +235,8 @@ impl TxBuffers for Buffers {
             return Err(Unpublished::Port(PortRefusal::BadFrame));
         }
         let mut bytes = std::vec![0; length];
-        fill(&mut bytes).map_err(Unpublished::Fill)?;
+        fill(&mut oer_protocols_network_port::Slot::new(&mut bytes, None))
+            .map_err(Unpublished::Fill)?;
         self.free -= 1;
         Ok(Written(bytes))
     }
@@ -274,13 +277,15 @@ fn port() -> Port {
 #[derive(Debug, Eq, PartialEq)]
 struct Declined;
 
-fn octets(slot: &mut [u8]) -> Result<(), Declined> {
-    slot.fill(7);
+fn octets(slot: &mut oer_protocols_network_port::Slot<'_>) -> Result<(), Declined> {
+    slot.open().0.fill(7);
     Ok(())
 }
 
 /// A fill no port may call.
-fn unreachable_fill(why: &'static str) -> impl FnOnce(&mut [u8]) -> Result<(), Declined> {
+fn unreachable_fill(
+    why: &'static str,
+) -> impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), Declined> {
     move |_| panic!("{why}")
 }
 
@@ -636,12 +641,20 @@ fn a_buffer_frees_only_when_its_end_is_handed_on() {
     );
     let takes = port.transmit.takes;
     assert_eq!(port.take_notice(), Some(first));
-    assert!(port.transmit.takes > takes, "the device is asked first");
+    assert_eq!(
+        port.transmit.takes, takes,
+        "an end already held goes without asking the device"
+    );
     assert_eq!(port.buffers.free, 1);
     let third = sent(&mut port);
     assert_ne!(third, first);
     assert_eq!(port.take_notice(), Some(second));
+    let takes = port.transmit.takes;
     assert_eq!(port.take_notice(), None);
+    assert!(
+        port.transmit.takes > takes,
+        "with no end held, the device is asked for what it returned"
+    );
 }
 
 #[test]

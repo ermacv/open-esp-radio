@@ -63,3 +63,33 @@ application's network task, which today is never cancelled.
 What it shows is the protocol composition over the model's port: the real handshake,
 DHCP, UDP, echo and the tasks' interaction under virtual time. The S31 hardware's
 wakes, its HE path and transmit timing are outside it.
+
+## Work per frame
+
+`tests/scenarios/work.rs` composes the transmit path as the load image does:
+the real service, core and airtime egress, the image's network geometry and a
+local producer of load datagrams, a header and filler, unpaced, to one peer.
+The medium's air is so fast that the service bounds the load, as a hart it
+saturates does, and it tells a Block Ack's 32 settlements at once. The
+service's diagnostics, always on here, and the producer count the work: turns,
+collections, places walked, plans continued and stopped, fills and offers.
+A case bounds that work per frame.
+
+The counts are the work's shape. Its weight is the case's instruction count on
+the host, which a run pinned to one core makes exact to a few hundred
+instructions a run:
+
+    cargo test --release -p oer-protocols-network-testing-model --test scenarios --no-run
+    taskset -c 0 perf stat -e instructions:u <the scenarios binary> \
+        work::an_unpaced_load_takes_each_frame_once_through_a_plan_of_several --exact
+
+The medium, the harness and the virtual clock are part of that count and do
+not change with the network's code, so the difference between two revisions,
+divided by the frames, is the work per frame one removed. `perf record` with
+the same event attributes it by function. A host instruction is not a hart's:
+the host vectorizes byte loops such as the checksum, which a hart without
+vector instructions runs one word at a time, and memory stalls, which a hart
+running from PSRAM pays for every copy and miss, are outside the count. The
+virtual clock wakes every wait at each advance, and the medium advances at
+each frame's landing, so the service waits once a frame here, which a
+saturated hart never does.

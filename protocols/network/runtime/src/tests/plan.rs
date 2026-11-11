@@ -86,12 +86,13 @@ impl Egress<u32, u32> for Planned {
     type Fault = Infallible;
     type Plan<C: Candidate> = Turns<C, QUANTUM>;
 
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<Turns<C, QUANTUM>, Infallible> {
+        ready: impl Fn() -> I,
+        plan: &'p mut Option<Turns<C, QUANTUM>>,
+    ) -> Result<&'p mut Turns<C, QUANTUM>, Infallible> {
         self.0.borrow_mut().push(Step::Collected);
-        <Direct as Egress<u32, u32>>::plan(&mut Direct, ready)
+        <Direct as Egress<u32, u32>>::plan(&mut Direct, ready, plan)
     }
 
     fn next<C: Candidate>(
@@ -478,12 +479,13 @@ impl Egress<u32, u32> for AlwaysStops {
     type Fault = Infallible;
     type Plan<C: Candidate> = ();
 
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        _ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<(), Infallible> {
+        _ready: impl Fn() -> I,
+        plan: &'p mut Option<()>,
+    ) -> Result<&'p mut (), Infallible> {
         self.0.0.borrow_mut().push(Step::Collected);
-        Ok(())
+        Ok(plan.insert(()))
     }
 
     fn next<C: Candidate>(&mut self, (): &mut ()) -> Result<Next<C, ()>, Infallible> {

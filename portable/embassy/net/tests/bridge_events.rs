@@ -97,6 +97,7 @@ struct Port(Rc<RefCell<State>>, LinkSnapshot);
 struct NoTransmit;
 impl NetTransmit for NoTransmit {
     type Frame = OwnedNetworkTxFrame;
+    fn reclaim(&mut self) {}
     fn has_room(&mut self) -> bool {
         false
     }

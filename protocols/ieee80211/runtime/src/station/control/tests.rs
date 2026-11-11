@@ -864,7 +864,7 @@ impl<P> TxSupply<P> for Losing {
 }
 
 #[test]
-fn asking_for_room_takes_returned_memory_back() {
+fn a_reclaim_takes_returned_memory_back() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
     let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
@@ -885,6 +885,11 @@ fn asking_for_room_takes_returned_memory_back() {
             })
             .is_ok()
     );
+    assert!(
+        !device.has_room(),
+        "returned memory waits for a reclaim: asking for room takes none back"
+    );
+    device.reclaim();
     assert!(device.has_room());
     assert_eq!(supply.free(), 1);
 }

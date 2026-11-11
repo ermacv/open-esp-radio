@@ -473,7 +473,7 @@ impl TxBuffers for Buffers {
     fn write<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
         let mut slot = self
             .0
@@ -482,7 +482,8 @@ impl TxBuffers for Buffers {
             .pop()
             .ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
         let written = match slot.bytes_mut().get_mut(..length) {
-            Some(bytes) => fill(bytes).map_err(Unpublished::Fill),
+            Some(bytes) => fill(&mut oer_protocols_network_port::Slot::new(bytes, None))
+                .map_err(Unpublished::Fill),
             None => Err(Unpublished::Port(PortRefusal::BadFrame)),
         };
         match written {
@@ -505,6 +506,9 @@ struct Transmit(Rc<RefCell<NetworkTransmit<'static, Joined, WrittenFrame, Supply
 
 impl NetTransmit for Transmit {
     type Frame = WrittenFrame;
+    fn reclaim(&mut self) {
+        self.0.borrow_mut().reclaim();
+    }
     fn has_room(&mut self) -> bool {
         self.0.borrow_mut().has_room()
     }
@@ -543,7 +547,7 @@ impl FramePort for Counted {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<PortRefusal, E>> {
         self.inner
             .as_mut()
@@ -1420,7 +1424,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
 
     /// The buffers home: what the station gave back and the network took.
     fn buffers_home(&mut self) -> usize {
-        let _room = self.transmit.0.borrow_mut().has_room();
+        self.transmit.0.borrow_mut().reclaim();
         self.free.slots.borrow().len() + self.free.ended.borrow().len()
     }
 

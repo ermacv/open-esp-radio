@@ -45,6 +45,8 @@ impl Sink {
 
 impl NetTransmit for Sink {
     type Frame = OwnedNetworkTxFrame;
+    /// The sink keeps nothing a device returns.
+    fn reclaim(&mut self) {}
     fn has_room(&mut self) -> bool {
         self.0.borrow().room != 0
     }

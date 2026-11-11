@@ -68,6 +68,39 @@ impl Checksum {
         Ok(self)
     }
 
+    /// Add `count` octets of `byte`, the next of the sequence, without
+    /// reading them: the sum of [`Self::with`] over them, in time that does
+    /// not grow with `count`. Each whole word of them is `byte` twice.
+    #[must_use]
+    pub fn repeated(mut self, byte: u8, count: usize) -> Self {
+        let mut left = count;
+        if left == 0 {
+            return self;
+        }
+        if let Some(high) = self.odd.take() {
+            self.add_word(high, byte);
+            left = left.saturating_sub(1);
+        }
+        // `words` copies of `word` sum, end-around carries and all, to a
+        // value congruent to their product modulo 0xFFFF, and to zero only
+        // when the product is: the count is taken modulo 0xFFFF first, so
+        // no product overflows, and a nonzero sum the count reduces to zero
+        // stays nonzero as 0xFFFF, which folds alike.
+        let words = u64::try_from(left >> 1).unwrap_or(u64::MAX);
+        let word = u64::from(u16::from_be_bytes([byte, byte]));
+        let reduced = (words % 0xFFFF).saturating_mul(word);
+        let part = if reduced == 0 && words != 0 && word != 0 {
+            0xFFFF
+        } else {
+            reduced
+        };
+        self.sum = self.sum.wrapping_add(part);
+        if left & 1 == 1 {
+            self.odd = Some(byte);
+        }
+        self
+    }
+
     fn octets(&mut self, bytes: &[u8]) {
         for byte in bytes {
             match self.odd.take() {
@@ -292,6 +325,72 @@ mod tests {
             for end in start..bytes.len() {
                 let part = &bytes[start..end];
                 assert_eq!(Checksum::new().with(part).finish(), reference(part));
+            }
+        }
+    }
+
+    /// Repeated octets sum as the octets themselves, after a part of any
+    /// length, odd or even, and before another.
+    #[test]
+    fn repeated_octets_sum_as_the_octets_written_out() {
+        let head = octets(9);
+        for before in 0..head.len() {
+            for byte in [0x00, 0x5a, 0xff] {
+                // Around a count of 0xFFFF words, which sums to zero modulo
+                // 0xFFFF though it is not zero.
+                for count in (0..12).chain([1443, 1444, 1445, 0x1_FFFC, 0x1_FFFE, 0x1_FFFF]) {
+                    let filler = vec![byte; count];
+                    let tail = [0x12, 0x34, 0x56];
+                    let mut whole = head[..before].to_vec();
+                    whole.extend_from_slice(&filler);
+                    whole.extend_from_slice(&tail);
+                    let sum = Checksum::new()
+                        .with(&head[..before])
+                        .repeated(byte, count)
+                        .with(&tail);
+                    assert_eq!(
+                        sum.finish(),
+                        reference(&whole),
+                        "{before} before, {count} of {byte:#x}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Counts no buffer could hold sum with every carry: the reference is
+    /// the arithmetic sum of the words, folded.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn repeated_octets_past_any_buffer_keep_their_carries() {
+        fn expected(byte: u8, count: usize) -> u16 {
+            let word = u128::from(u16::from_be_bytes([byte, byte]));
+            let words = u128::try_from(count / 2).unwrap();
+            let odd = if count % 2 == 1 {
+                u128::from(byte) << 8
+            } else {
+                0
+            };
+            let mut sum = words * word + odd;
+            while sum > 0xFFFF {
+                sum = (sum & 0xFFFF) + (sum >> 16);
+            }
+            !u16::try_from(sum).unwrap()
+        }
+        assert_eq!(Checksum::new().repeated(0xff, 1_usize << 50).finish(), 0);
+        for byte in [0x00, 0x01, 0x5a, 0xff] {
+            for count in [
+                1_usize << 49,
+                (1 << 50) + 1,
+                0xFFFF * 2 * 3,
+                usize::MAX - 1,
+                usize::MAX,
+            ] {
+                assert_eq!(
+                    Checksum::new().repeated(byte, count).finish(),
+                    expected(byte, count),
+                    "{count} of {byte:#x}"
+                );
             }
         }
     }

@@ -69,9 +69,11 @@ fn planned<const Q: usize>(works: &[Ready], mut turns: Turns<usize, Q>) -> (Vec<
     }
     let more = turns.more();
     let mut sent = Vec::new();
-    while let Some(index) = turns.take() {
-        sent.push(index);
+    // Empty exactly when a take finds nothing.
+    while !turns.is_empty() {
+        sent.push(turns.take().expect("a plan that is not empty holds a work"));
     }
+    assert!(turns.take().is_none(), "an empty plan holds no work");
     (sent, more)
 }
 
@@ -133,4 +135,39 @@ fn a_listed_turn_starts_at_the_first_data_flow() {
     assert_eq!(sent, [0, 1, 3, 4, 2, 5]);
     assert!(!more);
     assert_eq!(sent, reference(&works, Some(1)));
+}
+
+/// A plan started again in place holds what a fresh one holds: nothing of
+/// the works offered before, half taken or not, and of `more`, stays.
+#[test]
+fn a_plan_started_again_holds_what_a_fresh_one_holds() {
+    for seed in 0..200 {
+        let flows = 1 + (seed % 9) as u8;
+        let before = listing(seed, (seed % 23) as usize, flows);
+        let works = listing(seed.wrapping_add(1_000), ((seed + 7) % 23) as usize, flows);
+        for last in [None, Some(0), Some(3), Some(255)] {
+            let mut reused = Turns::<usize, 8>::after(Some(5));
+            for (index, work) in before.iter().enumerate() {
+                reused.offer(work, index + 100);
+            }
+            // Some of it taken, the rest left behind.
+            let _ = reused.take();
+            reused.restart(last);
+            assert_eq!(
+                planned(&works, reused),
+                planned(&works, Turns::<usize, 8>::after(last)),
+                "seed {seed}, after {last:?}"
+            );
+        }
+        let mut relisted = Turns::<usize, 8>::after(Some(2));
+        for (index, work) in before.iter().enumerate() {
+            relisted.offer(work, index + 100);
+        }
+        relisted.relist();
+        assert_eq!(
+            planned(&works, relisted),
+            planned(&works, Turns::<usize, 8>::listed()),
+            "seed {seed}, listed"
+        );
+    }
 }

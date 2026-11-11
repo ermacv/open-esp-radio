@@ -153,7 +153,7 @@ impl FramePort for WirePort {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<u32, Unpublished<bool, E>> {
         let mut wire = self.0.borrow_mut();
         wire.refused = wire.full;
@@ -172,7 +172,7 @@ impl FramePort for WirePort {
             return Ok(0);
         }
         let mut frame = std::vec![0; wire.room.unwrap_or(length)];
-        if let Err(error) = fill(&mut frame) {
+        if let Err(error) = fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None)) {
             return match wire.after_failed_fill {
                 AfterFailedFill::Fill => Err(Unpublished::Fill(error)),
                 AfterFailedFill::Refusal => Err(Unpublished::Port(false)),
@@ -2807,29 +2807,30 @@ impl Egress<u32, u32> for Policy {
     type Fault = &'static str;
     type Plan<C: Candidate> = OneChoice<C>;
 
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        mut ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<OneChoice<C>, &'static str> {
+        ready: impl Fn() -> I,
+        plan: &'p mut Option<OneChoice<C>>,
+    ) -> Result<&'p mut OneChoice<C>, &'static str> {
         let mut account = self.0.borrow_mut();
         account.plans += 1;
-        if account.fails && ready.clone().next().is_some() {
+        if account.fails && ready().next().is_some() {
             return Err("choose");
         }
         if account.shut {
-            return Ok(OneChoice::of(None));
+            return Ok(plan.insert(OneChoice::of(None)));
         }
         if let Some(needed) = account.notices_before_work
-            && ready.clone().next().is_some()
+            && ready().next().is_some()
         {
             assert_eq!(account.completed.len(), needed as usize, "chose too early");
         }
         let work = if account.last {
-            ready.last()
+            ready().last()
         } else {
-            ready.next()
+            ready().next()
         };
-        Ok(OneChoice::of(work))
+        Ok(plan.insert(OneChoice::of(work)))
     }
 
     fn next<C: Candidate>(&mut self, plan: &mut OneChoice<C>) -> Result<Next<C, ()>, &'static str> {

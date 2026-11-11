@@ -49,7 +49,9 @@ impl EthernetFrame for HostHeld {
     }
 }
 pub use oer_portable_time::Instant as NetworkInstant;
-pub use oer_protocols_network_core::{Configuration, Declined, Ipv4, Outcome, Remote, SendRefusal};
+pub use oer_protocols_network_core::{
+    Configuration, Declined, Ipv4, Outcome, Payload, Remote, SendRefusal,
+};
 pub use oer_protocols_network_runtime::{
     Interest, LocalEnd, Next, Offer, Produce, Refusal, Refused, WatchRefused, Work,
 };

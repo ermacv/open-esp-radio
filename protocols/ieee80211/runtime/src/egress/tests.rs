@@ -912,13 +912,20 @@ fn by_plan(
     let mut sent = Vec::new();
     let mut stops = Vec::new();
     let mut collections = 0;
+    // The plan's storage, kept from one collection to the next as the
+    // service keeps it: each collection after the first starts again in it.
     let mut plan = None;
+    let mut live = false;
     while sent.len() < frames {
         let current = match &mut plan {
-            Some(current) => current,
-            None => {
+            Some(current) if live => current,
+            _ => {
                 collections += 1;
-                plan.insert(policy.plan(ready.clone().into_iter()).unwrap())
+                live = true;
+                let listed = ready.clone();
+                policy
+                    .plan(|| listed.clone().into_iter(), &mut plan)
+                    .unwrap()
             }
         };
         match policy.next(current).unwrap() {
@@ -933,7 +940,7 @@ fn by_plan(
             Next::Idle => break,
             Next::Stop(stop) => {
                 stops.push(stop);
-                plan = None;
+                live = false;
             }
         }
     }
@@ -1021,17 +1028,19 @@ fn a_refusal_in_a_plan_costs_what_it_costs_a_choice_per_frame() {
         .unwrap();
     per_frame.refused(held).unwrap();
     // One plan: the same two answers, then dropped.
-    let mut plan = planned.plan(ready.iter().copied()).unwrap();
-    let Next::Send(work, held) = planned.next(&mut plan).unwrap() else {
+    let mut stored = None;
+    let plan = planned.plan(|| ready.iter().copied(), &mut stored).unwrap();
+    let Next::Send(work, held) = planned.next(plan).unwrap() else {
         panic!("the plan sends");
     };
     assert_eq!(work, first);
     planned.accepted(held, 0).unwrap();
-    let Next::Send(_, held) = planned.next(&mut plan).unwrap() else {
+    let Next::Send(_, held) = planned.next(plan).unwrap() else {
         panic!("the plan goes on");
     };
     planned.refused(held).unwrap();
-    drop(plan);
+    // The plan is dropped here, its storage with it.
+    drop(stored);
     assert_eq!(planned.balance_micros(1), per_frame.balance_micros(1));
     assert_eq!(
         (planned.unsettled(), planned.in_flight()),
@@ -1053,17 +1062,17 @@ fn a_plan_stops_when_the_air_moves() {
         .collect();
     let mut storage = long_storage();
     let mut policy = Long::new(&mut storage, Lengths::default());
-    let mut plan = policy.plan(ready.into_iter()).unwrap();
-    let Next::Send(_, held) = policy.next(&mut plan).unwrap() else {
+    let mut stored = None;
+    let plan = policy
+        .plan(|| ready.clone().into_iter(), &mut stored)
+        .unwrap();
+    let Next::Send(_, held) = policy.next(plan).unwrap() else {
         panic!("the plan sends");
     };
     policy.accepted(held, 0).unwrap();
     let balance = policy.balance_micros(1);
     policy.air_mut().view += 1;
-    assert_eq!(
-        stop_of(policy.next(&mut plan).unwrap()),
-        Some(PlanStop::Changed)
-    );
+    assert_eq!(stop_of(policy.next(plan).unwrap()), Some(PlanStop::Changed));
     assert_eq!(policy.balance_micros(1), balance, "nothing reserved");
     assert_eq!(policy.unsettled(), 1);
 }
@@ -1079,17 +1088,17 @@ fn a_plan_stops_when_its_account_s_largest_grant_goes() {
     ];
     let mut storage = long_storage();
     let mut policy = Long::new(&mut storage, Lengths::default());
-    let mut plan = policy.plan(ready.into_iter()).unwrap();
-    let Next::Send(work, held) = policy.next(&mut plan).unwrap() else {
+    let mut stored = None;
+    let plan = policy
+        .plan(|| ready.clone().into_iter(), &mut stored)
+        .unwrap();
+    let Next::Send(work, held) = policy.next(plan).unwrap() else {
         panic!("the plan sends");
     };
     assert_eq!(work, ready[0], "flow 0 first");
     policy.accepted(held, 0).unwrap();
     let balance = policy.balance_micros(1);
-    assert_eq!(
-        stop_of(policy.next(&mut plan).unwrap()),
-        Some(PlanStop::Grant)
-    );
+    assert_eq!(stop_of(policy.next(plan).unwrap()), Some(PlanStop::Grant));
     assert_eq!(policy.balance_micros(1), balance, "nothing reserved");
 }
 
@@ -1102,16 +1111,16 @@ fn a_plan_whose_frame_was_refused_does_not_go_on() {
         .collect();
     let mut storage = long_storage();
     let mut policy = Long::new(&mut storage, Lengths::default());
-    let mut plan = policy.plan(ready.into_iter()).unwrap();
-    let Next::Send(_, held) = policy.next(&mut plan).unwrap() else {
+    let mut stored = None;
+    let plan = policy
+        .plan(|| ready.clone().into_iter(), &mut stored)
+        .unwrap();
+    let Next::Send(_, held) = policy.next(plan).unwrap() else {
         panic!("the plan sends");
     };
     policy.refused(held).unwrap();
     let balance = policy.balance_micros(1);
-    assert_eq!(
-        stop_of(policy.next(&mut plan).unwrap()),
-        Some(PlanStop::Changed)
-    );
+    assert_eq!(stop_of(policy.next(plan).unwrap()), Some(PlanStop::Changed));
     assert_eq!(policy.balance_micros(1), balance);
 }
 
@@ -1127,17 +1136,17 @@ fn a_plan_stops_when_the_scheduler_serves_another_account() {
     ];
     let mut storage = long_storage();
     let mut policy = Long::new(&mut storage, Lengths::default());
-    let mut plan = policy.plan(ready.into_iter()).unwrap();
-    let Next::Send(work, held) = policy.next(&mut plan).unwrap() else {
+    let mut stored = None;
+    let plan = policy
+        .plan(|| ready.clone().into_iter(), &mut stored)
+        .unwrap();
+    let Next::Send(work, held) = policy.next(plan).unwrap() else {
         panic!("the plan sends");
     };
     assert_eq!(work, ready[0]);
     policy.accepted(held, 0).unwrap();
     let balances = [policy.balance_micros(1), policy.balance_micros(2)];
-    assert_eq!(
-        stop_of(policy.next(&mut plan).unwrap()),
-        Some(PlanStop::Account)
-    );
+    assert_eq!(stop_of(policy.next(plan).unwrap()), Some(PlanStop::Account));
     assert_eq!(
         [policy.balance_micros(1), policy.balance_micros(2)],
         balances
@@ -1152,8 +1161,11 @@ fn a_plan_stops_when_the_scheduler_serves_another_account() {
 /// What a turn with no work did before the hook: a plan over nothing and its
 /// first step, which chooses nothing.
 fn empty_plan(policy: &mut Policy<'_>) {
-    let mut plan = policy.plan(core::iter::empty::<Work>()).unwrap();
-    assert!(matches!(policy.next(&mut plan).unwrap(), Next::Idle));
+    let mut stored = None;
+    let plan = policy
+        .plan(|| core::iter::empty::<Work>(), &mut stored)
+        .unwrap();
+    assert!(matches!(policy.next(plan).unwrap(), Next::Idle));
 }
 
 /// What a turn with no work does now: no plan, the policy's own step.

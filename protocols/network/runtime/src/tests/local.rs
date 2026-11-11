@@ -21,8 +21,8 @@ use oer_portable_memory::WakingSpscSender;
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
-    Block, Declined, Group, Interface, NetEvent, NetworkOwner, Outcome, Remote, SendRefusal,
-    WorkId, claim,
+    Block, Declined, Group, Interface, NetEvent, NetworkOwner, Outcome, Payload, Remote,
+    SendRefusal, WorkId, claim,
 };
 use oer_protocols_network_port::{
     Egress, EthernetFrameView, FramePort, FrameSource, LinkSnapshot, LinkState, Unpublished,
@@ -198,7 +198,12 @@ impl Produce for Script {
         Ok(offer)
     }
 
-    fn fill(&mut self, _now: Instant, work: Work<Tag>, data: &mut [u8]) -> Result<(), Declined> {
+    fn fill(
+        &mut self,
+        _now: Instant,
+        work: Work<Tag>,
+        data: &mut Payload<'_>,
+    ) -> Result<(), Declined> {
         let mut source = self.0.borrow_mut();
         source.calls.push(Call::Filled(work.tag));
         source.works.push((work.id, work.tag));
@@ -210,8 +215,7 @@ impl Produce for Script {
             .iter()
             .find(|item| item.tag.index == work.tag.index)
             .ok_or(Declined::Stale)?;
-        data.copy_from_slice(&item.data);
-        Ok(())
+        data.put(&item.data).map_err(|_| Declined::Unwritable)
     }
 
     fn refused(&mut self, tag: Tag, reason: SendRefusal) {
@@ -343,7 +347,7 @@ impl FramePort for LocalPort {
     fn publish<E>(
         &mut self,
         length: usize,
-        fill: impl FnOnce(&mut [u8]) -> Result<(), E>,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<u32, Unpublished<(), E>> {
         let mut line = self.0.borrow_mut();
         line.publishes += 1;
@@ -362,18 +366,20 @@ impl FramePort for LocalPort {
             Reply::Full => Err(Unpublished::Port(())),
             Reply::Lazy => Ok(0),
             Reply::Yes => {
-                let _either = fill(&mut frame);
+                let _either = fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None));
                 Ok(0)
             }
-            Reply::Take | Reply::Misreport => match fill(&mut frame) {
-                Err(error) if reply == Reply::Take => Err(Unpublished::Fill(error)),
-                Err(_) => Err(Unpublished::Port(())),
-                Ok(()) => {
-                    line.sent.push(frame);
-                    line.tickets += 1;
-                    Ok(line.tickets)
+            Reply::Take | Reply::Misreport => {
+                match fill(&mut oer_protocols_network_port::Slot::new(&mut frame, None)) {
+                    Err(error) if reply == Reply::Take => Err(Unpublished::Fill(error)),
+                    Err(_) => Err(Unpublished::Port(())),
+                    Ok(()) => {
+                        line.sent.push(frame);
+                        line.tickets += 1;
+                        Ok(line.tickets)
+                    }
                 }
-            },
+            }
         }
     }
 }

@@ -17,8 +17,8 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::AtomicWaker;
 use oer_portable_time::Instant;
 use oer_protocols_network_core::{
-    CommandId, CommandState, Count, Declined, Ends, NetworkOwner, OpenRefused, Outcome, Remote,
-    RetiredResults, SendRefusal, SocketId, WorkId,
+    CommandId, CommandState, Count, Declined, Ends, NetworkOwner, OpenRefused, Outcome, Payload,
+    Remote, RetiredResults, SendRefusal, SocketId, WorkId,
 };
 use oer_protocols_network_port::FramePort;
 
@@ -54,17 +54,19 @@ pub trait Produce {
     /// [`Next`]: nothing now.
     fn offer(&mut self, now: Instant) -> Result<Offer<Self::Tag>, Next>;
 
-    /// Write every octet of `work`'s data into `data`, which is exactly the
-    /// declared length, in the port's slot. A fill consumes nothing: a
+    /// Write every octet of `work`'s data into `data`, the declared length
+    /// in the port's slot, front to back: what it writes is summed as it is
+    /// written, so no pass reads it again. A fill consumes nothing: a
     /// refusal after it, by the device, means a later fill of the same work.
     ///
     /// # Errors
-    /// [`Declined`]: the work ends [`Outcome::Declined`].
+    /// [`Declined`]: the work ends [`Outcome::Declined`]. A fill that leaves
+    /// part of `data` unwritten is declined as [`Declined::Unwritable`].
     fn fill(
         &mut self,
         now: Instant,
         work: Work<Self::Tag>,
-        data: &mut [u8],
+        data: &mut Payload<'_>,
     ) -> Result<(), Declined>;
 
     /// The offer of `tag` was not declared, for `reason`. A final refusal
@@ -274,8 +276,8 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
 
 pub(crate) mod sealed {
     use super::{
-        CommandId, CommandState, Context, Count, Declined, Ends, EventSink, Instant, Remote,
-        RetiredResults, SendRefusal, ServiceEvent, SocketId, WorkId,
+        CommandId, CommandState, Context, Count, Declined, Ends, EventSink, Instant, Payload,
+        Remote, RetiredResults, SendRefusal, ServiceEvent, SocketId, WorkId,
     };
 
     /// What a producer's part of the service asks of the core.
@@ -317,7 +319,12 @@ pub(crate) mod sealed {
         ///
         /// # Errors
         /// [`Declined`].
-        fn fill(&mut self, now: Instant, work: WorkId, data: &mut [u8]) -> Result<(), Declined>;
+        fn fill(
+            &mut self,
+            now: Instant,
+            work: WorkId,
+            data: &mut Payload<'_>,
+        ) -> Result<(), Declined>;
 
         /// A fill declined: the producer's flow is out of the rest of the
         /// turn.
@@ -432,7 +439,12 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     /// No work of a service without a producer is declared, so no frame
     /// asks for this.
     #[inline(always)]
-    fn fill(&mut self, _now: Instant, _work: WorkId, _data: &mut [u8]) -> Result<(), Declined> {
+    fn fill(
+        &mut self,
+        _now: Instant,
+        _work: WorkId,
+        _data: &mut Payload<'_>,
+    ) -> Result<(), Declined> {
         Err(Declined::Stale)
     }
 
@@ -578,7 +590,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         true
     }
 
-    fn fill(&mut self, now: Instant, work: WorkId, data: &mut [u8]) -> Result<(), Declined> {
+    fn fill(&mut self, now: Instant, work: WorkId, data: &mut Payload<'_>) -> Result<(), Declined> {
         let tag = self
             .works
             .get(work.place())

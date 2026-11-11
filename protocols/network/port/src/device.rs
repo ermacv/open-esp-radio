@@ -243,13 +243,16 @@ pub trait NetDevice {
 pub trait NetTransmit {
     /// The stack's packet owner a transmission hands over.
     type Frame: EthernetFrame;
-    /// Whether the next [`Self::try_transmit`] finds room, without
-    /// registering anything: the sending path asks at every frame. It takes
-    /// back the memory the device returned first, so a call returns that
-    /// memory to the stack whether or not a frame follows.
+    /// Take back the memory the device returned, to the stack: what the
+    /// sending path's next notices and buffers find. A caller asks when what
+    /// it holds runs out, not at every frame.
+    fn reclaim(&mut self);
+    /// Whether the next [`Self::try_transmit`] finds room, as the memory last
+    /// reclaimed leaves it, without registering anything: the sending path
+    /// asks at every frame.
     fn has_room(&mut self) -> bool;
-    /// As [`Self::has_room`], registering `cx` for the next room or returned
-    /// memory before observing them.
+    /// [`Self::reclaim`], then as [`Self::has_room`], registering `cx` for
+    /// the next room or returned memory before observing them.
     fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()>;
     fn try_transmit(&mut self, frame: Self::Frame) -> Result<(), TransmitRefused<Self::Frame>>;
     /// End a burst of [`Self::try_transmit`]s: a frame it took may wait for

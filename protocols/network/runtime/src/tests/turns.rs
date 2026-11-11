@@ -507,11 +507,12 @@ impl Egress<u32, u32> for Exhausted {
     type Fault = core::convert::Infallible;
     type Plan<C: Candidate> = ();
 
-    fn plan<C: Candidate>(
+    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
         &mut self,
-        _ready: impl Iterator<Item = C> + Clone,
-    ) -> Result<(), core::convert::Infallible> {
-        Ok(())
+        _ready: impl Fn() -> I,
+        plan: &'p mut Option<()>,
+    ) -> Result<&'p mut (), core::convert::Infallible> {
+        Ok(plan.insert(()))
     }
 
     fn next<C: Candidate>(
