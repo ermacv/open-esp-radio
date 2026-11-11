@@ -18,7 +18,7 @@ use crate::rx::arena::{WifiIrqSignals, WifiRxArena, WifiRxStatic};
 #[cfg(oer_trace)]
 use crate::rx::counters::stall::{RxStall, RxStallReading, RxStallTicket};
 use oer_chips_esp32s31_hal::radio::ieee80211::dma::{
-    rx_dma::model::{RxWalkerLanding, RxWalkerModel},
+    rx_dma::model::{RxWalkerLanding, RxWalkerModel, RxWalkerStart},
     space::HostDma,
 };
 use oer_chips_esp32s31_hal::system::memory::dma_static::Placed;
@@ -124,6 +124,8 @@ struct Bench {
     sequence: u16,
     /// The test's handle on what the device's registers touch.
     atoms: Atoms,
+    /// The RX walker the device's registers drive.
+    walker: &'static RefCell<RxWalkerModel>,
 }
 
 fn channel() -> oer_protocols_ieee80211_wire::channel::Ghz2_4Channel {
@@ -133,6 +135,19 @@ fn channel() -> oer_protocols_ieee80211_wire::channel::Ghz2_4Channel {
 
 impl Bench {
     fn new() -> Self {
+        let bench = Self::unstarted();
+        let waker = bench.waker();
+        let started = <Model as Device<TX>>::poll_start(
+            bench.device,
+            &mut Context::from_waker(&waker),
+            channel(),
+        );
+        assert!(matches!(started, Poll::Ready(Ok(()))), "{started:?}");
+        bench
+    }
+
+    /// The device as its construction leaves it: no start polled.
+    fn unstarted() -> Self {
         let clock = Shared(Rc::new(VirtualClock::new()));
         let reader = clock.clone();
         let atoms = Atoms::new(Rc::new(move || reader.now().as_micros()));
@@ -185,14 +200,8 @@ impl Bench {
             wakes: Arc::new(Count(AtomicUsize::new(0))),
             sequence: 0,
             atoms,
+            walker,
         };
-        let waker = bench.waker();
-        let started = <Model as Device<TX>>::poll_start(
-            bench.device,
-            &mut Context::from_waker(&waker),
-            channel(),
-        );
-        assert!(matches!(started, Poll::Ready(Ok(()))), "{started:?}");
         bench
     }
 
@@ -472,4 +481,47 @@ fn a_request_without_ring_work_takes_a_snapshot_but_no_service() {
     bench.pass(5);
     bench.facts();
     assert_eq!(bench.read(ticket).unwrap().resume, Some(resume));
+}
+
+/// A device whose receive session never began a start gives its radio back
+/// at once: its walker was never enabled.
+#[test]
+fn a_never_started_device_gives_its_radio_back_without_a_stop() {
+    let bench = Bench::unstarted();
+    assert!(!bench.walker.borrow().walker_enabled);
+    assert!(
+        bench.device.take_stopped().is_none(),
+        "the general release still needs a paused session"
+    );
+    assert!(bench.device.take_unstarted().is_some());
+    assert!(
+        bench.device.take_unstarted().is_none(),
+        "the radio left once"
+    );
+}
+
+/// A start that began and failed (the walker enabled, its proof never
+/// came) keeps the radio: neither the never-started release nor the
+/// general one takes it until a stop pauses the session.
+#[test]
+fn a_start_that_began_and_failed_keeps_its_radio_from_the_never_started_release() {
+    let bench = Bench::unstarted();
+    bench.walker.borrow_mut().start = RxWalkerStart::Unconfirmed;
+    let waker = bench.waker();
+    let started = <Model as Device<TX>>::poll_start(
+        bench.device,
+        &mut Context::from_waker(&waker),
+        channel(),
+    );
+    assert!(matches!(started, Poll::Ready(Err(_))), "{started:?}");
+    assert!(bench.walker.borrow().walker_enabled, "the walker may run");
+    assert!(bench.device.take_unstarted().is_none());
+    assert!(bench.device.take_stopped().is_none());
+}
+
+/// A started device keeps its radio from the never-started release too.
+#[test]
+fn a_started_device_keeps_its_radio_from_the_never_started_release() {
+    let bench = Bench::new();
+    assert!(bench.device.take_unstarted().is_none());
 }

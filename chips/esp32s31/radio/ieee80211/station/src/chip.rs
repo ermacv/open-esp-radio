@@ -264,7 +264,7 @@ impl Config {
 /// The image's callbacks and the engine the station unwraps EAPOL-Key data
 /// with in its step: the AES accelerator, each block waited for on its
 /// `STATE` flag.
-pub(crate) struct CoreCallbacks<C> {
+pub struct CoreCallbacks<C> {
     callbacks: C,
     aes: oer_chips_esp32s31_platform_runtime::crypto::AesEngine,
 }
@@ -538,6 +538,8 @@ pub struct StationRunner<W: Binding> {
     >,
     /// The installation mailbox the actor's task fills.
     pub(crate) news: oer_portable_memory::WakingSpscReceiver<'static, radio::News<W>, 1>,
+    /// Tells the actor's task that the lifecycle ended without retiring it.
+    pub(crate) abandon: radio::Abandon,
     /// Publishes the exit to Control once it is final.
     pub(crate) stop: crate::StopGuard<'static, StationExit>,
 }
@@ -551,23 +553,8 @@ pub(crate) struct ServiceRunner<W: Binding> {
         <W::Notifies as crate::Notifies>::Channels,
     >,
 }
-/// How the station ended: an ordinary stop, or a typed cause the image
-/// records before it resets. A restart of the station never ends it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StationExit {
-    Stopped,
-    /// Stopped and released, every owner back, but the network's stop
-    /// participant was lost, so the network never confirmed its stop: a
-    /// software error this exit records. The radio's stop was confirmed;
-    /// nothing resets for it.
-    StoppedNetworkLost,
-    /// The lifecycle or the datapath actor under it ended terminally.
-    Failed(crate::failure::LifecycleFailure),
-    /// Stopped, but the Wi-Fi radio release did not complete.
-    ReleaseFailed(crate::failure::ReleaseCause),
-    /// The station never started.
-    Unavailable(InitializationError),
-}
+/// How the station ended ([`crate::station_end::StationExitOf`]).
+pub type StationExit = crate::station_end::StationExitOf<InitializationError>;
 /// The station's link and receive end.
 pub type StationNetwork<W> = Network<'static, <W as Binding>::Notifies>;
 /// The station's transmit end over `W`'s transmit memory and its packets.
@@ -645,7 +632,7 @@ pub fn station<W: Binding>(
         events,
         status: control.status_reader(),
     });
-    let (places, actor, news) = storage.actor.split();
+    let (places, actor, news, abandon) = storage.actor.split();
     let crate::ActorConnection {
         network_stop,
         transmit,
@@ -698,6 +685,7 @@ pub fn station<W: Binding>(
                 },
                 actor,
                 news,
+                abandon,
                 stop,
             },
         },
@@ -705,13 +693,16 @@ pub fn station<W: Binding>(
 }
 impl<W: Binding> Datapath<W> {
     /// Run the datapath actor: its rates report to `observer`, its
-    /// station events go to `sink`.
-    pub async fn run(self, observer: W::Observer, sink: W::Sink) {
+    /// station events go to `sink`. An installation that did not retire
+    /// comes back whole ([`radio::DatapathEnd::Unfinished`]).
+    pub async fn run(self, observer: W::Observer, sink: W::Sink) -> radio::DatapathEnd<W> {
         radio::drive(self, observer, sink).await
     }
 }
 impl<W: Binding> StationRunner<W> {
-    pub async fn run(self, profile: Profile<W>) -> StationExit {
+    /// Run the station's lifecycle: its exit, and the lifecycle's half of
+    /// an installation that did not retire.
+    pub async fn run(self, profile: Profile<W>) -> service::StationEnd<W> {
         service::serve(self, profile).await
     }
 }

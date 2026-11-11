@@ -4,5 +4,5 @@ error[E0308]: mismatched types
 11 |     return PortCommand::SelectGroup { permission: ap, installed: selected }; // ui-error: E0308
    |                                                   ^^ expected `Station`, found `AccessPoint`
    |
-   = note: expected struct `IssuedSlot<'_, ModelGroupPermission<oer_protocols_ieee80211_contracts_port::Station>, oer_protocols_radio_port::Child<Root<StaticId<UiSlot>>, 8>>`
-              found struct `IssuedSlot<'id, ModelGroupPermission<oer_protocols_ieee80211_contracts_port::AccessPoint>, oer_protocols_radio_port::Child<oer_protocols_radio_port::Child<Root<StaticId<UiSlot>>, 9>, 0>>`
+   = note: expected struct `IssuedSlot<'_, Slots<ModelGroupPermission<oer_protocols_ieee80211_contracts_port::Station>, 1>, oer_protocols_radio_port::Child<Root<StaticId<UiSlot>>, 8>>`
+              found struct `IssuedSlot<'id, Slots<ModelGroupPermission<oer_protocols_ieee80211_contracts_port::AccessPoint>, 1>, oer_protocols_radio_port::Child<oer_protocols_radio_port::Child<Root<StaticId<UiSlot>>, 9>, 0>>`

@@ -10,6 +10,8 @@ pub enum BackendFault {
     /// The data arenas quarantined themselves.
     Arena(ArenaFault),
     TuneNotRecorded,
+    /// The port lost the right of its one unkept place.
+    RightLost,
     HardwareUnavailable,
     /// The lower-MAC core was not in the view a step needed.
     CoreViewUnavailable(CoreOperation),
@@ -18,15 +20,7 @@ pub enum BackendFault {
         queue: u8,
         step: PublishStep,
     },
-    /// A hardware queue completed twice in one service.
-    DuplicateCompletion {
-        queue: u8,
-    },
-    /// The core removed more keys than were installed.
-    RemovalOverflow,
-    /// The core reported no removal of a key it was told to remove.
-    RemovalMissing,
-    /// A removal's terminal named another slot than the key held.
+    /// A removal's rights were of another slot kind than the key it named.
     RemovalMismatch,
     /// A group command named a key index the access point's group has not.
     GroupKeyIdRange,
@@ -54,8 +48,6 @@ pub enum BackendFault {
     ReceiveRange,
     /// A received buffer was dropped without its recycle.
     ReceiveLost,
-    /// The data arenas' step completed an MPDU or removed a key.
-    ArenaCoreContract,
     /// The installation's descriptors, chains, tickets or buffers were not
     /// all available.
     InstallationResources,
@@ -70,10 +62,26 @@ pub enum BackendFault {
     KeySlotMissing(KeyOperation),
     /// Received units were returned or lent beyond the count held.
     ReceiveAccounting,
-    /// A command the data port held at its barrier passed its bound.
-    CommandExpired(PortCommandKind),
     /// An HE association the MAC's fields do not hold.
     HeAssociationRange,
+    /// A station group key replacement the hardware did not take.
+    GroupReplacement(GroupReplacement),
+    /// The stopped port's one clear of a failed rollback's group key entry
+    /// left the key table reading it valid.
+    GroupEntryHeld,
+}
+/// How a station group key replacement the hardware did not take ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GroupReplacement {
+    /// Refused before the key table changed.
+    Refused,
+    /// The new key was rejected and the previous key is installed again.
+    RolledBack(CryptoKeyError),
+    /// Neither key is installed: both causes.
+    RollbackFailed {
+        replacement: CryptoKeyError,
+        rollback: CryptoKeyError,
+    },
 }
 /// The lower-MAC operation a missing core view stopped.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -108,21 +116,6 @@ pub enum KeyOperation {
     Remove,
     Replace,
     Select,
-}
-/// The kind of a data-port command.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PortCommandKind {
-    InstallPairwise,
-    InstallGroup,
-    ReplaceGroup,
-    SelectGroup,
-    RemovePairwise,
-    RemoveGroup,
-    Configure,
-    CloseGate,
-    SetEdca,
-    SetBssColor,
-    SetHe,
 }
 /// Why the data arenas quarantined themselves.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -233,6 +226,7 @@ pub enum UnpublishedCause {
     CoreView,
     Admission,
     Key,
+    Registers,
     Step(PublishStep),
 }
 
@@ -535,10 +529,42 @@ pub enum PlatformClock {
     ModemCoexistence,
     ModemLowPowerTimer,
 }
+/// A role that never started: why its start refused, and how the owners
+/// that refusal returned ended. Both stand: a cleanup that failed never
+/// hides the refusal, and the refusal never hides the cleanup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Unavailable<C> {
+    /// Why the start refused.
+    pub cause: C,
+    /// How the refusal's owners ended: a started radio's release, or a
+    /// member's leave. An error names a posted leave that ended for its
+    /// cause; the owners went with it, and none is kept.
+    pub cleanup: Result<(), ReleaseCause>,
+}
+
+impl<C> Unavailable<C> {
+    /// A refusal that left nothing to end.
+    pub const fn took_nothing(cause: C) -> Self {
+        Self {
+            cause,
+            cleanup: Ok(()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReleaseCause {
-    /// The stopped device still held a live or failed radio frontier.
-    NotStopped,
+    /// The port has not confirmed its radio's stop: nothing was released,
+    /// and the port keeps the radio and every owner.
+    StopUnconfirmed,
+    /// The port confirmed its radio's stop and still holds owners (admitted
+    /// work, a received unit, an item a sink refused, a removal waiting):
+    /// nothing was released, and the port keeps the radio and those owners.
+    Held,
+    /// The port confirmed its radio's stop and released its installations,
+    /// but its device has not paused its radio frontier (live or failed):
+    /// the device keeps the radio and its owners.
+    FrontierHeld,
     /// The MAC or its RX walker was still active; nothing was posted.
     StillActive(MaintenanceError),
     /// The radio actor never answered the leave request.
@@ -549,30 +575,68 @@ pub enum ReleaseCause {
     /// the release. The task keeps what it was handed; a later answer is
     /// never read, and nothing is reused.
     Deadline,
+    /// The stopped port's cleanup did not finish: the port keeps its
+    /// owners and the radio, and nothing was released.
+    Cleanup(CleanupCause),
+    /// A port call of the run returned an item it could neither give nor
+    /// keep: no release ran, and the item goes back to the runner's
+    /// caller.
+    Unkept,
 }
-/// Why the station's lifecycle, or the datapath actor under it, ended
-/// with a cause the image records before it resets. A restart of the
-/// station never ends here: it reinstalls the port and builds the service
-/// again.
+/// Why the stopped port's cleanup ([`DataPort::clean_stopped`]) did not
+/// finish. Nothing calls it again on its own: the port stays stopped with
+/// the owners it holds.
+///
+/// [`DataPort::clean_stopped`]: oer_protocols_ieee80211_contracts_port::DataPort::clean_stopped
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CleanupCause {
+    /// The radio had not confirmed a stop.
+    NotStopped,
+    /// The port holds its contract fault.
+    Faulted(BackendFault),
+    /// The cleanup's next step could not run and wrote nothing.
+    Unavailable(BackendFault),
+    /// The cleanup's one write was issued and the hardware still holds
+    /// what it releases: a station group key's entry still reads valid.
+    Held(BackendFault),
+    /// The cleanup returned an item it could neither give its caller's
+    /// sink nor keep: nothing is released, and the item goes back to the
+    /// runner's caller.
+    Unkept,
+}
+/// Why the station's lifecycle, or the datapath actor under it, ended on a
+/// failure. Nothing resets for it: the installation comes back whole, both
+/// halves ([`crate::unfinished`]). A restart of the station never ends
+/// here: it reinstalls the port and builds the service again.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LifecycleFailure {
     /// The radio did not start on its first channel; a refused retune
     /// keeps the port's cause.
     StartRefused(oer_protocols_ieee80211_contracts_port::StartRefused<BackendFault>),
     /// A stop proved nothing by its deadline: what was still out.
-    StopUnconfirmed(oer_protocols_ieee80211_runtime::datapath::StopObserved),
+    StopUnconfirmed(oer_protocols_ieee80211_runtime::datapath::StopObserved<BackendFault>),
     /// A retune's stop proved nothing.
-    RetuneUnconfirmed(oer_protocols_ieee80211_contracts_port::StopUnconfirmed),
+    RetuneUnconfirmed(oer_protocols_ieee80211_contracts_port::StopUnconfirmed<BackendFault>),
     /// The data port broke its contract: its named fault.
     Port(BackendFault),
     /// The datapath actor broke its own contract.
     Actor(oer_protocols_ieee80211_runtime::datapath::ActorViolation),
+    /// The port refused a received unit's recycle for its count; the unit
+    /// stays with the actor.
+    Receive(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
     /// The actor returned an owner the lifecycle did not send.
     Contract(oer_protocols_ieee80211_runtime::lifecycle::LifecycleViolation),
     /// The port did not reinstall after the station's restart.
     Reinstall(ReinstallCause),
     /// The datapath task's news came out of its order.
     Mailbox,
+    /// A port call returned an item it could neither give the actor nor
+    /// keep: it stays with the actor, which makes no port call after it.
+    Unkept,
+    /// The port did not accept a submission for want of its right to hand
+    /// out the attempt's terminal: the attempt stays with the actor, which
+    /// runs no turn after it.
+    Unaccepted,
 }
 /// Why the port did not reinstall after the station's restart.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -589,6 +653,8 @@ pub enum ReinstallCause {
     Resources,
     /// The TSF epochs are used up.
     Epochs,
+    /// The stopped port's cleanup did not finish.
+    Cleanup(CleanupCause),
 }
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;
