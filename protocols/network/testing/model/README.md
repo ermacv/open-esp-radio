@@ -79,7 +79,7 @@ instructions a run:
 
     cargo test --release -p oer-protocols-network-testing-model --test scenarios --no-run
     taskset -c 0 perf stat -e instructions:u <the scenarios binary> \
-        work::an_unpaced_load_takes_each_frame_once_through_a_plan_of_several --exact
+        work::an_unpaced_load_takes_each_frame_once_and_walks_one_place_for_it --exact
 
 The medium, the harness and the virtual clock are part of that count and do
 not change with the network's code, so the difference between two revisions,
