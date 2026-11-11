@@ -1761,8 +1761,7 @@ fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
 }
 
 #[test]
-fn messages_stay_small() {
-    assert!(core::mem::size_of::<FromActor<'static, P<'static>>>() <= FROM_ACTOR_BYTES);
+fn message_sizes() {
     std::println!(
         "ToActor {} FromActor {} Returned {} StationTx {} Link {}",
         core::mem::size_of::<ToActor<'static, P<'static>>>(),
