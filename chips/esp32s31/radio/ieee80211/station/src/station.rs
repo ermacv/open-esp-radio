@@ -346,7 +346,7 @@ pub type RejectedOf<W> =
 /// the lifecycle stopped waiting. The place the lifecycle ran in is free
 /// once the half left it; the half stays here for good.
 #[must_use = "the lifecycle's half holds the station's owners of the installation"]
-pub struct UnfinishedLifecycle<W: Binding>(HalfOf<W>);
+pub struct UnfinishedLifecycle<W: Binding>(Placed<'static, HalfOf<W>>);
 
 /// The generic half of `W`'s lifecycle.
 type HalfOf<W> = crate::station_end::UnfinishedLifecycleOf<
@@ -479,16 +479,20 @@ impl<W: Binding> UnfinishedLifecycle<W> {
         reason = "a refused finish returns the half and the proof whole, by value"
     )]
     pub fn finish(
-        self,
+        mut self,
         retired: crate::station_end::DatapathRetired<<W as Binding>::Id>,
     ) -> Result<FinishedLifecycle<W>, RefusedProofOf<W>> {
-        self.0
-            .finish(retired)
-            .map_err(|refused| crate::station_end::RefusedProof {
-                half: Self(refused.half),
-                proof: refused.proof,
-                cause: refused.cause,
-            })
+        // A refused proof leaves the half in its place.
+        if let Some(cause) = self.0.refusal(&retired) {
+            return Err(crate::station_end::RefusedProof {
+                half: self,
+                proof: retired,
+                cause,
+            });
+        }
+        // The proof is spent: its installation retired with this half.
+        let _spent = retired;
+        Ok(self.0.read().into_finished())
     }
 }
 
@@ -520,6 +524,9 @@ pub(crate) struct ServiceStorage<W: Binding> {
     lifecycle: StaticPlace<LifecycleOf<W>>,
     completed: StaticPlace<CompletedOf<W>>,
     unfinished: StaticPlace<RetiredOf<W>>,
+    /// The unfinished installation's lifecycle half: it moves as its owner,
+    /// not by value, through the task's end.
+    half: StaticPlace<HalfOf<W>>,
 }
 impl<W: Binding> ServiceStorage<W> {
     pub(crate) const fn new() -> Self {
@@ -527,6 +534,7 @@ impl<W: Binding> ServiceStorage<W> {
             lifecycle: StaticPlace::new(),
             completed: StaticPlace::new(),
             unfinished: StaticPlace::new(),
+            half: StaticPlace::new(),
         }
     }
 }
@@ -662,20 +670,30 @@ type Mailbox<W> = oer_portable_memory::WakingSpscReceiver<'static, radio::News<W
 /// installation that did not retire, for the application.
 fn unfinished<W: Binding>(
     retired: Placed<'_, RetiredOf<W>>,
-    home: &'static mut MaybeUninit<RetiredOf<W>>,
+    (home, half): Homes<W>,
     queues: radio::LifecycleQueues<W>,
     installation: InstallationOf<W>,
     mailbox: Mailbox<W>,
     late: Option<crate::station_end::LateEnd<InitializationError>>,
 ) -> UnfinishedLifecycle<W> {
-    UnfinishedLifecycle(crate::station_end::UnfinishedLifecycleOf::new(
-        retired.move_to(home),
-        queues,
-        installation,
-        mailbox,
-        late,
-    ))
+    let retired = retired.move_to(home);
+    UnfinishedLifecycle(Placed::init(half, |half| {
+        half.write(crate::station_end::UnfinishedLifecycleOf::new(
+            retired,
+            queues,
+            installation,
+            mailbox,
+            late,
+        ))
+    }))
 }
+
+/// The homes an unfinished installation's lifecycle half leaves in: its
+/// retired lifecycle's, and its own.
+type Homes<W> = (
+    &'static mut MaybeUninit<RetiredOf<W>>,
+    &'static mut MaybeUninit<HalfOf<W>>,
+);
 
 /// The end of a lifecycle that ended on `failure` without retiring the
 /// actor: the actor's task hears it once and ends with its half
@@ -684,13 +702,13 @@ fn unfinished<W: Binding>(
 /// whole beside it.
 async fn abandoned<W: Binding>(
     failure: crate::failure::LifecycleFailure,
-    half: UnfinishedLifecycle<W>,
+    mut half: UnfinishedLifecycle<W>,
     abandon: &mut radio::Abandon,
 ) -> StationEnd<W> {
-    let UnfinishedLifecycle(half) = half;
+    half.0.abandoned(failure, abandon).await;
     StationEnd {
         exit: StationExit::Failed(failure),
-        lifecycle: Some(UnfinishedLifecycle(half.abandoned(failure, abandon).await)),
+        lifecycle: Some(half),
         in_transit: None,
     }
 }
@@ -725,10 +743,11 @@ async fn lifecycles<W: Binding>(
         lifecycle: lifecycle_place,
         completed: completed_place,
         unfinished: home,
+        half: half_home,
     } = storage;
     let lifecycle_place = lifecycle_place.uninit();
     let completed_place = completed_place.uninit();
-    let home = home.uninit();
+    let homes: Homes<W> = (home.uninit(), half_home.uninit());
     let Profile {
         station: mut station_config,
         mut sink,
@@ -836,7 +855,7 @@ async fn lifecycles<W: Binding>(
                             exit,
                             lifecycle: Some(unfinished(
                                 retired,
-                                home,
+                                homes,
                                 actor,
                                 installation,
                                 mailbox,
@@ -853,24 +872,24 @@ async fn lifecycles<W: Binding>(
                 let failure = crate::failure::LifecycleFailure::StopUnconfirmed(
                     crate::failure::convert::stop_observed(observed),
                 );
-                let half = unfinished(retired, home, actor, installation, mailbox, None);
+                let half = unfinished(retired, homes, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::RetuneUnconfirmed(unconfirmed) => {
                 let failure = crate::failure::LifecycleFailure::RetuneUnconfirmed(
                     crate::failure::convert::stop_unconfirmed(unconfirmed),
                 );
-                let half = unfinished(retired, home, actor, installation, mailbox, None);
+                let half = unfinished(retired, homes, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::Faulted(fault) => {
                 let failure = crate::failure::convert::actor_fault(fault);
-                let half = unfinished(retired, home, actor, installation, mailbox, None);
+                let half = unfinished(retired, homes, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
             LifecycleEnd::Contract(violation) => {
                 let failure = crate::failure::LifecycleFailure::Contract(violation);
-                let half = unfinished(retired, home, actor, installation, mailbox, None);
+                let half = unfinished(retired, homes, actor, installation, mailbox, None);
                 return abandoned(failure, half, &mut abandon).await;
             }
         };
@@ -901,7 +920,7 @@ async fn lifecycles<W: Binding>(
                 exit,
                 lifecycle: Some(unfinished(
                     retired,
-                    home,
+                    homes,
                     actor,
                     installation,
                     mailbox,

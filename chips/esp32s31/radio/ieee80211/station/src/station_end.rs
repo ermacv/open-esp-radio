@@ -521,7 +521,7 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// commands and tokens are kept in the half, and the wait goes on;
     /// nothing but the end of the actor's task ends it. Only then do the
     /// lifecycle's ends of the queues go out, so no producer runs while
-    /// they are collected.
+    /// they are collected. The half stays where it is: the wait borrows it.
     ///
     /// With every place for installations' news full ([`INSTALLED`]) the
     /// bound broke: the wait stops unconfirmed ([`LateRead::Full`]), the
@@ -529,15 +529,14 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
     /// ([`Self::confirm_end`]) once it took a kept news. A full store never
     /// stands for the end.
     pub(crate) async fn abandoned(
-        mut self,
+        &mut self,
         failure: LifecycleFailure,
         abandon: &mut oer_portable_memory::WakingSpscSender<'_, LifecycleFailure, 1>,
-    ) -> Self {
+    ) {
         abandon.ready().await.send(failure);
         // Confirmed, or every place full: the half tells which
         // ([`Self::late_end`]).
         let _read = self.confirm_end().await;
-        self
     }
 
     /// Wait until the actor's task tells how it ended, keeping each news of
@@ -661,17 +660,7 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
         reason = "a refused finish returns the half and the proof whole, by value"
     )]
     pub fn finish(mut self, retired: DatapathRetired<B>) -> Finished<Self, Q, C, K, E, B> {
-        // Read on first: a news of the proof's installation moves the
-        // current one to it.
-        let read = self.late_end();
-        let cause = if matches!(read, LateRead::Full) {
-            Some(ProofRefusal::Unread)
-        } else if retired.installation != self.current {
-            Some(ProofRefusal::Foreign)
-        } else {
-            None
-        };
-        if let Some(cause) = cause {
+        if let Some(cause) = self.refusal(&retired) {
             return Err(RefusedProof {
                 half: self,
                 proof: retired,
@@ -679,6 +668,26 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
             });
         }
         let DatapathRetired { installation: _ } = retired;
+        Ok(self.into_finished())
+    }
+
+    /// Why the half would refuse `retired` now, its news read on first (a
+    /// news of the proof's installation moves the current one to it), or
+    /// `None` when [`Self::into_finished`] may finish it.
+    pub(crate) fn refusal(&mut self, retired: &DatapathRetired<B>) -> Option<ProofRefusal> {
+        let read = self.late_end();
+        if matches!(read, LateRead::Full) {
+            Some(ProofRefusal::Unread)
+        } else if retired.installation != self.current {
+            Some(ProofRefusal::Foreign)
+        } else {
+            None
+        }
+    }
+
+    /// The finished half, once [`Self::refusal`] found nothing against the
+    /// proof and nothing was read since.
+    pub(crate) fn into_finished(self) -> FinishedLifecycleOf<Q, C, K, E, B> {
         let late = self.late;
         let Self {
             retired: _retired,
@@ -688,11 +697,11 @@ impl<'a, R, Q, C, K, E: Copy, B> UnfinishedLifecycleOf<'a, R, Q, C, K, E, B> {
             late: _,
             installed,
         } = self;
-        Ok(FinishedLifecycleOf {
+        FinishedLifecycleOf {
             late,
             queues,
             installed,
-        })
+        }
     }
 }
 /// One side's ends of the queues between the actor and the station's
