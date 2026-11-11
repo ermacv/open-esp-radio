@@ -44,6 +44,27 @@ fn the_header_s_octets_are_what_it_writes_and_reads_back() {
 }
 
 #[test]
+fn the_header_s_octets_follow_its_table() {
+    let header = Header {
+        run: 0x0a0b_0c0d,
+        sequence: 0x1011_1213_1415_1617,
+        sent_us: 0x2021_2223_2425_2627,
+        echo_request: false,
+        echo_reply: true,
+    };
+    let expected: [u8; LENGTH] = [
+        b'O', b'E', b'R', b'L', 2, 0, 0, 0, 0x0a, 0x0b, 0x0c, 0x0d, 0x10, 0x11, 0x12, 0x13, 0x14,
+        0x15, 0x16, 0x17, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+    ];
+    assert_eq!(header.to_bytes(), expected);
+    let both = Header {
+        echo_request: true,
+        ..header
+    };
+    assert_eq!(both.to_bytes()[4], 3);
+}
+
+#[test]
 fn the_largest_reports_fit_one_response() {
     let load = Load {
         now_us: u64::MAX,
