@@ -21,6 +21,7 @@ mod addressing;
 mod join;
 mod link;
 mod queued;
+mod rx_cycle;
 mod slow_consumer;
 mod stop;
 mod traffic;
