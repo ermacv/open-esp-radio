@@ -248,9 +248,10 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         }
     }
 
-    /// The one write of a place's state: its chain follows it. An ended
-    /// command goes on the ended chain only from a running one, so its end
-    /// is told once.
+    /// Write a place's state and hand the old one back: its chain follows
+    /// it, as with [`Self::put`], which writes one in place when nothing of
+    /// the old is needed. An ended command goes on the ended chain only from
+    /// a running one, so its end is told once.
     fn set(&mut self, number: u8, run: Run<'m, B, SIZE, T>) -> Option<Run<'m, B, SIZE, T>> {
         let to = self.chain_for(number, &run)?;
         let place = self.get_mut(number)?;
