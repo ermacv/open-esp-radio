@@ -47,7 +47,7 @@ impl Ipv4Fields {
     }
 
     /// The header's octets, with `checksum` in its field.
-    fn with_checksum(&self, checksum: u16) -> [u8; IPV4_HEADER_LEN] {
+    pub(crate) fn with_checksum(&self, checksum: u16) -> [u8; IPV4_HEADER_LEN] {
         let [checksum_high, checksum_low] = checksum.to_be_bytes();
         // Version 4, five words.
         let [version_ihl] = Ipv4VersionIhl::from_bytes([0x45]).to_bytes();
@@ -81,48 +81,6 @@ impl Ipv4Fields {
             destination2,
             destination3,
         ]
-    }
-
-    /// These fields as a template for headers that differ only in their
-    /// total length and identification: the sum of every other field is
-    /// made once.
-    pub fn template(&self) -> Ipv4Template {
-        let fields = Self {
-            total_length: 0,
-            identification: 0,
-            ..*self
-        };
-        Ipv4Template {
-            fields,
-            fixed: crate::checksum::Checksum::new().with(&fields.with_checksum(0)),
-        }
-    }
-}
-
-/// An IPv4 header's fields but its total length and identification, with
-/// the sum of the others ([`Ipv4Fields::template`]).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Ipv4Template {
-    fields: Ipv4Fields,
-    fixed: crate::checksum::Checksum,
-}
-
-impl Ipv4Template {
-    /// The header of `total_length` and `identification`, its checksum
-    /// from the fixed fields' sum and these two: the octets
-    /// [`Ipv4Fields::to_bytes`] makes of the same fields.
-    pub fn to_bytes(&self, total_length: u16, identification: u16) -> [u8; IPV4_HEADER_LEN] {
-        let checksum = self
-            .fixed
-            .with(&total_length.to_be_bytes())
-            .with(&identification.to_be_bytes())
-            .finish();
-        Ipv4Fields {
-            total_length,
-            identification,
-            ..self.fields
-        }
-        .with_checksum(checksum)
     }
 }
 

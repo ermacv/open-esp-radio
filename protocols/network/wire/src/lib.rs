@@ -39,4 +39,5 @@ pub mod ethernet;
 pub mod icmp;
 pub mod ip;
 pub mod transport;
+pub mod udp_frame;
 pub mod vlan;
