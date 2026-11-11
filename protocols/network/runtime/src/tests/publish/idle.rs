@@ -1,8 +1,7 @@
-//! A turn with certainly no work collects nothing: its policy hears
-//! `nothing_ready` in place of a plan, and the diagnostics count no
-//! collection for it. Every source of work still reaches a collection, in
-//! the turn it comes or the turn its time comes, and a turn with no work
-//! still takes its frames, commands and notices.
+//! A turn with certainly no work walks nothing: the diagnostics count no
+//! walk for it. Every source of work still goes out, in the turn it comes
+//! or the turn its time comes, and a turn with no work still takes its
+//! frames, commands and notices.
 
 use oer_portable_time::{Duration, Timer};
 use oer_protocols_network_wire::dhcp::MessageType;
@@ -21,9 +20,9 @@ fn turns_after(policy: &Planned, mark: usize) -> Vec<Vec<Step>> {
         .collect()
 }
 
-/// A turn's publishing, in either form it may take.
-const NOTHING: &[Step] = &[Step::NothingReady];
-const ONE_FRAME: &[Step] = &[Step::Collected, Step::Reserved, Step::Accepted];
+/// A turn that sent nothing, and one that sent one frame.
+const NOTHING: &[Step] = &[Step::Published(PublishEnd::Chose)];
+const ONE_FRAME: &[Step] = &[Step::Accepted, Step::Published(PublishEnd::Chose)];
 
 /// The peer asks for us: the service owes it a reply.
 fn peer_asks() -> Vec<u8> {
@@ -55,14 +54,12 @@ fn is_arp_reply(frame: &[u8]) -> bool {
 }
 
 /// A datagram comes in with a notice and the socket gives its block back:
-/// each of those turns collects nothing and counts no collection, and still
-/// takes the frame, the notice and the release. A send after them is
-/// collected and goes.
+/// each of those turns walks nothing, and still takes the frame, the notice
+/// and the release. A send after them goes.
 #[test]
-fn a_turn_with_nothing_ready_builds_no_plan_and_work_after_it_goes() {
+fn a_turn_with_nothing_ready_walks_nothing_and_work_after_it_goes() {
     brand!(Net);
     let probe = Probe::on();
-    let log = Planned::default();
     let PlanBench {
         service,
         mut sockets,
@@ -70,7 +67,7 @@ fn a_turn_with_nothing_ready_builds_no_plan_and_work_after_it_goes() {
         policy,
         stop,
         clock,
-    } = plan_bench_diagnosed::<Net, _, _>(log.clone(), log, probe.clone());
+    } = plan_bench_diagnosed::<Net, _>(probe.clone());
     let mut events = TurnMarks(policy.clone());
     let drive = async {
         let [a, _] = &mut sockets;
@@ -94,29 +91,20 @@ fn a_turn_with_nothing_ready_builds_no_plan_and_work_after_it_goes() {
         assert!(!quiet.is_empty());
         assert!(
             quiet.iter().all(|turn| turn == NOTHING),
-            "no turn collected: {quiet:?}"
+            "no turn sent: {quiet:?}"
         );
         let during = probe.total();
         assert_eq!(
             during.turns - before.turns,
             u32::try_from(quiet.len()).unwrap()
         );
-        assert_eq!(during.collections, before.collections, "none counted");
+        assert_eq!(during.walked, before.walked, "none walked");
         let mark = policy.0.borrow().len();
         let later = plan_send(a, b"later").await;
         assert_eq!(result_of(later).await, Sent::Ended(Outcome::Accepted));
         let after = turns_after(&policy, mark);
         assert!(after.iter().any(|turn| turn == ONE_FRAME), "{after:?}");
-        let collected = after
-            .iter()
-            .flatten()
-            .filter(|step| **step == Step::Collected)
-            .count();
-        assert_eq!(
-            probe.total().collections - during.collections,
-            u32::try_from(collected).unwrap(),
-            "each real collection counted, once"
-        );
+        assert!(probe.total().walked > during.walked, "the send was walked");
         stop.try_send(()).ok().unwrap();
     };
     let serve = async {
@@ -132,11 +120,10 @@ fn a_turn_with_nothing_ready_builds_no_plan_and_work_after_it_goes() {
     );
 }
 
-/// Control work a received frame makes is collected in that frame's turn.
+/// Control work a received frame makes goes in that frame's turn.
 #[test]
 fn control_work_after_a_received_frame_goes_in_its_turn() {
     brand!(Net);
-    let log = Planned::default();
     let PlanBench {
         service,
         mut sockets,
@@ -144,7 +131,7 @@ fn control_work_after_a_received_frame_goes_in_its_turn() {
         policy,
         stop,
         clock,
-    } = plan_bench_with::<Net, _>(log.clone(), log);
+    } = plan_bench::<Net>();
     let mut events = TurnMarks(policy.clone());
     let drive = async {
         settle().await;
@@ -172,12 +159,11 @@ fn control_work_after_a_received_frame_goes_in_its_turn() {
     home(&mut ended, &mut sockets);
 }
 
-/// A DHCP client's retransmission is control work its time makes: the turn
-/// its time comes collects it, and the turns between collect nothing.
+/// A DHCP client's retransmission is control work its time makes: it goes
+/// in the turn its time comes, and the turns between send nothing.
 #[test]
 fn control_work_its_time_makes_goes_when_the_time_comes() {
     brand!(Net);
-    let log = Planned::default();
     let interface = Interface::dhcp(LOCAL, 1500, 3).unwrap();
     let PlanBench {
         service,
@@ -186,7 +172,7 @@ fn control_work_its_time_makes_goes_when_the_time_comes() {
         policy,
         stop,
         clock,
-    } = plan_bench_on::<Net, _, _>(interface, log.clone(), log, ());
+    } = plan_bench_on::<Net, _>(interface, ());
     let mut events = TurnMarks(policy.clone());
     let drive = async {
         clock.wait_for(Duration::from_secs(20)).await.unwrap();
@@ -212,16 +198,15 @@ fn control_work_its_time_makes_goes_when_the_time_comes() {
         turns
             .iter()
             .all(|turn| turn == ONE_FRAME || turn == NOTHING || turn.is_empty()),
-        "every other turn collected nothing: {turns:?}"
+        "every other turn sent nothing: {turns:?}"
     );
 }
 
 /// A block that comes home through the return lane while the socket waits
-/// for one: the socket is granted it, and its datagram is collected and goes.
+/// for one: the socket is granted it, and its datagram goes.
 #[test]
 fn a_block_returned_to_a_waiting_socket_goes_out_after_turns_with_nothing_ready() {
     brand!(Net);
-    let log = Planned::default();
     let PlanBench {
         mut service,
         mut sockets,
@@ -229,7 +214,7 @@ fn a_block_returned_to_a_waiting_socket_goes_out_after_turns_with_nothing_ready(
         policy,
         stop,
         clock,
-    } = plan_bench_with::<Net, _>(log.clone(), log);
+    } = plan_bench::<Net>();
     let (returner, end) = Box::leak(Box::new(ReturnLane::new())).split();
     service.attach_returns(end).ok().unwrap();
     let mut events = TurnMarks(policy.clone());
@@ -252,7 +237,7 @@ fn a_block_returned_to_a_waiting_socket_goes_out_after_turns_with_nothing_ready(
         let turns = turns_after(&policy, mark);
         assert!(turns.iter().any(|turn| turn == NOTHING), "{turns:?}");
         assert!(
-            turns.iter().flatten().any(|step| *step == Step::Collected),
+            turns.iter().flatten().any(|step| *step == Step::Accepted),
             "{turns:?}"
         );
         for block in held {

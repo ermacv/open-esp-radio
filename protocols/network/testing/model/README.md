@@ -1,7 +1,7 @@
 # oer-protocols-network-testing-model
 
-One shared medium with several peers, for checking the network's egress on the
-host, and the end-to-end simulation of the station and the network. No product
+One shared medium with several peers, for checking the network's transmit path on
+the host, and the end-to-end simulation of the station and the network. No product
 package depends on it.
 
 `Medium` is a port and the radio's view of its peers at once: a frame holds the air
@@ -14,14 +14,12 @@ port's depth, free again only once its notice is taken. `Medium::batch` tells th
 ends of that many landed frames at once, or fewer once the air is idle: a Block
 Ack's settlements, without modelling the aggregate's air.
 
-The scenarios in `tests/` run the real sockets, service, core and policy, and judge
-by what the medium counted, which the policy never sees. `Direct` runs beside the
-airtime policy as a control: a scenario that could not tell them apart would prove
-nothing.
+The scenarios in `tests/` run the real sockets, service and core, and judge by
+what the medium counted, which the service never sees.
 
-It models contention for one radio's air: rates and retries are fixed per peer, and
-it has no loss, aggregated air, collisions or other stations' traffic. Its shares are checks
-of the scheduler's arithmetic and ownership, not claims about real air.
+It models one radio's air: rates and retries are fixed per peer, and it has no
+loss, aggregated air, collisions or other stations' traffic. Its scenarios check
+ownership and the service's progress, not claims about real air.
 
 ## Station simulation
 
@@ -67,12 +65,12 @@ wakes, its HE path and transmit timing are outside it.
 ## Work per frame
 
 `tests/scenarios/work.rs` composes the transmit path as the load image does:
-the real service, core and airtime egress, the image's network geometry and a
+the real service and core, the image's network geometry and a
 local producer of load datagrams, a header and filler, unpaced, to one peer.
 The medium's air is so fast that the service bounds the load, as a hart it
 saturates does, and it tells a Block Ack's 32 settlements at once. The
 service's diagnostics, always on here, and the producer count the work: turns,
-collections, places walked, plans continued and stopped, fills and offers.
+places walked, fills and offers.
 A case bounds that work per frame.
 
 The counts are the work's shape. Its weight is the case's instruction count on

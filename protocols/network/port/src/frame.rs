@@ -227,7 +227,7 @@ pub enum Class {
     Data,
 }
 
-/// What a policy may know of work that is ready, before any frame of it exists.
+/// What is known of work that is ready, before any frame of it exists.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Ready {
     pub class: Class,
@@ -239,103 +239,6 @@ pub struct Ready {
     pub flow: Option<u8>,
     /// Its priority.
     pub dscp: Dscp,
-}
-
-/// A piece of ready work a policy can choose whole.
-pub trait Candidate {
-    fn ready(&self) -> &Ready;
-}
-
-/// Chooses what goes out before any frame exists, and keeps the account of what
-/// it chose. `Ticket` and `Notice` are the port's.
-///
-/// A choice is made in two steps. [`Self::plan`] collects the ready work once
-/// and reserves nothing: it keeps the continuation of its choice, at most
-/// [`QUANTUM`](crate::QUANTUM) frames, and what the choice read. Each
-/// [`Self::next`] then chooses one frame from the plan and reserves for that
-/// frame alone, exactly what a choice over the same ready work would choose
-/// and reserve; or it says nothing may go, or that the plan no longer knows
-/// ([`Next::Stop`](crate::Next::Stop)), reserving nothing. Exactly one of
-/// [`Self::accepted`], [`Self::refused`] or [`Self::unknown`] answers each
-/// reservation. A plan goes on only after its last frame was accepted, and only
-/// while nothing but its own frames' answers reached the policy or the work
-/// since it was collected: its caller drops it at any other answer, at a
-/// notice, and at the end of its publishing. A plan holds no owner, so
-/// dropping it returns nothing and costs nothing.
-pub trait Egress<Ticket, Notice> {
-    /// What a choice holds until it is answered.
-    type Reservation;
-    /// Why the policy cannot go on.
-    type Fault;
-    /// What one collection of the ready work keeps for the frames after it.
-    type Plan<C: Candidate>;
-
-    /// Collect a plan into `plan`, in place, from the ready work: each call
-    /// of `ready` lists every piece of it, and a collection that needs a
-    /// second look calls it again. What `plan` held before is gone; it
-    /// reserves nothing. The caller keeps `plan`'s storage from one
-    /// collection to the next, so a collection moves no plan. Returns the
-    /// plan collected, in `plan`.
-    ///
-    /// # Errors
-    /// [`Self::Fault`], which ends the service.
-    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
-        &mut self,
-        ready: impl Fn() -> I,
-        plan: &'p mut Option<Self::Plan<C>>,
-    ) -> Result<&'p mut Self::Plan<C>, Self::Fault>;
-
-    /// The plan's next frame, reserved; [`Next::Idle`](crate::Next::Idle)
-    /// until a port's wake or a notice if nothing may go now; or
-    /// [`Next::Stop`](crate::Next::Stop), with nothing reserved, once the plan
-    /// cannot say what a choice over the ready work would.
-    ///
-    /// # Errors
-    /// [`Self::Fault`], which ends the service.
-    fn next<C: Candidate>(
-        &mut self,
-        plan: &mut Self::Plan<C>,
-    ) -> Result<crate::Next<C, Self::Reservation>, Self::Fault>;
-
-    /// No work is ready, and its caller knows it with no collection: the
-    /// policy makes the same transition as [`Self::plan`] over no work and
-    /// that plan's first [`Self::next`], which then says
-    /// [`Next::Idle`](crate::Next::Idle), with no plan built and nothing
-    /// reserved. A policy whose look at no work changes nothing does nothing.
-    ///
-    /// # Errors
-    /// What that step over no work would return: [`Self::Fault`], which ends
-    /// the service.
-    fn nothing_ready(&mut self) -> Result<(), Self::Fault>;
-
-    /// The port took the frame: its charge waits for a notice.
-    ///
-    /// # Errors
-    /// [`Self::Fault`].
-    fn accepted(
-        &mut self,
-        reservation: Self::Reservation,
-        ticket: Ticket,
-    ) -> Result<(), Self::Fault>;
-
-    /// Nothing was published: the reservation comes back whole.
-    ///
-    /// # Errors
-    /// [`Self::Fault`].
-    fn refused(&mut self, reservation: Self::Reservation) -> Result<(), Self::Fault>;
-
-    /// Whether the frame went out is not known, and no completion follows. Its
-    /// cost is not zero for that.
-    ///
-    /// # Errors
-    /// [`Self::Fault`].
-    fn unknown(&mut self, reservation: Self::Reservation) -> Result<(), Self::Fault>;
-
-    /// The port has news.
-    ///
-    /// # Errors
-    /// [`Self::Fault`].
-    fn notice(&mut self, notice: Notice) -> Result<(), Self::Fault>;
 }
 
 /// Why a port published nothing.

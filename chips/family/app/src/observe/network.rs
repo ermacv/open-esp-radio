@@ -31,9 +31,7 @@ pub enum Publish {
     Refused,
     /// Publishing took its whole budget of frames.
     Budget,
-    /// Notices were left untold, so the turn published nothing.
-    Deferred,
-    /// The port contradicted itself, or the policy cannot go on.
+    /// The port contradicted itself.
     Fault,
 }
 
@@ -128,8 +126,9 @@ pub struct NetworkTurns {
     pub publish_chose: u32,
     pub publish_refused: u32,
     pub publish_budget: u32,
-    pub publish_deferred: u32,
     pub publish_fault: u32,
+    /// Turns that took their whole budget of notices.
+    pub notices_full: u32,
     /// Turns that ended with no free block in the pool.
     pub blocks_out: u32,
     /// Turns that ended with an open socket out of credits.
@@ -183,8 +182,8 @@ mod word {
     pub const PUBLISH_CHOSE: usize = 16;
     pub const PUBLISH_REFUSED: usize = 17;
     pub const PUBLISH_BUDGET: usize = 18;
-    pub const PUBLISH_DEFERRED: usize = 19;
-    pub const PUBLISH_FAULT: usize = 20;
+    pub const PUBLISH_FAULT: usize = 19;
+    pub const NOTICES_FULL: usize = 20;
     pub const BLOCKS_OUT: usize = 21;
     pub const CREDITS_OUT: usize = 22;
     pub const YIELDS: usize = 23;
@@ -269,8 +268,8 @@ impl NetworkCounter {
             publish_chose: at(word::PUBLISH_CHOSE),
             publish_refused: at(word::PUBLISH_REFUSED),
             publish_budget: at(word::PUBLISH_BUDGET),
-            publish_deferred: at(word::PUBLISH_DEFERRED),
             publish_fault: at(word::PUBLISH_FAULT),
+            notices_full: at(word::NOTICES_FULL),
             blocks_out: at(word::BLOCKS_OUT),
             credits_out: at(word::CREDITS_OUT),
             yields: at(word::YIELDS),
@@ -329,6 +328,7 @@ pub struct TurnTally {
     spent: u32,
     accepted: u32,
     intake_full: bool,
+    notices_full: bool,
     publish: Option<Publish>,
     /// The last ended turn left work it knew of.
     work_left: bool,
@@ -340,6 +340,7 @@ impl TurnTally {
             spent: 0,
             accepted: 0,
             intake_full: false,
+            notices_full: false,
             publish: None,
             work_left: false,
         }
@@ -393,6 +394,11 @@ impl TurnTally {
         self.intake_full = true;
     }
 
+    /// The turn took its whole budget of notices.
+    pub fn notices_full(&mut self) {
+        self.notices_full = true;
+    }
+
     /// The port accepted a frame.
     pub fn accepted(&mut self) {
         self.accepted = self.accepted.wrapping_add(1);
@@ -416,6 +422,7 @@ impl TurnTally {
             spent,
             accepted,
             intake_full,
+            notices_full,
             publish,
             ..
         } = core::mem::take(self);
@@ -423,6 +430,7 @@ impl TurnTally {
         counter.bump(word::BUDGET_SPENT, spent);
         counter.bump(word::BUDGET_TURNS, u32::from(spent != 0));
         counter.bump(word::INTAKE_FULL, u32::from(intake_full));
+        counter.bump(word::NOTICES_FULL, u32::from(notices_full));
         counter.bump(word::ACCEPTED, accepted);
         counter.bump(
             word::ACCEPTED_BY_TURN.saturating_add(accepted_bin(accepted)),
@@ -434,7 +442,6 @@ impl TurnTally {
                     Publish::Chose => word::PUBLISH_CHOSE,
                     Publish::Refused => word::PUBLISH_REFUSED,
                     Publish::Budget => word::PUBLISH_BUDGET,
-                    Publish::Deferred => word::PUBLISH_DEFERRED,
                     Publish::Fault => word::PUBLISH_FAULT,
                 },
                 1,
@@ -446,9 +453,8 @@ impl TurnTally {
             word::LOANS_AT_TURN_END.saturating_add(loans.min(LOAN_BINS.saturating_sub(1))),
             1,
         );
-        self.work_left = spent != 0
-            || intake_full
-            || matches!(publish, Some(Publish::Budget | Publish::Deferred));
+        self.work_left =
+            spent != 0 || intake_full || notices_full || matches!(publish, Some(Publish::Budget));
     }
 
     /// The pass after the last turn yielded to the executor.

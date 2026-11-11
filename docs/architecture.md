@@ -1463,10 +1463,9 @@ the existing HAL owner.
 ### Switchable network-core diagnostics
 
 One narrow exception to zero-cost instrumentation exists: the network core's
-diagnostics in the product image (Queued egress with Lending reception), which
-are switched on, off and reset at runtime without a rebuild. It covers the
-agreed counters only: work done through readiness indices and full candidate
-collections; transmit-plan continuations and stop reasons; returns processed
+diagnostics in the product image (with Lending reception), which are
+switched on, off and reset at runtime without a rebuild. It covers the
+agreed counters only: work done through readiness walks; returns processed
 and credits restored; loans out and published but unprocessed returns at a
 `no_credit` refusal; materialised frames; and the time split of the core's
 main stages. The counters, where each is counted and the cost while off are

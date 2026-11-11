@@ -1073,21 +1073,22 @@ pub struct NetworkTurns {
     /// ([`ACCEPTED_BINS`]).
     pub accepted: u32,
     pub accepted_by_turn: [u32; ACCEPTED_BINS],
-    /// Turns by how their publishing ended: the policy chose nothing, the
-    /// port refused for room or link, publishing took its whole budget, it
-    /// waited for untold notices, or a fault.
+    /// Turns by how their publishing ended: nothing more was ready, the
+    /// port refused for room or link, publishing took its whole budget, or
+    /// a fault.
     pub publish_chose: u32,
     pub publish_refused: u32,
     pub publish_budget: u32,
-    pub publish_deferred: u32,
     pub publish_fault: u32,
+    /// Turns that took their whole budget of notices.
+    pub notices_full: u32,
     /// Turns that ended with no free block, and with an open socket out of
     /// credits.
     pub blocks_out: u32,
     pub credits_out: u32,
     /// Passes after a turn that moved, yielded to the executor: all, and
     /// those after a turn with signs of possible work left (a spent budget,
-    /// a full intake, publishing at its budget or deferred); a spent frame
+    /// a full intake or notices, publishing at its budget); a spent frame
     /// budget does not prove that a next frame exists.
     pub yields: u32,
     pub yields_with_work: u32,
@@ -1145,7 +1146,7 @@ impl NetworkTurns {
             publish_chose: count(|turns| turns.publish_chose),
             publish_refused: count(|turns| turns.publish_refused),
             publish_budget: count(|turns| turns.publish_budget),
-            publish_deferred: count(|turns| turns.publish_deferred),
+            notices_full: count(|turns| turns.notices_full),
             publish_fault: count(|turns| turns.publish_fault),
             blocks_out: count(|turns| turns.blocks_out),
             credits_out: count(|turns| turns.credits_out),
@@ -1249,19 +1250,10 @@ pub const DIAGNOSTIC_STAGE_NAMES: [&str; DIAGNOSTIC_STAGES] = [
 pub struct NetworkDiagnostics {
     /// Turns counted.
     pub turns: u32,
-    /// Full candidate collections, and the running places their readiness
-    /// walks visited.
-    pub collections: u32,
+    /// The running places the readiness walks visited.
     pub walked: u32,
     /// Ends the ended chains told.
     pub told: u32,
-    /// Frames a transmit plan sent after its first.
-    pub continued: u32,
-    /// Plans that stopped, by reason.
-    pub stopped_spent: u32,
-    pub stopped_changed: u32,
-    pub stopped_grant: u32,
-    pub stopped_account: u32,
     /// Return batches that took something, the blocks they brought home
     /// and the receive loans they gave back.
     pub return_batches: u32,

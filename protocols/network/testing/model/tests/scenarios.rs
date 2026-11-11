@@ -28,12 +28,12 @@ use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_network_core::{
     Block, Interface, NetEvent, NetworkOwner, Outcome, Remote, claim,
 };
-use oer_protocols_network_port::{Egress, FrameSource};
+use oer_protocols_network_port::FrameSource;
 use oer_protocols_network_runtime::{
-    Direct, EndCause, Ended, MemoryPolicy, Observer, PublishEnd, Sent, Service, ServiceEvent,
-    Socket, SocketLanes, StopLane,
+    EndCause, Ended, MemoryPolicy, Observer, Sent, Service, ServiceEvent, Socket, SocketLanes,
+    StopLane,
 };
-use oer_protocols_network_testing_model::{Medium, Notice, PeerSpec, Spent, Ticket};
+use oer_protocols_network_testing_model::{Medium, PeerSpec, Spent};
 use oer_protocols_network_wire::ip::Dscp;
 
 #[path = "scenarios/work.rs"]
@@ -66,20 +66,8 @@ type Stopper = WakingSpscSender<'static, (), 1>;
 type Sock<B> = Socket<'static, 'static, B, SIZE, DEPTH, LANE, CREDITS>;
 type Owner<B, const N: usize> =
     NetworkOwner<'static, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, N, Medium>;
-type Run<B, E, const N: usize> = Ended<
-    'static,
-    'static,
-    B,
-    SIZE,
-    SOCKETS,
-    CREDITS,
-    N,
-    DEPTH,
-    LANE,
-    Medium,
-    E,
-    <E as Egress<Ticket, Notice>>::Fault,
->;
+type Run<B, const N: usize> =
+    Ended<'static, 'static, B, SIZE, SOCKETS, CREDITS, N, DEPTH, LANE, Medium>;
 
 fn peer(number: u8, micros_per_octet: u32) -> PeerSpec {
     PeerSpec {
@@ -253,8 +241,8 @@ struct TurnCount {
     notices: u64,
     /// Frames the port took in the turn.
     accepted: u32,
-    /// The turn left notices untold and published nothing.
-    deferred: bool,
+    /// The turn took its whole budget of notices: more waited.
+    notices_full: bool,
 }
 
 /// Counts each turn: the medium tells how many notices it handed on.
@@ -273,7 +261,7 @@ impl EventSink<ServiceEvent> for Turns {
     fn event(&mut self, event: ServiceEvent) {
         match event {
             ServiceEvent::Accepted => self.turn.accepted += 1,
-            ServiceEvent::Published(PublishEnd::Deferred) => self.turn.deferred = true,
+            ServiceEvent::NoticesFull => self.turn.notices_full = true,
             ServiceEvent::TurnEnded(_) => {
                 let taken = self.medium.notices_taken();
                 self.turn.notices = taken - self.taken;
@@ -287,8 +275,8 @@ impl EventSink<ServiceEvent> for Turns {
     }
 }
 
-struct Report<B: 'static, E: Egress<Ticket, Notice>, const N: usize> {
-    ended: Run<B, E, N>,
+struct Report<B: 'static, const N: usize> {
+    ended: Run<B, N>,
     /// Each turn of the service.
     turns: Vec<TurnCount>,
 
@@ -325,11 +313,7 @@ fn scenario<'s>(medium: &'s Medium, flows: &'s [Flow], script: Vec<(u64, At)>) -
 }
 
 impl Scenario<'_> {
-    fn run<B: 'static, E: Egress<Ticket, Notice> + 'static, const N: usize>(
-        self,
-        owner: Owner<B, N>,
-        egress: E,
-    ) -> Report<B, E, N> {
+    fn run<B: 'static, const N: usize>(self, owner: Owner<B, N>) -> Report<B, N> {
         let Self {
             medium,
             clock,
@@ -352,8 +336,7 @@ impl Scenario<'_> {
             DEPTH,
             LANE,
             Medium,
-            E,
-        > = Service::new(owner, egress, memory, stopping);
+        > = Service::new(owner, memory, stopping);
         let left = RefCell::new(Vec::new());
         let evicted = RefCell::new(BTreeMap::new());
         let ended = Rc::new(RefCell::new(None));
@@ -460,8 +443,7 @@ fn a_sleeping_peer_holds_only_its_own_credits_of_a_shared_pool() {
     ];
     // Room for one socket's credits and a little: the pool runs out at once
     // but for what the asleep peer cannot hold.
-    let report =
-        scenario(&medium, &flows, script).run(owner::<Net, { CREDITS + 2 }>(&medium), Direct);
+    let report = scenario(&medium, &flows, script).run(owner::<Net, { CREDITS + 2 }>(&medium));
     let [slept, woke] = &report.marks[..] else {
         panic!();
     };
@@ -477,7 +459,7 @@ fn an_exhausted_pool_starves_no_flow() {
     let medium = medium(&peers);
     let flows = flows(&[(5000, peers[0]), (5001, peers[1])]);
     let script = vec![(SECOND, At::Stop)];
-    let report = scenario(&medium, &flows, script).run(owner::<Net, 2>(&medium), Direct);
+    let report = scenario(&medium, &flows, script).run(owner::<Net, 2>(&medium));
     assert_eq!(report.outstanding, 0);
 }
 
@@ -515,8 +497,8 @@ fn a_limit_keeps_a_sleepers_flows_to_their_share_of_the_pool() {
     let peers = [peer(1, FAST), peer(2, FAST)];
     let medium = medium(&peers);
     let flows = to_a_sleeper(&peers, CREDITS);
-    let report = scenario(&medium, &flows, a_second_asleep())
-        .run(owner::<Net, { 2 * CREDITS }>(&medium), Direct);
+    let report =
+        scenario(&medium, &flows, a_second_asleep()).run(owner::<Net, { 2 * CREDITS }>(&medium));
     let [start, end, after] = &report.marks[..] else {
         panic!();
     };
@@ -543,7 +525,7 @@ fn an_exhausted_pool_evicts_nothing_while_all_can_move() {
         evict_after: Some(Duration::from_millis(50)),
     };
     // Three blocks in two groups leave one group holding more, and a waiter.
-    let report = run.run(owner::<Net, 3>(&medium), Direct);
+    let report = run.run(owner::<Net, 3>(&medium));
     assert!(report.evicted.is_empty(), "{:?}", report.evicted);
 }
 
@@ -554,8 +536,7 @@ fn a_group_holding_little_goes_first_when_blocks_are_scarce() {
     let medium = medium(&peers);
     let list = flows(&[(5000, peers[0]), (5001, peers[0]), (5002, peers[1])]);
     let script = a_second_asleep();
-    let report =
-        scenario(&medium, &list, script).run(owner::<Net, { 2 * CREDITS }>(&medium), Direct);
+    let report = scenario(&medium, &list, script).run(owner::<Net, { 2 * CREDITS }>(&medium));
     let [start, end, _] = &report.marks[..] else {
         panic!();
     };
@@ -576,7 +557,7 @@ fn control_work_keeps_its_turn_under_full_data() {
         (63 * SECOND, At::Mark),
         (63 * SECOND, At::Stop),
     ];
-    let report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium), Direct);
+    let report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium));
     assert_eq!(report.marks.len(), 3);
     assert!(medium.spent_on_everyone().frames >= 4, "two peers, twice");
 }
@@ -591,7 +572,7 @@ fn refusals_return_their_reservations() {
         .map(|step| (step * SECOND / 20, At::Refuse(3)))
         .chain([(SECOND, At::Stop)])
         .collect();
-    let mut report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium), Direct);
+    let mut report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium));
     assert!(medium.refused() > 0);
     land_all(&medium, &mut report);
     assert_eq!(medium.unsettled(), 0);
@@ -599,7 +580,7 @@ fn refusals_return_their_reservations() {
 }
 
 /// Everything on the air ends, and the policy hears.
-fn land_all<B, const N: usize>(medium: &Medium, report: &mut Report<B, Direct, N>) {
+fn land_all<B, const N: usize>(medium: &Medium, report: &mut Report<B, N>) {
     while let Some(at) = medium.next_landing() {
         medium.advance(at);
     }
@@ -621,16 +602,14 @@ fn a_cancelled_run_hands_every_owner_to_the_next_service() {
         cancel_at: Some(SECOND),
         memory: MemoryPolicy::KEEP,
     };
-    let report = first.run(owner::<Net, BLOCKS>(&medium), Direct);
+    let report = first.run(owner::<Net, BLOCKS>(&medium));
     assert_eq!(report.ended.cause, EndCause::Stopped);
     assert_eq!(report.outstanding, 0, "blocks of unseen commands came back");
     let on_air = medium.unsettled();
     assert!(on_air > 0, "frames outlive the service that sent them");
     let before = medium.spent();
 
-    let Ended {
-        retired, egress, ..
-    } = report.ended;
+    let Ended { retired, .. } = report.ended;
     let owner = NetworkOwner::new(retired.brand, interface(), retired.pool, retired.port);
     let flow_list = flows(&[(5100, peers[0]), (5101, peers[1])]);
     let second = Scenario {
@@ -641,13 +620,8 @@ fn a_cancelled_run_hands_every_owner_to_the_next_service() {
         cancel_at: None,
         memory: MemoryPolicy::KEEP,
     };
-    let mut report = second.run(owner, egress);
-    assert_eq!(
-        report.ended.cause,
-        EndCause::Stopped,
-        "{:?}",
-        report.ended.fault
-    );
+    let mut report = second.run(owner);
+    assert_eq!(report.ended.cause, EndCause::Stopped);
     assert_eq!(report.outstanding, 0);
     let after = medium.spent();
     assert!(after[0].since(before[0]).frames > 0);
@@ -657,8 +631,8 @@ fn a_cancelled_run_hands_every_owner_to_the_next_service() {
 
 /// One peer's frames go out in aggregates of 32, whose ends the medium
 /// tells at once, as a Block Ack does: each batch of ends settles in the
-/// turn that finds it, and that turn publishes again. No turn defers its
-/// publication for the rest of an aggregate's ends.
+/// turn that finds it, and that turn publishes again. No turn leaves part
+/// of an aggregate's ends to the next.
 #[test]
 fn each_block_ack_of_32_settles_in_one_turn_which_publishes_again() {
     struct Net;
@@ -675,7 +649,7 @@ fn each_block_ack_of_32_settles_in_one_turn_which_publishes_again() {
         })
         .collect();
     let script = vec![(SECOND / 4, At::Stop)];
-    let report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium), Direct);
+    let report = scenario(&medium, &flows, script).run(owner::<Net, BLOCKS>(&medium));
     assert_eq!(report.ended.cause, EndCause::Stopped);
     let told: Vec<&TurnCount> = report
         .turns
@@ -686,14 +660,14 @@ fn each_block_ack_of_32_settles_in_one_turn_which_publishes_again() {
         .iter()
         .filter(|turn| turn.notices == AGGREGATE as u64)
         .count();
-    let deferred = report.turns.iter().filter(|turn| turn.deferred).count();
+    let notices_full = report.turns.iter().filter(|turn| turn.notices_full).count();
     let republished = told
         .iter()
         .filter(|turn| turn.notices == AGGREGATE as u64 && turn.accepted != 0)
         .count();
     let most = told.iter().map(|turn| turn.notices).max();
     println!(
-        "turns {}, turns with notices {}, whole aggregates {whole}, deferred {deferred}, \
+        "turns {}, turns with notices {}, whole aggregates {whole}, notices full {notices_full}, \
          published in the aggregate's turn {republished}, most notices in a turn {most:?}, \
          frames {}",
         report.turns.len(),
@@ -702,7 +676,7 @@ fn each_block_ack_of_32_settles_in_one_turn_which_publishes_again() {
     );
     assert!(whole >= 4, "aggregates went whole: {told:?}");
     assert_eq!(told.len(), whole, "every batch in one turn: {told:?}");
-    assert_eq!(deferred, 0, "no turn waits for the rest of an aggregate");
+    assert_eq!(notices_full, 0, "no turn leaves part of an aggregate");
     assert_eq!(republished, whole, "each such turn publishes again");
     assert_eq!(report.outstanding, 0);
 }

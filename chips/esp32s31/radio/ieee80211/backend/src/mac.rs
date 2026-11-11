@@ -8,13 +8,6 @@
 //! and synthetic RX bindings. These APIs require hardware doubles. Production
 //! builds validate real DMA addresses on every architecture.
 
-#[cfg(test)]
-#[allow(
-    clippy::disallowed_methods,
-    clippy::disallowed_macros,
-    clippy::arithmetic_side_effects
-)]
-mod airtime_tests;
 pub mod ap_policy;
 pub mod ap_tsf;
 pub mod capabilities;

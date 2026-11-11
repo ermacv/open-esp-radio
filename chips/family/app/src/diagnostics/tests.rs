@@ -3,11 +3,8 @@ use super::*;
 fn one_turn() -> Counts {
     Counts {
         turns: 1,
-        collections: 2,
         walked: 9,
         told: 3,
-        continued: 4,
-        stopped_changed: 1,
         return_batches: 1,
         credits_restored: 2,
         no_credit: 1,

@@ -100,7 +100,6 @@ fn a_turn_counts_how_publishing_ended_and_what_was_out() {
         Publish::Refused,
         Publish::Refused,
         Publish::Budget,
-        Publish::Deferred,
         Publish::Fault,
     ] {
         tally.published(publish);
@@ -116,10 +115,9 @@ fn a_turn_counts_how_publishing_ended_and_what_was_out() {
             read.publish_chose,
             read.publish_refused,
             read.publish_budget,
-            read.publish_deferred,
             read.publish_fault,
         ],
-        [3, 2, 1, 1, 1]
+        [3, 2, 1, 1]
     );
     assert_eq!((read.blocks_out, read.credits_out), (1, 1));
 }
@@ -136,10 +134,11 @@ fn a_yield_counts_whether_its_turn_left_work() {
     tally.published(Publish::Chose);
     tally.ended(&counter, true, true, 0);
     tally.yielded(&counter);
-    // And publishing at its budget, or deferred.
+    // And publishing at its budget, or notices past theirs.
     turn(&mut tally, &counter, &[], 0, 8, Publish::Budget);
     tally.yielded(&counter);
-    turn(&mut tally, &counter, &[], 0, 0, Publish::Deferred);
+    tally.notices_full();
+    turn(&mut tally, &counter, &[], 0, 0, Publish::Chose);
     tally.yielded(&counter);
     // A turn that emptied everything leaves none, nor does a refused port.
     turn(&mut tally, &counter, &[], 0, 2, Publish::Chose);
@@ -148,6 +147,7 @@ fn a_yield_counts_whether_its_turn_left_work() {
     tally.yielded(&counter);
     let read = counter.read();
     assert_eq!((read.yields, read.yields_with_work), (6, 4));
+    assert_eq!(read.notices_full, 1);
     assert_eq!(read.intake_full, 1);
 }
 

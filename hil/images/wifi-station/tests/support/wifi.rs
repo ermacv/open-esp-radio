@@ -9,9 +9,7 @@ use oer_portable_memory::WakingSpscSender;
 use oer_protocols_network_core::{Group, Interface, NetworkOwner, claim};
 use oer_protocols_network_port::{EthernetFrame, EthernetFrameView};
 use oer_protocols_network_port::{FramePort, FrameSource};
-use oer_protocols_network_runtime::{
-    Direct, LendingLanes, MemoryPolicy, Producer, Service, StopLane,
-};
+use oer_protocols_network_runtime::{LendingLanes, MemoryPolicy, Producer, Service, StopLane};
 use oer_protocols_network_wire::ip::Dscp;
 
 pub use oer_portable_memory::{AtomicWaker, ClaimCell};
@@ -129,7 +127,6 @@ pub(crate) type Served<P> = Service<
     32,
     32,
     P,
-    Direct,
     Producer<'static, Brand, crate::udp::LoadProducer, 32>,
 >;
 
@@ -164,7 +161,6 @@ pub(crate) fn network<P: FramePort + FrameSource<Held = HostHeld>>(
     let source: &'static crate::udp::Source = Box::leak(Box::new(crate::udp::Source::new()));
     let mut service = Service::with_producer(
         owner,
-        Direct,
         MemoryPolicy::KEEP,
         stopping,
         crate::udp::LoadProducer::new(source),

@@ -109,8 +109,8 @@ use oer_protocols_network_port::{
     OwnedTransmit, PortRefusal, Taken, Unpublished,
 };
 use oer_protocols_network_runtime::{
-    DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, Sent, Service, Socket,
-    SocketLanes, StopLane,
+    DevicePort, EndCause, Ended, MemoryPolicy, Observer, Sent, Service, Socket, SocketLanes,
+    StopLane,
 };
 use oer_protocols_network_wire::{
     arp::{self, Arp, Operation},
@@ -489,24 +489,11 @@ type NetService<T> = Service<
     DEPTH,
     LANE,
     Counted,
-    Direct,
 >;
 type NetSocket<T> = Socket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS>;
 type NetDatagram<T> = Datagram<'static, T, BLOCK>;
-type NetEnded<T> = Ended<
-    'static,
-    'static,
-    T,
-    BLOCK,
-    SOCKETS,
-    CREDITS,
-    BLOCKS,
-    DEPTH,
-    LANE,
-    Counted,
-    Direct,
-    core::convert::Infallible,
->;
+type NetEnded<T> =
+    Ended<'static, 'static, T, BLOCK, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, Counted>;
 
 /// A task's "poll me", counting its wakes.
 #[derive(Default)]
@@ -965,7 +952,7 @@ fn joined_with<T: 'static>(
         };
         let owner = NetworkOwner::new(brand, interface, blocks, port_end);
         let (stop, stopping) = leak(StopLane::new()).split();
-        let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+        let mut service = Service::new(owner, MemoryPolicy::KEEP, stopping);
         let socket = service
             .bind(
                 STATION_PORT,

@@ -1,6 +1,5 @@
 //! The task that owns the core.
 
-use core::convert::Infallible;
 use core::future::poll_fn;
 use core::pin::pin;
 use core::task::{Context, Poll};
@@ -11,13 +10,11 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    CommandId, CommandState, Count, Demand, Ends, Eviction, Group, GroupsFull, Intake,
-    LentDatagram, LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool,
-    Retired, SocketId, Unsent,
+    CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, Intake, LentDatagram,
+    LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool, Retired, SocketId,
+    Unsent,
 };
-use oer_protocols_network_port::{
-    Candidate, Egress, FramePort, FrameSource, Next, PlanStop, QUANTUM, Turns,
-};
+use oer_protocols_network_port::{FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::diagnostics::{Diagnostics, Stage, Tally};
@@ -42,85 +39,19 @@ pub(crate) const TURN_FRAMES: usize = 8;
 /// bounds the turn's work as [`TURN_FRAMES`] does.
 pub(crate) const TURN_NOTICES: usize = 64;
 
-/// The egress with no policy: the first ready work goes, no account is kept and
-/// a completion says nothing. Its plan is the list's own turns: control first,
-/// then the sockets in turn from the one whose turn it is, one datagram each,
-/// which is what the core's list gives first after each frame it takes.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Direct;
-
-impl<Ticket, Notice> Egress<Ticket, Notice> for Direct {
-    type Reservation = ();
-    type Fault = Infallible;
-    type Plan<C: Candidate> = Turns<C, QUANTUM>;
-
-    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
-        &mut self,
-        ready: impl Fn() -> I,
-        plan: &'p mut Option<Turns<C, QUANTUM>>,
-    ) -> Result<&'p mut Turns<C, QUANTUM>, Infallible> {
-        let turns = match plan {
-            Some(turns) => {
-                turns.relist();
-                turns
-            }
-            None => plan.insert(Turns::listed()),
-        };
-        for work in ready() {
-            let described = *work.ready();
-            turns.offer(&described, work);
-        }
-        Ok(turns)
-    }
-
-    fn next<C: Candidate>(
-        &mut self,
-        plan: &mut Turns<C, QUANTUM>,
-    ) -> Result<Next<C, ()>, Infallible> {
-        Ok(match plan.take() {
-            Some(work) => Next::Send(work, ()),
-            None if plan.more() => Next::Stop(PlanStop::Spent),
-            None => Next::Idle,
-        })
-    }
-
-    /// An empty list's plan changes nothing: there is nothing to do.
-    fn nothing_ready(&mut self) -> Result<(), Infallible> {
-        Ok(())
-    }
-
-    fn accepted(&mut self, (): (), _ticket: Ticket) -> Result<(), Infallible> {
-        Ok(())
-    }
-
-    fn refused(&mut self, (): ()) -> Result<(), Infallible> {
-        Ok(())
-    }
-
-    fn unknown(&mut self, (): ()) -> Result<(), Infallible> {
-        Ok(())
-    }
-
-    fn notice(&mut self, _notice: Notice) -> Result<(), Infallible> {
-        Ok(())
-    }
-}
-
 /// What a frame the port did not take left to its publishing.
 #[derive(Clone, Copy, Debug)]
 struct AfterUnsent {
     /// Its work moved: it ended, or the producer's flow sat out.
     moved: bool,
-    /// The plan's turns after it are not the choice's.
-    stale: bool,
     /// Publishing ends here.
     end: Option<PublishEnd>,
 }
 
 impl AfterUnsent {
-    const STALE: Self = Self {
+    /// The work ended or is other work: the next work goes.
+    const ENDED: Self = Self {
         moved: true,
-        stale: true,
         end: None,
     };
 }
@@ -189,9 +120,6 @@ pub enum EndCause {
     /// The others end `Outcome::Retired`, and the port goes back to its owner
     /// in [`Ended::retired`].
     PortContract,
-    /// The egress policy cannot go on: [`Ended::fault`] says why, and its
-    /// account is in [`Ended::egress`].
-    Egress,
 }
 
 /// What a service's end hands on. Dropping it strands what is still on its way
@@ -208,17 +136,11 @@ pub struct Ended<
     const DEPTH: usize,
     const LANE: usize,
     P,
-    E,
-    F,
     R = (),
     T = (),
 > {
     pub cause: EndCause,
     pub retired: Retired<'m, B, SIZE, SOCKETS, CREDITS, BLOCKS, P, T>,
-    /// The policy and its account, in-flight work included.
-    pub egress: E,
-    /// What ended the policy, with [`EndCause::Egress`].
-    pub fault: Option<F>,
     /// One per socket bound, for what a socket dropped later holds.
     pub sockets: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
     /// Those of earlier services, adopted here, whose sockets have not gone.
@@ -242,11 +164,9 @@ impl<
     const DEPTH: usize,
     const LANE: usize,
     P,
-    E,
-    F,
     R,
     T,
-> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, E, F, R, T>
+> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, R, T>
 {
     /// With no service to come, close the way home for good: what it accepted
     /// comes to the pool, and a later `give` is refused.
@@ -394,14 +314,10 @@ pub struct Service<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-    E: Egress<P::Ticket, P::Notice>,
     L: Producers<B, CREDITS> = (),
     D = (),
 > {
     owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, L::Tag>,
-    egress: E,
-    /// What ended the policy.
-    fault: Option<E::Fault>,
     bound: [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>; SOCKETS],
     stop: WakingSpscReceiver<'a, (), 1>,
     /// Why [`Self::run`] ended; it serves no more once this is set.
@@ -416,10 +332,6 @@ pub struct Service<
     adopted: [Option<LateSocket<'a, 'm, B, SIZE, DEPTH, LANE>>; SOCKETS],
     returns: Option<ReturnEnd<'a, 'm, B, SIZE, BLOCKS>>,
     local: L,
-    /// The policy's plan's place, kept from one publication to the next:
-    /// each publication starts a new plan in it ([`Egress::plan`] empties
-    /// it), so no plan outlives its publication and its memory is made once.
-    plan: Option<E::Plan<Demand<B>>>,
     /// Where the interface's address is published, and the core's count of
     /// changes at the last publication.
     watch: Option<Watching<'a>>,
@@ -439,8 +351,7 @@ impl<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-    E: Egress<P::Ticket, P::Notice>,
-> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E>
+> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P>
 {
     /// Own `owner`, with no local producer. A service keeps its owners until
     /// [`Self::retire`] hands them on, so a cancelled [`Self::run`] loses
@@ -449,11 +360,10 @@ impl<
     /// their memory is not reused, and waiting sockets and observers end.
     pub const fn new(
         owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>,
-        egress: E,
         memory: MemoryPolicy,
         stop: WakingSpscReceiver<'a, (), 1>,
     ) -> Self {
-        Self::build(owner, egress, memory, stop, ())
+        Self::build(owner, memory, stop, ())
     }
 }
 
@@ -470,7 +380,6 @@ impl<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-    E: Egress<P::Ticket, P::Notice>,
     Q: Produce,
 >
     Service<
@@ -486,7 +395,6 @@ impl<
         DEPTH,
         LANE,
         P,
-        E,
         Producer<'a, B, Q, CREDITS>,
     >
 {
@@ -497,13 +405,12 @@ impl<
     /// nothing called.
     pub const fn with_producer(
         owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, Q::Tag>,
-        egress: E,
         memory: MemoryPolicy,
         stop: WakingSpscReceiver<'a, (), 1>,
         producer: Q,
         end: &'a LocalEnd,
     ) -> Self {
-        Self::build(owner, egress, memory, stop, Producer::new(producer, end))
+        Self::build(owner, memory, stop, Producer::new(producer, end))
     }
 }
 
@@ -520,7 +427,6 @@ impl<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-    E: Egress<P::Ticket, P::Notice>,
     Q: Produce,
     D,
 >
@@ -537,7 +443,6 @@ impl<
         DEPTH,
         LANE,
         P,
-        E,
         Producer<'a, B, Q, CREDITS>,
         D,
     >
@@ -574,21 +479,17 @@ impl<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-    E: Egress<P::Ticket, P::Notice>,
     L: Producers<B, CREDITS>,
-> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E, L>
+> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, L>
 {
     const fn build(
         owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, L::Tag>,
-        egress: E,
         memory: MemoryPolicy,
         stop: WakingSpscReceiver<'a, (), 1>,
         local: L,
     ) -> Self {
         Self {
             owner,
-            egress,
-            fault: None,
             bound: [const { None }; SOCKETS],
             stop,
             ended: None,
@@ -598,7 +499,6 @@ impl<
             adopted: [const { None }; SOCKETS],
             returns: None,
             local,
-            plan: None,
             watch: None,
             diagnostics: (),
         }
@@ -611,27 +511,10 @@ impl<
     pub fn with_diagnostics<D: Diagnostics>(
         self,
         diagnostics: D,
-    ) -> Service<
-        'a,
-        'm,
-        B,
-        SIZE,
-        SOCKETS,
-        CREDITS,
-        RECEIVED,
-        NEIGHBORS,
-        BLOCKS,
-        DEPTH,
-        LANE,
-        P,
-        E,
-        L,
-        D,
-    > {
+    ) -> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, L, D>
+    {
         let Self {
             owner,
-            egress,
-            fault,
             bound,
             stop,
             ended,
@@ -641,14 +524,11 @@ impl<
             adopted,
             returns,
             local,
-            plan,
             watch,
             diagnostics: (),
         } = self;
         Service {
             owner,
-            egress,
-            fault,
             bound,
             stop,
             ended,
@@ -658,7 +538,6 @@ impl<
             adopted,
             returns,
             local,
-            plan,
             watch,
             diagnostics,
         }
@@ -678,10 +557,9 @@ impl<
     const DEPTH: usize,
     const LANE: usize,
     P: FramePort + FrameSource,
-    E: Egress<P::Ticket, P::Notice>,
     L: Producers<B, CREDITS>,
     D: Diagnostics,
-> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, E, L, D>
+> Service<'a, 'm, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, DEPTH, LANE, P, L, D>
 {
     /// Take blocks home through `returns`, for as long as this service holds
     /// the pool.
@@ -979,8 +857,6 @@ impl<
             only_frames = turned.packets;
             if self.owner.port_broken() {
                 self.ended = Some(EndCause::PortContract);
-            } else if self.fault.is_some() {
-                self.ended = Some(EndCause::Egress);
             } else if turned.again {
                 // The turn left work no wake will name: the next turn
                 // takes it, once the executor had its turn.
@@ -1057,35 +933,24 @@ impl<
                 told_all = true;
                 break;
             };
+            // A notice is the port's: taking it is what frees its place.
+            let _settled = notice;
             report(events, || ServiceEvent::Noticed);
-            let answer = self.egress.notice(notice);
-            self.note(answer);
-            if self.fault.is_some() {
-                break;
-            }
         }
         tally.stage(Stage::Notices, &mut self.diagnostics);
-        if self.fault.is_some() {
-            // Nothing more is offered or published: the epilogue delivers.
-            report(events, || ServiceEvent::Published(PublishEnd::Fault));
-        } else if told_all {
-            self.local
-                .offers(now, &mut self.owner, events, tally.steps());
-            let end = self.publish(now, events, &mut tally);
-            // More may be ready past the budget; a declining fill kept the
-            // producer's flow out of the rest of this turn only.
-            packets |= end == PublishEnd::Budget || self.local.filtered().is_some();
-        } else {
-            // A policy chooses knowing all the port has said: a later notice
-            // may free what the choice needs. So publishing waits for the
-            // next turn.
-            report(events, || ServiceEvent::Published(PublishEnd::Deferred));
-            again = true;
-        }
+        // Notices the budget left are the next turn's.
+        seen(events, || (!told_all).then_some(ServiceEvent::NoticesFull));
+        again |= !told_all;
+        self.local
+            .offers(now, &mut self.owner, events, tally.steps());
+        let end = self.publish(now, events, &mut tally);
+        // More may be ready past the budget; a declining fill kept the
+        // producer's flow out of the rest of this turn only.
+        packets |= end == PublishEnd::Budget || self.local.filtered().is_some();
         tally.stage(Stage::Publish, &mut self.diagnostics);
         // Eviction ends commands too, so it comes before the delivery: the
         // epilogue's delivery is the turn's last step that can learn a result.
-        if kind == Turn::Full && self.fault.is_none() && !self.owner.port_broken() {
+        if kind == Turn::Full && !self.owner.port_broken() {
             // An evicted block is granted by the next turn.
             again |= self.relieve(now);
         }
@@ -1367,31 +1232,12 @@ impl<
         gave
     }
 
-    /// Keep the first fault of the policy.
-    fn note(&mut self, answer: Result<(), E::Fault>) {
-        Self::note_in(&mut self.fault, answer);
-    }
-
-    /// [`Self::note`] over the fault alone, for a caller that holds another
-    /// field of the service.
-    fn note_in(fault: &mut Option<E::Fault>, answer: Result<(), E::Fault>) {
-        if let Err(answer) = answer {
-            fault.get_or_insert(answer);
-        }
-    }
-
-    /// Publish what the policy chooses, until it or the port has no room, or
-    /// the turn's budget of frames is spent. The ready work is collected once
-    /// into the policy's plan, and each frame after takes the plan's next:
-    /// a plan goes on only after its last frame was accepted. Any other answer
-    /// drops it, and a final one or a decline lets a new collection choose,
-    /// as a stop of the plan does; a refusal of the port ends publishing. At
-    /// most one collection a frame of the budget, so a plan that stops at once
-    /// cannot hold the turn. No await falls between a choice and its answer,
-    /// so no cancellation can leave a reservation unanswered, and the plan
-    /// ends with publishing: it reserved nothing beyond its frames. Where the
-    /// core is certainly idle no collection is made: the policy takes the
-    /// step of one over no work ([`Egress::nothing_ready`]).
+    /// Publish the ready work, the first the core lists each time, until the
+    /// port has no room or the turn's budget of frames is spent: control
+    /// first, then the sockets in turn from the one whose turn it is. The air
+    /// is the port's to choose: a frame it takes goes in its queue, and its
+    /// MAC decides when and charges it. No await falls between a choice and
+    /// its answer, so no cancellation can leave a frame unanswered.
     #[inline(never)]
     fn publish(
         &mut self,
@@ -1401,77 +1247,24 @@ impl<
     ) -> PublishEnd {
         let mut moved = false;
         let mut frames = 0_usize;
-        let mut collections = 0_usize;
-        // Whether the plan's place holds this publication's collection: a
-        // publication starts none, and collects into the kept place.
-        let mut live = false;
-        // Frames the plan in hand sent: those after its first are its
-        // continuations.
-        let mut planned = 0_usize;
         let end = loop {
             if frames == TURN_FRAMES {
                 break PublishEnd::Budget;
             }
-            let current = match &mut self.plan {
-                Some(current) if live => current,
-                _ => {
-                    if collections == TURN_FRAMES {
-                        break PublishEnd::Budget;
-                    }
-                    // Certainly no work: the policy makes the step a
-                    // collection over none would, and nothing is collected.
-                    if self.owner.idle() {
-                        match self.egress.nothing_ready() {
-                            Ok(()) => break PublishEnd::Chose,
-                            Err(fault) => {
-                                Self::note_in(&mut self.fault, Err(fault));
-                                break PublishEnd::Fault;
-                            }
-                        }
-                    }
-                    collections = collections.saturating_add(1);
-                    planned = 0;
-                    tally.note(|counts| counts.collections = counts.collections.wrapping_add(1));
-                    // After a declining fill, the producer's flow sits out
-                    // the turn.
-                    let filtered = self.local.filtered();
-                    let (owner, steps) = (&self.owner, tally.steps());
-                    let ready = || {
-                        owner.demands(now, steps).filter(move |demand| {
-                            filtered.is_none_or(|flow| demand.ready().flow != Some(flow))
-                        })
-                    };
-                    match self.egress.plan(ready, &mut self.plan) {
-                        Ok(collected) => {
-                            live = true;
-                            collected
-                        }
-                        Err(fault) => {
-                            Self::note_in(&mut self.fault, Err(fault));
-                            break PublishEnd::Fault;
-                        }
-                    }
-                }
-            };
-            let (demand, reservation) = match self.egress.next(current) {
-                Ok(Next::Send(demand, reservation)) => (demand, reservation),
-                Ok(Next::Idle) => break PublishEnd::Chose,
-                // Nothing was reserved: a new collection chooses.
-                Ok(Next::Stop(stop)) => {
-                    tally.stopped(stop);
-                    live = false;
-                    continue;
-                }
-                Err(fault) => {
-                    self.note(Err(fault));
-                    break PublishEnd::Fault;
-                }
+            // Certainly no work: nothing is walked.
+            if self.owner.idle() {
+                break PublishEnd::Chose;
+            }
+            // After a declining fill, the producer's flow sits out the turn.
+            let filtered = self.local.filtered();
+            let demand = self
+                .owner
+                .demands(now, tally.steps())
+                .find(|demand| filtered.is_none_or(|flow| demand.ready().flow != Some(flow)));
+            let Some(demand) = demand else {
+                break PublishEnd::Chose;
             };
             frames = frames.saturating_add(1);
-            if planned != 0 {
-                tally.note(|counts| counts.continued = counts.continued.wrapping_add(1));
-            }
-            planned = planned.saturating_add(1);
             let local = &mut self.local;
             let fill = |work, tag, data: &mut Payload<'_>| local.fill(now, work, tag, data);
             match self
@@ -1481,29 +1274,20 @@ impl<
                 Ok(transmitted) => {
                     moved = true;
                     report(events, || ServiceEvent::Accepted);
-                    let answer = self.egress.accepted(reservation, transmitted.ticket);
-                    self.note(answer);
-                    // The frame's physical end stays the egress's ticket; the
-                    // datagram's one outcome is its producer's now.
+                    // The datagram's one outcome is its producer's now.
                     if let Some((work, tag)) = transmitted.ended {
                         self.local.accepted(work, tag);
                     }
                 }
-                // Every other answer ends the plan or the publishing: rare,
+                // Every other answer ends the work or the publishing: rare,
                 // and apart from the frames' own path.
                 Err(unsent) => {
-                    let after = self.unsent(unsent, reservation, events);
+                    let after = self.unsent(unsent, events);
                     moved |= after.moved;
-                    if after.stale {
-                        live = false;
-                    }
                     if let Some(end) = after.end {
                         break end;
                     }
                 }
-            }
-            if self.fault.is_some() {
-                break PublishEnd::Fault;
             }
         };
         report(events, || ServiceEvent::Published(end));
@@ -1513,63 +1297,40 @@ impl<
         end
     }
 
-    /// What a frame the port did not take does to its reservation, its
-    /// work, the plan and the publishing. Kept out of the frames' own path,
+    /// What a frame the port did not take does to its work and the
+    /// publishing. Kept out of the frames' own path,
     /// which only an accepted frame takes.
     #[cold]
     #[inline(never)]
     fn unsent(
         &mut self,
         unsent: Unsent<P::Refusal>,
-        reservation: E::Reservation,
         events: &mut impl EventSink<ServiceEvent>,
     ) -> AfterUnsent {
         match unsent {
-            // The work ended or is other work: the plan's turns after it
-            // are not the choice's.
-            Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort => {
-                let answer = self.egress.refused(reservation);
-                self.note(answer);
-                AfterUnsent::STALE
-            }
+            // The work ended or is other work: the next goes.
+            Unsent::Stale | Unsent::Rejected(_) | Unsent::SlotTooShort => AfterUnsent::ENDED,
             // One declining fill a turn: the producer's flow is out of the
             // rest of it, so its declines never stop another's work.
             Unsent::Declined => {
                 report(events, || ServiceEvent::Local(LocalEvent::Declined));
                 self.local.declined();
-                let answer = self.egress.refused(reservation);
-                self.note(answer);
-                AfterUnsent::STALE
+                AfterUnsent::ENDED
             }
             // The port took nothing, by its word, and is at fault: the work
             // ended by its fill's cause, and the service ends.
-            Unsent::FillMisreported(_) => {
-                let answer = self.egress.refused(reservation);
-                self.note(answer);
-                AfterUnsent {
-                    moved: true,
-                    stale: false,
-                    end: Some(PublishEnd::Fault),
-                }
-            }
-            Unsent::Port(_) => {
-                let answer = self.egress.refused(reservation);
-                self.note(answer);
-                AfterUnsent {
-                    moved: false,
-                    stale: false,
-                    end: Some(PublishEnd::Refused),
-                }
-            }
-            Unsent::PortContract => {
-                let answer = self.egress.unknown(reservation);
-                self.note(answer);
-                AfterUnsent {
-                    moved: false,
-                    stale: false,
-                    end: Some(PublishEnd::Fault),
-                }
-            }
+            Unsent::FillMisreported(_) => AfterUnsent {
+                moved: true,
+                end: Some(PublishEnd::Fault),
+            },
+            Unsent::Port(_) => AfterUnsent {
+                moved: false,
+                end: Some(PublishEnd::Refused),
+            },
+            Unsent::PortContract => AfterUnsent {
+                moved: false,
+                end: Some(PublishEnd::Fault),
+            },
         }
     }
 
@@ -1662,22 +1423,7 @@ impl<
     )]
     pub fn retire(
         self,
-    ) -> Ended<
-        'a,
-        'm,
-        B,
-        SIZE,
-        SOCKETS,
-        CREDITS,
-        BLOCKS,
-        DEPTH,
-        LANE,
-        P,
-        E,
-        E::Fault,
-        L::Returned,
-        L::Tag,
-    > {
+    ) -> Ended<'a, 'm, B, SIZE, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, P, L::Returned, L::Tag> {
         let cause = self.ended.unwrap_or(EndCause::Stopped);
         let mut this = self;
         // The lease leaves with the core: the watch ends here, as it would
@@ -1694,8 +1440,6 @@ impl<
         Ended {
             cause,
             retired,
-            egress: this.egress,
-            fault: this.fault,
             sockets,
             adopted,
             returns,

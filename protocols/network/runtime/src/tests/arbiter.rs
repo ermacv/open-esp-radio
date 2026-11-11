@@ -7,21 +7,8 @@ use super::*;
 
 const POOL: usize = 8;
 
-type Pair<B> = Service<
-    'static,
-    'static,
-    B,
-    SIZE,
-    2,
-    CREDITS,
-    RECEIVED,
-    2,
-    POOL,
-    DEPTH,
-    RECEIVED,
-    WirePort,
-    Direct,
->;
+type Pair<B> =
+    Service<'static, 'static, B, SIZE, 2, CREDITS, RECEIVED, 2, POOL, DEPTH, RECEIVED, WirePort>;
 
 /// A block granted to `socket` and not yet taken, if any; with blocks still
 /// asked for, it asks for nothing more.
@@ -41,7 +28,7 @@ fn sockets_of_one_group_share_a_turn_s_blocks_whatever_each_asks() {
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, WirePort::default());
     let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service: Pair<Net> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let mut service: Pair<Net> = Service::new(owner, MemoryPolicy::KEEP, stopping);
     let dscp = Dscp::default();
     let group = service.group(POOL).unwrap();
     let mut first = service

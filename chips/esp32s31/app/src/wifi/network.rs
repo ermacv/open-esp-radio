@@ -130,7 +130,6 @@ type NetService<P> = Service<
     DEPTH,
     LANE,
     Port,
-    oer_protocols_network_runtime::Direct,
     Producer<'static, Brand, P, CREDITS>,
     Diagnosis,
 >;
@@ -177,14 +176,8 @@ impl oer_protocols_network_runtime::Diagnostics for NetworkDiagnosis {
     fn add(&mut self, counted: &oer_protocols_network_runtime::Diagnosis) {
         let oer_protocols_network_runtime::Diagnosis {
             turns,
-            collections,
             walked,
             told,
-            continued,
-            stopped_spent,
-            stopped_changed,
-            stopped_grant,
-            stopped_account,
             return_batches,
             blocks_returned,
             credits_restored,
@@ -196,14 +189,8 @@ impl oer_protocols_network_runtime::Diagnostics for NetworkDiagnosis {
         } = *counted;
         DIAGNOSTICS.add(&oer_chips_family_app::diagnostics::Counts {
             turns,
-            collections,
             walked,
             told,
-            continued,
-            stopped_spent,
-            stopped_changed,
-            stopped_grant,
-            stopped_account,
             return_batches,
             blocks_returned,
             credits_restored,
@@ -472,15 +459,8 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
         let port = DevicePort::new(network, transmit);
         let owner = NetworkOwner::new(brand, interface, pool, port);
         let running = service.insert(
-            Service::with_producer(
-                owner,
-                oer_protocols_network_runtime::Direct,
-                MemoryPolicy::KEEP,
-                stopping,
-                producer,
-                end,
-            )
-            .with_diagnostics(DIAGNOSIS),
+            Service::with_producer(owner, MemoryPolicy::KEEP, stopping, producer, end)
+                .with_diagnostics(DIAGNOSIS),
         );
         running
             .bind_local(ports.sending, Dscp::default())

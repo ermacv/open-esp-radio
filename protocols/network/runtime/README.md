@@ -59,76 +59,43 @@ a stop or a dropped socket brings them home with the rest of its lanes. A cancel
 `reserve` leaves its request in place for the next one. A close ends what the socket
 was still owed, and what it was granted stays its own.
 
-A service's `Egress` policy chooses what goes out, among all ready work and before
-any frame exists, and keeps its own account: `Direct` is the first ready work and no
-account. No await falls between a choice and its answer from the port, so a
-cancelled `run` leaves no reservation unanswered. A policy that cannot go on ends the
-service with `EndCause::Egress`, and `Ended` returns the policy with its account.
+## Publishing
 
-## Transmit plan
+A turn's publishing takes the ready work the core lists first, one frame at a
+time, until the port has no room or the turn's eight frames are spent: control
+first as listed, then the sockets in turn from the one whose turn it is, one
+datagram each, which is what the core's list gives first after each frame it
+takes. The network chooses no air: a frame the port takes goes in its queue,
+and the port's MAC decides when it goes and charges its attempts (for Wi-Fi,
+the station's queues per peer and TID). No await falls between a frame's
+choice and the port's answer, so a cancelled `run` leaves no frame unanswered.
 
-A turn's publishing collects the ready work once into the policy's plan
-(`Egress::plan`), which reserves nothing. Where the core is certainly idle
-(`NetworkOwner::idle`), nothing is collected: the policy hears
-`Egress::nothing_ready`, the transition a plan over no work and its first step
-make, and publishing ends as that step's `Idle` ends it. The core is idle when
-no ARP reply, echo reply or DHCP message is owed, no socket's running chain has
-a head (a producer's declared works among them), and no neighbor entry owes a
-request: every source `demands` lists. Each is read in its own state, with no
-walk of the running chains; the neighbor table, last, is a look at each of its
-entries. Work that runs but is not ready (a datagram waiting for its neighbor)
-leaves the core not idle, and a collection finds nothing. The check comes after
-the producer's offers, so an offer of the turn is a running work by then. Each frame then takes the plan's next
-step (`Egress::next`): a frame with its own reservation, exactly what a choice
-over the same ready work would choose and reserve; nothing, when nothing may go;
-or a stop, with nothing reserved, when the plan can no longer say what that
-choice would be. A plan holds at most `QUANTUM` (eight) frames, and it holds no
-owner: a work stays the core's, a block its pool's, until the frame's answer.
+Where the core is certainly idle (`NetworkOwner::idle`), nothing is walked and
+publishing ends. The core is idle when no ARP reply, echo reply or DHCP
+message is owed, no socket's running chain has a head (a producer's declared
+works among them), and no neighbor entry owes a request: every source
+`demands` lists. Each is read in its own state, with no walk of the running
+chains; the neighbor table, last, is a look at each of its entries. Work that
+runs but is not ready (a datagram waiting for its neighbor) leaves the core
+not idle, and its walk finds nothing. The check comes after the producer's
+offers, so an offer of the turn is a running work by then.
 
-| Step | Owners and state |
+| Answer | Owners and state |
 | --- | --- |
-| collect | the core lists its ready work (`demands`), the policy keeps the continuation of its choice and what the choice read; nothing is reserved |
-| next: send | the policy reserves for this frame alone; the core builds it in the port's slot (`transmit`), and exactly one of `accepted`, `refused` or `unknown` answers its reservation |
-| accepted | the core commits the work, the policy keeps its charge; the plan goes on |
-| a final refusal (`Stale`, `Rejected`, `SlotTooShort`) or a decline | the work ends as before, its reservation comes back; the plan is dropped and a new collection chooses |
-| a refusal of the port | the reservation comes back, the work stays ready; publishing ends for the turn, and the rest of the plan reserved nothing |
-| a port fault or a policy fault | as before: publishing ends, the service ends |
-| stop | nothing was reserved; a new collection chooses |
-| end of publishing | the plan is dropped: it held nothing to return |
-
-A plan goes on only after its last frame was accepted, and only within one
-turn's publishing, where nothing reaches the core or the policy but its own
-frames' answers: no command, received frame, notice or offer comes between its
-steps. A turn publishes at most eight frames and collects at most once a frame,
-so a policy whose plans stop at once cannot hold the turn.
-
-A plan stops when:
-
-| Stop | What moved |
-| --- | --- |
-| `Changed` | what the policy's choice reads besides the work: for `AirtimeEgress` its `PeerAir::view`, which for the station is the link's word (its state, its association's epoch, its slowest rate) and the last reported rate, so an association change, a link down or a new rate stops it; or the turn of the account's flows is not the plan's, which a frame not accepted leaves behind |
-| `Grant` | the account's largest least grant went with the frames sent, and the plan does not count the next largest |
-| `Account` | the scheduler would serve another account than the one whose turns the plan holds |
-| `Spent` | the plan's frames are spent and more of the work it serves is ready |
+| accepted | the core commits the work; the next frame goes |
+| a final refusal (`Stale`, `Rejected`, `SlotTooShort`) or a decline | the work ends as before; the next frame goes |
+| a refusal of the port | the work stays ready; publishing ends for the turn |
+| a port fault | publishing ends, the service ends |
 
 Keys are not the network's: the station reports its link up only once
-connected, and a key it loses reaches the plan as a change of the link's word
-(a stop) or as the port's refusal (`LinkDown`, the end of publishing).
-Resources are not the plan's either: a full port or no free buffer is the
-port's refusal, which ends publishing, and a full reservation horizon is the
-policy's `Idle`, until a frame's end. The core's own state (an address, a
-neighbor, a lease) is read when each frame is built: a work no longer that work
-is `Stale`, which drops the plan.
+connected, and a key it loses reaches publishing as the port's refusal
+(`LinkDown`). A full port or no free buffer is the port's refusal too. The
+core's own state (an address, a neighbor, a lease) is read when each frame is
+built: a work no longer that work is `Stale`.
 
-`Direct`'s plan is the list's own turns: control first as listed, then the
-sockets in turn from the one whose turn it is, one datagram each, which is what
-the core's list gives first after each frame it takes. `AirtimeEgress` counts
-every account's candidate, as a choice gives the scheduler, and keeps the turns
-of the account the scheduler serves first: control first, then that account's
-flows in turn after its last served flow. Each next frame asks the scheduler
-over all accounts and is granted only for the plan's account; another account's
-turn stops the plan before anything is reserved
-(`AirtimeScheduler::reserve_for`).
+The port's notices are settlements of frames it took: a turn takes at most its
+budget of them, and a turn that leaves more (`ServiceEvent::NoticesFull`)
+turns again after a yield.
 
 Memory is shared and has two guards. A block counts toward the `Group` of the pool it
 was taken for until the pool has it back, so moving it between sockets, or dropping
@@ -167,7 +134,7 @@ read them all, asks its producer for offers, chooses work and publishes it (eigh
 over the transmit plan below),
 evicts under memory pressure, then hands results and datagrams back. Each part is bounded, so no lane and no port
 starves the others, and sockets waiting for blocks take turns. Every exit of a
-turn goes through that last part, a fault's too: after a policy or port fault the
+turn goes through that last part, a fault's too: after a port fault the
 turn publishes nothing more, and only hands back what it knows, so at an await
 each open work truly was not published.
 
@@ -251,7 +218,7 @@ one record; the producer keeps a count of open works and nothing else of them.
 A refusal is the offer's one answer, `refused`; a declared work has one outcome,
 `ended`. A work its port takes ends `Accepted` within its publication, before
 the next frame is tried; every other end comes, with its tag, from the core's
-ended chain at the next delivery. Once the policy chooses the
+ended chain at the next delivery. Once publishing takes the
 work and the port gives it a slot, the core writes the Ethernet and IPv4 headers,
 the producer's `fill` writes the data in the slot itself, and the core sums the
 UDP checksum over it there. Generated data so needs no copy at all.
@@ -302,7 +269,7 @@ new.
 The sink lent to `run` hears the core's drops and the service's `ServiceEvent`s:
 each turn's beginning, each request it takes by kind, each received frame it takes
 in, each socket whose lane still holds requests once the turn took its budget of
-them, a full intake, each notice it hands the policy, each frame the port accepts, how
+them, a full intake, each notice it takes and a full budget of them, each frame the port accepts, how
 publishing ended, what was free when the turn ended, and whether the pass after it
 yielded or waited. The sink counts; the service keeps nothing and reads no clock for
 it. A disabled sink, `()` among them, hears nothing and builds no event.
@@ -333,7 +300,7 @@ returns, asks `Diagnostics::on` once. While on, the turn counts into its own
 `Diagnosis` on the task's stack, reads the diagnostics' clock at its start
 and at each stage's end, and hands the whole count to `Diagnostics::add` at
 its end; the core counts its own steps into it through `Count`
-(oer-protocols-network-core). Nothing the service, the policy or the core
+(oer-protocols-network-core). Nothing the service or the core
 decides reads a count, so the same events decide the same with them on or
 off; a switch takes effect at the next turn. These are the counters, and
 only these:
@@ -341,22 +308,19 @@ only these:
 | Counter | Counted where |
 | --- | --- |
 | `turns` | each turn counted, the stages' time is theirs |
-| `collections` | each full candidate collection: `demands` into `Egress::plan` in publishing; a turn whose core is idle collects nothing and counts none |
-| `walked` | each running place a collection's walk of the sockets' running chains visits, ready or not, on every pass a policy makes (`Core::demands`) |
+| `walked` | each running place a walk of the sockets' running chains visits, ready or not (`Core::demands`); a turn whose core is idle walks nothing |
 | `told` | each end an ended chain tells (`Core::next_end`), the sockets' in the delivery and the producer's |
-| `continued` | each `Next::Send` of a plan after its first: a frame with no collection |
-| `stopped_spent`, `stopped_changed`, `stopped_grant`, `stopped_account` | each `Next::Stop`, by its `PlanStop` |
 | `return_batches`, `blocks_returned`, `credits_restored` | each return batch that took something (`returns_of`, in a turn or a pass of the wait), the blocks it brought home and the receive loans it gave back to the pool's account |
 | `no_credit`, `no_credit_loans`, `no_credit_unreturned` | each `NotLent::NoCredit` refusal in `NetworkOwner::take_frame`, the loans out of the account at the refusal, and the lent buffers back with their port whose loans the service had not yet taken back, read right after the refusal's frame |
 | `materialised` | each frame `NetworkOwner::transmit` wrote whole in the port's slot, whatever the port answers |
-| `stage_ticks` | the clock between stage ends: `Intake` (link, tick, commands), `Returns` (returns, blocks given), `Receive`, `Notices`, `Publish` (offers, collections, plans, frames), `Settle` (eviction, delivery, the turn's end), and `Waiting`, a pass's return servicing |
+| `stage_ticks` | the clock between stage ends: `Intake` (link, tick, commands), `Returns` (returns, blocks given), `Receive`, `Notices`, `Publish` (offers, frames), `Settle` (eviction, delivery, the turn's end), and `Waiting`, a pass's return servicing |
 
 Off, a turn reads no clock and updates no counter. What it still costs is
 the enable check, one `Diagnostics::on` call per turn and per pass that
 takes returns (an observing S31 image's: two atomic loads and a compare;
 every other image has `()` and pays nothing), and
 at each point above a test of that answer, held in the turn's tally: six
-stage ends, one per collection, plan step and stop, one per return batch
+stage ends, one per return batch
 and per received frame, and in the core one per running place a walk
 visits, per end told, per frame built and per refusal for credit. The
 turn's tally stays on the task's stack either way.
@@ -369,7 +333,7 @@ those buffers: the transmit half takes a buffer and the room to hand the
 frame on together, once, before any fill, and reads the frame's length and
 DSCP from the `FrameMeta` its publisher gives, not from the written frame. A
 frame the device took carries the transmit half's ticket, and its notices
-are those frames' ends, which the egress policy settles its reservations by: a buffer
+are those frames' ends: a buffer
 the device gave back is free again only when its end is handed on, so no more
 frames are unsettled than there are buffers. It shows a lent received frame as
 lendable and hands its buffer over when the reader keeps it; a frame the

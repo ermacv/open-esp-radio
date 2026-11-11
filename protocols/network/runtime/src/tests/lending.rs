@@ -18,9 +18,7 @@ use super::{
     BLOCKS, CREDITS, DEPTH, LOCAL, OUR_IP, RECEIVED, SIZE, TestPair, TestSocket, WireHeld,
     WirePort, run_tasks, settle, storage, udp_frame,
 };
-use crate::{
-    Direct, LendingLanes, LendingSocket, MemoryPolicy, Received, Service, ServiceEvent, StopLane,
-};
+use crate::{LendingLanes, LendingSocket, MemoryPolicy, Received, Service, ServiceEvent, StopLane};
 
 const LENDING: u16 = 6000;
 const COPYING: u16 = 5000;
@@ -81,7 +79,6 @@ fn lending_diagnosed<B: 'static, D: crate::Diagnostics>(
         DEPTH,
         RECEIVED,
         WirePort,
-        Direct,
         (),
         D,
     >,
@@ -103,7 +100,7 @@ fn lending_diagnosed<B: 'static, D: crate::Diagnostics>(
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
     let mut service =
-        Service::new(owner, Direct, MemoryPolicy::KEEP, stopping).with_diagnostics(diagnostics);
+        Service::new(owner, MemoryPolicy::KEEP, stopping).with_diagnostics(diagnostics);
     let copying = service
         .bind(COPYING, Dscp::default(), Group::shared(), storage::<B>())
         .ok()
@@ -301,7 +298,7 @@ fn a_late_return_reaches_the_next_service_that_adopted_the_socket() {
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(retired.brand, interface, retired.pool, retired.port);
     let (next_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut next: TestPair<Net, BLOCKS> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let mut next: TestPair<Net, BLOCKS> = Service::new(owner, MemoryPolicy::KEEP, stopping);
     for late in late.into_iter().flatten() {
         next.adopt(late).ok().unwrap();
     }
@@ -342,8 +339,7 @@ fn a_credit_the_account_cannot_hold_refuses_the_bind_and_returns_the_storage() {
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, WirePort::default());
     let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service: TestPair<Net, BLOCKS> =
-        Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let mut service: TestPair<Net, BLOCKS> = Service::new(owner, MemoryPolicy::KEEP, stopping);
     let refused = service
         .bind_lending::<2>(
             LENDING,

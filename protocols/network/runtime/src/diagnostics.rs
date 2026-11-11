@@ -15,7 +15,6 @@ use core::cell::Cell;
 use core::marker::PhantomData;
 
 use oer_protocols_network_core::Count;
-use oer_protocols_network_port::PlanStop;
 
 /// An image's diagnostics of its network service.
 pub trait Diagnostics {
@@ -65,9 +64,9 @@ pub enum Stage {
     Returns,
     /// Received frames taken in.
     Receive,
-    /// The port's notices handed to the policy.
+    /// The port's notices taken.
     Notices,
-    /// The producer's offers, and publishing: collections, plans and frames.
+    /// The producer's offers, and publishing.
     Publish,
     /// Eviction, the delivery of results and datagrams, and the turn's end.
     Settle,
@@ -83,22 +82,10 @@ pub const STAGES: usize = Stage::Waiting as usize + 1;
 pub struct Diagnosis {
     /// Turns counted: the stages' time is theirs.
     pub turns: u32,
-    /// Full candidate collections: each a walk of all ready work into a
-    /// transmit plan. A turn whose core is idle collects nothing and counts
-    /// none.
-    pub collections: u32,
-    /// Running places the collections' readiness walks visited, ready or
-    /// not, on every pass a policy made over them.
+    /// Running places the readiness walks visited, ready or not.
     pub walked: u32,
     /// Ends the sockets' and the producer's ended chains told.
     pub told: u32,
-    /// Frames a plan sent after its first: each a frame with no collection.
-    pub continued: u32,
-    /// Plans that stopped, by [`PlanStop`].
-    pub stopped_spent: u32,
-    pub stopped_changed: u32,
-    pub stopped_grant: u32,
-    pub stopped_account: u32,
     /// Return servicing that took something, in turns and passes of the
     /// wait: its batches, the blocks they brought home, and the receive
     /// loans they gave back to the pool's account.
@@ -123,14 +110,8 @@ impl Diagnosis {
     pub fn accumulate(&mut self, other: &Self) {
         let Self {
             turns,
-            collections,
             walked,
             told,
-            continued,
-            stopped_spent,
-            stopped_changed,
-            stopped_grant,
-            stopped_account,
             return_batches,
             blocks_returned,
             credits_restored,
@@ -142,14 +123,8 @@ impl Diagnosis {
         } = self;
         for (count, more) in [
             (turns, other.turns),
-            (collections, other.collections),
             (walked, other.walked),
             (told, other.told),
-            (continued, other.continued),
-            (stopped_spent, other.stopped_spent),
-            (stopped_changed, other.stopped_changed),
-            (stopped_grant, other.stopped_grant),
-            (stopped_account, other.stopped_account),
             (return_batches, other.return_batches),
             (blocks_returned, other.blocks_returned),
             (credits_restored, other.credits_restored),
@@ -162,17 +137,6 @@ impl Diagnosis {
         }
         for (ticks, more) in stage_ticks.iter_mut().zip(other.stage_ticks) {
             *ticks = ticks.wrapping_add(more);
-        }
-    }
-
-    /// How many plans stopped for `stop`.
-    #[must_use]
-    pub const fn stopped(&self, stop: PlanStop) -> u32 {
-        match stop {
-            PlanStop::Spent => self.stopped_spent,
-            PlanStop::Changed => self.stopped_changed,
-            PlanStop::Grant => self.stopped_grant,
-            PlanStop::Account => self.stopped_account,
         }
     }
 
@@ -253,14 +217,8 @@ impl<D: Diagnostics> Tally<D> {
             },
             counts: Diagnosis {
                 turns: 0,
-                collections: 0,
                 walked: 0,
                 told: 0,
-                continued: 0,
-                stopped_spent: 0,
-                stopped_changed: 0,
-                stopped_grant: 0,
-                stopped_account: 0,
                 return_batches: 0,
                 blocks_returned: 0,
                 credits_restored: 0,
@@ -316,20 +274,6 @@ impl<D: Diagnostics> Tally<D> {
         if self.on() {
             note(&mut self.counts);
         }
-    }
-
-    /// A plan stopped for `stop`.
-    #[inline(always)]
-    pub(crate) fn stopped(&mut self, stop: PlanStop) {
-        self.note(|counts| {
-            let count = match stop {
-                PlanStop::Spent => &mut counts.stopped_spent,
-                PlanStop::Changed => &mut counts.stopped_changed,
-                PlanStop::Grant => &mut counts.stopped_grant,
-                PlanStop::Account => &mut counts.stopped_account,
-            };
-            *count = count.wrapping_add(1);
-        });
     }
 
     /// The refusals for want of credit since the last read, with the lent

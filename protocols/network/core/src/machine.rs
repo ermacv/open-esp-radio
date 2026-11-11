@@ -9,8 +9,7 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
 use oer_protocols_network_port::{
-    Candidate, Class, CopyReason, EthernetFrameView, FrameMeta, Holding, LinkSnapshot, LinkState,
-    Ready,
+    Class, CopyReason, EthernetFrameView, FrameMeta, Holding, LinkSnapshot, LinkState, Ready,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header};
@@ -85,9 +84,9 @@ enum Work {
     },
 }
 
-/// Work that is ready, before any frame of it exists: what a scheduler needs
-/// to choose it. Its grant sends to the station address the core found, so
-/// what a scheduler reads cannot be changed:
+/// Work that is ready, before any frame of it exists. Its grant sends to the
+/// station address the core found, so what its reader sees cannot be
+/// changed:
 ///
 /// ```compile_fail,E0616
 /// # use oer_protocols_network_core::Demand;
@@ -97,21 +96,15 @@ enum Work {
 /// ```
 #[derive(Debug, Eq, PartialEq)]
 pub struct Demand<B> {
-    /// What a scheduler may know of it, as the core found it: read only, for
-    /// its grant names the station address in it.
+    /// What is known of it, as the core found it: read only, for its grant
+    /// names the station address in it.
     ready: Ready,
     work: Work,
     brand: Tag<B>,
 }
 
-impl<B> Candidate for Demand<B> {
-    fn ready(&self) -> &Ready {
-        &self.ready
-    }
-}
-
 impl<B> Demand<B> {
-    /// What a scheduler may know of it.
+    /// What is known of it.
     pub const fn ready(&self) -> &Ready {
         &self.ready
     }
@@ -2049,8 +2042,8 @@ impl<
     }
 
     /// Every piece of work ready now, with no frame built: control first,
-    /// then datagrams from the socket whose turn it is. A scheduler chooses
-    /// among these; a direct interface takes [`Self::poll_demand`]. `count`
+    /// then datagrams from the socket whose turn it is. Publishing takes the
+    /// first; a direct interface takes [`Self::poll_demand`]. `count`
     /// hears each running place the walk of the sockets' running chains
     /// visits ([`Count::walked`]), ready or not, on every pass a caller makes.
     pub fn demands<'s, C: Count + ?Sized>(

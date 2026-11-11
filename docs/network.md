@@ -42,8 +42,8 @@ aliases and include optional and target-specific dependencies.
 | --- | --- | --- |
 | `oer-protocols-network-core` (`protocols/network/core`) | the sans-IO core with one owner: UDP, ARP, blocks, choosing work before a frame is built; the HIL `wifi-station` image links it | tasks, queues, time |
 | `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task, its sockets and its local producer, and `DevicePort`, whose frames carry the buffers' tickets and whose notices are the buffers' ends; the HIL `wifi-station` image links it | protocol state, the port's implementation |
-| `oer-protocols-network-testing-model` (`protocols/network/testing/model`) | a host model of one shared medium with several peers, the egress scenarios over the real stack, and the end-to-end station and network simulation against a simulated access point (its [README](../protocols/network/testing/model/README.md)) | product code; no product package depends on it |
-| `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, the `NetDevice` and `NetTransmit` contracts, and `FramePort`, `FrameSource` and `Egress`, the new core's port and its policy | queues, allocator, executor, hardware |
+| `oer-protocols-network-testing-model` (`protocols/network/testing/model`) | a host model of one shared medium with several peers, the transmit scenarios over the real stack, and the end-to-end station and network simulation against a simulated access point (its [README](../protocols/network/testing/model/README.md)) | product code; no product package depends on it |
+| `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, the `NetDevice` and `NetTransmit` contracts, and `FramePort` and `FrameSource`, the new core's port | queues, allocator, executor, hardware |
 | `oer-protocols-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-portable-wire` | decisions about a packet, IEEE 802.11 formats |
 | `oer-protocols-bridges-ieee80211-ethernet` (`protocols/bridges/ieee80211-ethernet`) | the requested WMM user priority of an outgoing frame from its VLAN PCP or IP DSCP | the final priority, which the station decides from its link |
 | `oer-portable-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, stack wake registration, RX copying into packet pools, a device's transmit memory parked as the stack's general packets (`ParkedTx`) | radio scheduling, DMA descriptors, a concrete physical allocator |
@@ -132,90 +132,46 @@ station (P2)
 - `TxCompletion` exposes completion class, ACK SNR and trigger-flow packet
   counts (not retry counts); it exposes no response PHY or measured airtime.
 
-## Queued egress on the station (`oer::wifi::Queued`)
+## Transmit on the station: the MAC's queues
 
-The network core's egress is chosen by type: `wifi::Network<P, Queued>` takes
-the airtime egress (`AirtimeEgress`), `wifi::Network<P, Direct>` the first
-ready work with no table or account. How an application provides data, a
-local producer or a socket's blocks, does not depend on the mode; waiting work
-stays outside the transmit buffers in either, and a frame is built in one
-only after the policy chose it and the port gave the room.
+The network chooses no air. Its service publishes the ready work the core
+lists (`oer-protocols-network-runtime`'s README, "Publishing"), and a frame
+the port takes goes to the station's MAC, which decides when it goes and
+charges its air. How an application provides data, a local producer or a
+socket's blocks, does not change this; a frame is built in a transmit buffer
+only once the port gave the room.
 
-- **Accounts.** `StationAir` (`oer-protocols-ieee80211-runtime::station`)
-  keys the station's air by the link epoch: every frame of a station,
-  broadcast included, goes to its access point, so one account per
-  association. Control work goes first; flows take turns within the
-  account. Service classes are not separated yet.
-- **Choice.** A turn's publishing reads the ready work, the network's whole
-  backlog, once, into a plan: each work's least grant once, kept per
-  account as the largest with how many works hold it, and the turns of the
-  account the scheduler serves first, at most eight frames
-  (`oer-protocols-network-runtime`'s README, "Transmit plan"). Each frame
-  asks the scheduler over every account's candidate and takes the plan's
-  next only when the scheduler serves the plan's account; a change of the
-  link's word, the account's largest least grant gone, or another account's
-  turn stops the plan with nothing reserved, and a new collection chooses.
-- **Least grant.** A frame's least useful grant is its PPDU at the full rate
-  (mode, MCS, streams, width, guard interval and LTF) of its association's
-  last settled frame: each frame's end carries its own last established rate
-  (`TxEnd`), the data plane keeping it per frame as it keeps the cost, to
-  `Completions` and the policy, which hands it to `StationAir` under the
-  frame's own association. A report of an earlier association changes
-  nothing. Until the current association reports one, the grant is the PPDU
-  at its slowest data rate, `NegotiatedLegacyRates::slowest`: where every
-  rate walk of its plans ends, supported non-basic rates included, so an
-  OFDM-only access point starts at 6 Mb/s. The link publishes that rate in
-  the same word as its epoch. `rate: None` in an end means no established
-  rate, not that nothing was sent. The cost model is asked only with
-  a resolved rate (`FrameCost::least` takes a `PhyRate`): a link up without
-  its association's rate offers no account, so no frame is charged at a rate
-  its association was not given. The S31's cost model keeps its last answers
-  keyed by the resolved rate and the length (the grant) and by the length
-  (the ceiling); a frame no PPDU at its rate carries asks the most.
-- **Cost.** Each arena attempt reports `TxEstimate`, the cost of its
-  publications that reached the air by the backend's declared model: the
-  modelled PPDU (`PpduTiming`), one SIFS and the solicited Ack or BlockAck
-  at the lowest mandatory rate of the PPDU's modulation class. AIFS, backoff
-  and CCA waits are not counted, nor publications that never reached the air.
-  It is the cost of that model, "PPDU + SIFS + ACK/BA", not a measured medium
-  occupancy and not a frame's service time. That the S31 MAC makes no
-  transmission of its own inside one publication is an unverified
-  assumption; it limits how far the model follows the air, and no airtime
-  guarantee rests on it.
-- **Split.** The data plane divides each attempt's cost among the frames the
-  attempt carried, exactly once, the first taking the remainder, and keeps
-  each frame's sum across its selective retries; a frame returns its memory
-  with that sum. An attempt the model cannot time makes its frames' cost
-  `Unknown` for good.
-- **Ceiling.** A frame of unknown cost is charged
-  `msdu_cost_ceiling_micros` (`lower_mac::arena`): up to the data plane's 32
-  aggregate attempts of a member, each its whole aggregate (HT within its
-  5484 us L-SIG TXTIME, HE the longest PPDU of the HE aggregate limit at HE
-  MCS 0, 4x HE-LTF, 3.2 us GI), then the largest single plan of any rate
-  record (32) at 1 Mb/s DSSS. It is a margin, not a statement of accuracy.
-- **Return and settlement are two events.** The station's buffer comes back
-  with its frame's cost and waits with that end in `Completions`, both in
-  the network's one transmit owner (`LocalTx`); the buffer is free again
-  only when the port hands the end on to the policy
-  (`OwnedTransmit::take_notice`). So no more frames are
-  unsettled than there are buffers, which is the policy's reservation
-  bound (`NETWORK_BUFFERS`). A frame's ticket is its buffer's place among
-  the network's (`TxSlot::place`, below `NETWORK_BUFFERS`), and the policy
-  keeps each frame in flight at that place: an acceptance and an end read
-  one place, and a ticket given again before its end, or past the places,
-  is the policy's fault. The station returns ended frames' memory as one
-  burst with one wake at its end; a network turn hands the policy up to 64
-  notices before it publishes, so a Block Ack's ends that reached it settle
-  in that turn and the turn publishes again. The port asks for returned buffers whether or
-  not it sends, so an idle network still settles. A frame lost with its
-  buffer at publication settles as `RadioNotice::Lost` at its ceiling; that
-  settles the account only and returns no memory. A new link epoch ends
-  the old association's account (`RadioNotice::Left`) before the next end:
-  each of its frames still out settles there once, at its ceiling, and the
-  account goes at once; the frame's buffer stays the port's until it comes
-  back, and its return only closes the ticket, with no second charge and
-  nothing on the new account. An outcome a socket already read is not
-  changed by this settlement.
+- **Queues.** The data plane (`oer-protocols-ieee80211-runtime`,
+  `datapath::queues`) keeps one logical queue per radio peer and TID over
+  one bounded pool of the network's MSDUs, which the network's buffers
+  bound. The station has one peer, its access point; the access point's
+  runner keeps a queue per authorized client and one for the group.
+- **Choice.** The next transmission starts from the highest access category
+  any ready queue holds; of the peers with a ready queue of it, the one that
+  had the least air; of that peer's queues of it, the one that had the least
+  air. Several TIDs of one peer earn it no more air than one. A transmission
+  of one queue is the quantum: an arena holds one TID, so a standby that
+  holds frames takes from its own queue only. With exactly one ready queue
+  the choice reads no other.
+- **Blocking.** A queue is ready while it holds an MSDU and waits for
+  nothing. A queue that waits (for its Block Ack window, a free arena or the
+  standby) blocks only itself: another TID of the same access category and
+  every other queue go on, and the waiting queue keeps its own MSDUs.
+- **Cost.** Each arena attempt that ended is charged once, whole, to its
+  queue and its peer: `TxEstimate`, the cost of its publications that
+  reached the air by the backend's declared model, the modelled PPDU
+  (`PpduTiming`), one SIFS and the solicited Ack or BlockAck at the lowest
+  mandatory rate of the PPDU's modulation class. AIFS, backoff and CCA
+  waits are not counted, nor publications that never reached the air. It is
+  the cost of that model, not a measured medium occupancy. An attempt the
+  model cannot time is charged the dearest attempt known, at least one
+  microsecond: an unknown cost is never zero. The access point's runner
+  charges its single MPDUs `Unknown`, so its fairness among clients is per
+  attempt, not by air.
+- **Return.** A frame's buffer comes back to the network's one transmit
+  owner (`LocalTx`) when its MSDU ends, and is free again at once: no
+  separate settlement follows. A new link epoch or a stopped data plane
+  hands every queued MSDU back with its memory.
 
 ## Physical storage contracts (`oer-portable-embassy-net::datapath`)
 

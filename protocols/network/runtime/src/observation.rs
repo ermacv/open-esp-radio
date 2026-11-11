@@ -25,15 +25,13 @@ pub enum RequestKind {
 /// How a turn's publishing ended.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PublishEnd {
-    /// The policy chose nothing: no work was ready, or none may go now.
+    /// No work was ready, or none may go now.
     Chose,
     /// The port refused a frame for room or link: the work stays ready.
     Refused,
     /// Publishing took its whole budget of frames: more may be ready.
     Budget,
-    /// Notices were left untold, so this turn published nothing.
-    Deferred,
-    /// The port contradicted itself, or the policy cannot go on.
+    /// The port contradicted itself.
     Fault,
 }
 
@@ -93,9 +91,12 @@ pub enum ServiceEvent {
     FrameTaken,
     /// The turn took in its whole budget of received frames: more may wait.
     IntakeFull,
-    /// The turn handed the policy one notice of the port: one settlement of
-    /// one transmitted frame.
+    /// The turn took one notice of the port: one settlement of one
+    /// transmitted frame.
     Noticed,
+    /// The turn took its whole budget of notices: more wait, and the next
+    /// turn follows after a yield.
+    NoticesFull,
     /// The port accepted a frame.
     Accepted,
     /// How the turn's publishing ended.

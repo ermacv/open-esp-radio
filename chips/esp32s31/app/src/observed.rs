@@ -668,12 +668,12 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
             ),
             ServiceEvent::BudgetSpent => tally.budget_spent(),
             ServiceEvent::IntakeFull => tally.intake_full(),
+            ServiceEvent::NoticesFull => tally.notices_full(),
             ServiceEvent::Accepted => tally.accepted(),
             ServiceEvent::Published(end) => tally.published(match end {
                 PublishEnd::Chose => Publish::Chose,
                 PublishEnd::Refused => Publish::Refused,
                 PublishEnd::Budget => Publish::Budget,
-                PublishEnd::Deferred => Publish::Deferred,
                 PublishEnd::Fault => Publish::Fault,
             }),
             ServiceEvent::TurnEnded(end) => {

@@ -76,7 +76,7 @@ use oer_protocols_network_port::{
     EthernetFrameView, FramePort, FrameSource, LinkSnapshot, PortRefusal, Unpublished,
 };
 use oer_protocols_network_runtime::{
-    ConfigurationWatch, DevicePort, Direct, EndCause, Ended, LendingLanes, LendingSocket, LocalEnd,
+    ConfigurationWatch, DevicePort, EndCause, Ended, LendingLanes, LendingSocket, LocalEnd,
     MemoryPolicy, Observer, Producer, Received as Delivered, Sent, Service, Socket, SocketLanes,
     StopLane,
 };
@@ -150,27 +150,12 @@ type NetService<'c, T, L = ()> = Service<
     DEPTH,
     LANE,
     Held<Inner<'c>>,
-    Direct,
     L,
 >;
 /// The network's local producer: the case's stream.
 type StreamProducer<T> = Producer<'static, T, Stream, CREDITS>;
-type NetEnded<'c, T, R = (), U = ()> = Ended<
-    'static,
-    'static,
-    T,
-    BLOCK,
-    SOCKETS,
-    CREDITS,
-    BLOCKS,
-    DEPTH,
-    LANE,
-    Held<Inner<'c>>,
-    Direct,
-    core::convert::Infallible,
-    R,
-    U,
->;
+type NetEnded<'c, T, R = (), U = ()> =
+    Ended<'static, 'static, T, BLOCK, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, Held<Inner<'c>>, R, U>;
 /// The application's socket.
 pub type Sock<T> = Socket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS>;
 /// A received frame's buffer the station lends the network.
@@ -1153,7 +1138,6 @@ async fn run<'s, T: 'static>(
         let interface = Interface::dhcp(STATION, MTU, seed).expect("the interface");
         let owner = NetworkOwner::new(brand, interface, pool, Held(port.take()));
         let (stop_lane, stopping) = Box::leak(Box::new(StopLane::new())).split();
-        let egress = Direct;
         let (stream_port, stream) = setup.stream.clone().unwrap_or_else(|| {
             (
                 0,
@@ -1169,7 +1153,6 @@ async fn run<'s, T: 'static>(
         });
         let mut service: NetService<'_, T, StreamProducer<T>> = Service::with_producer(
             owner,
-            egress,
             MemoryPolicy::KEEP,
             stopping,
             stream,
