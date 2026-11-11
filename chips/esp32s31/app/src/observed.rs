@@ -645,6 +645,7 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
                 ServiceEvent::BudgetSpent
                 | ServiceEvent::PacketTurn
                 | ServiceEvent::IntakeFull
+                | ServiceEvent::NoticesFull
                 | ServiceEvent::Published(_)
                 | ServiceEvent::Returned { .. }
                 | ServiceEvent::Local(_) => {}
