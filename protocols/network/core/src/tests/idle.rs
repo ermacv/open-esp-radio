@@ -82,7 +82,7 @@ fn a_declared_work_alone_keeps_the_core_from_idle() {
             address: [192, 0, 2, 255],
             port: 7,
         };
-        let _work = stack.declare(at(0), &socket, broadcast, 10).unwrap();
+        let _work = stack.declare(at(0), &socket, broadcast, 10, 1).unwrap();
         assert_eq!(listed(stack, at(0)), [Class::Data]);
         assert!(!stack.idle(), "a producer's work runs");
         let demand = stack.poll_demand(at(0)).unwrap();
@@ -90,7 +90,7 @@ fn a_declared_work_alone_keeps_the_core_from_idle() {
             .transmit(
                 at(0),
                 demand.grant(),
-                |_, data: &mut crate::Payload<'_>| {
+                |_, _, data: &mut crate::Payload<'_>| {
                     data.repeat(0, 10).map_err(|_| crate::Declined::Unwritable)
                 },
                 &(),

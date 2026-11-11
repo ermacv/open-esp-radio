@@ -246,8 +246,12 @@ producer runs on the service's hart and task; independent and cross-hart clients
 keep the channel sockets.
 
 Each turn the service asks `offer` and makes each offer one `Core::declare`, the
-acceptance point: a place and no block. A refusal is the offer's one answer,
-`refused`; a declared work has one outcome, `ended`. Once the policy chooses the
+acceptance point: a place and no block, the offer's tag kept in it, the work's
+one record; the producer keeps a count of open works and nothing else of them.
+A refusal is the offer's one answer, `refused`; a declared work has one outcome,
+`ended`. A work its port takes ends `Accepted` within its publication, before
+the next frame is tried; every other end comes, with its tag, from the core's
+ended chain at the next delivery. Once the policy chooses the
 work and the port gives it a slot, the core writes the Ethernet and IPv4 headers,
 the producer's `fill` writes the data in the slot itself, and the core sums the
 UDP checksum over it there. Generated data so needs no copy at all.

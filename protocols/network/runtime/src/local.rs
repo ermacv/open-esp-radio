@@ -17,8 +17,8 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_memory::AtomicWaker;
 use oer_portable_time::Instant;
 use oer_protocols_network_core::{
-    CommandId, CommandState, Count, Declined, Ends, NetworkOwner, OpenRefused, Outcome, Payload,
-    Remote, RetiredResults, SendRefusal, SocketId, WorkId,
+    Count, Declined, Ends, NetworkOwner, OpenRefused, Outcome, Payload, Remote, RetiredResults,
+    SendRefusal, SocketId, WorkId,
 };
 use oer_protocols_network_port::FramePort;
 
@@ -236,9 +236,8 @@ pub struct Producer<'a, B, P: Produce, const CREDITS: usize> {
     socket: Option<SocketId<B>>,
     /// Where the core tells the socket's ends.
     ends: Option<Ends<B>>,
-    /// Each open work by its core place.
-    works: [Option<(CommandId<B>, P::Tag)>; CREDITS],
-    /// The works open.
+    /// The works open: declared, with no outcome given yet. Each one's
+    /// record, its tag in it, is its core place.
     open: usize,
     /// The generation the open works were last checked against.
     generation: u32,
@@ -261,7 +260,6 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
             producer,
             socket: None,
             ends: None,
-            works: [const { None }; CREDITS],
             open: 0,
             generation: 0,
             hold: None,
@@ -284,22 +282,31 @@ impl<'a, B, P: Produce, const CREDITS: usize> Producer<'a, B, P, CREDITS> {
 
 pub(crate) mod sealed {
     use super::{
-        CommandId, CommandState, Context, Count, Declined, Ends, EventSink, Instant, Payload,
-        Remote, RetiredResults, SendRefusal, ServiceEvent, SocketId, WorkId,
+        Context, Count, Declined, Ends, EventSink, Instant, Outcome, Payload, Remote,
+        RetiredResults, SendRefusal, ServiceEvent, SocketId, WorkId,
     };
 
-    /// What a producer's part of the service asks of the core.
-    pub trait Owner<B> {
+    /// What a producer's part of the service asks of the core, whose place
+    /// is each declared work's one record, its tag `T` in it.
+    pub trait Owner<B, T> {
         fn declare(
             &mut self,
             now: Instant,
             socket: &SocketId<B>,
             remote: Remote,
             length: usize,
-        ) -> Result<CommandId<B>, SendRefusal>;
-        fn withdraw(&mut self, command: &CommandId<B>) -> bool;
-        fn take_result(&mut self, command: CommandId<B>) -> CommandState<B>;
-        fn next_end(&mut self, ends: &Ends<B>, count: &impl Count) -> Option<WorkId>;
+            tag: T,
+        ) -> Result<WorkId, SendRefusal>;
+        fn withdraw_declared(
+            &mut self,
+            socket: &SocketId<B>,
+            keep: impl FnMut(&T) -> bool,
+        ) -> usize;
+        fn next_declared_end(
+            &mut self,
+            ends: &Ends<B>,
+            count: &impl Count,
+        ) -> Option<(WorkId, T, Outcome)>;
         fn neighbors_changed(&self) -> u32;
         fn address_version(&self) -> u32;
     }
@@ -308,6 +315,8 @@ pub(crate) mod sealed {
     pub trait Local<B, const CREDITS: usize> {
         /// What retirement hands back.
         type Returned;
+        /// What the core keeps of each declared work for its producer.
+        type Tag: Copy;
 
         /// A turn begins: no fill declined in it yet.
         fn turn_begins(&mut self);
@@ -318,12 +327,13 @@ pub(crate) mod sealed {
         fn offers(
             &mut self,
             now: Instant,
-            owner: &mut impl Owner<B>,
+            owner: &mut impl Owner<B, Self::Tag>,
             events: &mut impl EventSink<ServiceEvent>,
             count: &impl Count,
         ) -> bool;
 
-        /// Fill `work`'s data in the port's slot, while its tag is current.
+        /// Fill `work`'s data, named by `tag`, in the port's slot, while it
+        /// is current.
         ///
         /// # Errors
         /// [`Declined`].
@@ -331,8 +341,13 @@ pub(crate) mod sealed {
             &mut self,
             now: Instant,
             work: WorkId,
+            tag: Self::Tag,
             data: &mut Payload<'_>,
         ) -> Result<(), Declined>;
+
+        /// The port took `work`'s frame: its one outcome, `Accepted`, given
+        /// in the publication itself.
+        fn accepted(&mut self, work: WorkId, tag: Self::Tag);
 
         /// A fill declined: the producer's flow is out of the rest of the
         /// turn.
@@ -345,7 +360,7 @@ pub(crate) mod sealed {
         /// hears each end told.
         fn deliver(
             &mut self,
-            owner: &mut impl Owner<B>,
+            owner: &mut impl Owner<B, Self::Tag>,
             events: &mut impl EventSink<ServiceEvent>,
             count: &impl Count,
         ) -> bool;
@@ -364,13 +379,13 @@ pub(crate) mod sealed {
         /// Whether the next turn would ask the producer for offers that the
         /// last turn stopped asking for: its hold or its budget freed since.
         /// No wake of the producer's names these.
-        fn again(&self, owner: &impl Owner<B>) -> bool;
+        fn again(&self, owner: &impl Owner<B, Self::Tag>) -> bool;
 
         /// The core retired: each open work's outcome, then the producer
         /// back, and only then the end flag.
         fn retire<const SOCKETS: usize>(
             self,
-            results: &mut RetiredResults<B, SOCKETS, CREDITS>,
+            results: &mut RetiredResults<B, SOCKETS, CREDITS, Self::Tag>,
         ) -> Self::Returned;
     }
 }
@@ -394,7 +409,8 @@ impl<
     const NEIGHBORS: usize,
     const BLOCKS: usize,
     P: FramePort,
-> Owner<B> for NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P>
+    T: Copy,
+> Owner<B, T> for NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, T>
 {
     fn declare(
         &mut self,
@@ -402,20 +418,21 @@ impl<
         socket: &SocketId<B>,
         remote: Remote,
         length: usize,
-    ) -> Result<CommandId<B>, SendRefusal> {
-        Self::declare(self, now, socket, remote, length)
+        tag: T,
+    ) -> Result<WorkId, SendRefusal> {
+        Self::declare(self, now, socket, remote, length, tag)
     }
 
-    fn withdraw(&mut self, command: &CommandId<B>) -> bool {
-        Self::withdraw(self, command)
+    fn withdraw_declared(&mut self, socket: &SocketId<B>, keep: impl FnMut(&T) -> bool) -> usize {
+        Self::withdraw_declared(self, socket, keep)
     }
 
-    fn take_result(&mut self, command: CommandId<B>) -> CommandState<B> {
-        Self::take_result(self, command)
-    }
-
-    fn next_end(&mut self, ends: &Ends<B>, count: &impl Count) -> Option<WorkId> {
-        Self::next_end(self, ends, count)
+    fn next_declared_end(
+        &mut self,
+        ends: &Ends<B>,
+        count: &impl Count,
+    ) -> Option<(WorkId, T, Outcome)> {
+        Self::next_declared_end(self, ends, count)
     }
 
     fn neighbors_changed(&self) -> u32 {
@@ -429,6 +446,7 @@ impl<
 
 impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     type Returned = ();
+    type Tag = ();
 
     #[inline(always)]
     fn turn_begins(&mut self) {}
@@ -437,7 +455,7 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     fn offers(
         &mut self,
         _now: Instant,
-        _owner: &mut impl Owner<B>,
+        _owner: &mut impl Owner<B, Self::Tag>,
         _events: &mut impl EventSink<ServiceEvent>,
         _count: &impl Count,
     ) -> bool {
@@ -451,10 +469,15 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
         &mut self,
         _now: Instant,
         _work: WorkId,
+        _tag: (),
         _data: &mut Payload<'_>,
     ) -> Result<(), Declined> {
         Err(Declined::Stale)
     }
+
+    /// No work of a service without a producer is declared.
+    #[inline(always)]
+    fn accepted(&mut self, _work: WorkId, _tag: ()) {}
 
     #[inline(always)]
     fn declined(&mut self) {}
@@ -467,7 +490,7 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     #[inline(always)]
     fn deliver(
         &mut self,
-        _owner: &mut impl Owner<B>,
+        _owner: &mut impl Owner<B, Self::Tag>,
         _events: &mut impl EventSink<ServiceEvent>,
         _count: &impl Count,
     ) -> bool {
@@ -489,16 +512,17 @@ impl<B, const CREDITS: usize> Local<B, CREDITS> for () {
     }
 
     #[inline(always)]
-    fn again(&self, _owner: &impl Owner<B>) -> bool {
+    fn again(&self, _owner: &impl Owner<B, ()>) -> bool {
         false
     }
 
     #[inline(always)]
-    fn retire<const SOCKETS: usize>(self, _results: &mut RetiredResults<B, SOCKETS, CREDITS>) {}
+    fn retire<const SOCKETS: usize>(self, _results: &mut RetiredResults<B, SOCKETS, CREDITS, ()>) {}
 }
 
 impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, P, CREDITS> {
     type Returned = P;
+    type Tag = P::Tag;
 
     fn turn_begins(&mut self) {
         self.declined = false;
@@ -507,7 +531,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
     fn offers(
         &mut self,
         now: Instant,
-        owner: &mut impl Owner<B>,
+        owner: &mut impl Owner<B, Self::Tag>,
         events: &mut impl EventSink<ServiceEvent>,
         count: &impl Count,
     ) -> bool {
@@ -521,11 +545,12 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         if generation != self.generation {
             self.generation = generation;
             let producer = &self.producer;
-            for (command, tag) in self.works.iter().flatten() {
-                if !producer.current(*tag) && owner.withdraw(command) {
+            if let Some(socket) = self.socket.as_ref() {
+                let withdrawn = owner.withdraw_declared(socket, |tag| producer.current(*tag));
+                for _ in 0..withdrawn {
                     report(events, || ServiceEvent::Local(LocalEvent::Withdrawn));
-                    moved = true;
                 }
+                moved |= withdrawn != 0;
             }
         }
         // What a withdrawal or a tick ended frees its place first.
@@ -563,14 +588,9 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             // A refusal handled is progress too: the next pass yields.
             moved = true;
             report(events, || ServiceEvent::Local(LocalEvent::Offered));
-            match owner.declare(now, socket, offer.remote, offer.length) {
-                Ok(command) => {
-                    // The core numbers this socket's places below `CREDITS`.
-                    if let Some(place) = self.works.get_mut(command.work().place()) {
-                        *place = Some((command, offer.tag));
-                        self.open = self.open.saturating_add(1);
-                    }
-                }
+            match owner.declare(now, socket, offer.remote, offer.length, offer.tag) {
+                // Its place keeps its tag: the work's one record.
+                Ok(_work) => self.open = self.open.saturating_add(1),
                 Err(reason) => {
                     self.producer.refused(offer.tag, reason);
                     let waits = match reason {
@@ -598,17 +618,23 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         true
     }
 
-    fn fill(&mut self, now: Instant, work: WorkId, data: &mut Payload<'_>) -> Result<(), Declined> {
-        let tag = self
-            .works
-            .get(work.place())
-            .and_then(Option::as_ref)
-            .filter(|(command, _)| command.work() == work)
-            .map(|(_, tag)| *tag)
-            .ok_or(Declined::Stale)?;
-        // The guarantee of identity is the fill's own: it finds the tag's
-        // data once and declines what is no longer the producer's.
+    fn fill(
+        &mut self,
+        now: Instant,
+        work: WorkId,
+        tag: P::Tag,
+        data: &mut Payload<'_>,
+    ) -> Result<(), Declined> {
+        // The core's place gave the tag; the guarantee of identity is the
+        // fill's own: it finds the tag's data once and declines what is no
+        // longer the producer's.
         self.producer.fill(now, Work { id: work, tag }, data)
+    }
+
+    fn accepted(&mut self, work: WorkId, tag: P::Tag) {
+        self.open = self.open.saturating_sub(1);
+        self.producer
+            .ended(Work { id: work, tag }, Outcome::Accepted);
     }
 
     fn declined(&mut self) {
@@ -624,7 +650,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
 
     fn deliver(
         &mut self,
-        owner: &mut impl Owner<B>,
+        owner: &mut impl Owner<B, Self::Tag>,
         _events: &mut impl EventSink<ServiceEvent>,
         count: &impl Count,
     ) -> bool {
@@ -632,31 +658,11 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             return false;
         };
         let mut moved = false;
-        // Only what the core told ended: open works are not looked at.
-        while let Some(work) = owner.next_end(&ends, count) {
-            // The generation decides: a told end that is not this work's
-            // leaves the work where it is.
-            let Some(slot) = self.works.get_mut(work.place()).filter(|slot| {
-                slot.as_ref()
-                    .is_some_and(|(command, _)| command.work() == work)
-            }) else {
-                continue;
-            };
-            let Some((command, tag)) = slot.take() else {
-                continue;
-            };
-            let outcome = match owner.take_result(command) {
-                // An end is told once it is a result, so this keeps the work.
-                CommandState::Running(command) => {
-                    *slot = Some((command, tag));
-                    continue;
-                }
-                CommandState::Finished(outcome) => outcome,
-                // Not this core's: nothing says what became of it.
-                CommandState::Gone => Outcome::Unknown,
-            };
+        // Only what the core told ended, each with its tag, once: open works
+        // are not looked at.
+        while let Some((id, tag, outcome)) = owner.next_declared_end(&ends, count) {
             self.open = self.open.saturating_sub(1);
-            self.producer.ended(Work { id: work, tag }, outcome);
+            self.producer.ended(Work { id, tag }, outcome);
             moved = true;
         }
         moved
@@ -693,7 +699,7 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         self.at
     }
 
-    fn again(&self, owner: &impl Owner<B>) -> bool {
+    fn again(&self, owner: &impl Owner<B, P::Tag>) -> bool {
         if !self.stopped || self.socket.is_none() || self.open >= TURN_FRAMES {
             return false;
         }
@@ -709,20 +715,21 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
         })
     }
 
-    fn retire<const SOCKETS: usize>(self, results: &mut RetiredResults<B, SOCKETS, CREDITS>) -> P {
+    fn retire<const SOCKETS: usize>(
+        self,
+        results: &mut RetiredResults<B, SOCKETS, CREDITS, P::Tag>,
+    ) -> P {
         let Self {
             mut producer,
-            works,
+            socket,
             ending,
             ..
         } = self;
-        for (command, tag) in works.into_iter().flatten() {
-            let id = command.work();
-            let outcome = match results.take(command) {
-                CommandState::Finished(outcome) => outcome,
-                CommandState::Running(_) | CommandState::Gone => Outcome::Unknown,
-            };
-            producer.ended(Work { id, tag }, outcome);
+        // Every open work's place, with its tag, became a retired result.
+        if let Some(socket) = socket.as_ref() {
+            for (id, tag, outcome) in results.take_declared(socket) {
+                producer.ended(Work { id, tag }, outcome);
+            }
         }
         // After every outcome.
         drop(ending);

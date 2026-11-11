@@ -137,7 +137,7 @@ pub struct Grant<B> {
 
 /// A frame ready to write, as values.
 #[derive(Debug)]
-pub(crate) enum Frame<'a> {
+pub(crate) enum Frame<'a, T> {
     Arp([u8; ARP_FRAME]),
     /// A stored datagram's: its data is copied into the slot after the
     /// headers and summed in the same pass, the UDP checksum last.
@@ -151,6 +151,8 @@ pub(crate) enum Frame<'a> {
         headers: UdpHeaders,
         length: usize,
         work: WorkId,
+        /// Its producer's tag, from the work's one record.
+        tag: T,
     },
     /// The DHCP client's message, written in the slot after its headers,
     /// the UDP checksum last.
@@ -202,7 +204,7 @@ pub enum FillFailed {
     Declined(Declined),
 }
 
-impl Frame<'_> {
+impl<T: Copy> Frame<'_, T> {
     pub(crate) fn length(&self) -> usize {
         match self {
             Self::Arp(frame) => frame.len(),
@@ -233,7 +235,7 @@ impl Frame<'_> {
     pub(crate) fn write(
         &self,
         room: &mut Slot<'_>,
-        produce: impl FnOnce(WorkId, &mut Payload<'_>) -> Result<(), Declined>,
+        produce: impl FnOnce(WorkId, T, &mut Payload<'_>) -> Result<(), Declined>,
     ) -> Result<(), FillFailed> {
         let (slot, kept) = room.open();
         match self {
@@ -258,6 +260,7 @@ impl Frame<'_> {
                 headers,
                 length,
                 work,
+                tag,
             } => {
                 let (head, rest, sum) = headers.open(slot)?;
                 let data = rest.get_mut(..*length).ok_or(FillFailed::SlotTooShort)?;
@@ -272,7 +275,7 @@ impl Frame<'_> {
                 // One pass over the data at most: each octet is summed as it
                 // is written, and a run the slot holds is not written again.
                 let mut payload = Payload::new(data, sum, kept);
-                produce(*work, &mut payload).map_err(FillFailed::Declined)?;
+                produce(*work, *tag, &mut payload).map_err(FillFailed::Declined)?;
                 let (sum, left) = payload
                     .finish()
                     .ok_or(FillFailed::Declined(Declined::Unwritable))?;
@@ -626,8 +629,9 @@ fn end_waiting<
     const CREDITS: usize,
     const RECEIVED: usize,
     const BLOCKS: usize,
+    T: Copy,
 >(
-    sockets: &mut [Socket<'m, B, SIZE, CREDITS, RECEIVED>],
+    sockets: &mut [Socket<'m, B, SIZE, CREDITS, RECEIVED, T>],
     address: [u8; 4],
     outcome: Outcome,
     pool: &mut Pool<'m, B, SIZE, BLOCKS>,
@@ -639,8 +643,8 @@ fn end_waiting<
 
 /// Whether a datagram or an echo reply goes through `address`: what data
 /// protects in the neighbor table.
-fn data_needs<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>(
-    sockets: &[Socket<'m, B, SIZE, CREDITS, RECEIVED>],
+fn data_needs<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: Copy>(
+    sockets: &[Socket<'m, B, SIZE, CREDITS, RECEIVED, T>],
     echoes: &Echoes<'m, B, SIZE>,
     address: [u8; 4],
 ) -> bool {
@@ -675,7 +679,7 @@ pub struct Configuration {
 }
 
 #[derive(Debug)]
-struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize> {
+struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T> {
     serial: u64,
     /// The bound port; a socket being closed keeps its slot, not its port.
     port: Option<u16>,
@@ -689,12 +693,12 @@ struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: us
     group: Group<B>,
     /// Its commands' places, the close's among them: held from the
     /// socket's creation, so a close always has a place.
-    places: Places<'m, B, SIZE, CREDITS>,
+    places: Places<'m, B, SIZE, CREDITS, T>,
     received: heapless::Deque<Datagram<'m, B, SIZE>, RECEIVED>,
 }
 
-impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize>
-    Socket<'m, B, SIZE, CREDITS, RECEIVED>
+impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: Copy>
+    Socket<'m, B, SIZE, CREDITS, RECEIVED, T>
 {
     const fn new() -> Self {
         Self {
@@ -747,13 +751,14 @@ pub struct Core<
     const CREDITS: usize,
     const RECEIVED: usize,
     const NEIGHBORS: usize,
+    T = (),
 > {
     interface: Interface,
     neighbors: Neighbors<NEIGHBORS>,
     /// Replies owed, oldest first. Bounded by the table: an asker past it
     /// asks again.
     replies: heapless::Vec<Reply, NEIGHBORS>,
-    sockets: [Socket<'m, B, SIZE, CREDITS, RECEIVED>; SOCKETS],
+    sockets: [Socket<'m, B, SIZE, CREDITS, RECEIVED, T>; SOCKETS],
     /// Where the next look for a datagram starts, so sockets take turns: every
     /// end at publication, a commit or a reject, moves it past its socket.
     cursor: usize,
@@ -785,7 +790,8 @@ impl<
     const CREDITS: usize,
     const RECEIVED: usize,
     const NEIGHBORS: usize,
-> Core<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS>
+    T: Copy,
+> Core<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, T>
 {
     const FITS: () = {
         if SOCKETS > 255 || CREDITS >= 255 || NEIGHBORS > 255 {
@@ -1053,7 +1059,7 @@ impl<
         &mut self,
         index: u8,
         serial: u64,
-    ) -> Option<&mut Socket<'m, B, SIZE, CREDITS, RECEIVED>> {
+    ) -> Option<&mut Socket<'m, B, SIZE, CREDITS, RECEIVED, T>> {
         self.sockets
             .get_mut(usize::from(index))
             .filter(|socket| socket.serial == serial)
@@ -1074,7 +1080,7 @@ impl<
     ) -> Result<CommandId<B>, SendRefused<'m, B, SIZE>> {
         let length = block.octets().len();
         match self.admit(now, socket, remote, length) {
-            Ok(admitted) => Ok(self.place(socket, admitted, |hop| {
+            Ok(admitted) => Ok(self.place(socket, admitted, None, |hop| {
                 Run::Sending(Sending {
                     remote,
                     block,
@@ -1087,9 +1093,12 @@ impl<
     }
 
     /// Declare `length` octets to `remote` that a local producer fills when
-    /// the port gives them room. This is the acceptance point: it takes a
-    /// command place as [`Self::send`] does, with the same refusals, and no
-    /// block. A refusal moved nothing; after it the work has one outcome.
+    /// the port gives them room, its data named by the producer's `tag`. This
+    /// is the acceptance point: it takes a command place as [`Self::send`]
+    /// does, with the same refusals, and no block. A refusal moved nothing;
+    /// after it the work has one outcome, given with its tag once: by
+    /// [`Self::next_declared_end`], by the publication its port took, or in
+    /// [`RetiredResults::take_declared`]. Its place is its one record.
     ///
     /// # Errors
     /// [`SendRefusal`].
@@ -1099,15 +1108,17 @@ impl<
         socket: &SocketId<B>,
         remote: Remote,
         length: usize,
-    ) -> Result<CommandId<B>, SendRefusal> {
+        tag: T,
+    ) -> Result<WorkId, SendRefusal> {
         let admitted = self.admit(now, socket, remote, length)?;
-        Ok(self.place(socket, admitted, |hop| {
+        let command = self.place(socket, admitted, Some(tag), |hop| {
             Run::Declared(Declared {
                 remote,
                 length,
                 hop,
             })
-        }))
+        });
+        Ok(command.work())
     }
 
     /// Admit a datagram of `length` octets on `socket` to `remote`: its free
@@ -1148,6 +1159,7 @@ impl<
         &mut self,
         socket: &SocketId<B>,
         admitted: Admitted,
+        tag: Option<T>,
         run: impl FnOnce(Option<[u8; 4]>) -> Run<'m, B, SIZE>,
     ) -> CommandId<B> {
         let serial = self.next_serial();
@@ -1156,7 +1168,7 @@ impl<
         if let Some(open) = self.socket_mut(socket.index, socket.serial) {
             let _started = open
                 .places
-                .start(admitted.number, serial, run(admitted.hop));
+                .start(admitted.number, serial, run(admitted.hop), tag);
         }
         CommandId {
             socket: socket.index,
@@ -1183,27 +1195,25 @@ impl<
         self.neighbor_changes
     }
 
-    /// End declared `command` [`Outcome::Declined`], before any port saw it:
-    /// its source moved on. Whether it was still declared.
-    pub fn withdraw(&mut self, command: &CommandId<B>) -> bool {
-        let Some(places) = self
-            .sockets
-            .get_mut(usize::from(command.socket))
-            .map(|socket| &mut socket.places)
-            .filter(|places| {
-                places
-                    .of(command.place, command.serial)
-                    .is_some_and(|place| matches!(place.run(), Run::Declared(_)))
-            })
-        else {
-            return false;
+    /// End [`Outcome::Declined`] every work declared on `socket` whose tag
+    /// `keep` no longer keeps, before any port saw it: its source moved on.
+    /// How many ended.
+    pub fn withdraw_declared(
+        &mut self,
+        socket: &SocketId<B>,
+        keep: impl FnMut(&T) -> bool,
+    ) -> usize {
+        let Some(open) = self.socket_mut(socket.index, socket.serial) else {
+            return 0;
         };
-        let protected = places.end_declared(command.place, Outcome::Declined);
+        let (ended, protected) = open.places.withdraw_declared(keep);
         if protected {
             self.neighbors_moved();
         }
-        self.forget_unneeded();
-        true
+        if ended != 0 {
+            self.forget_unneeded();
+        }
+        ended
     }
 
     fn forget_unneeded(&mut self) {
@@ -1238,6 +1248,23 @@ impl<
         let (place, serial) = self.socket_mut(ends.index, ends.serial)?.places.tell()?;
         counted(count, Count::told);
         Some(WorkId { serial, place })
+    }
+
+    /// The next of `ends`' socket's declared works to end since this last
+    /// told it, oldest end first, with its tag and outcome: its place frees,
+    /// so the outcome is given once. An end of other work on the way is told
+    /// and stays for its [`CommandId`]'s holder. `count` hears each end told.
+    pub fn next_declared_end<C: Count + ?Sized>(
+        &mut self,
+        ends: &Ends<B>,
+        count: &C,
+    ) -> Option<(WorkId, T, Outcome)> {
+        let (place, serial, outcome, tag) = self
+            .socket_mut(ends.index, ends.serial)?
+            .places
+            .tell_declared()?;
+        counted(count, Count::told);
+        Some((WorkId { serial, place }, tag, outcome))
     }
 
     /// Every datagram [`Self::evict`] can take back.
@@ -1929,9 +1956,9 @@ impl<
         &self,
         now: Instant,
         index: usize,
-        socket: &Socket<'m, B, SIZE, CREDITS, RECEIVED>,
+        socket: &Socket<'m, B, SIZE, CREDITS, RECEIVED, T>,
         number: u8,
-        place: &Place<'m, B, SIZE>,
+        place: &Place<'m, B, SIZE, T>,
     ) -> Option<Demand<B>> {
         let (hop, length) = match place.run() {
             Run::Sending(sending) => (sending.hop, sending.block.octets().len()),
@@ -1971,7 +1998,7 @@ impl<
     /// neighbor address, a later reply or a retired command is `None`. Only
     /// [`NetworkOwner`](crate::NetworkOwner) reaches this, so the port's
     /// answer is always committed.
-    pub(crate) fn frame(&self, now: Instant, grant: &Grant<B>) -> Option<Frame<'_>> {
+    pub(crate) fn frame(&self, now: Instant, grant: &Grant<B>) -> Option<Frame<'_, T>> {
         match grant.work {
             Work::Reply { serial } => {
                 let reply = self.replies.iter().find(|reply| reply.serial == serial)?;
@@ -2036,7 +2063,7 @@ impl<
 
     #[cold]
     #[inline(never)]
-    fn dhcp_frame(&self, now: Instant, serial: u64, peer: [u8; 6]) -> Option<Frame<'_>> {
+    fn dhcp_frame(&self, now: Instant, serial: u64, peer: [u8; 6]) -> Option<Frame<'_, T>> {
         let client = self.dhcp.as_ref()?;
         if self.dhcp_peer(now, client)? != peer {
             return None;
@@ -2082,7 +2109,7 @@ impl<
         serial: u64,
         peer: [u8; 6],
         found: &Holds,
-    ) -> Option<Frame<'_>> {
+    ) -> Option<Frame<'_, T>> {
         let owed = self.echoes.get(serial)?;
         if self.next_hop(now, Some(owed.hop), Some(found), peer)? != peer {
             return None;
@@ -2112,7 +2139,7 @@ impl<
         destination: [u8; 6],
         target_hardware: [u8; 6],
         target_protocol: [u8; 4],
-    ) -> Option<Frame<'_>> {
+    ) -> Option<Frame<'_, T>> {
         let mut frame = [0; ARP_FRAME];
         let (head, rest) = frame.split_at_mut_checked(ethernet::HEADER_LEN)?;
         EthernetHeader {
@@ -2160,7 +2187,7 @@ impl<
         place: u8,
         serial: u64,
         (peer, found): ([u8; 6], Option<Holds>),
-    ) -> Option<Frame<'_>> {
+    ) -> Option<Frame<'_, T>> {
         // No frame leaves from an address past its lease's end.
         let source = self.usable(now)?.address();
         let open = self.sockets.get(usize::from(socket))?;
@@ -2176,6 +2203,7 @@ impl<
             Run::Declared(declared) => (declared.remote, declared.hop, None, declared.length),
             Run::Free | Run::Finished(_) => return None,
         };
+        let tag = entry.tag().copied();
         let next_hop = self.next_hop(now, hop, found.as_ref(), peer)?;
         if next_hop != peer {
             return None;
@@ -2211,10 +2239,12 @@ impl<
         };
         Some(match data {
             Some(data) => Frame::Datagram { headers, data },
+            // Every declared work keeps its tag from its declaration.
             None => Frame::Produced {
                 headers,
                 length,
                 work: WorkId { serial, place },
+                tag: tag?,
             },
         })
     }
@@ -2327,14 +2357,17 @@ impl<
     }
 
     /// The port took the granted work, or said it did without a written
-    /// frame: then its datagram ends `Unknown`, and nothing is sent again.
+    /// frame: then its datagram ends `Unknown`, and nothing is sent again. A
+    /// declared work the port took with its frame written ends `Accepted`
+    /// here, its place free, and comes back with its tag for its producer:
+    /// its one outcome, given at once.
     pub(crate) fn commit<const BLOCKS: usize>(
         &mut self,
         now: Instant,
         grant: Grant<B>,
         written: bool,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
-    ) {
+    ) -> Option<(WorkId, T)> {
         match grant.work {
             Work::Reply { serial } => {
                 self.replies.retain(|reply| reply.serial != serial);
@@ -2361,17 +2394,23 @@ impl<
                 } else {
                     Outcome::Unknown
                 };
-                let released = self
+                let places = self
                     .sockets
                     .get_mut(usize::from(socket))
                     .map(|open| &mut open.places)
-                    .filter(|places| places.of(place, serial).is_some())
-                    .is_some_and(|places| places.end(place, outcome, pool));
+                    .filter(|places| places.of(place, serial).is_some());
+                let (released, given) = match places {
+                    Some(places) if written => places.end_given(place, outcome, pool),
+                    Some(places) => (places.end(place, outcome, pool), None),
+                    None => (false, None),
+                };
                 if released {
                     self.neighbors_moved();
                 }
+                return given.map(|tag| (WorkId { serial, place }, tag));
             }
         }
+        None
     }
 
     /// End this core. Every block it holds returns to `pool`, and the brand
@@ -2382,7 +2421,7 @@ impl<
     pub fn retire<const BLOCKS: usize>(
         self,
         pool: &mut Pool<'m, B, SIZE, BLOCKS>,
-    ) -> (RetiredResults<B, SOCKETS, CREDITS>, CoreBrand<B>) {
+    ) -> (RetiredResults<B, SOCKETS, CREDITS, T>, CoreBrand<B>) {
         // Loans outlive a core: what is out stays owed, to this pool.
         pool.loans().reinstall();
         let Self {
@@ -2397,7 +2436,11 @@ impl<
         let mut index = 0;
         let mut results = [const { [Kept::NONE; CREDITS] }; SOCKETS];
         let mut closes = [Kept::NONE; SOCKETS];
+        let mut generations = [0_u64; SOCKETS];
         for mut socket in sockets {
+            if let Some(slot) = generations.get_mut(index) {
+                *slot = socket.serial;
+            }
             while let Some(datagram) = socket.received.pop_front() {
                 pool.give(datagram.block);
                 received_dropped = received_dropped.saturating_add(1);
@@ -2405,7 +2448,7 @@ impl<
             let (places, close) = socket.places.into_places();
             let close = Kept::of(close);
             let kept = places.map(|place| {
-                let (place_serial, observed, run) = place.into_parts();
+                let (place_serial, observed, run, tag) = place.into_parts();
                 let outcome = match run {
                     Run::Sending(sending) => {
                         pool.give(sending.block);
@@ -2418,6 +2461,7 @@ impl<
                 Kept {
                     serial: place_serial,
                     outcome: outcome.filter(|_| observed),
+                    tag: tag.filter(|_| observed),
                 }
             });
             if let Some(slot) = results.get_mut(index) {
@@ -2432,6 +2476,7 @@ impl<
             RetiredResults {
                 results,
                 closes,
+                generations,
                 received_dropped,
                 brand,
             },
@@ -2440,24 +2485,27 @@ impl<
     }
 }
 
-/// A result kept past its core.
+/// A result kept past its core, with a declared work's producer tag.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct Kept {
+struct Kept<T> {
     serial: u64,
     outcome: Option<Outcome>,
+    tag: Option<T>,
 }
 
-impl Kept {
+impl<T> Kept<T> {
     const NONE: Self = Self {
         serial: 0,
         outcome: None,
+        tag: None,
     };
 
-    fn of<B, const SIZE: usize>(place: Place<'_, B, SIZE>) -> Self {
+    fn of<B, const SIZE: usize>(place: Place<'_, B, SIZE, T>) -> Self {
         match place.into_parts() {
-            (serial, true, Run::Finished(outcome)) => Self {
+            (serial, true, Run::Finished(outcome), _) => Self {
                 serial,
                 outcome: Some(outcome),
+                tag: None,
             },
             _ => Self::NONE,
         }
@@ -2466,15 +2514,50 @@ impl Kept {
 
 /// A retired core's results, each read once, whenever its observer comes.
 #[derive(Debug)]
-pub struct RetiredResults<B, const SOCKETS: usize, const CREDITS: usize> {
-    results: [[Kept; CREDITS]; SOCKETS],
-    closes: [Kept; SOCKETS],
+pub struct RetiredResults<B, const SOCKETS: usize, const CREDITS: usize, T = ()> {
+    results: [[Kept<T>; CREDITS]; SOCKETS],
+    closes: [Kept<T>; SOCKETS],
+    /// Each slot's socket as the core retired it: a socket's results are
+    /// its own only, not those of another socket in the same slot.
+    generations: [u64; SOCKETS],
     /// Received datagrams nobody read, which went back to the pool.
     pub received_dropped: u32,
     brand: Tag<B>,
 }
 
-impl<B, const SOCKETS: usize, const CREDITS: usize> RetiredResults<B, SOCKETS, CREDITS> {
+impl<B, const SOCKETS: usize, const CREDITS: usize, T: Copy>
+    RetiredResults<B, SOCKETS, CREDITS, T>
+{
+    /// Every declared work of `socket`'s with a result, in its places'
+    /// order, each once: its work, its producer tag and its outcome. A
+    /// socket this core did not hold in its slot at retirement, an earlier
+    /// core's among them, has none.
+    pub fn take_declared(
+        &mut self,
+        socket: &SocketId<B>,
+    ) -> impl Iterator<Item = (WorkId, T, Outcome)> + '_ {
+        let index = usize::from(socket.index);
+        let own = self.generations.get(index) == Some(&socket.serial);
+        self.results
+            .get_mut(index)
+            .filter(|_| own)
+            .into_iter()
+            .flatten()
+            .zip(0_u8..)
+            .filter_map(|(kept, place)| {
+                let tag = kept.tag.take()?;
+                let outcome = kept.outcome.take()?;
+                Some((
+                    WorkId {
+                        serial: kept.serial,
+                        place,
+                    },
+                    tag,
+                    outcome,
+                ))
+            })
+    }
+
     /// The command's result, once.
     pub fn take(&mut self, command: CommandId<B>) -> CommandState<B> {
         let kept = self

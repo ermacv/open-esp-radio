@@ -27,8 +27,9 @@ const OUR_IP: [u8; 4] = [192, 0, 2, 1];
 const PEER_IP: [u8; 4] = [192, 0, 2, 2];
 const GATEWAY: [u8; 4] = [192, 0, 2, 254];
 
-type Stack<B> = NetworkOwner<'static, B, SIZE, 2, 2, 2, 2, BLOCKS, Port>;
-type Small<B> = NetworkOwner<'static, B, SIZE, 1, 1, 1, 2, BLOCKS, Port>;
+/// A declared work's tag in these tests: a number each test chooses.
+type Stack<B> = NetworkOwner<'static, B, SIZE, 2, 2, 2, 2, BLOCKS, Port, u32>;
+type Small<B> = NetworkOwner<'static, B, SIZE, 1, 1, 1, 2, BLOCKS, Port, u32>;
 type Blocks<B> = Pool<'static, B, SIZE, BLOCKS>;
 
 #[derive(Default)]
@@ -350,14 +351,21 @@ fn filled<B>(pool: &mut Blocks<B>, data: &[u8]) -> Block<'static, B, SIZE> {
 
 /// The fill of a test whose work no producer declared: only a declared
 /// work's frame calls it.
-fn unproduced(_: crate::WorkId, _: &mut crate::Payload<'_>) -> Result<(), crate::Declined> {
+fn unproduced<T>(
+    _: crate::WorkId,
+    _: T,
+    _: &mut crate::Payload<'_>,
+) -> Result<(), crate::Declined> {
     panic!("no work of this test is a producer's")
 }
 
 /// Send the next ready work.
 fn send_next<B>(stack: &mut Stack<B>, now: Instant) -> Result<(), Unsent<&'static str>> {
     let demand = stack.poll_demand(now).unwrap();
-    stack.transmit(now, demand.grant(), unproduced, &())
+    // No declared work: no producer's outcome comes with the frame.
+    stack
+        .transmit(now, demand.grant(), unproduced, &())
+        .map(|_| ())
 }
 
 /// Learn the peer through its own request for us.

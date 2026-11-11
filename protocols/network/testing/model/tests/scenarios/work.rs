@@ -53,6 +53,8 @@ type LoadOwner = NetworkOwner<
     LOAD_NEIGHBORS,
     LOAD_BLOCKS,
     Medium,
+    // The load producer's tag, kept in each declared work's place.
+    u64,
 >;
 
 struct LoadNet;

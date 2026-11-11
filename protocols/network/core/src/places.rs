@@ -78,24 +78,28 @@ struct Line {
 
 /// One command's place: what it runs and, after, its result.
 #[derive(Debug)]
-pub(crate) struct Place<'m, B, const SIZE: usize> {
+pub(crate) struct Place<'m, B, const SIZE: usize, T> {
     /// The running command's, or 0.
     serial: u64,
     /// Someone holds the right to the result.
     observed: bool,
     run: Run<'m, B, SIZE>,
+    /// A declared work's producer tag, from its declaration until its
+    /// result is taken: the producer keeps no record of its own.
+    tag: Option<T>,
     /// The chain it is on, and its neighbors there.
     on: Option<Chain>,
     previous: Option<u8>,
     next: Option<u8>,
 }
 
-impl<'m, B, const SIZE: usize> Place<'m, B, SIZE> {
+impl<'m, B, const SIZE: usize, T> Place<'m, B, SIZE, T> {
     const fn new() -> Self {
         Self {
             serial: 0,
             observed: false,
             run: Run::Free,
+            tag: None,
             on: None,
             previous: None,
             next: None,
@@ -110,19 +114,24 @@ impl<'m, B, const SIZE: usize> Place<'m, B, SIZE> {
         &self.run
     }
 
-    /// Its generation, its state and whether its result is observed, as it
-    /// leaves its core.
-    pub(crate) fn into_parts(self) -> (u64, bool, Run<'m, B, SIZE>) {
-        (self.serial, self.observed, self.run)
+    /// A declared work's producer tag.
+    pub(crate) const fn tag(&self) -> Option<&T> {
+        self.tag.as_ref()
+    }
+
+    /// Its generation, its state, whether its result is observed and its
+    /// producer tag, as it leaves its core.
+    pub(crate) fn into_parts(self) -> (u64, bool, Run<'m, B, SIZE>, Option<T>) {
+        (self.serial, self.observed, self.run, self.tag)
     }
 }
 
 /// A socket's places: `CREDITS` for commands and one for its close, whose
 /// number is `CREDITS`.
 #[derive(Debug)]
-pub(crate) struct Places<'m, B, const SIZE: usize, const CREDITS: usize> {
-    places: [Place<'m, B, SIZE>; CREDITS],
-    close: Place<'m, B, SIZE>,
+pub(crate) struct Places<'m, B, const SIZE: usize, const CREDITS: usize, T> {
+    places: [Place<'m, B, SIZE, T>; CREDITS],
+    close: Place<'m, B, SIZE, T>,
     /// Places from here on were never used: free, and on no chain.
     fresh: usize,
     free: Line,
@@ -130,7 +139,7 @@ pub(crate) struct Places<'m, B, const SIZE: usize, const CREDITS: usize> {
     ended: Line,
 }
 
-impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS> {
+impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE, CREDITS, T> {
     pub(crate) const fn new() -> Self {
         Self {
             places: [const { Place::new() }; CREDITS],
@@ -152,7 +161,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
     }
 
     /// A place by its number: `CREDITS` is the close's.
-    pub(crate) fn get(&self, number: u8) -> Option<&Place<'m, B, SIZE>> {
+    pub(crate) fn get(&self, number: u8) -> Option<&Place<'m, B, SIZE, T>> {
         let number = usize::from(number);
         if number == CREDITS {
             Some(&self.close)
@@ -162,11 +171,11 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
     }
 
     /// A place by its number, while it runs `serial`'s command.
-    pub(crate) fn of(&self, number: u8, serial: u64) -> Option<&Place<'m, B, SIZE>> {
+    pub(crate) fn of(&self, number: u8, serial: u64) -> Option<&Place<'m, B, SIZE, T>> {
         self.get(number).filter(|place| place.serial == serial)
     }
 
-    fn get_mut(&mut self, number: u8) -> Option<&mut Place<'m, B, SIZE>> {
+    fn get_mut(&mut self, number: u8) -> Option<&mut Place<'m, B, SIZE, T>> {
         let number = usize::from(number);
         if number == CREDITS {
             Some(&mut self.close)
@@ -255,7 +264,13 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
 
     /// Run `run` as `serial`'s command in the place [`Self::vacant`] named.
     /// Whether it was still free.
-    pub(crate) fn start(&mut self, number: u8, serial: u64, run: Run<'m, B, SIZE>) -> bool {
+    pub(crate) fn start(
+        &mut self,
+        number: u8,
+        serial: u64,
+        run: Run<'m, B, SIZE>,
+        tag: Option<T>,
+    ) -> bool {
         if self.vacant() != Some(number) {
             return false;
         }
@@ -267,6 +282,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
         };
         place.observed = true;
         place.serial = serial;
+        place.tag = tag;
         let _free = self.set(number, run);
         true
     }
@@ -300,6 +316,54 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
         protected
     }
 
+    /// End declared `number`, which its port took, as `outcome` given to its
+    /// producer at once: the place frees now, with no end to tell, and its
+    /// tag comes back with whether it held a neighbor's protection. Any
+    /// other running command ends as [`Self::end`] ends it, and no tag
+    /// comes back.
+    pub(crate) fn end_given<const BLOCKS: usize>(
+        &mut self,
+        number: u8,
+        outcome: Outcome,
+        pool: &mut Pool<'m, B, SIZE, BLOCKS>,
+    ) -> (bool, Option<T>) {
+        let given = self
+            .get(number)
+            .filter(|place| matches!(place.run, Run::Declared(_)) && place.observed)
+            .and_then(|place| place.tag);
+        let Some(tag) = given else {
+            return (self.end(number, outcome, pool), None);
+        };
+        let protected = self
+            .get(number)
+            .is_some_and(|place| place.run.hop().is_some());
+        let _declared = self.free(number);
+        (protected, Some(tag))
+    }
+
+    /// End `Declined` every declared command whose tag `keep` no longer
+    /// keeps: how many ended, and whether one held a neighbor's protection.
+    pub(crate) fn withdraw_declared(&mut self, mut keep: impl FnMut(&T) -> bool) -> (usize, bool) {
+        let (mut ended, mut released) = (0_usize, false);
+        let mut at = self.running.head;
+        for _ in 0..=CREDITS {
+            let Some(number) = at else {
+                break;
+            };
+            let Some(place) = self.get(number) else {
+                break;
+            };
+            at = place.next;
+            let stale = matches!(place.run, Run::Declared(_))
+                && place.tag.as_ref().is_some_and(|tag| !keep(tag));
+            if stale {
+                ended = ended.saturating_add(1);
+                released |= self.end_declared(number, Outcome::Declined);
+            }
+        }
+        (ended, released)
+    }
+
     /// End the command. A place nobody observes frees here; otherwise the
     /// result waits in it, and its end goes on the ended chain.
     fn finish(&mut self, number: u8, outcome: Outcome) -> Option<Run<'m, B, SIZE>> {
@@ -315,6 +379,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
         let old = self.set(number, Run::Free);
         if let Some(place) = self.get_mut(number) {
             place.serial = 0;
+            place.tag = None;
         }
         old
     }
@@ -393,8 +458,29 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
         Some((number, serial))
     }
 
+    /// The next end not yet told of a declared work, oldest first, with its
+    /// generation, outcome and tag: its place frees, so its result is given
+    /// once. An end of other work on the way is told and stays for its
+    /// holder.
+    pub(crate) fn tell_declared(&mut self) -> Option<(u8, u64, Outcome, T)> {
+        for _ in 0..=CREDITS {
+            let (number, serial) = self.tell()?;
+            let Some(place) = self.get(number) else {
+                continue;
+            };
+            if let (Run::Finished(outcome), Some(tag)) = (&place.run, place.tag) {
+                let outcome = *outcome;
+                let _finished = self.free(number);
+                return Some((number, serial, outcome, tag));
+            }
+        }
+        None
+    }
+
     /// The running commands, oldest first.
-    pub(crate) fn running(&self) -> impl Iterator<Item = (u8, &Place<'m, B, SIZE>)> + Clone + '_ {
+    pub(crate) fn running(
+        &self,
+    ) -> impl Iterator<Item = (u8, &Place<'m, B, SIZE, T>)> + Clone + '_ {
         let mut at = self.running.head;
         // A chain is at most every place long.
         (0..=CREDITS).map_while(move |_| {
@@ -421,7 +507,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize> Places<'m, B, SIZE, CREDITS
     }
 
     /// The places, as their core leaves them.
-    pub(crate) fn into_places(self) -> ([Place<'m, B, SIZE>; CREDITS], Place<'m, B, SIZE>) {
+    pub(crate) fn into_places(self) -> ([Place<'m, B, SIZE, T>; CREDITS], Place<'m, B, SIZE, T>) {
         (self.places, self.close)
     }
 }

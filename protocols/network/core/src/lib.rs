@@ -153,7 +153,7 @@ pub use machine::{
     FillFailed, Grant, LendTo, NetEvent, OpenRefused, Outcome, Queued, Remote, RetiredResults,
     SendRefusal, SendRefused, SocketId, StaleSocket, WorkId,
 };
-pub use owner::{Intake, LentDatagram, NetworkOwner, Retired, Unsent};
+pub use owner::{Intake, LentDatagram, NetworkOwner, Retired, Transmitted, Unsent};
 pub use payload::{Payload, PayloadFull};
 
 #[cfg(test)]
