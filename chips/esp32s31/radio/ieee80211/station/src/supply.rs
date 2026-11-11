@@ -165,6 +165,11 @@ impl NetworkTx {
         })
     }
 
+    /// The publisher and every buffer, in the storage that holds them.
+    pub(crate) fn into_owned(self) -> (TxPublisher, heapless::Vec<TxSlot, NETWORK_BUFFERS>) {
+        (self.publisher, self.slots)
+    }
+
     /// The publisher and the buffers, last built first.
     pub fn into_parts(self) -> (TxPublisher, impl Iterator<Item = TxSlot>) {
         let mut slots = self.slots;
@@ -239,7 +244,7 @@ pub type LocalTransmit<'a, N> = runtime::LocalTx<
 impl<N: crate::Notifies> NetworkTxEnd<N> for LocalEnd {
     type End = LocalTransmit<'static, N>;
     fn end(queues: crate::TxQueues<'static, N, TxMemory>, memory: NetworkTx) -> Self::End {
-        let (publisher, slots) = memory.into_parts();
+        let (publisher, slots) = memory.into_owned();
         runtime::LocalTx::new(
             queues.transmit,
             queues.returned,

@@ -251,7 +251,12 @@ pub type Notice = RadioNotice<Ticket, StationKey>;
 impl FreeMemory {
     /// `total` buffers of an MPDU each, and the memory, each buffer at its
     /// place.
-    pub fn new(total: usize) -> (Rc<Self>, Vec<ModelSlot>) {
+    pub fn new(
+        total: usize,
+    ) -> (
+        Rc<Self>,
+        heapless::Vec<ModelSlot, { super::NETWORK_BUFFERS }>,
+    ) {
         let memory: Vec<Memory> = (0..total).map(|_| Box::new([0; MODEL_MAX_MPDU])).collect();
         let places = memory.iter().map(|memory| memory.as_ptr().addr()).collect();
         let free = Rc::new(Self {
@@ -260,13 +265,14 @@ impl FreeMemory {
             out: Cell::new(0),
             settled: Cell::new((0, 0)),
         });
-        let slots = memory
-            .into_iter()
-            .map(|memory| ModelSlot {
+        let mut slots = heapless::Vec::new();
+        for memory in memory {
+            let slot = ModelSlot {
                 place: free.ticket_of(&memory),
                 memory,
-            })
-            .collect();
+            };
+            assert!(slots.push(slot).is_ok(), "the network holds every buffer");
+        }
         (free, slots)
     }
 

@@ -62,11 +62,19 @@ type Tx<'c> = LocalTx<'c, Pool, SLOTS, TX, SameHart>;
 type Queue = WakingSlotQueue<Option<Outgoing<Buffer>>, TX>;
 type Back = WakingSlotQueue<Option<TxEnded<Buffer>>, TX>;
 
-fn buffers(octets: usize) -> impl Iterator<Item = Buffer> {
-    (0..SLOTS).map(move |place| Buffer {
-        place: u8::try_from(place).unwrap(),
-        bytes: std::vec![0; octets],
-    })
+/// Every buffer the network holds, of `octets` each.
+fn buffers(octets: usize) -> heapless::Vec<Buffer, SLOTS> {
+    buffers_of(SLOTS, octets)
+}
+
+/// `count` buffers of `octets` each, at the first places.
+fn buffers_of(count: usize, octets: usize) -> heapless::Vec<Buffer, SLOTS> {
+    (0..count)
+        .map(|place| Buffer {
+            place: u8::try_from(place).unwrap(),
+            bytes: std::vec![0; octets],
+        })
+        .collect()
 }
 
 fn up(state: &State) {
@@ -421,7 +429,7 @@ fn a_buffer_keeps_the_run_its_last_frame_left() {
         sender,
         back,
         Pool::default(),
-        buffers(64).take(1),
+        buffers_of(1, 64),
         state.network_link(),
     );
     let run = Held {
@@ -496,4 +504,80 @@ fn room_is_ready_only_with_a_free_buffer_and_room_to_hand_it_on() {
     assert!(tx.notice_waiting());
     while tx.take_notice().is_some() {}
     assert!(tx.poll_room(&mut cx).is_ready());
+}
+
+/// Every buffer the constructor is given is the network's: none is
+/// dropped, and each one carries a frame. More than `SLOTS` cannot be given:
+/// the storage's type bounds them.
+#[test]
+fn every_buffer_given_is_held() {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    struct Tracked {
+        bytes: [u8; 64],
+        place: u8,
+        dropped: Arc<AtomicUsize>,
+    }
+    impl Drop for Tracked {
+        fn drop(&mut self) {
+            self.dropped.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+    impl TxStorage for Tracked {
+        fn bytes_mut(&mut self) -> &mut [u8] {
+            &mut self.bytes
+        }
+    }
+    struct Kept;
+    impl TxPool for Kept {
+        type Slot = Tracked;
+        type Memory = Tracked;
+        fn place(slot: &Tracked) -> u8 {
+            slot.place
+        }
+        fn publish(&mut self, slot: Tracked, _: usize) -> Result<Tracked, PoolRefused<Tracked>> {
+            Ok(slot)
+        }
+        fn slot(&mut self, memory: Tracked) -> Tracked {
+            memory
+        }
+    }
+    let mut queue = WakingSlotQueue::<Option<Outgoing<Tracked>>, TX>::new();
+    let mut back = WakingSlotQueue::<Option<TxEnded<Tracked>>, TX>::new();
+    let state = State::new();
+    up(&state);
+    let (sender, mut receiver) = queue.split(|| None);
+    let (_returned, back) = back.split(|| None);
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let slots: heapless::Vec<Tracked, SLOTS> = (0..SLOTS)
+        .map(|place| Tracked {
+            bytes: [0; 64],
+            place: u8::try_from(place).unwrap(),
+            dropped: dropped.clone(),
+        })
+        .collect();
+    let mut tx: LocalTx<'_, Kept, SLOTS, TX, SameHart> =
+        LocalTx::new(sender, back, Kept, slots, state.network_link());
+    assert_eq!(dropped.load(Ordering::SeqCst), 0, "no buffer is dropped");
+    assert_eq!(tx.buffers(), SLOTS, "every buffer is the network's");
+    let mut places = Vec::new();
+    for _ in 0..SLOTS {
+        places.push(tx.publish(plain(42), octets).unwrap());
+    }
+    places.sort_unstable();
+    assert_eq!(
+        places,
+        (0..SLOTS)
+            .map(|place| u8::try_from(place).unwrap())
+            .collect::<Vec<_>>()
+    );
+    while receiver
+        .try_receive_with(Option::take)
+        .is_ok_and(|frame| frame.is_some())
+    {}
+    assert_eq!(
+        dropped.load(Ordering::SeqCst),
+        SLOTS,
+        "the station took each one"
+    );
 }

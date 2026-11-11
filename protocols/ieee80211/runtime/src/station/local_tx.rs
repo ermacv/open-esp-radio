@@ -83,21 +83,16 @@ pub struct LocalTx<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifi
 
 impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c, P, SLOTS, TX, N> {
     /// The network's end over the station's transmit channels, `pool` and
-    /// its free buffers `slots`, and `state`'s link. A buffer past `SLOTS`
-    /// is not the network's to hold, and stays out.
+    /// its free buffers `slots`, and `state`'s link. The network holds at
+    /// most `SLOTS` buffers, as the type of `slots` bounds them: every one
+    /// given is held.
     pub fn new(
         transmit: SlotSender<'c, Option<Outgoing<P::Memory>>, TX, N::Station, N::Network>,
         returned: SlotReceiver<'c, Option<TxEnded<P::Memory>>, TX, N::Network, N::Station>,
         pool: P,
-        slots: impl IntoIterator<Item = P::Slot>,
+        free: heapless::Vec<P::Slot, SLOTS>,
         link: &'c super::NetworkLink<N::NetworkWaker>,
     ) -> Self {
-        let mut free = heapless::Vec::new();
-        for slot in slots {
-            if free.push(slot).is_err() {
-                break;
-            }
-        }
         Self {
             transmit,
             returned,
