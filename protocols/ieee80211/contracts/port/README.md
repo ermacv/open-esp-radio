@@ -22,11 +22,36 @@ receive-configuration, gate or setting operation as one `PortCommand`
 (module `command`), which the actor hands to `DataPort::command` in order.
 A command whose barrier is not reached comes back `Held` and runs again on a
 later call; one the port cannot run in its state comes back refused with
-every owner. Installation commands come only from the backend's issuer
+every owner. A port fault returns the command beside it when the port did
+not take its owners (`CommandFailed::Returned`, a faulted port included,
+which keeps no command), or names that the port took them
+(`CommandFailed::Taken`); a returned command is never issued again
+automatically. A start that fails after it began on the device or the MAC,
+and whose stop is not confirmed, answers `StartRefused::Unstopped` with the
+start's cause and the stop's observation: the port is stopping, and
+`poll_stop` goes on with that stop before any start. An unconfirmed stop
+names its cause (`StopUnconfirmed<Fault>`): `Deadline` (not confirmed
+yet: the same stop goes on and a later poll can confirm it),
+`CoreEnabled`, or `Device(fault)`, the very fault the stop met.
+Installation commands come only from the backend's issuer
 (`PortCommands`), which mints the identity the installed key will carry.
 Terminals, TBTTs and the units a group mutation's receive cut drained go to
 the turn's `PortSink`, in the order the port produced them; a data arena's
-end returns from `service_tx` itself. `PortTypes` (module `types`) names
+end returns from `service_tx` itself. A sink may refuse a terminal or a unit
+it has no room for (`PortSink::terminal` / `received` return it): the port
+keeps it whole in a place of its own token and offers what it keeps again,
+oldest first and before anything newer, at its next call with a sink while
+the radio has not confirmed a stop; after a confirmed stop only
+`DataPort::take_unconsumed` offers it, each once. The port signals nothing
+for what it keeps: the refusing sink registers its own wake for room and
+checks its room again before its task sleeps. After a confirmed stop the
+lifecycle owner that stopped the port calls `DataPort::clean_stopped`, once
+per call and whether or not the datapath actor still runs, for the cleanup
+the stop leaves to the backend (a hardware write that releases what a failed
+operation left in use); its result (`CleanupRefused`: not stopped, faulted,
+a step that could not run and wrote nothing, or held after its one write) is
+that owner's, and a port whose cleanup did not finish does not retire.
+Nothing repeats the cleanup's write. `PortTypes` (module `types`) names
 the types the port's owners and terminals carry:
 
 - **Tickets and buffers.** A transmission takes a ticket (a place in
@@ -284,8 +309,10 @@ all delivered old-installation frames precede it, including facts retained
 in hardware, DMA, ISR and software queues; selected-installation frames
 follow it; the units the cut drained go to the sink before the terminal.
 The cut is finite under continuous ingress. A mutation held at its barrier
-past the backend's command bound is the port's named fault, which keeps its
-owners. A stop completes accepted GTK operations within the same bound. The
+past the backend's command bound did not run: the port undoes what its
+barrier began (the removal barrier and the key's activity, a cut it froze
+resumes after its freeze ends) and refuses it `Expired` with every owner;
+attempts its barrier already withdrew keep their terminals. A stop completes accepted GTK operations within the same bound. The
 API exposes no cancellation.
 
 `PortCommand::SelectGroup` consumes a concrete retained installed owner. It neither
@@ -335,10 +362,14 @@ slots and group permission, and the installation's one `BeaconPermission`
 (minted by `BeaconPool`). A missing permission does not compile, and no
 station permission or installation payload fits an access-point operation or
 the reverse (`tests/ui`, the model's `tests/ui`). A `BeaconAttempt` takes the
-permission, contends as `BEACON_ACCESS_CATEGORY` (voice) unprotected, and
-every end of it, a refused submission's included, is a `TxCompleted::Beacon`
-that returns the permission: one beacon is admitted, queued or on the air at
-a time.
+permission, contends as `BEACON_ACCESS_CATEGORY` (voice) unprotected under
+its own coexistence operation (`TxOperation::Beacon`), and every end of it,
+a refused submission's included, is a `TxCompleted::Beacon` that returns the
+permission: one beacon is admitted, queued or on the air at a time. Its
+`deadline` is its TBTT's: a beacon the port has not published by then ends
+`TxOutcome::Expired` with the permission and is not sent later; one
+published ends with what the air reported, and a beacon of indeterminate
+end is not repeated.
 
 Every token the port's own pools mint (configure permissions, association
 starts and key slots, the beacon permission, and a backend's group
@@ -361,8 +392,8 @@ Block Ack slots, the epoch slot) are not checked.
 | Operation | Accepted at | Refused before | Ends with |
 | --- | --- | --- | --- |
 | access-point transmission | `submit` | `SubmitRefusal`, withdrawn terminal in the sink | `TxCompleted::Single` |
-| beacon | `submit` | as a transmission, an earlier installation's permission included; its terminal returns the permission | `TxCompleted::Beacon` with the permission |
-| key install or removal, configuration with its TSF control | `AccessPointProgress::Done` | `AccessPointProgress::Refused` with the command (`NotEnabled`, `StalePermission`) | its terminal (`PairwiseKeyInstalled`, `GroupKeyInstalled`, `KeyRemoved`, `Configured` of the access point) |
+| beacon | `submit` | as a transmission, an earlier installation's permission included; its terminal returns the permission | `TxCompleted::Beacon` with the permission, `Expired` when unpublished by its deadline |
+| key install or removal, configuration with its TSF control | `AccessPointProgress::Done` | `AccessPointProgress::Refused` with the command (`NotEnabled`, `StalePermission`, `Expired` past the command bound, its barrier undone) | its terminal (`PairwiseKeyInstalled`, `GroupKeyInstalled`, `KeyRemoved`, `Configured` of the access point) |
 
 The access point's commands run in its own order: one held at its barrier
 holds no station command, and a station command held at its barrier holds

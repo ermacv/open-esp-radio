@@ -219,11 +219,13 @@ pub enum FromActor<'id, D: DatapathPort<'id>> {
     /// The retune's end.
     Retuned(Result<(), RetuneFailed<<D::Port as DataPort<'id>>::Fault>>),
     /// The stop's end.
-    Stopped(StopOutcome),
+    Stopped(StopOutcome<<D::Port as DataPort<'id>>::Fault>),
     /// The actor ended on a broken contract; it keeps every owner it held.
     Faulted(ActorFault<<D::Port as DataPort<'id>>::Fault>),
     /// A broken contract the actor survives: it serves a stop, and the
-    /// station restarts.
+    /// station restarts. Never after the lifecycle's retire or reinstall:
+    /// the lifecycle ended then, so the fault ends the run
+    /// ([`Self::Faulted`]).
     Recovering(ActorFault<<D::Port as DataPort<'id>>::Fault>),
 }
 
@@ -247,6 +249,17 @@ pub enum Returned<'id, D: DatapathPort<'id>> {
         /// Why.
         reason: CommandRefusal,
     },
+    /// A command the port gave back beside its fault: it did not take the
+    /// command's owners. A step of it may have begun with an unknown end,
+    /// so the lifecycle never issues it again; the fault's own message
+    /// ends or restarts the run.
+    Unrun {
+        /// The command, with its owners.
+        command: ActorCommand<'id, D>,
+        /// It was a group key change: the station's token waits in the
+        /// group queue.
+        grouped: bool,
+    },
     /// A station frame that did not go.
     Station {
         /// Its ticket.
@@ -262,14 +275,14 @@ pub enum Returned<'id, D: DatapathPort<'id>> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RetuneFailed<F> {
     /// The radio did not confirm its stop.
-    Stop(StopUnconfirmed),
+    Stop(StopUnconfirmed<F>),
     /// The radio did not start on the new channel; it is stopped.
     Start(StartRefused<F>),
 }
 
-/// How a stop ended.
+/// How a stop ended; `F` is the port's fault.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StopOutcome {
+pub enum StopOutcome<F> {
     /// The radio is stopped and every owner of the run is back.
     Confirmed,
     /// The radio is stopped and its data settled, but by the deadline the
@@ -285,7 +298,7 @@ pub enum StopOutcome {
     /// to record, not a fault of the radio.
     NetworkLost(ReturnObserved),
     /// The stop proved nothing by its deadline: what was still out.
-    Unconfirmed(StopObserved),
+    Unconfirmed(StopObserved<F>),
 }
 
 /// What the network still owed a stopped radio at the stop's deadline.
@@ -311,11 +324,13 @@ pub enum NetworkEnd {
     Stops,
 }
 
-/// What a stop still held when it ended unconfirmed.
+/// What a stop still held when it ended unconfirmed; `F` is the port's
+/// fault.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StopObserved {
-    /// The port's own report, when it ended its stop unconfirmed.
-    pub port: Option<StopUnconfirmed>,
+pub struct StopObserved<F> {
+    /// The port's own report, when it ended its stop unconfirmed, with the
+    /// fault the stop met.
+    pub port: Option<StopUnconfirmed<F>>,
     /// The deadline passed.
     pub deadline: bool,
     /// A data arena's end is still owed.
@@ -342,6 +357,18 @@ pub enum ActorFault<F> {
     Port(F),
     /// The actor's own contract.
     Contract(ActorViolation),
+    /// The port refused a received unit's recycle for its count: the unit
+    /// stays with the actor ([`Actor::take_unrecycled`]), which takes no
+    /// unit more.
+    Receive(oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
+    /// A port call returned an item it could neither give the actor nor
+    /// keep: the item stays with the actor ([`Actor::take_unkept`]), which
+    /// makes no port call that takes owners while it keeps it.
+    Unkept,
+    /// The port did not accept a submission for want of its right to hand
+    /// out the attempt's terminal: the attempt stays with the actor
+    /// ([`Actor::take_unaccepted`]), which runs no turn while it keeps it.
+    Unaccepted,
 }
 
 /// A broken contract the actor names.
@@ -350,6 +377,11 @@ pub enum ActorViolation {
     /// The return queue or its announcement had no room: the producers'
     /// bounds did not hold. The owner stays with the actor.
     OutboxFull,
+    /// The lifecycle closed its reception while the actor ran: nothing the
+    /// actor sends reaches it, so the actor sends nothing more and does not
+    /// wait for its room. The owner it did not send stays with the actor,
+    /// or with the port that offered it.
+    LifecycleClosed,
     /// The port did not lend its two data arenas.
     ArenaClaim,
     /// A data arena's end named an arena the plane did not publish, or
@@ -367,9 +399,6 @@ pub enum ActorViolation {
     /// the lifecycle lent one while the actor kept another, asked for a key
     /// the actor does not keep, or retired the actor while it kept one.
     PairwiseCustody,
-    /// A group mutation's receive cut drained more units than the actor
-    /// stages; the unit stays with the actor.
-    CutOverflow,
     /// The receive reordering lost its delivery order.
     ReorderOverflow,
 }
@@ -417,19 +446,19 @@ pub struct LifecycleEnds<
     const RETURNS: usize,
 > {
     /// The lifecycle's messages.
-    pub to_actor: WakingSpscReceiver<'c, ToActor<'id, D>, TO>,
+    pub to_actor: ClosingSpscReceiver<'c, ToActor<'id, D>, TO>,
     /// The lifecycle's large messages, each announced in `to_actor`.
-    pub parcels: WakingSpscReceiver<'c, Parcel<'id, D>, PARCELS>,
+    pub parcels: ClosingSpscReceiver<'c, Parcel<'id, D>, PARCELS>,
     /// The actor's messages.
-    pub from_actor: WakingSpscSender<'c, FromActor<'id, D>, FROM>,
+    pub from_actor: ClosingSpscSender<'c, FromActor<'id, D>, FROM>,
     /// The owners the actor gives back.
-    pub returns: WakingSpscSender<'c, Returned<'id, D>, RETURNS>,
+    pub returns: ClosingSpscSender<'c, Returned<'id, D>, RETURNS>,
     /// The station's group tokens, back with their change's end.
-    pub groups: WakingSpscSender<'c, GroupPending<'id, ActorEpochPath<'id, D>>, 1>,
+    pub groups: ClosingSpscSender<'c, GroupPending<'id, ActorEpochPath<'id, D>>, 1>,
     /// The link the station hands over.
-    pub link: WakingSpscReceiver<'c, ActorLink<'id, D>, 1>,
+    pub link: ClosingSpscReceiver<'c, ActorLink<'id, D>, 1>,
     /// The link the actor gives back.
-    pub link_return: WakingSpscSender<'c, LinkReturn, 1>,
+    pub link_return: ClosingSpscSender<'c, LinkReturn, 1>,
 }
 
 /// The actor's ends to the network stack.

@@ -13,7 +13,10 @@
 //! answers each later call with the same fault.
 
 use super::driver::{self, Driver, DriverEnv, Pending, Sink, core_views, queue, settle_lent};
-use super::keys::{GroupCommand, Installation, KeyIdentity, PortKeys, RawKeyIdentity, Role};
+use super::keys::{
+    AccessPointGroupCommand, AccessPointGroupInstallation, GroupInstallation, Installation,
+    KeyIdentity, PortKeys, RawKeyIdentity, Role, StationGroupCommand, StationGroupInstallation,
+};
 use super::*;
 use crate::lower_mac::arena::{ArenaFault, ArenaPort};
 use oer_protocols_ieee80211_contracts_port::arena::{
@@ -21,10 +24,12 @@ use oer_protocols_ieee80211_contracts_port::arena::{
     Settlement, TxArena,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, PairwiseIssue, PortArena,
-    PortCommand, PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink, RxPull,
-    StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal,
-    TxFacts,
+    CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input,
+    PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed, PortCommands,
+    PortCompleted, PortRxBuffer, PortRxPull, PortSink, ReceiveAccounting, ReceiveOperation,
+    RecycleRefused, RxPull, StartFailure, StartRefused, StationSubmission, StopCause,
+    StopObservations, StopUnconfirmed, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts,
+    Unconsumed, UnconsumedRefused, Unkeeping,
 };
 use oer_protocols_radio_port::{Installation as Receipt, Installations, Minted};
 
@@ -58,9 +63,17 @@ pub struct PairwiseInstall<Id: SlotIdentity> {
 
 /// An accepted group installation. Only [`Esp32s31Commands`] makes one.
 pub struct GroupInstall<Id: SlotIdentity> {
-    command: GroupCommand<'static, Id>,
+    install: StationGroupInstallation<'static, Id>,
     /// The installation that issued its association.
     association: u32,
+}
+
+impl<Id: SlotIdentity> GroupInstall<Id> {
+    /// The slot and permission indices of the installation.
+    #[cfg(test)]
+    pub(crate) fn owners_for_test(&self) -> (u8, u8) {
+        (self.install.slot.index(), self.install.permission.index())
+    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> CommandTypes<'id>
@@ -150,8 +163,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> PortCommand<'id, Self::Types, Self::Caps> {
         PortCommand::InstallGroup(GroupInstall {
             association: association.generation(),
-            command: <Station as Role<'id, Id>>::group(association, slot, permission, key_id, key)
-                .into_owned(&self.loan),
+            install: GroupInstallation {
+                spp: association.spp(),
+                slot,
+                permission,
+                key_id,
+                material: key,
+            }
+            .into_owned(&self.loan),
         })
     }
 }
@@ -172,24 +191,11 @@ fn station_generations<
             let [association, slot] = install.issued;
             [Some(association), Some(slot), None]
         }
-        PortCommand::InstallGroup(install) => match &install.command {
-            GroupCommand::InstallStation {
-                slot, permission, ..
-            } => [
-                Some(install.association),
-                Some(slot.generation()),
-                Some(permission.generation()),
-            ],
-            GroupCommand::InstallAccessPoint {
-                slot, permission, ..
-            } => [
-                Some(install.association),
-                Some(slot.generation()),
-                Some(permission.generation()),
-            ],
-            // The issuer makes installations only.
-            _ => [Some(install.association), None, None],
-        },
+        PortCommand::InstallGroup(install) => [
+            Some(install.association),
+            Some(install.install.slot.generation()),
+            Some(install.install.permission.generation()),
+        ],
         PortCommand::ReplaceGroup {
             permission,
             installed,
@@ -235,6 +241,12 @@ enum PortState {
     Recovering,
     Stopping {
         since: Instant,
+    },
+    /// A start the device began failed: its receive path stops before the
+    /// refusal is answered, within the command bound from `since`.
+    RollingBack {
+        since: Instant,
+        refused: StartFailure<Fault>,
     },
 }
 
@@ -344,6 +356,13 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     rx_later: Option<Instant>,
     /// A group mutation held at its barrier since this instant.
     group_since: Option<Instant>,
+    /// Whose group mutation holds the receive cut.
+    group_mutator: Option<Mutator>,
+    /// The kind of an access-point command the caller holds at its barrier.
+    access_point_holding: Option<oer_protocols_ieee80211_contracts_port::AccessPointCommandKind>,
+    /// An access-point configuration held at its barrier since this
+    /// instant.
+    access_point_since: Option<Instant>,
     /// The kind of a command the caller holds at its barrier, which keeps
     /// later single MPDUs from publishing as the command queue did.
     holding: Option<oer_protocols_ieee80211_contracts_port::CommandKind>,
@@ -363,9 +382,51 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     waker: Option<core::task::Waker>,
     /// The first contract fault: every later call answers with it.
     fault: Option<Fault>,
-    /// A command the fault kept with the quarantine.
-    retained: Option<Cmd<'id, Id, D, B, O>>,
+    /// What a sink refused, kept whole until a sink takes it.
+    unconsumed: unconsumed::Store<'id, Id, D, B, O>,
+    /// The current call's one place for an item it could neither give its
+    /// sink nor keep, and the call's right to fill it: returned beside the
+    /// call's answer, empty between calls.
+    unkept: unconsumed::CallPlace<'id, Id, D, B, O>,
 }
+
+/// How far the S31 port took a station command.
+type CmdProgress<'id, Id, D, const B: usize, O> =
+    CommandProgress<'id, Types<Id, D, B, O>, Esp32s31Caps<B>>;
+
+/// A failed station command of the S31 port.
+type CmdFailed<'id, Id, D, const B: usize, O> = CommandFailed<Cmd<'id, Id, D, B, O>, Fault>;
+
+/// Whose group mutation runs: the station's or the access point's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Mutator {
+    Station(oer_protocols_ieee80211_contracts_port::CommandKind),
+    AccessPoint(oer_protocols_ieee80211_contracts_port::AccessPointCommandKind),
+}
+
+/// How far one group mutation's step took it.
+pub(super) enum GroupStep<C> {
+    /// It ran; its terminal is in the sink.
+    Done,
+    /// It waits at its barrier or receive cut.
+    Held(C),
+    /// It waited past its bound and did not run; what its barrier began is
+    /// undone and the caller refuses it with every owner.
+    Expired(C),
+    /// It failed before it took the command's owners: the caller returns
+    /// the command beside the fault.
+    Failed(C, Fault),
+}
+
+/// A group mutation's receive cut: polled under the call's right, or
+/// waiting without one.
+enum Cut<P> {
+    Polled(P, unconsumed::Vacancy),
+    Waiting,
+}
+
+mod access_point;
+pub use access_point::{AccessPointGroupInstall, AccessPointPairwiseInstall};
 
 /// The port's environment for one shared driver step.
 struct PortEnv<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations, S> {
@@ -377,6 +438,23 @@ struct PortEnv<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Obser
     shared: &'static PortSharedStorage<B, D::Lent>,
     loan: Loan<'id, Id, D, B, O>,
     sink: &'a mut S,
+    /// What the sink refused, which the port keeps.
+    unconsumed: &'a mut unconsumed::Store<'id, Id, D, B, O>,
+    /// The call's one place for an item it could not keep, and its right.
+    unkept: &'a mut unconsumed::CallPlace<'id, Id, D, B, O>,
+}
+
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, S>
+    PortEnv<'_, 'id, Id, D, B, O, S>
+where
+    S: PortSink<'id, Types<Id, D, B, O>>,
+{
+    /// Give `item` to the sink behind what the port keeps, under the
+    /// call's right `vacancy`.
+    fn deliver(&mut self, vacancy: unconsumed::Vacancy, item: unconsumed::Item<'id, Id, D, B, O>) {
+        self.unconsumed
+            .deliver(self.sink, self.unkept, vacancy, item);
+    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations, S>
@@ -384,6 +462,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations,
 where
     S: PortSink<'id, Types<Id, D, B, O>>,
 {
+    type Vacancy = unconsumed::Vacancy;
+    fn vacancy(&mut self) -> Option<unconsumed::Vacancy> {
+        self.unkept.vacancy()
+    }
+    fn vacate(&mut self, vacancy: unconsumed::Vacancy) {
+        self.unkept.vacate(vacancy);
+    }
     fn stopping(&self) -> bool {
         self.stopping
     }
@@ -399,18 +484,25 @@ where
     fn count_expired(&mut self, msdus: u32) {
         *self.expired = self.expired.saturating_add(msdus);
     }
-    fn tx_completed(&mut self, _: u8, completed: brand::OwnedTxCompleted<'static, Id, D, B, O>) {
-        self.sink.terminal(completed.lend(&self.loan));
+    fn tx_completed(
+        &mut self,
+        vacancy: unconsumed::Vacancy,
+        _: u8,
+        completed: brand::OwnedTxCompleted<'static, Id, D, B, O>,
+    ) {
+        let terminal = completed.lend(&self.loan);
+        self.deliver(vacancy, unconsumed::Item::Terminal(terminal));
     }
     fn tbtt(&mut self, event: TbttEvent) {
         self.sink.tbtt(event);
     }
     fn received(
         &mut self,
+        vacancy: unconsumed::Vacancy,
         frame: ReceiveBuffer<'static, Id, D::Receive>,
         meta: Esp32s31RxMeta,
     ) -> Result<(), Fault> {
-        self.sink.received(frame.lend(), meta);
+        self.deliver(vacancy, unconsumed::Item::Received(frame.lend(), meta));
         Ok(())
     }
     fn serial(&mut self) -> u64 {
@@ -422,15 +514,22 @@ where
     fn rx_out(&self) -> &Cell<usize> {
         self.rx_out
     }
+    fn halted(&self) -> bool {
+        self.unkept.halted()
+    }
     #[cfg(oer_debug_control)]
     fn reject_group_replacement(&mut self) -> bool {
         false
     }
 }
 
-/// The parts and the mint an installation refused, both unchanged.
-pub type InstallRefused<Id, D, const B: usize, O> =
-    (PortParts<D, B, O>, Minted<Id, InstallationPools>);
+/// The parts, the mint and the driver an installation refused, all
+/// unchanged: nothing was installed.
+pub type InstallRefused<'id, Id, D, const B: usize, O> = (
+    PortParts<D, B, O>,
+    Minted<Id, InstallationPools>,
+    &'id mut PortDriver<Id, D, B, O>,
+);
 
 /// The driver, the device and the environment of one shared step.
 type Step<'a, 'id, Id, D, const B: usize, O, S> = (
@@ -459,13 +558,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// size or bank it does not take, a busy descriptor, a driver that holds
     /// work, a lost receive buffer or a transmit allocation still out.
     #[inline(never)]
+    #[allow(
+        clippy::result_large_err,
+        reason = "the refusal returns every input by value, unchanged"
+    )]
     pub fn install(
         parts: PortParts<D, B, O>,
         minted: Minted<Id, InstallationPools>,
         driver: &'id mut PortDriver<Id, D, B, O>,
-    ) -> Result<PortInstallation<'id, Id, D, B, O>, InstallRefused<Id, D, B, O>> {
+    ) -> Result<PortInstallation<'id, Id, D, B, O>, InstallRefused<'id, Id, D, B, O>> {
         let Ok(station) = IndividualAddress::for_interface(parts.config.station_address) else {
-            return Err((parts, minted));
+            return Err((parts, minted, driver));
         };
         if parts.config.publication_timeout > PUBLICATION_BOUND
             || parts.config.publication_timeout == Duration::ZERO
@@ -482,7 +585,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             || parts.shared.lost()
             || !parts.shared.returned.none_out()
         {
-            return Err((parts, minted));
+            return Err((parts, minted, driver));
         }
         let PortParts {
             device,
@@ -577,6 +680,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             deadline: None,
             rx_later: None,
             group_since: None,
+            group_mutator: None,
+            access_point_holding: None,
+            access_point_since: None,
             holding: None,
             cut_retry: false,
             cut_due: false,
@@ -585,7 +691,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             core_disabled: false,
             waker: None,
             fault: prepared.err(),
-            retained: None,
+            unconsumed: unconsumed::Store::new(),
+            unkept: unconsumed::CallPlace::new(),
         };
         PortInstallation {
             port,
@@ -681,7 +788,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.stop_served = false;
         self.core_disabled = false;
         self.fault = prepared.err();
-        self.retained = None;
         Ok((commands, resources))
     }
 
@@ -702,10 +808,30 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.driver.refuse_values_for_test = true;
     }
 
+    /// Refuse the next step of `refusal`'s kind, which the counts exclude.
+    #[cfg(test)]
+    pub(crate) fn refuse_for_test(&mut self, refusal: super::driver::TestRefusal) {
+        self.driver.refuse_for_test = Some(refusal);
+    }
+
+    /// The place of `key` among the driver's installed keys.
+    #[cfg(test)]
+    pub(crate) fn key_place_for_test<R>(
+        &self,
+        key: &super::PairwiseKey<'id, Id, R>,
+    ) -> Option<usize> {
+        self.driver.keys.iter().position(|entry| {
+            entry
+                .as_ref()
+                .and_then(super::keys::KeyPlace::installed)
+                .is_some_and(|(identity, _)| *identity == key.identity)
+        })
+    }
+
     /// The tickets in the driver's hand and the keys' uses in the core.
     #[cfg(test)]
     pub(crate) fn admissions_for_test(&mut self) -> (usize, Option<u32>) {
-        let tickets = self.driver.tickets.iter().flatten().count();
+        let tickets = self.driver.tickets.at_home() as usize;
         let uses = match self.driver.core.view() {
             CoreView::Open(core) => Some(core.key_uses_for_test()),
             _ => None,
@@ -719,6 +845,55 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         for key in &mut self.driver.keys {
             drop(key.take());
         }
+    }
+
+    /// Count `units` lost beyond the buffers the caller holds, which the
+    /// held count excludes.
+    #[cfg(test)]
+    pub(crate) fn lose_for_test(&self, units: usize) {
+        self.shared
+            .lost
+            .fetch_add(units, core::sync::atomic::Ordering::AcqRel);
+    }
+
+    /// Admit a use of the first installed transmit key outside any
+    /// publication, held by the test.
+    #[cfg(test)]
+    pub(crate) fn hold_key_use_for_test(
+        &mut self,
+    ) -> Option<crate::lower_mac::TxAdmission<'static, CorePath<Id>, TX_TICKETS>> {
+        self.driver.hold_key_use_for_test()
+    }
+
+    /// Return the use [`Self::hold_key_use_for_test`] admitted, as an
+    /// unpublished admission returns.
+    #[cfg(test)]
+    pub(crate) fn return_key_use_for_test(
+        &mut self,
+        admission: crate::lower_mac::TxAdmission<'static, CorePath<Id>, TX_TICKETS>,
+    ) {
+        let hardware = self.device.hardware().expect("registers");
+        self.driver.return_key_use_for_test(hardware, admission);
+        self.recompute_deadline();
+    }
+
+    /// Whether a removal its command left waits in the port.
+    #[cfg(test)]
+    pub(crate) fn removal_waits_for_test(&self) -> bool {
+        self.driver.removal_waits()
+    }
+
+    /// Set the received units the caller holds: a count a unit did not
+    /// join.
+    #[cfg(test)]
+    pub(crate) fn set_held_for_test(&self, held: usize) {
+        self.rx_out.set(held);
+    }
+
+    /// The received units the caller holds.
+    #[cfg(test)]
+    pub(crate) fn held_for_test(&self) -> usize {
+        self.rx_out.get()
     }
 
     /// Report `fault` as the port would.
@@ -751,10 +926,73 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.state == PortState::Stopped
             && self.fault.is_none()
             && self.rx_out.get() == 0
+            && !self.driver.removal_waits()
+            && self.driver.retained_group.is_none()
+            && self.unconsumed.is_empty()
             && self.shared.returned.none_out()
             && self.driver.queues.iter().all(|queue| queue.is_empty())
             && self.driver.running.iter().all(Option::is_none)
             && self.driver.arenas_returnable()
+    }
+
+    /// End every removal its command left waiting whose key the core
+    /// cleared since: each terminal, taken from the core place its key's
+    /// table place names, returns the rights waiting there. The key is not
+    /// cleared again.
+    fn deliver_removals(
+        &mut self,
+        sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
+    ) -> Result<(), Fault> {
+        for place in 0..self.driver.keys.len() {
+            // Each removal ends under the call's right, obtained before its
+            // terminal leaves: without it the rest wait in their places for
+            // the next call.
+            let Some(vacancy) = self.unkept.vacancy() else {
+                break;
+            };
+            match self.driver.finished_removal(place) {
+                Some(terminal) => self.unconsumed.deliver(
+                    sink,
+                    &mut self.unkept,
+                    vacancy,
+                    unconsumed::Item::Terminal(
+                        brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
+                    ),
+                ),
+                None => self.unkept.vacate(vacancy),
+            }
+        }
+        Ok(())
+    }
+
+    /// The stopped port's cleanup of a station group replacement whose
+    /// rollback failed: its removal's terminal returns the slot and the
+    /// permission once the key table reads the entry cleared.
+    fn clean_retained_group(
+        &mut self,
+        sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
+    ) -> Result<(), CleanupRefused<Fault>> {
+        // The removal's terminal leaves under the call's right: without it
+        // the replacement stays retained and the cleanup is not finished.
+        let Some(vacancy) = self.unkept.vacancy() else {
+            return Ok(());
+        };
+        match self.driver.clean_retained_group(self.device) {
+            Ok(Some(terminal)) => self.unconsumed.deliver(
+                sink,
+                &mut self.unkept,
+                vacancy,
+                unconsumed::Item::Terminal(
+                    brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
+                ),
+            ),
+            Ok(None) => self.unkept.vacate(vacancy),
+            Err(refused) => {
+                self.unkept.vacate(vacancy);
+                return Err(refused);
+            }
+        }
+        Ok(())
     }
 
     /// Forget the command the caller held at its barrier: its admission
@@ -764,7 +1002,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// runs again.
     fn forget_held(&mut self) {
         self.group_since = None;
+        self.group_mutator = None;
         self.holding = None;
+        self.access_point_holding = None;
+        self.access_point_since = None;
+        self.driver.access_point_configuring = false;
         self.cut_retry = false;
         self.cut_due = false;
         self.driver.barrier = None;
@@ -779,6 +1021,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         self.device.detach();
         reusable
+    }
+
+    /// Whether the port confirmed its radio's stop: its last stop ended
+    /// confirmed and nothing started it again.
+    pub fn stop_confirmed(&self) -> bool {
+        self.state == PortState::Stopped
     }
 
     /// End the stopped port's installations after the retire checks: its
@@ -801,20 +1049,54 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
     }
 
+    /// Offer what a sink refused again, oldest first, while the radio has
+    /// not confirmed a stop; after a confirmed stop only
+    /// [`DataPort::take_unconsumed`] does.
+    /// Refuse the next `count` keeps of the store, as a taken place does.
+    #[cfg(test)]
+    pub(crate) fn refuse_keeps_for_test(&mut self, count: usize) {
+        self.unconsumed.refuse_keeps = count;
+    }
+
+    /// Lose the call place's right, as a producer that dropped it would.
+    #[cfg(test)]
+    pub(crate) fn lose_right_for_test(&mut self) {
+        self.unkept.lose_right_for_test();
+    }
+
+    /// Mark the radio's stop confirmed, as a stop whose core disable left
+    /// completions with the driver ends.
+    #[cfg(test)]
+    pub(crate) fn confirm_stop_for_test(&mut self) {
+        self.state = PortState::Stopped;
+        self.recompute_deadline();
+    }
+
+    /// How many attempts wait in the queues, and how many completions a
+    /// halted call left with the driver.
+    #[cfg(test)]
+    pub(crate) fn waiting_for_test(&self) -> (usize, usize) {
+        (
+            self.driver.queues.iter().map(heapless::Deque::len).sum(),
+            self.driver.uncollected_for_test(),
+        )
+    }
+
+    /// Whether this call stopped on an item it could not keep: it takes no
+    /// further owner ([`unconsumed::CallPlace::halted`]).
+    fn halted(&self) -> bool {
+        self.unkept.halted()
+    }
+
+    fn reoffer(&mut self, sink: &mut impl PortSink<'id, Types<Id, D, B, O>>) {
+        if self.state != PortState::Stopped {
+            let _kept: Unconsumed = self.unconsumed.offer(sink);
+        }
+    }
+
     /// Record the first contract fault; later ones keep the first.
     fn record(&mut self, fault: Fault) -> Fault {
         *self.fault.get_or_insert(fault)
-    }
-
-    /// Keep a command with the quarantine of a fault.
-    fn retain(&mut self, command: Cmd<'id, Id, D, B, O>) {
-        match self.retained {
-            None => self.retained = Some(command),
-            // A later command stays quarantined with the first.
-            Some(_) => {
-                let _quarantined = core::mem::ManuallyDrop::new(command);
-            }
-        }
     }
 
     fn running(&self) -> bool {
@@ -843,6 +1125,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 shared: self.shared,
                 loan: self.loan,
                 sink,
+                unconsumed: &mut self.unconsumed,
+                unkept: &mut self.unkept,
             },
         )
     }
@@ -859,21 +1143,31 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         add(self.device.next_deadline());
         add(self.rx_later);
         match self.state {
-            PortState::Starting { since } | PortState::Stopping { since } => {
+            PortState::Starting { since }
+            | PortState::Stopping { since }
+            | PortState::RollingBack { since, .. } => {
                 add(Some(since.saturating_add(COMMAND_BOUND)));
             }
             PortState::Stopped | PortState::Running | PortState::Recovering => {}
         }
         // Settings wait for a port that runs: the start applies them, so `now`
-        // here would hide what the start itself waits for.
-        let settings_due = self.settings.dirty()
-            && !matches!(self.state, PortState::Stopped | PortState::Starting { .. });
+        // here would hide what the start itself waits for, and a stopping
+        // port applies none.
+        let settings_due = self.settings.dirty() && self.running();
+        // A removal the core finished after its command waits for a
+        // service to end it.
+        if self.driver.removal_ready() {
+            add(Some(self.now));
+        }
         // Work a turn owes at once: a stop's withdrawals, an opened gate,
         // settings to apply.
         if (self.stopping() && !self.stop_served) || self.reopen || self.cut_due || settings_due {
             add(Some(self.now));
         }
         if let Some(since) = self.group_since {
+            add(Some(since.saturating_add(COMMAND_BOUND)));
+        }
+        if let Some(since) = self.access_point_since {
             add(Some(since.saturating_add(COMMAND_BOUND)));
         }
         if self.cut_retry {
@@ -891,6 +1185,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     )));
                 }
             }
+        }
+        // A beacon's deadline holds behind a busy queue and a barrier too.
+        for pending in self.driver.queues.iter().flat_map(|queue| queue.iter()) {
+            add(pending.deadline());
         }
         add(self
             .driver
@@ -933,31 +1231,33 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.settings.he = None;
         }
         if self.settings.block_acks_dirty {
-            for (index, old) in driver.applied_ba.iter_mut().enumerate() {
+            // The registers before any agreement changes: a device that holds
+            // none leaves every applied record as it was.
+            let hardware = self.device.hardware()?;
+            for (index, applied) in driver.applied_ba.iter_mut().enumerate() {
                 let wanted = self.settings.block_acks.get(index).copied().flatten();
-                if *old == wanted {
+                if *applied == wanted {
                     continue;
                 }
-                if let Some(old) = old.take() {
-                    view.end_checked_rx_block_ack(
-                        self.device.hardware()?,
-                        old.role,
-                        old.peer,
-                        old.tid,
-                    )?;
+                if let Some(old) = *applied {
+                    view.end_checked_rx_block_ack(&mut *hardware, old.role, old.peer, old.tid)?;
+                    // Ended: the record follows the bank.
+                    *applied = None;
                 }
                 if let Some(agreement) = wanted {
-                    view.start_checked_rx_block_ack(self.device.hardware()?, agreement)?;
+                    view.start_checked_rx_block_ack(&mut *hardware, agreement)?;
                 }
-                *old = wanted;
+                *applied = wanted;
             }
             self.settings.block_acks_dirty = false;
         }
         Ok(())
     }
 
-    /// Whether a command the caller holds at its barrier keeps single
-    /// MPDUs from publishing; a removal withdraws only its key's attempts.
+    /// Whether a station command the caller holds at its barrier keeps the
+    /// station's single MPDUs from publishing; a removal withdraws only its
+    /// key's attempts. The access point's MPDUs are not ordered behind the
+    /// station's commands.
     fn holding_blocks(&self) -> bool {
         use oer_protocols_ieee80211_contracts_port::CommandKind as Kind;
         matches!(
@@ -971,35 +1271,63 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
-        let blocked = self.stopping() || self.holding_blocks();
+        let stopping = self.stopping();
+        let holding = self.holding_blocks();
         let (driver, device, mut env) = self.parts(sink);
         for index in 0..driver.queues.len() {
+            // A halted call ends and publishes nothing more.
+            if env.halted() {
+                break;
+            }
             // A published MPDU or arena holds the queue.
             let busy = driver.running.get(index).is_none_or(Option::is_some)
-                || driver.free.get(index).is_none_or(Option::is_none);
+                || !driver.free.is_home_at(index);
             if busy {
+                // A beacon past its deadline ends behind a busy queue too:
+                // the next TBTT's beacon replaces it.
+                driver.expire_beacons(&mut env, index, now);
                 continue;
             }
-            // Expiry continues behind a gate or a barrier.
+            // Expiry continues behind a gate or a barrier. Each attempt
+            // leaves under the call's right, obtained before it leaves.
             while driver
                 .queues
                 .get(index)
                 .and_then(heapless::Deque::front)
                 .is_some_and(|pending| Driver::<Id, D, B, O>::expired(&env, pending, now))
             {
+                let Some(vacancy) = env.vacancy() else {
+                    break;
+                };
                 let Some(pending) = driver
                     .queues
                     .get_mut(index)
                     .and_then(heapless::Deque::pop_front)
                 else {
+                    env.vacate(vacancy);
                     break;
                 };
-                driver.finish(&mut env, pending, TxOutcome::Expired { msdus: 1 });
+                driver.finish(&mut env, vacancy, pending, TxOutcome::Expired { msdus: 1 });
             }
-            let held = blocked
+            let held = stopping
+                || (holding
+                    && driver
+                        .queues
+                        .get(index)
+                        .and_then(heapless::Deque::front)
+                        .is_some_and(|pending| {
+                            pending.operation.payload().role == VifRole::Station
+                        }))
                 || driver.closed
                 || driver.closing.is_some()
-                || core_views::configuring::<Id, D, B>(driver.core.view())
+                || driver
+                    .queues
+                    .get(index)
+                    .and_then(heapless::Deque::front)
+                    .is_none_or(|pending| {
+                        core_views::configuring_role::<Id, D, B>(driver.core.view())
+                            .is_some_and(|role| role == pending.operation.payload().role)
+                    })
                 || driver
                     .queues
                     .get(index)
@@ -1008,12 +1336,18 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             if held {
                 continue;
             }
-            if let Some(pending) = driver
+            // A publication takes the call's right before its attempt
+            // leaves the queue: a refused one may end there.
+            let Some(vacancy) = env.vacancy() else {
+                break;
+            };
+            match driver
                 .queues
                 .get_mut(index)
                 .and_then(heapless::Deque::pop_front)
             {
-                driver.publish(device, index, pending)?;
+                Some(pending) => driver.publish(device, &mut env, vacancy, index, pending)?,
+                None => env.vacate(vacancy),
             }
         }
         Ok(())
@@ -1036,7 +1370,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         let loan = self.loan;
         let (driver, device, mut env) = self.parts(sink);
         if core_views::configuring::<Id, D, B>(driver.core.view()) {
-            let mut steps = Sink::default();
+            let mut steps = driver.completion_sink();
             let done = core_views::advance_configuration::<Id, D, B>(
                 driver.core.view(),
                 device.hardware()?,
@@ -1047,11 +1381,21 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 return Ok(());
             }
         }
+        // The terminal leaves under the call's right, obtained before the
+        // permission leaves the driver.
         if driver.withdraw(&mut env)
-            && let Some(permission) = driver.configuring.take()
+            && driver.configuring.is_some()
+            && let Some(vacancy) = env.vacancy()
         {
-            env.sink
-                .terminal(brand::OwnedTerminal::Configured(permission).lend(&loan));
+            match driver.configuring.take() {
+                Some(permission) => env.deliver(
+                    vacancy,
+                    unconsumed::Item::Terminal(
+                        brand::OwnedTerminal::Configured(permission).lend(&loan),
+                    ),
+                ),
+                None => env.vacate(vacancy),
+            }
         }
         Ok(())
     }
@@ -1061,15 +1405,37 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
-        if self.driver.closing.is_some()
-            && !self.driver.arena_on_air()
-            && !core_views::configuring::<Id, D, B>(self.driver.core.view())
-            && core_views::close::<Id, D, B>(self.driver.core.view(), self.device.hardware()?)
+        if self.driver.closing.is_none()
+            || self.driver.arena_on_air()
+            || core_views::configuring::<Id, D, B>(self.driver.core.view())
+        {
+            return Ok(());
+        }
+        // The gate's terminal leaves under the call's right, obtained
+        // before the core closes it.
+        let Some(vacancy) = self.unkept.vacancy() else {
+            return Ok(());
+        };
+        let hardware = match self.device.hardware() {
+            Ok(hardware) => hardware,
+            Err(fault) => {
+                self.unkept.vacate(vacancy);
+                return Err(fault);
+            }
+        };
+        if core_views::close::<Id, D, B>(self.driver.core.view(), hardware)
             && let Some(gate) = self.driver.closing.take()
         {
             let gate = self.gate.close(gate);
             self.driver.closed = true;
-            sink.terminal(LowerMacTerminal::GateClosed(gate.lend(&self.loan)));
+            self.unconsumed.deliver(
+                sink,
+                &mut self.unkept,
+                vacancy,
+                unconsumed::Item::Terminal(LowerMacTerminal::GateClosed(gate.lend(&self.loan))),
+            );
+        } else {
+            self.unkept.vacate(vacancy);
         }
         Ok(())
     }
@@ -1085,10 +1451,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         let stopping = self.stopping();
         let (driver, device, mut env) = self.parts(sink);
-        let mut steps = Sink::default();
-        core_views::open::<Id, D, B>(driver.core.view(), device.hardware()?, &mut steps)?;
-        driver.closed = false;
-        driver.collect(&mut env, &mut steps, stopping)?;
+        let mut steps = driver.completion_sink();
+        let opened =
+            core_views::open::<Id, D, B>(driver.core.view(), device.hardware()?, &mut steps);
+        if opened.is_ok() {
+            driver.closed = false;
+        }
+        // What the open's steps completed goes home before its fault.
+        let collected = driver.collect(&mut env, &mut steps, stopping);
+        opened?;
+        collected?;
         self.reopen = false;
         Ok(())
     }
@@ -1107,12 +1479,22 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             return Ok(());
         }
         let (driver, device, mut env) = self.parts(sink);
-        let mut steps = Sink::default();
+        let mut steps = driver.completion_sink();
         core_views::disable::<Id, D, B>(driver.core.view(), device.hardware()?, &mut steps);
         driver.collect(&mut env, &mut steps, true)?;
-        let mut steps = Sink::default();
+        let mut steps = driver.completion_sink();
         let disabled = core_views::finish_disable::<Id, D, B>(driver.core.view(), &mut steps);
         driver.collect(&mut env, &mut steps, true)?;
+        if disabled {
+            // The stopped MAC receives nothing for the access point and
+            // runs no TSF of it.
+            driver
+                .core
+                .view()
+                .commands()
+                .ok_or(Fault::CoreViewUnavailable(CoreOp::Configure))?
+                .release_access_point(device.hardware()?);
+        }
         self.core_disabled = disabled;
         Ok(())
     }
@@ -1130,7 +1512,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
         self.write_open_gate(sink)?;
-        self.apply_settings()?;
+        // Settings wait for a port that runs: a stopping one applies none,
+        // and the next start applies what is still dirty.
+        if self.running() {
+            self.apply_settings()?;
+        }
         let stopping = self.stopping();
         let wake = match tx.bits() {
             0 => WifiTxWake::Deadline,
@@ -1141,7 +1527,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             let done =
                 driver.service_tx(&mut env, device, wake, tx.is_arena_ended(), stopping, now)?;
             if tbtt {
-                let mut steps = Sink::default();
+                let mut steps = driver.completion_sink();
                 if !core_views::configuring::<Id, D, B>(driver.core.view()) {
                     driver
                         .core
@@ -1154,32 +1540,49 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             done
         };
+        // A halted call takes nothing more: the next call goes on from
+        // here, with the arena's end returned now.
+        if self.halted() {
+            return Ok(done);
+        }
         self.advance_configuration(sink)?;
+        if self.halted() {
+            return Ok(done);
+        }
+        if self.driver.access_point_configuring {
+            // The access point's held configuration ends its attempts that
+            // waited behind its frame on the air.
+            let (driver, _, mut env) = self.parts(sink);
+            driver.withdraw(&mut env);
+        }
         self.close_quiet_gate(sink)?;
+        if self.halted() {
+            return Ok(done);
+        }
         self.advance_queues(sink, now)?;
-        if stopping {
+        if stopping && !self.halted() {
             self.disable_core(sink)?;
             self.stop_served = true;
         }
         Ok(done)
     }
 
-    /// Run a group mutation behind its barrier and receive cut, or hold it.
+    /// Run a station group mutation behind its barrier and receive cut, or
+    /// hold it.
+    #[allow(
+        clippy::result_large_err,
+        reason = "the failure returns the command by value, as a hold does"
+    )]
     fn group<S>(
         &mut self,
         command: Cmd<'id, Id, D, B, O>,
         now: Instant,
         sink: &mut S,
-    ) -> Result<CommandProgress<'id, Types<Id, D, B, O>, Esp32s31Caps<B>>, Fault>
+    ) -> Result<CmdProgress<'id, Id, D, B, O>, CmdFailed<'id, Id, D, B, O>>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
-        let since = *self.group_since.get_or_insert(now);
-        if now.saturating_duration_since(since) >= COMMAND_BOUND {
-            let kind = command.kind();
-            self.retain(command);
-            return Err(self.record(Fault::CommandExpired(kind)));
-        }
+        let kind = command.kind();
         // The installed key the mutation uses, which no published attempt
         // may name; a removal also withdraws its key's queued attempts.
         let (uses, removal) = match &command {
@@ -1188,6 +1591,114 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             PortCommand::RemoveGroup { key, .. } => (Some(key.identity), Some(key.identity)),
             _ => (None, None),
         };
+        let step = self
+            .group_mutation(
+                command,
+                Mutator::Station(kind),
+                uses,
+                removal,
+                now,
+                sink,
+                |command, loan| match command {
+                    PortCommand::InstallGroup(GroupInstall { install, .. }) => {
+                        Ok(StationGroupCommand::Install(install))
+                    }
+                    PortCommand::ReplaceGroup {
+                        permission,
+                        installed,
+                        key_id,
+                        key,
+                    } => Ok(StationGroupCommand::Replace {
+                        permission: permission.into_owned(loan),
+                        key: installed.into_owned(),
+                        key_id,
+                        material: key,
+                    }),
+                    PortCommand::SelectGroup {
+                        permission,
+                        installed,
+                    } => Ok(StationGroupCommand::Select {
+                        permission: permission.into_owned(loan),
+                        key: installed.into_owned(),
+                    }),
+                    PortCommand::RemoveGroup { permission, key } => {
+                        Ok(StationGroupCommand::Remove {
+                            permission: permission.into_owned(loan),
+                            key: key.into_owned(),
+                        })
+                    }
+                    other => Err(other),
+                },
+                // The inverse of the conversion above: a command the driver
+                // refused goes back to the caller as it came.
+                |command, loan, association| match command {
+                    StationGroupCommand::Install(install) => {
+                        PortCommand::InstallGroup(GroupInstall {
+                            install,
+                            association,
+                        })
+                    }
+                    StationGroupCommand::Replace {
+                        permission,
+                        key,
+                        key_id,
+                        material,
+                    } => PortCommand::ReplaceGroup {
+                        permission: permission.lend(loan),
+                        installed: key.lend(),
+                        key_id,
+                        key: material,
+                    },
+                    StationGroupCommand::Select { permission, key } => PortCommand::SelectGroup {
+                        permission: permission.lend(loan),
+                        installed: key.lend(),
+                    },
+                    StationGroupCommand::Remove { permission, key } => PortCommand::RemoveGroup {
+                        permission: permission.lend(loan),
+                        key: key.lend(),
+                    },
+                },
+            )
+            .map_err(CommandFailed::Taken)?;
+        match step {
+            GroupStep::Done => Ok(CommandProgress::Done),
+            GroupStep::Held(command) => Ok(CommandProgress::Held(command)),
+            GroupStep::Expired(command) => {
+                Ok(CommandProgress::Refused(command, CommandRefusal::Expired))
+            }
+            GroupStep::Failed(command, fault) => Err(CommandFailed::Returned { command, fault }),
+        }
+    }
+
+    /// Run a group mutation of either role behind its barrier and receive
+    /// cut, or hold it. One mutation runs at a time: they share the receive
+    /// cut. `uses` is the installed key no published attempt may name;
+    /// `removal` the key whose queued attempts end withdrawn.
+    #[allow(clippy::too_many_arguments, reason = "one step of one mutation")]
+    pub(super) fn group_mutation<S, C, G>(
+        &mut self,
+        command: C,
+        mutator: Mutator,
+        uses: Option<RawKeyIdentity>,
+        removal: Option<RawKeyIdentity>,
+        now: Instant,
+        sink: &mut S,
+        into_owned: impl FnOnce(C, &Loan<'id, Id, D, B, O>) -> Result<G, C>,
+        restore: impl FnOnce(G, &Loan<'id, Id, D, B, O>, u32) -> C,
+    ) -> Result<GroupStep<C>, Fault>
+    where
+        S: PortSink<'id, Types<Id, D, B, O>>,
+        G: driver::GroupMutation<'static, Id, D, B, O>,
+    {
+        // The other role's mutation holds the receive cut.
+        if self.group_mutator.is_some_and(|running| running != mutator) {
+            return Ok(GroupStep::Held(command));
+        }
+        self.group_mutator = Some(mutator);
+        let since = *self.group_since.get_or_insert(now);
+        if now.saturating_duration_since(since) >= COMMAND_BOUND {
+            return self.expire_mutation(command, mutator, removal);
+        }
         if let Some(identity) = removal {
             identity.activity.set(0);
             self.driver.barrier = Some(identity);
@@ -1202,104 +1713,299 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             let (driver, _, mut env) = self.parts(sink);
             driver.withdraw(&mut env)
         };
-        if in_use || !drained {
+        if in_use || !drained || self.halted() {
             // A publication has its own bound and the air decides how long
             // it takes: the command's counts from the last one that held it.
             self.group_since = Some(now);
-            self.holding = Some(command.kind());
-            return Ok(CommandProgress::Held(command));
+            self.hold_mutation(mutator);
+            return Ok(GroupStep::Held(command));
         }
         let room = RX_HELD.saturating_sub(self.rx_out.get());
         // Before the caller's first poll of the facts there is no task to
-        // register: the cut runs again at the device's drain poll.
-        let cut = match self.waker.as_ref() {
-            Some(waker) => self
-                .device
-                .poll_rx_cut(room, &mut Context::from_waker(waker)),
-            None => Poll::Pending,
+        // register: the cut runs again at the device's drain poll. The cut
+        // runs under the call's right, obtained before it hands out a unit
+        // and before the command's owners are taken: without it the cut
+        // takes no unit and runs again at the next call.
+        let cut = match self.unkept.vacancy() {
+            Some(vacancy) => match self.waker.as_ref() {
+                Some(waker) => Cut::Polled(
+                    self.device
+                        .poll_rx_cut(room, &mut Context::from_waker(waker)),
+                    vacancy,
+                ),
+                None => {
+                    self.unkept.vacate(vacancy);
+                    Cut::Waiting
+                }
+            },
+            None => Cut::Waiting,
+        };
+        let (cut, vacancy) = match cut {
+            Cut::Waiting => return Ok(self.cut_waits(room, mutator, now, command)),
+            Cut::Polled(Poll::Pending, vacancy) => {
+                self.unkept.vacate(vacancy);
+                return Ok(self.cut_waits(room, mutator, now, command));
+            }
+            Cut::Polled(Poll::Ready(cut), vacancy) => (cut, vacancy),
         };
         match cut {
-            Poll::Ready(Ok(Some(unit))) => {
+            Ok(Some(unit)) => {
                 // A unit captured before the mutation precedes its terminal.
                 let (driver, device, mut env) = self.parts(sink);
-                driver.receive(&mut env, device, unit)?;
+                if let Err(fault) = driver.receive(&mut env, vacancy, device, unit) {
+                    // The mutation has not reached the key table: it comes
+                    // back beside the fault.
+                    return Ok(GroupStep::Failed(command, fault));
+                }
                 self.cut_retry = false;
                 self.cut_due = true;
-                self.holding = Some(command.kind());
-                Ok(CommandProgress::Held(command))
+                self.hold_mutation(mutator);
+                Ok(GroupStep::Held(command))
             }
-            Poll::Pending => {
-                // The caller holds all the units the cut could hand it: as
-                // with a publication, they decide how long this takes, and
-                // the command's bound counts from the last they held it.
-                if room == 0 || self.device.cut_held_by_units() {
-                    self.group_since = Some(now);
+            Err(cause) => {
+                self.unkept.vacate(vacancy);
+                Ok(GroupStep::Failed(command, cause))
+            }
+            Ok(None) => {
+                // What the driver's step needs besides the command's own
+                // owners, checked before it takes them: the registers, the
+                // core's command view, the key it names, or a free table
+                // place for an installation. Refused, the command comes
+                // back whole and the frozen receive path resumes.
+                if let Err(fault) = self.group_ready(mutator, uses) {
+                    self.unkept.vacate(vacancy);
+                    self.unfreeze_mutation(mutator, removal);
+                    return Ok(GroupStep::Failed(command, fault));
                 }
-                self.cut_retry = true;
-                self.cut_due = false;
-                self.holding = Some(command.kind());
-                Ok(CommandProgress::Held(command))
-            }
-            Poll::Ready(Err(cause)) => {
-                self.retain(command);
-                Err(self.record(cause))
-            }
-            Poll::Ready(Ok(None)) => {
-                let owned = match command {
-                    PortCommand::InstallGroup(GroupInstall { command, .. }) => command,
-                    PortCommand::ReplaceGroup {
-                        permission,
-                        installed,
-                        key_id,
-                        key,
-                    } => GroupCommand::Replace {
-                        permission: permission.into_owned(&self.loan),
-                        key: installed.into_owned(),
-                        key_id,
-                        material: key,
-                    },
-                    PortCommand::SelectGroup {
-                        permission,
-                        installed,
-                    } => GroupCommand::Select {
-                        permission: permission.into_owned(&self.loan),
-                        key: installed.into_owned(),
-                    },
-                    PortCommand::RemoveGroup { permission, key } => GroupCommand::Remove {
-                        identity: <Station as Role<'id, Id>>::group_identity(key),
-                        removal: <Station as Role<'id, Id>>::remove_group(permission)
-                            .into_owned(&self.loan),
-                    },
-                    other => return Ok(CommandProgress::Held(other)),
-                };
                 let loan = self.loan;
+                let owned = match into_owned(command, &loan) {
+                    Ok(owned) => owned,
+                    Err(other) => {
+                        self.unkept.vacate(vacancy);
+                        return Ok(GroupStep::Held(other));
+                    }
+                };
                 let terminal = {
                     let (driver, device, mut env) = self.parts(sink);
-                    driver.group(&mut env, device, owned)?
+                    owned.run(driver, &mut env, device)
+                };
+                let terminal = match terminal {
+                    Ok(terminal) => terminal,
+                    Err(driver::GroupFailed::Returned(command, fault)) => {
+                        // The driver's step took none of the command's
+                        // owners: the command comes back whole, an
+                        // installation with its installation's generation
+                        // (the command's: its stale check passed).
+                        self.unkept.vacate(vacancy);
+                        self.unfreeze_mutation(mutator, removal);
+                        let generation = self.serials.generation;
+                        return Ok(GroupStep::Failed(
+                            restore(command, &loan, generation),
+                            fault,
+                        ));
+                    }
+                    Err(driver::GroupFailed::Retained(fault)) => {
+                        // The mutation failed with its fault; the receive
+                        // path it froze resumes, so a failed command leaves
+                        // no frozen receive behind. The first fault stays
+                        // the port's.
+                        self.unkept.vacate(vacancy);
+                        let fault = self.record(fault);
+                        if let Err(cause) = self.device.finish_rx_cut() {
+                            self.record(cause);
+                        }
+                        self.group_since = None;
+                        self.group_mutator = None;
+                        self.cut_retry = false;
+                        self.cut_due = false;
+                        return Err(fault);
+                    }
                 };
                 if let Err(cause) = self.device.finish_rx_cut() {
-                    // The terminal stays with the quarantine.
-                    let _quarantined = core::mem::ManuallyDrop::new(terminal);
+                    // The mutation ran: its terminal says so, and the fault
+                    // of the receive path's resume follows it.
+                    match terminal {
+                        Some(terminal) => self.unconsumed.deliver(
+                            sink,
+                            &mut self.unkept,
+                            vacancy,
+                            unconsumed::Item::Terminal(terminal.lend(&loan)),
+                        ),
+                        None => self.unkept.vacate(vacancy),
+                    }
                     return Err(self.record(cause));
                 }
                 self.group_since = None;
+                self.group_mutator = None;
                 self.cut_retry = false;
                 self.cut_due = false;
-                self.holding = None;
+                match mutator {
+                    Mutator::Station(_) => self.holding = None,
+                    Mutator::AccessPoint(_) => self.access_point_holding = None,
+                }
                 self.driver.barrier = None;
-                sink.terminal(terminal.lend(&loan));
-                Ok(CommandProgress::Done)
+                // A removal whose key's last use is out ends at a later
+                // service ([`Self::deliver_removals`]).
+                match terminal {
+                    Some(terminal) => self.unconsumed.deliver(
+                        sink,
+                        &mut self.unkept,
+                        vacancy,
+                        unconsumed::Item::Terminal(terminal.lend(&loan)),
+                    ),
+                    None => self.unkept.vacate(vacancy),
+                }
+                Ok(GroupStep::Done)
             }
         }
     }
 
-    /// Run one command of a running port.
+    /// A group mutation whose receive cut waits: the caller holds all the
+    /// units the cut could hand it, or the call has no right to take one.
+    /// As with a publication, the units decide how long this takes, and
+    /// the command's bound counts from the last they held it.
+    fn cut_waits<C>(
+        &mut self,
+        room: usize,
+        mutator: Mutator,
+        now: Instant,
+        command: C,
+    ) -> GroupStep<C> {
+        if room == 0 || self.device.cut_held_by_units() {
+            self.group_since = Some(now);
+        }
+        self.cut_retry = true;
+        self.cut_due = false;
+        self.hold_mutation(mutator);
+        GroupStep::Held(command)
+    }
+
+    /// Whether the driver's step of a group mutation has what it needs
+    /// besides the command: the registers, the core's command view, the
+    /// installed key `uses` names, or a free table place when it names
+    /// none (an installation).
+    fn group_ready(&mut self, mutator: Mutator, uses: Option<RawKeyIdentity>) -> Result<(), Fault> {
+        self.device.hardware()?;
+        if self.driver.core.view().commands().is_none() {
+            return Err(Fault::CoreViewUnavailable(CoreOp::Command));
+        }
+        let op = match mutator {
+            Mutator::Station(oer_protocols_ieee80211_contracts_port::CommandKind::SelectGroup) => {
+                KeyOp::Select
+            }
+            Mutator::Station(oer_protocols_ieee80211_contracts_port::CommandKind::ReplaceGroup) => {
+                KeyOp::Replace
+            }
+            _ => KeyOp::Remove,
+        };
+        // A station mutation names the station's group key, an access
+        // point's the access point's.
+        let group = match mutator {
+            Mutator::Station(_) => core_mac::association::KeySlotKind::StationGroup,
+            Mutator::AccessPoint(_) => core_mac::association::KeySlotKind::AccessPointGroup,
+        };
+        match uses.map(|identity| self.driver.installed_kind(identity)) {
+            Some(None) => Err(Fault::KeySlotMissing(op)),
+            Some(Some(kind)) if kind != group => match op {
+                KeyOp::Remove => Err(Fault::RemovalMismatch),
+                _ => Err(Fault::KeySlotMissing(op)),
+            },
+            Some(Some(_)) => Ok(()),
+            None if self.driver.keys.iter().any(Option::is_none) => Ok(()),
+            None => Err(Fault::KeySlotMissing(KeyOp::Install)),
+        }
+    }
+
+    /// Undo a group mutation's hold that did not reach the key table: its
+    /// frozen receive path resumes (a resume that fails is the port's
+    /// fault), its removal's key is active again and its barrier lifts.
+    fn unfreeze_mutation(&mut self, mutator: Mutator, removal: Option<RawKeyIdentity>) {
+        if let Err(cause) = self.device.finish_rx_cut() {
+            self.record(cause);
+        }
+        if let Some(identity) = removal {
+            identity.activity.set(identity.serial);
+            if self.driver.barrier == Some(identity) {
+                self.driver.barrier = None;
+            }
+        }
+        self.group_since = None;
+        self.group_mutator = None;
+        self.cut_retry = false;
+        self.cut_due = false;
+        match mutator {
+            Mutator::Station(_) => self.holding = None,
+            Mutator::AccessPoint(_) => self.access_point_holding = None,
+        }
+    }
+
+    /// End a group mutation past its bound. It never reached the key table
+    /// (`Driver::group` runs only once its cut drained), so its outcome is
+    /// known: not run. What its hold began is undone: a cut it polled ends
+    /// once a freeze already begun completes, then the removal's key is
+    /// active again and its barrier lifts. Attempts the barrier withdrew
+    /// keep their terminals.
+    fn expire_mutation<C>(
+        &mut self,
+        command: C,
+        mutator: Mutator,
+        removal: Option<RawKeyIdentity>,
+    ) -> Result<GroupStep<C>, Fault> {
+        // A polled cut: `poll_rx_cut` runs only with the caller's waker.
+        if self.cut_retry || self.cut_due {
+            let ended = match self.waker.as_ref() {
+                Some(waker) => self
+                    .device
+                    .poll_abandon_rx_cut(&mut Context::from_waker(waker)),
+                None => Poll::Ready(Ok(())),
+            };
+            match ended {
+                Poll::Pending => {
+                    self.hold_mutation(mutator);
+                    return Ok(GroupStep::Held(command));
+                }
+                Poll::Ready(Err(cause)) => return Ok(GroupStep::Failed(command, cause)),
+                Poll::Ready(Ok(())) => {}
+            }
+        }
+        if let Some(identity) = removal {
+            // The key is installed: its removal did not run.
+            identity.activity.set(identity.serial);
+            if self.driver.barrier == Some(identity) {
+                self.driver.barrier = None;
+            }
+        }
+        self.group_since = None;
+        self.group_mutator = None;
+        self.cut_retry = false;
+        self.cut_due = false;
+        match mutator {
+            Mutator::Station(_) => self.holding = None,
+            Mutator::AccessPoint(_) => self.access_point_holding = None,
+        }
+        Ok(GroupStep::Expired(command))
+    }
+
+    /// Mark the mutation held at its barrier.
+    fn hold_mutation(&mut self, mutator: Mutator) {
+        match mutator {
+            Mutator::Station(kind) => self.holding = Some(kind),
+            Mutator::AccessPoint(kind) => self.access_point_holding = Some(kind),
+        }
+    }
+
+    /// Run one command of a running port. A fault before the command's
+    /// owners moved into the port returns the command beside it.
+    #[allow(
+        clippy::result_large_err,
+        reason = "the failure returns the command by value, as a hold does"
+    )]
     fn run_command<S>(
         &mut self,
         command: Cmd<'id, Id, D, B, O>,
         now: Instant,
         sink: &mut S,
-    ) -> Result<CommandProgress<'id, Types<Id, D, B, O>, Esp32s31Caps<B>>, Fault>
+    ) -> Result<CmdProgress<'id, Id, D, B, O>, CmdFailed<'id, Id, D, B, O>>
     where
         S: PortSink<'id, Types<Id, D, B, O>>,
     {
@@ -1308,17 +2014,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 let [station, _] = &mut self.settings.edca;
                 *station = parameters.get();
                 self.settings.edca_dirty = true;
-                self.apply_settings()?;
+                self.apply_settings().map_err(CommandFailed::Taken)?;
                 Ok(CommandProgress::Done)
             }
             PortCommand::SetBssColor(color) => {
                 self.settings.color = Some(color);
-                self.apply_settings()?;
+                self.apply_settings().map_err(CommandFailed::Taken)?;
                 Ok(CommandProgress::Done)
             }
             PortCommand::SetHe(he) => {
                 self.settings.he = Some(he);
-                self.apply_settings()?;
+                self.apply_settings().map_err(CommandFailed::Taken)?;
                 Ok(CommandProgress::Done)
             }
             PortCommand::CloseGate(gate) => {
@@ -1334,7 +2040,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     let (driver, _, mut env) = self.parts(sink);
                     driver.withdraw(&mut env);
                 }
-                self.close_quiet_gate(sink)?;
+                self.close_quiet_gate(sink).map_err(CommandFailed::Taken)?;
                 Ok(CommandProgress::Done)
             }
             PortCommand::Configure {
@@ -1366,7 +2072,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     }
                     StationReceive::Bss { bssid, filter } => (Some(bssid.get()), filter.get()),
                 };
-                core_views::configure::<Id, D, B>(
+                if let Err(fault) = core_views::configure::<Id, D, B>(
                     self.driver.core.view(),
                     CoreVif {
                         role: VifRole::Station,
@@ -1374,29 +2080,70 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                         bssid,
                         receive: filter,
                     },
-                )?;
+                ) {
+                    return Err(CommandFailed::Returned {
+                        command: PortCommand::Configure {
+                            permission,
+                            receive,
+                        },
+                        fault,
+                    });
+                }
                 self.holding = None;
                 self.driver.configuring = Some(brand::OwnedConfigured::Station(
                     permission.into_owned(&self.loan),
                 ));
-                self.advance_configuration(sink)?;
+                self.advance_configuration(sink)
+                    .map_err(CommandFailed::Taken)?;
                 Ok(CommandProgress::Done)
             }
             PortCommand::InstallPairwise(PairwiseInstall {
                 identity,
                 installation,
                 material,
-                issued: _,
+                issued,
             }) => {
-                self.driver
-                    .install(self.device, identity, installation, &material)?;
+                // The terminal leaves under the call's right, obtained
+                // before the core takes the slot: without it the command
+                // waits for the next call, whole.
+                let Some(vacancy) = self.unkept.vacancy() else {
+                    return Ok(CommandProgress::Held(PortCommand::InstallPairwise(
+                        PairwiseInstall {
+                            identity,
+                            installation,
+                            material,
+                            issued,
+                        },
+                    )));
+                };
+                // Refused, the installation comes back whole with its
+                // command: the core did not take its slot.
+                if let Err((installation, fault)) =
+                    self.driver
+                        .install(self.device, identity, installation, &material)
+                {
+                    self.unkept.vacate(vacancy);
+                    return Err(CommandFailed::Returned {
+                        command: PortCommand::InstallPairwise(PairwiseInstall {
+                            identity,
+                            installation,
+                            material,
+                            issued,
+                        }),
+                        fault,
+                    });
+                }
                 identity.activity.set(identity.serial);
-                sink.terminal(
-                    brand::OwnedTerminal::PairwiseKeyInstalled(brand::OwnedInstalledPairwise::new(
-                        identity.role,
-                        identity,
-                    ))
-                    .lend(&self.loan),
+                self.unconsumed.deliver(
+                    sink,
+                    &mut self.unkept,
+                    vacancy,
+                    unconsumed::Item::Terminal(
+                        brand::OwnedTerminal::PairwiseKeyInstalled(
+                            brand::OwnedInstalledPairwise::new(identity.role, identity),
+                        )
+                        .lend(&self.loan),
+                    ),
                 );
                 Ok(CommandProgress::Done)
             }
@@ -1409,27 +2156,54 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     let (driver, _, mut env) = self.parts(sink);
                     driver.withdraw(&mut env)
                 };
-                if !drained {
-                    self.holding =
-                        Some(oer_protocols_ieee80211_contracts_port::CommandKind::RemovePairwise);
-                    return Ok(CommandProgress::Held(PortCommand::RemovePairwise {
-                        association,
-                        key,
-                    }));
-                }
-                let removed = match self.driver.remove(self.device, identity) {
-                    Ok(removed) => removed,
-                    Err(fault) => {
-                        self.retain(PortCommand::RemovePairwise { association, key });
-                        return Err(fault);
+                // The terminal leaves under the call's right, obtained
+                // before the core removes the key.
+                let vacancy = match self.unkept.vacancy() {
+                    Some(vacancy) if drained => vacancy,
+                    vacancy => {
+                        if let Some(vacancy) = vacancy {
+                            self.unkept.vacate(vacancy);
+                        }
+                        self.holding = Some(
+                            oer_protocols_ieee80211_contracts_port::CommandKind::RemovePairwise,
+                        );
+                        return Ok(CommandProgress::Held(PortCommand::RemovePairwise {
+                            association,
+                            key,
+                        }));
                     }
                 };
-                let removal =
-                    <Station as Role<'id, Id>>::removal(association).into_owned(&self.loan);
-                let terminal = self.driver.removed_terminal(removal, removed)?;
+                let removed = match self
+                    .driver
+                    .remove::<core_mac::association::StationAssociation<'static, CorePath<Id>>>(
+                        self.device,
+                        identity,
+                    ) {
+                    Ok(removed) => removed,
+                    Err(fault) => {
+                        self.unkept.vacate(vacancy);
+                        return Err(CommandFailed::Returned {
+                            command: PortCommand::RemovePairwise { association, key },
+                            fault,
+                        });
+                    }
+                };
+                let terminal = removed.settle(association.into_owned(&self.loan));
                 self.driver.barrier = None;
                 self.holding = None;
-                sink.terminal(brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan));
+                // A removal whose key's last use is out ends at a later
+                // service ([`Self::deliver_removals`]).
+                match terminal {
+                    Some(terminal) => self.unconsumed.deliver(
+                        sink,
+                        &mut self.unkept,
+                        vacancy,
+                        unconsumed::Item::Terminal(
+                            brand::OwnedTerminal::KeyRemoved(terminal).lend(&self.loan),
+                        ),
+                    ),
+                    None => self.unkept.vacate(vacancy),
+                }
                 Ok(CommandProgress::Done)
             }
             group @ (PortCommand::InstallGroup(_)
@@ -1557,6 +2331,287 @@ struct Assembly<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observat
     minted: Minted<Id, InstallationPools>,
 }
 
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    Esp32s31Port<'id, Id, D, B, O>
+{
+    /// The answer of a producing call, beside the one item it could not
+    /// keep, if any: the call accepted its input, and its own answer
+    /// stands. A held item leaves the place here, which makes the next
+    /// right ([`unconsumed::CallPlace::settle`]).
+    fn answer<I, R>(&mut self, answer: R) -> PortAnswer<'id, Types<Id, D, B, O>, I, R> {
+        // A call that ends with an empty place and no right lost it: the
+        // port records its permanent fault, and its next calls answer it.
+        if self.unkept.right_lost() {
+            self.record(Fault::RightLost);
+        }
+        match self.unkept.settle() {
+            Some(item) => Err(Unkeeping {
+                unkept: item.into_unkept(),
+                input: Input::Accepted(answer),
+            }),
+            None => Ok(answer),
+        }
+    }
+
+    fn served_tx(
+        &mut self,
+        tx: TxFacts,
+        tbtt: bool,
+        now: Instant,
+        sink: &mut impl PortSink<'id, <Self as DataPort<'id>>::Types>,
+    ) -> Result<Option<PortCompleted<'id, Self>>, <Self as DataPort<'id>>::Fault> {
+        self.reoffer(sink);
+        self.check()?;
+        self.now = now;
+        if !matches!(
+            self.state,
+            PortState::Running | PortState::Recovering | PortState::Stopping { .. }
+        ) {
+            // A stopped port ends the removals the stop finished. A
+            // replacement whose rollback failed waits for the lifecycle
+            // owner's cleanup ([`DataPort::clean_stopped`]), not for this
+            // service.
+            let delivered = self
+                .deliver_removals(sink)
+                .map_err(|fault| self.record(fault));
+            self.recompute_deadline();
+            return delivered.map(|()| None);
+        }
+        let done = self
+            .turn(tx, tbtt, now, sink)
+            .and_then(|done| self.deliver_removals(sink).map(|()| done))
+            .map_err(|fault| self.record(fault));
+        self.recompute_deadline();
+        done
+    }
+
+    /// Take `attempt` under the submission's right `vacancy`, which covers
+    /// the attempt's own terminal: its refusal, or its publication at once.
+    fn submitted(
+        &mut self,
+        mut attempt: <Self as DataPort<'id>>::Admitted,
+        vacancy: unconsumed::Vacancy,
+        now: Instant,
+        sink: &mut impl PortSink<'id, <Self as DataPort<'id>>::Types>,
+    ) -> Result<(), SubmitRefusal> {
+        self.reoffer(sink);
+        let reason = match self.state {
+            PortState::Running if self.check().is_ok() => None,
+            PortState::Stopping { .. } | PortState::Recovering => Some(SubmitRefusal::Stopping),
+            _ => Some(SubmitRefusal::NotEnabled),
+        };
+        let installation = self.serials.generation;
+        // An attempt under a key or a beacon permission of an earlier
+        // installation is refused for good; it is checked before the
+        // radio's state.
+        let stale = attempt
+            .operation
+            .payload()
+            .key
+            .as_ref()
+            .map(RawKeyIdentity::generation)
+            .into_iter()
+            .chain(
+                attempt
+                    .execution
+                    .beacon
+                    .as_ref()
+                    .map(|(permission, _)| permission.generation()),
+            )
+            .find(|issued| *issued != installation);
+        let refusal = match (stale, reason) {
+            (Some(issued), _) => Some((
+                SubmitRefusal::StalePermission {
+                    issued,
+                    installation,
+                },
+                oer_protocols_ieee80211_contracts_port::WithdrawCause::StalePermission,
+            )),
+            (None, Some(reason)) => Some((
+                reason,
+                oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
+            )),
+            (None, None) => None,
+        };
+        if let Some((reason, cause)) = refusal {
+            // The attempt ends at once, withdrawn and never published: its
+            // terminal returns every owner.
+            let completed = attempt
+                .operation
+                .complete(oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(cause));
+            let completed = match attempt.execution.beacon {
+                Some((permission, _)) => brand::OwnedTxCompleted::Beacon {
+                    completed,
+                    permission,
+                },
+                None => brand::OwnedTxCompleted::Single(completed),
+            };
+            self.unconsumed.deliver(
+                sink,
+                &mut self.unkept,
+                vacancy,
+                unconsumed::Item::Terminal(completed.lend(&self.loan)),
+            );
+            return Err(reason);
+        }
+        self.now = now;
+        // Admission happens on this call: the MSDU ages from here.
+        let buffer = &mut attempt.operation.execute().mpdu.buffer;
+        if buffer.admission.is_none() {
+            buffer.admission = Some(now);
+        }
+        let index = queue(attempt.access_category);
+        let attempt_role = attempt.operation.payload().role;
+        let tries_left = attempt
+            .execution
+            .plan
+            .first()
+            .transmissions
+            .get()
+            .saturating_sub(1);
+        let pending = Pending {
+            operation: attempt.operation,
+            plan: attempt.execution.plan,
+            category: attempt.access_category,
+            protection: attempt.protection,
+            power: attempt.power.get(),
+            coex: attempt.coex_operation,
+            tries_left,
+            published: false,
+            air: None,
+            beacon: attempt.execution.beacon,
+        };
+        // A queue holds every ticket's attempt (`QUEUE_DEPTH`), and this
+        // attempt holds one: the push has room.
+        if let Err(pending) = self.driver.enqueue(index, pending, false) {
+            // Refused all the same: the attempt ends withdrawn with every
+            // owner, and the fault stops the port.
+            self.record(Fault::QueueFull {
+                queue: u8::try_from(index).unwrap_or(u8::MAX),
+            });
+            let (driver, _, mut env) = self.parts(sink);
+            driver.finish(
+                &mut env,
+                vacancy,
+                pending,
+                oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(
+                    oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
+                ),
+            );
+            return Ok(());
+        }
+        // A free queue publishes its head at once: nothing ends here.
+        let driver = &mut self.driver;
+        let free =
+            driver.running.get(index).is_some_and(Option::is_none) && driver.free.is_home_at(index);
+        let alone = driver.queues.get(index).is_some_and(|queued| {
+            queued.len() == 1 && queued.front().is_some_and(|p| !driver.blocked(p))
+        });
+        let role = attempt_role;
+        let publishable = free
+            && alone
+            && !(self.holding_blocks() && role == VifRole::Station)
+            && !self.driver.closed
+            && self.driver.closing.is_none()
+            && core_views::configuring_role::<Id, D, B>(self.driver.core.view()) != Some(role);
+        if publishable {
+            let (driver, device, mut env) = self.parts(sink);
+            let published = match driver
+                .queues
+                .get_mut(index)
+                .and_then(heapless::Deque::pop_front)
+            {
+                Some(pending) => driver.publish(device, &mut env, vacancy, index, pending),
+                None => {
+                    env.vacate(vacancy);
+                    Ok(())
+                }
+            };
+            if let Err(fault) = published {
+                self.record(fault);
+            }
+        } else {
+            self.unkept.vacate(vacancy);
+        }
+        self.recompute_deadline();
+        Ok(())
+    }
+
+    #[allow(
+        clippy::result_large_err,
+        reason = "the failure returns the command by value, as the trait's call does"
+    )]
+    fn ran(
+        &mut self,
+        command: PortCommand<'id, <Self as DataPort<'id>>::Types, <Self as DataPort<'id>>::Caps>,
+        now: Instant,
+        sink: &mut impl PortSink<'id, <Self as DataPort<'id>>::Types>,
+    ) -> Result<
+        CommandProgress<'id, <Self as DataPort<'id>>::Types, <Self as DataPort<'id>>::Caps>,
+        PortCommandFailed<'id, Self>,
+    > {
+        self.reoffer(sink);
+        // A faulted port keeps no command: it comes back beside the fault.
+        if let Err(fault) = self.check() {
+            return Err(CommandFailed::Returned { command, fault });
+        }
+        self.now = now;
+        if let Some(arena) = self.driver.arena.as_mut() {
+            arena.forget_program();
+        }
+        // A token of an earlier installation is refused for good, before
+        // the radio's own state is asked.
+        let installation = self.serials.generation;
+        if let Some(issued) = station_generations::<Id, D, B, O>(&command)
+            .into_iter()
+            .flatten()
+            .find(|issued| *issued != installation)
+        {
+            return Ok(CommandProgress::Refused(
+                command,
+                CommandRefusal::StalePermission {
+                    issued,
+                    installation,
+                },
+            ));
+        }
+        if !self.running() {
+            return Ok(CommandProgress::Refused(
+                command,
+                CommandRefusal::NotEnabled,
+            ));
+        }
+        let progress = self.run_command(command, now, sink);
+        let progress = progress.map_err(|failed| failed.map_fault(|fault| self.record(fault)));
+        self.recompute_deadline();
+        progress
+    }
+
+    fn cleaned(
+        &mut self,
+        sink: &mut impl PortSink<'id, <Self as DataPort<'id>>::Types>,
+    ) -> Result<(), CleanupRefused<<Self as DataPort<'id>>::Fault>> {
+        if self.state != PortState::Stopped {
+            return Err(CleanupRefused::NotStopped);
+        }
+        self.check().map_err(CleanupRefused::Faulted)?;
+        // Completions a halted call left with the driver go home first,
+        // each under the place's right: software only, no hardware call. A
+        // refused one fills the place and the rest stay with the driver.
+        let (driver, _device, mut env) = self.parts(sink);
+        let mut none = driver.completion_sink();
+        if let Err(fault) = driver.collect(&mut env, &mut none, true) {
+            return Err(CleanupRefused::Faulted(self.record(fault)));
+        }
+        // The cleanup's result is the owner's, never the port's recorded
+        // fault: a later call goes on from where it stands, writing nothing
+        // it wrote before.
+        let cleaned = self.clean_retained_group(sink);
+        self.recompute_deadline();
+        cleaned
+    }
+}
+
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> DataPort<'id>
     for Esp32s31Port<'id, Id, D, B, O>
 {
@@ -1565,9 +2620,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     type Fault = Fault;
     type Admitted = AdmittedTxParts<
         D::OwnedContext<Id>,
-        Slot<'static, Tickets, Part<Id, 2>>,
+        Slot<'static, radio::Slots<Tickets, TX_TICKETS>, Part<Id, 2>>,
         Mpdu<'static, Id, D, B, O>,
-        buffer::Execution,
+        buffer::Execution<Id>,
         Esp32s31Caps<B>,
     >;
     type Arena<'t>
@@ -1650,20 +2705,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault> {
-        self.check()?;
-        self.now = now;
-        if !matches!(
-            self.state,
-            PortState::Running | PortState::Recovering | PortState::Stopping { .. }
-        ) {
-            return Ok(None);
-        }
-        let done = self
-            .turn(tx, tbtt, now, sink)
-            .map_err(|fault| self.record(fault));
-        self.recompute_deadline();
-        done
+    ) -> PortAnswer<'id, Self::Types, (), Result<Option<PortCompleted<'id, Self>>, Self::Fault>>
+    {
+        let served = self.served_tx(tx, tbtt, now, sink);
+        self.answer(served)
     }
 
     fn service_arena(
@@ -1696,115 +2741,19 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 
     fn submit(
         &mut self,
-        mut attempt: Self::Admitted,
+        attempt: Self::Admitted,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<(), SubmitRefusal> {
-        let reason = match self.state {
-            PortState::Running if self.check().is_ok() => None,
-            PortState::Stopping { .. } | PortState::Recovering => Some(SubmitRefusal::Stopping),
-            _ => Some(SubmitRefusal::NotEnabled),
+    ) -> SubmitAnswer<'id, Self::Types, Self::Admitted> {
+        // The place's right covers the attempt's own terminal: what the
+        // port kept is offered again and stays in its own place when
+        // refused. Without the right the port takes nothing of the attempt.
+        let Some(vacancy) = self.unkept.vacancy() else {
+            self.record(Fault::RightLost);
+            return Err(SubmitHalt::NotAccepted(attempt));
         };
-        let installation = self.serials.generation;
-        // An attempt under a key of an earlier installation is refused for
-        // good; it is checked before the radio's state.
-        let stale = attempt
-            .operation
-            .payload()
-            .key
-            .as_ref()
-            .map(RawKeyIdentity::generation)
-            .filter(|issued| *issued != installation);
-        let refusal = match (stale, reason) {
-            (Some(issued), _) => Some((
-                SubmitRefusal::StalePermission {
-                    issued,
-                    installation,
-                },
-                oer_protocols_ieee80211_contracts_port::WithdrawCause::StalePermission,
-            )),
-            (None, Some(reason)) => Some((
-                reason,
-                oer_protocols_ieee80211_contracts_port::WithdrawCause::Disabled,
-            )),
-            (None, None) => None,
-        };
-        if let Some((reason, cause)) = refusal {
-            // The attempt ends at once, withdrawn and never published: its
-            // terminal returns every owner.
-            let completed = brand::OwnedTxCompleted::Single(
-                attempt
-                    .operation
-                    .complete(oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(cause)),
-            );
-            sink.terminal(completed.lend(&self.loan));
-            return Err(reason);
-        }
-        self.now = now;
-        // Admission happens on this call: the MSDU ages from here.
-        let buffer = &mut attempt.operation.execute().mpdu.buffer;
-        if buffer.admission.is_none() {
-            buffer.admission = Some(now);
-        }
-        let index = queue(attempt.access_category);
-        let tries_left = attempt
-            .execution
-            .plan
-            .first()
-            .transmissions
-            .get()
-            .saturating_sub(1);
-        let pending = Pending {
-            operation: attempt.operation,
-            plan: attempt.execution.plan,
-            category: attempt.access_category,
-            protection: attempt.protection,
-            power: attempt.power.get(),
-            coex: attempt.coex_operation,
-            tries_left,
-            published: false,
-            air: None,
-        };
-        let Some(queued) = self.driver.queues.get_mut(index) else {
-            // The attempt stays in custody with the quarantine.
-            core::mem::forget(pending);
-            self.record(Fault::QueueFull { queue: 0 });
-            return Ok(());
-        };
-        if let Err(pending) = queued.push_back(pending) {
-            // A queue holds at most every ticket; the attempt stays in
-            // custody with the quarantine.
-            core::mem::forget(pending);
-            self.record(Fault::QueueFull {
-                queue: u8::try_from(index).unwrap_or(u8::MAX),
-            });
-            return Ok(());
-        }
-        // A free queue publishes its head at once: nothing ends here.
-        let driver = &mut self.driver;
-        let free = driver.running.get(index).is_some_and(Option::is_none)
-            && driver.free.get(index).is_some_and(Option::is_some);
-        let alone = driver.queues.get(index).is_some_and(|queued| {
-            queued.len() == 1 && queued.front().is_some_and(|p| !driver.blocked(p))
-        });
-        let publishable = free
-            && alone
-            && !self.holding_blocks()
-            && !self.driver.closed
-            && self.driver.closing.is_none()
-            && !core_views::configuring::<Id, D, B>(self.driver.core.view());
-        if publishable
-            && let Some(pending) = self
-                .driver
-                .queues
-                .get_mut(index)
-                .and_then(heapless::Deque::pop_front)
-            && let Err(fault) = self.driver.publish(self.device, index, pending)
-        {
-            self.record(fault);
-        }
-        self.recompute_deadline();
-        Ok(())
+        let submitted = self.submitted(attempt, vacancy, now, sink);
+        self.answer(submitted).map_err(SubmitHalt::Unkeeping)
     }
 
     fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, Self::Fault> {
@@ -1858,15 +2807,25 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         Ok(RxPull::Later(now))
     }
 
-    fn recycle(&mut self, unit: PortRxBuffer<'id, Self>) {
-        let unit = unit.into_unit();
-        self.device.recycle(unit);
-        match self.rx_out.get().checked_sub(1) {
-            Some(held) => self.rx_out.set(held),
-            None => {
-                self.record(Fault::ReceiveAccounting);
-            }
-        }
+    fn recycle(
+        &mut self,
+        unit: PortRxBuffer<'id, Self>,
+    ) -> Result<(), RecycleRefused<PortRxBuffer<'id, Self>>> {
+        // The count first: a refused unit is not touched.
+        let held = self.rx_out.get();
+        let Some(after) = held.checked_sub(1) else {
+            return Err(RecycleRefused {
+                unit,
+                fault: ReceiveAccounting {
+                    operation: ReceiveOperation::Recycle,
+                    held,
+                    requested: 1,
+                },
+            });
+        };
+        self.rx_out.set(after);
+        self.device.recycle(unit.into_unit());
+        Ok(())
     }
 
     fn lend(
@@ -1935,41 +2894,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         command: PortCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<CommandProgress<'id, Self::Types, Self::Caps>, Self::Fault> {
-        if let Err(fault) = self.check() {
-            self.retain(command);
-            return Err(fault);
-        }
-        self.now = now;
-        if let Some(arena) = self.driver.arena.as_mut() {
-            arena.forget_program();
-        }
-        // A token of an earlier installation is refused for good, before
-        // the radio's own state is asked.
-        let installation = self.serials.generation;
-        if let Some(issued) = station_generations::<Id, D, B, O>(&command)
-            .into_iter()
-            .flatten()
-            .find(|issued| *issued != installation)
-        {
-            return Ok(CommandProgress::Refused(
-                command,
-                CommandRefusal::StalePermission {
-                    issued,
-                    installation,
-                },
-            ));
-        }
-        if !self.running() {
-            return Ok(CommandProgress::Refused(
-                command,
-                CommandRefusal::NotEnabled,
-            ));
-        }
-        let progress = self.run_command(command, now, sink);
-        let progress = progress.map_err(|fault| self.record(fault));
-        self.recompute_deadline();
-        progress
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        PortCommand<'id, Self::Types, Self::Caps>,
+        Result<CommandProgress<'id, Self::Types, Self::Caps>, PortCommandFailed<'id, Self>>,
+    > {
+        let ran = self.ran(command, now, sink);
+        self.answer(ran)
     }
 
     fn poll_start(
@@ -1988,15 +2920,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 now
             }
             PortState::Starting { since } => since,
+            PortState::RollingBack { since, refused } => {
+                return self.poll_roll_back(cx, since, refused, now);
+            }
         };
         if self.check().is_err() {
             self.state = PortState::Stopped;
             return Poll::Ready(Err(StartRefused::Device));
         }
         if now.saturating_duration_since(since) >= COMMAND_BOUND {
-            self.state = PortState::Stopped;
-            self.recompute_deadline();
-            return Poll::Ready(Err(StartRefused::Deadline));
+            // What the device began of the start stops first.
+            return self.roll_back_start(cx, StartFailure::Deadline, now);
         }
         let Some(wifi) = channel.channel().ghz2_4_channel() else {
             self.state = PortState::Stopped;
@@ -2009,6 +2943,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             Poll::Ready(started) => started,
         };
+        // A device that refused its start and one that started before a
+        // later step failed both stop what they began before the refusal
+        // is answered: the device is never left started.
         let tuned = started.and_then(|()| {
             core_views::tune::<Id, D, B>(
                 self.driver.core.view(),
@@ -2019,36 +2956,32 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         // The started core takes the station's settings before its first
         // publication.
         let tuned = tuned.and_then(|()| self.apply_settings());
-        let result = match tuned {
+        let refused = match tuned {
             Ok(()) => {
                 self.state = PortState::Running;
                 self.channel = channel.channel();
                 self.stop_served = false;
                 self.core_disabled = false;
-                Ok(())
+                self.recompute_deadline();
+                return Poll::Ready(Ok(()));
             }
             Err(cause @ (Fault::Retune(_) | Fault::ChannelNotPermitted)) => {
-                self.state = PortState::Stopped;
-                Err(StartRefused::Retune(cause))
+                StartFailure::Retune(cause)
             }
-            Err(_) => {
-                self.state = PortState::Stopped;
-                Err(StartRefused::Device)
-            }
+            Err(_) => StartFailure::Device,
         };
-        self.recompute_deadline();
-        Poll::Ready(result)
+        self.roll_back_start(cx, refused, now)
     }
 
     fn poll_stop(
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed>> {
+    ) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         self.now = now;
         let since = match self.state {
             PortState::Stopped => return Poll::Ready(Ok(())),
-            PortState::Starting { .. } | PortState::Running => {
+            PortState::Starting { .. } | PortState::RollingBack { .. } | PortState::Running => {
                 self.state = PortState::Stopping { since: now };
                 self.stop_served = false;
                 // A stopping port refuses the held command back to its
@@ -2064,14 +2997,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             PortState::Stopping { since } => since,
         };
-        let unconfirmed = |port: &mut Self, cause: StopCause| {
+        let unconfirmed = |port: &mut Self, cause: StopCause<Fault>| {
             Poll::Ready(Err(StopUnconfirmed {
                 cause,
                 observations: port.stop_observations(),
             }))
         };
-        if self.check().is_err() {
-            return unconfirmed(self, StopCause::Device);
+        if let Err(fault) = self.check() {
+            return unconfirmed(self, StopCause::Device(fault));
         }
         let expired = now.saturating_duration_since(since) >= COMMAND_BOUND;
         if !self.core_disabled {
@@ -2087,7 +3020,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 self.recompute_deadline();
                 Poll::Ready(Ok(()))
             }
-            Poll::Ready(Err(_)) => unconfirmed(self, StopCause::Device),
+            // A mask the line's handler has not confirmed within its bound
+            // is a stop not confirmed yet: the handler may still serve it,
+            // and the next poll confirms then. Only another failure of the
+            // device's stop is its fault.
+            Poll::Ready(Err(Fault::Receive(crate::rx::control::WifiRxCause::LineRefused))) => {
+                unconfirmed(self, StopCause::Deadline)
+            }
+            Poll::Ready(Err(fault)) => unconfirmed(self, StopCause::Device(fault)),
             Poll::Pending if expired => unconfirmed(self, StopCause::Deadline),
             Poll::Pending => {
                 // The device may have asked to look again before the bound.
@@ -2098,9 +3038,35 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     fn recover_for_stop(&mut self) -> bool {
-        let recoverable = self.retained.is_none()
-            && !self.shared.lost()
-            && self.fault.is_some_and(|fault| fault.leaves_owners_whole());
+        // A faulted port keeps no command: the call that faulted returned
+        // it to its caller.
+        // Units of buffers dropped unrecycled are back in the ring: they
+        // leave the held count here, and the loss stays the port's cause
+        // until this recovery.
+        //
+        // The held count is the installation's live buffers, plus its
+        // lends not yet settled, plus its losses not yet settled: a buffer
+        // joins it once at its admission and leaves it once, by its
+        // recycle, its lend's settlement or its loss's settlement here; a
+        // loss is counted only by a buffer the count holds. A retirement
+        // needs the count at zero, so a reinstallation starts with no
+        // buffer, lend or loss of the previous one. The losses read here
+        // are therefore within the held count, and the settlement below
+        // subtracts exactly them, so a loss recorded meanwhile stays.
+        let lost = self.shared.lost_units();
+        if lost > 0 {
+            let Some(held) = self.rx_out.get().checked_sub(lost) else {
+                // Excluded by the count above. Nothing is settled: the
+                // held and lost counts and the port's cause stay as they
+                // were, and no recovery follows a failed settlement.
+                return false;
+            };
+            self.rx_out.set(held);
+            self.shared.settle_lost(lost);
+            self.device.returned();
+            self.record(Fault::ReceiveLost);
+        }
+        let recoverable = self.fault.is_some_and(|fault| fault.leaves_owners_whole());
         if recoverable {
             self.fault = None;
             if matches!(self.state, PortState::Starting { .. } | PortState::Running) {
@@ -2113,6 +3079,24 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         recoverable
     }
 
+    fn clean_stopped(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
+        let cleaned = self.cleaned(sink);
+        self.answer(cleaned)
+    }
+
+    fn take_unconsumed(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<Unconsumed, UnconsumedRefused> {
+        if self.state != PortState::Stopped {
+            return Err(UnconsumedRefused::NotStopped);
+        }
+        Ok(self.unconsumed.offer(sink))
+    }
+
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError> {
         self.device.radio_now()
     }
@@ -2121,6 +3105,81 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     Esp32s31Port<'id, Id, D, B, O>
 {
+    /// Begin to undo a failed start: the device stops its receive path
+    /// before `refused` is answered. A start that enabled the core (its
+    /// settings failed after the tune) is not undone here: the port is
+    /// stopping, as after [`DataPort::poll_stop`]'s first call, and the
+    /// answer is [`StartRefused::Unstopped`] with the start's cause.
+    fn roll_back_start(
+        &mut self,
+        cx: &mut Context<'_>,
+        refused: StartFailure<Fault>,
+        now: Instant,
+    ) -> Poll<Result<(), StartRefused<Fault>>> {
+        if !core_views::disabled::<Id, D, B>(self.driver.core.view()) {
+            // The stop's own service disables the core.
+            self.state = PortState::Stopping { since: now };
+            self.stop_served = false;
+            self.core_disabled = false;
+            self.recompute_deadline();
+            return Poll::Ready(Err(StartRefused::Unstopped {
+                cause: refused,
+                stop: StopUnconfirmed {
+                    cause: StopCause::CoreEnabled,
+                    observations: self.stop_observations(),
+                },
+            }));
+        }
+        self.state = PortState::RollingBack {
+            since: now,
+            refused,
+        };
+        self.poll_roll_back(cx, now, refused, now)
+    }
+
+    /// Undo a failed start: once the device confirms its receive path
+    /// paused (at once for one that never started it) the port is stopped
+    /// and the start's refusal is answered. A device that refuses that
+    /// pause, or does not confirm it within the command bound, leaves the
+    /// radio not stopped: the answer is [`StartRefused::Unstopped`] with
+    /// the start's cause and the stop's, and the port is stopping, so
+    /// [`DataPort::poll_stop`] goes on with it and a release refuses until
+    /// it confirms.
+    fn poll_roll_back(
+        &mut self,
+        cx: &mut Context<'_>,
+        since: Instant,
+        refused: StartFailure<Fault>,
+        now: Instant,
+    ) -> Poll<Result<(), StartRefused<Fault>>> {
+        let unstopped = |port: &mut Self, cause: StopCause<Fault>| {
+            port.state = PortState::Stopping { since };
+            Err(StartRefused::Unstopped {
+                cause: refused,
+                stop: StopUnconfirmed {
+                    cause,
+                    observations: port.stop_observations(),
+                },
+            })
+        };
+        let result = match self.device.poll_stop(cx) {
+            Poll::Ready(Ok(())) => {
+                self.state = PortState::Stopped;
+                Err(refused.into())
+            }
+            Poll::Ready(Err(fault)) => unstopped(self, StopCause::Device(fault)),
+            Poll::Pending if now.saturating_duration_since(since) >= COMMAND_BOUND => {
+                unstopped(self, StopCause::Deadline)
+            }
+            Poll::Pending => {
+                self.recompute_deadline();
+                return Poll::Pending;
+            }
+        };
+        self.recompute_deadline();
+        Poll::Ready(result)
+    }
+
     /// What the port held when its stop gave up.
     fn stop_observations(&mut self) -> StopObservations {
         let count = |count: usize| u8::try_from(count).unwrap_or(u8::MAX);
@@ -2189,13 +3248,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             .as_mut()
             .ok_or(Fault::InstallationResources)?;
         let pairwise = driver::arena::station_pairwise(&driver.keys);
-        let mut sink = Sink::default();
+        // The arena core hands its port nothing: a receipt or a completion
+        // it finishes waits with the core for the next ordinary service.
+        let mut sink = Sink::refusing();
         let result = {
             let mut arena_port: driver::arena::Port<'_, 'static, Id, D, B, O> = ArenaPort::new(
                 arena,
                 core,
                 hardware,
-                &mut driver.free,
+                &mut driver.free.bank,
                 VifRole::Station,
                 pairwise,
                 &mut sink,
@@ -2203,15 +3264,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             );
             step(&mut arena_port)
         };
-        let contract = sink.fault().or_else(|| {
-            (!sink.removed.is_empty() || !sink.completed.is_empty())
-                .then_some(Fault::ArenaCoreContract)
-        });
-        if let Some(fault) = contract {
-            // The callback's owners stay with the sink's quarantine.
-            core::mem::forget(sink);
-            return Err(port.record(fault));
-        }
         let result = result.map_err(|fault| port.record(Fault::Arena(fault)));
         port.recompute_deadline();
         result

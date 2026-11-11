@@ -55,6 +55,16 @@ fn the_name_follows_the_path() {
             false,
             "oer-hil-services-wifi-station",
         ),
+        (
+            "hil/scenarios/wifi-access-point",
+            true,
+            "oer-hil-scenarios-wifi-access-point",
+        ),
+        (
+            "hil/services/wifi-access-point",
+            false,
+            "oer-hil-services-wifi-access-point",
+        ),
         ("tools/image/build", false, "oer-tools-image-build"),
         ("tools/image/bundle", false, "oer-tools-image-bundle"),
         ("tools/vendor/scenario", false, "oer-tools-vendor-scenario"),
@@ -990,15 +1000,18 @@ const ROLES: &[(&str, Role)] = &[
     ("hil/agent", Role::HilSdkAgent),
     ("hil/images/aes", Role::HilImage),
     ("hil/images/wifi-station", Role::HilImage),
+    ("hil/images/wifi-access-point", Role::HilImage),
     ("hil/services/aes", Role::HilBinding),
     ("hil/services/fault", Role::HilBinding),
     ("hil/services/load", Role::HilBinding),
     ("hil/services/sdk-station", Role::HilBinding),
     ("hil/services/wifi-station", Role::HilBinding),
+    ("hil/services/wifi-access-point", Role::HilBinding),
     ("hil/scenarios/aes", Role::Tool),
     ("hil/scenarios/sdk-station", Role::Tool),
     ("hil/scenarios/wifi-station", Role::Tool),
     ("hil/scenarios/wifi-load", Role::Tool),
+    ("hil/scenarios/wifi-access-point", Role::Tool),
 ];
 
 /// Roles fixed before their package exists, with what creates it. When the

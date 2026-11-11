@@ -60,7 +60,7 @@ use oer_protocols_radio_port::{
 };
 use oer_protocols_radio_port::{
     Child, DisableEnd, EventsLost, FifoPermitPool, Mint, Poisoned, PortResult, Root, Seat, Slot,
-    StopDeadline,
+    Slots, StopDeadline,
 };
 
 use oer_protocols_ieee802154_wire::{Channel, Frame, FrameError};
@@ -669,7 +669,7 @@ impl RecentRssi for ModelRssi {
 
 /// A configured interface `I` of the model; it holds the interface's slot.
 pub struct ModelConfigured<'id, Id: SlotIdentity, const I: u8> {
-    slot: Slot<'id, InterfaceKind<I>, Child<Child<Root<Id>, I>, 0>>,
+    slot: Slot<'id, Slots<InterfaceKind<I>, 1>, Child<Child<Root<Id>, I>, 0>>,
 }
 
 impl<'id, Id: SlotIdentity, const I: u8> ConfiguredInterface<'id, I>
@@ -773,7 +773,7 @@ macro_rules! interfaces {
 
             fn configure<const I: u8>(
                 &mut self,
-                slot: Slot<'id, InterfaceKind<I>, Child<Child<Root<Id>, I>, 0>>,
+                slot: Slot<'id, Slots<InterfaceKind<I>, 1>, Child<Child<Root<Id>, I>, 0>>,
             ) -> ModelConfigured<'id, Id, I> {
                 change_interface::<I>(self.shared, |interface| interface.configured = true);
                 ModelConfigured { slot }
@@ -782,7 +782,7 @@ macro_rules! interfaces {
             fn remove<const I: u8>(
                 &mut self,
                 interface: ModelConfigured<'id, Id, I>,
-            ) -> Slot<'id, InterfaceKind<I>, Child<Child<Root<Id>, I>, 0>> {
+            ) -> Slot<'id, Slots<InterfaceKind<I>, 1>, Child<Child<Root<Id>, I>, 0>> {
                 self.shared.with(|state| {
                     let index = ModelInterface::of::<I>();
                     state.end_window(index);
@@ -961,12 +961,12 @@ impl RadioWork for ModelToken {
 
 /// An installed short-address pending entry of interface `I`.
 pub struct ModelShortEntry<'id, Id: SlotIdentity, const I: u8> {
-    slot: Slot<'id, ShortPending<I>, Child<Child<Root<Id>, I>, 1>>,
+    slot: Slot<'id, Slots<ShortPending<I>, MODEL_PENDING_SLOTS>, Child<Child<Root<Id>, I>, 1>>,
 }
 
 /// An installed extended-address pending entry of interface `I`.
 pub struct ModelExtendedEntry<'id, Id: SlotIdentity, const I: u8> {
-    slot: Slot<'id, ExtendedPending<I>, Child<Child<Root<Id>, I>, 2>>,
+    slot: Slot<'id, Slots<ExtendedPending<I>, MODEL_PENDING_SLOTS>, Child<Child<Root<Id>, I>, 2>>,
 }
 
 /// The client of the model's interface `I` in a running phase.
@@ -1065,6 +1065,8 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
     type Caps = ModelCaps;
 
     type InterfacePath = Child<Root<Id>, I>;
+    type ShortSlots = Slots<ShortPending<I>, MODEL_PENDING_SLOTS>;
+    type ExtendedSlots = Slots<ExtendedPending<I>, MODEL_PENDING_SLOTS>;
     type ShortEntry = ModelShortEntry<'id, Id, I>;
     type ExtendedEntry = ModelExtendedEntry<'id, Id, I>;
 
@@ -1127,7 +1129,7 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
 
     fn add_pending_short(
         &self,
-        slot: Slot<'id, ShortPending<I>, Child<Child<Root<Id>, I>, 1>>,
+        slot: Slot<'id, Slots<ShortPending<I>, MODEL_PENDING_SLOTS>, Child<Child<Root<Id>, I>, 1>>,
         address: [u8; 2],
     ) -> ModelShortEntry<'id, Id, I> {
         change_interface::<I>(self.shared, |interface| {
@@ -1138,7 +1140,11 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
 
     fn add_pending_extended(
         &self,
-        slot: Slot<'id, ExtendedPending<I>, Child<Child<Root<Id>, I>, 2>>,
+        slot: Slot<
+            'id,
+            Slots<ExtendedPending<I>, MODEL_PENDING_SLOTS>,
+            Child<Child<Root<Id>, I>, 2>,
+        >,
         address: [u8; 8],
     ) -> ModelExtendedEntry<'id, Id, I> {
         change_interface::<I>(self.shared, |interface| {
@@ -1150,7 +1156,7 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
     fn remove_pending_short(
         &self,
         entry: ModelShortEntry<'id, Id, I>,
-    ) -> Slot<'id, ShortPending<I>, Child<Child<Root<Id>, I>, 1>> {
+    ) -> Slot<'id, Slots<ShortPending<I>, MODEL_PENDING_SLOTS>, Child<Child<Root<Id>, I>, 1>> {
         change_interface::<I>(self.shared, |interface| {
             interface.pending_short.remove(&entry.slot.index());
         });
@@ -1160,7 +1166,8 @@ impl<'c, 'id, Id: SlotIdentity, const I: u8> Ieee802154Client<'id, I>
     fn remove_pending_extended(
         &self,
         entry: ModelExtendedEntry<'id, Id, I>,
-    ) -> Slot<'id, ExtendedPending<I>, Child<Child<Root<Id>, I>, 2>> {
+    ) -> Slot<'id, Slots<ExtendedPending<I>, MODEL_PENDING_SLOTS>, Child<Child<Root<Id>, I>, 2>>
+    {
         change_interface::<I>(self.shared, |interface| {
             interface.pending_extended.remove(&entry.slot.index());
         });

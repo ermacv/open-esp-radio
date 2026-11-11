@@ -391,7 +391,9 @@ impl Worker {
         self.phase = Phase::Leaving;
         let left = match self.station.stop().await {
             Ok(()) => Left::Down,
-            Err(StopError::Failed) => Left::Refused(StationError::Unavailable),
+            Err(StopError::Failed | StopError::ReleaseFailed(_)) => {
+                Left::Refused(StationError::Unavailable)
+            }
             // The radio's stop was confirmed; the network's was not.
             Err(StopError::NetworkLost) => Left::DownNetworkLost,
         };
@@ -514,6 +516,6 @@ fn station_error(error: ConnectError) -> StationError {
         ConnectError::Refused(refusal) => codes::refused(refusal),
         ConnectError::Busy => StationError::failed(codes::class::NOT_ADMITTED, 0, 0),
         ConnectError::Profile(_) => StationError::InvalidSettings,
-        ConnectError::Stopped => StationError::Unavailable,
+        ConnectError::Stopped | ConnectError::NotStarted(_) => StationError::Unavailable,
     }
 }

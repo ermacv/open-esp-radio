@@ -39,14 +39,14 @@ fn alone(first: First, check: impl for<'s> FnOnce(Completed<'s>, Vec<Returned<'s
             resources,
         } = install;
         let (parts, _storage, spare) = lifecycle_spare::<2>(open(), resources, commands);
-        let mut to_queue = WakingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
-        let mut parcel_queue = WakingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
-        let mut from_queue = WakingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
-        let mut return_queue = WakingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
-        let mut link_queue = WakingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+        let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+        let mut parcel_queue = ClosingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
+        let mut from_queue = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+        let mut return_queue = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+        let mut link_queue = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
         let mut group_queue =
-            WakingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
-        let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
+            ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+        let mut link_return_queue = ClosingSpscQueue::<LinkReturn, 1>::new();
         let mut command_queue =
             WakingSpscQueue::<crate::station::ServiceCommand<ModelCaps24>, COMMANDS>::new();
         let (to_actor, to_actor_end) = to_queue.split();
@@ -187,4 +187,228 @@ fn an_unsolicited_access_point_key_removal_ends_the_lifecycle_and_keeps_its_owne
         ));
         assert!(announced);
     });
+}
+
+/// A closed reception of the actor is its own refusal, never a full queue:
+/// the lifecycle ends on it at once, retries nothing, and keeps the message
+/// it could not send whole.
+#[test]
+fn a_closed_actor_reception_ends_the_lifecycle_named_and_keeps_its_message() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let clock = Rc::new(VirtualClock::new());
+        let mut installations = Installations::claim(claim);
+        let (install, _air) = ModelPort::install(
+            &mut installations,
+            channel6(),
+            [
+                IndividualAddress::new(LOCAL).unwrap(),
+                IndividualAddress::new(BSSID).unwrap(),
+            ],
+            clock.clone(),
+        )
+        .unwrap();
+        let ModelInstall {
+            port,
+            commands,
+            resources,
+        } = install;
+        let (parts, _storage, _spare) = lifecycle_spare::<2>(open(), resources, commands);
+        let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+        let mut parcel_queue = ClosingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
+        let mut from_queue = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+        let mut return_queue = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+        let mut link_queue = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+        let mut group_queue =
+            ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+        let mut link_return_queue = ClosingSpscQueue::<LinkReturn, 1>::new();
+        let mut command_queue =
+            WakingSpscQueue::<crate::station::ServiceCommand<ModelCaps24>, COMMANDS>::new();
+        let (to_actor, mut to_actor_end) = to_queue.split();
+        let (parcels, _parcels_end) = parcel_queue.split();
+        let (_from_actor_end, from_actor) = from_queue.split();
+        let (_returns_end, returns) = return_queue.split();
+        let (link, _link_end) = link_queue.split();
+        let (_groups_end, groups) = group_queue.split();
+        let (_link_return_end, link_return) = link_return_queue.split();
+        let (application, commands) = command_queue.split();
+        // The actor's side closed its reception before the lifecycle ran.
+        embassy_futures::block_on(to_actor_end.close());
+        let state = State::new();
+        let (application, control) = Control::new(application, &state).unwrap();
+        let mut lifecycle_ends = ActorEnds {
+            to_actor,
+            parcels,
+            from_actor,
+            returns,
+            groups,
+            link,
+            link_return,
+        };
+        let mut output = application.events(|_| {});
+        let mut io = LifecycleIo {
+            commands,
+            output: &mut output,
+            control,
+            stop: StopPolicy {
+                drain: Duration::from_secs(1),
+            },
+        };
+        let mut cx = Context::from_waker(Waker::noop());
+        let completed = {
+            let run = parts.run(&mut lifecycle_ends, &mut io, &clock, Observed::default());
+            let mut run = core::pin::pin!(run);
+            match run.as_mut().poll(&mut cx) {
+                Poll::Ready(done) => done,
+                Poll::Pending => panic!("a closed reception ends the lifecycle at once"),
+            }
+        };
+        assert_eq!(
+            completed.end,
+            LifecycleEnd::Contract(LifecycleViolation::ActorClosed)
+        );
+        let UnsentUnit {
+            cause,
+            outbox: mut unsent,
+        } = completed.retired.unsent.expect("the refused unit is kept");
+        assert_eq!(cause, LifecycleViolation::ActorClosed);
+        assert!(matches!(
+            unsent.pop_front(),
+            Some(Unsent::ToActor(ToActor::Start(_)))
+        ));
+        assert!(unsent.is_empty());
+        assert!(to_actor_end.try_receive().is_none());
+        drop(port);
+    }));
+}
+
+/// The actor's ends over queues the test holds, `to` the message queue.
+fn ends_over<'c, 's, const N: usize>(
+    to: &'c mut ClosingSpscQueue<ToActor<'s, P<'s>>, N>,
+    parcels: &'c mut ClosingSpscQueue<Parcel<'s, P<'s>>, ACTOR_PARCELS>,
+    from: &'c mut ClosingSpscQueue<FromActor<'s, P<'s>>, FROM>,
+    returns: &'c mut ClosingSpscQueue<Returned<'s, P<'s>>, RETURNS>,
+    link: &'c mut ClosingSpscQueue<ActorLink<'s, P<'s>>, 1>,
+    groups: &'c mut ClosingSpscQueue<GroupPending<'s, ActorEpochPath<'s, P<'s>>>, 1>,
+    link_return: &'c mut ClosingSpscQueue<LinkReturn, 1>,
+) -> (
+    ActorEnds<'c, 's, P<'s>, N, FROM, RETURNS>,
+    ClosingSpscReceiver<'c, ToActor<'s, P<'s>>, N>,
+) {
+    let (to_actor, to_actor_end) = to.split();
+    let (parcels, _) = parcels.split();
+    let (_, from_actor) = from.split();
+    let (_, returns) = returns.split();
+    let (link, _) = link.split();
+    let (_, groups) = groups.split();
+    let (_, link_return) = link_return.split();
+    (
+        ActorEnds {
+            to_actor,
+            parcels,
+            from_actor,
+            returns,
+            groups,
+            link,
+            link_return,
+        },
+        to_actor_end,
+    )
+}
+
+/// A unit's outbox, refused part way: the messages before the refusal went
+/// in order, the refused one and every later one stay in the outbox whole
+/// and in order, and the right goes with them, so no unit follows. A
+/// reception that closes after the room was looked at (the reservation)
+/// refuses the whole unit, named closed, all of it kept.
+#[test]
+fn a_unit_refused_part_way_keeps_its_remainder_in_order_and_no_unit_follows() {
+    fn unit<'s>() -> Outbox<'s, P<'s>> {
+        Outbox::of(
+            Some(ToActor::Release),
+            Messages::Three(
+                ToActor::Connect,
+                ToActor::Disconnect,
+                ToActor::ReturnPairwise,
+            ),
+        )
+    }
+    let mut to = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+    let mut parcels = ClosingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
+    let mut from = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+    let mut returns = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+    let mut link = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+    let mut groups = ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+    let mut link_return = ClosingSpscQueue::<LinkReturn, 1>::new();
+    let (ends, mut actor) = ends_over(
+        &mut to,
+        &mut parcels,
+        &mut from,
+        &mut returns,
+        &mut link,
+        &mut groups,
+        &mut link_return,
+    );
+    // Two places are left of the actor's queue.
+    while ends.to_actor.free_capacity() > 2 {
+        assert!(ends.to_actor.try_send(ToActor::Hold).is_ok());
+    }
+    let mut sending = Sending::<'_, P<'_>>::new();
+    let right = sending
+        .take()
+        .expect("the right of a lifecycle that sent nothing");
+    assert!(sending.take().is_none(), "one unit holds the right");
+    let mut outbox = unit();
+    assert_eq!(outbox.send(&ends), Err(LifecycleViolation::QueueFull));
+    let mut sent = Vec::new();
+    while let Some(message) = actor.try_receive() {
+        if !matches!(message, ToActor::Hold) {
+            sent.push(message);
+        }
+    }
+    assert!(matches!(
+        sent.as_slice(),
+        [ToActor::Release, ToActor::Connect]
+    ));
+    let mut sending = Sending::refused(right, outbox, LifecycleViolation::QueueFull);
+    assert!(sending.take().is_none(), "no unit follows a refused one");
+    let UnsentUnit {
+        cause,
+        outbox: mut kept,
+    } = sending.into_unsent().expect("the remainder");
+    assert_eq!(
+        cause,
+        LifecycleViolation::QueueFull,
+        "the refusal's own cause"
+    );
+    assert!(matches!(
+        kept.pop_front(),
+        Some(Unsent::ToActor(ToActor::Disconnect))
+    ));
+    assert!(matches!(
+        kept.pop_front(),
+        Some(Unsent::ToActor(ToActor::ReturnPairwise))
+    ));
+    assert!(kept.pop_front().is_none() && kept.is_empty());
+
+    // The room is there when looked at; the reception closes after it.
+    assert!(ends.to_actor.free_capacity() >= UNSENT);
+    embassy_futures::block_on(actor.close());
+    let mut outbox = unit();
+    assert_eq!(outbox.send(&ends), Err(LifecycleViolation::ActorClosed));
+    assert!(matches!(
+        [
+            outbox.pop_front(),
+            outbox.pop_front(),
+            outbox.pop_front(),
+            outbox.pop_front(),
+            outbox.pop_front(),
+        ],
+        [
+            Some(Unsent::ToActor(ToActor::Release)),
+            Some(Unsent::ToActor(ToActor::Connect)),
+            Some(Unsent::ToActor(ToActor::Disconnect)),
+            Some(Unsent::ToActor(ToActor::ReturnPairwise)),
+            None,
+        ]
+    ));
 }

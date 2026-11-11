@@ -41,6 +41,13 @@ impl CcmpKeyHardware for Hardware {
         self.occupied = false;
         self.clears += 1;
     }
+
+    fn ccmp_entry_is_valid(
+        &mut self,
+        _index: oer_chips_esp32s31_hal::types::MacKeyEntryIndex,
+    ) -> bool {
+        self.occupied
+    }
 }
 
 #[test]
@@ -58,6 +65,26 @@ fn first_ap_peer_and_gtk_own_the_evidenced_disjoint_slots() {
     assert_eq!(hardware.last_index, Some(2));
     group.clear(&mut hardware);
     assert_eq!(hardware.clears, 2);
+}
+
+#[test]
+fn ap_association_ids_outside_the_pairwise_entries_are_refused_without_a_hardware_write() {
+    let mut hardware = Hardware::default();
+    for association_id in [0, u16::from(AP_PAIRWISE_SLOT_COUNT) + 1, 256, u16::MAX] {
+        assert_eq!(
+            install_ap_pairwise_ccmp(&mut hardware, [1; 6], association_id, &[7; 16]).err(),
+            Some(CryptoKeyError::InvalidAccessPointAssociationId)
+        );
+    }
+    assert_eq!((hardware.installs, hardware.last_index), (0, None));
+    let last = install_ap_pairwise_ccmp(
+        &mut hardware,
+        [1; 6],
+        u16::from(AP_PAIRWISE_SLOT_COUNT),
+        &[7; 16],
+    )
+    .unwrap();
+    assert_eq!(last.hardware_index(), 22);
 }
 
 #[test]

@@ -17,8 +17,8 @@
 //! configuration while a data arena or a station MPDU is on the air, a
 //! key removal while an admitted attempt still uses its key, a group
 //! mutation while the air holds group commands. A held command that waits
-//! past [`MODEL_HELD_COMMAND_BOUND`] is a named fault, and the port keeps
-//! its owners.
+//! past [`MODEL_HELD_COMMAND_BOUND`] did not run: the port undoes what its
+//! hold began and refuses it `Expired` with every owner.
 
 use super::*;
 use core::task::Context;
@@ -30,10 +30,13 @@ use oer_protocols_ieee80211_contracts_port::{
     TsfControl, first_stale,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AdmittedTxParts, CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts,
-    LendRefusal, LendRefused, PairwiseIssue, PortArena, PortCommand, PortCommands, PortCompleted,
-    PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull, StartRefused,
-    StationSubmission, StopCause, StopObservations, StopUnconfirmed, SubmitRefusal, TxFacts,
+    AccessPointCommandFailed, AdmittedTxParts, CleanupRefused, CommandFailed, CommandKind,
+    CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input, LendRefusal,
+    LendRefused, PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed,
+    PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull,
+    StartFailure, StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed,
+    SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts, Unconsumed, UnconsumedRefused, Unkeeping,
+    Unkept,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
@@ -53,6 +56,29 @@ pub const MODEL_HELD_COMMAND_BOUND: oer_portable_time::Duration =
 /// How long a stop may wait for the work on the air, in model time.
 pub const MODEL_STOP_BOUND: oer_portable_time::Duration =
     oer_portable_time::Duration::from_millis(20);
+
+/// A key's activity before a removal held at its barrier changed it.
+struct HeldKey {
+    key: RawKeyIdentity,
+    active: bool,
+    rx_active: bool,
+}
+
+impl HeldKey {
+    fn of(key: &RawKeyIdentity) -> Self {
+        Self {
+            key: key.clone(),
+            active: key.0.active.get(),
+            rx_active: key.0.rx_active.get(),
+        }
+    }
+
+    /// The removal did not run: the key is as it was.
+    fn restore(self) {
+        self.key.0.active.set(self.active);
+        self.key.0.rx_active.set(self.rx_active);
+    }
+}
 
 /// A pairwise installation the issuer accepted.
 pub struct ModelPairwiseInstall<B: ModelComposition> {
@@ -218,7 +244,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         association: &ModelAssociation<'id, Backend<Id, C, X>, AccessPoint>,
         permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'id,
-            ModelGroupPermission<AccessPoint>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
             <AccessPoint as ModelRole>::GroupPermissionPath<Id>,
         >,
         slot: GroupKeySlot<
@@ -355,25 +381,7 @@ pub enum ModelPortFault {
         /// The arena on the air then.
         on_air: Option<ArenaId>,
     },
-    /// A held command passed [`MODEL_HELD_COMMAND_BOUND`]; the port keeps it.
-    CommandStalled {
-        /// The held command.
-        kind: CommandKind,
-        /// When the port first held it.
-        since: Instant,
-    },
-    /// A held access-point command passed [`MODEL_HELD_COMMAND_BOUND`]; the
-    /// port keeps it.
-    AccessPointCommandStalled {
-        /// The held command.
-        kind: AccessPointCommandKind,
-        /// When the port first held it.
-        since: Instant,
-    },
 }
-
-/// A command of the model port of `(Id, C, X)`.
-type ModelCommand<'id, Id, C, X> = PortCommand<'id, ModelTypes<Backend<Id, C, X>>, C>;
 
 /// An access-point command of the model port of `(Id, C, X)`.
 type ModelAccessPointCommand<'id, Id, C, X> =
@@ -386,7 +394,7 @@ type ModelAccessPointProgress<'id, Id, C, X> =
 /// A station attempt the model port accepted: the backend's own owners.
 pub type ModelAdmitted<Id, C, X> = AdmittedTxParts<
     ModelContextOf<Backend<Id, C, X>>,
-    Slot<'static, ModelTickets, ModelPool<Id, 1>>,
+    Slot<'static, oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>, ModelPool<Id, 1>>,
     ModelMpdu<'static, Backend<Id, C, X>>,
     ModelTxExecution<Backend<Id, C, X>>,
     C,
@@ -461,12 +469,46 @@ pub struct ModelPort<
     radio: Radio,
     deadline: Option<Instant>,
     held_since: Option<(CommandKind, Instant)>,
+    /// The activity of the key a held removal names, as it was before its
+    /// first hold: an expired removal restores it.
+    held_key: Option<HeldKey>,
     /// The access point's held command, on its own bound: it holds no
     /// station command.
     access_point_held_since: Option<(AccessPointCommandKind, Instant)>,
-    retained: Vec<ModelCommand<'id, Id, C, X>>,
-    retained_access_point: Vec<ModelAccessPointCommand<'id, Id, C, X>>,
+    /// The access point's [`Self::held_key`].
+    access_point_held_key: Option<HeldKey>,
     fault: Option<ModelPortFault>,
+    /// What a sink refused, oldest first: offered again before anything
+    /// newer ([`PortSink`]).
+    kept: alloc::collections::VecDeque<Unkept<'id, ModelTypes<Backend<Id, C, X>>>>,
+    /// The one item this call could not keep: returned at its end.
+    unkept: Option<Unkept<'id, ModelTypes<Backend<Id, C, X>>>>,
+}
+
+/// Where a test makes the model's next call stop on an item its sink
+/// refused ([`ModelAir::unkeep_next`](crate::ModelAir::unkeep_next)).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelUnkeep {
+    /// The next refused item of a drain is not kept: the call returns it
+    /// beside its answer, and what was posted after it stays posted.
+    AtDrain,
+    /// The next command or submission drains what was posted before it
+    /// accepts its input; an item refused there comes back beside the
+    /// input, whole.
+    BeforeAcceptance,
+}
+
+/// Offer `item` to `sink`; refused, it comes back.
+fn offer<'id, T: PortTypes<'id>>(
+    sink: &mut impl PortSink<'id, T>,
+    item: Unkept<'id, T>,
+) -> Result<(), Unkept<'id, T>> {
+    match item {
+        Unkept::Terminal(terminal) => sink.terminal(terminal).map_err(Unkept::Terminal),
+        Unkept::Received(frame, meta) => sink
+            .received(frame, meta)
+            .map_err(|(frame, meta)| Unkept::Received(frame, meta)),
+    }
 }
 
 impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContext + 'id>
@@ -515,9 +557,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 radio: Radio::Stopped,
                 deadline: None,
                 held_since: None,
+                held_key: None,
                 access_point_held_since: None,
-                retained: Vec::new(),
-                retained_access_point: Vec::new(),
+                access_point_held_key: None,
+                kept: alloc::collections::VecDeque::new(),
+                unkept: None,
                 fault: None,
             },
             commands: ModelCommands { air, loan },
@@ -536,16 +580,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         self,
         installations: &mut Installations<Id, ModelPools>,
     ) -> Result<ModelInstall<'id, Id, C, X>, Box<(Self, ModelReinstallRefused)>> {
-        if self.fault.is_some() || self.air.failed() {
-            return Err(Box::new((self, ModelReinstallRefused::Faulted)));
-        }
-        let retired = self.radio == Radio::Stopped
-            && self.idle()
-            && self.held.events.is_empty()
-            && self.held.rx_out.get() == 0
-            && self.driver.removing.is_empty();
-        if !retired {
-            return Err(Box::new((self, ModelReinstallRefused::NotRetired)));
+        if let Err(refused) = self.retirable() {
+            return Err(Box::new((self, refused)));
         }
         let Self {
             air,
@@ -554,8 +590,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             installation,
             channel,
             addresses,
-            retained,
-            retained_access_point,
             ..
         } = self;
         match installations.remint(installation) {
@@ -564,8 +598,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 for key in driver.keys.drain(..) {
                     air.remove_key_material(&key);
                 }
-                drop(retained);
-                drop(retained_access_point);
                 Ok(Self::from_mint(
                     minted,
                     channel,
@@ -588,14 +620,39 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                         radio: Radio::Stopped,
                         deadline: None,
                         held_since: None,
+                        held_key: None,
                         access_point_held_since: None,
-                        retained,
-                        retained_access_point,
+                        access_point_held_key: None,
+                        kept: alloc::collections::VecDeque::new(),
+                        unkept: None,
                         fault: None,
                     },
                     ModelReinstallRefused::Receipt,
                 )))
             }
+        }
+    }
+
+    /// The retire checks [`Self::reinstall`] makes, without reinstalling:
+    /// no fault, the radio stopped, no work, terminal or received unit out.
+    ///
+    /// # Errors
+    ///
+    /// Why the port does not retire.
+    pub fn retirable(&self) -> Result<(), ModelReinstallRefused> {
+        if self.fault.is_some() || self.air.failed() {
+            return Err(ModelReinstallRefused::Faulted);
+        }
+        let retired = self.radio == Radio::Stopped
+            && self.idle()
+            && self.held.events.is_empty()
+            && self.kept.is_empty()
+            && self.held.rx_out.get() == 0
+            && self.driver.removing.is_empty();
+        if retired {
+            Ok(())
+        } else {
+            Err(ModelReinstallRefused::NotRetired)
         }
     }
 
@@ -667,16 +724,98 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     }
 
     /// Move every terminal and received unit the model's steps posted to
-    /// `sink`, in the order they were posted.
+    /// `sink`, in the order they were posted, behind what a sink refused
+    /// before. After a confirmed stop what the port keeps leaves only
+    /// through [`DataPort::take_unconsumed`], so nothing newer passes it.
     fn drain(&mut self, sink: &mut impl PortSink<'id, ModelTypes<Backend<Id, C, X>>>) {
-        while let Some(event) = self.held.take_event() {
-            match event {
-                OwnedLowerMacEvent::Terminal(terminal) => sink.terminal(terminal.lend(&self.loan)),
-                OwnedLowerMacEvent::Received { frame, meta } => {
-                    sink.received(frame.lend(&self.loan), meta);
+        if self.radio == Radio::Stopped && !self.kept.is_empty() {
+            self.keep_posted();
+            return;
+        }
+        if self.offer_kept(sink) == Unconsumed::Kept {
+            self.keep_posted();
+            return;
+        }
+        while self.unkept.is_none()
+            && let Some(event) = self.held.take_event()
+        {
+            if let Err(refused) = offer(sink, self.lend_event(event)) {
+                if self.air.take_unkeep(ModelUnkeep::AtDrain) {
+                    // The call's one unkept item: nothing more is taken,
+                    // what was posted after it stays posted.
+                    self.unkept = Some(refused);
+                    return;
                 }
+                // Everything posted after it waits behind it.
+                self.kept.push_back(refused);
+                self.keep_posted();
+                return;
             }
         }
+    }
+
+    /// The call's answer `answer`, beside its one unkept item, if any.
+    fn answer<I, R>(&mut self, answer: R) -> PortAnswer<'id, ModelTypes<Backend<Id, C, X>>, I, R> {
+        match self.unkept.take() {
+            Some(unkept) => Err(Unkeeping {
+                unkept,
+                input: Input::Accepted(answer),
+            }),
+            None => Ok(answer),
+        }
+    }
+
+    /// Before a command or a submission accepts its input: the drain a
+    /// test asked for, and the item it could not keep.
+    fn unkept_before_acceptance(
+        &mut self,
+        sink: &mut impl PortSink<'id, ModelTypes<Backend<Id, C, X>>>,
+    ) -> Option<Unkept<'id, ModelTypes<Backend<Id, C, X>>>> {
+        if !self.air.take_unkeep(ModelUnkeep::BeforeAcceptance) {
+            return None;
+        }
+        self.air.unkeep_next(ModelUnkeep::AtDrain);
+        self.drain(sink);
+        // An item the drain did take leaves the request spent.
+        let _spent = self.air.take_unkeep(ModelUnkeep::AtDrain);
+        self.unkept.take()
+    }
+
+    /// A posted event in the caller's brand.
+    fn lend_event(
+        &self,
+        event: OwnedLowerMacEvent<'static, Backend<Id, C, X>>,
+    ) -> Unkept<'id, ModelTypes<Backend<Id, C, X>>> {
+        match event {
+            OwnedLowerMacEvent::Terminal(terminal) => Unkept::Terminal(terminal.lend(&self.loan)),
+            OwnedLowerMacEvent::Received { frame, meta } => {
+                Unkept::Received(frame.lend(&self.loan), meta)
+            }
+        }
+    }
+
+    /// Keep every posted event behind what the port keeps, in order: a
+    /// posted event makes the port's deadline due, a kept one does not.
+    fn keep_posted(&mut self) {
+        while let Some(event) = self.held.take_event() {
+            let kept = self.lend_event(event);
+            self.kept.push_back(kept);
+        }
+    }
+
+    /// Offer what the port keeps to `sink`, oldest first, until it refuses
+    /// one again.
+    fn offer_kept(
+        &mut self,
+        sink: &mut impl PortSink<'id, ModelTypes<Backend<Id, C, X>>>,
+    ) -> Unconsumed {
+        while let Some(item) = self.kept.pop_front() {
+            if let Err(item) = offer(sink, item) {
+                self.kept.push_front(item);
+                return Unconsumed::Kept;
+            }
+        }
+        Unconsumed::None
     }
 
     /// End each queued single MPDU whose lifetime passed at `now`.
@@ -688,7 +827,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     .edca(work.role)
                     .access_category(work.queue)
                     .msdu_lifetime;
-                if !work.operation.payload().expired(now, lifetime) {
+                if !work.expired(now, lifetime) {
                     break;
                 }
                 let Some(work) = queue.waiting.pop_front() else {
@@ -840,6 +979,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                         .msdu_lifetime;
                     if let Some(at) = work.operation.payload().admitted_monotonic() {
                         due(at.saturating_add(lifetime));
+                    }
+                    if let Some(deadline) = work.deadline {
+                        due(deadline);
                     }
                 } else {
                     due(now);
@@ -1295,6 +1437,35 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
     }
 
+    fn take_unconsumed(
+        &mut self,
+        sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> Result<Unconsumed, UnconsumedRefused> {
+        if self.radio != Radio::Stopped {
+            return Err(UnconsumedRefused::NotStopped);
+        }
+        self.keep_posted();
+        Ok(self.offer_kept(sink))
+    }
+
+    /// The model's stop leaves no cleanup: a stopped port has finished.
+    fn clean_stopped(
+        &mut self,
+        _sink: &mut impl PortSink<'id, Self::Types>,
+    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
+        #[allow(
+            clippy::redundant_closure_call,
+            reason = "the call's own answer, then its unkept item"
+        )]
+        let answer = (|| -> Result<(), CleanupRefused<Self::Fault>> {
+            if self.radio != Radio::Stopped {
+                return Err(CleanupRefused::NotStopped);
+            }
+            Ok(())
+        })();
+        self.answer(answer)
+    }
+
     fn deadline(&self) -> Option<Instant> {
         [self.deadline, self.air.kept_due.get()]
             .into_iter()
@@ -1308,31 +1479,52 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         tbtt: bool,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<Option<PortCompleted<'id, Self>>, ModelPortFault> {
-        self.check(ModelPortCall::ServiceTx)?;
-        if tbtt {
-            sink.tbtt(oer_protocols_ieee80211_contracts_port::TbttEvent {
-                tbtt: oer_protocols_ieee80211_contracts_port::VifTsf::new(
-                    VifRole::Station,
-                    oer_protocols_ieee80211_contracts_port::tsf::TsfInstant::from_micros(
-                        now.as_micros(),
+    ) -> PortAnswer<'id, Self::Types, (), Result<Option<PortCompleted<'id, Self>>, ModelPortFault>>
+    {
+        #[allow(
+            clippy::redundant_closure_call,
+            reason = "the call's own answer, then its unkept item"
+        )]
+        if self.air.take_poison_at_service() {
+            self.air.poison();
+        }
+        let answer = (|| -> Result<Option<PortCompleted<'id, Self>>, ModelPortFault> {
+            self.check(ModelPortCall::ServiceTx)?;
+            if tbtt {
+                sink.tbtt(oer_protocols_ieee80211_contracts_port::TbttEvent {
+                    tbtt: oer_protocols_ieee80211_contracts_port::VifTsf::new(
+                        VifRole::Station,
+                        oer_protocols_ieee80211_contracts_port::tsf::TsfInstant::from_micros(
+                            now.as_micros(),
+                        ),
                     ),
-                ),
+                });
+            }
+            let air = self.air.clone();
+            let _turn = Turn::at(&air, now);
+            self.expire(now);
+            // A held configuration withdraws its interface's attempts queued
+            // behind a frame on the air, as its call did.
+            let station = self.held.configuring_station.get();
+            let access_point = matches!(
+                self.access_point_held_since,
+                Some((AccessPointCommandKind::Configure, _))
+            );
+            self.driver.publish_before(&self.held, |role| match role {
+                VifRole::Station => station,
+                VifRole::AccessPoint => access_point,
             });
-        }
-        let air = self.air.clone();
-        let _turn = Turn::at(&air, now);
-        self.expire(now);
-        self.driver.publish(&self.held);
-        let done = self.serve_arena(now)?;
-        self.close_gate();
-        if !self.driver.removing.is_empty() {
-            self.driver.finish_removals(&self.held);
-        }
-        self.drain(sink);
-        self.check(ModelPortCall::ServiceTx)?;
-        self.refresh_deadline(now);
-        Ok(done)
+            let done = self.serve_arena(now)?;
+            self.close_gate();
+            if !self.driver.removing.is_empty() {
+                self.driver.finish_removals(&self.held);
+            }
+            self.drain(sink);
+            self.check(ModelPortCall::ServiceTx)?;
+            self.refresh_deadline(now);
+            Ok(done)
+        })();
+        self.answer(answer)
     }
 
     fn service_arena(
@@ -1372,87 +1564,102 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         attempt: ModelAdmitted<Id, C, X>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<(), SubmitRefusal> {
-        // An attempt under a key or beacon permission of an earlier
-        // installation is refused for good, with its owners, before the
-        // radio's own state is asked.
-        {
-            let installation = self.installation.generation();
-            let named = [
-                attempt
-                    .execution
-                    .beacon
-                    .as_ref()
-                    .map(|beacon| beacon.generation()),
-                attempt
-                    .execution
-                    .key
-                    .as_ref()
-                    .map(|key| key.identity.0.generation),
-            ];
-            let named: Vec<u32> = named.into_iter().flatten().collect();
-            if let Some(issued) = first_stale(installation, &named) {
+    ) -> SubmitAnswer<'id, Self::Types, ModelAdmitted<Id, C, X>> {
+        if let Some(unkept) = self.unkept_before_acceptance(sink) {
+            return Err(SubmitHalt::Unkeeping(Unkeeping {
+                unkept,
+                input: Input::NotAccepted(attempt),
+            }));
+        }
+        #[allow(
+            clippy::redundant_closure_call,
+            reason = "the call's own answer, then its unkept item"
+        )]
+        let answer = (|| -> Result<(), SubmitRefusal> {
+            // An attempt under a key or beacon permission of an earlier
+            // installation is refused for good, with its owners, before the
+            // radio's own state is asked.
+            {
+                let installation = self.installation.generation();
+                let named = [
+                    attempt
+                        .execution
+                        .beacon
+                        .as_ref()
+                        .map(|beacon| beacon.generation()),
+                    attempt
+                        .execution
+                        .key
+                        .as_ref()
+                        .map(|key| key.identity.0.generation),
+                ];
+                let named: Vec<u32> = named.into_iter().flatten().collect();
+                if let Some(issued) = first_stale(installation, &named) {
+                    return Err(self.withdraw(
+                        attempt,
+                        SubmitRefusal::StalePermission {
+                            issued,
+                            installation,
+                        },
+                        WithdrawCause::StalePermission,
+                        sink,
+                    ));
+                }
+            }
+            let refusal = match self.radio {
+                Radio::Stopped => Some(SubmitRefusal::NotEnabled),
+                Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
+                Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
+                    Some(SubmitRefusal::Stopping)
+                }
+                // The admission instant projects into radio time; without the
+                // relation the radio does not run for this attempt.
+                Radio::Running if self.air.project_time(now).is_err() => {
+                    Some(SubmitRefusal::NotEnabled)
+                }
+                Radio::Running => None,
+            };
+            if let Some(reason) = refusal {
+                return Err(self.withdraw(attempt, reason, WithdrawCause::Disabled, sink));
+            }
+            let air = self.air.clone();
+            let _turn = Turn::at(&air, now);
+            let mut attempt = attempt;
+            let mpdu = attempt.operation.execute().mpdu;
+            mpdu.admit(now);
+            if mpdu.project_admission(&air).is_err() {
                 return Err(self.withdraw(
                     attempt,
-                    SubmitRefusal::StalePermission {
-                        issued,
-                        installation,
-                    },
-                    WithdrawCause::StalePermission,
+                    SubmitRefusal::NotEnabled,
+                    WithdrawCause::Disabled,
                     sink,
                 ));
             }
-        }
-        let refusal = match self.radio {
-            Radio::Stopped => Some(SubmitRefusal::NotEnabled),
-            Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
-            Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
-                Some(SubmitRefusal::Stopping)
-            }
-            // The admission instant projects into radio time; without the
-            // relation the radio does not run for this attempt.
-            Radio::Running if self.air.project_time(now).is_err() => {
-                Some(SubmitRefusal::NotEnabled)
-            }
-            Radio::Running => None,
-        };
-        if let Some(reason) = refusal {
-            return Err(self.withdraw(attempt, reason, WithdrawCause::Disabled, sink));
-        }
-        let air = self.air.clone();
-        let _turn = Turn::at(&air, now);
-        let mut attempt = attempt;
-        let mpdu = attempt.operation.execute().mpdu;
-        mpdu.admit(now);
-        if mpdu.project_admission(&air).is_err() {
-            return Err(self.withdraw(
-                attempt,
-                SubmitRefusal::NotEnabled,
-                WithdrawCause::Disabled,
-                sink,
-            ));
-        }
-        let ModelTxExecution {
-            plan,
-            key,
-            role,
-            beacon,
-        } = attempt.execution;
-        let prepared = Box::new(Prepared {
-            operation: attempt.operation,
-            role,
-            queue: attempt.access_category,
-            plan,
-            key,
-            beacon,
-        });
-        attempt
-            .access_category
-            .select_mut(&mut self.driver.queues)
-            .waiting
-            .push_back(prepared);
-        self.refresh_deadline(now);
-        Ok(())
+            let ModelTxExecution {
+                plan,
+                key,
+                role,
+                beacon,
+                deadline,
+            } = attempt.execution;
+            let prepared = Box::new(Prepared {
+                operation: attempt.operation,
+                role,
+                queue: attempt.access_category,
+                plan,
+                key,
+                beacon,
+                deadline,
+            });
+            attempt
+                .access_category
+                .select_mut(&mut self.driver.queues)
+                .waiting
+                .push_back(prepared);
+            self.refresh_deadline(now);
+            Ok(())
+        })();
+        self.answer(answer).map_err(SubmitHalt::Unkeeping)
     }
 
     fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, ModelPortFault> {
@@ -1512,13 +1719,28 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         })
     }
 
-    fn recycle(&mut self, unit: PortRxBuffer<'id, Self>) {
+    fn recycle(
+        &mut self,
+        unit: PortRxBuffer<'id, Self>,
+    ) -> Result<(), oer_protocols_ieee80211_contracts_port::RecycleRefused<PortRxBuffer<'id, Self>>>
+    {
+        // The count first: a return without a charge, or one the air's
+        // knob refuses, leaves the unit whole.
+        if self.air.take_recycle_refusal() {
+            let fault = oer_protocols_ieee80211_contracts_port::ReceiveAccounting {
+                operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+                held: self.held.rx_held(),
+                requested: 1,
+            };
+            return Err(oer_protocols_ieee80211_contracts_port::RecycleRefused { unit, fault });
+        }
+        if let Err(fault) = self.held.release_rx() {
+            return Err(oer_protocols_ieee80211_contracts_port::RecycleRefused { unit, fault });
+        }
         let mut owner = unit.owner;
         owner.recycled = true;
         drop(owner);
-        // A return without a charge breaks the model's count: the air
-        // quarantines, and the next fallible call reports it.
-        self.held.release_rx();
+        Ok(())
     }
 
     fn lend(
@@ -1548,7 +1770,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             .held
             .fetch_add(1, core::sync::atomic::Ordering::AcqRel);
         drop(owner);
-        self.held.release_rx();
+        // A lend without a charge breaks the model's count: the air
+        // quarantines, and the next fallible call reports it.
+        if self.held.release_rx().is_err() {
+            self.held.poison();
+        }
         Ok(ModelLentRx {
             bytes,
             mpdu_len,
@@ -1629,65 +1855,101 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         command: PortCommand<'id, Self::Types, C>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<CommandProgress<'id, Self::Types, C>, ModelPortFault> {
-        if let Err(fault) = self.check(ModelPortCall::Command) {
-            self.retained.push(command);
-            return Err(fault);
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        PortCommand<'id, Self::Types, C>,
+        Result<CommandProgress<'id, Self::Types, C>, PortCommandFailed<'id, Self>>,
+    > {
+        if let Some(unkept) = self.unkept_before_acceptance(sink) {
+            return Err(Unkeeping {
+                unkept,
+                input: Input::NotAccepted(command),
+            });
         }
-        // A token of an earlier installation is refused for good, before
-        // the radio's own state is asked.
-        let named: Vec<u32> = station_generations(&command)
-            .into_iter()
-            .flatten()
-            .collect();
-        let installation = self.installation.generation();
-        if let Some(issued) = first_stale(installation, &named) {
-            return Ok(CommandProgress::Refused(
-                command,
-                CommandRefusal::StalePermission {
-                    issued,
-                    installation,
-                },
-            ));
-        }
-        if self.radio != Radio::Running {
-            return Ok(CommandProgress::Refused(
-                command,
-                CommandRefusal::NotEnabled,
-            ));
-        }
-        let air = self.air.clone();
-        let _turn = Turn::at(&air, now);
-        let kind = command.kind();
-        let progress = self.run(command, now);
-        self.drain(sink);
-        if let Err(fault) = self.check(ModelPortCall::Command) {
-            if let CommandProgress::Held(command) | CommandProgress::Refused(command, _) = progress
-            {
-                self.retained.push(command);
-            }
-            return Err(fault);
-        }
-        let progress = match progress {
-            CommandProgress::Held(command) => {
-                let since = match self.held_since {
-                    Some((held, since)) if held == kind => since,
-                    _ => now,
-                };
-                if now.saturating_duration_since(since) >= MODEL_HELD_COMMAND_BOUND {
-                    self.retained.push(command);
-                    return Err(self.fail(ModelPortFault::CommandStalled { kind, since }));
+        #[allow(
+            clippy::redundant_closure_call,
+            reason = "the call's own answer, then its unkept item"
+        )]
+        let answer =
+            (|| -> Result<CommandProgress<'id, Self::Types, C>, PortCommandFailed<'id, Self>> {
+                // A faulted port keeps no command: it comes back beside the fault.
+                if let Err(fault) = self.check(ModelPortCall::Command) {
+                    return Err(CommandFailed::Returned { command, fault });
                 }
-                self.held_since = Some((kind, since));
-                CommandProgress::Held(command)
-            }
-            done => {
-                self.held_since = None;
-                done
-            }
-        };
-        self.refresh_deadline(now);
-        Ok(progress)
+                // A token of an earlier installation is refused for good, before
+                // the radio's own state is asked.
+                let named: Vec<u32> = station_generations(&command)
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                let installation = self.installation.generation();
+                if let Some(issued) = first_stale(installation, &named) {
+                    return Ok(CommandProgress::Refused(
+                        command,
+                        CommandRefusal::StalePermission {
+                            issued,
+                            installation,
+                        },
+                    ));
+                }
+                if self.radio != Radio::Running {
+                    return Ok(CommandProgress::Refused(
+                        command,
+                        CommandRefusal::NotEnabled,
+                    ));
+                }
+                let air = self.air.clone();
+                let _turn = Turn::at(&air, now);
+                let kind = command.kind();
+                if self.held_since.is_none_or(|(held, _)| held != kind) {
+                    self.held_key = match &command {
+                        PortCommand::RemovePairwise { key, .. } => Some(HeldKey::of(&key.identity)),
+                        PortCommand::RemoveGroup { key, .. } => Some(HeldKey::of(&key.identity)),
+                        _ => None,
+                    };
+                }
+                let progress = self.run(command, now);
+                self.drain(sink);
+                if let Err(fault) = self.check(ModelPortCall::Command) {
+                    return Err(match progress {
+                        CommandProgress::Held(command) | CommandProgress::Refused(command, _) => {
+                            CommandFailed::Returned { command, fault }
+                        }
+                        CommandProgress::Done => CommandFailed::Taken(fault),
+                    });
+                }
+                let progress = match progress {
+                    CommandProgress::Held(command) => {
+                        let since = match self.held_since {
+                            Some((held, since)) if held == kind => since,
+                            _ => now,
+                        };
+                        if now.saturating_duration_since(since) >= MODEL_HELD_COMMAND_BOUND {
+                            // It did not run: what its hold began is undone.
+                            self.held_since = None;
+                            if let Some(key) = self.held_key.take() {
+                                key.restore();
+                            }
+                            if kind == CommandKind::Configure {
+                                self.held.configuring_station.set(false);
+                            }
+                            self.refresh_deadline(now);
+                            return Ok(CommandProgress::Refused(command, CommandRefusal::Expired));
+                        }
+                        self.held_since = Some((kind, since));
+                        CommandProgress::Held(command)
+                    }
+                    done => {
+                        self.held_since = None;
+                        self.held_key = None;
+                        done
+                    }
+                };
+                self.refresh_deadline(now);
+                Ok(progress)
+            })();
+        self.answer(answer)
     }
 
     fn poll_start(
@@ -1702,6 +1964,24 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal() {
             return Poll::Ready(Err(StartRefused::Device));
         }
+        if self.air.take_unstopped_enable() {
+            // The MAC began the start: its stop begins now and goes on in
+            // `poll_stop`.
+            self.air
+                .disables
+                .set(self.air.disables.get().saturating_add(1));
+            self.radio = Radio::Stopping { since: now };
+            self.refresh_deadline(now);
+            // The MAC the start enabled is still on: the stop is not done
+            // yet, and no fault names it.
+            return Poll::Ready(Err(StartRefused::Unstopped {
+                cause: StartFailure::Device,
+                stop: StopUnconfirmed {
+                    cause: StopCause::CoreEnabled,
+                    observations: self.stop_observations(),
+                },
+            }));
+        }
         self.channel = channel.channel();
         self.radio = Radio::Running;
         self.refresh_deadline(now);
@@ -1712,10 +1992,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed>> {
-        if self.check(ModelPortCall::Stop).is_err() {
+    ) -> Poll<Result<(), StopUnconfirmed<ModelPortFault>>> {
+        if let Err(fault) = self.check(ModelPortCall::Stop) {
             return Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device,
+                cause: StopCause::Device(fault),
                 observations: self.stop_observations(),
             }));
         }
@@ -1728,7 +2008,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 // A stopping port refuses the held command back to its
                 // caller: its bound runs again from its next admission.
                 self.held_since = None;
+                self.held_key = None;
                 self.access_point_held_since = None;
+                self.access_point_held_key = None;
                 now
             }
             Radio::Stopping { since } => since,
@@ -1738,9 +2020,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let _turn = Turn::at(&air, now);
         self.held.draining.set(true);
         self.driver.publish(&self.held);
-        if self.idle() && self.held.events.is_empty() {
+        if self.idle() && self.held.events.is_empty() && !self.air.stop_held.get() {
             self.held.draining.set(false);
             self.radio = Radio::Stopped;
+            self.air.stop_confirmed();
             // The stopped MAC receives for no interface and runs no TSF.
             self.air
                 .access_point
