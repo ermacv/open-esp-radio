@@ -374,6 +374,10 @@ impl<X: ExecutionContext, const RX_QUEUE_DEPTH: usize, T: NetTransmit<Frame = Ow
         OwnedNetworkDevice::can_transmit(self)
     }
 
+    // Kept out of the stack's own functions: the burst's wake stays a call
+    // of this function, which the image's stack analysis bounds through the
+    // waker's type, never a tail jump of the stack's code.
+    #[inline(never)]
     fn transmit(&mut self, packet: PacketBuf) -> Result<(), PacketBuf> {
         OwnedNetworkDevice::transmit(self, packet)
     }

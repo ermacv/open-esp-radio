@@ -14,9 +14,9 @@ oer-protocols-ieee80211-wire = { path = "../../../../../protocols/ieee80211/wire
 oer-protocols-ieee80211-core-upper-mac = { path = "../../../../../protocols/ieee80211/core/upper-mac" }
 oer-protocols-network-wire = { path = "../../../../../protocols/network/wire" }
 oer-portable-time = { path = "../../../../../portable/time" }
+oer-portable-wire = { path = "../../../../../portable/wire" }
 
 [dev-dependencies]
-oer-portable-wire = { path = "../../../../../portable/wire" }
 oer-chips-esp32s31-radio-ieee80211-backend = { path = "../../../../esp32s31/radio/ieee80211/backend", features = ["test-support"] }
 oer-tools-test-ui-cases = { path = "../../../../../tools/test/ui-cases" }
 

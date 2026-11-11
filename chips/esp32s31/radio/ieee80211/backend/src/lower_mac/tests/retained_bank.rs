@@ -221,3 +221,35 @@ fn a_configuring_view_returns_to_its_own_gate_frontier() {
         assert!(matches!(bank.view(), CoreView::Disabled(_)));
     });
 }
+
+#[test]
+fn a_disabled_bank_stays_in_place_while_a_removal_receipt_waits() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut fixture = core(pools);
+        static KEY: [u8; 16] = [0x5a; 16];
+        let key = fixture
+            .install_key(
+                &mut hardware,
+                TransmitKeyScope::StationPairwise { peer: BSSID },
+                &KEY,
+            )
+            .unwrap();
+        let mut refusing = Events {
+            refuse_removals: 1,
+            ..Events::default()
+        };
+        fixture.remove_key_for_test(&mut hardware, key, &mut refusing);
+        assert!(refusing.removed.is_empty());
+        // The receipt keeps the bank in place: it does not end with it.
+        assert_eq!(
+            fixture.inner.0.dismantle().err(),
+            Some(CoreRetained::Results)
+        );
+        let mut events = Events::default();
+        fixture.offer_kept(&mut events);
+        assert_eq!(events.removed.len(), 1);
+        assert_eq!(hardware.cleared_keys, [4]);
+        assert!(fixture.inner.0.dismantle().is_ok());
+    });
+}

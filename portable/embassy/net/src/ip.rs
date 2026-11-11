@@ -202,6 +202,39 @@ pub struct Resources<
     state: State,
 }
 
+/// A pool of `N` packets in its own memory: the general allocator of a
+/// stack whose device's transmit half copies each frame it takes, so a sent
+/// packet's memory returns to this pool at once.
+pub struct GeneralPool<const N: usize> {
+    storage: PacketPoolStorage<N>,
+    pool: Option<PacketPool<N>>,
+}
+
+impl<const N: usize> GeneralPool<N> {
+    pub const fn new() -> Self {
+        Self {
+            storage: PacketPoolStorage::new(),
+            pool: None,
+        }
+    }
+
+    /// The pool's allocator, made once from its placed storage.
+    pub fn allocator(&'static mut self) -> PacketBufAllocator {
+        let Self { storage, pool } = self;
+        let pool: &'static PacketPool<N> = match pool {
+            Some(pool) => pool,
+            None => pool.insert(PacketPool::new(storage)),
+        };
+        pool.allocator()
+    }
+}
+
+impl<const N: usize> Default for GeneralPool<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<
     X: ExecutionContext + 'static,
     const RX: usize,

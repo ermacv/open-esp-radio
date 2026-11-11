@@ -22,7 +22,9 @@ use std::vec::Vec;
 
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
 use oer_portable_events::EventSink;
-use oer_portable_memory::{SlotReceiver, SlotSender, WakingSlotQueue, WakingSpscQueue};
+use oer_portable_memory::{
+    ClosingSpscQueue, SlotReceiver, SlotSender, WakingSlotQueue, WakingSpscQueue,
+};
 use oer_portable_time::Duration;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::ReturnedMpdu;
@@ -1006,14 +1008,14 @@ fn pair_with<const G: usize>(
         let network_side = Network {
             absent: network_absent.clone(),
         };
-        let mut to_queue = WakingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
-        let mut parcel_queue = WakingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
-        let mut from_queue = WakingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
-        let mut return_queue = WakingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
-        let mut link_queue = WakingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
+        let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
+        let mut parcel_queue = ClosingSpscQueue::<Parcel<'_, P<'_>>, ACTOR_PARCELS>::new();
+        let mut from_queue = ClosingSpscQueue::<FromActor<'_, P<'_>>, FROM>::new();
+        let mut return_queue = ClosingSpscQueue::<Returned<'_, P<'_>>, RETURNS>::new();
+        let mut link_queue = ClosingSpscQueue::<ActorLink<'_, P<'_>>, 1>::new();
         let mut group_queue =
-            WakingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
-        let mut link_return_queue = WakingSpscQueue::<LinkReturn, 1>::new();
+            ClosingSpscQueue::<GroupPending<'_, ActorEpochPath<'_, P<'_>>>, 1>::new();
+        let mut link_return_queue = ClosingSpscQueue::<LinkReturn, 1>::new();
         let mut transmit_queue = WakingSlotQueue::<Option<Outgoing<Memory>>, TX_DEPTH>::new();
         let mut returned_queue =
             WakingSlotQueue::<Option<crate::station::TxEnded<Memory>>, TX_DEPTH>::new();
