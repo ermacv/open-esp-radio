@@ -61,6 +61,12 @@ const PEER_IP: [u8; 4] = [192, 0, 2, 2];
 /// The wire between the stack and the test, which plays the peer.
 #[derive(Default)]
 struct Wire {
+    /// Calls a scenario counts: frames and notices taken, empty or not, and registrations.
+    takes: u64,
+    empty_takes: u64,
+    notice_takes: u64,
+    empty_notices: u64,
+    registers: u64,
     incoming: VecDeque<Vec<u8>>,
     sent: Vec<Vec<u8>>,
     full: bool,
@@ -199,7 +205,13 @@ impl FrameSource for WirePort {
     type Held = WireHeld;
 
     fn take_notice(&mut self) -> Option<u32> {
-        self.0.borrow_mut().ended.pop_front()
+        let mut wire = self.0.borrow_mut();
+        wire.notice_takes += 1;
+        let notice = wire.ended.pop_front();
+        if notice.is_none() {
+            wire.empty_notices += 1;
+        }
+        notice
     }
 
     fn take_frame(
@@ -208,7 +220,9 @@ impl FrameSource for WirePort {
     ) -> Taken<WireHeld> {
         let (frame, holding, out) = {
             let mut wire = self.0.borrow_mut();
+            wire.takes += 1;
             let Some(frame) = wire.incoming.pop_front() else {
+                wire.empty_takes += 1;
                 return Taken::Empty;
             };
             let holding = wire.holding.unwrap_or(Holding::Copied(CopyReason::Format));
@@ -234,6 +248,7 @@ impl FrameSource for WirePort {
     fn register(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
+        wire.registers += 1;
         oer_protocols_network_port::PortReady {
             frames: !wire.incoming.is_empty(),
             notices: !wire.ended.is_empty(),
@@ -3152,6 +3167,7 @@ mod paced;
 mod plan;
 mod probe;
 mod reserve;
+mod rx_load;
 mod turns;
 
 #[test]
