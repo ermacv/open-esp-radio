@@ -41,12 +41,6 @@ pub(crate) const TURN_FRAMES: usize = 8;
 /// turn publishes again. A notice is one settlement of one frame, so this
 /// bounds the turn's work as [`TURN_FRAMES`] does.
 pub(crate) const TURN_NOTICES: usize = 64;
-/// Packet turns in a row at most: a turn that only moves frames, with no
-/// control work pending, takes the next one without the control steps, and
-/// the control steps run again after this many. It bounds how long a socket's
-/// command, a return of lent memory or a block's eviction waits behind
-/// frames that are always ready, as [`TURN_FRAMES`] bounds a turn.
-pub(crate) const PACKET_TURNS: usize = 4;
 
 /// The egress with no policy: the first ready work goes, no account is kept and
 /// a completion says nothing. Its plan is the list's own turns: control first,
@@ -965,8 +959,8 @@ impl<
         clock: &T,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> EndCause {
-        // Packet turns since the last full one, while only frames are left.
-        let mut packet_turns = None::<usize>;
+        // Whether the last turn left only frames.
+        let mut only_frames = false;
         loop {
             if let Some(cause) = self.ended {
                 return cause;
@@ -976,16 +970,13 @@ impl<
                 continue;
             }
             let now = clock.now();
-            let kind = match packet_turns {
-                Some(taken) if taken < PACKET_TURNS && !self.control_pending(now) => Turn::Packets,
-                _ => Turn::Full,
+            let kind = if only_frames && !self.control_pending(now) {
+                Turn::Packets
+            } else {
+                Turn::Full
             };
             let turned = self.turn(now, kind, events);
-            packet_turns = match (turned.packets, kind) {
-                (false, _) => None,
-                (true, Turn::Full) => Some(0),
-                (true, Turn::Packets) => packet_turns.map(|taken| taken.saturating_add(1)),
-            };
+            only_frames = turned.packets;
             if self.owner.port_broken() {
                 self.ended = Some(EndCause::PortContract);
             } else if self.fault.is_some() {
@@ -1114,9 +1105,13 @@ impl<
         }
     }
 
-    /// Whether control work is pending that a packet turn would leave: a
-    /// socket's request or abandon, a due time of the core, the producer or
-    /// the pool's pressure. Read from each source's own head, once a turn.
+    /// Whether control work is pending that a packet turn would leave, each
+    /// a step only the full turn takes: a socket's request or abandon (its
+    /// commands), a due time of the core, the producer or the pool's
+    /// pressure (the tick, the offers' deadline, the eviction's age), a
+    /// socket owed a block (its grant, or with none free its eviction) and
+    /// a configuration not yet published. Read from each source's own head,
+    /// once a turn.
     fn control_pending(&self, now: Instant) -> bool {
         let due = [
             self.owner.poll_deadline(),
@@ -1126,11 +1121,14 @@ impl<
         .into_iter()
         .flatten()
         .any(|at| at <= now);
-        due || self
-            .bound
-            .iter()
-            .flatten()
-            .any(|bound| !bound.end.requests.is_empty() || !bound.end.abandon.is_empty())
+        let unpublished = self
+            .watch
+            .as_ref()
+            .is_some_and(|watching| watching.seen != self.owner.configuration_changes());
+        due || unpublished
+            || self.bound.iter().flatten().any(|bound| {
+                bound.waiting() || !bound.end.requests.is_empty() || !bound.end.abandon.is_empty()
+            })
     }
 
     /// The lent buffers back with their port whose loans the service has not

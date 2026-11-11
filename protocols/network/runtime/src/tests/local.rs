@@ -2072,11 +2072,11 @@ fn turn_kinds(events: &[ServiceEvent]) -> Vec<(bool, usize)> {
     turns
 }
 
-/// Frames that are always ready move in packet turns, which leave the
-/// control steps out, at most `PACKET_TURNS` in a row; a full turn comes
-/// between them.
+/// Frames that are always ready, with no control work pending, move in
+/// packet turns only: after the first turn, which found the frames, no full
+/// turn comes until control work does.
 #[test]
-fn frames_always_ready_take_packet_turns_with_a_full_turn_between() {
+fn frames_always_ready_take_packet_turns_until_control_work_comes() {
     brand!(Net);
     let Bench {
         mut service,
@@ -2098,17 +2098,15 @@ fn frames_always_ready_take_packet_turns_with_a_full_turn_between() {
         }
     }
     let turns = turn_kinds(&tape.0.borrow());
-    let packets = turns.iter().filter(|turn| turn.0).count();
-    assert!(packets > 0, "frames always ready take packet turns");
-    let mut in_a_row = 0;
-    for turn in &turns {
-        in_a_row = if turn.0 { in_a_row + 1 } else { 0 };
-        assert!(
-            in_a_row <= crate::service::PACKET_TURNS,
-            "a full turn comes after {} packet turns",
-            crate::service::PACKET_TURNS
-        );
-    }
+    let (first, rest) = turns.split_first().unwrap();
+    assert!(!first.0, "the first turn is whole");
+    let packets = rest.iter().take_while(|turn| turn.0).count();
+    assert!(packets > 1, "frames always ready take packet turns");
+    let last = rest.iter().rposition(|turn| turn.0).unwrap();
+    assert!(
+        rest[..last].iter().all(|turn| turn.0),
+        "no full turn without control work while frames are ready"
+    );
     assert_eq!(script.filled(), 200, "every frame went, each once");
 }
 
@@ -2152,4 +2150,41 @@ fn a_command_while_frames_are_always_ready_takes_the_next_turn_whole() {
         Some((false, 1)),
         "the next turn is whole and takes the request"
     );
+}
+
+/// A socket owed a block is control work: while it waits, every turn is
+/// whole, so the grant of a block freed meanwhile, or with none free the
+/// eviction, comes at the next turn though frames are always ready.
+#[test]
+fn a_socket_owed_a_block_keeps_every_turn_whole() {
+    brand!(Net);
+    let Bench {
+        mut service,
+        mut socket,
+        script,
+        clock,
+        line,
+        ..
+    } = direct::<Net>();
+    let tape = Tape::default();
+    let mut events = tape.clone();
+    let cx = &mut Context::from_waker(Waker::noop());
+    let mut run = pin!(service.run(clock, &mut events));
+    // Every block the socket's: the next reserve waits.
+    let held = blocks(&mut socket, &mut run, BLOCKS);
+    let mut reserve = pin!(socket.reserve());
+    assert!(reserve.as_mut().poll(cx).is_pending(), "no block is free");
+    for index in 0..64 {
+        script.push(tag(0, index), broadcast(), 40);
+    }
+    let before = turn_kinds(&tape.0.borrow()).len();
+    while line.sent() < 64 {
+        assert!(poll(&mut run, cx).is_pending());
+    }
+    let turns = turn_kinds(&tape.0.borrow());
+    assert!(
+        turns[before..].iter().all(|turn| !turn.0),
+        "no packet turn while the socket is owed a block"
+    );
+    drop(held);
 }
