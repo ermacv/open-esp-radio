@@ -252,26 +252,60 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
     /// command goes on the ended chain only from a running one, so its end
     /// is told once.
     fn set(&mut self, number: u8, run: Run<'m, B, SIZE, T>) -> Option<Run<'m, B, SIZE, T>> {
-        let close = usize::from(number) == CREDITS;
+        let to = self.chain_for(number, &run)?;
         let place = self.get_mut(number)?;
+        let old = core::mem::replace(&mut place.run, run);
+        self.relink(number, to);
+        Some(old)
+    }
+
+    /// [`Self::set`] where the place's state before holds no block (it is
+    /// free, declared or a result): the new state is written in place and
+    /// nothing of the old is moved out. A sending command's end, whose block
+    /// goes back to the pool, takes [`Self::set`].
+    fn put(&mut self, number: u8, run: Run<'m, B, SIZE, T>) {
+        let Some(to) = self.chain_for(number, &run) else {
+            return;
+        };
+        if let Some(place) = self.get_mut(number) {
+            place.run = run;
+        }
+        self.relink(number, to);
+    }
+
+    /// Free `number`, whose state holds no block, as [`Self::free`] does.
+    fn free_unsent(&mut self, number: u8) {
+        self.put(number, Run::Free);
+        if let Some(place) = self.get_mut(number) {
+            place.serial = 0;
+        }
+    }
+
+    /// The chain `number` goes on with `run`, as the place stands now:
+    /// `None` names no such place; `Some(None)` no chain.
+    fn chain_for(&self, number: u8, run: &Run<'m, B, SIZE, T>) -> Option<Option<Chain>> {
+        let close = usize::from(number) == CREDITS;
+        let place = self.get(number)?;
         let was_running = place.run.running();
-        let to = match &run {
+        Some(match run {
             Run::Free if close => None,
             Run::Free => Some(Chain::Free),
             Run::Sending(_) | Run::Declared(_) => Some(Chain::Running),
             Run::Finished(_) | Run::Ended { .. } if was_running || close => Some(Chain::Ended),
             // Told already, or never told: its chain stays.
             Run::Finished(_) | Run::Ended { .. } => place.on,
-        };
-        let old = core::mem::replace(&mut place.run, run);
-        let on = place.on;
+        })
+    }
+
+    /// Put `number` on `to`, off the chain it was on.
+    fn relink(&mut self, number: u8, to: Option<Chain>) {
+        let on = self.get(number).and_then(|place| place.on);
         if on != to {
             self.unlink(number);
             if let Some(chain) = to {
                 self.push(chain, number);
             }
         }
-        Some(old)
     }
 
     /// The number of a free place, which [`Self::start`] takes next.
@@ -297,7 +331,8 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         };
         place.observed = true;
         place.serial = serial;
-        let _free = self.set(number, run);
+        // The place was free: nothing of it is moved out.
+        self.put(number, run);
         true
     }
 
@@ -326,7 +361,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
             return false;
         };
         let protected = declared.hop.is_some();
-        let _declared = self.finish(number, outcome);
+        self.finish_unsent(number, outcome);
         protected
     }
 
@@ -354,7 +389,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         let protected = self
             .get(number)
             .is_some_and(|place| place.run.hop().is_some());
-        let _declared = self.free(number);
+        self.free_unsent(number);
         (protected, Some(tag))
     }
 
@@ -400,6 +435,26 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         } else {
             self.free(number)
         }
+    }
+
+    /// [`Self::finish`] of a command whose state holds no block: a declared
+    /// work's result keeps its tag, and nothing is moved out.
+    fn finish_unsent(&mut self, number: u8, outcome: Outcome) {
+        let Some(place) = self.get(number) else {
+            return;
+        };
+        if !place.observed {
+            self.free_unsent(number);
+            return;
+        }
+        let result = match &place.run {
+            Run::Declared(declared) => Run::Ended {
+                outcome,
+                tag: declared.tag,
+            },
+            _ => Run::Finished(outcome),
+        };
+        self.put(number, result);
     }
 
     fn free(&mut self, number: u8) -> Option<Run<'m, B, SIZE, T>> {
@@ -449,7 +504,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         let number = u8::try_from(CREDITS).unwrap_or(u8::MAX);
         self.close.observed = true;
         self.close.serial = serial;
-        let _free = self.set(number, Run::Finished(Outcome::SocketClosed));
+        self.put(number, Run::Finished(Outcome::SocketClosed));
     }
 
     /// The result of `serial`'s command in `number`, once it ended: the
@@ -459,7 +514,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         let Some(outcome) = place.run.outcome() else {
             return Some(None);
         };
-        let _finished = self.free(number);
+        self.free_unsent(number);
         Some(Some(outcome))
     }
 
@@ -471,7 +526,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
         };
         place.observed = false;
         if place.run.outcome().is_some() {
-            let _finished = self.free(number);
+            self.free_unsent(number);
         }
     }
 
@@ -495,7 +550,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, T: Copy> Places<'m, B, SIZE
                 continue;
             };
             if let Run::Ended { outcome, tag } = place.run {
-                let _finished = self.free(number);
+                self.free_unsent(number);
                 return Some((number, serial, outcome, tag));
             }
         }
