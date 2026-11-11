@@ -107,7 +107,7 @@ pub enum Running {}
 /// prevent release through another pool, context or installation.
 #[must_use = "retain the session until its next command or normal disable"]
 pub struct Session<'p, P: PoolPath, State> {
-    slot: Slot<'p, DtmSessionKind, Child<P, 1>>,
+    slot: Slot<'p, oer_protocols_radio_port::Slots<DtmSessionKind, 1>, Child<P, 1>>,
     epoch: u64,
     state: PhantomData<State>,
 }

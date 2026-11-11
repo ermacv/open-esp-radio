@@ -35,6 +35,7 @@ impl DiagnosticPath for BackendFault {
                     UnpublishedCause::CoreView => "CoreView",
                     UnpublishedCause::Admission => "Admission",
                     UnpublishedCause::Key => "Key",
+                    UnpublishedCause::Registers => "Registers",
                     UnpublishedCause::Step(step) => publish_step(step),
                 });
             }
@@ -63,6 +64,7 @@ impl DiagnosticPath for BackendFault {
                 }
             }
             Self::TuneNotRecorded => path.name("TuneNotRecorded"),
+            Self::RightLost => path.name("RightLost"),
             Self::HardwareUnavailable => path.name("HardwareUnavailable"),
             Self::CoreViewUnavailable(op) => {
                 path.name("CoreViewUnavailable");
@@ -79,9 +81,6 @@ impl DiagnosticPath for BackendFault {
                 queue_fault(path, "Publish", *queue);
                 path.name(publish_step(step));
             }
-            Self::DuplicateCompletion { queue } => queue_fault(path, "DuplicateCompletion", *queue),
-            Self::RemovalOverflow => path.name("RemovalOverflow"),
-            Self::RemovalMissing => path.name("RemovalMissing"),
             Self::RemovalMismatch => path.name("RemovalMismatch"),
             Self::GroupKeyIdRange => path.name("GroupKeyIdRange"),
             Self::ConfigurationRefused => path.name("ConfigurationRefused"),
@@ -94,7 +93,6 @@ impl DiagnosticPath for BackendFault {
             Self::ReceiveOverflow => path.name("ReceiveOverflow"),
             Self::ReceiveRange => path.name("ReceiveRange"),
             Self::ReceiveLost => path.name("ReceiveLost"),
-            Self::ArenaCoreContract => path.name("ArenaCoreContract"),
             Self::InstallationResources => path.name("InstallationResources"),
             Self::EdcaUnsupported => path.name("EdcaUnsupported"),
             Self::ChannelNotPermitted => path.name("ChannelNotPermitted"),
@@ -109,28 +107,62 @@ impl DiagnosticPath for BackendFault {
                 });
             }
             Self::ReceiveAccounting => path.name("ReceiveAccounting"),
-            Self::CommandExpired(kind) => {
-                path.name("CommandExpired");
-                path.name(match kind {
-                    PortCommandKind::InstallPairwise => "InstallPairwise",
-                    PortCommandKind::InstallGroup => "InstallGroup",
-                    PortCommandKind::ReplaceGroup => "ReplaceGroup",
-                    PortCommandKind::SelectGroup => "SelectGroup",
-                    PortCommandKind::RemovePairwise => "RemovePairwise",
-                    PortCommandKind::RemoveGroup => "RemoveGroup",
-                    PortCommandKind::Configure => "Configure",
-                    PortCommandKind::CloseGate => "CloseGate",
-                    PortCommandKind::SetEdca => "SetEdca",
-                    PortCommandKind::SetBssColor => "SetBssColor",
-                    PortCommandKind::SetHe => "SetHe",
-                });
-            }
             Self::HeAssociationRange => path.name("HeAssociationRange"),
+            Self::GroupReplacement(ended) => {
+                path.name("GroupReplacement");
+                match ended {
+                    GroupReplacement::Refused => path.name("Refused"),
+                    GroupReplacement::RolledBack(cause) => {
+                        path.name("RolledBack");
+                        path.name(crypto_key_error_name(*cause));
+                    }
+                    GroupReplacement::RollbackFailed {
+                        replacement,
+                        rollback,
+                    } => {
+                        path.name("RollbackFailed");
+                        path.name(crypto_key_error_name(*replacement));
+                        path.name(crypto_key_error_name(*rollback));
+                    }
+                }
+            }
+            Self::GroupEntryHeld => path.name("GroupEntryHeld"),
         }
     }
 }
 
+/// The name of a key table error.
+const fn crypto_key_error_name(error: CryptoKeyError) -> &'static str {
+    match error {
+        CryptoKeyError::InvalidGroupKeyId => "InvalidGroupKeyId",
+        CryptoKeyError::InvalidAccessPointAssociationId => "InvalidAccessPointAssociationId",
+        CryptoKeyError::Occupied => "Occupied",
+        CryptoKeyError::HardwareRejected => "HardwareRejected",
+    }
+}
+
 /// A fault of one hardware queue: its name, then the queue.
+/// The path of a cleanup that did not finish: its kind, then the port's
+/// cause.
+fn cleanup_path(cause: CleanupCause, path: &mut DiagPath) {
+    match cause {
+        CleanupCause::NotStopped => path.name("NotStopped"),
+        CleanupCause::Faulted(fault) => {
+            path.name("Faulted");
+            fault.push_path(path);
+        }
+        CleanupCause::Unavailable(fault) => {
+            path.name("Unavailable");
+            fault.push_path(path);
+        }
+        CleanupCause::Held(fault) => {
+            path.name("Held");
+            fault.push_path(path);
+        }
+        CleanupCause::Unkept => path.name("Unkept"),
+    }
+}
+
 fn queue_fault(path: &mut DiagPath, name: &'static str, queue: u8) {
     path.name(name);
     path.word(u32::from(queue));
@@ -172,14 +204,7 @@ impl DiagnosticPath for LowerMacFault {
             Self::RxBlockAckReadback => path.name("RxBlockAckReadback"),
             Self::Key(error) => {
                 path.name("Key");
-                path.name(match error {
-                    CryptoKeyError::InvalidGroupKeyId => "InvalidGroupKeyId",
-                    CryptoKeyError::InvalidAccessPointAssociationId => {
-                        "InvalidAccessPointAssociationId"
-                    }
-                    CryptoKeyError::Occupied => "Occupied",
-                    CryptoKeyError::HardwareRejected => "HardwareRejected",
-                });
+                path.name(crypto_key_error_name(*error));
             }
             Self::RxBlockAck(error) => {
                 path.name("RxBlockAck");
@@ -375,6 +400,19 @@ impl DiagnosticPath for LifecycleFailure {
                     }
                     Refused::Deadline => path.name("Deadline"),
                     Refused::Device => path.name("Device"),
+                    Refused::Unstopped { cause, stop } => {
+                        use oer_protocols_ieee80211_contracts_port::StartFailure as Failure;
+                        path.name("Unstopped");
+                        match cause {
+                            Failure::Retune(cause) => {
+                                path.name("Retune");
+                                cause.push_path(path);
+                            }
+                            Failure::Deadline => path.name("Deadline"),
+                            Failure::Device => path.name("Device"),
+                        }
+                        stop_unconfirmed(stop, path);
+                    }
                 }
             }
             Self::StopUnconfirmed(observed) => {
@@ -406,6 +444,11 @@ impl DiagnosticPath for LifecycleFailure {
                 path.name("Actor");
                 path.name(actor_violation(*violation));
             }
+            // The counts are observations, outside the path's names.
+            Self::Receive(_) => {
+                path.name("Receive");
+                path.name("Recycle");
+            }
             Self::Contract(violation) => {
                 path.name("Contract");
                 path.name(lifecycle_violation(*violation));
@@ -424,19 +467,34 @@ impl DiagnosticPath for LifecycleFailure {
                     ReinstallCause::Receipt => "Receipt",
                     ReinstallCause::Resources => "Resources",
                     ReinstallCause::Epochs => "Epochs",
+                    ReinstallCause::Cleanup(_) => "Cleanup",
                 });
+                if let ReinstallCause::Cleanup(cause) = cause {
+                    cleanup_path(*cause, path);
+                }
             }
             Self::Mailbox => path.name("Mailbox"),
+            Self::Unkept => path.name("Unkept"),
+            Self::Unaccepted => path.name("Unaccepted"),
         }
     }
 }
 
-/// A port's unconfirmed stop: its cause, then what it still held.
+/// A port's unconfirmed stop: its cause (the device's fault by name), then
+/// what it still held.
 fn stop_unconfirmed(
-    unconfirmed: &oer_protocols_ieee80211_contracts_port::StopUnconfirmed,
+    unconfirmed: &oer_protocols_ieee80211_contracts_port::StopUnconfirmed<BackendFault>,
     path: &mut DiagPath,
 ) {
-    path.truncated();
+    use oer_protocols_ieee80211_contracts_port::StopCause;
+    match unconfirmed.cause {
+        StopCause::Deadline => path.name("Deadline"),
+        StopCause::Device(fault) => {
+            path.name("Device");
+            fault.push_path(path);
+        }
+        StopCause::CoreEnabled => path.name("CoreEnabled"),
+    }
     let observations = unconfirmed.observations;
     path.word(u32::from(observations.arena_on_air));
     path.word(u32::from(observations.published));
@@ -450,6 +508,7 @@ fn actor_violation(
     use oer_protocols_ieee80211_runtime::datapath::ActorViolation as V;
     match violation {
         V::OutboxFull => "OutboxFull",
+        V::LifecycleClosed => "LifecycleClosed",
         V::ArenaClaim => "ArenaClaim",
         V::ArenaCompletion => "ArenaCompletion",
         V::LinkMailbox => "LinkMailbox",
@@ -457,7 +516,6 @@ fn actor_violation(
         V::RetireRunning => "RetireRunning",
         V::LinkReturn => "LinkReturn",
         V::PairwiseCustody => "PairwiseCustody",
-        V::CutOverflow => "CutOverflow",
         V::ReorderOverflow => "ReorderOverflow",
     }
 }
@@ -470,6 +528,7 @@ fn lifecycle_violation(
         V::Returned(_) => "Returned",
         V::Missing => "Missing",
         V::QueueFull => "QueueFull",
+        V::ActorClosed => "ActorClosed",
         V::RetuneWithoutRequest => "RetuneWithoutRequest",
     }
 }

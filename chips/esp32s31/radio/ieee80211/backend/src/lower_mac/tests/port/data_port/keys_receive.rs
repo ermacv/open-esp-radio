@@ -6,6 +6,7 @@
 //! station's next publications.
 use super::*;
 use oer_portable_time::Duration;
+use oer_protocols_ieee80211_contracts_port::{CleanupRefused, CommandFailed};
 use oer_protocols_ieee80211_testing_conformance::group_keys::{
     self as group_cases, Event, Installation, Mutation, Timing,
 };
@@ -28,16 +29,27 @@ enum Seen<'id, Id: radio::SlotIdentity + 'id> {
 /// A sink that keeps cut units and terminals in one ordered list.
 struct Ordered<'id, Id: radio::SlotIdentity + 'id>(Vec<Seen<'id, Id>>);
 impl<'id, Id: radio::SlotIdentity + 'id> PortSink<'id, Family<Id>> for Ordered<'id, Id> {
-    fn terminal(&mut self, terminal: LowerMacTerminal<'id, Family<Id>>) {
+    fn terminal(
+        &mut self,
+        terminal: LowerMacTerminal<'id, Family<Id>>,
+    ) -> Result<(), LowerMacTerminal<'id, Family<Id>>> {
         self.0.push(Seen::Terminal(terminal));
+        Ok(())
     }
     fn tbtt(&mut self, _: TbttEvent) {}
     fn received(
         &mut self,
         frame: ReceiveBuffer<'id, Id, TestReceive>,
         _: crate::lower_mac::Esp32s31RxMeta,
-    ) {
+    ) -> Result<
+        (),
+        (
+            ReceiveBuffer<'id, Id, TestReceive>,
+            crate::lower_mac::Esp32s31RxMeta,
+        ),
+    > {
         self.0.push(Seen::Received(frame));
+        Ok(())
     }
 }
 
@@ -142,7 +154,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let mut command = command;
         for _ in 0..16 {
             let now = self.now();
-            match self.port.command(command, now, sink) {
+            match self.port.command(command, now, sink).unwrap() {
                 Ok(CommandProgress::Held(held)) => command = held,
                 Ok(other) => return other,
                 Err(fault) => panic!("the command faulted: {fault:?}"),
@@ -301,7 +313,7 @@ fn the_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
                         } else {
                             Event::NewRx
                         });
-                        fixture.port.recycle(frame);
+                        assert!(fixture.port.recycle(frame).is_ok());
                     }
                     Seen::Terminal(
                         LowerMacTerminal::GroupKeyReplaced { key, permission }
@@ -341,7 +353,7 @@ fn the_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
                     inactive_accepted = true;
                     events.push(Event::OldRx);
                 }
-                fixture.port.recycle(frame);
+                assert!(fixture.port.recycle(frame).is_ok());
             }
             assert_eq!(
                 fixture.observed.borrow().undecryptable,
@@ -381,6 +393,7 @@ fn a_gtk_mutation_behind_a_published_frame_outlasts_its_bound_while_the_frame_ho
         fixture
             .port
             .submit(attempt, now, &mut fixture.outbox)
+            .unwrap()
             .ok()
             .expect("published");
         let configure = DataPortHarness::configure(fixture).expect("permission");
@@ -389,11 +402,16 @@ fn a_gtk_mutation_behind_a_published_frame_outlasts_its_bound_while_the_frame_ho
             fixture
                 .port
                 .command(configure, now, &mut fixture.outbox)
+                .unwrap()
                 .is_ok()
         );
         for _ in 0..6 {
             let now = fixture.now();
-            match fixture.port.command(command, now, &mut fixture.outbox) {
+            match fixture
+                .port
+                .command(command, now, &mut fixture.outbox)
+                .unwrap()
+            {
                 Ok(CommandProgress::Held(held)) => command = held,
                 other => panic!("the frame holds the mutation: {:?}", other.is_ok()),
             }
@@ -412,14 +430,22 @@ fn a_gtk_mutation_held_at_its_cut_comes_back_refused_by_a_stopped_port_and_runs_
             let cuts = fixture.observed.borrow().resumed_cuts;
             fixture.observed.borrow_mut().hold_cut = true;
             let now = fixture.now();
-            let held = match fixture.port.command(command, now, &mut fixture.outbox) {
+            let held = match fixture
+                .port
+                .command(command, now, &mut fixture.outbox)
+                .unwrap()
+            {
                 Ok(CommandProgress::Held(held)) => held,
                 _ => panic!("{mutation:?}: the cut holds the mutation"),
             };
             fixture.stop();
             // The stopped port returns the command and its owners unchanged.
             let now = fixture.now();
-            let refused = match fixture.port.command(held, now, &mut fixture.outbox) {
+            let refused = match fixture
+                .port
+                .command(held, now, &mut fixture.outbox)
+                .unwrap()
+            {
                 Ok(CommandProgress::Refused(refused, CommandRefusal::NotEnabled)) => refused,
                 _ => panic!("{mutation:?}: a stopped port refuses the held mutation"),
             };
@@ -454,7 +480,11 @@ fn a_gtk_mutation_waits_for_units_the_network_holds_past_its_bound() {
             observed.cut_by_units = true;
         }
         let now = fixture.now();
-        let mut held = match fixture.port.command(command, now, &mut fixture.outbox) {
+        let mut held = match fixture
+            .port
+            .command(command, now, &mut fixture.outbox)
+            .unwrap()
+        {
             Ok(CommandProgress::Held(held)) => held,
             _ => panic!("the cut holds the mutation"),
         };
@@ -462,7 +492,11 @@ fn a_gtk_mutation_waits_for_units_the_network_holds_past_its_bound() {
         for _ in 0..3 {
             fixture.advance(Duration::from_micros(COMMAND_BOUND.as_micros() - 1000));
             let now = fixture.now();
-            held = match fixture.port.command(held, now, &mut fixture.outbox) {
+            held = match fixture
+                .port
+                .command(held, now, &mut fixture.outbox)
+                .unwrap()
+            {
                 Ok(CommandProgress::Held(held)) => held,
                 _ => panic!("the units decide: {:?}", fixture.port.fault()),
             };
@@ -487,8 +521,6 @@ fn a_fault_that_took_owners_keeps_the_port_quarantined() {
         fixture.start();
         // Each of these left a site with an owner in its hands.
         for fault in [
-            Fault::RemovalOverflow,
-            Fault::RemovalMissing,
             Fault::RemovalMismatch,
             Fault::ReceiveAccounting,
             Fault::KeySlotMissing(crate::port::KeyOp::Remove),
@@ -524,13 +556,21 @@ fn a_gtk_mutation_refused_by_a_stop_measures_its_bound_from_the_restart() {
         let (command, owners) = fixture.group_command(Mutation::Replace);
         fixture.observed.borrow_mut().hold_cut = true;
         let now = fixture.now();
-        let held = match fixture.port.command(command, now, &mut fixture.outbox) {
+        let held = match fixture
+            .port
+            .command(command, now, &mut fixture.outbox)
+            .unwrap()
+        {
             Ok(CommandProgress::Held(held)) => held,
             _ => panic!("the cut holds the mutation"),
         };
         fixture.stop();
         let now = fixture.now();
-        let refused = match fixture.port.command(held, now, &mut fixture.outbox) {
+        let refused = match fixture
+            .port
+            .command(held, now, &mut fixture.outbox)
+            .unwrap()
+        {
             Ok(CommandProgress::Refused(refused, CommandRefusal::NotEnabled)) => refused,
             _ => panic!("a stopped port refuses the held mutation"),
         };
@@ -559,13 +599,21 @@ fn a_gtk_mutation_refused_by_a_stop_leaves_no_hold_on_single_mpdus_after_the_res
             let (command, _) = fixture.group_command(mutation);
             fixture.observed.borrow_mut().hold_cut = true;
             let now = fixture.now();
-            let held = match fixture.port.command(command, now, &mut fixture.outbox) {
+            let held = match fixture
+                .port
+                .command(command, now, &mut fixture.outbox)
+                .unwrap()
+            {
                 Ok(CommandProgress::Held(held)) => held,
                 _ => panic!("{mutation:?}: the cut holds the mutation"),
             };
             fixture.stop();
             let now = fixture.now();
-            let refused = match fixture.port.command(held, now, &mut fixture.outbox) {
+            let refused = match fixture
+                .port
+                .command(held, now, &mut fixture.outbox)
+                .unwrap()
+            {
                 Ok(CommandProgress::Refused(refused, CommandRefusal::NotEnabled)) => refused,
                 _ => panic!("{mutation:?}: a stopped port refuses the held mutation"),
             };
@@ -580,6 +628,7 @@ fn a_gtk_mutation_refused_by_a_stop_leaves_no_hold_on_single_mpdus_after_the_res
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
+                .unwrap()
                 .unwrap_or_else(|_| panic!("{mutation:?}: submitted"));
             // The device reports its publications at the next turn's facts.
             let _ = fixture.turn();
@@ -596,14 +645,13 @@ fn a_gtk_mutation_refused_by_a_stop_leaves_no_hold_on_single_mpdus_after_the_res
 }
 
 #[test]
-fn every_stalled_gtk_mutation_expires_on_its_own_deadline_into_its_named_fault() {
+fn every_stalled_gtk_mutation_is_refused_expired_at_its_own_deadline_and_runs_again_later() {
     // An installation's expiry is checked beside the cut-held installation
     // in data_port.rs; these are the mutations of an installed key.
     for mutation in [Mutation::Replace, Mutation::Select, Mutation::Remove] {
         with_fixture(|fixture| {
             fixture.start();
             let (command, _) = fixture.group_command(mutation);
-            let fault = Fault::CommandExpired(command.kind());
             let cuts = fixture.observed.borrow().resumed_cuts;
             fixture.observed.borrow_mut().hold_cut = true;
             let admitted = fixture.now();
@@ -611,24 +659,34 @@ fn every_stalled_gtk_mutation_expires_on_its_own_deadline_into_its_named_fault()
             let mut command = command;
             for _ in 0..100_000 {
                 let now = fixture.now();
-                match fixture.port.command(command, now, &mut fixture.outbox) {
+                match fixture
+                    .port
+                    .command(command, now, &mut fixture.outbox)
+                    .unwrap()
+                {
                     Ok(CommandProgress::Held(held)) => command = held,
-                    Err(found) => {
-                        assert_eq!(found, fault, "{mutation:?}");
+                    Ok(CommandProgress::Refused(refused, CommandRefusal::Expired)) => {
                         assert_eq!(now, bound, "{mutation:?}: expired at its own bound");
-                        assert_eq!(fixture.port.fault(), Some(fault));
+                        assert_eq!(fixture.port.fault(), None, "{mutation:?}");
                         assert!(fixture.group_terminals().is_empty(), "{mutation:?}");
+                        // The cut it polled ended; nothing resumed it as a
+                        // finished mutation.
+                        assert_eq!(fixture.observed.borrow().abandoned_cuts, 1);
                         assert_eq!(fixture.observed.borrow().resumed_cuts, cuts);
-                        // Every later call answers with the same fault.
+                        assert_eq!(fixture.port.deadline(), None, "{mutation:?}");
+                        // The port runs on, and the key is still installed:
+                        // the same command runs once the cut passes.
+                        fixture.observed.borrow_mut().hold_cut = false;
                         assert!(
-                            matches!(fixture.port.receive(4, now), Err(found) if found == fault)
+                            matches!(fixture.run(refused), Ok(CommandProgress::Done)),
+                            "{mutation:?}: the refused command runs again"
                         );
-                        assert!(matches!(
-                            fixture.port.service_tx(TxFacts::DUE, false, now, &mut fixture.outbox),
-                            Err(found) if found == fault
-                        ));
+                        assert_eq!(fixture.group_terminals().len(), 1, "{mutation:?}");
+                        fixture.stop();
+                        assert_eq!(fixture.port.fault(), None, "{mutation:?}");
                         return;
                     }
+                    Err(fault) => panic!("{mutation:?}: {fault:?}"),
                     Ok(_) => panic!("{mutation:?}: the cut holds the mutation"),
                 }
                 // The caller follows the port's deadline, which the held
@@ -646,56 +704,324 @@ fn every_stalled_gtk_mutation_expires_on_its_own_deadline_into_its_named_fault()
     }
 }
 
-#[test]
-fn a_rejected_gtk_replacement_is_a_named_key_fault_without_a_success_terminal() {
-    with_fixture(|fixture| {
-        fixture.start();
-        let (key, permission) = fixture.installed_group();
-        let permission_index = permission.index();
-        let cuts = fixture.observed.borrow().resumed_cuts;
-        // The new write is rejected; the old entry's restoration is not.
-        fixture.observed.borrow_mut().reject_key_writes = 1;
+/// The replacement's KeyID and material the tests attempt.
+const REPLACEMENT: (u8, u8) = (2, 2);
+
+impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
+    /// The installed first GTK's replacement, with the slot and
+    /// permission it holds.
+    fn replacement(&mut self) -> (Command<'id, Id>, (u8, u8)) {
+        let (key, permission) = self.installed_group();
+        let owners = (
+            <Keys<Id> as KeyTypes<'id>>::group_slot_identity(&key),
+            permission.index(),
+        );
         let replace = PortCommand::ReplaceGroup {
             permission,
             installed: key,
-            key_id: key_id(2),
-            key: group_key(2),
+            key_id: key_id(REPLACEMENT.0),
+            key: group_key(REPLACEMENT.1),
         };
-        assert!(matches!(fixture.run(replace), Err(found) if found == KEY_REJECTED));
-        assert_eq!(fixture.port.fault(), Some(KEY_REJECTED));
-        // The driver keeps the replacement's owners, and the rollback
-        // restored the previous KeyID's entry.
-        let (retained, rolled_back) = fixture.port.retained_group();
-        assert_eq!(
-            retained.map(|(_, permission)| permission),
-            Some(permission_index)
-        );
-        assert_eq!(rolled_back, Some((1, 2, true)));
-        assert!(
-            fixture.group_terminals().is_empty(),
-            "no terminal returns the replacement's owners"
-        );
-        // The cut stays closed with the quarantine.
-        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts);
-        let now = fixture.now();
-        assert!(matches!(fixture.port.receive(4, now), Err(found) if found == KEY_REJECTED));
-        let color = BssColor::new(5).expect("color");
-        assert!(matches!(
-            fixture
-                .port
-                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox),
-            Err(found) if found == KEY_REJECTED
-        ));
-        let waker = fixture.waker();
-        assert!(matches!(
-            fixture
-                .port
-                .poll_stop(&mut Context::from_waker(&waker), now),
-            Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device,
+        (replace, owners)
+    }
+
+    /// Whether the stopped port refuses its release once the fixture's
+    /// transmit buffers went home.
+    fn stopped_release_refused(&mut self) -> bool {
+        drop(core::mem::take(&mut self.buffers));
+        self.port.release().is_none()
+    }
+
+    /// One service of the stopped port: its result as the port gave it.
+    fn stopped_service(&mut self) -> Result<(), Fault> {
+        let now = self.now();
+        self.port
+            .service_tx(TxFacts::DUE, false, now, &mut self.outbox)
+            .unwrap()
+            .map(|completed| assert!(completed.is_none()))
+    }
+
+    /// The lifecycle owner's cleanup of the stopped port.
+    fn clean(&mut self) -> Result<(), CleanupRefused<Fault>> {
+        self.port.clean_stopped(&mut self.outbox).unwrap()
+    }
+}
+
+/// Whether the stopped port retires once the fixture's transmit buffers
+/// went home, as every retire check needs.
+fn retires<Id: radio::SlotIdentity>(fixture: &mut Fixture<'_, Id>) {
+    drop(core::mem::take(&mut fixture.buffers));
+    assert!(fixture.port.release().is_some(), "the stopped port retires");
+}
+
+/// A replacement the hardware rejects and rolls back is a named fault with
+/// its command whole: the previous key, its identity and its slot and
+/// permission come back, its entry is in the table again, the receive cut
+/// resumes, and a stop recovers the port, which retires.
+#[test]
+fn a_gtk_replacement_the_hardware_rolls_back_comes_back_whole_beside_its_fault() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        let cuts = fixture.observed.borrow().resumed_cuts;
+        // The new write is rejected; the old entry's restoration is not.
+        fixture.observed.borrow_mut().reject_key_writes = 1;
+        let returned = match fixture.run_failed(replace) {
+            Err(CommandFailed::Returned { command, fault }) => {
+                assert_eq!(
+                    fault,
+                    Fault::GroupReplacement(GroupReplacement::RolledBack(
+                        crate::mac::crypto::CryptoKeyError::HardwareRejected
+                    ))
+                );
+                command
+            }
+            _ => panic!("the replacement comes back beside its fault"),
+        };
+        match returned {
+            PortCommand::ReplaceGroup {
+                permission,
+                installed,
+                key_id: attempted,
                 ..
-            }))
+            } => {
+                assert_eq!(
+                    (
+                        <Keys<_> as KeyTypes<'_>>::group_slot_identity(&installed),
+                        permission.index()
+                    ),
+                    owners,
+                    "the very key and permission"
+                );
+                assert_eq!(attempted.get(), REPLACEMENT.0);
+                drop((permission, installed));
+            }
+            _ => panic!("the replacement itself"),
+        }
+        // Nothing is retained; the rollback restored the previous KeyID.
+        assert_eq!(fixture.port.retained_group(), (None, Some((1, 2, true))));
+        assert!(fixture.group_terminals().is_empty(), "no terminal");
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
+        // The stop takes the fault back and the stopped port retires.
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        assert!(fixture.stopped_service().is_ok());
+        assert!(fixture.group_terminals().is_empty());
+        retires(fixture);
+    });
+}
+
+/// A replacement whose rollback fails keeps both causes and its owners in
+/// the port: no terminal, and the stopped port does not retire until its
+/// cleanup cleared the entry and read it cleared; then the key's removal
+/// returns its slot and the command's permission, once, and the port
+/// retires.
+#[test]
+fn a_gtk_replacement_whose_rollback_fails_returns_its_owners_through_the_stop_once() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        let cuts = fixture.observed.borrow().resumed_cuts;
+        // The new write and the old entry's restoration are both rejected.
+        fixture.observed.borrow_mut().reject_key_writes = 2;
+        let rejected = crate::mac::crypto::CryptoKeyError::HardwareRejected;
+        let failed = Fault::GroupReplacement(GroupReplacement::RollbackFailed {
+            replacement: rejected,
+            rollback: rejected,
+        });
+        assert!(matches!(
+            fixture.run_failed(replace),
+            Err(CommandFailed::Taken(fault)) if fault == failed
         ));
+        assert_eq!(fixture.port.fault(), Some(failed));
+        assert_eq!(
+            fixture.port.retained_group(),
+            (Some(owners), Some((1, 2, false)))
+        );
+        assert!(fixture.group_terminals().is_empty(), "no terminal");
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
+        // Before a confirmed stop the cleanup refuses and writes nothing.
+        let clears = fixture.observed.borrow().key_clears;
+        assert_eq!(fixture.clean(), Err(CleanupRefused::NotStopped));
+        assert_eq!(fixture.observed.borrow().key_clears, clears);
+        // The stop takes the fault back; the stopped port keeps the owners
+        // until its cleanup.
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        assert!(fixture.stopped_release_refused(), "the owners are retained");
+        // The stopped service is not the cleanup: it neither frees the
+        // owners nor reports the cleanup's result.
+        let clears = fixture.observed.borrow().key_clears;
+        assert!(fixture.stopped_service().is_ok());
+        assert!(fixture.group_terminals().is_empty());
+        assert_eq!(fixture.observed.borrow().key_clears, clears);
+        assert!(fixture.stopped_release_refused(), "still retained");
+        assert!(fixture.clean().is_ok());
+        assert_eq!(
+            fixture.group_terminals(),
+            [(Mutation::Remove, owners.0, owners.1)],
+            "the removal returns the slot and the permission"
+        );
+        assert!(fixture.clean().is_ok());
+        assert!(fixture.stopped_service().is_ok());
+        assert_eq!(fixture.group_terminals().len(), 1, "once");
+        retires(fixture);
+    });
+}
+
+/// The cleanup of a failed rollback's entry, each case its own: without
+/// registers it writes nothing and waits; a table that still reads the
+/// entry valid after the one clear frees nothing, and each later cleanup
+/// call only reads it again. Each is the call's named result, the port's
+/// own fault untouched, the owners with the port. Once the table reads the
+/// entry cleared, the removal (writing nothing more) returns the same slot
+/// and permission once, and the port retires.
+#[test]
+fn a_failed_rollbacks_entry_is_cleared_once_and_then_only_read_until_it_reads_cleared() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        fixture.observed.borrow_mut().reject_key_writes = 2;
+        assert!(matches!(
+            fixture.run_failed(replace),
+            Err(CommandFailed::Taken(_))
+        ));
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        // The device's `hardware` records the clears earlier calls wrote.
+        let observed = fixture.observed.clone();
+        let clears = || observed.borrow().key_clears;
+        fixture.observed.borrow_mut().hardware_unavailable = true;
+        assert_eq!(
+            fixture.clean(),
+            Err(CleanupRefused::Unavailable(Fault::HardwareUnavailable))
+        );
+        let before = clears();
+        fixture.observed.borrow_mut().hardware_unavailable = false;
+        fixture.observed.borrow_mut().key_entries_stuck = true;
+        assert_eq!(
+            fixture.clean(),
+            Err(CleanupRefused::Held(Fault::GroupEntryHeld))
+        );
+        assert_eq!(clears(), before, "nothing was written without registers");
+        assert!(fixture.group_terminals().is_empty(), "the slot is not free");
+        assert_eq!(
+            fixture.port.fault(),
+            None,
+            "the call's result, not recorded"
+        );
+        assert!(fixture.port.retained_group().0.is_some());
+        assert!(fixture.stopped_release_refused(), "the owners stay");
+        // Read again: still valid.
+        assert_eq!(
+            fixture.clean(),
+            Err(CleanupRefused::Held(Fault::GroupEntryHeld))
+        );
+        assert_eq!(clears(), before + 1, "the clear was issued once");
+        assert_eq!(
+            fixture.clean(),
+            Err(CleanupRefused::Held(Fault::GroupEntryHeld))
+        );
+        assert_eq!(clears(), before + 1, "a read writes nothing");
+        assert!(fixture.group_terminals().is_empty());
+        // The table reads the entry cleared: the removal, which writes the
+        // entry no more, returns the owners once.
+        fixture.observed.borrow_mut().key_entries_stuck = false;
+        assert!(fixture.clean().is_ok());
+        assert_eq!(
+            fixture.group_terminals(),
+            [(Mutation::Remove, owners.0, owners.1)],
+            "the removal returns the slot and the permission"
+        );
+        assert!(fixture.clean().is_ok());
+        assert_eq!(clears(), before + 1, "no second clear");
+        assert_eq!(fixture.group_terminals().len(), 1, "once");
+        retires(fixture);
+    });
+}
+
+/// The port's release does not ask for a cleanup receipt's owners: a
+/// caller that dropped the receipt before it would still see the port
+/// retire. So the receipt leaves whole to the caller's sink, and the caller
+/// keeps the very slot and permission past the release.
+#[test]
+fn a_cleanup_receipt_leaves_whole_to_its_caller_and_outlives_the_release() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        fixture.observed.borrow_mut().reject_key_writes = 2;
+        assert!(matches!(
+            fixture.run_failed(replace),
+            Err(CommandFailed::Taken(_))
+        ));
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        assert!(fixture.clean().is_ok());
+        let index = fixture
+            .outbox
+            .terminals
+            .iter()
+            .position(|terminal| group_terminal::<_>(terminal).is_some())
+            .expect("the receipt is in the caller's sink");
+        let receipt = fixture.outbox.terminals.remove(index);
+        assert_eq!(
+            group_terminal::<_>(&receipt),
+            Some((Mutation::Remove, owners.0, owners.1))
+        );
+        // Not enforced by the port: the release succeeds with the receipt
+        // out, whether its holder keeps it or dropped it.
+        retires(fixture);
+        assert_eq!(
+            group_terminal::<_>(&receipt),
+            Some((Mutation::Remove, owners.0, owners.1)),
+            "the caller still holds the owners after the release"
+        );
+        drop(receipt);
+    });
+}
+
+/// A stopped port that holds a fault runs no cleanup: the refusal names
+/// that exact fault, clears nothing and frees nothing; the owners stay
+/// retained and the port does not retire.
+#[test]
+fn a_faulted_stopped_port_refuses_its_cleanup_with_its_fault_and_clears_nothing() {
+    with_installations(|mut fixture, _| {
+        let fixture = &mut fixture;
+        fixture.start();
+        let (replace, owners) = fixture.replacement();
+        fixture.observed.borrow_mut().reject_key_writes = 2;
+        assert!(matches!(
+            fixture.run_failed(replace),
+            Err(CommandFailed::Taken(_))
+        ));
+        assert!(fixture.port.recover_for_stop());
+        fixture.stop();
+        fixture.port.fault_for_test(Fault::Abandoned);
+        let clears = fixture.observed.borrow().key_clears;
+        for _ in 0..2 {
+            assert_eq!(
+                fixture.clean(),
+                Err(CleanupRefused::Faulted(Fault::Abandoned)),
+                "the exact cause"
+            );
+        }
+        assert_eq!(
+            fixture.observed.borrow().key_clears,
+            clears,
+            "nothing cleared"
+        );
+        assert!(fixture.group_terminals().is_empty(), "nothing freed");
+        assert_eq!(
+            fixture.port.retained_group().0,
+            Some(owners),
+            "the owners stay in place"
+        );
+        assert_eq!(fixture.port.fault(), Some(Fault::Abandoned));
+        assert!(fixture.stopped_release_refused());
     });
 }
 
@@ -712,7 +1038,7 @@ fn a_received_unit_keeps_its_bytes_and_owner_until_it_is_recycled() {
         assert_eq!(meta.common().rssi_dbm, RxEvidence::HardwareObserved(-42));
         assert_eq!(frame.bytes(), &crate::lower_mac::tests::data_frame(STATION));
         assert_eq!(count(&fixture.released), 0, "the caller holds the unit");
-        fixture.port.recycle(frame);
+        assert!(fixture.port.recycle(frame).is_ok());
         assert_eq!(count(&fixture.released), 1, "recycled once");
         fixture.stop();
         let Fixture {
@@ -753,7 +1079,67 @@ fn a_lent_unit_lends_its_storage_and_its_drop_returns_it_to_the_ring() {
 }
 
 #[test]
-fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stays_out() {
+fn a_loss_past_the_held_count_settles_nothing_and_keeps_the_earlier_cause() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.deliver(1);
+        let now = fixture.now();
+        let RxPull::Unit { frame: kept, .. } = fixture.port.receive(8, now).expect("receive")
+        else {
+            panic!("a received unit");
+        };
+        assert_eq!(fixture.port.held_for_test(), 1);
+        // An earlier cause a stop recovers from, then two losses where the
+        // caller holds one unit: a count the held count excludes.
+        let earlier = Fault::Unpublished(crate::port::Unpublished::Key);
+        fixture.port.fault_for_test(earlier);
+        fixture.port.lose_for_test(2);
+        assert!(
+            !fixture.port.recover_for_stop(),
+            "no recovery follows a failed settlement"
+        );
+        assert_eq!(
+            fixture.port.fault(),
+            Some(earlier),
+            "the earlier cause stays"
+        );
+        assert_eq!(fixture.port.held_for_test(), 1, "the held count stays");
+        assert!(
+            !fixture.port.recover_for_stop(),
+            "the losses stay unsettled for the next look"
+        );
+        assert!(fixture.port.recycle(kept).is_ok());
+    });
+}
+
+#[test]
+fn a_loss_settles_exactly_the_units_it_read() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.deliver(2);
+        let now = fixture.now();
+        let RxPull::Unit { frame: lost, .. } = fixture.port.receive(8, now).expect("receive")
+        else {
+            panic!("a received unit");
+        };
+        let RxPull::Unit { frame: later, .. } = fixture.port.receive(8, now).expect("receive")
+        else {
+            panic!("a received unit");
+        };
+        drop(lost);
+        assert!(fixture.port.recover_for_stop(), "the unit is back");
+        assert_eq!(fixture.port.held_for_test(), 1, "one unit left the count");
+        // A loss after the settlement is the port's again, not erased by it.
+        drop(later);
+        assert_eq!(fixture.port.fault(), Some(Fault::ReceiveLost));
+        assert!(fixture.port.recover_for_stop());
+        assert_eq!(fixture.port.held_for_test(), 0);
+        assert_eq!(fixture.port.fault(), None);
+    });
+}
+
+#[test]
+fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit_goes_back() {
     use oer_protocols_ieee80211_contracts_port::LendRefused;
     with_installations(|mut fixture, _| {
         fixture.start();
@@ -768,8 +1154,8 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
             panic!("a received unit");
         };
         drop(lost);
-        // The dropped buffer frees nothing and rearms nothing.
-        assert_eq!(count(&fixture.released), 0);
+        // The dropped buffer's unit goes back: nothing of it is forgotten.
+        assert_eq!(count(&fixture.released), 1, "the dropped unit returned");
         let (pulls, returned) = {
             let observed = fixture.observed.borrow();
             (observed.pulls, observed.returned)
@@ -782,7 +1168,8 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
         assert!(matches!(
             fixture
                 .port
-                .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox),
+                .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox)
+                .unwrap(),
             Err(Fault::ReceiveLost)
         ));
         let waker = fixture.waker();
@@ -792,14 +1179,19 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox),
-            Err(Fault::ReceiveLost)
+                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox)
+                .unwrap(),
+            Err(CommandFailed::Returned {
+                fault: Fault::ReceiveLost,
+                ..
+            })
         ));
         let attempt = fixture.station_mpdu().expect("attempt");
         assert!(
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
+                .unwrap()
                 .is_err()
         );
         assert_eq!(
@@ -812,8 +1204,8 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
             Err(LendRefused { buffer, .. }) => buffer,
             Ok(_) => panic!("a faulted port lends nothing"),
         };
-        fixture.port.recycle(kept);
-        assert_eq!(count(&fixture.released), 1, "only the kept unit returned");
+        assert!(fixture.port.recycle(kept).is_ok());
+        assert_eq!(count(&fixture.released), 2, "the kept unit returned too");
         fixture.advance(COMMAND_BOUND);
         let now = fixture.now();
         assert!(matches!(
@@ -825,7 +1217,7 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
                 .port
                 .poll_stop(&mut Context::from_waker(&waker), now),
             Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device,
+                cause: StopCause::Device(Fault::ReceiveLost),
                 ..
             }))
         ));
@@ -835,16 +1227,17 @@ fn a_dropped_received_buffer_is_a_permanent_receive_lost_fault_and_its_unit_stay
             assert_eq!(observed.returned, returned, "nothing rearmed the ring");
             assert_eq!(observed.received.len(), 1, "the third unit stays staged");
         }
-        assert_eq!(
-            count(&fixture.released),
-            1,
-            "the lost allocation never returns"
-        );
+        assert_eq!(count(&fixture.released), 2, "each unit returned once");
+        // The stop's recovery takes the returned unit out of the held
+        // count; the ordinary stop then confirms.
+        assert!(fixture.port.recover_for_stop(), "the unit is back");
+        assert_eq!(fixture.port.fault(), None);
+        fixture.stop();
         let Fixture {
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_none(), "the lost unit keeps the device");
+        assert!(port.release().is_some(), "the stopped port retires");
     });
 }
 
@@ -874,7 +1267,7 @@ fn a_continuous_burst_reaches_the_caller_through_its_pulls_within_the_continuati
             let now = fixture.now();
             match fixture.port.receive(32, now).expect("receive") {
                 RxPull::Unit { frame, .. } => {
-                    fixture.port.recycle(frame);
+                    assert!(fixture.port.recycle(frame).is_ok());
                     taken += 1;
                 }
                 RxPull::Later(at) => {
@@ -963,7 +1356,7 @@ fn idle_fact_polls_leave_the_ring_unpulled_until_it_holds_a_unit() {
         let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
             panic!("the announced unit");
         };
-        fixture.port.recycle(frame);
+        assert!(fixture.port.recycle(frame).is_ok());
         assert_eq!(count(&fixture.released), 1);
     });
 }
@@ -988,6 +1381,7 @@ fn each_set_edca_table_reaches_the_next_publications_contention_draw() {
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
+                .unwrap()
                 .expect("submitted");
             for _ in 0..4 {
                 fixture.turn();
@@ -1040,6 +1434,7 @@ fn a_set_edca_lifetime_expires_a_queued_mpdu_at_its_exact_deadline() {
         fixture
             .port
             .submit(attempt, admitted, &mut fixture.outbox)
+            .unwrap()
             .expect("queued");
         let expiry = admitted.saturating_add(lifetime);
         assert_eq!(
@@ -1055,5 +1450,150 @@ fn a_set_edca_lifetime_expires_a_queued_mpdu_at_its_exact_deadline() {
         assert_eq!(fixture.take_completed(), 1, "expired at its deadline");
         assert_eq!(fixture.port.expired_msdus(), 1);
         assert_eq!(fixture.observed.borrow().publications, 0, "never published");
+    });
+}
+
+#[test]
+fn a_unit_a_cut_drains_past_the_held_units_goes_back_to_the_ring_beside_the_fault() {
+    with_installations(|mut fixture, _| {
+        fixture.start();
+        fixture.configure_station();
+        fixture.deliver(RX_HELD);
+        let now = fixture.now();
+        let mut held = Vec::new();
+        while held.len() < RX_HELD {
+            let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+                panic!("a received unit");
+            };
+            held.push(frame);
+        }
+        let frame = fixture.frame();
+        fixture.observed.borrow_mut().captured.push_back(frame);
+        let released = count(&fixture.released);
+        let (association, slot, _) = fixture.association();
+        let permission = fixture.group_permission.take().expect("permission");
+        let install =
+            fixture
+                .commands
+                .install_group(&association, permission, slot, key_id(1), group_key(1));
+        let _ran = fixture.run(install);
+        assert_eq!(fixture.port.fault(), Some(Fault::ReceiveOverflow));
+        assert_eq!(
+            count(&fixture.released),
+            released + 1,
+            "the drained unit went back to the ring"
+        );
+        assert!(fixture.outbox.received.is_empty(), "the caller got none");
+        for frame in held {
+            assert!(fixture.port.recycle(frame).is_ok());
+        }
+    });
+}
+
+impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
+    /// Run `command` until it leaves its barrier, serving a turn between
+    /// holds: its progress or its failure, as the port returned them.
+    fn run_failed(
+        &mut self,
+        mut command: Command<'id, Id>,
+    ) -> Result<CommandProgress<'id, Family<Id>, Caps>, CommandFailed<Command<'id, Id>, Fault>>
+    {
+        for _ in 0..16 {
+            let now = self.now();
+            match self.port.command(command, now, &mut self.outbox).unwrap()? {
+                CommandProgress::Held(held) => command = held,
+                other => return Ok(other),
+            }
+            self.turn();
+        }
+        Ok(CommandProgress::Held(command))
+    }
+
+    /// The slot and permission a returned station group command holds.
+    fn group_owners(command: &Command<'id, Id>) -> Option<(u8, u8)> {
+        match command {
+            PortCommand::InstallGroup(install) => Some(install.owners_for_test()),
+            PortCommand::SelectGroup {
+                permission,
+                installed,
+            } => Some((
+                <Keys<Id> as KeyTypes<'id>>::group_slot_identity(installed),
+                permission.index(),
+            )),
+            _ => None,
+        }
+    }
+}
+
+/// A pairwise installation the hardware rejects comes back whole, its
+/// slot in it, beside the fault: the core did not take the slot.
+#[test]
+fn a_pairwise_installation_the_hardware_rejects_comes_back_with_its_slot() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(7),
+        );
+        fixture.observed.borrow_mut().reject_key_writes = 1;
+        match fixture.run_failed(install) {
+            Err(CommandFailed::Returned {
+                command: PortCommand::InstallPairwise(_),
+                fault,
+            }) => assert_eq!(fault, KEY_REJECTED),
+            _ => panic!("the installation comes back beside its fault"),
+        }
+        assert!(fixture.outbox.terminals.is_empty(), "no terminal");
+    });
+}
+
+/// A group installation the hardware rejects after its receive cut comes
+/// back whole, its slot and permission in it, beside the fault; the cut
+/// resumes.
+#[test]
+fn a_group_installation_the_hardware_rejects_comes_back_with_its_slot_and_permission() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (install, owners) = fixture.group_command(Mutation::Install);
+        let cuts = fixture.observed.borrow().resumed_cuts;
+        fixture.observed.borrow_mut().reject_key_writes = 1;
+        let returned = match fixture.run_failed(install) {
+            Err(CommandFailed::Returned {
+                command: command @ PortCommand::InstallGroup(_),
+                fault,
+            }) => {
+                assert_eq!(fault, KEY_REJECTED);
+                command
+            }
+            _ => panic!("the installation comes back beside its fault"),
+        };
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
+        assert!(fixture.group_terminals().is_empty(), "no terminal");
+        // The very slot and permission the command took.
+        assert_eq!(Fixture::group_owners(&returned), Some(owners));
+    });
+}
+
+/// A group selection whose key the driver no longer holds comes back
+/// whole beside the fault, its key and permission in it, before the
+/// driver takes anything; the cut resumes.
+#[test]
+fn a_group_selection_of_a_missing_key_comes_back_with_its_owners() {
+    with_fixture(|fixture| {
+        fixture.start();
+        let (select, owners) = fixture.group_command(Mutation::Select);
+        fixture.port.uninstall_keys_for_test();
+        let cuts = fixture.observed.borrow().resumed_cuts;
+        match fixture.run_failed(select) {
+            Err(CommandFailed::Returned {
+                command: command @ PortCommand::SelectGroup { .. },
+                fault: Fault::KeySlotMissing(crate::port::KeyOp::Select),
+            }) => assert_eq!(Fixture::group_owners(&command), Some(owners)),
+            _ => panic!("the selection comes back beside its fault"),
+        }
+        assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
     });
 }

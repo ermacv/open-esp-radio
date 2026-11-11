@@ -195,8 +195,8 @@ use oer_protocols_ieee80211_contracts_port::{
     LowerMacCapabilities, MpduKind, MpduLayout, PhyFormatSet, PortTypes, PreparationError,
     PreparationRefused, PreparedTx, RateSupport, ReceiveFilter, RetransmissionPlan, RoleKeys,
     RxBuffer, RxEvidence, RxMeta, RxMetadata, SignalMetadata, Station, SupportedBlockAck,
-    SupportedChannel, TxBody, TxBufferClass, TxBufferMemory, TxBufferPool, TxFrame, TxMpdu,
-    TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
+    SupportedChannel, TxBody, TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxFrame,
+    TxMpdu, TxOutcome, TxProtection, TxSource, VifRole, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_contracts_port::{
     AckSnr, Air, BlockAckSnr, SingleEnd, SingleOutcome, SingleResponse, SnrSample,
@@ -432,7 +432,7 @@ pub enum ModelBlockAcks {}
 /// A transmit buffer of the class `C`: its token and its memory, which
 /// moves with it; only the install mints one.
 pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
-    slot: Slot<'id, C, C::Path<B::Identity>>,
+    slot: Slot<'id, C::Layout, C::Path<B::Identity>>,
     loan: Option<BodyLoan<'id, B::Identity, B>>,
     memory: ModelMemory,
     admitted_at: Option<RadioInstant<Ieee80211Radio>>,
@@ -870,7 +870,33 @@ impl<'id, B: ModelComposition> TxMpdu for ModelMpdu<'id, B> {
         }
     }
 }
+/// The variant of [`ModelAnyBuffer`] a model MPDU comes back as.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelBufferKind {
+    /// Fresh small memory.
+    Small,
+    /// Fresh large memory.
+    Large,
+    /// A small published MPDU.
+    SmallSent,
+    /// A large published MPDU.
+    LargeSent,
+}
+
 impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
+    /// The variant its `into_parts` returns, read by borrow.
+    const fn returned_kind(&self) -> ModelBufferKind {
+        match (&self.buffer, self.published.is_some()) {
+            (ModelAnyBuffer::Small(_), true) | (ModelAnyBuffer::SmallSent(_), _) => {
+                ModelBufferKind::SmallSent
+            }
+            (ModelAnyBuffer::Large(_), true) | (ModelAnyBuffer::LargeSent(_), _) => {
+                ModelBufferKind::LargeSent
+            }
+            (ModelAnyBuffer::Small(_), false) => ModelBufferKind::Small,
+            (ModelAnyBuffer::Large(_), false) => ModelBufferKind::Large,
+        }
+    }
     fn admit(&mut self, at: Instant) {
         match &mut self.buffer {
             ModelAnyBuffer::Small(buffer) => buffer.admit(at),
@@ -1098,7 +1124,7 @@ impl<'id, B: ModelComposition + 'id> PortTypes<'id> for ModelTypes<B> {
     type Prepared<'k, 'p, R, K: Ieee80211Capabilities> = ModelPrepared<'k, 'p, 'id, R, K, B>;
     type KeyIdentity = KeyIdentity<'id, B::Identity>;
     type TxBody = ModelBodyOf<B>;
-    type TicketKind = ModelTickets;
+    type TicketKind = oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>;
     type AckEvidence = ModelAck;
     type BlockAckEvidence = ModelBlockAckEvidence;
     type AirDenied = ModelAirDenied;
@@ -1187,7 +1213,7 @@ impl<'id, B: ModelComposition + 'id, R: ModelRole + 'id> KeyTypes<'id> for Model
     type GroupKey = ModelGroupKey<'id, B, R>;
     type GroupPermission = oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
-        ModelGroupPermission<R>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<R>, 1>,
         R::GroupPermissionPath<B::Identity>,
     >;
     type Identity = KeyIdentity<'id, B::Identity>;
@@ -1245,6 +1271,10 @@ impl<'id, B: ModelComposition + 'id, C: ModelClass> TxBufferPool<'id, C> for Mod
     fn renew(mpdu: Self::Sent) -> (Self::Buffer, Option<ModelBodyOf<B>>) {
         // The MPDU and its PN end here; `renew_msdu` releases its admission.
         (mpdu.buffer, mpdu.body)
+    }
+
+    fn class_of(mpdu: &ModelMpdu<'id, B>) -> Option<TxBufferForm> {
+        C::class_of(mpdu.returned_kind())
     }
 }
 
@@ -1428,11 +1458,17 @@ pub struct ModelResources<'id, B: ModelComposition> {
 /// receive Block Ack slots and the gate its arbiter holds.
 pub struct ModelShared<'id, B: ModelComposition> {
     /// The transmit tickets.
-    pub tickets: Vec<Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>>,
+    pub tickets: Vec<
+        Slot<
+            'id,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<<B as ModelComposition>::Identity, 1>,
+        >,
+    >,
     /// Sole permission for the body to unpack TX terminals.
     pub terminal_access: oer_protocols_ieee80211_contracts_port::TerminalAccess<
         'id,
-        ModelTickets,
+        oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
         ModelPool<<B as ModelComposition>::Identity, 1>,
     >,
     /// The small transmit buffers.
@@ -1467,8 +1503,11 @@ pub struct ModelStationPermissions<'id, B: ModelComposition> {
         oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 1>,
     >,
     /// The install's single epoch-source slot; Station constructs its source.
-    pub connection_epoch:
-        Slot<'id, ConnectionEpochKind, ModelPool<<B as ModelComposition>::Identity, 4>>,
+    pub connection_epoch: Slot<
+        'id,
+        oer_protocols_radio_port::Slots<ConnectionEpochKind, 1>,
+        ModelPool<<B as ModelComposition>::Identity, 4>,
+    >,
     /// Its pairwise key slots.
     pub pairwise: [PairwiseKeySlot<
         'id,
@@ -1488,7 +1527,7 @@ pub struct ModelStationPermissions<'id, B: ModelComposition> {
     /// Its sole GTK mutation permission.
     pub group_permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
-        ModelGroupPermission<Station>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
         ModelPool<<B as ModelComposition>::Identity, 8>,
     >,
 }
@@ -1528,7 +1567,7 @@ pub struct ModelAccessPointPermissions<'id, B: ModelComposition> {
     /// Its sole GTK mutation permission.
     pub group_permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
-        ModelGroupPermission<AccessPoint>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<AccessPoint>, 1>,
         oer_protocols_radio_port::Child<ModelPool<<B as ModelComposition>::Identity, 9>, 0>,
     >,
     /// The installation's one beacon permission.
@@ -1770,10 +1809,25 @@ pub struct ModelAir {
     rx: OwnedQueue<(Vec<u8>, ModelRxMeta)>,
     rx_stream: Cell<Option<(Vec<u8>, ModelRxMeta)>>,
     refuse_enable: Cell<u8>,
+    /// The port's count refuses the next recycles, as a count that lost
+    /// their units would.
+    refuse_recycle: Cell<u8>,
+    /// Where the port's next call stops on an item its sink refused.
+    unkeep: Cell<Option<crate::data_port::ModelUnkeep>>,
+    /// The next enable fails after the MAC began it, its stop not
+    /// confirmed: the port answers `StartRefused::Unstopped` and stops.
+    unstop_enable: Cell<bool>,
+    /// Stops the port confirmed.
+    confirmed_stops: Cell<u32>,
+    refuse_access_point: Cell<u8>,
+    /// The next access-point command meets a poisoned air.
+    fault_access_point: Cell<bool>,
     /// The HE20 associations (`SetHe` after an Association Response) the
     /// port refuses next.
     refuse_he_association: Cell<u8>,
     group_held: Cell<bool>,
+    /// The access point's configuration is held at its barrier.
+    access_point_configure_held: Cell<bool>,
     // Secret material belongs to this installation table, never to the
     // cloneable identity carried by captured RX or returned Sent owners.
     key_installations: Cell<Vec<KeyInstallation>>,
@@ -1783,6 +1837,11 @@ pub struct ModelAir {
     stream: Cell<ModelStream>,
     /// The port may take a poison back for a stop.
     recovery: Cell<bool>,
+    /// The next transmit service poisons the backend as it begins: a fault
+    /// a service meets before any other call does.
+    poison_at_service: Cell<bool>,
+    /// How often the port asked to take a poison back.
+    recovery_asks: Cell<u32>,
     disables: Cell<u32>,
     /// The EDCA set each interface's attempts contend with, by role.
     edca: Cell<ModelEdca>,
@@ -1790,6 +1849,8 @@ pub struct ModelAir {
     held: Cell<[bool; WmmAccessCategory::ALL.len()]>,
     /// Keep a published PPDU's result pending, independently of prepublication CCA.
     held_results: Cell<[bool; WmmAccessCategory::ALL.len()]>,
+    /// The MAC does not go quiet: a stop stays unconfirmed while set.
+    stop_held: Cell<bool>,
     /// Arena ends served ahead of the port's transmit service.
     relayed: Cell<usize>,
     /// What [`TxArena::event_waiting`] of the port's arenas answers.
@@ -1840,19 +1901,29 @@ impl ModelAir {
             rx: Default::default(),
             rx_stream: Default::default(),
             refuse_enable: Default::default(),
+            refuse_recycle: Default::default(),
+            unkeep: Cell::new(None),
+            refuse_access_point: Default::default(),
             refuse_he_association: Default::default(),
             group_held: Default::default(),
+            access_point_configure_held: Default::default(),
             key_installations: Default::default(),
             associations: Default::default(),
             group_rx: Default::default(),
             group_writes: Default::default(),
             stream: Default::default(),
             recovery: Default::default(),
+            poison_at_service: Default::default(),
+            recovery_asks: Cell::new(0),
             disables: Default::default(),
+            unstop_enable: Cell::new(false),
+            fault_access_point: Cell::new(false),
+            confirmed_stops: Cell::new(0),
             edca: Default::default(),
             he: Cell::new(oer_protocols_ieee80211_contracts_port::StationHe::Off),
             held: Default::default(),
             held_results: Default::default(),
+            stop_held: Cell::new(false),
             relayed: Cell::new(0),
             event_waiting: Cell::new(false),
             time: ModelTime::new(clock),
@@ -2117,9 +2188,86 @@ impl ModelAir {
         self.wake_world();
     }
 
+    /// Hold the access point's configuration at its barrier while `held`, as
+    /// a frame of the access point on the air does.
+    pub fn hold_access_point_configure(&self, held: bool) {
+        self.access_point_configure_held.set(held);
+        self.wake_world();
+    }
+
+    /// Whether the access point's configuration is held.
+    pub(crate) fn access_point_configure_held(&self) -> bool {
+        self.access_point_configure_held.get()
+    }
+
+    /// Keep the MAC from going quiet: a stop stays unconfirmed, past its
+    /// bound, until the hold ends.
+    pub fn hold_stop(&self, held: bool) {
+        self.stop_held.set(held);
+        self.wake_world();
+    }
+
     /// Actual material writes, including replacement and excluding selection.
     pub fn group_writes(&self) -> usize {
         self.group_writes.get()
+    }
+
+    /// The pairwise keys of `role` the hardware key table holds now.
+    pub fn installed_pairwise(&self, role: VifRole) -> usize {
+        let installations = self.key_installations.take();
+        let count = installations
+            .iter()
+            .filter_map(|entry| entry.identity.upgrade())
+            .filter(|identity| {
+                identity.active.get() && identity.group_role.is_none() && identity.role == role
+            })
+            .count();
+        self.key_installations.set(installations);
+        count
+    }
+
+    /// Capture a protected individually addressed frame as the hardware
+    /// does: decrypted with the pairwise key of `role` that the port
+    /// installed and that opens it, delivered as its header, its CCMP
+    /// header and its plaintext with the decryption observed. Without such
+    /// a key the frame is not captured: `false`.
+    pub fn receive_protected(&self, frame: &[u8], meta: ModelRxMeta, role: VifRole) -> bool {
+        const HEADER: usize = 24;
+        const CCMP: usize = oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN;
+        let installations = self.key_installations.take();
+        let mut opened = None;
+        for entry in &installations {
+            let Some(identity) = entry.identity.upgrade() else {
+                continue;
+            };
+            if !identity.active.get() || identity.group_role.is_some() || identity.role != role {
+                continue;
+            }
+            let mut wire: Vec<u8> = frame.into();
+            let Ok(body) = self.associations.get().get(role).open(
+                &mut oer_protocols_ieee80211_core_security_cipher::aes::SoftwareAes128,
+                &entry.key,
+                &mut wire,
+            ) else {
+                continue;
+            };
+            let body: Vec<u8> = body.into();
+            let mut delivered: Vec<u8> = frame.get(..HEADER + CCMP).unwrap_or_default().into();
+            delivered.extend_from_slice(&body);
+            opened = Some(delivered);
+            break;
+        }
+        self.key_installations.set(installations);
+        let Some(delivered) = opened else {
+            return false;
+        };
+        self.receive(
+            &delivered,
+            meta.with_crypto(RxEvidence::HardwareObserved(
+                oer_protocols_ieee80211_contracts_port::RxCryptoStatus::DecryptedAndIntegrityVerified,
+            )),
+        );
+        true
     }
 
     /// Capture a group frame against the current modeled hardware key table.
@@ -2300,6 +2448,88 @@ impl ModelAir {
         self.refuse_enables(1);
     }
 
+    /// Refuse the next `count` access-point commands of a running radio as
+    /// not enabled, each with its owners returned.
+    pub fn refuse_access_point_commands(&self, count: u8) {
+        self.refuse_access_point.set(count);
+    }
+
+    /// Poison the air at the next access-point command, before the port
+    /// takes it: the command comes back beside the fault.
+    pub fn fault_next_access_point_command(&self) {
+        self.fault_access_point.set(true);
+    }
+
+    /// Whether this access-point command meets the poison
+    /// [`Self::fault_next_access_point_command`] asked for.
+    pub(crate) fn take_access_point_fault(&self) -> bool {
+        self.fault_access_point.replace(false)
+    }
+
+    /// Whether this access-point command is refused: one of the refusals
+    /// asked for.
+    pub(crate) fn take_access_point_refusal(&self) -> bool {
+        let left = self.refuse_access_point.get();
+        if left == 0 {
+            return false;
+        }
+        self.refuse_access_point.set(left.saturating_sub(1));
+        true
+    }
+
+    /// Fail the next enable after the MAC began it: the port answers
+    /// `StartRefused::Unstopped` and its stop goes on, confirmed only once
+    /// the MAC is quiet ([`Self::hold_stop`] keeps it unconfirmed).
+    pub fn unstop_enable(&self) {
+        self.unstop_enable.set(true);
+    }
+
+    /// Whether this enable fails unstopped, as [`Self::unstop_enable`]
+    /// asked.
+    pub(crate) fn take_unstopped_enable(&self) -> bool {
+        self.unstop_enable.replace(false)
+    }
+
+    /// Stops the port confirmed.
+    pub fn confirmed_stops(&self) -> u32 {
+        self.confirmed_stops.get()
+    }
+
+    /// Count a stop the port confirmed.
+    pub(crate) fn stop_confirmed(&self) {
+        self.confirmed_stops
+            .set(self.confirmed_stops.get().saturating_add(1));
+    }
+
+    /// Refuse the next `count` recycles for the port's count: each unit
+    /// comes back whole with a [`ReceiveAccounting`](oer_protocols_ieee80211_contracts_port::ReceiveAccounting),
+    /// and the count stays.
+    pub fn refuse_recycles(&self, count: u8) {
+        self.refuse_recycle.set(count);
+    }
+
+    /// Make the port's next call stop on the next item its sink refuses,
+    /// at `at`: the call returns it beside its input or answer.
+    pub fn unkeep_next(&self, at: crate::data_port::ModelUnkeep) {
+        self.unkeep.set(Some(at));
+    }
+
+    /// Whether the test asked for a stop at `at`: the request is spent.
+    pub(crate) fn take_unkeep(&self, at: crate::data_port::ModelUnkeep) -> bool {
+        let asked = self.unkeep.get() == Some(at);
+        if asked {
+            self.unkeep.set(None);
+        }
+        asked
+    }
+
+    /// Whether this recycle is refused: one of the refusals asked for.
+    pub(crate) fn take_recycle_refusal(&self) -> bool {
+        let left = self.refuse_recycle.get();
+        self.refuse_recycle.set(left.saturating_sub(1));
+        left != 0
+    }
+
     /// Refuse the next `count` enables.
     pub fn refuse_enables(&self, count: u8) {
         self.refuse_enable.set(count);
@@ -2331,6 +2561,22 @@ impl ModelAir {
         self.stream.set(ModelStream::Ended);
     }
 
+    /// Poison the backend as the next transmit service begins: that
+    /// service meets the fault first.
+    pub fn poison_at_next_service(&self) {
+        self.poison_at_service.set(true);
+    }
+
+    /// Whether the next transmit service poisons the backend, once.
+    pub(crate) fn take_poison_at_service(&self) -> bool {
+        self.poison_at_service.take()
+    }
+
+    /// How often the port asked to take a poison back.
+    pub fn recovery_asks(&self) -> u32 {
+        self.recovery_asks.get()
+    }
+
     /// Let the port take a poison back for a stop.
     pub fn allow_recovery(&self) {
         self.recovery.set(true);
@@ -2338,6 +2584,8 @@ impl ModelAir {
 
     /// Take a poison back, when the port may.
     pub(crate) fn recover(&self) -> bool {
+        self.recovery_asks
+            .set(self.recovery_asks.get().saturating_add(1));
         let allowed = self.recovery.get();
         if allowed {
             self.stream.set(ModelStream::Running);
@@ -2505,7 +2753,7 @@ struct AnswerShapeMismatch;
 
 type StationGroupPermission<'id, B> = oer_protocols_ieee80211_contracts_port::IssuedSlot<
     'id,
-    ModelGroupPermission<Station>,
+    oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
     ModelPool<<B as ModelComposition>::Identity, 8>,
 >;
 
@@ -2516,7 +2764,7 @@ struct PendingGroupInstall<'id, B: ModelComposition, R: ModelRole> {
     slot: GroupKeySlot<'id, R, MODEL_KEY_SLOTS, MODEL_KEY_SLOTS, R::AssociationPath<B::Identity>>,
     permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
         'id,
-        ModelGroupPermission<R>,
+        oer_protocols_radio_port::Slots<ModelGroupPermission<R>, 1>,
         R::GroupPermissionPath<B::Identity>,
     >,
     key_id: GroupKeyId,
@@ -2536,7 +2784,7 @@ trait GroupInstallationRole: ModelRole + Sized {
         key: ModelGroupKey<'o, B, Self>,
         permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
-            ModelGroupPermission<Self>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<Self>, 1>,
             Self::GroupPermissionPath<B::Identity>,
         >,
     ) -> OwnedInstalledGroup<'o, B>;
@@ -2572,7 +2820,7 @@ impl GroupInstallationRole for AccessPoint {
         key: ModelGroupKey<'o, B, Self>,
         permission: oer_protocols_ieee80211_contracts_port::IssuedSlot<
             'o,
-            ModelGroupPermission<Self>,
+            oer_protocols_radio_port::Slots<ModelGroupPermission<Self>, 1>,
             oer_protocols_radio_port::Child<ModelPool<B::Identity, 9>, 0>,
         >,
     ) -> OwnedInstalledGroup<'o, B> {
@@ -2609,7 +2857,11 @@ type Work<'id, B> = Box<Prepared<'id, B>>;
 
 type ModelInFlight<'id, B, M> = InFlight<
     ModelContextOf<B>,
-    Slot<'id, ModelTickets, ModelPool<<B as ModelComposition>::Identity, 1>>,
+    Slot<
+        'id,
+        oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+        ModelPool<<B as ModelComposition>::Identity, 1>,
+    >,
     M,
 >;
 
@@ -2622,11 +2874,18 @@ struct Prepared<'id, B: ModelComposition> {
     key: Option<PreparedKey>,
     /// A beacon's permission, which its terminal returns.
     beacon: Option<OwnedBeacon<B>>,
+    /// A beacon's deadline: not published by then, it ends expired.
+    deadline: Option<Instant>,
 }
 
 impl<B: ModelComposition> Prepared<'_, B> {
     const fn role(&self) -> VifRole {
         self.role
+    }
+    /// Whether it aged past its MSDU `lifetime` or its deadline at `now`.
+    fn expired(&self, now: Instant, lifetime: Duration) -> bool {
+        self.operation.payload().expired(now, lifetime)
+            || self.deadline.is_some_and(|deadline| now >= deadline)
     }
     fn key(&self) -> Option<&RawKeyIdentity> {
         self.key.as_ref().map(|key| &key.identity)
@@ -2694,14 +2953,25 @@ impl<'id, B: ModelComposition> ModelHeld<'id, B> {
         }
     }
 
+    /// The receive buffers out with the caller.
+    fn rx_held(&self) -> usize {
+        self.rx_out.get()
+    }
+
     /// Return one received buffer's capacity. Each buffer is charged once
-    /// when delivered, so a return with none charged is a broken model
-    /// invariant: it poisons instead of hiding the count.
-    fn release_rx(&self) {
-        match self.rx_out.get().checked_sub(1) {
-            Some(out) => self.rx_out.set(out),
-            None => self.poison(),
-        }
+    /// when delivered, so a return with none charged is refused with the
+    /// count, which stays as it was.
+    fn release_rx(&self) -> Result<(), oer_protocols_ieee80211_contracts_port::ReceiveAccounting> {
+        let held = self.rx_out.get();
+        let Some(out) = held.checked_sub(1) else {
+            return Err(oer_protocols_ieee80211_contracts_port::ReceiveAccounting {
+                operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
+                held,
+                requested: 1,
+            });
+        };
+        self.rx_out.set(out);
+        Ok(())
     }
 }
 
@@ -2712,7 +2982,7 @@ pub use data_port::{
     MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAccessPointGroupInstall,
     ModelAccessPointPairwiseInstall, ModelAdmitted, ModelCommands, ModelGroupInstall, ModelInstall,
     ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
-    ModelPortObservation, ModelReinstallRefused,
+    ModelPortObservation, ModelReinstallRefused, ModelUnkeep,
 };
 
 /// The composition's initial software depth for each access category.
@@ -3202,7 +3472,7 @@ fn publish_single<'id, B: ModelComposition>(
         .edca(plan.prepared.role)
         .access_category(plan.prepared.queue)
         .msdu_lifetime;
-    if plan.prepared.operation.payload().expired(now, lifetime) {
+    if plan.prepared.expired(now, lifetime) {
         held.air.expired(1);
         terminal(held, *plan.prepared, TxOutcome::Expired { msdus: 1 });
         return None;
@@ -3429,6 +3699,8 @@ pub struct ModelTxExecution<B: ModelComposition> {
     key: Option<PreparedKey>,
     role: VifRole,
     beacon: Option<OwnedBeacon<B>>,
+    /// A beacon's deadline: not published by then, it ends expired.
+    deadline: Option<Instant>,
 }
 
 /// The beacon permission while the model holds its beacon.
@@ -3443,11 +3715,19 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
     fn into_admission(
         self,
         context: <Self::Types as PortTypes<'id>>::Context,
-        ticket: Slot<'id, ModelTickets, ModelPool<B::Identity, 1>>,
+        ticket: Slot<
+            'id,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<B::Identity, 1>,
+        >,
         _: oer_protocols_ieee80211_contracts_port::Admission<Self>,
     ) -> oer_protocols_ieee80211_contracts_port::AdmissionOwners<
         Self::OwnedContext,
-        Slot<'static, ModelTickets, ModelPool<B::Identity, 1>>,
+        Slot<
+            'static,
+            oer_protocols_radio_port::Slots<ModelTickets, MODEL_TICKETS>,
+            ModelPool<B::Identity, 1>,
+        >,
         Self::OwnedPayload,
         Self::Execution,
     > {
@@ -3461,6 +3741,7 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
                 key: self.key,
                 role: self.role,
                 beacon: None,
+                deadline: None,
             },
         }
     }
@@ -3473,6 +3754,8 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
 pub trait ModelClass: TxBufferClass + Sized {
     /// Nominal component of the backing memory slots.
     type Path<Id: SlotIdentity>: oer_protocols_radio_port::PoolPath<Identity = Id>;
+    /// The layout of the class's buffer slots, `Slots<Self, N>`.
+    type Layout: oer_protocols_radio_port::SlotLayout<Kind = Self>;
     /// Return fresh memory through the terminal's exhaustive buffer enum.
     fn erase<'id, B: ModelComposition>(buffer: ModelBuffer<'id, B, Self>)
     -> ModelAnyBuffer<'id, B>;
@@ -3488,10 +3771,14 @@ pub trait ModelClass: TxBufferClass + Sized {
     fn sent<'id, B: ModelComposition>(
         buffer: ModelAnyBuffer<'id, B>,
     ) -> Result<ModelSent<'id, B, Self>, ModelAnyBuffer<'id, B>>;
+    /// The form a buffer of `kind` takes in this class, as `class` and
+    /// `sent` take it; `None` for another class's.
+    fn class_of(kind: ModelBufferKind) -> Option<TxBufferForm>;
 }
 
 impl ModelClass for ModelSmall {
     type Path<Id: SlotIdentity> = ModelPool<Id, 2>;
+    type Layout = oer_protocols_radio_port::Slots<Self, MODEL_SMALL_BUFFERS>;
     fn erase<'id, B: ModelComposition>(
         buffer: ModelBuffer<'id, B, Self>,
     ) -> ModelAnyBuffer<'id, B> {
@@ -3521,9 +3808,17 @@ impl ModelClass for ModelSmall {
             buffer => Err(buffer),
         }
     }
+    fn class_of(kind: ModelBufferKind) -> Option<TxBufferForm> {
+        match kind {
+            ModelBufferKind::Small => Some(TxBufferForm::Fresh),
+            ModelBufferKind::SmallSent => Some(TxBufferForm::Sent),
+            _ => None,
+        }
+    }
 }
 impl ModelClass for ModelLarge {
     type Path<Id: SlotIdentity> = ModelPool<Id, 3>;
+    type Layout = oer_protocols_radio_port::Slots<Self, MODEL_LARGE_BUFFERS>;
     fn erase<'id, B: ModelComposition>(
         buffer: ModelBuffer<'id, B, Self>,
     ) -> ModelAnyBuffer<'id, B> {
@@ -3551,6 +3846,13 @@ impl ModelClass for ModelLarge {
         match buffer {
             ModelAnyBuffer::LargeSent(buffer) => Ok(buffer),
             buffer => Err(buffer),
+        }
+    }
+    fn class_of(kind: ModelBufferKind) -> Option<TxBufferForm> {
+        match kind {
+            ModelBufferKind::Large => Some(TxBufferForm::Fresh),
+            ModelBufferKind::LargeSent => Some(TxBufferForm::Sent),
+            _ => None,
         }
     }
 }

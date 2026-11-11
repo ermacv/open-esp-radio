@@ -90,15 +90,23 @@ struct Hardware {
     installed_keys: Vec<(u8, MacCcmpKeyIdentity)>,
     key_material: Vec<(u8, [u8; 16])>,
     reject_key_writes: usize,
+    /// The key table reads every entry valid however it was cleared.
+    key_entries_stuck: bool,
     crypto_order: Vec<CryptoOperation>,
     cleared_keys: Vec<u8>,
     rx_block_acks: Vec<S31RxBlockAckAgreement>,
+    /// The banks refuse every agreement, as a readback that does not
+    /// match.
+    reject_rx_block_acks: bool,
     cleared_rx_block_acks: Vec<u8>,
     station_policy: Option<StationPolicy>,
     station_disabled: usize,
     access_point_policy: Option<[u8; 6]>,
     access_point_disabled: usize,
     access_point_tsf_resets: usize,
+    /// What the access point's interface does, shared with a fixture that
+    /// lent the hardware to its port.
+    access_point: std::rc::Rc<RefCell<AccessPointObserved>>,
     promiscuous: bool,
     station_tsf: u64,
     tbtt: Option<StaTbttSchedule>,
@@ -272,6 +280,17 @@ impl CcmpKeyHardware for Hardware {
         self.crypto_order.push(CryptoOperation::Remove(index));
         self.cleared_keys.push(index);
     }
+
+    fn ccmp_entry_is_valid(
+        &mut self,
+        index: oer_chips_esp32s31_hal::types::MacKeyEntryIndex,
+    ) -> bool {
+        self.key_entries_stuck
+            || self
+                .installed_keys
+                .iter()
+                .any(|(slot, _)| u32::from(*slot) == index.get())
+    }
 }
 
 impl RxBlockAckHardware for Hardware {
@@ -280,6 +299,9 @@ impl RxBlockAckHardware for Hardware {
         agreement: S31RxBlockAckAgreement,
     ) -> Result<(), S31RxBlockAckAgreementError> {
         let agreement = agreement.validate()?;
+        if self.reject_rx_block_acks {
+            return Err(S31RxBlockAckAgreementError::HardwareReadbackMismatch);
+        }
         self.rx_block_acks.push(agreement);
         Ok(())
     }
@@ -380,24 +402,42 @@ impl MacSnifferHardware for Hardware {
     }
 }
 
+/// The access point's interface as the register model holds it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct AccessPointObserved {
+    /// Its receive policy names this address.
+    policy: Option<[u8; 6]>,
+    /// Its TSF runs.
+    tsf_running: bool,
+    tsf_starts: usize,
+    tsf_stops: usize,
+}
+
 impl ApRxPolicyHardware for Hardware {
     fn apply_ap_link_policy(&mut self, access_point: [u8; 6]) {
         self.access_point_policy = Some(access_point);
+        self.access_point.borrow_mut().policy = Some(access_point);
     }
 
     fn disable_ap_link_policy(&mut self) {
         self.access_point_policy = None;
         self.access_point_disabled += 1;
+        self.access_point.borrow_mut().policy = None;
     }
 }
 
 impl ApTsfHardware for Hardware {
     fn reset_and_start_access_point_tsf(&mut self, _: crate::mac::ap_tsf::AccessPointTsfWrite) {
         self.access_point_tsf_resets += 1;
+        let mut observed = self.access_point.borrow_mut();
+        observed.tsf_running = true;
+        observed.tsf_starts += 1;
     }
 
     fn stop_access_point_tsf(&mut self, _: crate::mac::ap_tsf::AccessPointTsfWrite) {
-        unreachable!("the port never stops the access-point TSF")
+        let mut observed = self.access_point.borrow_mut();
+        observed.tsf_running = false;
+        observed.tsf_stops += 1;
     }
 }
 
@@ -809,9 +849,15 @@ impl core::ops::DerefMut for Request {
 }
 
 #[derive(Default)]
-struct Events<'core> {
+struct Events<'core, const TICKETS: usize = 4> {
     returned: Vec<FreeQueue<'core>>,
-    returned_tickets: Vec<TxTicket<'core>>,
+    returned_tickets: Vec<
+        TxTicket<
+            'core,
+            oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'core>>,
+            TICKETS,
+        >,
+    >,
     removed: Vec<KeyRemoved<'core>>,
     order: Vec<&'static str>,
     completions: Vec<PublicationEnd>,
@@ -823,17 +869,52 @@ struct Events<'core> {
     slots: Vec<Pin<&'static mut TxSlot<512>>>,
     disabled: usize,
     tbtts: Vec<TbttEvent>,
+    /// How many of the next completions this sink refuses.
+    refuse_completions: usize,
+    /// How many of the next removal receipts this sink refuses.
+    refuse_removals: usize,
 }
 
-impl<'core> LowerMacSink<'core, 'static, 512> for Events<'core> {
+impl<'core, const TICKETS: usize>
+    LowerMacSink<
+        'core,
+        'static,
+        512,
+        oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'core>>,
+        TICKETS,
+    > for Events<'core, TICKETS>
+{
     fn tx_completed(
         &mut self,
-        queue: FreeQueue<'core>,
-        ticket: TxTicket<'core>,
-        slot: Pin<&'static mut TxSlot<512>>,
-        end: PublicationEnd,
-        rate: PhyRate,
-    ) {
+        completion: TxCompletion<
+            'core,
+            'static,
+            512,
+            oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'core>>,
+            TICKETS,
+        >,
+    ) -> Result<
+        (),
+        TxCompletion<
+            'core,
+            'static,
+            512,
+            oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'core>>,
+            TICKETS,
+        >,
+    > {
+        if let Some(left) = self.refuse_completions.checked_sub(1) {
+            self.refuse_completions = left;
+            self.order.push("tx refused");
+            return Err(completion);
+        }
+        let TxCompletion {
+            queue,
+            ticket,
+            slot,
+            end,
+            rate,
+        } = completion;
         self.returned_tickets.push(ticket);
         self.order.push("tx");
         self.queues.push(queue.category());
@@ -841,11 +922,21 @@ impl<'core> LowerMacSink<'core, 'static, 512> for Events<'core> {
         self.slots.push(slot);
         self.completions.push(end);
         self.rates.push(rate);
+        Ok(())
     }
 
-    fn key_removed(&mut self, removed: KeyRemoved<'core>) {
-        self.removed.push(removed);
+    fn key_removed<S: RemovableSlot<'core, Root<oer_protocols_radio_port::LocalId<'core>>>>(
+        &mut self,
+        removed: KeyRemoved<'core, Root<oer_protocols_radio_port::LocalId<'core>>, S>,
+    ) -> Result<(), KeyRemoved<'core, Root<oer_protocols_radio_port::LocalId<'core>>, S>> {
+        if let Some(left) = self.refuse_removals.checked_sub(1) {
+            self.refuse_removals = left;
+            self.order.push("key refused");
+            return Err(removed);
+        }
+        self.removed.push(removed.erase());
         self.order.push("key");
+        Ok(())
     }
 
     fn disabled(&mut self) {
@@ -2367,9 +2458,79 @@ fn keys_install_into_their_role_slots_and_protect_attempts() {
         complete(&mut core, &mut hardware, 0);
         assert_eq!(core.keys.uses[pairwise.index].get(), 0);
         let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, pairwise, &mut events);
+        core.remove_key_for_test(&mut hardware, pairwise, &mut events);
         assert_eq!(hardware.cleared_keys, [4]);
         assert_eq!(events.removed.len(), 1);
+    });
+}
+
+/// A removal names the slot kind of its key: a handle asked for another
+/// kind comes back whole, and the removal of its own kind ends with a
+/// receipt of that kind.
+#[test]
+fn a_key_asked_for_another_slot_kind_comes_back_whole_and_its_own_kind_removes_it() {
+    use association::{
+        AccessPointGroupSlot, AccessPointPairwiseSlot, StationGroupSlot, StationPairwiseSlot,
+    };
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        static KEY: [u8; 16] = [0x5a; 16];
+        let pairwise = core
+            .install_key(
+                &mut hardware,
+                TransmitKeyScope::StationPairwise { peer: BSSID },
+                &KEY,
+            )
+            .unwrap();
+        let group = core
+            .install_receive_key(
+                &mut hardware,
+                oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+                &KEY,
+            )
+            .unwrap();
+        let Err(pairwise) = pairwise.into_removing::<AccessPointPairwiseSlot<'_>>() else {
+            panic!("a station pairwise key is no access point's");
+        };
+        let Err(pairwise) = pairwise.into_removing::<StationGroupSlot<'_>>() else {
+            panic!("a station pairwise key is no group key");
+        };
+        let Err(group) = group.into_removing::<AccessPointGroupSlot<'_>>() else {
+            panic!("a station group key is no access point's");
+        };
+        // Nothing was taken or cleared by the refusals.
+        assert!(hardware.cleared_keys.is_empty());
+        let mut events = Events::default();
+        let removing = pairwise
+            .into_removing::<StationPairwiseSlot<'_>>()
+            .ok()
+            .unwrap();
+        let place = core.remove_checked_key(&mut hardware, removing, &mut events);
+        assert_eq!(hardware.cleared_keys, [4]);
+        assert!(matches!(
+            events.removed.pop().unwrap().into_slot(),
+            association::VacantKeySlot::StationPairwise(_)
+        ));
+        // The sink took the receipt: its place holds none.
+        assert!(!core.removed_ready(&place));
+        assert!(core.take_removed(place).is_err());
+        let mut refusing = Events {
+            refuse_removals: 1,
+            ..Events::default()
+        };
+        let removing = group.into_removing::<StationGroupSlot<'_>>().ok().unwrap();
+        let place = core.remove_checked_key(&mut hardware, removing, &mut refusing);
+        assert!(refusing.removed.is_empty());
+        // Refused, the receipt waits in its place, of the group's kind.
+        assert!(core.removed_ready(&place));
+        let removed: KeyRemoved<'_, _, StationGroupSlot<'_>> =
+            core.take_removed(place).ok().unwrap();
+        assert!(matches!(
+            removed.scope(),
+            CheckedKeyScope::StationGroup { .. }
+        ));
+        drop(removed.into_slot());
     });
 }
 
@@ -2418,7 +2579,7 @@ fn a_fresh_protected_mpdu_is_numbered_and_receive_only_group_removal_has_its_fif
         }
         // A receive-only key has no admitted TX rights to delay its removal.
         let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, group, &mut events);
+        core.remove_key_for_test(&mut hardware, group, &mut events);
         assert_eq!(events.removed.len(), 1);
         assert!(matches!(
             events.removed[0].scope(),
@@ -3426,7 +3587,7 @@ fn key_removal_waits_for_both_parallel_attempts_and_follows_the_last_terminal() 
                 assert_eq!(core.keys.uses[index].get(), 2);
                 assert_eq!(hardware.publications(), 2);
                 let mut events = Events::default();
-                core.remove_checked_key(&mut hardware, key, &mut events);
+                core.remove_key_for_test(&mut hardware, key, &mut events);
                 assert!(events.removed.is_empty());
                 assert!(hardware.cleared_keys.is_empty());
                 // The installation consumed the only affine slot. A second
@@ -3463,13 +3624,13 @@ fn key_removal_without_uses_completes_at_the_remove_command() {
         let scope = TransmitKeyScope::StationPairwise { peer: BSSID };
         let key = core.install_key(&mut hardware, scope, &[0x71; 16]).unwrap();
         let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, key, &mut events);
+        core.remove_key_for_test(&mut hardware, key, &mut events);
         assert_eq!(events.order, ["key"]);
         assert_eq!(hardware.cleared_keys, [4]);
         core.associations
             .put(events.removed.pop().unwrap().into_slot());
         let key = core.install_key(&mut hardware, scope, &[0x72; 16]).unwrap();
-        core.remove_checked_key(&mut hardware, key, &mut events);
+        core.remove_key_for_test(&mut hardware, key, &mut events);
         assert_eq!(events.order, ["key", "key"]);
         assert_eq!(hardware.cleared_keys, [4, 4]);
     });
@@ -3499,7 +3660,7 @@ fn held_withdrawal_and_indeterminate_timeout_return_their_key_rights() {
         .ok()
         .unwrap();
         let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, key, &mut events);
+        core.remove_key_for_test(&mut hardware, key, &mut events);
         core.disable_checked(&mut hardware, &mut events);
         assert_eq!(events.completions, [PublicationEnd::Withdrawn]);
         assert!(events.removed.is_empty());
@@ -3539,7 +3700,7 @@ fn poisoned_attempts_retain_key_rights_and_never_report_key_removed() {
                 .unwrap();
         }
         let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, key, &mut events);
+        core.remove_key_for_test(&mut hardware, key, &mut events);
         hardware.taken_by_air = [true; 4];
         for _ in 0..8 {
             let deadline = core.next_deadline().unwrap();
@@ -3598,12 +3759,9 @@ fn refused_publication_returns_the_key_right_until_its_owner_releases_it() {
             .unwrap();
         assert_eq!(hardware.publications(), 0);
         let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, key, &mut events);
+        core.remove_key_for_test(&mut hardware, key, &mut events);
         assert!(events.removed.is_empty());
-        let _ticket = core
-            .return_admission(&mut hardware, refused.admission, &mut events)
-            .ok()
-            .unwrap();
+        let _ticket = core.return_admission(&mut hardware, refused.admission, &mut events);
         assert_eq!(events.order, ["key"]);
         assert_eq!(hardware.cleared_keys, [4]);
     });
@@ -3635,7 +3793,7 @@ fn key_bank_survives_a_disabled_core_round_trip() {
         )
         .ok()
         .unwrap();
-        core.remove_checked_key(&mut hardware, key, &mut events);
+        core.remove_key_for_test(&mut hardware, key, &mut events);
         assert!(hardware.cleared_keys.is_empty());
         hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
         core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
@@ -3675,7 +3833,7 @@ fn failed_gate_open_returns_key_uses_of_every_held_attempt() {
             };
             single.backoff_slots = u16::MAX;
             let mut events = Events::default();
-            core.remove_checked_key(&mut hardware, key, &mut events);
+            core.remove_key_for_test(&mut hardware, key, &mut events);
             let mut failed = core
                 .inner
                 .open_gate(&mut hardware, &mut events)
@@ -3698,7 +3856,7 @@ fn failed_gate_open_returns_key_uses_of_every_held_attempt() {
 }
 
 #[test]
-fn an_unpublished_right_returned_after_poison_stays_in_custody() {
+fn an_unpublished_right_returned_after_poison_gives_its_key_use_back_and_admits_nothing() {
     installed(|pools| {
         let mut hardware = Hardware::default();
         let mut core = enabled(&mut hardware, pools);
@@ -3718,9 +3876,10 @@ fn an_unpublished_right_returned_after_poison_stays_in_custody() {
         .ok()
         .unwrap();
         let ticket = core.take_ticket();
+        let admitted = ticket.index();
         let outside = core.admit_key(&key, ticket).ok().unwrap();
         let mut events = Events::default();
-        core.remove_checked_key(&mut hardware, key, &mut events);
+        core.remove_key_for_test(&mut hardware, key, &mut events);
         hardware.taken_by_air = [true; 4];
         for _ in 0..8 {
             let deadline = core.next_deadline().unwrap();
@@ -3733,13 +3892,23 @@ fn an_unpublished_right_returned_after_poison_stays_in_custody() {
             }
         }
         assert!(core.inner.fault().is_some());
-        let _custody = core
-            .return_admission(&mut hardware, TxAdmission::Protected(outside), &mut events)
-            .err()
-            .unwrap();
-        assert_eq!(core.keys.uses[index].get(), 2);
-        assert!(hardware.cleared_keys.is_empty());
-        assert!(events.order.is_empty());
+        let ticket =
+            core.return_admission(&mut hardware, TxAdmission::Protected(outside), &mut events);
+        assert_eq!(
+            core.keys.uses[index].get(),
+            1,
+            "the key use goes back first"
+        );
+        assert!(
+            hardware.cleared_keys.is_empty(),
+            "the poisoned core keeps its key material"
+        );
+        assert!(events.order.is_empty(), "the removal waits under the fault");
+        assert_eq!(
+            ticket.index(),
+            admitted,
+            "the admission's own ticket comes back"
+        );
     });
 }
 
@@ -3824,10 +3993,7 @@ fn a_protected_wire_frame_cannot_publish_with_an_open_ticket() {
         assert_eq!(refused.fault, LowerMacFault::KeyUseMismatch);
         assert_eq!(hardware.publications(), 0);
         let mut events = Events::default();
-        let _ticket = core
-            .return_admission(&mut hardware, refused.admission, &mut events)
-            .ok()
-            .unwrap();
+        let _ticket = core.return_admission(&mut hardware, refused.admission, &mut events);
         assert!(events.order.is_empty());
     });
 }
@@ -3886,14 +4052,15 @@ fn maximum_ticket_pool_keeps_key_removal_until_all_256_rights_return() {
                 .map(|ticket| core.admit_key(&key, ticket).ok().unwrap());
             assert_eq!(core.keys.uses[index].get(), 256);
             let mut events = Events::default();
-            core.remove_checked_key(&mut hardware, key, &mut events);
+            core.remove_key_for_test(&mut hardware, key, &mut events);
             assert!(hardware.cleared_keys.is_empty());
             rights.reverse();
             for (ordinal, right) in rights.into_iter().enumerate() {
-                let ticket = core
-                    .return_admission(&mut hardware, TxAdmission::Protected(right), &mut events)
-                    .ok()
-                    .unwrap();
+                let ticket = core.return_admission(
+                    &mut hardware,
+                    TxAdmission::Protected(right),
+                    &mut events,
+                );
                 assert_eq!(ticket.index(), 255 - ordinal);
                 assert_eq!(core.keys.uses[index].get() as usize, 255 - ordinal);
                 assert_eq!(events.removed.len(), usize::from(ordinal == 255));
@@ -4065,24 +4232,20 @@ fn spp_changes_only_after_the_complete_bank_and_end_has_no_hardware_effect() {
         let first = inner.admit_key(&key, first.unwrap()).ok().unwrap();
         let second = inner.admit_key(&key, second.unwrap()).ok().unwrap();
         let mut events = Events::default();
-        inner.remove_checked_key(&mut hardware, group, &mut events);
+        inner.remove_key_for_test(&mut hardware, group, &mut events);
         let VacantKeySlot::StationGroup(group) = events.removed.pop().unwrap().into_slot() else {
             panic!("GTK slot");
         };
-        inner.remove_checked_key(&mut hardware, key, &mut events);
+        inner.remove_key_for_test(&mut hardware, key, &mut events);
         assert!(events.removed.is_empty());
-        let _ticket = inner
-            .return_admission(&mut hardware, TxAdmission::Protected(first), &mut events)
-            .ok()
-            .unwrap();
+        let _ticket =
+            inner.return_admission(&mut hardware, TxAdmission::Protected(first), &mut events);
         assert!(
             events.removed.is_empty(),
             "the full bank does not exist while a use is retained"
         );
-        let _ticket = inner
-            .return_admission(&mut hardware, TxAdmission::Protected(second), &mut events)
-            .ok()
-            .unwrap();
+        let _ticket =
+            inner.return_admission(&mut hardware, TxAdmission::Protected(second), &mut events);
         let VacantKeySlot::StationPairwise(pairwise) = events.removed.pop().unwrap().into_slot()
         else {
             panic!("PTK slot");
@@ -4236,7 +4399,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
 }
 
 #[test]
-fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_rollback() {
+fn group_replacement_keeps_exact_material_and_the_core_runs_on_after_every_failed_replacement() {
     use crate::mac::crypto::StaGroupCcmpReplaceError;
     use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
     for rejected in 0..=2 {
@@ -4256,14 +4419,16 @@ fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_ro
                     assert_eq!(key.key_id, new_id);
                     assert_eq!(hardware.key_material, [(1, [2; 16])]);
                     assert!(core.fault.is_none());
-                    // A later rejected update must restore the newly committed key.
+                    // A later rejected update restores the newly committed
+                    // key, and the core runs on.
                     hardware.reject_key_writes = 1;
                     assert!(matches!(
                         core.replace_station_group_key(&mut hardware, &mut key, old_id, &[3; 16]),
                         Err(StaGroupCcmpReplaceError::ReplacementRolledBack(_))
                     ));
                     assert_eq!(hardware.key_material, [(1, [2; 16])]);
-                    assert!(core.fault.is_some());
+                    assert_eq!(key.key_id, new_id);
+                    assert!(core.fault.is_none(), "a rollback proves the previous key");
                 }
                 1 => {
                     assert!(matches!(
@@ -4272,7 +4437,7 @@ fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_ro
                     ));
                     assert_eq!(key.key_id, old_id);
                     assert_eq!(hardware.key_material, [(1, [1; 16])]);
-                    assert!(core.fault.is_some());
+                    assert!(core.fault.is_none(), "a rollback proves the previous key");
                 }
                 _ => {
                     assert!(matches!(
@@ -4280,7 +4445,32 @@ fn group_replacement_keeps_exact_material_and_poisons_even_after_a_successful_ro
                         Err(StaGroupCcmpReplaceError::RollbackFailed { .. })
                     ));
                     assert!(hardware.key_material.is_empty());
-                    assert!(core.fault.is_some());
+                    assert!(core.fault.is_none(), "the key's removal still runs");
+                    // A further replacement is refused before the table
+                    // changes: nothing is written or cleared.
+                    let writes = hardware.crypto_order.len();
+                    assert_eq!(
+                        core.replace_station_group_key(&mut hardware, &mut key, new_id, &[4; 16]),
+                        Err(StaGroupCcmpReplaceError::CurrentMaterialMismatch)
+                    );
+                    assert_eq!(hardware.crypto_order.len(), writes);
+                    assert!(core.fault.is_none());
+                    // The cleanup clears the entry once and reads it; a
+                    // table that still reads it valid is read again, with
+                    // nothing written.
+                    hardware.key_entries_stuck = true;
+                    core.clear_failed_station_group(&mut hardware, &mut key);
+                    let writes = hardware.crypto_order.len();
+                    assert_eq!(
+                        core.read_failed_station_group(&mut hardware, &key),
+                        crate::mac::crypto::EntryRead::Held
+                    );
+                    hardware.key_entries_stuck = false;
+                    assert_eq!(
+                        core.read_failed_station_group(&mut hardware, &key),
+                        crate::mac::crypto::EntryRead::Cleared
+                    );
+                    assert_eq!(hardware.crypto_order.len(), writes, "reads write nothing");
                 }
             }
         });
@@ -4415,4 +4605,141 @@ fn the_port_table_holds_the_lengths_the_core_plans_by() {
             assert_eq!(at(rate).ok(), planned, "{rate:?}");
         }
     }
+}
+
+#[test]
+fn a_ticket_and_a_queue_place_go_back_to_their_own_places() {
+    installed(|pools| {
+        let mut tickets = TicketBank::new(pools.tickets);
+        let mut queues = QueueBank::new(pools.queues);
+        assert!(tickets.all_home() && queues.all_home());
+        let first = tickets.take().unwrap();
+        let second = tickets.take().unwrap();
+        assert_eq!((first.index(), second.index()), (0, 1));
+        tickets.put(first);
+        // The lowest index at home is the one just returned, not a search
+        // for any free place.
+        let again = tickets.take().unwrap();
+        assert_eq!(again.index(), 0);
+        assert_eq!(tickets.at_home(), 2);
+        tickets.put(second);
+        tickets.put(again);
+        assert!(tickets.all_home());
+        let video = queues.take(WmmAccessCategory::Video).unwrap();
+        assert_eq!(video.category(), WmmAccessCategory::Video);
+        assert!(queues.take(WmmAccessCategory::Video).is_none());
+        assert!(!queues.is_home(WmmAccessCategory::Video));
+        assert!(queues.is_home(WmmAccessCategory::Voice));
+        queues.put(video);
+        assert!(queues.all_home());
+    });
+}
+
+#[test]
+fn a_completion_its_sink_refuses_waits_in_its_queue_and_ends_once_when_offered_again() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let frame = data_frame(BSSID);
+        submit(&mut core, &mut hardware, values(&frame, false)).unwrap();
+        hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
+        let mut events = Events {
+            refuse_completions: 1,
+            ..Events::default()
+        };
+        core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
+            .unwrap();
+        assert_eq!(events.order, ["tx refused"]);
+        assert!(events.completions.is_empty());
+        // The ended attempt keeps its queue's place: no second attempt of
+        // the queue is admitted, and the core holds a result.
+        assert!(core.queue_busy(WmmAccessCategory::BestEffort));
+        assert!(core.keeps_results());
+        // The next service offers it again; the hardware ends nothing new.
+        let mut events = Events::default();
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        assert_eq!(events.order, ["tx"]);
+        assert!(matches!(
+            events.completions.as_slice(),
+            [PublicationEnd::Delivered { .. }]
+        ));
+        assert_eq!(hardware.publications(), 1);
+        assert!(!core.queue_busy(WmmAccessCategory::BestEffort));
+        assert!(!core.keeps_results());
+        // It ends once.
+        let mut events = Events::default();
+        core.service(&mut hardware, WifiTxWake::Deadline, &mut events)
+            .unwrap();
+        assert!(events.order.is_empty());
+    });
+}
+
+#[test]
+fn a_removal_receipt_its_sink_refuses_waits_in_its_place_and_the_key_clears_once() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        static KEY: [u8; 16] = [0x5a; 16];
+        let pairwise = core
+            .install_key(
+                &mut hardware,
+                TransmitKeyScope::StationPairwise { peer: BSSID },
+                &KEY,
+            )
+            .unwrap();
+        let mut events = Events {
+            refuse_removals: 1,
+            ..Events::default()
+        };
+        core.remove_key_for_test(&mut hardware, pairwise, &mut events);
+        assert_eq!(hardware.cleared_keys, [4]);
+        assert_eq!(events.order, ["key refused"]);
+        assert!(events.removed.is_empty());
+        assert!(core.keeps_results());
+        // Offered again: the receipt comes out, the key is not cleared again.
+        let mut events = Events::default();
+        core.offer_kept(&mut events);
+        assert_eq!(hardware.cleared_keys, [4]);
+        assert_eq!(events.removed.len(), 1);
+        assert!(!core.keeps_results());
+        let mut again = Events::default();
+        core.offer_kept(&mut again);
+        assert!(again.order.is_empty());
+    });
+}
+
+#[test]
+fn a_disable_offers_a_kept_completion_before_it_ends() {
+    installed(|pools| {
+        let mut hardware = Hardware::default();
+        let mut core = enabled(&mut hardware, pools);
+        let frame = data_frame(BSSID);
+        submit(&mut core, &mut hardware, values(&frame, false)).unwrap();
+        hardware.completion[BE] = Some(MacTxCompletionObservation::new_model(0, 0));
+        let mut events = Events {
+            refuse_completions: 1,
+            ..Events::default()
+        };
+        core.service(&mut hardware, interrupt(EVENT_TX_COMPLETE), &mut events)
+            .unwrap();
+        assert!(core.keeps_results());
+        let mut refusing = Events {
+            refuse_completions: 1,
+            ..Events::default()
+        };
+        // A disable whose sink still refuses the completion does not end.
+        core.inner
+            .disable_checked(&mut hardware, &mut refusing)
+            .unwrap();
+        assert_eq!(refusing.order, ["tx refused"]);
+        assert_eq!(refusing.disabled, 0);
+        assert!(core.keeps_results());
+        let mut events = Events::default();
+        core.inner.finish_disable(&mut events);
+        assert_eq!(events.order, ["tx"]);
+        assert_eq!(events.disabled, 1);
+        assert!(!core.keeps_results());
+        core.reclaim(&mut events);
+    });
 }

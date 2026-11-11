@@ -1,4 +1,4 @@
-error[E0599]: the method `admit` exists for struct `Attempt<'_, ModelTickets, ModelPrepared<'_, 'p, 'a, oer_protocols_ieee80211_contracts_port::Station, ModelCaps, ModelBackend<StaticId<Source>>>, ModelCaps, (), oer_protocols_radio_port::Child<Root<StaticId<Target>>, 1>>`, but its trait bounds were not satisfied
+error[E0599]: the method `admit` exists for struct `Attempt<'_, Slots<ModelTickets, 8>, ModelPrepared<'_, 'p, 'a, oer_protocols_ieee80211_contracts_port::Station, ModelCaps, ModelBackend<StaticId<Source>>>, ModelCaps, (), oer_protocols_radio_port::Child<Root<StaticId<Target>>, 1>>`, but its trait bounds were not satisfied
   --> tests/ui/installation_prepared.rs:35:18
    |
 35 |     drop(attempt.admit()); // ui-error: E0599

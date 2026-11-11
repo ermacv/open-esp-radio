@@ -14,9 +14,10 @@ oer-protocols-ieee80211-core-upper-mac = { path = "../../upper-mac" }
 oer-protocols-ieee80211-wire = { path = "../../../wire" }
 oer-protocols-ieee80211-core-security-rsn = { path = "../../security/rsn" }
 oer-portable-time = { path = "../../../../../portable/time" }
+oer-protocols-ieee80211-contracts-security = { path = "../../../contracts/security" }
+oer-protocols-ieee80211-contracts-port = { path = "../../../contracts/port" }
 
 [dev-dependencies]
-oer-protocols-ieee80211-contracts-security = { path = "../../../contracts/security" }
 oer-portable-wire = { path = "../../../../../portable/wire" }
 
 [lints]

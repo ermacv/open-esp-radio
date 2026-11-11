@@ -5,7 +5,7 @@
 use core::marker::PhantomData;
 use oer_protocols_ieee80211_contracts_port::ConnectionEpochKind;
 use oer_protocols_radio_port::{ContextLoan, ContextProjection, PortContext};
-use oer_protocols_radio_port::{PoolPath, Root, Slot};
+use oer_protocols_radio_port::{PoolPath, Root, Slot, Slots};
 
 /// Queue representation of an epoch and its operation data. The epoch is
 /// private; public projections always restore the consumer's body loan.
@@ -98,7 +98,7 @@ pub struct LinkEpochSource<'id, Path: PoolPath = Root<oer_protocols_radio_port::
 
 impl<'id, Path: PoolPath> LinkEpochSource<'id, Path> {
     /// Consume the one station source slot the backend minted at install.
-    pub fn new(_slot: Slot<'id, ConnectionEpochKind, Path>) -> Self {
+    pub fn new(_slot: Slot<'id, Slots<ConnectionEpochKind, 1>, Path>) -> Self {
         Self {
             brand: PhantomData,
             last: 0,

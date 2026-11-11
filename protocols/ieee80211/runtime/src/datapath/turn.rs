@@ -2,7 +2,8 @@
 //! lifecycle's messages and the radio's start, move and stop.
 
 use super::*;
-use oer_protocols_ieee80211_contracts_port::PortCompleted;
+use oer_protocols_ieee80211_contracts_port::{Input, PortCompleted, RecycleRefused};
+use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckRefused;
 
 /// What [`Actor::collect`] found.
 pub(super) struct Collected {
@@ -34,11 +35,13 @@ pub(super) type Failed<'id, D> = ActorFault<PortFault<'id, D>>;
 /// The turn's sink for what the port produces besides its return values: a
 /// terminal goes to the lifecycle at once, unless it ends the group change
 /// the actor holds a token for; that terminal, the units of a receive cut
-/// and the TBTT wait in the stage for the actor.
+/// and the TBTT wait in the stage for the actor. One it has no room for it
+/// refuses: the port keeps it, and the actor's next wait registers for the
+/// lifecycle's room ([`Stage::refused`]) before it sleeps.
 pub(super) struct Outbox<'a, 'c, 'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize>
 {
-    pub(super) from_actor: &'a WakingSpscSender<'c, FromActor<'id, D>, FROM>,
-    pub(super) returns: &'a WakingSpscSender<'c, Returned<'id, D>, RETURNS>,
+    pub(super) from_actor: &'a mut ClosingSpscSender<'c, FromActor<'id, D>, FROM>,
+    pub(super) returns: &'a mut ClosingSpscSender<'c, Returned<'id, D>, RETURNS>,
     pub(super) stage: &'a mut Stage<'id, D>,
     /// A group change's terminal is owed.
     pub(super) grouped: bool,
@@ -56,16 +59,33 @@ fn is_group<'id, T: PortTypes<'id>>(terminal: &LowerMacTerminal<'id, T>) -> bool
     )
 }
 
-/// Send `returned` and its announcement, when both queues have room.
-pub(super) fn give_back<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize>(
-    from_actor: &WakingSpscSender<'_, FromActor<'id, D>, FROM>,
-    returns: &WakingSpscSender<'_, Returned<'id, D>, RETURNS>,
-    returned: Returned<'id, D>,
-) -> Result<(), Returned<'id, D>> {
-    if from_actor.free_capacity() == 0 {
-        return Err(returned);
+/// The violation a refused send to the lifecycle names: a closed reception
+/// is its own, never a full queue.
+pub(super) const fn refusal<T>(refused: &ClosingSpscSendError<T>) -> ActorViolation {
+    match refused {
+        ClosingSpscSendError::Full(_) => ActorViolation::OutboxFull,
+        ClosingSpscSendError::Closed(_) => ActorViolation::LifecycleClosed,
     }
-    returns.try_send(returned).map_err(|refused| refused.0)?;
+}
+
+/// Send `returned` and its announcement, when both queues have room and
+/// the lifecycle's reception is open; otherwise `returned` comes back with
+/// the refusal's violation.
+pub(super) fn give_back<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize>(
+    from_actor: &ClosingSpscSender<'_, FromActor<'id, D>, FROM>,
+    returns: &ClosingSpscSender<'_, Returned<'id, D>, RETURNS>,
+    returned: Returned<'id, D>,
+) -> Result<(), (Returned<'id, D>, ActorViolation)> {
+    if from_actor.is_closed() {
+        return Err((returned, ActorViolation::LifecycleClosed));
+    }
+    if from_actor.free_capacity() == 0 {
+        return Err((returned, ActorViolation::OutboxFull));
+    }
+    returns.try_send(returned).map_err(|refused| {
+        let violation = refusal(&refused);
+        (refused.into_inner(), violation)
+    })?;
     // The announcement's room was checked; the one sender sends.
     from_actor
         .try_send(FromActor::Returned)
@@ -77,33 +97,57 @@ pub(super) fn give_back<'id, D: DatapathPort<'id>, const FROM: usize, const RETU
 impl<'id, D: DatapathPort<'id>, const FROM: usize, const RETURNS: usize> PortSink<'id, D::Types>
     for Outbox<'_, '_, 'id, D, FROM, RETURNS>
 {
-    fn terminal(&mut self, terminal: ActorTerminal<'id, D>) {
-        D::terminal(&terminal);
+    fn terminal(&mut self, terminal: ActorTerminal<'id, D>) -> Result<(), ActorTerminal<'id, D>> {
         if self.grouped && self.stage.group_terminal.is_none() && is_group(&terminal) {
+            D::terminal(&terminal);
             self.stage.group_terminal = Some(terminal);
-            return;
+            return Ok(());
         }
-        let returned = Returned::Terminal {
-            terminal,
-            grouped: false,
+        // A closed reception has no lifecycle to hand it to: the port keeps
+        // it, whole, and nothing waits for room that never comes.
+        if self.from_actor.is_closed() || self.returns.is_closed() {
+            self.stage.closed = true;
+            return Err(terminal);
+        }
+        // Both cells first: a terminal without its announcement's room is
+        // refused whole, and the port keeps it.
+        let (Some(announce), Some(cell)) =
+            (self.from_actor.try_reserve(), self.returns.try_reserve())
+        else {
+            self.stage.refused = true;
+            return Err(terminal);
         };
-        if let Err(returned) = give_back(self.from_actor, self.returns, returned) {
-            // The producers' bounds did not hold: the owner stays, never
-            // dropped, and the run ends on the violation.
-            let _quarantined = core::mem::ManuallyDrop::new(returned);
-            self.stage.overflow = Some(ActorViolation::OutboxFull);
+        D::terminal(&terminal);
+        // Closed after the check above: the same end.
+        if let Err(ClosingSpscClosed(terminal)) =
+            cell.send_with(terminal, |terminal| Returned::Terminal {
+                terminal,
+                grouped: false,
+            })
+        {
+            self.stage.closed = true;
+            return Err(terminal);
         }
+        // The announcement carries no owner: a closed reception has no
+        // reader for it, and the owner it announces stays in its queue.
+        let _announced = announce.send(FromActor::Returned);
+        Ok(())
     }
 
     fn tbtt(&mut self, event: TbttEvent) {
         self.stage.tbtt = Some(event);
     }
 
-    fn received(&mut self, frame: ActorRxBuffer<'id, D>, meta: ActorRxMeta<'id, D>) {
-        if let Err(unit) = self.stage.cut.push_back((frame, meta)) {
-            let _quarantined = core::mem::ManuallyDrop::new(unit);
-            self.stage.overflow = Some(ActorViolation::CutOverflow);
-        }
+    fn received(
+        &mut self,
+        frame: ActorRxBuffer<'id, D>,
+        meta: ActorRxMeta<'id, D>,
+    ) -> Result<(), (ActorRxBuffer<'id, D>, ActorRxMeta<'id, D>)> {
+        // A full stage is drained by this turn: the port keeps the unit and
+        // offers it again at the next turn's call.
+        self.stage.cut.push_back((frame, meta)).inspect_err(|_| {
+            self.stage.refused = true;
+        })
     }
 }
 
@@ -128,8 +172,11 @@ impl<'id, P: DataPort<'id>> RxBlockAckPort<PortRxBlockAck<'id, P::Types>> for Po
         self.0.remove_block_ack(running)
     }
 
-    fn recycle(&mut self, frame: <P::Types as PortTypes<'id>>::RxBuffer) {
-        self.0.recycle(frame);
+    fn recycle(
+        &mut self,
+        frame: <P::Types as PortTypes<'id>>::RxBuffer,
+    ) -> Result<(), RecycleRefused<<P::Types as PortTypes<'id>>::RxBuffer>> {
+        self.0.recycle(frame)
     }
 }
 
@@ -324,6 +371,20 @@ where
         if self.poll_network_stop(cx, network) {
             ready = true;
         }
+        // What the outbox refused waits in the port, which signals nothing
+        // for it: the lifecycle's room wakes the actor, each queue's wait
+        // armed before its room is checked again.
+        // A closed reception ends the wait at once: the turn ends the run.
+        if self.stage.refused {
+            let announce = lifecycle.from_actor.poll_room(cx);
+            let cell = lifecycle.returns.poll_room(cx);
+            if matches!(announce, Poll::Ready(Err(_))) || matches!(cell, Poll::Ready(Err(_))) {
+                self.stage.closed = true;
+                ready = true;
+            } else if announce.is_ready() && cell.is_ready() {
+                ready = true;
+            }
+        }
         if self.receive.has_ready()
             && (!network.network.takes_frames()
                 || self.network_late()
@@ -403,6 +464,26 @@ where
         // now, so the network's next MSDU wakes this actor.
         self.connect_plane()?;
         self.flush(lifecycle);
+        self.lifecycle_open(lifecycle)
+    }
+
+    /// The run ends once the lifecycle's reception closed: nothing the
+    /// actor owes it is sent any more, and no wait for its room follows.
+    /// What it did not send stays where it is: the owed answers with the
+    /// actor, a refused terminal with the port.
+    pub(super) fn lifecycle_open<const TO: usize, const FROM: usize, const RETURNS: usize>(
+        &mut self,
+        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+    ) -> Result<(), Failed<'id, D>> {
+        if self.stage.closed
+            || lifecycle.from_actor.is_closed()
+            || lifecycle.returns.is_closed()
+            || lifecycle.groups.is_closed()
+            || lifecycle.link_return.is_closed()
+        {
+            self.stage.closed = true;
+            return Err(ActorFault::Contract(ActorViolation::LifecycleClosed));
+        }
         Ok(())
     }
 
@@ -484,22 +565,49 @@ where
         if facts.tx.is_some_and(|tx| tx.bits() != 0) || facts.tbtt {
             self.progressed = true;
         }
-        if facts.tx.is_some() || facts.tbtt || due {
+        // What the outbox refused waits in the port: after a confirmed stop
+        // only `take_unconsumed` offers it, before one the service does.
+        let refused = core::mem::take(&mut self.stage.refused);
+        if refused {
             let mut outbox = Outbox {
-                from_actor: &lifecycle.from_actor,
-                returns: &lifecycle.returns,
+                from_actor: &mut lifecycle.from_actor,
+                returns: &mut lifecycle.returns,
                 stage: &mut self.stage,
                 grouped: self.group.is_some(),
             };
-            let done = self
-                .port
-                .service_tx(
-                    facts.tx.unwrap_or(TxFacts::DUE),
-                    facts.tbtt,
-                    self.now,
-                    &mut outbox,
-                )
-                .map_err(ActorFault::Port)?;
+            if self.port.take_unconsumed(&mut outbox).is_ok() {
+                self.staged(lifecycle, network)?;
+            }
+        }
+        if facts.tx.is_some() || facts.tbtt || due || refused {
+            let mut outbox = Outbox {
+                from_actor: &mut lifecycle.from_actor,
+                returns: &mut lifecycle.returns,
+                stage: &mut self.stage,
+                grouped: self.group.is_some(),
+            };
+            // No turn runs while an unkept item is kept: its place is
+            // empty here.
+            let served = match self.port.service_tx(
+                facts.tx.unwrap_or(TxFacts::DUE),
+                facts.tbtt,
+                self.now,
+                &mut outbox,
+            ) {
+                Ok(served) => served,
+                Err(oer_protocols_ieee80211_contracts_port::Unkeeping { unkept, input }) => {
+                    // The run ends on it; the arena an accepted call ended
+                    // stays with the actor, and the port keeps its own
+                    // fault. A call refused before it served
+                    // (`NotAccepted(())`) ran nothing and answered nothing.
+                    self.retained.unkept = Some(unkept);
+                    if let Input::Accepted(Ok(Some(done))) = input {
+                        self.retained.completed = Some(done);
+                    }
+                    return Err(ActorFault::Unkept);
+                }
+            };
+            let done = served.map_err(ActorFault::Port)?;
             self.staged(lifecycle, network)?;
             if let Some(done) = done {
                 self.finish_arena(done)?;
@@ -524,9 +632,6 @@ where
         lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
-        if let Some(violation) = self.stage.overflow.take() {
-            return Err(ActorFault::Contract(violation));
-        }
         if let Some(event) = self.stage.tbtt.take() {
             self.owed.tbtt = Some(event);
         }
@@ -556,8 +661,9 @@ where
             return Ok(false);
         };
         lifecycle.groups.try_send(group).map_err(|refused| {
-            self.retained.group = Some(refused.0);
-            ActorFault::Contract(ActorViolation::OutboxFull)
+            let violation = refusal(&refused);
+            self.retained.group = Some(refused.into_inner());
+            ActorFault::Contract(violation)
         })?;
         Ok(true)
     }
@@ -569,10 +675,12 @@ where
         lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         returned: Returned<'id, D>,
     ) -> Result<(), Failed<'id, D>> {
-        give_back(&lifecycle.from_actor, &lifecycle.returns, returned).map_err(|returned| {
-            self.retained.returned = Some(returned);
-            ActorFault::Contract(ActorViolation::OutboxFull)
-        })
+        give_back(&lifecycle.from_actor, &lifecycle.returns, returned).map_err(
+            |(returned, violation)| {
+                self.retained.returned = Some(returned);
+                ActorFault::Contract(violation)
+            },
+        )
     }
 
     /// Take the lifecycle's messages in order: at most
@@ -683,6 +791,7 @@ where
             ToActor::Start(channel) => match self.radio {
                 Radio::Stopped | Radio::Halted => {
                     self.radio = Radio::Starting(channel);
+                    self.stop_unconfirmed = false;
                     self.drive_radio(cx)?;
                 }
                 _ => self.owed.started = Some(Err(StartRefused::Running)),
@@ -777,22 +886,26 @@ where
                 outcome,
             } => self.rates.learn(self.now, rates, current, &outcome),
             ToActor::RxAgreement(request) => {
-                if self
-                    .receive
-                    .offer(
-                        self.now,
-                        request.epoch(),
-                        request.bssid(),
-                        request.action(),
-                        request.supported(),
-                        &mut PortBlockAcks(&mut self.port),
-                        &mut self.events,
-                    )
-                    .is_err()
-                {
+                match self.receive.offer(
+                    self.now,
+                    request.epoch(),
+                    request.bssid(),
+                    request.action(),
+                    request.supported(),
+                    &mut PortBlockAcks(&mut self.port),
+                    &mut self.events,
+                ) {
+                    Ok(()) => {}
                     // No reply place or bank is left for the request: the
                     // access point hears nothing and asks again.
-                    report(&mut self.events, || ActorEvent::RepliesFull);
+                    Err(RxBlockAckRefused::Capacity(_)) => {
+                        report(&mut self.events, || ActorEvent::RepliesFull);
+                    }
+                    // The previous association's frames stay in their
+                    // places; the run ends on the count.
+                    Err(RxBlockAckRefused::Clear(fault)) => {
+                        return Err(ActorFault::Receive(fault));
+                    }
                 }
             }
             ToActor::BlockAckReplied(place) => {
@@ -806,7 +919,7 @@ where
                 self.owed.gate = Some(self.port.open_gate(closed));
             }
             ToActor::Recycle(frame) => {
-                self.port.recycle(frame);
+                self.recycle(frame)?;
                 self.frames_out = self.frames_out.saturating_sub(1);
                 // The room it frees may let the ring give units it held
                 // back: the next turn pulls again.
@@ -818,6 +931,7 @@ where
                 network: end,
             } => self.stop(deadline, end, lifecycle, network)?,
             ToActor::Retire if matches!(self.radio, Radio::Returning) => {
+                self.finishing = true;
                 if self.pairwise.is_some() {
                     return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
                 }
@@ -826,6 +940,7 @@ where
                 self.retiring = true;
             }
             ToActor::Retire | ToActor::Reinstall => {
+                self.finishing = true;
                 if !matches!(self.radio, Radio::Halted | Radio::Stopped) {
                     // Only a stopped radio retires: the lifecycle stops it
                     // first.
@@ -870,19 +985,60 @@ where
             self.withdraw_unpublished()?;
         }
         let mut outbox = Outbox {
-            from_actor: &lifecycle.from_actor,
-            returns: &lifecycle.returns,
+            from_actor: &mut lifecycle.from_actor,
+            returns: &mut lifecycle.returns,
             stage: &mut self.stage,
             grouped: self.group.is_some(),
         };
-        let progress = self
-            .port
-            .command(command, self.now, &mut outbox)
-            .map_err(ActorFault::Port)?;
+        // No turn runs while an unkept item is kept: its place is empty
+        // here.
+        let (answer, unkept) = crate::answered(self.port.command(command, self.now, &mut outbox));
+        let answer = match answer {
+            Input::Accepted(answer) => answer,
+            Input::NotAccepted(command) => {
+                // Found before the port accepted it: it goes back to the
+                // lifecycle as one the port did not take, with the group
+                // token, and the run ends on the unkept item.
+                self.retained.unkept = unkept;
+                let group = if self.stage.group_terminal.is_none() {
+                    self.group.take()
+                } else {
+                    None
+                };
+                let grouped = self.give_group(lifecycle, group)?;
+                self.give(lifecycle, Returned::Unrun { command, grouped })?;
+                return Err(ActorFault::Unkept);
+            }
+        };
+        if unkept.is_some() {
+            // The command's own answer is served below; the run then ends
+            // on the unkept item.
+            self.retained.unkept = unkept;
+        }
+        let progress = match answer {
+            Ok(progress) => progress,
+            Err(CommandFailed::Returned { command, fault }) => {
+                // The port did not take it: it goes back to the lifecycle
+                // with the group token, never issued again, and the fault
+                // ends the run.
+                let group = if self.stage.group_terminal.is_none() {
+                    self.group.take()
+                } else {
+                    None
+                };
+                let grouped = self.give_group(lifecycle, group)?;
+                self.give(lifecycle, Returned::Unrun { command, grouped })?;
+                return Err(ActorFault::Port(fault));
+            }
+            Err(CommandFailed::Taken(fault)) => return Err(ActorFault::Port(fault)),
+        };
         match progress {
             CommandProgress::Done => {}
             CommandProgress::Held(command) => self.held = Some(HeldCommand { command }),
             CommandProgress::Refused(command, reason) => self.refuse(command, reason, lifecycle)?,
+        }
+        if self.retained.unkept.is_some() {
+            return Err(ActorFault::Unkept);
         }
         self.staged(lifecycle, network)
     }
@@ -920,7 +1076,8 @@ where
     ) -> Result<(), Failed<'id, D>> {
         self.stop_data()?;
         self.receive
-            .clear(&mut PortBlockAcks(&mut self.port), &mut self.events);
+            .clear(&mut PortBlockAcks(&mut self.port), &mut self.events)
+            .map_err(ActorFault::Receive)?;
         self.reply_out = None;
         let Some(link) = self.link.take() else {
             return Err(ActorFault::Contract(ActorViolation::LinkMailbox));
@@ -938,8 +1095,12 @@ where
             self.pairwise = Some(key);
         }
         if let Err(refused) = lifecycle.link_return.try_send(link) {
-            self.retained.link_return = Some(refused.0);
-            return Err(ActorFault::Contract(ActorViolation::LinkReturn));
+            let violation = match refused {
+                ClosingSpscSendError::Full(_) => ActorViolation::LinkReturn,
+                ClosingSpscSendError::Closed(_) => ActorViolation::LifecycleClosed,
+            };
+            self.retained.link_return = Some(refused.into_inner());
+            return Err(ActorFault::Contract(violation));
         }
         self.owed.link_returned = true;
         Ok(())
@@ -971,7 +1132,8 @@ where
         }
         self.stop_data()?;
         self.receive
-            .clear(&mut PortBlockAcks(&mut self.port), &mut self.events);
+            .clear(&mut PortBlockAcks(&mut self.port), &mut self.events)
+            .map_err(ActorFault::Receive)?;
         self.reply_out = None;
         self.return_freed(network);
         // The network stops once its memory is home: the stopped radio's
@@ -1062,7 +1224,10 @@ where
 
     /// The answer of a stop whose network settled: confirmed, or the
     /// radio's confirmed stop with the network's participant lost.
-    fn network_outcome(&self, observed: &StopObserved) -> StopOutcome {
+    fn network_outcome(
+        &self,
+        observed: &StopObserved<PortFault<'id, D>>,
+    ) -> StopOutcome<PortFault<'id, D>> {
         if self.network_stopping == NetworkStopping::Lost {
             StopOutcome::NetworkLost(ReturnObserved {
                 memory_held: observed.memory_held,
@@ -1075,7 +1240,11 @@ where
     }
 
     /// What a stop still holds.
-    fn observed(&self, port: Option<StopUnconfirmed>, deadline: bool) -> StopObserved {
+    fn observed(
+        &self,
+        port: Option<StopUnconfirmed<PortFault<'id, D>>>,
+        deadline: bool,
+    ) -> StopObserved<PortFault<'id, D>> {
         StopObserved {
             port,
             deadline,
@@ -1107,7 +1276,7 @@ where
                     self.owed.started = Some(Ok(()));
                 }
                 Poll::Ready(Err(refused)) => {
-                    self.radio = Radio::Stopped;
+                    self.radio = after_refused_start(&refused);
                     self.owed.started = Some(Err(refused));
                 }
                 Poll::Pending => {}
@@ -1125,6 +1294,7 @@ where
                 }
                 Poll::Ready(Err(unconfirmed)) => {
                     self.radio = Radio::Halted;
+                    self.stop_unconfirmed = true;
                     self.owed.retuned = Some(Err(RetuneFailed::Stop(unconfirmed)));
                 }
                 Poll::Pending => {}
@@ -1139,7 +1309,7 @@ where
                     self.owed.retuned = Some(Ok(()));
                 }
                 Poll::Ready(Err(refused)) => {
-                    self.radio = Radio::Stopped;
+                    self.radio = after_refused_start(&refused);
                     self.owed.retuned = Some(Err(RetuneFailed::Start(refused)));
                 }
                 Poll::Pending => {}
@@ -1180,6 +1350,7 @@ where
                 };
                 if let Some(outcome) = outcome {
                     self.radio = Radio::Halted;
+                    self.stop_unconfirmed = matches!(outcome, StopOutcome::Unconfirmed(_));
                     self.owed.stopped = Some(outcome);
                 }
             }
@@ -1211,7 +1382,7 @@ where
                     }
                 }
             }
-            Radio::Stopped | Radio::Running | Radio::Halted => {}
+            Radio::Stopped | Radio::Unstopped | Radio::Running | Radio::Halted => {}
         }
         Ok(())
     }
@@ -1243,7 +1414,7 @@ where
         if let Some(started) = self.owed.started.take()
             && let Err(refused) = from.try_send(FromActor::Started(started))
         {
-            self.owed.started = match refused.0 {
+            self.owed.started = match refused.into_inner() {
                 FromActor::Started(started) => Some(started),
                 _ => None,
             };
@@ -1251,7 +1422,7 @@ where
         if let Some(retuned) = self.owed.retuned.take()
             && let Err(refused) = from.try_send(FromActor::Retuned(retuned))
         {
-            self.owed.retuned = match refused.0 {
+            self.owed.retuned = match refused.into_inner() {
                 FromActor::Retuned(retuned) => Some(retuned),
                 _ => None,
             };
@@ -1267,7 +1438,7 @@ where
         if let Some(key) = self.owed.pairwise.take()
             && let Err(refused) = from.try_send(FromActor::PairwiseReturned(key))
         {
-            self.owed.pairwise = match refused.0 {
+            self.owed.pairwise = match refused.into_inner() {
                 FromActor::PairwiseReturned(key) => Some(key),
                 _ => None,
             };
@@ -1275,7 +1446,7 @@ where
         if let Some(gate) = self.owed.gate.take()
             && let Err(refused) = from.try_send(FromActor::GateOpened(gate))
         {
-            self.owed.gate = match refused.0 {
+            self.owed.gate = match refused.into_inner() {
                 FromActor::GateOpened(gate) => Some(gate),
                 _ => None,
             };
@@ -1283,7 +1454,7 @@ where
         if let Some(stopped) = self.owed.stopped.take()
             && let Err(refused) = from.try_send(FromActor::Stopped(stopped))
         {
-            self.owed.stopped = match refused.0 {
+            self.owed.stopped = match refused.into_inner() {
                 FromActor::Stopped(stopped) => Some(stopped),
                 _ => None,
             };
@@ -1297,7 +1468,7 @@ where
         // Facts only take the places the bounded producers do not keep.
         let reserve = LIFECYCLE_FRAMES.saturating_add(RETURNS);
         let room =
-            |from: &WakingSpscSender<'_, FromActor<'id, D>, FROM>| from.free_capacity() > reserve;
+            |from: &ClosingSpscSender<'_, FromActor<'id, D>, FROM>| from.free_capacity() > reserve;
         if let Some(event) = self.owed.tbtt
             && room(from)
             && from.try_send(FromActor::Tbtt(event)).is_ok()
@@ -1337,6 +1508,18 @@ where
         }
     }
 
+    /// Return `frame` to the port. A refusal keeps the unit with the actor
+    /// and ends the run: the caller returns the fault at once, and no turn
+    /// runs while the unit is kept ([`Actor::take_unrecycled`]), so the
+    /// one place is empty here.
+    pub(super) fn recycle(&mut self, frame: ActorRxBuffer<'id, D>) -> Result<(), Failed<'id, D>> {
+        self.port.recycle(frame).map_err(|refused| {
+            let fault = refused.fault;
+            self.retained.unrecycled = Some(refused);
+            ActorFault::Receive(fault)
+        })
+    }
+
     /// Serve `fault`: the first one the port can stop past asks the
     /// lifecycle for a restart. Any other ends the run; the lifecycle hears
     /// it when its queue has room, and every owner stays where it is.
@@ -1345,7 +1528,21 @@ where
         lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         fault: Failed<'id, D>,
     ) {
+        // A refused recycle is final: its unit stays kept, so no restart.
+        // So is an unkept item: it stays kept, and no port call follows.
+        // And any fault after the lifecycle's last message: the lifecycle
+        // ended and hears no recovery, so nothing would restart.
         if !self.recovering
+            && !self.finishing
+            && !matches!(
+                fault,
+                ActorFault::Receive(_)
+                    | ActorFault::Unkept
+                    | ActorFault::Unaccepted
+                    | ActorFault::Contract(ActorViolation::LifecycleClosed)
+            )
+            && self.retained.unkept.is_none()
+            && self.retained.unaccepted.is_none()
             && self.port.recover_for_stop()
             && lifecycle
                 .from_actor
@@ -1357,5 +1554,17 @@ where
         }
         let _told = lifecycle.from_actor.try_send(FromActor::Faulted(fault));
         self.end = Some(ActorEnd::Faulted(fault));
+    }
+}
+
+/// The radio after a refused start: stopped, or stopping still when the
+/// port's stop of the begun start has not confirmed.
+const fn after_refused_start<K, F>(refused: &StartRefused<F>) -> Radio<K> {
+    match refused {
+        StartRefused::Unstopped { .. } => Radio::Unstopped,
+        StartRefused::Running
+        | StartRefused::Retune(_)
+        | StartRefused::Deadline
+        | StartRefused::Device => Radio::Stopped,
     }
 }

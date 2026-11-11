@@ -131,7 +131,7 @@
 use oer_protocols_ieee80211_wire::address::AddressFlags;
 use oer_protocols_ieee80211_wire::frame::{FrameControlFields, FrameType};
 
-use core::pin::Pin;
+use core::{marker::PhantomData, pin::Pin};
 use oer_protocols_radio_port::{PoolPath, Root};
 
 use oer_portable_events::{EventSink, report};
@@ -202,7 +202,9 @@ pub mod ampdu;
 pub mod arena;
 pub mod association;
 mod resources;
-pub use resources::{CoreAuthority, CorePools, CoreResources, FreeQueue, TxTicket};
+pub use resources::{
+    CoreAuthority, CorePools, CoreResources, FreeQueue, QueueBank, TicketBank, TxTicket,
+};
 mod lifecycle;
 pub use lifecycle::{
     ArenaCore, ClosedGate, ClosingGate, CommandView, ConfigurationProgress, ConfigureRefused,
@@ -212,10 +214,10 @@ pub use lifecycle::{
 
 mod keys;
 pub use keys::{
-    KeyAdmissionError, KeyAdmissionRefused, KeyHandle, KeyRemoved, KeyUse, QuarantinedAdmission,
-    ReceiveKeyHandle, RemovingKey, TransmitKeyScope, TxAdmission,
+    KeyAdmissionError, KeyAdmissionRefused, KeyHandle, KeyRemoved, KeyUse, ReceiveKeyHandle,
+    RemovableSlot, RemovalPlace, RemovingKey, TransmitKeyScope, TxAdmission,
 };
-use keys::{KeyUseCount, TransmitKeyToken};
+use keys::{KeyUseCount, TransmitKeyToken, removals::Removal};
 
 pub use ampdu::{
     AmpduFormat, AmpduPublication, ESP32S31_AMPDU_LENGTHS, ESP32S31_AMPDU_MAX_LENGTH,
@@ -595,24 +597,53 @@ pub trait LowerMacSink<
     'slot,
     const BUFFER_SIZE: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
 >
 {
-    /// The attempt of `queue`, submitted at `rate`, ended as `end`: its
-    /// slot comes back with it.
+    /// An attempt ended: its queue place, ticket and slot come back with
+    /// its end.
+    ///
+    /// # Errors
+    ///
+    /// The sink has no room for it: the whole completion comes back, and
+    /// the core keeps it in its queue's place and offers it again at its
+    /// next service or disable, never repeating the hardware's end.
     fn tx_completed(
         &mut self,
-        queue: FreeQueue<'core, Path>,
-        ticket: TxTicket<'core, Path>,
-        slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
-        end: PublicationEnd,
-        rate: PhyRate,
-    );
+        completion: TxCompletion<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    ) -> Result<(), TxCompletion<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>;
     /// The last admitted use returned and the programmed key was cleared.
-    fn key_removed(&mut self, removed: KeyRemoved<'core, Path>);
+    ///
+    /// # Errors
+    ///
+    /// The sink does not take it now: the receipt comes back, and the core
+    /// keeps it in its removal's place, offering it again without clearing
+    /// the key a second time.
+    fn key_removed<S: RemovableSlot<'core, Path>>(
+        &mut self,
+        removed: KeyRemoved<'core, Path, S>,
+    ) -> Result<(), KeyRemoved<'core, Path, S>>;
     /// A disable the core started has ended: no attempt is left.
     fn disabled(&mut self);
     /// The station's TBTT event announced the TBTT `event` names.
     fn tbtt(&mut self, event: TbttEvent);
+}
+
+/// One ended attempt: its queue place, its ticket and its slot, with the
+/// end the hardware reported and the rate it was submitted at.
+#[must_use = "a completion carries the attempt's owners home"]
+pub struct TxCompletion<
+    'core,
+    'slot,
+    const BUFFER_SIZE: usize,
+    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
+> {
+    pub queue: FreeQueue<'core, Path>,
+    pub ticket: TxTicket<'core, Path, TICKETS>,
+    pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+    pub end: PublicationEnd,
+    pub rate: PhyRate,
 }
 
 /// Why the backend's state is unknown: the port is poisoned.
@@ -884,7 +915,69 @@ impl KeyToken {
 struct KeyBank<'core, Path: PoolPath, const TICKETS: usize> {
     installed: [Option<CheckedKeyScope>; LOWER_MAC_KEY_SLOTS],
     uses: [KeyUseCount<TICKETS>; LOWER_MAC_KEY_SLOTS],
-    removals: [Option<RemovingKey<'core, Path>>; LOWER_MAC_KEY_SLOTS],
+    removals: keys::removals::Removals<'core, Path>,
+}
+
+/// Offer every finished receipt of kind `S` to `sink`; one it refuses waits
+/// in its place.
+fn offer_removed<'core, 'slot, const BUFFER_SIZE: usize, const TICKETS: usize, Path, K, S>(
+    removals: &mut keys::removals::Removals<'core, Path>,
+    sink: &mut K,
+    _kind: PhantomData<S>,
+) where
+    Path: PoolPath,
+    K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    S: RemovableSlot<'core, Path>,
+{
+    for removal in S::places(removals) {
+        if !matches!(removal, Some(Removal::Finished(_))) {
+            continue;
+        }
+        let Some(Removal::Finished(removed)) = removal.take() else {
+            continue;
+        };
+        if let Err(removed) = sink.key_removed(removed) {
+            *removal = Some(Removal::Finished(removed));
+        }
+    }
+}
+
+/// Clear the key `index` when its removal of kind `S` is pending, and offer
+/// its receipt to `sink`; refused, the receipt waits in the removal's
+/// place: the key is cleared once, and only the receipt is offered again.
+/// Whether a removal of this kind was pending for it.
+fn finish_removal<'core, 'slot, const BUFFER_SIZE: usize, const TICKETS: usize, Path, H, K, S>(
+    removals: &mut keys::removals::Removals<'core, Path>,
+    index: usize,
+    hardware: &mut H,
+    sink: &mut K,
+    _kind: PhantomData<S>,
+) -> bool
+where
+    Path: PoolPath,
+    H: CcmpKeyHardware,
+    K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    S: RemovableSlot<'core, Path>,
+{
+    let Some(removal) = S::places(removals)
+        .iter_mut()
+        .find(|removal| matches!(removal, Some(Removal::Pending(key)) if key.index == index))
+    else {
+        return false;
+    };
+    let Some(Removal::Pending(key)) = removal.take() else {
+        return false;
+    };
+    key.token.clear(hardware);
+    let removed = KeyRemoved {
+        slot: key.slot,
+        scope: key.scope,
+        brand: key.brand,
+    };
+    if let Err(removed) = sink.key_removed(removed) {
+        *removal = Some(Removal::Finished(removed));
+    }
+    true
 }
 
 impl<Path: PoolPath, const TICKETS: usize> KeyBank<'_, Path, TICKETS> {
@@ -892,7 +985,7 @@ impl<Path: PoolPath, const TICKETS: usize> KeyBank<'_, Path, TICKETS> {
         Self {
             installed: [None; LOWER_MAC_KEY_SLOTS],
             uses: [const { KeyUseCount::new() }; LOWER_MAC_KEY_SLOTS],
-            removals: [const { None }; LOWER_MAC_KEY_SLOTS],
+            removals: keys::removals::Removals::new(),
         }
     }
 }
@@ -917,6 +1010,12 @@ enum Work<'slot, const BUFFER_SIZE: usize> {
     Quarantined {
         _owner: QuarantinedSingleAttempt<'slot, BUFFER_SIZE>,
     },
+    /// An ended attempt whose sink had no room: its slot and end wait in
+    /// the queue's place, offered again until the sink takes them.
+    Done {
+        slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
+        end: PublicationEnd,
+    },
 }
 
 impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
@@ -924,21 +1023,33 @@ impl<const BUFFER_SIZE: usize> Work<'_, BUFFER_SIZE> {
         matches!(self, Self::Held { .. })
     }
 
+    const fn done(&self) -> bool {
+        matches!(self, Self::Done { .. })
+    }
+
     /// The pending deadline of a published attempt, and whether it is the
     /// end of a timeout abort's settle.
     const fn deadline(&self) -> Option<(oer_portable_time::Instant, bool)> {
         match self {
             Self::Published(queued) => Some((queued.deadline(), queued.abort_settling())),
-            Self::Held { .. } | Self::Quarantined { .. } => None,
+            Self::Held { .. } | Self::Quarantined { .. } | Self::Done { .. } => None,
         }
     }
 }
 
+/// An ended attempt on its way to the sink, with what its queue's place
+/// keeps of it when the sink refuses it.
+struct Ended<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath, const TICKETS: usize> {
+    role: VifRole,
+    admitted_at: oer_portable_time::Instant,
+    completion: TxCompletion<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+}
+
 /// The attempt occupying one queue.
-struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath> {
+struct Attempt<'core, 'slot, const BUFFER_SIZE: usize, Path: PoolPath, const TICKETS: usize> {
     queue: FreeQueue<'core, Path>,
     role: VifRole,
-    admission: TxAdmission<'core, Path>,
+    admission: TxAdmission<'core, Path, TICKETS>,
     /// The rate of its publication, which its completion reports.
     rate: PhyRate,
     admitted_at: oer_portable_time::Instant,
@@ -1031,7 +1142,7 @@ pub struct LowerMacCore<
     expired_msdus: u32,
     /// The attempt of each ordinary queue, by its hardware index
     /// ([`LegacyTxQueue::hardware_index`]).
-    queues: [Option<Attempt<'core, 'slot, BUFFER_SIZE, Path>>; LOWER_MAC_TX_QUEUES],
+    queues: [Option<Attempt<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>; LOWER_MAC_TX_QUEUES],
     /// The queues, by hardware index bit, whose published aggregate's
     /// timeout abort forces CCA now ([`Self::service_ampdu`]).
     ampdu_settling: u8,
@@ -1228,7 +1339,7 @@ where
         self.queues[usize::from(queue.hardware_index())].is_some()
     }
 
-    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, BUFFER_SIZE, Path>> {
+    fn attempts(&self) -> impl Iterator<Item = &Attempt<'core, 'slot, BUFFER_SIZE, Path, TICKETS>> {
         self.queues.iter().flatten()
     }
 
@@ -1303,10 +1414,10 @@ where
         &mut self,
         hardware: &mut H,
         queue: FreeQueue<'core, Path>,
-        admission: TxAdmission<'core, Path>,
+        admission: TxAdmission<'core, Path, TICKETS>,
         values: MpduValues<'slot, BUFFER_SIZE>,
         publish: bool,
-    ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path>> {
+    ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path, TICKETS>> {
         let MpduValues {
             role,
             admitted_at,
@@ -1414,7 +1525,7 @@ where
         role: VifRole,
         rate: TxPhyRate,
         protection: Protection,
-        admission: &TxAdmission<'core, Path>,
+        admission: &TxAdmission<'core, Path, TICKETS>,
         power_ceiling_dbm: Option<i8>,
         backoff_slots: u16,
     ) -> CommonAdmission {
@@ -1454,9 +1565,11 @@ where
         let queue = common.queue;
         // The static priority vendor data encapsulation assigns the access
         // category, unless the coexistence owner raises a connection frame.
+        // A beacon takes its access category's static priority: no beacon
+        // transmit priority is recovered.
         let raised = match operation {
             TxOperation::Connection(frame) => self.coex.connection_frame_priorities(frame),
-            TxOperation::Data => None,
+            TxOperation::Data | TxOperation::Beacon => None,
         };
         let (scheduler_priority, packet_priority, priority_count) = match raised {
             Some(connection) => (
@@ -1567,13 +1680,16 @@ where
     /// A fault of the transmit owner.
     pub fn service<
         H: HtAmpduHardware + CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
         wake: WifiTxWake,
         sink: &mut K,
     ) -> Result<(), LowerMacFault> {
+        // What a sink refused before is offered first, under a fault too:
+        // its hardware end is known.
+        self.offer_kept(sink);
         if let Some(fault) = self.fault {
             return Err(fault);
         }
@@ -1598,6 +1714,21 @@ where
                     work,
                 } = attempt;
                 let queued = match work {
+                    Work::Done { slot, end } => {
+                        let ended = Ended {
+                            role,
+                            admitted_at,
+                            completion: TxCompletion {
+                                queue,
+                                ticket: admission.into_ticket(),
+                                slot,
+                                end,
+                                rate,
+                            },
+                        };
+                        self.offer_completion(ended, sink);
+                        continue;
+                    }
                     Work::Held { slot, .. }
                         if self.msdu_expired(role, queue.category(), admitted_at) =>
                     {
@@ -1609,6 +1740,7 @@ where
                             slot,
                             PublicationEnd::Expired { msdus: 1 },
                             rate,
+                            admitted_at,
                             sink,
                         );
                         continue;
@@ -1653,6 +1785,7 @@ where
                             slot,
                             publication_end(outcome),
                             rate,
+                            admitted_at,
                             sink,
                         );
                     }
@@ -1685,15 +1818,19 @@ where
         clippy::too_many_arguments,
         reason = "one terminal returns the complete admitted attempt"
     )]
-    fn finish_attempt<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    fn finish_attempt<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &mut self,
         hardware: &mut H,
         role: VifRole,
         queue: FreeQueue<'core, Path>,
-        admission: TxAdmission<'core, Path>,
+        admission: TxAdmission<'core, Path, TICKETS>,
         slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
         end: PublicationEnd,
         rate: PhyRate,
+        admitted_at: oer_portable_time::Instant,
         sink: &mut K,
     ) {
         if let PublicationEnd::Expired { msdus } = end {
@@ -1711,14 +1848,130 @@ where
             self.tx
                 .record_retry_failure(role, LegacyTxQueue::from_access_category(queue.category()));
         }
+        let ended = |ticket| Ended {
+            role,
+            admitted_at,
+            completion: TxCompletion {
+                queue,
+                ticket,
+                slot,
+                end,
+                rate,
+            },
+        };
         match admission {
-            TxAdmission::Open(ticket) => sink.tx_completed(queue, ticket, slot, end, rate),
+            TxAdmission::Open(ticket) => self.offer_completion(ended(ticket), sink),
             TxAdmission::Protected(key) => {
                 let (index, ticket) = self.release_key(key);
-                sink.tx_completed(queue, ticket, slot, end, rate);
+                self.offer_completion(ended(ticket), sink);
                 self.finish_key_removal(hardware, index, sink);
             }
         }
+    }
+
+    /// Offer an ended attempt to `sink`. Refused, it waits whole in its
+    /// queue's place, which its attempt just left, until a later offer.
+    fn offer_completion<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>(
+        &mut self,
+        ended: Ended<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+        sink: &mut K,
+    ) {
+        let Ended {
+            role,
+            admitted_at,
+            completion,
+        } = ended;
+        let Err(refused) = sink.tx_completed(completion) else {
+            return;
+        };
+        let TxCompletion {
+            queue,
+            ticket,
+            slot,
+            end,
+            rate,
+        } = refused;
+        let [voice, video, best_effort, background] = &mut self.queues;
+        let place = match LegacyTxQueue::from_access_category(queue.category()) {
+            LegacyTxQueue::Voice => voice,
+            LegacyTxQueue::Video => video,
+            LegacyTxQueue::BestEffort => best_effort,
+            LegacyTxQueue::Background => background,
+        };
+        *place = Some(Attempt {
+            queue,
+            role,
+            admission: TxAdmission::Open(ticket),
+            rate,
+            admitted_at,
+            work: Work::Done { slot, end },
+        });
+    }
+
+    /// Offer again what a sink refused before: every ended attempt waiting
+    /// in its queue's place and every finished removal's receipt. Nothing
+    /// is repeated on the hardware; a refused offer keeps its place.
+    pub fn offer_kept<K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>(
+        &mut self,
+        sink: &mut K,
+    ) {
+        for index in 0..LOWER_MAC_TX_QUEUES {
+            let Some(place) = self.queues.get_mut(index) else {
+                continue;
+            };
+            if !place.as_ref().is_some_and(|attempt| attempt.work.done()) {
+                continue;
+            }
+            let Some(Attempt {
+                queue,
+                role,
+                admission,
+                rate,
+                admitted_at,
+                work: Work::Done { slot, end },
+            }) = place.take()
+            else {
+                continue;
+            };
+            let ended = Ended {
+                role,
+                admitted_at,
+                completion: TxCompletion {
+                    queue,
+                    ticket: admission.into_ticket(),
+                    slot,
+                    end,
+                    rate,
+                },
+            };
+            self.offer_completion(ended, sink);
+        }
+        let removals = &mut self.keys.removals;
+        offer_removed(
+            removals,
+            sink,
+            PhantomData::<association::StationPairwiseSlot<'core, Path>>,
+        );
+        offer_removed(
+            removals,
+            sink,
+            PhantomData::<association::StationGroupSlot<'core, Path>>,
+        );
+        offer_removed(
+            removals,
+            sink,
+            PhantomData::<association::AccessPointPairwiseSlot<'core, Path>>,
+        );
+        offer_removed(
+            removals,
+            sink,
+            PhantomData::<association::AccessPointGroupSlot<'core, Path>>,
+        );
+    }
+
+    /// Whether the core keeps a result its sink refused, or a removal.
+    pub fn keeps_results(&self) -> bool {
+        self.attempts().any(|attempt| attempt.work.done()) || self.keys.removals.any()
     }
 
     /// The owned view of one received MPDU, or `None` while the port does
@@ -1751,7 +2004,7 @@ where
 
     /// End a queue's held attempt as [`PublicationEnd::Withdrawn`]: it
     /// never reached the hardware, and its slot comes back with it.
-    fn abort_held<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    fn abort_held<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>>(
         &mut self,
         hardware: &mut H,
         index: usize,
@@ -1767,7 +2020,7 @@ where
                 work: Work::Held { slot, .. },
                 admission,
                 rate,
-                ..
+                admitted_at,
             } => {
                 self.finish_attempt(
                     hardware,
@@ -1777,6 +2030,7 @@ where
                     slot,
                     PublicationEnd::Withdrawn,
                     rate,
+                    admitted_at,
                     sink,
                 );
             }
@@ -1787,7 +2041,7 @@ where
     /// Return every held attempt without publishing it.
     fn withdraw_held_attempts<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
@@ -1941,17 +2195,28 @@ where
         self.install_key_parts(hardware, spp, scope, slot, temporal_key)
     }
 
-    pub(crate) fn install_key_parts<H: LowerMacHardware>(
+    /// Install a transmit key in `slot`, which a refusal returns as the
+    /// caller gave it.
+    pub(crate) fn install_key_parts<H: LowerMacHardware, S>(
         &mut self,
         hardware: &mut H,
         spp: oer_protocols_ieee80211_wire::security::Spp,
         scope: TransmitKeyScope,
-        slot: association::VacantKeySlot<'core, Path>,
+        slot: S,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
-    ) -> Result<KeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
+    ) -> Result<KeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path, S>>
+    where
+        S: Into<association::VacantKeySlot<'core, Path>>,
+    {
         let (free, place) = match self.vacant_key(scope.into()) {
             Ok(vacant) => vacant,
-            Err(fault) => return Err(association::KeyInstallRefused { fault, slot }),
+            Err(fault) => {
+                return Err(association::KeyInstallRefused {
+                    fault,
+                    slot,
+                    brand: core::marker::PhantomData,
+                });
+            }
         };
         hardware.configure_ccmp_association(
             match scope {
@@ -1982,12 +2247,13 @@ where
                 return Err(association::KeyInstallRefused {
                     fault: LowerMacFault::Key(error),
                     slot,
+                    brand: core::marker::PhantomData,
                 });
             }
         };
         *place = Some(scope.into());
         Ok(KeyHandle {
-            slot,
+            slot: slot.into(),
             index: free,
             token,
             scope,
@@ -2006,6 +2272,11 @@ where
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
     ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
         self.install_station_group_parts(hardware, association.spp(), slot, key_id, temporal_key)
+            .map_err(|refused| association::KeyInstallRefused {
+                fault: refused.fault,
+                slot: refused.slot.into(),
+                brand: core::marker::PhantomData,
+            })
     }
 
     pub(crate) fn install_station_group_parts<H: LowerMacHardware>(
@@ -2015,12 +2286,20 @@ where
         slot: association::StationGroupSlot<'core, Path>,
         key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId,
         temporal_key: &[u8; CCMP_128_KEY_BYTES],
-    ) -> Result<ReceiveKeyHandle<'core, Path>, association::KeyInstallRefused<'core, Path>> {
+    ) -> Result<
+        ReceiveKeyHandle<'core, Path>,
+        association::KeyInstallRefused<'core, Path, association::StationGroupSlot<'core, Path>>,
+    > {
         let scope = CheckedKeyScope::StationGroup { key_id };
-        let slot = association::VacantKeySlot::StationGroup(slot);
         let (index, place) = match self.vacant_key(scope) {
             Ok(vacant) => vacant,
-            Err(fault) => return Err(association::KeyInstallRefused { fault, slot }),
+            Err(fault) => {
+                return Err(association::KeyInstallRefused {
+                    fault,
+                    slot,
+                    brand: core::marker::PhantomData,
+                });
+            }
         };
         hardware.configure_ccmp_association(
             oer_chips_esp32s31_hal::types::MacInterface::Station,
@@ -2032,12 +2311,13 @@ where
                 return Err(association::KeyInstallRefused {
                     fault: LowerMacFault::Key(error),
                     slot,
+                    brand: core::marker::PhantomData,
                 });
             }
         };
         *place = Some(scope);
         Ok(ReceiveKeyHandle {
-            slot,
+            slot: slot.into(),
             index,
             token,
             material: crate::mac::crypto::StaGroupCcmpKeyMaterial::new(key_id, *temporal_key),
@@ -2074,14 +2354,38 @@ where
             &installed.material,
             &replacement,
         );
+        // A refusal changed nothing, and a rollback put the previous entry
+        // back: the previous key stands in both, and the core runs on. A
+        // failed rollback leaves the entry cleared (`token` says so) and the
+        // key in its place for the port's cleanup, which clears the entry
+        // again and confirms it before the key's removal frees the slot.
         if result.is_ok() {
             installed.material = replacement;
             installed.key_id = key_id;
             *scope = Some(CheckedKeyScope::StationGroup { key_id });
-        } else {
-            self.fault = Some(LowerMacFault::Key(CryptoKeyError::HardwareRejected));
         }
         result
+    }
+
+    /// Clear the station group key entry of `installed`, whose replacement's
+    /// rollback failed, once. The key stays in its place; only its removal,
+    /// which writes the entry no more, frees the slot.
+    pub(crate) fn clear_failed_station_group<H: CcmpKeyHardware>(
+        &mut self,
+        hardware: &mut H,
+        installed: &mut ReceiveKeyHandle<'core, Path>,
+    ) {
+        installed.token.clear_failed(hardware);
+    }
+
+    /// Read, writing nothing, what the key table holds at the station group
+    /// key entry of `installed`.
+    pub(crate) fn read_failed_station_group<H: CcmpKeyHardware>(
+        &self,
+        hardware: &mut H,
+        installed: &ReceiveKeyHandle<'core, Path>,
+    ) -> crate::mac::crypto::EntryRead {
+        installed.token.read_entry(hardware)
     }
 
     fn vacant_key(
@@ -2120,7 +2424,10 @@ where
 
     /// Return one admitted right to its key's count. A right naming no bank
     /// position poisons the core; its ticket still returns.
-    fn release_key(&mut self, key: KeyUse<'core, Path>) -> (usize, TxTicket<'core, Path>) {
+    fn release_key(
+        &mut self,
+        key: KeyUse<'core, Path, TICKETS>,
+    ) -> (usize, TxTicket<'core, Path, TICKETS>) {
         let index = key.index;
         let ticket = match self.keys.uses.get_mut(index) {
             Some(uses) => uses.release(key),
@@ -2139,8 +2446,8 @@ where
     pub fn admit_key(
         &mut self,
         key: &KeyHandle<'core, Path>,
-        ticket: TxTicket<'core, Path>,
-    ) -> Result<KeyUse<'core, Path>, KeyAdmissionRefused<'core, Path>> {
+        ticket: TxTicket<'core, Path, TICKETS>,
+    ) -> Result<KeyUse<'core, Path, TICKETS>, KeyAdmissionRefused<'core, Path, TICKETS>> {
         if self.fault.is_some() {
             return Err(KeyAdmissionRefused {
                 ticket,
@@ -2163,7 +2470,7 @@ where
     pub(in crate::lower_mac) fn arena_aggregate(
         &self,
         values: ArenaValues,
-        admission: &TxAdmission<'core, Path>,
+        admission: &TxAdmission<'core, Path, TICKETS>,
         min_mpdu_start_spacing: u8,
         he: Option<crate::mac::tx::ampdu::HeAmpduPolicy>,
     ) -> Result<ampdu::AmpduSettings, AmpduRefusal> {
@@ -2197,7 +2504,7 @@ where
     pub(in crate::lower_mac) fn arena_single(
         &self,
         values: ArenaValues,
-        admission: &TxAdmission<'core, Path>,
+        admission: &TxAdmission<'core, Path, TICKETS>,
         mpdu_length: u16,
         hardware_mic_length: u8,
         individual: bool,
@@ -2286,7 +2593,7 @@ where
     fn arena_common(
         &self,
         values: ArenaValues,
-        admission: &TxAdmission<'core, Path>,
+        admission: &TxAdmission<'core, Path, TICKETS>,
     ) -> CommonAdmission {
         self.plan_common(
             values.access_category,
@@ -2304,13 +2611,13 @@ where
     /// last use finishes, reported to `sink`.
     pub(in crate::lower_mac) fn release_arena_key<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
-        key: KeyUse<'core, Path>,
+        key: KeyUse<'core, Path, TICKETS>,
         sink: &mut K,
-    ) -> TxTicket<'core, Path> {
+    ) -> TxTicket<'core, Path, TICKETS> {
         let (index, ticket) = self.release_key(key);
         self.finish_key_removal(hardware, index, sink);
         ticket
@@ -2347,37 +2654,131 @@ where
 
     /// Consume the sole installed handle at removal's FIFO position. The
     /// programmed material stays until the last admitted use returns. No
-    /// further right can be obtained from the moved handle.
+    /// further right can be obtained from the moved handle. Its place, of
+    /// the key's slot kind: the receipt a sink refused waits there for
+    /// [`Self::take_removed`].
     pub fn remove_checked_key<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+        S: RemovableSlot<'core, Path>,
     >(
         &mut self,
         hardware: &mut H,
-        key: impl Into<RemovingKey<'core, Path>>,
+        key: RemovingKey<'core, Path, S>,
         sink: &mut K,
-    ) {
-        let key = key.into();
+    ) -> RemovalPlace<'core, Path, S> {
         let index = key.index;
-        let Some(removal) = self.keys.removals.get_mut(index) else {
+        // A kind's places are as many as its pool's slots, and each kept
+        // removal holds one of them: the slot of `key` finds a free one.
+        let places = S::places(&mut self.keys.removals);
+        let length = places.len();
+        let Some((position, removal)) = places
+            .iter_mut()
+            .enumerate()
+            .find(|(_, removal)| removal.is_none())
+        else {
             // No position can retain it; the poisoned core keeps the
             // programmed material until reset.
             self.fault.get_or_insert(LowerMacFault::KeyBank);
-            return;
+            return RemovalPlace {
+                position: length,
+                brand: core::marker::PhantomData,
+            };
         };
-        *removal = Some(key);
+        *removal = Some(Removal::Pending(key));
+        let place = RemovalPlace {
+            position,
+            brand: core::marker::PhantomData,
+        };
         self.finish_key_removal(hardware, index, sink);
+        place
     }
 
-    fn finish_key_removal<H: CcmpKeyHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    /// Remove an installed key of any kind, as [`Self::remove_checked_key`]
+    /// does with the kind its slot holds.
+    #[cfg(test)]
+    pub(crate) fn remove_key_for_test<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
+        &mut self,
+        hardware: &mut H,
+        key: impl Into<keys::InstalledForTest<'core, Path>>,
+        sink: &mut K,
+    ) {
+        use association::{
+            AccessPointGroupSlot, AccessPointPairwiseSlot, StationGroupSlot, StationPairwiseSlot,
+        };
+        match key.into() {
+            keys::InstalledForTest::Transmit(key) => match key.slot_kind() {
+                association::KeySlotKind::StationPairwise => {
+                    let removing = key.into_removing::<StationPairwiseSlot<'core, Path>>();
+                    let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+                }
+                association::KeySlotKind::StationGroup => {
+                    let removing = key.into_removing::<StationGroupSlot<'core, Path>>();
+                    let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+                }
+                association::KeySlotKind::AccessPointPairwise => {
+                    let removing = key.into_removing::<AccessPointPairwiseSlot<'core, Path>>();
+                    let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+                }
+                association::KeySlotKind::AccessPointGroup => {
+                    let removing = key.into_removing::<AccessPointGroupSlot<'core, Path>>();
+                    let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+                }
+            },
+            keys::InstalledForTest::Receive(key) => {
+                let removing = key.into_removing::<StationGroupSlot<'core, Path>>();
+                let _place = self.remove_checked_key(hardware, removing.ok().unwrap(), sink);
+            }
+        }
+    }
+
+    /// The receipt of the removal at `place`, once its key is cleared and
+    /// its sink refused it.
+    ///
+    /// # Errors
+    ///
+    /// It waits for a use: the place comes back.
+    pub fn take_removed<S: RemovableSlot<'core, Path>>(
+        &mut self,
+        place: RemovalPlace<'core, Path, S>,
+    ) -> Result<KeyRemoved<'core, Path, S>, RemovalPlace<'core, Path, S>> {
+        let Some(removal) = S::places(&mut self.keys.removals).get_mut(place.position) else {
+            return Err(place);
+        };
+        match removal.take() {
+            Some(Removal::Finished(removed)) => Ok(removed),
+            other => {
+                *removal = other;
+                Err(place)
+            }
+        }
+    }
+
+    /// Whether the removal at `place` finished and its receipt waits.
+    pub fn removed_ready<S: RemovableSlot<'core, Path>>(
+        &self,
+        place: &RemovalPlace<'core, Path, S>,
+    ) -> bool {
+        matches!(
+            S::places_ref(&self.keys.removals).get(place.position),
+            Some(Some(Removal::Finished(_)))
+        )
+    }
+
+    fn finish_key_removal<
+        H: CcmpKeyHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &mut self,
         hardware: &mut H,
         index: usize,
         sink: &mut K,
     ) {
-        let (Some(uses), Some(removal), Some(installed)) = (
+        let (Some(uses), Some(installed)) = (
             self.keys.uses.get(index),
-            self.keys.removals.get_mut(index),
             self.keys.installed.get_mut(index),
         ) else {
             return;
@@ -2385,42 +2786,63 @@ where
         if self.fault.is_some() || !uses.is_empty() {
             return;
         }
-        if let Some(key) = removal.take() {
-            key.token.clear(hardware);
+        // The key `index` is pending in the places of its own kind only.
+        let removals = &mut self.keys.removals;
+        let cleared = finish_removal(
+            removals,
+            index,
+            hardware,
+            sink,
+            PhantomData::<association::StationPairwiseSlot<'core, Path>>,
+        ) || finish_removal(
+            removals,
+            index,
+            hardware,
+            sink,
+            PhantomData::<association::StationGroupSlot<'core, Path>>,
+        ) || finish_removal(
+            removals,
+            index,
+            hardware,
+            sink,
+            PhantomData::<association::AccessPointPairwiseSlot<'core, Path>>,
+        ) || finish_removal(
+            removals,
+            index,
+            hardware,
+            sink,
+            PhantomData::<association::AccessPointGroupSlot<'core, Path>>,
+        );
+        if cleared {
             *installed = None;
-            sink.key_removed(KeyRemoved {
-                slot: key.slot,
-                scope: key.scope,
-                brand: key.brand,
-            });
         }
     }
 
     /// Return an admission which was never published (including submission
     /// refusal), or one carried by a detached aggregate's terminal. Published
     /// MPDUs keep this owner private and return it through their terminal.
+    ///
+    /// The key use goes back first, in every state of the core: a poisoned
+    /// core counts it too, keeps its key material (a removal it holds never
+    /// finishes under the fault) and refuses every later admission, so the
+    /// returned ticket admits nothing it refuses.
     pub fn return_admission<
         H: CcmpKeyHardware,
-        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
     >(
         &mut self,
         hardware: &mut H,
-        admission: TxAdmission<'core, Path>,
+        admission: TxAdmission<'core, Path, TICKETS>,
         sink: &mut K,
-    ) -> Result<TxTicket<'core, Path>, QuarantinedAdmission<'core, Path>> {
-        if self.fault.is_some() {
-            return Err(QuarantinedAdmission {
-                _admission: admission,
-            });
-        }
-        Ok(match admission {
+    ) -> TxTicket<'core, Path, TICKETS> {
+        match admission {
             TxAdmission::Open(ticket) => ticket,
             TxAdmission::Protected(key) => {
                 let (index, ticket) = self.release_key(key);
                 self.finish_key_removal(hardware, index, sink);
                 ticket
             }
-        })
+        }
     }
 
     /// Start an agreement whose values a caller's types guarantee: its TID
@@ -2542,6 +2964,25 @@ where
         self.access_point_tsf.restart(hardware);
     }
 
+    /// Stop the access point's TSF, a new generation of its relation.
+    pub fn stop_access_point_tsf<H: LowerMacHardware>(&mut self, hardware: &mut H) {
+        self.access_point_tsf.stop(hardware);
+    }
+
+    /// Release the access point's interface for a stopped port: close its
+    /// receive policy if it receives and stop its TSF if it runs, in the
+    /// order its own stop takes. A later configuration starts from nothing.
+    pub fn release_access_point<H: LowerMacHardware>(&mut self, hardware: &mut H) {
+        if let Some(vif) = self.vifs[VifRole::AccessPoint as usize].take()
+            && !vif.receive.is_empty()
+        {
+            hardware.disable_ap_link_policy();
+        }
+        if self.access_point_tsf.running() {
+            self.access_point_tsf.stop(hardware);
+        }
+    }
+
     /// Program the station TBTT schedule. The event fires the schedule's
     /// lead before each TBTT; the wake lead published beside it keeps the
     /// vendor's window above the lead.
@@ -2584,7 +3025,10 @@ where
     /// Report the station TBTT whose event the power interrupt delivered
     /// (`MacPowerInterruptObservation::sta_tbtt`). Without a schedule the edge is stale
     /// and reports nothing.
-    pub fn station_tbtt<H: StationTsfHardware, K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path>>(
+    pub fn station_tbtt<
+        H: StationTsfHardware,
+        K: LowerMacSink<'core, 'slot, BUFFER_SIZE, Path, TICKETS>,
+    >(
         &self,
         hardware: &mut H,
         sink: &mut K,
@@ -2644,11 +3088,12 @@ pub struct SubmitFault<
     'slot,
     const BUFFER_SIZE: usize,
     Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'core>>,
+    const TICKETS: usize = 4,
 > {
     pub queue: FreeQueue<'core, Path>,
     pub fault: LowerMacFault,
     pub slot: Pin<&'slot mut TxSlot<BUFFER_SIZE>>,
-    pub admission: TxAdmission<'core, Path>,
+    pub admission: TxAdmission<'core, Path, TICKETS>,
 }
 
 /// An interface configuration the receive policies cannot take.
@@ -2777,6 +3222,11 @@ pub struct MpduValuesRefused<'slot, const BUFFER_SIZE: usize> {
 }
 
 impl<'slot, const BUFFER_SIZE: usize> MpduValues<'slot, BUFFER_SIZE> {
+    /// The slot the values hold, for a test that refuses their submission.
+    #[cfg(test)]
+    pub(crate) fn into_slot_for_test(self) -> Pin<&'slot mut crate::mac::tx::TxSlot<BUFFER_SIZE>> {
+        self.slot.into_slot()
+    }
     /// Validate the public request once; callers cannot mutate the resulting
     /// length, rate or protection fields before submission. Encryption itself
     /// comes from the separately consumed `TxAdmission`, never these values.

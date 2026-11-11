@@ -88,6 +88,43 @@ pub type WifiRxStatic<
     RxDmaStorage<COUNT, BUFFER, STORAGE, S>,
 );
 
+/// A refused bind ([`WifiRxArena::bind`]): its cause and every input, the
+/// static's two placed halves as the bind split them, untouched but for the
+/// storage's recorded buffer addresses, and the line's signals.
+pub struct WifiRxBindRefused<
+    const COUNT: usize,
+    const BUFFER: usize,
+    const STORAGE: usize,
+    const STAGE_SLOTS: usize,
+    X: SignalExecutor,
+    S: DmaSpace = ChipDma,
+> {
+    /// Why the storage did not place.
+    pub error: RxDmaStorageError,
+    /// The arena's half of the static.
+    pub arena: Placed<WifiRxArena<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S>>,
+    /// The RX DMA storage's half of the static.
+    pub rx: Placed<RxDmaStorage<COUNT, BUFFER, STORAGE, S>>,
+    /// The line's signals.
+    pub signals: WifiIrqSignals<X>,
+}
+
+impl<
+    const COUNT: usize,
+    const BUFFER: usize,
+    const STORAGE: usize,
+    const STAGE_SLOTS: usize,
+    X: SignalExecutor,
+    S: DmaSpace,
+> core::fmt::Debug for WifiRxBindRefused<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S>
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("WifiRxBindRefused")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Every part of a bound arena, lent once.
 pub struct WifiRxParts<
     'a,
@@ -131,10 +168,11 @@ impl<
     /// # Errors
     ///
     /// The DMA storage has no valid layout in its address space; nothing
-    /// is lent.
+    /// is lent, and every input comes back ([`WifiRxBindRefused`]).
     #[allow(
         clippy::type_complexity,
-        reason = "the parts, the stop handle and the queue ends are the owners of one bind"
+        clippy::result_large_err,
+        reason = "the parts, the stop handle and the queue ends are the owners of one bind; a refusal returns every input"
     )]
     pub fn bind(
         placed: Placed<WifiRxStatic<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S>>,
@@ -145,7 +183,7 @@ impl<
             ReceiveStopHandle<'static>,
             RxFrameEnds<'static, STAGE_SLOTS, BUFFER, X>,
         ),
-        RxDmaStorageError,
+        WifiRxBindRefused<COUNT, BUFFER, STORAGE, STAGE_SLOTS, X, S>,
     > {
         // A unit spanning the whole ring cannot be a frame, so the ring may
         // reject one instead of republishing the whole ring
@@ -159,7 +197,17 @@ impl<
             );
         }
         let (arena, rx) = placed.split();
-        let rx = RxDmaStorage::place(rx)?;
+        let rx = match RxDmaStorage::place(rx) {
+            Ok(rx) => rx,
+            Err((error, rx)) => {
+                return Err(WifiRxBindRefused {
+                    error,
+                    arena,
+                    rx,
+                    signals,
+                });
+            }
+        };
         let Self {
             irq,
             irq_publisher: publisher_slot,
