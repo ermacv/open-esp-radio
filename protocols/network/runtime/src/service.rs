@@ -1672,14 +1672,6 @@ impl<
     /// with no wait: what a turn after a yield runs on, beside what the turn
     /// before left. Returns that came are taken, as the wait takes them.
     async fn look(&mut self, events: &mut impl EventSink<ServiceEvent>) -> Woken {
-        let deadline = [
-            self.owner.poll_deadline(),
-            self.pressure_at,
-            self.local.deadline(),
-        ]
-        .into_iter()
-        .flatten()
-        .min();
         let Self {
             owner,
             bound,
@@ -1702,10 +1694,12 @@ impl<
                 diagnostics,
                 events,
             );
+            // Almost every stage moves the timers (an answer, a resolution,
+            // a datagram's end): after work, they are due to be looked at.
             Poll::Ready(Woken {
                 port,
                 lanes,
-                due: deadline.map_or(Due::Never, Due::At),
+                due: Due::Unknown,
             })
         })
         .await
