@@ -13,7 +13,7 @@ type Command<'s> = PortCommand<'s, Types<'s>, ModelCaps>;
 type StaGroup<'s> = ModelGroupKey<'s, B<'s>, Station>;
 type StaGroupPermission<'s> = oer_protocols_ieee80211_contracts_port::IssuedSlot<
     's,
-    ModelGroupPermission<Station>,
+    oer_protocols_radio_port::Slots<ModelGroupPermission<Station>, 1>,
     ModelPool<LocalId<'s>, 8>,
 >;
 
@@ -327,7 +327,7 @@ fn a_station_frame_under_a_key_of_an_earlier_installation_is_refused_at_submit()
         harness.start();
         let now = harness.clock.now();
         assert_eq!(
-            harness.port.submit(sealed, now, &mut harness.sink),
+            harness.port.submit(sealed, now, &mut harness.sink).unwrap(),
             Err(SubmitRefusal::StalePermission {
                 issued: 0,
                 installation: 1,
@@ -376,7 +376,10 @@ fn a_frame_under_an_earlier_key_is_refused_as_stale_while_the_radio_is_stopped()
         let ticket = attempt.operation.ticket().index();
         let now = harness.clock.now();
         assert_eq!(
-            harness.port.submit(attempt, now, &mut harness.sink),
+            harness
+                .port
+                .submit(attempt, now, &mut harness.sink)
+                .unwrap(),
             Err(SubmitRefusal::StalePermission {
                 issued: 0,
                 installation: 1,

@@ -134,6 +134,37 @@ pub struct LendRefused<B> {
     pub reason: LendRefusal,
 }
 
+/// The receive operation whose count did not hold.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReceiveOperation {
+    /// [`DataPort::recycle`](crate::DataPort::recycle).
+    Recycle,
+}
+
+/// A receive count that did not hold: `operation` would return
+/// `requested` units while the port held `held` of the caller's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReceiveAccounting {
+    /// The operation the port refused.
+    pub operation: ReceiveOperation,
+    /// The caller's units the port held then.
+    pub held: usize,
+    /// The units the operation would return.
+    pub requested: usize,
+}
+
+/// A refused [`DataPort::recycle`](crate::DataPort::recycle): the port
+/// took nothing and recorded no fault. The unit comes back unchanged, and
+/// its count says why; a later recycle of the same unit is no repair, so
+/// its caller keeps it and ends with the refusal.
+#[derive(Debug)]
+pub struct RecycleRefused<B> {
+    /// The unit, unchanged.
+    pub unit: B,
+    /// The count that refused it.
+    pub fault: ReceiveAccounting,
+}
+
 /// The metadata a backend gives a received MPDU: the portable fields
 /// ([`RxMeta`]), and whatever more the backend's type guarantees
 /// ([`SignalMetadata`]).

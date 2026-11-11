@@ -445,3 +445,35 @@ fn a_truncated_channel_switch_count_is_refused_without_writing_outside_the_templ
         Err(ApChannelSwitchError::MalformedTemplate)
     );
 }
+
+/// A refused template returns the storage it was given, to be built on
+/// again.
+#[test]
+fn a_refused_beacon_returns_its_storage() {
+    let mut storage = [0_u8; AP_BEACON_CAPACITY];
+    let place: *const [u8; AP_BEACON_CAPACITY] = &raw const storage;
+    let channel = Channel::ghz2_4(
+        6,
+        oer_protocols_ieee80211_wire::channel::ChannelWidth::Mhz20,
+    )
+    .unwrap();
+    let Err(refused) = ApBeacon::new(
+        &mut storage,
+        &ADVERTISEMENT,
+        [2; 6],
+        &Ssid::new(b"ap").unwrap(),
+        channel,
+        100,
+        0,
+        SequenceNumber::ZERO,
+        ApSecurityPolicy::Wpa2Personal,
+    ) else {
+        panic!("a DTIM period of 0 is refused");
+    };
+    assert_eq!(refused.error, ApBeaconBuildError::InvalidDtimPeriod);
+    assert!(core::ptr::eq(refused.storage, place), "the same storage");
+    assert!(
+        publication_beacon(refused.storage).advertisement().is_ok(),
+        "built again"
+    );
+}

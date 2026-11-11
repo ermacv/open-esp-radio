@@ -149,6 +149,9 @@ oer_chips_family_platform_executor::tasks! {
         /// The Wi-Fi datapath actor, which owns the radio, beside the
         /// station's lifecycle.
         datapath(datapath: wifi::Datapath) = wifi::datapath;
+        #[cfg(feature = "access-point")]
+        /// The Wi-Fi access point, which owns the radio, and its IP service.
+        access_point(launch: wifi::ApStart) = wifi::serve_access_point;
     }
 }
 
@@ -273,6 +276,9 @@ pub(crate) struct Pending {
     /// The Wi-Fi datapath actor, started beside the station.
     #[cfg(feature = "wifi")]
     pub(crate) datapath: Option<wifi::Datapath>,
+    /// The Wi-Fi access point and its IP service.
+    #[cfg(feature = "access-point")]
+    pub(crate) access_point: Option<wifi::ApStart>,
 }
 
 impl Boot {
@@ -932,6 +938,11 @@ impl Starts {
             && pending
                 .station
                 .is_none_or(|start| SdkTasks::station(library, start).is_ok());
+        #[cfg(feature = "access-point")]
+        let started = started
+            && pending
+                .access_point
+                .is_none_or(|start| SdkTasks::access_point(library, start).is_ok());
         if !started {
             fail(Error::AlreadyStarted.name());
         }
@@ -993,32 +1004,6 @@ async fn feed_rtc_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
 /// library applies on the image's behalf.
 pub(crate) fn fail<const B: usize>(reason: oer_portable_diagnostics::Name<B>) -> ! {
     oer_chips_family_platform_runtime::fatal::boot_failure::<Port>(reason.as_str(), || {
-        let _note = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
-            &oer_portable_diagnostics::Note::runtime_fail(reason),
-        );
-    })
-}
-
-/// [`fail`] for a reason whose variant path the record keeps after it: the
-/// next boot prints `reason` and `path` ([`oer_chips_esp32s31_platform_runtime::diagnostic_text`]),
-/// cut to the record's payload.
-#[cfg(feature = "wifi")]
-pub(crate) fn fail_path<const B: usize>(
-    reason: oer_portable_diagnostics::Name<B>,
-    path: &oer_portable_diagnostics::DiagPath,
-) -> ! {
-    let mut text = [0; oer_portable_diagnostics::fault::PAYLOAD_BYTES];
-    let length = oer_chips_esp32s31_platform_runtime::diagnostic_text::write(
-        reason.as_str().as_bytes(),
-        path,
-        &mut text,
-    );
-    // The names and digits are ASCII; text that is not keeps the reason alone.
-    let record = text
-        .get(..length)
-        .and_then(|text| core::str::from_utf8(text).ok())
-        .unwrap_or(reason.as_str());
-    oer_chips_family_platform_runtime::fatal::boot_failure::<Port>(record, || {
         let _note = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
             &oer_portable_diagnostics::Note::runtime_fail(reason),
         );
