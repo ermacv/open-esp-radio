@@ -774,6 +774,51 @@ fn a_frame_held_for_reorder_is_delivered_by_the_link_at_its_release() {
     });
 }
 
+/// A frame the reorder window releases while the link still holds is
+/// refused by the link as it is then: it never inherits the permission its
+/// arrival had, it is recycled rather than sent to the station, and the
+/// link's release later delivers nothing of it.
+#[test]
+fn a_frame_expires_from_reorder_while_the_link_is_still_held() {
+    bench(|bench| {
+        bench.start();
+        let handover = link(true, None);
+        let epoch = handover.epoch();
+        bench.connect(handover);
+        rx_agreement(bench, epoch);
+        bench.air.receive(&qos_data_from_ap(101, &[1; 4]), meta());
+        bench.settle();
+        assert!(bench.receive.try_receive().is_none(), "101 waits for 100");
+
+        bench.send(ToActor::Hold);
+        // The window lets 101 go while delivery is forbidden.
+        bench.advance(200_000);
+        bench.settle();
+        assert!(
+            bench.receive.try_receive().is_none(),
+            "101 does not inherit its arrival's permission"
+        );
+        while let Some(message) = bench.next() {
+            assert!(
+                !matches!(message, FromActor::Received { .. }),
+                "a refused data frame is recycled, not sent to the station"
+            );
+        }
+
+        bench.send(ToActor::Release);
+        bench.advance(200_000);
+        bench.settle();
+        assert!(
+            bench.receive.try_receive().is_none(),
+            "101 ended under the hold and is not delivered again"
+        );
+        assert!(
+            bench.end.is_none(),
+            "its owner was recycled, the installation unharmed"
+        );
+    });
+}
+
 #[test]
 fn a_turn_s_received_data_wakes_a_waiting_network() {
     struct Woken(AtomicUsize);
