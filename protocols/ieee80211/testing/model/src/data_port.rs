@@ -850,7 +850,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) -> SubmitRefusal {
         self.held.post(OwnedLowerMacEvent::Terminal(
             OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::of(
-                attempt.operation.complete(TxOutcome::Withdrawn(cause)),
+                // Never published: nothing reached the air.
+                attempt.operation.complete(
+                    TxOutcome::Withdrawn(cause),
+                    oer_protocols_ieee80211_contracts_port::TxEstimate::NONE,
+                ),
                 attempt.execution.beacon,
             )),
         ));

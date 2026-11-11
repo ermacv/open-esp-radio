@@ -29,6 +29,12 @@ pub(super) struct Pending<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O
     pub published: bool,
     /// What it has put on the air.
     pub air: Option<Air>,
+    /// The descriptor's work before the publication now on the air: what
+    /// that publication adds is its cost.
+    pub try_work: Option<crate::mac::tx_work::MacTxWork>,
+    /// What the plan's publications cost so far, by the backend's model
+    /// ([`TxEstimate`]): its terminal carries it.
+    pub cost: TxEstimate,
     /// A beacon's permission, which its terminal returns, and the instant
     /// it must be published by.
     pub beacon: Option<(BeaconPermission<'static, Part<Id, 10>>, Instant)>,
@@ -208,6 +214,46 @@ const _: () = {
 };
 
 /// A step a test refuses, which the installation's counts exclude.
+/// What one publication of a single MPDU cost by the backend's model, as
+/// its completion `end` tells it: the work it added to its descriptor's
+/// record (`before` to `after`) and its response, as an arena's publication
+/// is costed. A completion of no publication costs nothing; one that did not
+/// reach the air (a collision, a withdrawal, an expiry) nothing; one whose
+/// air the model does not describe (a hardware timeout, a refused key, a
+/// protection exchange left unanswered) is unknown, never nothing.
+fn attempt_cost(
+    before: Option<crate::mac::tx_work::MacTxWork>,
+    after: crate::mac::tx_work::MacTxWork,
+    rate: PhyRate,
+    end: &PublicationEnd,
+) -> TxEstimate {
+    use crate::lower_mac::arena::cost::{Response, publication_cost};
+    use crate::ordinary_tx::OrdinaryTxFailure as Failure;
+    let Some(before) = before else {
+        return TxEstimate::NONE;
+    };
+    let response = match end {
+        PublicationEnd::Expired { .. }
+        | PublicationEnd::Withdrawn
+        | PublicationEnd::Collision
+        | PublicationEnd::Undelivered(Failure::Collision) => return TxEstimate::NONE,
+        PublicationEnd::TimedOut
+        | PublicationEnd::Undelivered(
+            Failure::TimedOut | Failure::KeyRefused | Failure::CtsTimeout,
+        ) => return TxEstimate::Unknown,
+        PublicationEnd::Delivered { response, .. } => match response {
+            PublicationResponse::Unsolicited => Response::None,
+            PublicationResponse::Ack => Response::Ack,
+            PublicationResponse::BlockAck(_) => Response::BlockAck,
+        },
+        PublicationEnd::Undelivered(Failure::AckTimeout) => Response::Ack,
+    };
+    let Ok(rate) = crate::mac::tx::TxPhyRate::try_from(rate) else {
+        return TxEstimate::Unknown;
+    };
+    publication_cost(Some(before), Some(after), rate, response)
+}
+
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TestRefusal {
@@ -528,7 +574,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             env.count_expired(msdus.count_ones());
         }
         let place = pending.operation.ticket().index();
-        let completed = pending.operation.complete(outcome);
+        let completed = pending.operation.complete(outcome, pending.cost);
         let completed = match pending.beacon {
             Some((permission, _)) => brand::OwnedTxCompleted::Beacon {
                 completed,
@@ -798,8 +844,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
             },
         };
+        // What the publication added to the descriptor's record, read
+        // before the descriptor goes home.
+        let work = slot.as_ref().work();
         // The queue place and its descriptor go home together.
         self.free.put_paired(free, slot);
+        pending.cost = pending
+            .cost
+            .add(attempt_cost(pending.try_work.take(), work, rate, &end));
         if let Err(fault) = returned {
             // Its memory is not back: the attempt stays published.
             self.keep_running(category, pending);
@@ -1280,6 +1332,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 PublishStep::Values,
             );
         }
+        // What this publication adds to the descriptor's record is its cost.
+        pending.try_work = Some(memory.slot().work());
         let values = MpduValues::checked(
             memory,
             core_mac::MpduParameters {

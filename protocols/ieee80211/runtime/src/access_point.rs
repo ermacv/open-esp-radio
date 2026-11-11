@@ -93,8 +93,8 @@ use oer_protocols_ieee80211_contracts_port::{
     RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopCause,
     StopObservations, StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower,
     SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory,
-    TxBufferPool, TxCompleted, TxEstimate, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower,
-    TxProtection, TxSource, Unconsumed, UnconsumedRefused,
+    TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection,
+    TxSource, Unconsumed, UnconsumedRefused,
 };
 use oer_protocols_ieee80211_core_roles_ap::{
     AP_MAX_CLIENTS, ApAssociationIdentity, ApEapolTransmit, ApEapolTxContext,
@@ -1535,6 +1535,7 @@ where
         let parts = completed.into_parts(&mut self.access);
         let index = parts.ticket.index();
         let outcome = parts.outcome;
+        let cost = parts.cost;
         let (buffer, _) = parts.payload.into_parts();
         // Each home below was found free by `admit`, and the buffer of the
         // runner's class.
@@ -1572,11 +1573,11 @@ where
                 }
             }
             Purpose::Response(_) => {}
-            // One charge for the attempt: a single MPDU's completion names no
-            // modelled cost, so it is charged as unknown, never nothing.
+            // One charge for the attempt, what its publications cost by the
+            // backend's model; an unknown cost stays unknown, never nothing.
             Purpose::Data(queue, association) => {
                 if self.owns(queue, association) {
-                    self.queues.charge(queue, TxEstimate::Unknown);
+                    self.queues.charge(queue, cost);
                 }
             }
             Purpose::Eapol(context) => {

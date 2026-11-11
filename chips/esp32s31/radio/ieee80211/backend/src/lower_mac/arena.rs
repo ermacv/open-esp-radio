@@ -58,7 +58,7 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_radio_port::PoolPath;
 
-mod cost;
+pub(crate) mod cost;
 use cost::{Response, publication_cost};
 
 /// What the S31 observed of an arena's ACK or BlockAck: its SNR, when the

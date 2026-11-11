@@ -1,6 +1,6 @@
 #![no_std]
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateOutcome, InFlight, PortSingleOutcome, PortTypes, TxCompleted,
+    AggregateOutcome, InFlight, PortSingleOutcome, PortTypes, TxCompleted, TxEstimate,
 };
 use oer_protocols_radio_port::Slot;
 
@@ -14,7 +14,7 @@ pub fn finish<'id, P: PortTypes<'id>>(
 ) -> TxCompleted<'id, P> {
     let _ = (&single, &aggregate);
     #[cfg(ui_reject)]
-    return TxCompleted::Single(operation.complete(aggregate)); // ui-error: E0308
+    return TxCompleted::Single(operation.complete(aggregate, TxEstimate::NONE)); // ui-error: E0308
     #[cfg(not(ui_reject))]
-    TxCompleted::Single(operation.complete(single))
+    TxCompleted::Single(operation.complete(single, TxEstimate::NONE))
 }

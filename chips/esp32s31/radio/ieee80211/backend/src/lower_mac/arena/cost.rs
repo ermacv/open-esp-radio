@@ -19,7 +19,7 @@ use crate::mac::tx_work::MacTxWork;
 
 /// The response a publication solicits, in the cost model.
 #[derive(Clone, Copy)]
-pub(super) enum Response {
+pub(crate) enum Response {
     None,
     Ack,
     BlockAck,
@@ -107,7 +107,7 @@ fn response_micros(rate: TxPhyRate, response: Response) -> Option<u32> {
 /// What one publication costs by the model ([`TxEstimate`]): the work its
 /// submission recorded between the two snapshots, its modelled PPDU, plus
 /// [`response_micros`]. A publication the model cannot time is unknown.
-pub(super) fn publication_cost(
+pub(crate) fn publication_cost(
     before: Option<MacTxWork>,
     after: Option<MacTxWork>,
     rate: TxPhyRate,

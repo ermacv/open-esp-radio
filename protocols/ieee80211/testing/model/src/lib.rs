@@ -3643,6 +3643,20 @@ fn withdrawn<'id, B: ModelComposition>(
     terminal(held, *work, TxOutcome::Withdrawn(cause));
 }
 
+/// The cost the model declares for a single MPDU's terminal: none for an
+/// MSDU that aged before it went, unknown otherwise.
+const fn model_cost(
+    outcome: &ModelSingleOutcome,
+) -> oer_protocols_ieee80211_contracts_port::TxEstimate {
+    use oer_protocols_ieee80211_contracts_port::TxEstimate;
+    match outcome {
+        TxOutcome::Expired { .. } => TxEstimate::NONE,
+        TxOutcome::Withdrawn(_) | TxOutcome::Ended(_) | TxOutcome::Indeterminate(_) => {
+            TxEstimate::Unknown
+        }
+    }
+}
+
 /// Post the terminal of `prepared`, with its tokens.
 fn terminal<'id, B: ModelComposition>(
     held: &ModelHeld<'id, B>,
@@ -3651,7 +3665,9 @@ fn terminal<'id, B: ModelComposition>(
 ) {
     held.post(OwnedLowerMacEvent::Terminal(
         OwnedLowerMacTerminal::TxCompleted(OwnedTxCompleted::of(
-            prepared.operation.complete(outcome),
+            // The model times its air but declares no cost of a single
+            // MPDU's publications: unknown, except where nothing went.
+            prepared.operation.complete(outcome, model_cost(&outcome)),
             prepared.beacon,
         )),
     ));

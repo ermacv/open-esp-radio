@@ -172,8 +172,13 @@ only once the port gave the room.
   the cost of that model, not a measured medium occupancy. An attempt the
   model cannot time is charged the dearest attempt known, at least one
   microsecond: an unknown cost is never zero. The access point's runner
-  charges its single MPDUs `Unknown`, so its fairness among clients is per
-  attempt, not by air.
+  charges each data attempt what its single MPDU's terminal carries
+  (`Completed::cost`): the S31 backend sums, over the plan's publications,
+  the work each added to its descriptor's record by the same model, none
+  for a publication that did not reach the air, and `Unknown` where the
+  model cannot say (a hardware timeout, a refused key, an unanswered
+  protection exchange). The reference model declares single MPDUs'
+  costs unknown.
 - **Return.** A frame's buffer comes back to the network's one transmit
   owner (`LocalTx`) when its MSDU ends, and is free again at once: no
   separate settlement follows. A new link epoch or a stopped data plane

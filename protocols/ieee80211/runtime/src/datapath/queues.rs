@@ -349,7 +349,7 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
         }
     }
 
-    fn air(&self, queue: QueueId) -> u32 {
+    pub(crate) fn air(&self, queue: QueueId) -> u32 {
         self.served
             .get(usize::from(queue.peer()))
             .and_then(|tids| tids.get(usize::from(queue.tid().value())))

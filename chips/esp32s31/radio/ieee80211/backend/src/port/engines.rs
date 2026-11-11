@@ -2436,9 +2436,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         if let Some((reason, cause)) = refusal {
             // The attempt ends at once, withdrawn and never published: its
             // terminal returns every owner.
-            let completed = attempt
-                .operation
-                .complete(oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(cause));
+            let completed = attempt.operation.complete(
+                oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(cause),
+                // Never published: nothing reached the air.
+                oer_protocols_ieee80211_contracts_port::TxEstimate::NONE,
+            );
             let completed = match attempt.execution.beacon {
                 Some((permission, _)) => brand::OwnedTxCompleted::Beacon {
                     completed,
@@ -2479,6 +2481,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             tries_left,
             published: false,
             air: None,
+            try_work: None,
+            cost: TxEstimate::NONE,
             beacon: attempt.execution.beacon,
         };
         // A queue holds every ticket's attempt (`QUEUE_DEPTH`), and this

@@ -1,7 +1,7 @@
 error[E0308]: mismatched types
   --> tests/ui/single_aggregate_outcome.rs:17:51
    |
-17 |     return TxCompleted::Single(operation.complete(aggregate)); // ui-error: E0308
+17 |     return TxCompleted::Single(operation.complete(aggregate, TxEstimate::NONE)); // ui-error: E0308
    |                                          -------- ^^^^^^^^^ expected `TxOutcome<SingleEnd<_, _>>`, found `TxOutcome<AggregateEnd<..., ...>>`
    |                                          |
    |                                          arguments to this method are incorrect
@@ -11,12 +11,12 @@ error[E0308]: mismatched types
 help: the return type of this call is `TxOutcome<AggregateEnd<<P as PortTypes<'id>>::BlockAckEvidence, <P as PortTypes<'id>>::AirDenied>>` due to the type of the argument passed
   --> tests/ui/single_aggregate_outcome.rs:17:32
    |
-17 |     return TxCompleted::Single(operation.complete(aggregate)); // ui-error: E0308
-   |                                ^^^^^^^^^^^^^^^^^^^---------^
+17 |     return TxCompleted::Single(operation.complete(aggregate, TxEstimate::NONE)); // ui-error: E0308
+   |                                ^^^^^^^^^^^^^^^^^^^---------^^^^^^^^^^^^^^^^^^^
    |                                                   |
    |                                                   this argument influences the return type of `complete`
 note: method defined here
   --> src/in_flight.rs
    |
-   |     pub const fn complete<O>(self, outcome: O) -> Completed<C, T, M, O> {
+   |     pub const fn complete<O>(self, outcome: O, cost: crate::TxEstimate) -> Completed<C, T, M, O> {
    |                  ^^^^^^^^

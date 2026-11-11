@@ -52,6 +52,7 @@ struct Returned<'id, Id: radio::SlotIdentity + 'id> {
     buffer: AnyBuffer<'id, Id, TestDevice, 512, Draws>,
     body: Option<Payload>,
     outcome: Outcome,
+    cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
 }
 
 /// One terminal of the port, in the order the sink took it.
@@ -303,6 +304,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                         buffer,
                         body,
                         outcome: parts.outcome,
+                        cost: parts.cost,
                     }))
                 }
                 LowerMacTerminal::GateClosed(gate) => Event::GateClosed(gate),
@@ -537,6 +539,39 @@ fn a_retransmission_after_a_hardware_timeout_carries_the_retry_bit() {
             panic!("a retransmission returns Sent");
         };
         assert!(published_retry(&mut sent));
+    });
+}
+
+/// A single MPDU's terminal carries what its publications cost by the
+/// backend's model, as an arena's does: a delivered one its PPDU, SIFS and
+/// Ack, never nothing; one whose air the hardware timed out unknown, never
+/// an invented value.
+#[test]
+fn a_single_mpdu_s_terminal_carries_its_cost_and_an_unknown_one_stays_unknown() {
+    use oer_protocols_ieee80211_contracts_port::TxEstimate;
+    with_access(|fixture, access| {
+        fixture.start();
+        fixture.submit_mpdu(Spec::open(97));
+        let delivered = single(fixture.until(access, 1));
+        assert!(delivered.outcome.is_delivered(), "{:?}", delivered.outcome);
+        let TxEstimate::Estimated { micros } = delivered.cost else {
+            panic!(
+                "a delivered MPDU's cost is the model's: {:?}",
+                delivered.cost
+            );
+        };
+        assert!(micros > 0, "it reached the air");
+    });
+    with_access(|fixture, access| {
+        fixture.observed.borrow_mut().timeout_edge = true;
+        fixture.start();
+        fixture.submit_mpdu(Spec::open(98));
+        fixture.turns(2);
+        fixture.advance(crate::ordinary_tx::TX_ABORT_SETTLE);
+        fixture.turns(1);
+        let timed_out = single(fixture.events(access));
+        assert!(matches!(timed_out.outcome, TxOutcome::Indeterminate(_)));
+        assert_eq!(timed_out.cost, TxEstimate::Unknown);
     });
 }
 

@@ -157,11 +157,15 @@ impl<C, T, M> InFlight<C, T, M> {
 
     /// End this operation once, returning its entire owner with its outcome:
     /// a single MPDU's [`SingleOutcome`](crate::SingleOutcome) or an
-    /// aggregate's [`AggregateOutcome`](crate::AggregateOutcome).
-    pub const fn complete<O>(self, outcome: O) -> Completed<C, T, M, O> {
+    /// aggregate's [`AggregateOutcome`](crate::AggregateOutcome), and what
+    /// its publications cost by the backend's model: none when nothing of it
+    /// reached the air, [`TxEstimate::Unknown`](crate::TxEstimate::Unknown)
+    /// when the model cannot say, never an invented value.
+    pub const fn complete<O>(self, outcome: O, cost: crate::TxEstimate) -> Completed<C, T, M, O> {
         Completed {
             operation: self,
             outcome,
+            cost,
         }
     }
 }
@@ -171,12 +175,19 @@ impl<C, T, M> InFlight<C, T, M> {
 pub struct Completed<C, T, M, O> {
     operation: InFlight<C, T, M>,
     outcome: O,
+    cost: crate::TxEstimate,
 }
 
 impl<C, T, M, O> Completed<C, T, M, O> {
     /// The terminal's observation, without releasing any owner.
     pub const fn outcome(&self) -> &O {
         &self.outcome
+    }
+
+    /// What every publication of the operation cost by the backend's
+    /// declared model ([`TxEstimate`](crate::TxEstimate)).
+    pub const fn cost(&self) -> crate::TxEstimate {
+        self.cost
     }
 
     /// The terminal's payload, read by its pool's class check
@@ -211,6 +222,7 @@ impl<C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'static, Kind, Path>, M, O
                 payload.lend(loan),
             ),
             outcome: self.outcome,
+            cost: self.cost,
         }
     }
 }
@@ -237,6 +249,7 @@ impl<'id, C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'id, Kind, Path>, M, 
                 payload.into_owned(loan),
             ),
             outcome: self.outcome,
+            cost: self.cost,
         }
     }
 
@@ -262,6 +275,7 @@ impl<'id, C, Kind, Path: PoolPath, M, O> Completed<C, Slot<'id, Kind, Path>, M, 
             ticket,
             payload,
             outcome: self.outcome,
+            cost: self.cost,
         }
     }
 }
@@ -288,6 +302,8 @@ pub struct TerminalParts<C, T, M, O> {
     pub payload: M,
     /// Observation which ended this operation.
     pub outcome: O,
+    /// What its publications cost by the backend's model.
+    pub cost: crate::TxEstimate,
 }
 
 /// One returned MPDU. A fresh MPDU carries its memory and optional body
