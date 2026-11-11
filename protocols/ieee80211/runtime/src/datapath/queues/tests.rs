@@ -231,3 +231,34 @@ fn a_long_lone_queue_s_account_stays_small_and_a_later_one_shares_the_air() {
         "{served:?}"
     );
 }
+
+/// Voice that holds the air for long beside a starved best-effort queue
+/// keeps its account below its end: a second voice queue that starts later
+/// shares the air with it.
+#[test]
+fn a_category_s_accounts_stay_small_beside_a_starved_lower_one() {
+    const VO: WmmUserPriority = WmmUserPriority::UP6;
+    const VO7: WmmUserPriority = WmmUserPriority::UP7;
+    let mut queues = Station::new();
+    assert!(queues.push(q(BE), msdu(0, BE)).is_ok());
+    assert!(queues.push(q(VO), msdu(1, VO)).is_ok());
+    for _ in 0..64 {
+        queues.charge(q(VO), estimated(u32::MAX / 8));
+    }
+    for tag in 2..6 {
+        assert!(queues.push(q(VO), msdu(tag, VO)).is_ok());
+        assert!(queues.push(q(VO7), msdu(10 + tag, VO7)).is_ok());
+    }
+    let mut served = Vec::new();
+    for _ in 0..6 {
+        let queue = queues.select(None).unwrap();
+        served.push(queue);
+        let _msdu = queues.pop(queue);
+        queues.charge(queue, estimated(1000));
+    }
+    assert_eq!(
+        served.iter().filter(|queue| **queue == q(VO7)).count(),
+        3,
+        "{served:?}"
+    );
+}
