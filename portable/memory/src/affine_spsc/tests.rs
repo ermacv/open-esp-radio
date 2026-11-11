@@ -290,67 +290,83 @@ fn cached_placement_transfers_received_owners_and_drops_only_the_queued_owner() 
     assert_eq!(dropped[1].load(Ordering::SeqCst), 1);
 }
 
-/// Staged values stay unseen until one publication, which shows them all
-/// in order; a short batch stops at the free cells and hands the value
-/// back; around the ring's end the cursors keep their order.
+/// A batch publishes once, in order, around the ring's end; a short batch
+/// stops at the vacant cells and hands the value back; a batched consumer
+/// frees its cells only at its release.
 #[test]
-fn a_staged_batch_publishes_once_in_order_around_the_ring() {
+fn batches_publish_and_release_once_in_order_around_the_ring() {
     let mut queue = AffineSpscQueue::<u8, 4>::new();
-    let (mut sender, mut receiver) = queue.split();
+    let (sender, receiver) = queue.split();
+    let (mut sender, mut receiver) = (sender.batched(), receiver.batched());
     for round in 0_u8..10 {
-        let base = round * 10;
-        // Three in, so each round's cells wrap past the ring's end.
         for n in 0..3 {
-            assert!(sender.stage(base + n).is_ok());
+            assert_eq!(sender.stage(round * 10 + n), Ok(()));
         }
         assert_eq!(sender.staged(), 3);
-        assert_eq!(sender.free_capacity(), 1, "staged cells are not free");
         assert!(receiver.is_empty(), "nothing is seen before publication");
         sender.publish();
         assert_eq!(receiver.len(), 3);
         for n in 0..3 {
-            assert_eq!(receiver.take(), Some(base + n));
+            assert_eq!(receiver.take(), Some(round * 10 + n));
         }
         assert_eq!(receiver.take(), None);
-        // Until released, the taken cells are not the producer's.
-        assert_eq!(sender.free_capacity(), 1);
+        assert_eq!(sender.len(), 3, "taken cells stay held");
         receiver.release();
-        assert_eq!(sender.free_capacity(), 4);
+        assert_eq!(sender.len(), 0);
     }
-    // A short batch: four cells, a fifth value comes back unstaged.
     for n in 0..4 {
-        assert!(sender.stage(n).is_ok());
+        assert_eq!(sender.stage(n), Ok(()));
     }
-    assert_eq!(sender.stage(9).unwrap_err().0, 9);
+    assert_eq!(sender.stage(9), Err(9), "a short batch");
     sender.publish();
-    assert_eq!(receiver.try_receive(), Ok(0));
+    assert_eq!(receiver.take(), Some(0));
 }
 
-/// Ordinary sends and receives keep the order of staged and taken ones: a
-/// send publishes what was staged before it, a receive frees what was
-/// taken before it, and so do local loans.
+/// A batched end and an ordinary one work together: the ordinary end sees
+/// a batch only at its boundary.
 #[test]
-fn single_operations_follow_the_batches_before_them() {
+fn a_batched_end_meets_an_ordinary_one_at_its_boundaries() {
     let mut queue = AffineSpscQueue::<u8, 4>::new();
-    let (mut sender, mut receiver) = queue.split();
-    assert!(sender.stage(1).is_ok());
-    assert!(sender.try_send(2).is_ok());
-    assert_eq!(receiver.take(), Some(1));
-    assert_eq!(receiver.try_receive(), Ok(2));
-    assert_eq!(sender.free_capacity(), 4, "the taken cell was freed first");
-    assert!(sender.stage(3).is_ok());
-    assert!(sender.borrow_local().try_send(4).is_ok());
-    assert_eq!(receiver.take(), Some(3));
-    assert_eq!(receiver.borrow_local().try_receive(), Ok(4));
+    let (sender, receiver) = queue.split();
+    let mut sender = sender.batched();
+    assert_eq!(sender.stage(1), Ok(()));
+    assert_eq!(
+        receiver.try_receive(),
+        Err(AffineSpscTryReceiveError::Empty)
+    );
+    sender.publish();
+    assert_eq!(receiver.try_receive(), Ok(1));
+}
+
+/// Endpoints that end in a batch leave no owner and no stale value: what
+/// was staged is unpublished, and what was taken and not released is
+/// received again by the next consumer, once.
+#[test]
+fn a_batch_ended_unfinished_leaves_the_queue_whole() {
+    let mut queue = AffineSpscQueue::<u8, 4>::new();
+    {
+        let (sender, receiver) = queue.split();
+        assert!(sender.try_send(1).is_ok());
+        let (mut sender, mut receiver) = (sender.batched(), receiver.batched());
+        assert_eq!(receiver.take(), Some(1));
+        assert_eq!(sender.stage(2), Ok(()));
+    }
+    let (sender, receiver) = queue.split();
+    assert_eq!(receiver.try_receive(), Ok(1), "the unreleased value, again");
+    assert!(
+        receiver.try_receive().is_err(),
+        "the unpublished one never was"
+    );
     assert_eq!(sender.free_capacity(), 4);
 }
 
-/// A producer and a consumer on two threads, each in batches: every value
+/// A batched producer and a batched consumer on two threads: every value
 /// arrives once and in order.
 #[test]
 fn batches_across_threads_deliver_every_value_once_in_order() {
     let queue = std::boxed::Box::leak(std::boxed::Box::new(AffineSpscQueue::<u32, 8>::new()));
-    let (mut sender, mut receiver) = queue.split();
+    let (sender, receiver) = queue.split();
+    let (mut sender, mut receiver) = (sender.batched(), receiver.batched());
     const VALUES: u32 = 20_000;
     std::thread::scope(|scope| {
         scope.spawn(move || {
@@ -377,33 +393,4 @@ fn batches_across_threads_deliver_every_value_once_in_order() {
             }
         });
     });
-}
-
-/// Endpoints that end in a batch leave it to the queue: the next split
-/// publishes what was staged, once, and frees the taken cells, whose values
-/// are not received again.
-#[test]
-fn a_batch_left_by_ended_endpoints_ends_at_the_next_split() {
-    let mut queue = AffineSpscQueue::<u8, 4>::new();
-    {
-        let (mut sender, mut receiver) = queue.split();
-        assert!(sender.try_send(1).is_ok());
-        assert!(sender.try_send(2).is_ok());
-        assert_eq!(receiver.take(), Some(1));
-        assert!(sender.stage(3).is_ok());
-        // Both end here, the take unreleased and the stage unpublished.
-    }
-    let (sender, receiver) = queue.split();
-    assert_eq!(
-        receiver.try_receive(),
-        Ok(2),
-        "the taken value is not seen again"
-    );
-    assert_eq!(
-        receiver.try_receive(),
-        Ok(3),
-        "the staged one is published once"
-    );
-    assert!(receiver.try_receive().is_err());
-    assert_eq!(sender.free_capacity(), 4, "every cell is free");
 }

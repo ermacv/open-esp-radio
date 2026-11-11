@@ -13,7 +13,7 @@
 //! ([`SlotSender::try_send_held_with`], [`SlotSender::flush`]), which then
 //! finds the burst, not its first value.
 
-use crate::{AffineSpscQueue, AffineSpscReceiver, AffineSpscSender, ClaimCell, QueueNotify};
+use crate::{AffineSpscQueue, BatchedSpscReceiver, BatchedSpscSender, ClaimCell, QueueNotify};
 use core::future::poll_fn;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering, fence};
 use core::task::Poll;
@@ -137,8 +137,8 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
         (
             SlotSender {
                 slots: &self.slots,
-                filled: filled_send,
-                free: free_receive,
+                filled: filled_send.batched(),
+                free: free_receive.batched(),
                 spare: None,
                 consumer,
                 producer,
@@ -146,8 +146,8 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
             },
             SlotReceiver {
                 slots: &self.slots,
-                filled: filled_receive,
-                free: free_send,
+                filled: filled_receive.batched(),
+                free: free_send.batched(),
                 consumer,
                 producer,
                 waits,
@@ -223,8 +223,8 @@ impl<T, const DEPTH: usize> Default for WakingSlotQueue<T, DEPTH> {
 /// The producer: fills free slots in place.
 pub struct SlotSender<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWaker> {
     slots: &'a [ClaimCell<T>; DEPTH],
-    filled: AffineSpscSender<'a, u8, DEPTH>,
-    free: AffineSpscReceiver<'a, u8, DEPTH>,
+    filled: BatchedSpscSender<'a, u8, DEPTH>,
+    free: BatchedSpscReceiver<'a, u8, DEPTH>,
     /// A free slot a refused fill left: the next fill takes it first.
     spare: Option<u8>,
     consumer: &'a C,
@@ -343,7 +343,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
         &mut self,
         fill: impl FnOnce(&mut T) -> Result<R, E>,
     ) -> Result<R, SlotSendError<E>> {
-        let Some(index) = self.spare.take().or_else(|| self.free.try_receive().ok()) else {
+        let Some(index) = self.spare.take().or_else(|| self.free.take()) else {
             return Err(SlotSendError::Full);
         };
         let slot = self
@@ -360,9 +360,9 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
             }
         };
         // The index was free, so the filled queue has room for it.
-        self.filled
-            .try_send(index)
-            .map_err(|_| SlotSendError::Lost)?;
+        self.filled.stage(index).map_err(|_| SlotSendError::Lost)?;
+        // A single fill is a burst of one, published at once.
+        self.publish_burst();
         Ok(value)
     }
 
@@ -390,8 +390,8 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
 /// The consumer: reads the oldest filled slot in place.
 pub struct SlotReceiver<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWaker> {
     slots: &'a [ClaimCell<T>; DEPTH],
-    filled: AffineSpscReceiver<'a, u8, DEPTH>,
-    free: AffineSpscSender<'a, u8, DEPTH>,
+    filled: BatchedSpscReceiver<'a, u8, DEPTH>,
+    free: BatchedSpscSender<'a, u8, DEPTH>,
     consumer: &'a C,
     producer: &'a P,
     waits: Waits<'a>,
@@ -426,22 +426,10 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotReceiver<'_, T, 
         &mut self,
         read: impl FnOnce(&mut T) -> R,
     ) -> Result<R, SlotReceiveError> {
-        let index = self
-            .filled
-            .try_receive()
-            .map_err(|_| SlotReceiveError::Empty)?;
-        let slot = self
-            .slots
-            .get(usize::from(index))
-            .ok_or(SlotReceiveError::Lost)?;
-        let value = slot.lend(read).map_err(|_| SlotReceiveError::Lost)?;
-        // The index was filled, so the free queue has room for it.
-        self.free
-            .try_send(index)
-            .map_err(|_| SlotReceiveError::Lost)?;
-        let producer = self.producer;
-        wake_waiting(self.waits.producer, || producer.notify());
-        Ok(value)
+        // A single read is a burst of one, freed at once.
+        let value = self.try_receive_held_with(read);
+        self.commit();
+        value
     }
 
     /// [`Self::try_receive_with`] within a burst: the slot is read in place

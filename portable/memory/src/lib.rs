@@ -78,8 +78,8 @@ pub use request_slot::{
 pub use affine_spsc::{
     AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, AffineSpscQueue,
     AffineSpscReceiver, AffineSpscSendPermit, AffineSpscSender, AffineSpscTryReceiveError,
-    AffineSpscTrySendError, CachedSpscCursor, CompactSpscCursor, LocalSpscReceiver,
-    LocalSpscSender, SpscCursor, UniqueQueueIndex,
+    AffineSpscTrySendError, BatchedSpscReceiver, BatchedSpscSender, CachedSpscCursor,
+    CompactSpscCursor, LocalSpscReceiver, LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
 pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use context_cell::{ContextCell, ContextProof};
