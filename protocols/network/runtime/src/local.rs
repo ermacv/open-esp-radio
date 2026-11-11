@@ -43,7 +43,8 @@ pub trait Produce {
     fn generation(&self) -> u32;
 
     /// Whether `tag`'s data is still the producer's to send. The service asks
-    /// before every fill, after a generation change and about a held offer.
+    /// after a generation change and about a held offer; a fill answers it
+    /// itself ([`Self::fill`]).
     fn current(&self, tag: Self::Tag) -> bool;
 
     /// The next datagram to declare, or when to ask again. An offer handed
@@ -59,9 +60,16 @@ pub trait Produce {
     /// written, so no pass reads it again. A fill consumes nothing: a
     /// refusal after it, by the device, means a later fill of the same work.
     ///
+    /// The fill is the guarantee of identity: it finds the data of `work`'s
+    /// tag once, and writes it only while it is the producer's to send, as
+    /// [`Self::current`] would say; data a later generation or another datagram
+    /// took the place of is never written for this work.
+    ///
     /// # Errors
-    /// [`Declined`]: the work ends [`Outcome::Declined`]. A fill that leaves
-    /// part of `data` unwritten is declined as [`Declined::Unwritable`].
+    /// [`Declined`]: the work ends [`Outcome::Declined`]. The tag's data is no
+    /// longer the producer's: [`Declined::Stale`], nothing written. A fill
+    /// that leaves part of `data` unwritten is declined as
+    /// [`Declined::Unwritable`].
     fn fill(
         &mut self,
         now: Instant,
@@ -598,11 +606,8 @@ impl<B, P: Produce, const CREDITS: usize> Local<B, CREDITS> for Producer<'_, B, 
             .filter(|(command, _)| command.work() == work)
             .map(|(_, tag)| *tag)
             .ok_or(Declined::Stale)?;
-        // The guarantee of identity: a source that moved on has no data of
-        // this work's any more.
-        if !self.producer.current(tag) {
-            return Err(Declined::Stale);
-        }
+        // The guarantee of identity is the fill's own: it finds the tag's
+        // data once and declines what is no longer the producer's.
         self.producer.fill(now, Work { id: work, tag }, data)
     }
 
