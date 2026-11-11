@@ -16,7 +16,7 @@ use oer_protocols_network_core::{
     Unsent,
 };
 use oer_protocols_network_port::{
-    Candidate, Egress, FramePort, FrameSource, Next, PlanStop, QUANTUM, Turns,
+    Candidate, Egress, FramePort, FrameSource, Next, PlanStop, PortReady, QUANTUM, Turns,
 };
 use oer_protocols_network_wire::ip::Dscp;
 
@@ -122,6 +122,62 @@ impl AfterUnsent {
         moved: true,
         stale: true,
         end: None,
+    };
+}
+
+/// What the sources said at the wait that ends before a turn: the port's
+/// facts, whether a socket's lanes hold work, and the time the core's
+/// timers wait for. A turn runs a stage only for its source, and every
+/// stage when it knows nothing ([`Self::ALL`]).
+#[derive(Clone, Copy, Debug)]
+struct Woken {
+    port: PortReady,
+    lanes: bool,
+    /// When the core's timers, pressure relief or the producer next want a
+    /// turn.
+    due: Due,
+}
+
+/// When timed work next wants a turn.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Due {
+    /// Not known: it runs.
+    Unknown,
+    /// At this time.
+    At(Instant),
+    /// Nothing waits for a time.
+    Never,
+}
+
+impl Due {
+    /// Whether timed work is due at `now`.
+    fn by(self, now: Instant) -> bool {
+        match self {
+            Self::Unknown => true,
+            Self::At(at) => now >= at,
+            Self::Never => false,
+        }
+    }
+}
+
+impl Woken {
+    /// Nothing known: every stage runs.
+    const ALL: Self = Self {
+        port: PortReady {
+            frames: true,
+            notices: true,
+            link: true,
+            room: true,
+        },
+        lanes: true,
+        due: Due::Unknown,
+    };
+
+    /// Nothing said yet.
+    const NONE: Self = Self {
+        port: PortReady::NONE,
+        lanes: false,
+        due: Due::Never,
     };
 }
 
@@ -936,6 +992,9 @@ impl<
         clock: &T,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> EndCause {
+        // What the next turn's sources said; a first turn, or one after a
+        // yield, knows nothing and runs every stage.
+        let mut woken = Woken::ALL;
         loop {
             if let Some(cause) = self.ended {
                 return cause;
@@ -944,7 +1003,8 @@ impl<
                 self.ended = Some(EndCause::Stopped);
                 continue;
             }
-            let turned = self.turn(clock.now(), events);
+            let turned = self.turn(clock.now(), woken, events);
+            woken = Woken::ALL;
             if self.owner.port_broken() {
                 self.ended = Some(EndCause::PortContract);
             } else if self.fault.is_some() {
@@ -954,13 +1014,17 @@ impl<
                 // takes it, once the executor had its turn.
                 report(events, || ServiceEvent::Yielded);
                 yield_now().await;
-            } else if self.wait(clock, events).await {
-                // The wait was over at its first poll, by work or by a time
-                // already due: no turn follows another within the same poll,
-                // and a source that says it is ready for good cannot hold
-                // the executor.
-                report(events, || ServiceEvent::Yielded);
-                yield_now().await;
+            } else {
+                let (at_once, said) = self.wait(clock, events).await;
+                woken = said;
+                if at_once {
+                    // The wait was over at its first poll, by work or by a
+                    // time already due: no turn follows another within the
+                    // same poll, and a source that says it is ready for good
+                    // cannot hold the executor.
+                    report(events, || ServiceEvent::Yielded);
+                    yield_now().await;
+                }
             }
         }
     }
@@ -971,6 +1035,7 @@ impl<
     fn turn(
         &mut self,
         now: Instant,
+        woken: Woken,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> Turned {
         let mut again = false;
@@ -978,16 +1043,22 @@ impl<
         report(events, || ServiceEvent::TurnBegan);
         self.local.turn_begins();
         self.owner.observe_link(now);
-        self.owner.tick(now, events);
-        for index in 0..SOCKETS {
-            self.commands(now, index, events);
+        // The core's timers run when their time came or the link moved;
+        // nothing else makes them due.
+        if woken.port.link || woken.due.by(now) {
+            self.owner.tick(now, events);
+        }
+        if woken.lanes {
+            for index in 0..SOCKETS {
+                self.commands(now, index, events);
+            }
         }
         tally.stage(Stage::Intake, &mut self.diagnostics);
         self.take_returns(&mut tally);
         self.give_blocks();
         tally.stage(Stage::Returns, &mut self.diagnostics);
-        let mut intake_full = true;
-        for _ in 0..TURN_FRAMES {
+        let mut intake_full = woken.port.frames;
+        for _ in 0..if woken.port.frames { TURN_FRAMES } else { 0 } {
             let intake = self.owner.take_frame(now, events, tally.steps());
             // Read right after the refusal's frame, before anything else
             // moves the loans.
@@ -1505,7 +1576,7 @@ impl<
         &mut self,
         clock: &T,
         events: &mut impl EventSink<ServiceEvent>,
-    ) -> bool {
+    ) -> (bool, Woken) {
         let deadline = [
             self.owner.poll_deadline(),
             self.pressure_at,
@@ -1524,15 +1595,27 @@ impl<
             diagnostics,
             ..
         } = self;
+        let said = core::cell::Cell::new(Woken {
+            due: deadline.map_or(Due::Never, Due::At),
+            ..Woken::NONE
+        });
         let ready = poll_fn(|cx| {
             let mut ready = pin!(stop.ready()).poll(cx).is_ready();
-            ready |= owner.register_port(cx).any();
+            let port = owner.register_port(cx);
+            ready |= port.any();
             ready |= local.register(cx, events);
             let mut returned = false;
+            let mut lanes = false;
             for bound in bound.iter_mut().flatten() {
-                ready |= bound.poll_lanes(cx);
+                lanes |= bound.poll_lanes(cx);
                 returned |= bound.poll_returns(cx);
             }
+            ready |= lanes;
+            said.set(Woken {
+                port,
+                lanes,
+                ..said.get()
+            });
             for late in adopted.iter_mut().flatten() {
                 returned |= late.poll(cx);
             }
@@ -1568,7 +1651,7 @@ impl<
             wait.as_mut().poll(cx)
         })
         .await;
-        polls == 1
+        (polls == 1, said.get())
     }
 
     /// End: nothing more is published, every known result goes to its place,
