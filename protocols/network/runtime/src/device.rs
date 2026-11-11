@@ -27,7 +27,8 @@ pub trait TxBuffers {
     ///
     /// # Errors
     /// [`Unpublished`]: a [`PortRefusal`], or the error `fill` returned; the
-    /// buffer stays free.
+    /// buffer stays free. With no free buffer, [`PortRefusal::NoRoom`]
+    /// before any fill.
     fn write<E>(
         &mut self,
         length: usize,
@@ -153,22 +154,24 @@ impl<D, T: NetTransmit, X: TxBuffers<Frame = T::Frame>> FramePort for DevicePort
         length: usize,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<X::Ticket, Unpublished<PortRefusal, E>> {
-        // What the device returned is taken back only when the room or the
-        // buffers run out: it may be what is asked for.
-        if !(self.transmit.has_room() && self.buffers.available()) {
+        // What the device returned is taken back only when the room runs
+        // out: it may be what is asked for. A buffer's own lack the write
+        // says, before any fill.
+        let mut room = self.transmit.has_room();
+        if !room {
             self.transmit.reclaim();
+            room = self.transmit.has_room();
         }
-        if !self.transmit.has_room() {
+        if !room {
             self.waiting = Waiting::Room;
-            return Err(Unpublished::Port(PortRefusal::NoRoom));
-        }
-        if !self.buffers.available() {
-            self.waiting = Waiting::Buffer;
             return Err(Unpublished::Port(PortRefusal::NoRoom));
         }
         let frame = match self.buffers.write(length, fill) {
             Ok(frame) => frame,
             Err(unpublished) => {
+                if matches!(unpublished, Unpublished::Port(PortRefusal::NoRoom)) {
+                    self.transmit.reclaim();
+                }
                 // A failed fill is the frame's, not the port's: it waits for
                 // nothing.
                 self.waiting = match unpublished {
