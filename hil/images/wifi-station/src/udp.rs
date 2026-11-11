@@ -391,7 +391,7 @@ impl Produce for LoadProducer {
 
 /// The network the load server opens its runs on.
 pub(crate) struct Network {
-    network: wifi::Network<LoadProducer, wifi::Queued, Receive>,
+    network: wifi::Network<LoadProducer, Receive>,
     /// The channel socket, which receives and echoes.
     socket: RefCell<Socket>,
     source: &'static Source,
@@ -411,7 +411,7 @@ pub(crate) struct Network {
 impl Network {
     /// The network, its channel socket, and the source its producer reads.
     pub(crate) fn new(
-        network: wifi::Network<LoadProducer, wifi::Queued, Receive>,
+        network: wifi::Network<LoadProducer, Receive>,
         socket: Socket,
         source: &'static Source,
     ) -> Self {
@@ -444,9 +444,7 @@ pub(crate) fn address(net: &Network) -> Result<Option<Ipv4>, WatchRefused> {
 /// The network's publications, which the station services' waits read
 /// (`crate::waits`).
 #[cfg(target_arch = "riscv32")]
-pub(crate) const fn published(
-    net: &Network,
-) -> &wifi::Network<LoadProducer, wifi::Queued, Receive> {
+pub(crate) const fn published(net: &Network) -> &wifi::Network<LoadProducer, Receive> {
     &net.network
 }
 

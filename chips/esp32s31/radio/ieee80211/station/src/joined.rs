@@ -369,7 +369,7 @@ struct Transmit(Rc<RefCell<crate::supply::LocalTransmit<'static, Joined>>>);
 
 impl OwnedTransmit for Transmit {
     type Ticket = u8;
-    type Notice = oer_protocols_ieee80211_runtime::egress::RadioNotice<u8, runtime::StationKey>;
+    type Notice = core::convert::Infallible;
     fn publish<E>(
         &mut self,
         meta: oer_protocols_network_port::FrameMeta,
@@ -1220,16 +1220,10 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
         assert!(self.link.try_send(link).is_ok(), "the mailbox is empty");
         self.send(ToActor::Connect);
         self.send(ToActor::Release);
-        // The test's association admits DSSS 1 Mb/s.
-        self.runner.publish_link_for_test(
-            LinkSnapshot {
-                state: LinkState::Up,
-                epoch: 1,
-            },
-            Some(oer_protocols_ieee80211_wire::phy::PhyRate::Legacy(
-                oer_protocols_ieee80211_wire::phy::LegacyRate::Dsss1M,
-            )),
-        );
+        self.runner.publish_link_for_test(LinkSnapshot {
+            state: LinkState::Up,
+            epoch: 1,
+        });
         self.settle();
     }
 

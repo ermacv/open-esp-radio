@@ -7,12 +7,10 @@
 extern crate std;
 
 use super::*;
-use crate::egress::Exchange;
 use crate::station::{SameHart, State};
 use core::task::Waker;
 use oer_portable_memory::WakingSlotQueue;
 use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
-use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_network_port::LinkSnapshot;
 use oer_protocols_network_wire::ip::Dscp;
 use std::vec::Vec;
@@ -121,10 +119,7 @@ fn ipv4(dscp: u8) -> impl FnOnce(&mut Slot<'_>) -> Result<(), Declined> {
 }
 
 fn ended(memory: Buffer) -> TxEnded<Buffer> {
-    TxEnded {
-        memory,
-        end: TxEnd::NONE,
-    }
+    TxEnded { memory }
 }
 
 #[test]
@@ -342,11 +337,11 @@ fn a_failed_fill_comes_back_as_the_fill_s_and_keeps_the_buffer() {
     tx.publish(plain(42), octets).unwrap();
 }
 
-/// A returned buffer and a settled end are two events: the buffer is free
-/// again only once its end went on, so no more frames than buffers are
-/// ever unsettled.
+/// A buffer is free again once the station returns it: the MAC charged
+/// its frame's air, and no end comes back to the network. Until then, no
+/// more frames than buffers are out.
 #[test]
-fn a_buffer_frees_only_when_its_end_is_handed_on() {
+fn a_buffer_frees_when_the_station_returns_it() {
     let mut queue = Queue::new();
     let mut back = Back::new();
     let state = State::new();
@@ -365,47 +360,34 @@ fn a_buffer_frees_only_when_its_end_is_handed_on() {
     let first = tx.publish(plain(42), octets).unwrap();
     let second = tx.publish(plain(42), octets).unwrap();
     assert_ne!(first, second);
-    for _ in 0..2 {
-        tx.flush();
-        let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
-            panic!("the frame went to the station");
-        };
-        assert!(
-            returned
-                .try_send_with(|slot| {
-                    *slot = Some(ended(outgoing.memory));
-                    Ok::<_, ()>(())
-                })
-                .is_ok()
-        );
-    }
-    assert!(!tx.notice_waiting(), "nothing is taken back unasked");
+    tx.flush();
     assert_eq!(
-        tx.publish(plain(42), unreachable_fill("two unsettled ends")),
+        tx.publish(plain(42), unreachable_fill("both buffers are out")),
         Err(Unpublished::Port(PortRefusal::NoRoom)),
-        "two buffers, two unsettled ends: no third frame"
+        "two buffers out: no third frame"
     );
-    assert!(tx.notice_waiting(), "the refusal took back what came");
-    // The first notice is the epoch's, then each frame's end.
-    let mut ends = Vec::new();
-    while let Some(notice) = tx.take_notice() {
-        if let RadioNotice::Ended(Exchange { ticket, .. }) = notice {
-            ends.push(ticket);
-            break;
-        }
-    }
-    assert_eq!(ends, [first]);
+    let Ok(Some(outgoing)) = receiver.try_receive_with(Option::take) else {
+        panic!("the frame went to the station");
+    };
+    assert_eq!(outgoing.memory.place, first);
+    assert!(
+        returned
+            .try_send_with(|slot| {
+                *slot = Some(ended(outgoing.memory));
+                Ok::<_, ()>(())
+            })
+            .is_ok()
+    );
     let third = tx.publish(plain(42), octets).unwrap();
-    assert_eq!(third, first, "the settled buffer goes out again");
-    assert!(matches!(
-        tx.take_notice(),
-        Some(RadioNotice::Ended(Exchange { ticket, .. })) if ticket == second
-    ));
-    assert!(tx.take_notice().is_none());
+    assert_eq!(third, first, "the returned buffer goes out again");
+    assert!(tx.take_notice().is_none(), "no end is handed on");
+    assert!(!tx.notice_waiting());
 }
 
+/// A buffer the pool loses is accepted and lost: it never comes back, and
+/// the network's buffers are one fewer.
 #[test]
-fn a_buffer_the_pool_loses_is_told_lost_and_never_comes_back() {
+fn a_buffer_the_pool_loses_never_comes_back() {
     let mut queue = Queue::new();
     let mut back = Back::new();
     let state = State::new();
@@ -421,17 +403,12 @@ fn a_buffer_the_pool_loses_is_told_lost_and_never_comes_back() {
         buffers(64),
         state.network_link(),
     );
-    let lost = tx.publish(plain(42), octets).unwrap();
+    let _lost = tx.publish(plain(42), octets).unwrap();
     tx.flush();
     assert!(
         matches!(receiver.try_receive_with(Option::take), Err(_) | Ok(None)),
         "nothing reaches the station"
     );
-    let mut told = false;
-    while let Some(notice) = tx.take_notice() {
-        told |= notice == RadioNotice::Lost(lost);
-    }
-    assert!(told);
     // One buffer is left, then none.
     tx.publish(plain(42), octets).unwrap();
     assert_eq!(
@@ -484,7 +461,6 @@ fn a_buffer_keeps_the_run_its_last_frame_left() {
             })
             .is_ok()
     );
-    while tx.take_notice().is_some() {}
     let second = tx
         .publish(plain(42), |slot| {
             assert_eq!(slot.open().1, Some(run), "the buffer's run is kept");
@@ -529,12 +505,9 @@ fn room_is_ready_only_with_a_free_buffer_and_room_to_hand_it_on() {
             .is_ok()
     );
     assert!(
-        tx.poll_room(&mut cx).is_pending(),
-        "the buffer is back, but frees only with its notice"
+        tx.poll_room(&mut cx).is_ready(),
+        "the buffer is back and free at once"
     );
-    assert!(tx.notice_waiting());
-    while tx.take_notice().is_some() {}
-    assert!(tx.poll_room(&mut cx).is_ready());
 }
 
 /// Every buffer the constructor is given is the network's: none is
@@ -658,7 +631,6 @@ fn a_burst_holds_the_places_it_read_until_its_end() {
                 .is_ok()
         );
     }
-    while tx.take_notice().is_some() {}
     // The next burst reads the room again: both places are free.
     tx.publish(plain(42), octets).unwrap();
     tx.publish(plain(42), octets).unwrap();

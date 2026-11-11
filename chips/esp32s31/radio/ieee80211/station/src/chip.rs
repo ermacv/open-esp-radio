@@ -125,7 +125,10 @@ const TX_BLOCK_ACK: oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockA
             lifetime: Duration::from_micros(
                 oer_chips_family_radio_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
             ),
-            attempts: crate::air::AGGREGATE_MEMBER_ATTEMPTS,
+            // Aggregates on the air a missing member may miss before the
+            // data plane drops it.
+            // SOURCE(esp32s31): `lmac::LONG_RETRY_LIMIT` (`libpp[lmac.o]::lmacInit`).
+            attempts: oer_chips_family_radio_ieee80211_policy::lmac::LONG_RETRY_LIMIT,
         },
     };
 pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);

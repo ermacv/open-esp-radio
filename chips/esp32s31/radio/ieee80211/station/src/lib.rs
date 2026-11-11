@@ -287,21 +287,6 @@ type EthernetCopy = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 pub struct Network<'a, N: Notifies> {
     inner: runtime::Device<'a, LentRx<N>, RX_DEPTH, Ch<N>>,
 }
-/// The link a [`Network`] reads, which another reader on the network's
-/// side may read too.
-pub type NetworkLinkSource<N> = runtime::NetworkLink<<Ch<N> as runtime::Notifies>::NetworkWaker>;
-impl<'a, N: Notifies> Network<'a, N> {
-    /// The link this end reads.
-    pub const fn link_source(&self) -> &'a NetworkLinkSource<N> {
-        self.inner.link_source()
-    }
-}
-/// The station's air for a network's queued egress: one account per
-/// association of the link `N`'s network end reads, a frame of unknown
-/// cost charged the S31's ceiling.
-#[cfg(any(test, target_arch = "riscv32"))]
-pub type StationAir<'a, N> =
-    runtime::StationAir<'a, <Ch<N> as runtime::Notifies>::NetworkWaker, S31Ceiling>;
 /// Affine neutral Ethernet transmit end over the network stack's packets
 /// `P`, whose frames go into the network's transmit memory `S`.
 pub struct NetworkTransmit<'a, N: Notifies, P, S: runtime::TxSupply<P>> {
@@ -778,10 +763,6 @@ struct ActorConnection<'a, N: Notifies, M> {
     >,
 }
 
-#[cfg(any(test, target_arch = "riscv32"))]
-mod air;
-#[cfg(any(test, target_arch = "riscv32"))]
-pub use air::S31Ceiling;
 #[cfg(target_arch = "riscv32")]
 pub mod access_point;
 #[cfg(target_arch = "riscv32")]
@@ -1034,7 +1015,7 @@ mod tests {
                 },
             ))
         }
-        fn give(&mut self, (): (), _: oer_protocols_ieee80211_contracts_port::TxEnd) {}
+        fn give(&mut self, (): ()) {}
     }
     #[test]
     fn a_stopper_reports_its_stop_and_a_dropped_one_is_a_lost_participant() {

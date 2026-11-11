@@ -16,10 +16,9 @@ use oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET;
 use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
 use oer_protocols_ieee80211_runtime::datapath::{ActorEvent, DatapathPort};
-use oer_protocols_ieee80211_runtime::egress::RadioNotice;
 use oer_protocols_ieee80211_runtime::lifecycle::{LifecyclePort, LifecycleTxBuffer};
 use oer_protocols_ieee80211_runtime::station::{
-    NetworkStop, NetworkStopLost, PoolRefused, ServiceEvent, StationKey, TxPool,
+    NetworkStop, NetworkStopLost, PoolRefused, ServiceEvent, TxPool,
 };
 use oer_protocols_ieee80211_testing_model::{
     MODEL_MAX_MPDU, ModelAck, ModelAnyBuffer, ModelBackend, ModelBlockAckEvidence, ModelCaps24,
@@ -260,8 +259,6 @@ pub struct FreeMemory {
     places: Vec<usize>,
     /// The buffers the station holds: published, not yet given back.
     out: Cell<usize>,
-    /// Frames' ends the port handed on, with a known cost and without.
-    settled: Cell<(usize, usize)>,
 }
 
 /// The name of a frame in transmit memory: its buffer's place, below the
@@ -269,8 +266,8 @@ pub struct FreeMemory {
 /// one and until its end is handed on.
 pub type Ticket = u8;
 
-/// What the port tells the egress policy.
-pub type Notice = RadioNotice<Ticket, StationKey>;
+/// What the port tells of a frame's end: nothing, the MAC charged its air.
+pub type Notice = core::convert::Infallible;
 
 impl FreeMemory {
     /// `total` buffers of an MPDU each, and the memory, each buffer at its
@@ -287,7 +284,6 @@ impl FreeMemory {
             total,
             places,
             out: Cell::new(0),
-            settled: Cell::new((0, 0)),
         });
         let mut slots = heapless::Vec::new();
         for memory in memory {
@@ -319,23 +315,6 @@ impl FreeMemory {
 
     pub const fn total(&self) -> usize {
         self.total
-    }
-
-    /// Frames' ends handed on to the egress policy: with an estimated cost,
-    /// and with none known.
-    pub fn settled(&self) -> (usize, usize) {
-        self.settled.get()
-    }
-
-    /// The port handed `notice` on.
-    pub fn settle(&self, notice: &Notice) {
-        if let RadioNotice::Ended(exchange) = notice {
-            let (known, unknown) = self.settled.get();
-            self.settled.set(match exchange.charged {
-                Some(_) => (known + 1, unknown),
-                None => (known, unknown + 1),
-            });
-        }
     }
 }
 

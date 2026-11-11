@@ -60,8 +60,8 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 };
 use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Ieee80211Capabilities, IndeterminateCause, MpduProtection,
-    MpduStartSpacing, PhyRate, RxMetadata, SingleEnd, SingleOutcome, SingleResponse, TxEnd,
-    TxEstimate, TxOutcome,
+    MpduStartSpacing, PhyRate, RxMetadata, SingleEnd, SingleOutcome, SingleResponse, TxEstimate,
+    TxOutcome,
 };
 use oer_protocols_ieee80211_core_upper_mac::{
     ccmp::CcmpTxPacketNumber,
@@ -197,11 +197,9 @@ pub enum IntakeRefusal {
 pub enum Intake<M> {
     /// The standby arena took it as one MPDU of this TID.
     Taken(WmmUserPriority),
-    /// The standby cannot take it now: it is full, belongs to another TID
-    /// or does not follow on, the MSDU's sequence number lies beyond its
-    /// TID's window, or no arena is free. The MSDU, unchanged, waits in the
-    /// network's queue.
-    Wait(OutboundMsdu<M>),
+    /// The standby cannot take it now, for the reason given. The MSDU,
+    /// unchanged, waits in its queue.
+    Wait(OutboundMsdu<M>, Waits),
     /// The MSDU ends: its memory goes back to the network.
     Refused {
         /// The memory it came in.
@@ -209,6 +207,20 @@ pub enum Intake<M> {
         /// Why.
         reason: IntakeRefusal,
     },
+}
+
+/// Why the standby cannot take an MSDU now, and so what frees it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Waits {
+    /// No arena is free, or the standby is full: the next settlement frees
+    /// one, for any TID.
+    Arena,
+    /// The standby holds another TID's frames, or this one's do not follow:
+    /// the next arena takes it.
+    Standby,
+    /// Its sequence number lies beyond its TID's window: only that TID
+    /// waits, until a settlement or a new agreement moves the window.
+    Window,
 }
 
 /// How an arena goes on the air, as the plane planned it; the caller gives
@@ -342,6 +354,10 @@ pub struct Settled<R, D> {
     pub dropped: u8,
     /// Frames the arena keeps for its next publication.
     pub retried: u8,
+    /// The TID the arena held, and the cost of the attempt that ended: one
+    /// charge for the whole PPDU.
+    pub tid: WmmUserPriority,
+    pub cost: TxEstimate,
 }
 
 /// What one arena's end of the backend `A` settled.
@@ -384,13 +400,6 @@ struct ArenaBook {
     octets: u32,
     /// When each original position's MSDU was admitted.
     admitted: [Instant; BOOK_FRAMES],
-    /// What each original position's transmissions cost so far: its part of
-    /// every attempt that carried it.
-    spent: [TxEstimate; BOOK_FRAMES],
-    /// What each original position's last transmission on the air went at:
-    /// the rate of the last attempt that carried it with an established
-    /// rate, `None` while none did.
-    rates: [Option<PhyRate>; BOOK_FRAMES],
     /// Publications that may have reached a receiver: every frame the arena
     /// holds went in each.
     attempts: u8,
@@ -412,8 +421,6 @@ impl ArenaBook {
             pending: 0,
             octets: 0,
             admitted: [Instant::EPOCH; BOOK_FRAMES],
-            spent: [TxEstimate::NONE; BOOK_FRAMES],
-            rates: [None; BOOK_FRAMES],
             attempts: 0,
             retained: false,
             published: None,
@@ -433,69 +440,6 @@ impl ArenaBook {
         self.octets = 0;
         self.attempts = 0;
         self.retained = false;
-        self.spent = [TxEstimate::NONE; BOOK_FRAMES];
-        self.rates = [None; BOOK_FRAMES];
-    }
-
-    /// The original positions of `carried`, the frames one attempt put on
-    /// the air, last went at `rate`: the others keep their own.
-    fn transmitted(&mut self, carried: u64, rate: PhyRate) {
-        for original in Originals(carried) {
-            if let Some(last) = usize::try_from(original)
-                .ok()
-                .and_then(|original| self.rates.get_mut(original))
-            {
-                *last = Some(rate);
-            }
-        }
-    }
-
-    /// Split `cost` exactly once among the original positions of `carried`,
-    /// the frames one attempt put on the air: the first takes the
-    /// remainder.
-    fn charge(&mut self, carried: u64, cost: TxEstimate) {
-        let parts = u8::try_from(carried.count_ones()).unwrap_or(u8::MAX);
-        let Some((first, each)) = cost.split(parts) else {
-            return;
-        };
-        for (index, original) in Originals(carried).enumerate() {
-            let part = if index == 0 { first } else { each };
-            if let Some(spent) = usize::try_from(original)
-                .ok()
-                .and_then(|original| self.spent.get_mut(original))
-            {
-                *spent = spent.add(part);
-            }
-        }
-    }
-
-    /// Hand each memory leaving the arena to `returned` with its end: its
-    /// cost and its own last established rate. The arena returns them in
-    /// position order, which is the ascending order of their original
-    /// positions in `leaving`. A memory past them has no known cost and no
-    /// rate.
-    fn with_costs<M, F: FnMut(M, TxEnd)>(
-        &self,
-        leaving: u64,
-        mut returned: F,
-    ) -> impl FnMut(M) + use<M, F> {
-        let spent = self.spent;
-        let rates = self.rates;
-        let mut originals = Originals(leaving);
-        move |memory| {
-            let original = originals
-                .next()
-                .and_then(|original| usize::try_from(original).ok());
-            let cost = original
-                .and_then(|original| spent.get(original))
-                .copied()
-                .unwrap_or(TxEstimate::Unknown);
-            let rate = original
-                .and_then(|original| rates.get(original))
-                .copied()
-                .flatten();
-            returned(memory, TxEnd { cost, rate });
-        }
     }
 
     /// The arena is the standby: the plane holds it and it takes frames.
@@ -621,7 +565,7 @@ impl DataPlane {
     pub fn stop<'p, 'id: 'p, A: TxArena<'p, 'id>>(
         &mut self,
         arena: &mut A,
-        mut returned: impl FnMut(A::Memory, TxEnd),
+        mut returned: impl FnMut(A::Memory),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<Option<DataLink>, A::Fault> {
         for id in [ArenaId::First, ArenaId::Second] {
@@ -643,7 +587,7 @@ impl DataPlane {
     pub fn withdraw_unpublished<'p, 'id: 'p, A: TxArena<'p, 'id>>(
         &mut self,
         arena: &mut A,
-        mut returned: impl FnMut(A::Memory, TxEnd),
+        mut returned: impl FnMut(A::Memory),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), A::Fault> {
         for id in [ArenaId::First, ArenaId::Second] {
@@ -696,7 +640,7 @@ impl DataPlane {
         &mut self,
         arena: &mut A,
         id: ArenaId,
-        returned: &mut impl FnMut(A::Memory, TxEnd),
+        returned: &mut impl FnMut(A::Memory),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<(), A::Fault> {
         let book = self.book_mut(id);
@@ -706,10 +650,10 @@ impl DataPlane {
         if book.pending == 0 {
             return Ok(());
         }
-        let leave = book.with_costs(book.pending, |memory, end| {
+        let leave = |memory| {
             report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
-            returned(memory, end);
-        });
+            returned(memory);
+        };
         arena.withdraw(right, leave)?;
         book.clear();
         Ok(())
@@ -770,6 +714,13 @@ impl DataPlane {
             .or_else(|| ids.into_iter().find(|id| self.book(*id).takes()))
     }
 
+    /// The TID whose frames the standby holds: only its next frames join
+    /// them. `None` while the standby holds none, or no arena takes frames.
+    pub fn standby_tid(&self) -> Option<WmmUserPriority> {
+        let book = self.book(self.standby()?);
+        (book.count() != 0).then_some(book.tid)
+    }
+
     /// Take `msdu`, admitted at `now`, into the standby arena as one MPDU:
     /// its header is written in front of its payload from the link's
     /// template, with the next sequence number of its TID in `numbers` and,
@@ -824,10 +775,10 @@ impl DataPlane {
         let sequence = numbers.next(tid);
         let window = *tid.select(&link.windows);
         let Some(id) = self.standby() else {
-            return Intake::Wait(msdu);
+            return Intake::Wait(msdu, Waits::Arena);
         };
         if window.is_some_and(|window| window.ahead(sequence)) {
-            return Intake::Wait(msdu);
+            return Intake::Wait(msdu, Waits::Window);
         }
         let book = self.book(id);
         let count = book.count();
@@ -843,8 +794,11 @@ impl DataPlane {
                         .checked_add(octets)
                         .is_some_and(|total| total <= limit.octets())
             });
-            if !follows || !fits {
-                return Intake::Wait(msdu);
+            if !follows {
+                return Intake::Wait(msdu, Waits::Standby);
+            }
+            if !fits {
+                return Intake::Wait(msdu, Waits::Arena);
             }
         }
         let epoch = self.epoch;
@@ -859,7 +813,7 @@ impl DataPlane {
             ArenaId::Second => second,
         };
         let Some(right) = book.right.as_ref() else {
-            return Intake::Wait(msdu);
+            return Intake::Wait(msdu, Waits::Arena);
         };
         let (counter, key) = numbers.data_and_key(tid);
         let packet_numbers = key.map(TxKey::packet_numbers);
@@ -1057,7 +1011,7 @@ impl DataPlane {
         arena: &mut A,
         done: CompletedOf<'p, 'id, A>,
         now: Instant,
-        mut returned: impl FnMut(A::Memory, TxEnd),
+        mut returned: impl FnMut(A::Memory),
         events: &mut impl EventSink<StaEvent>,
     ) -> Result<SettledOf<'p, 'id, A>, SettleErrorOf<'p, 'id, A>>
     where
@@ -1072,26 +1026,14 @@ impl DataPlane {
             return Err(SettleError::Unexpected(done));
         }
         let tid = book.tid;
-        // The attempt's cost, split among the frames it carried: a single
-        // MPDU's the first the arena holds, an aggregate's all of them.
-        let carried = match kind {
-            PpduKind::Single => book.pending & book.pending.wrapping_neg(),
-            PpduKind::Aggregate { .. } => book.pending,
-        };
+        // One charge for the whole attempt, whatever it carried.
         let cost = done.cost();
-        let air = done.end().air().map(|air| air.rate);
-        let book = self.book_mut(id);
-        book.charge(carried, cost);
-        // Only the frames this attempt carried went at its rate.
-        if let Some(rate) = air {
-            book.transmitted(carried, rate);
-        }
-        let book = self.book(id);
         let link = self.link.as_ref().filter(|_| book.epoch == self.epoch);
         let Some(link) = link else {
             // An ended link's frames neither retry nor move its windows.
-            let leave = book.with_costs(book.pending, &mut returned);
-            let right = arena.release(done, leave).map_err(SettleError::Fault)?;
+            let right = arena
+                .release(done, &mut returned)
+                .map_err(SettleError::Fault)?;
             let book = self.book_mut(id);
             book.right = Some(right);
             book.published = None;
@@ -1102,6 +1044,8 @@ impl DataPlane {
                 delivered: 0,
                 dropped: 0,
                 retried: 0,
+                tid,
+                cost,
             });
         };
         let end = done.end();
@@ -1119,7 +1063,7 @@ impl DataPlane {
             (attempts == 1 && matches!(end, AttemptEnd::Answered { .. })).then_some(decision.holes);
         let frames = done.frames();
         let retried = decision.retry.count();
-        let leave = book.with_costs(book.pending & !decision.pending, &mut returned);
+        let leave = &mut returned;
         let right = if decision.retry.is_empty() {
             arena.release(done, leave).map_err(SettleError::Fault)?
         } else {
@@ -1162,6 +1106,8 @@ impl DataPlane {
             delivered: decision.delivered,
             dropped: decision.dropped,
             retried,
+            tid,
+            cost,
         })
     }
 

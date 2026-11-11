@@ -162,8 +162,9 @@ fn interleaved_station_and_data_terminals_keep_their_owner_and_the_networks_orde
                 let ptk = world.handshake(&mut seen).await;
                 let baseline = world.completions.borrow().len();
                 // The first data arena stays on the air while the others
-                // wait: the standby takes the next TID's frame and the one
-                // after waits for it, in the network's order.
+                // wait in their TIDs' queues: the MAC starts each next arena
+                // from the highest access category, voice, then video, then
+                // best effort.
                 world.air.hold_completion(WmmAccessCategory::Voice, true);
                 for (index, priority) in [6, 0, 7, 4].into_iter().enumerate() {
                     assert!(world.send_msdu_at([2, 0, 0, 0, 0, index as u8], priority));
@@ -184,7 +185,7 @@ fn interleaved_station_and_data_terminals_keep_their_owner_and_the_networks_orde
                         data.push((frame.plaintext[21], frame.plaintext[24] & 0x0f));
                     }
                 }
-                assert_eq!(data, [(0, 6), (1, 0), (2, 7), (3, 4)]);
+                assert_eq!(data, [(0, 6), (2, 7), (3, 4), (1, 0)]);
                 // Every data frame's end teaches the rates once it came.
                 let learned = |rates: FrameRates| {
                     world.completions.borrow()[baseline..]

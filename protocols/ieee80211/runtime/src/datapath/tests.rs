@@ -678,11 +678,25 @@ fn a_waiting_event_stops_intake_at_the_next_frame() {
             bench.send_msdu(msdu(0, &[tag; 8]));
         }
         bench.poll();
-        assert_eq!(
-            bench.transmit.free_capacity(),
-            TX_DEPTH - 2,
-            "one frame taken, the rest left queued for the event"
-        );
+        // The MAC took every MSDU off the network's queue into its own, and
+        // the standby one before the event: the rest wait in the TID's
+        // queue, none lost.
+        assert_eq!(bench.transmit.free_capacity(), TX_DEPTH);
+        let sent = bench.data_sent().len();
+        bench.air.set_event_waiting(false);
+        bench
+            .air
+            .hold_completion(WmmAccessCategory::BestEffort, false);
+        let _ = sent;
+        let mut frames = bench.data_sent().len();
+        for _ in 0..8 {
+            bench.settle();
+            frames = bench.data_sent().len();
+            if frames >= 4 {
+                break;
+            }
+        }
+        assert!(frames >= 4, "every MSDU went: {frames}");
     });
 }
 

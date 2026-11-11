@@ -182,7 +182,7 @@ pub use rx::{
 };
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
-    Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody, TxEnd,
+    Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody,
     TxEstimate, TxOutcome, TxPower, TxResponse, TxStatus, WithdrawCause,
 };
 pub use types::{

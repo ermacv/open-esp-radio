@@ -30,9 +30,6 @@ const LOAD_LANE: usize = 32;
 const AGGREGATE: usize = 32;
 /// Frames the port holds: the image's network buffers.
 const AT_THE_PORT: usize = 63;
-/// Accounts and reservations of the egress.
-const ACCOUNTS: usize = 4;
-const RESERVATIONS: usize = 63;
 /// The UDP payload of a load datagram, which fills one frame.
 const DATAGRAM: usize = 1472;
 /// The load header's length (`hil/services/load`), and its filler.
@@ -42,7 +39,7 @@ const LOAD_PORT: u16 = 5001;
 /// How long the load runs.
 const RUN: u64 = SECOND / 10;
 
-type LoadEgress = AirtimeEgress<'static, Medium, Ticket, ACCOUNTS, RESERVATIONS>;
+type LoadEgress = Direct;
 type LoadOwner = NetworkOwner<
     'static,
     LoadNet,
@@ -244,10 +241,7 @@ fn load(micros_per_frame: u32) -> Account {
     let memory = Box::leak(Box::new([[0; LOAD_SIZE]; LOAD_BLOCKS]));
     let (pool, brand) = claim::<LoadNet, LOAD_SIZE, LOAD_BLOCKS>(memory).unwrap();
     let owner: LoadOwner = NetworkOwner::new(brand, interface(), pool, medium.clone());
-    let storage = Box::leak(Box::new(AirtimeStorage::new(
-        NonZeroU32::new(QUANTUM).unwrap(),
-    )));
-    let egress: LoadEgress = AirtimeEgress::new(storage, medium.clone());
+    let egress: LoadEgress = Direct;
     let (stop, stopping): (Stopper, _) = Box::leak(Box::new(StopLane::new())).split();
     let asked = Rc::new(RefCell::new(Asked::default()));
     let producer = Load {

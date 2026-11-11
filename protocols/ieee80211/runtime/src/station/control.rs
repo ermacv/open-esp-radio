@@ -52,9 +52,6 @@ pub struct State<N: Notifies = SameHart> {
     /// The profile of the one Connect in the queue, published in the same
     /// poll as that request; the lifecycle takes it with the request.
     profile: Cell<Option<StaProfile>>,
-    /// The slowest data rate of the association the link runs, published
-    /// with it; `None` while none connected.
-    floor: Cell<Option<oer_protocols_ieee80211_contracts_port::PhyRate>>,
 }
 
 impl State {
@@ -88,7 +85,6 @@ impl<N: Notifies> State<N> {
             operations: operation::Operations::new(),
             stop_deadline: Cell::new(None),
             profile: Cell::new(None),
-            floor: Cell::new(None),
         }
     }
 
@@ -100,7 +96,7 @@ impl<N: Notifies> State<N> {
     /// Set the status, publishing its link to the network device.
     fn set_status(&self, status: Status) {
         self.status.set(status);
-        self.network.publish(status.link, self.floor.get());
+        self.network.publish(status.link);
     }
     /// Publish `link` as the station's, as its service does.
     #[cfg(test)]
@@ -125,8 +121,6 @@ impl<N: Notifies> State<N> {
         self.operations.begin_epoch();
         // An ended epoch's unserved profile erases itself here.
         drop(self.profile.take());
-        // So did its association's rate.
-        self.floor.set(None);
         // An ended epoch's stop ended with it: the new epoch's policy keeps
         // only the configuration, and no stop deadline is pending.
         self.policy.set(self.policy.get().next_epoch());
@@ -150,12 +144,6 @@ impl<N: Notifies> State<N> {
             output,
         }
     }
-    /// The association that connects now has `floor` as its slowest data
-    /// rate: the link publishes it from its next publication on.
-    pub(crate) fn floor(&self, floor: Option<oer_protocols_ieee80211_contracts_port::PhyRate>) {
-        self.floor.set(floor);
-    }
-
     pub(crate) fn epoch(&self, epoch: u64) {
         let mut status = self.status.get();
         status.link.epoch = epoch;
@@ -257,16 +245,10 @@ pub struct RunnerControl<'c, N: Notifies = SameHart> {
 }
 
 impl<'c, N: Notifies> RunnerControl<'c, N> {
-    /// Publish `link`, of an association whose slowest data rate is
-    /// `floor`, as the lifecycle does, for a host composition that plays the
-    /// lifecycle itself.
+    /// Publish `link`, as the lifecycle does, for a host composition that
+    /// plays the lifecycle itself.
     #[cfg(feature = "test-support")]
-    pub fn publish_link_for_test(
-        &self,
-        link: oer_protocols_network_port::LinkSnapshot,
-        floor: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
-    ) {
-        self.state.floor(floor);
+    pub fn publish_link_for_test(&self, link: oer_protocols_network_port::LinkSnapshot) {
         self.state.set_status(Status {
             link,
             ..self.state.status.get()
@@ -609,9 +591,8 @@ pub trait TxSupply<P> {
     /// the memory does not hold ([`TransmitError::InvalidLength`]) keeps the
     /// frame; a pool that refuses its own written memory loses both.
     fn write(&mut self, frame: P) -> Result<Self::Memory, TxRefused<P>>;
-    /// Memory the station gave back, its MSDU ended so (`end`): free again
-    /// once the network settled that end.
-    fn give(&mut self, memory: Self::Memory, end: oer_protocols_ieee80211_contracts_port::TxEnd);
+    /// Memory the station gave back, its MSDU ended: free again.
+    fn give(&mut self, memory: Self::Memory);
 }
 
 /// A frame [`TxSupply::write`] did not hand over.
@@ -630,12 +611,8 @@ pub struct Device<'c, L, const RX: usize, N: Notifies = SameHart> {
     receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
     copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
     link: &'c super::NetworkLink<N::NetworkWaker>,
-    /// The publication last observed: the link and its association's rate,
-    /// which the network's egress reads too.
-    observed: (
-        LinkSnapshot,
-        Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
-    ),
+    /// The link last observed.
+    observed: LinkSnapshot,
 }
 impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
     /// The network end over the station's receive channels and `state`'s
@@ -649,13 +626,8 @@ impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
             receive,
             copied,
             link: state.network_link(),
-            observed: (LinkSnapshot::DOWN, None),
+            observed: LinkSnapshot::DOWN,
         }
-    }
-
-    /// The link this end reads, for another reader on the network's side.
-    pub const fn link_source(&self) -> &'c super::NetworkLink<N::NetworkWaker> {
-        self.link
     }
 }
 impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N: Notifies>
@@ -665,16 +637,15 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
     fn link(&self) -> LinkSnapshot {
         self.link.snapshot()
     }
-    /// Ready at a new publication of the link word: the link, or only its
-    /// association's rate, which the egress needs before it charges a frame.
+    /// Ready at a new publication of the link word.
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot> {
         self.link.register(cx);
-        let published = self.link.read();
+        let published = self.link.snapshot();
         if published == self.observed {
             Poll::Pending
         } else {
             self.observed = published;
-            Poll::Ready(published.0)
+            Poll::Ready(published)
         }
     }
     fn receive_queue_len(&self) -> usize {
@@ -735,7 +706,7 @@ impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, 
     /// executor.
     fn take_returned(&mut self) {
         while let Ok(Some(ended)) = self.returned.try_receive_with(Option::take) {
-            self.supply.give(ended.memory, ended.end);
+            self.supply.give(ended.memory);
         }
     }
 }

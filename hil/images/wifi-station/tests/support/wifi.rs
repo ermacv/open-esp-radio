@@ -84,17 +84,14 @@ pub struct Ports {
     pub sending: u16,
 }
 
-/// The chip's queued egress, by type, as the image names it.
-pub enum Queued {}
-
 /// A network the test built: its address is the test's to set.
-pub struct Network<P, M, R> {
+pub struct Network<P, R> {
     pub end: &'static LocalEnd,
     pub configuration: std::rc::Rc<core::cell::Cell<Option<Configuration>>>,
-    pub producer: PhantomData<(P, M, R)>,
+    pub producer: PhantomData<(P, R)>,
 }
 
-impl<P, M, R> Network<P, M, R> {
+impl<P, R> Network<P, R> {
     pub const fn end(&self) -> &'static LocalEnd {
         self.end
     }

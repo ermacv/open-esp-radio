@@ -848,6 +848,8 @@ where
                 {
                     plane.agreement(tid, window);
                 }
+                // The window moved or ended: its TID may go on.
+                self.data.queues.unblock();
             }
             ToActor::EapolFaulted => {
                 if let Some(link) = self.link.as_mut() {
@@ -1209,7 +1211,10 @@ where
     /// asks once the data settled (no arena on the air), so no later
     /// settlement adds memory to the return.
     fn network_home(&self) -> bool {
-        self.data_settled() && self.data.freed.is_empty() && self.queued == 0
+        self.data_settled()
+            && self.data.freed.is_empty()
+            && self.data.queues.is_empty()
+            && self.queued == 0
     }
 
     /// Whether no arena owes its end: none on the air and none holding a

@@ -65,6 +65,7 @@
 
 mod data;
 mod messages;
+mod queues;
 mod rx;
 mod station_tx;
 mod turn;
@@ -466,10 +467,10 @@ struct Stage<'id, D: DatapathPort<'id>> {
 }
 
 /// The data transmission's state: the plane over the port's arenas, the
-/// MSDU that waits for the standby and the network's freed memory.
+/// TIDs' queues of the network's MSDUs and the network's freed memory.
 struct DataTx<M> {
     plane: Option<DataPlane>,
-    deferred: Option<OutboundMsdu<M>>,
+    queues: queues::TxQueues<M, HELD>,
     freed: heapless::Deque<TxEnded<M>, HELD>,
 }
 
@@ -597,7 +598,7 @@ where
             sequence_hold: None,
             data: DataTx {
                 plane: None,
-                deferred: None,
+                queues: queues::TxQueues::new(),
                 freed: heapless::Deque::new(),
             },
             radio: Radio::Stopped,
@@ -667,7 +668,7 @@ where
                 data => |place: &mut core::mem::MaybeUninit<DataTx<D::TxMemory>>| {
                     oer_portable_memory::init_in_place!(place, DataTx {
                         plane: None,
-                        deferred: None,
+                        queues: queues::TxQueues::new(),
                         freed: heapless::Deque::new(),
                     })
                 },
