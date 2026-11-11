@@ -304,6 +304,11 @@ impl MacLegacyTxProgram {
         self.parameters.interface
     }
 
+    /// Hardware key slot the MAC encrypts the MPDU under; zero for none.
+    pub const fn hardware_key_selector(self) -> u8 {
+        self.parameters.hardware_key_selector
+    }
+
     pub const fn scheduler_priority(self) -> u8 {
         self.parameters.scheduler_priority
     }

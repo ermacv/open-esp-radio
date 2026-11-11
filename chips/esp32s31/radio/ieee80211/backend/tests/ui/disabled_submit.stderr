@@ -12,5 +12,5 @@ error[E0624]: method `submit_checked` is private
   | |         queue: FreeQueue<'core, Path>,
 ... |
   | |         publish: bool,
-  | |     ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path>> {
-  | |_________________________________________________________________- private method defined here
+  | |     ) -> Result<(), SubmitFault<'core, 'slot, BUFFER_SIZE, Path, TICKETS>> {
+  | |__________________________________________________________________________- private method defined here
