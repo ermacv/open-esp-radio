@@ -500,7 +500,8 @@ where
                     }
                 }
             };
-            link.receive(bytes, &meta, deliver, |payload, protection| {
+            // The buffer decoded the header when it took the frame.
+            link.receive(frame.header(), &meta, deliver, |payload, protection| {
                 // The station takes the link's EAPOL in its own task: the
                 // frame goes to it, its first EAPOL packet named.
                 eapols = eapols.saturating_add(1);

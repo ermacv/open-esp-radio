@@ -24,7 +24,7 @@ use oer_protocols_ieee80211_wire::{
     block_ack::frame::{
         ADDBA_ACTION_BODY_LEN, BlockAckAction, encode_delba, parse_compressed_block_ack_request,
     },
-    frame::{DecodedHeader, QosControl},
+    frame::QosControl,
     sequence::{SequenceControl, SequenceNumber},
     status::reason_code,
 };
@@ -368,8 +368,9 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     /// room: it waits behind the frames already in delivery order. A
     /// management or control frame is not held; the caller delivers it.
     pub fn park(&mut self, frame: T::Frame, meta: T::Meta) -> Parked<T> {
-        let data =
-            DecodedHeader::decode(frame.bytes()).is_some_and(|header| header.control().is_data());
+        let data = frame
+            .header()
+            .is_some_and(|header| header.control().is_data());
         if !data {
             return Parked::Deliver((frame, meta));
         }
@@ -760,7 +761,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         meta: T::Meta,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
-        let action = DecodedHeader::decode(frame.bytes()).is_some_and(|header| {
+        let action = frame.header().is_some_and(|header| {
             !header.control().is_data() && header.control().subtype() == ACTION_SUBTYPE
         });
         if action && !self.can_receive_management() {
@@ -803,7 +804,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
             return RxDisposition::Recycle(frame);
         }
-        let key = DecodedHeader::decode(frame.bytes()).and_then(|header| {
+        let key = frame.header().and_then(|header| {
             let (_, bssid) = self.header.association?;
             let control = header.control();
             let fragment =

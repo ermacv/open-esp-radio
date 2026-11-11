@@ -701,6 +701,146 @@ fn received_data_reaches_the_network_without_the_lifecycle() {
     });
 }
 
+/// A data frame too short for its MAC header has no decoded header: the
+/// link takes none of it, the network gets nothing, and the frame goes to
+/// the station whole, once.
+#[test]
+fn a_frame_whose_header_does_not_decode_goes_to_the_station_whole() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        let whole = data_from_ap(1, &[9, 9, 9, 9]);
+        let short = &whole[..20];
+        bench.air.receive(short, meta());
+        bench.settle();
+        assert!(
+            bench.receive.try_receive().is_none(),
+            "nothing for the network"
+        );
+        let Some(FromActor::Received { frame, .. }) = bench.next() else {
+            panic!("the station's frame");
+        };
+        assert_eq!(frame.bytes(), short);
+        assert!(bench.next().is_none(), "once");
+    });
+}
+
+/// A QoS data frame of TID 0 from the access point, `payload` after its
+/// LLC header, Sequence Number `sequence`.
+fn qos_data_from_ap(sequence: u16, payload: &[u8]) -> Vec<u8> {
+    let mut frame = data_from_ap(sequence, payload);
+    frame[0..2].copy_from_slice(&0x0288_u16.to_le_bytes());
+    frame.splice(24..24, [0, 0]);
+    frame
+}
+
+/// The access point's ADDBA request for TID 0, its window starting at 100,
+/// taken through the actor as the station hands it on.
+fn rx_agreement<'s>(bench: &mut Bench<'_, 's>, epoch: LinkEpoch<'s, ActorEpochPath<'s, P<'s>>>) {
+    let body = oer_protocols_ieee80211_wire::block_ack::frame::encode_addba_request(
+        5,
+        0,
+        8,
+        0,
+        false,
+        oer_protocols_ieee80211_wire::sequence::SequenceNumber::new(100).unwrap(),
+    )
+    .unwrap();
+    let action =
+        oer_protocols_ieee80211_wire::block_ack::frame::parse_block_ack_action(&body).unwrap();
+    let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
+    bench.send(ToActor::RxAgreement(PendingRxBlockAck::for_test(
+        epoch, bssid, action, true,
+    )));
+    bench.settle();
+}
+
+/// A frame held for reorder is delivered by the link as it is at the
+/// frame's release, not as it was when the frame came: while the link stops
+/// carrying, nothing reaches the network, and once it carries again the
+/// frame the window still held goes, once. The same order as before the
+/// receive buffer kept its frame's header.
+#[test]
+fn a_frame_held_for_reorder_is_delivered_by_the_link_at_its_release() {
+    bench(|bench| {
+        bench.start();
+        let handover = link(true, None);
+        let epoch = handover.epoch();
+        bench.connect(handover);
+        rx_agreement(bench, epoch);
+        bench.air.receive(&qos_data_from_ap(101, &[1; 4]), meta());
+        bench.settle();
+        assert!(bench.receive.try_receive().is_none(), "101 waits for 100");
+        bench.send(ToActor::Hold);
+        bench.settle();
+        bench.air.receive(&qos_data_from_ap(100, &[2; 4]), meta());
+        bench.settle();
+        assert!(
+            bench.receive.try_receive().is_none(),
+            "a link that carries nothing delivers no released frame"
+        );
+        assert!(
+            !matches!(bench.next(), Some(FromActor::Received { .. })),
+            "the frames are no station's either"
+        );
+        bench.send(ToActor::Release);
+        // Past the reorder timeout: what the window still holds goes, by the
+        // link that carries again.
+        bench.advance(200_000);
+        bench.settle();
+        assert!(matches!(
+            bench.receive.try_receive(),
+            Some(Received::Lent(_))
+        ));
+        assert!(bench.receive.try_receive().is_none(), "once");
+    });
+}
+
+/// A frame the reorder window releases while the link still holds is
+/// refused by the link as it is then: it never inherits the permission its
+/// arrival had, it is recycled rather than sent to the station, and the
+/// link's release later delivers nothing of it.
+#[test]
+fn a_frame_expires_from_reorder_while_the_link_is_still_held() {
+    bench(|bench| {
+        bench.start();
+        let handover = link(true, None);
+        let epoch = handover.epoch();
+        bench.connect(handover);
+        rx_agreement(bench, epoch);
+        bench.air.receive(&qos_data_from_ap(101, &[1; 4]), meta());
+        bench.settle();
+        assert!(bench.receive.try_receive().is_none(), "101 waits for 100");
+
+        bench.send(ToActor::Hold);
+        // The window lets 101 go while delivery is forbidden.
+        bench.advance(200_000);
+        bench.settle();
+        assert!(
+            bench.receive.try_receive().is_none(),
+            "101 does not inherit its arrival's permission"
+        );
+        while let Some(message) = bench.next() {
+            assert!(
+                !matches!(message, FromActor::Received { .. }),
+                "a refused data frame is recycled, not sent to the station"
+            );
+        }
+
+        bench.send(ToActor::Release);
+        bench.advance(200_000);
+        bench.settle();
+        assert!(
+            bench.receive.try_receive().is_none(),
+            "101 ended under the hold and is not delivered again"
+        );
+        assert!(
+            bench.end.is_none(),
+            "its owner was recycled, the installation unharmed"
+        );
+    });
+}
+
 #[test]
 fn a_turn_s_received_data_wakes_a_waiting_network() {
     struct Woken(AtomicUsize);

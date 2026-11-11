@@ -54,12 +54,18 @@ pub enum Received<'frame> {
 /// A control frame, a frame of another protocol version and a frame shorter
 /// than its header are refused with [`RxDropReason::Header`].
 pub fn classify(frame: &[u8]) -> Result<Received<'_>, RxDropReason> {
-    let header = DecodedHeader::decode(frame).ok_or(RxDropReason::Header)?;
-    Ok(if header.control().is_data() {
+    DecodedHeader::decode(frame)
+        .map(sort)
+        .ok_or(RxDropReason::Header)
+}
+
+/// Sort a decoded `header` by kind, as [`classify`] sorts its frame.
+pub const fn sort(header: DecodedHeader<'_>) -> Received<'_> {
+    if header.control().is_data() {
         Received::Data(header)
     } else {
         Received::Management(Management(header))
-    })
+    }
 }
 
 /// Record `management`, received at `now`, in `scan`; with `network`, a

@@ -1332,6 +1332,9 @@ pub struct ModelRxBuffer<'p, Id: SlotIdentity> {
 
 struct OwnedRxBuffer<Id: SlotIdentity> {
     bytes: Vec<u8>,
+    /// The frame's MAC header, checked once when the model received it, as
+    /// the device's buffer checks it.
+    header: Option<oer_protocols_ieee80211_wire::frame::CheckedHeader>,
     recycled: bool,
     air: Weak<ModelAir>,
     identity: PhantomData<fn(Id) -> Id>,
@@ -1340,6 +1343,10 @@ struct OwnedRxBuffer<Id: SlotIdentity> {
 impl<Id: SlotIdentity> RxBuffer for ModelRxBuffer<'_, Id> {
     fn bytes(&self) -> &[u8] {
         &self.owner.bytes
+    }
+
+    fn header(&self) -> Option<oer_protocols_ieee80211_wire::frame::DecodedHeader<'_>> {
+        self.owner.header.as_ref()?.of(&self.owner.bytes)
     }
 }
 impl<Id: SlotIdentity> core::fmt::Debug for ModelRxBuffer<'_, Id> {
@@ -3259,6 +3266,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
             held.post(OwnedLowerMacEvent::Received {
                 frame: OwnedRxBuffer {
                     identity: PhantomData,
+                    header: oer_protocols_ieee80211_wire::frame::CheckedHeader::check(&frame),
                     bytes: frame,
                     recycled: false,
                     air: Rc::downgrade(&held.air),

@@ -1,6 +1,7 @@
 //! Receive metadata of one MPDU.
 
 use crate::Ieee80211Stamp;
+use oer_protocols_ieee80211_wire::frame::DecodedHeader;
 use oer_protocols_ieee80211_wire::{channel::Channel, phy::PhyRate};
 
 /// Provenance of one receive value.
@@ -73,6 +74,12 @@ pub enum RxCryptoStatus {
 pub trait RxBuffer {
     /// Borrow the MPDU bytes while retaining ownership of its receive buffer.
     fn bytes(&self) -> &[u8];
+
+    /// The MPDU's MAC header over [`Self::bytes`], as
+    /// [`DecodedHeader::decode`] would decode it, `None` alike. A buffer
+    /// may decode it once when it takes the frame and give it again here,
+    /// for its own bytes only: no reader decodes the variable layout again.
+    fn header(&self) -> Option<DecodedHeader<'_>>;
 }
 
 /// A received buffer moved out of the port's receive capacity to a network

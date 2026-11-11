@@ -396,6 +396,109 @@ impl<'a> DecodedHeader<'a> {
     }
 }
 
+/// A MAC header decoded once, kept compact beside its frame's owner: the
+/// fields that decide its variable length and the frame's place. It gives
+/// its [`DecodedHeader`] again for those same bytes only, reading the fixed
+/// fields with no second decode of the variable layout; any other slice,
+/// another frame's or the same buffer after its start moved, gets none, and
+/// so do the same bytes rewritten: the kept fields are compared with them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CheckedHeader {
+    control: FrameControl,
+    sequence_control: u16,
+    /// The QoS Control field, when [`Self::has_qos`].
+    qos: u16,
+    has_qos: bool,
+    /// Where the body starts: at most 36 octets.
+    header_length: u8,
+    /// The frame the header was decoded from: its length and its first
+    /// byte's address. Kept this small, it travels with its receive buffer.
+    length: u16,
+    at: usize,
+}
+
+impl CheckedHeader {
+    /// Decode `frame`'s header once; `None` as [`DecodedHeader::decode`].
+    pub fn check(frame: &[u8]) -> Option<Self> {
+        let header = DecodedHeader::decode(frame)?;
+        let header_length = u8::try_from(frame.len().checked_sub(header.body.len())?).ok()?;
+        Some(Self {
+            control: header.control,
+            sequence_control: header.sequence_control,
+            qos: header.qos.unwrap_or(0),
+            has_qos: header.qos.is_some(),
+            header_length,
+            length: u16::try_from(frame.len()).ok()?,
+            at: frame.as_ptr().addr(),
+        })
+    }
+
+    /// The decoded header of `frame`, when it is the frame this was checked
+    /// against.
+    pub fn of<'a>(&self, frame: &'a [u8]) -> Option<DecodedHeader<'a>> {
+        if frame.as_ptr().addr() != self.at || frame.len() != usize::from(self.length) {
+            return None;
+        }
+        // What decided the layout must still be in the bytes: a rewrite of
+        // the frame in place is another frame.
+        let field = |at: usize| -> Option<u16> {
+            Some(u16::from_le_bytes(*frame.get(at..)?.first_chunk::<2>()?))
+        };
+        let qos_at = if self.control.is_four_address() {
+            30
+        } else {
+            24
+        };
+        if field(0)? != self.control.get()
+            || field(22)? != self.sequence_control
+            || (self.has_qos && field(qos_at)? != self.qos)
+        {
+            return None;
+        }
+        let address =
+            |at: usize| -> Option<[u8; 6]> { frame.get(at..)?.first_chunk::<6>().copied() };
+        let address4 = if self.control.is_four_address() {
+            Some(address(24)?)
+        } else {
+            None
+        };
+        let ht_control = if self.control.has_ht_control() {
+            let at = usize::from(self.header_length).checked_sub(4)?;
+            Some(*frame.get(at..)?.first_chunk::<4>()?)
+        } else {
+            None
+        };
+        Some(DecodedHeader {
+            control: self.control,
+            duration: u16::from_le_bytes(*frame.get(2..)?.first_chunk::<2>()?),
+            receiver: address(4)?,
+            transmitter: address(10)?,
+            address3: address(16)?,
+            sequence_control: self.sequence_control,
+            address4,
+            qos: self.qos(),
+            ht_control,
+            frame,
+            body: frame.get(usize::from(self.header_length)..)?,
+        })
+    }
+
+    /// The decoded `control` field.
+    pub const fn control(&self) -> FrameControl {
+        self.control
+    }
+
+    /// The decoded `sequence_control` field.
+    pub const fn sequence_control(&self) -> u16 {
+        self.sequence_control
+    }
+
+    /// The decoded `qos` field.
+    pub const fn qos(&self) -> Option<u16> {
+        if self.has_qos { Some(self.qos) } else { None }
+    }
+}
+
 /// The Ack Policy a lower-MAC frame writes into its QoS Control field.
 /// SOURCE: IEEE Std 802.11-2020, 9.2.4.5.4 (Ack Policy subfield), Table
 /// 9-11: Normal Ack or Implicit BAR is 0, No Ack is 1.
