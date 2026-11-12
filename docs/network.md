@@ -199,8 +199,20 @@ only once the port gave the room.
   counted in `ApStatus::payload_moves`. A refusal returns the memory to
   the network unwritten; the MPDU's terminal returns it through the
   network's return queue (`TxEnded`), whose depth (`AP_TX_DEPTH`) holds
-  every network buffer, and so does a stop or a client place's takeover
-  for every frame still queued.
+  every network buffer (`ApNetworkStorage::split` proves it at compile
+  time; a broken queue's refusal is counted, `ApNetworkEnd::quarantined`),
+  and so does a stop or a client place's takeover for every frame still
+  queued. A refusal after the sequence number was drawn, which the checks
+  exclude, is the runner's named contract break
+  (`ApContract::NetworkAdmission`). A completion returns memory only into
+  the place it was published from: the S31 backend checks the pool place
+  and refuses another's. Where "no copy" holds: for a packet the network
+  stack wrote in a transmit slot at its start; a packet written with
+  headroom is moved to the slot's start (`TxPublisher::publish`), and a
+  frame from outside the slots is copied into the spare slot
+  (`ParkedTx::write`), as on the station. A network buffer the runner
+  drops (owners abandoned after a halt) goes back to the pool, not to the
+  network, until the next composition claims the network's places.
 
 ## Physical storage contracts (`oer-portable-embassy-net::datapath`)
 

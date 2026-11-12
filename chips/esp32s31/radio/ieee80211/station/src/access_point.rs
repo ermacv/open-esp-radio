@@ -57,10 +57,12 @@ const _: () = {
     if AP_BANK < PORT_BUFFERS {
         panic!("the bank holds at least the station's port buffers");
     }
-    if oer_chips_esp32s31_radio_ieee80211_backend::port::TX_BUFFERS - AP_BUFFERS > AP_TX_DEPTH {
-        panic!("the runner's queue back holds every network buffer");
-    }
 };
+
+/// The pool buffers the access point's network holds: every place past
+/// the bank.
+const AP_NETWORK_BUFFERS: usize =
+    oer_chips_esp32s31_radio_ieee80211_backend::port::TX_BUFFERS - AP_BUFFERS;
 
 /// The transmissions of an individually addressed management frame of the
 /// access point (a response, an EAPOL-Key frame, a teardown): a named
@@ -489,7 +491,7 @@ pub fn access_point<W: Binding, S: NetworkTxSupply>(
         shared,
         start,
     } = storage;
-    let (device, transmit, end) = network.split::<S::Packet, S>(S::new(memory));
+    let (device, transmit, end) = network.split::<S::Packet, S, AP_NETWORK_BUFFERS>(S::new(memory));
     let shared: &'static ApShared = shared;
     let start: &'static StartSlot = start;
     (

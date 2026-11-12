@@ -603,6 +603,11 @@ pub enum ApContract {
     /// A receive cut handed over more units in one call than the runner
     /// reads after it.
     CutUnits,
+    /// A network MSDU whose every check passed was refused after its
+    /// sequence number was drawn: its own header did not read back, its
+    /// key gave no number, or the port's check refused what the runner's
+    /// geometry admits.
+    NetworkAdmission,
 }
 
 /// The access point's state, as the application reads it.
@@ -1561,6 +1566,14 @@ where
             }
             return Ok(());
         }
+        // One key a peer: a key it still had is superseded and comes off, so
+        // the key a frame is checked against is the key it is numbered by.
+        if let Some(at) = self.keys.iter().position(|(owner, _)| *owner == peer) {
+            let (_, superseded) = self.keys.swap_remove(at);
+            if let Err(key) = self.removals.push_back(superseded.into_key()) {
+                return Err((ApContract::ForeignKey, Kept::PairwiseKey(key)));
+            }
+        }
         if let Err(installed) = self.keys.push((peer, installed)) {
             // Excluded by `admit`: a key's place was free.
             return Err((ApContract::ForeignKey, Kept::Installed(installed)));
@@ -1597,6 +1610,36 @@ where
         }
     }
 
+    /// A terminal's buffer home: a port buffer to the runner's, fresh or
+    /// renewed; a network's memory back to the network, its MPDU ended, sent
+    /// or not, carrying no MSDU of the runner's.
+    fn home_returned(
+        &mut self,
+        buffer: <Ty<'id, P> as PortTypes<'id>>::AnyTxBuffer,
+    ) -> Result<(), Stray<'id, P, C>> {
+        let buffer = match <Ty<'id, P> as TxBufferPool<'id, C>>::class(buffer) {
+            Ok(buffer) => return self.home_buffer(buffer),
+            Err(buffer) => buffer,
+        };
+        let buffer = match <Ty<'id, P> as TxBufferPool<'id, C>>::sent(buffer) {
+            Ok(sent) => {
+                return self.home_buffer(<Ty<'id, P> as TxBufferPool<'id, C>>::renew(sent).0);
+            }
+            Err(buffer) => buffer,
+        };
+        let buffer =
+            match <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::class(buffer) {
+                Ok(buffer) => return self.give_network(buffer),
+                Err(buffer) => buffer,
+            };
+        match <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::sent(buffer) {
+            Ok(sent) => self.give_network(
+                <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::renew(sent).0,
+            ),
+            Err(other) => Err((ApContract::BufferClass, Kept::AnyBuffer(other))),
+        }
+    }
+
     /// A single MPDU's terminal: its ticket and buffer home, then what its
     /// purpose asks.
     fn completed(
@@ -1617,35 +1660,7 @@ where
                 Kept::Completion(ticket, buffer),
             ));
         }
-        match <Ty<'id, P> as TxBufferPool<'id, C>>::class(buffer) {
-            Ok(buffer) => self.home_buffer(buffer)?,
-            Err(buffer) => {
-                match <Ty<'id, P> as TxBufferPool<'id, C>>::sent(buffer) {
-                    Ok(sent) => {
-                        self.home_buffer(<Ty<'id, P> as TxBufferPool<'id, C>>::renew(sent).0)?;
-                    }
-                    // A network's memory goes back to the network, its MPDU
-                    // ended: sent or not, it carries no MSDU of the runner's.
-                    Err(buffer) => {
-                        match <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::class(
-                            buffer,
-                        ) {
-                            Ok(buffer) => self.give_network(buffer)?,
-                            Err(buffer) => {
-                                match <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::sent(buffer) {
-                            Ok(sent) => self.give_network(
-                                <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::renew(sent).0,
-                            )?,
-                            Err(other) => {
-                                return Err((ApContract::BufferClass, Kept::AnyBuffer(other)));
-                            }
-                        }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        self.home_returned(buffer)?;
         let delivered = matches!(outcome, TxOutcome::Ended(SingleEnd::Delivered { .. }));
         let Some(purpose) = self
             .purposes
@@ -2870,7 +2885,8 @@ where
     /// its frame, its authorized destination, its key and a packet number
     /// left, its rate and power; only then are its sequence number and its
     /// packet number drawn, in that order. A refusal returns the ticket and
-    /// the buffer, whole.
+    /// the buffer, whole; one after the sequence number was drawn, which the
+    /// checks exclude, also records [`ApContract::NetworkAdmission`].
     #[allow(
         clippy::type_complexity,
         reason = "the refusal returns each owner by its own type"
@@ -2910,13 +2926,19 @@ where
         let Some((plan, payload)) = plan else {
             return Err((ticket, Source::Network(buffer)));
         };
-        // The key that numbers it, with a packet number left, and its rate.
+        // The key that numbers it, with a packet number left, and its rate:
+        // the pairwise key found once, the same one checked and drawn from.
+        let pairwise = match plan.kind() {
+            ApFrameKind::Pairwise { peer, .. } => {
+                homes.keys.iter().position(|(owner, _)| *owner == peer)
+            }
+            _ => None,
+        };
         let (keyed, rate, transmissions) = match plan.kind() {
-            ApFrameKind::Pairwise { peer, rate } => (
-                homes
-                    .keys
-                    .iter()
-                    .any(|(owner, key)| *owner == peer && key.can_number()),
+            ApFrameKind::Pairwise { rate, .. } => (
+                pairwise
+                    .and_then(|at| homes.keys.get(at))
+                    .is_some_and(|(_, key)| key.can_number()),
                 rate,
                 policy.data_transmissions,
             ),
@@ -2965,16 +2987,17 @@ where
             Err(_) => None,
         };
         let Some((frame, moved)) = written else {
+            // The region was checked by the plan: a write that does not read
+            // back is the runner's own fault, after its number was drawn.
+            homes.broken.get_or_insert(ApContract::NetworkAdmission);
             return Err((ticket, Source::Network(buffer)));
         };
         if moved {
             homes.status.payload_moves = homes.status.payload_moves.saturating_add(1);
         }
         let protection = match plan.kind() {
-            ApFrameKind::Pairwise { peer, .. } => homes
-                .keys
-                .iter()
-                .find(|(owner, _)| *owner == peer)
+            ApFrameKind::Pairwise { .. } => pairwise
+                .and_then(|at| homes.keys.get(at))
                 .and_then(|(_, key)| key.number())
                 .map(|numbered| {
                     TxProtection::Ccmp(NumberedKey {
@@ -2995,7 +3018,8 @@ where
             ApFrameKind::Management { .. } | ApFrameKind::Beacon => None,
         };
         let Some(protection) = protection else {
-            // Excluded by the key's check above, in the same turn.
+            // Excluded by the same key's check above, in the same turn.
+            homes.broken.get_or_insert(ApContract::NetworkAdmission);
             return Err((ticket, Source::Network(buffer)));
         };
         let source = TxSource::Fresh {
@@ -3004,9 +3028,13 @@ where
             body: None,
             protection,
         };
+        // The geometry the port checks is the runner's, admitted at compile
+        // time: a refusal from here on is a contract break, after both
+        // numbers were drawn.
         let checked = match source.check() {
             Ok(checked) => checked,
             Err(refusal) => {
+                homes.broken.get_or_insert(ApContract::NetworkAdmission);
                 return Err((
                     ticket,
                     returned_network::<P, C, _, _, _, _>(refusal.operation),
@@ -3020,6 +3048,7 @@ where
         {
             Ok(prepared) => prepared,
             Err(refusal) => {
+                homes.broken.get_or_insert(ApContract::NetworkAdmission);
                 return Err((
                     ticket,
                     returned_network::<P, C, _, _, _, _>(refusal.operation),

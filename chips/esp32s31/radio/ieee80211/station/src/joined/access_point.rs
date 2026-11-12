@@ -254,9 +254,9 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             .ok()
             .expect("network buffers");
         let (_device, _transmit, end) = leak(ApNetworkStorage::new())
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _>(
-            Copied::new(network),
-        );
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, {
+            oer_chips_esp32s31_radio_ieee80211_backend::port::TX_BUFFERS - AP_BUFFERS
+        }>(Copied::new(network));
         let mut runner = ApRunner::new(
             port,
             commands,

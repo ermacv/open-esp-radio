@@ -59,7 +59,10 @@ impl<M> ApNetworkStorage<M> {
     /// Split the storage into the network's device, its transmit half over
     /// the network's transmit memory `supply`, which takes the stack's
     /// frames `F`, and the runner's end.
-    pub fn split<F, S: TxSupply<F, Memory = M>>(
+    /// `MEMORIES` is how many memories `supply` holds: the runner's queue
+    /// back holds them all, which this proves at compile time, so every
+    /// memory it gives back finds room.
+    pub fn split<F, S: TxSupply<F, Memory = M>, const MEMORIES: usize>(
         &mut self,
         supply: S,
     ) -> (
@@ -67,6 +70,11 @@ impl<M> ApNetworkStorage<M> {
         ApNetTransmit<'_, F, S>,
         ApNetworkEnd<'_, M>,
     ) {
+        const {
+            if MEMORIES > AP_TX_DEPTH {
+                panic!("the runner's queue back holds every network memory");
+            }
+        }
         let (receive_sender, receive_receiver) = self.receive.split();
         let (transmit_sender, transmit_receiver) = self.transmit.split(|| None);
         let (returned_sender, returned_receiver) = self.returned.split(|| None);
@@ -84,6 +92,7 @@ impl<M> ApNetworkStorage<M> {
                 transmit: transmit_receiver,
                 returned: returned_sender,
                 link,
+                quarantined: 0,
             },
         )
     }
@@ -138,6 +147,8 @@ pub struct ApNetworkEnd<'a, M> {
     pub(crate) transmit: SlotReceiver<'a, Option<Outgoing<M>>, AP_TX_DEPTH>,
     returned: SlotSender<'a, Option<TxEnded<M>>, AP_TX_DEPTH>,
     link: &'a ApLink,
+    /// Memories a broken queue back refused, kept out of reach.
+    quarantined: u32,
 }
 
 impl<M> ApNetworkEnd<'_, M> {
@@ -165,9 +176,16 @@ impl<M> ApNetworkEnd<'_, M> {
         !self.transmit.is_empty()
     }
 
+    /// Memories a broken queue back refused, kept out of reach: the queue
+    /// holds every memory ([`ApNetworkStorage::split`]), so only a broken
+    /// queue refuses one.
+    pub const fn quarantined(&self) -> u32 {
+        self.quarantined
+    }
+
     /// Give `memory` back to the network: its frame ended, sent or not.
-    /// The network has at most [`AP_TX_DEPTH`] memories, so the queue back
-    /// always has room; a broken one keeps the memory quarantined.
+    /// The queue back holds every network memory, so it has room; a broken
+    /// one keeps the memory quarantined and counted ([`Self::quarantined`]).
     pub fn give_back(&mut self, memory: M) {
         let mut ended = Some(TxEnded { memory });
         let _sent = self.returned.try_send_with(|slot| {
@@ -176,6 +194,7 @@ impl<M> ApNetworkEnd<'_, M> {
         });
         if let Some(ended) = ended {
             let _quarantined = core::mem::ManuallyDrop::new(ended);
+            self.quarantined = self.quarantined.saturating_add(1);
         }
     }
 }

@@ -230,7 +230,7 @@ macro_rules! fixture {
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
         let $supply = ModelTx::new();
         let ($device, mut $transmit, end) = network
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _>(
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, AP_TX_DEPTH>(
                 $supply.clone(),
             );
         let mut $runner = ApRunner::new(
