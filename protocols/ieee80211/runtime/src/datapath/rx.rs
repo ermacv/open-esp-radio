@@ -358,7 +358,8 @@ where
         lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
-        while !self.holds_back(network) {
+        // Nothing in delivery order asks nothing of the network.
+        while self.receive.has_ready() && !self.holds_back(network) {
             let Some((frame, meta)) = self.receive.pop_ready() else {
                 break;
             };

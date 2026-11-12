@@ -426,6 +426,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         sink: &mut impl PortSink<'id, Types<Id, D, B, O>>,
     ) -> Unconsumed {
         loop {
+            // An empty store has no first item: no place is searched.
+            if self.is_empty() {
+                return Unconsumed::None;
+            }
             let refused = match self.first() {
                 None => return Unconsumed::None,
                 Some(Cell::Terminal(cell)) => match cell.take() {
