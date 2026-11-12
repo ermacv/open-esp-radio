@@ -28,7 +28,7 @@
 use super::turn::{Failed, PortBlockAcks};
 use super::*;
 use crate::station::{CopiedMark, NetworkRx, RxDrop, RxMsdusCopied, RxMsdusRefused, ServiceEvent};
-use oer_protocols_ieee80211_contracts_port::{LendRefusal, LendRefused, RxPull};
+use oer_protocols_ieee80211_contracts_port::{LendRefusal, LendRefused, RxThen};
 use oer_protocols_ieee80211_core_roles_sta::data::{
     MAX_ETHERNET_PAYLOAD_LEN, MsduDelivery, MsduPlan, PlannedCopyError,
 };
@@ -230,8 +230,12 @@ where
         if (signalled || continued) && self.radio_receives() {
             self.rx_later = None;
             let mut pulled = 0_u8;
-            loop {
-                if pulled >= RX_BUDGET {
+            let mut batches = 0_u8;
+            'batches: loop {
+                // A batch that gives no unit counts as well: the turn's
+                // receive work is bounded by its batches as by its units.
+                batches = batches.saturating_add(1);
+                if pulled >= RX_BUDGET || batches > RX_BUDGET {
                     // The budget ran out with the ring's work left: the
                     // next turn pulls on.
                     self.facts.rx = true;
@@ -245,27 +249,44 @@ where
                     self.facts.rx = true;
                     break;
                 }
-                let room = D::RX_HELD.saturating_sub(self.frames_out);
-                match self.port.receive(room, now).map_err(ActorFault::Port)? {
-                    RxPull::Unit { frame, meta } => {
-                        pulled = pulled.saturating_add(1);
-                        self.progressed = true;
-                        D::received(frame.bytes(), &meta);
-                        if matches!(self.radio, Radio::Stopping { .. } | Radio::Unstopped) {
-                            // A stopping radio's units go back unread.
-                            self.recycle(frame)?;
-                            report(&mut self.events, || {
-                                ServiceEvent::RxFrameDropped(RxDrop::Draining)
-                            });
-                        } else {
-                            self.received(frame, meta, lifecycle, network)?;
-                        }
+                // One batch, within the turn's budget and the caller's room:
+                // the port's checks and its ring service once for it.
+                let room = D::RX_HELD
+                    .saturating_sub(self.frames_out)
+                    .min(RX_BUDGET.saturating_sub(pulled));
+                let mut batch = self
+                    .port
+                    .begin_receive(room, now)
+                    .map_err(ActorFault::Port)?;
+                while let Some((frame, meta)) =
+                    self.port.take_ready(&mut batch).map_err(ActorFault::Port)?
+                {
+                    pulled = pulled.saturating_add(1);
+                    self.progressed = true;
+                    D::received(frame.bytes(), &meta);
+                    if matches!(self.radio, Radio::Stopping { .. } | Radio::Unstopped) {
+                        // A stopping radio's units go back unread.
+                        self.recycle(frame)?;
+                        report(&mut self.events, || {
+                            ServiceEvent::RxFrameDropped(RxDrop::Draining)
+                        });
+                    } else {
+                        self.received(frame, meta, lifecycle, network)?;
                     }
-                    RxPull::Empty => {
+                    if self.receive.has_ready() && self.holds_back(network) {
+                        // The rest of the batch stays with the port.
+                        self.held_back.get_or_insert(now);
+                        self.facts.rx = true;
+                        break 'batches;
+                    }
+                }
+                match batch.then() {
+                    RxThen::More => {}
+                    RxThen::Empty => {
                         self.walked_to_end();
                         break;
                     }
-                    RxPull::Later(at) if at <= now => {
+                    RxThen::Later(at) if at <= now => {
                         // The port's call ended at its own bound with the
                         // ring's work left: no alarm keeps an instant
                         // already reached, so the next turn pulls on after
@@ -274,7 +295,7 @@ where
                         self.again = true;
                         break;
                     }
-                    RxPull::Later(at) => {
+                    RxThen::Later(at) => {
                         self.rx_later = Some(at);
                         break;
                     }

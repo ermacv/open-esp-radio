@@ -38,6 +38,7 @@ pub mod arena;
 pub mod data_port;
 pub mod edca;
 pub mod group_keys;
+pub mod pull;
 
 #[cfg(test)]
 extern crate alloc;

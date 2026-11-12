@@ -1265,7 +1265,7 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
             Err(Fault::RemovalMismatch)
         ));
         assert!(matches!(
-            fixture.port.receive(8, now),
+            pull(&mut fixture.port, 8, now),
             Err(Fault::RemovalMismatch)
         ));
         // The quarantine keeps every owner: no MPDU ended, no body dropped,

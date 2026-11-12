@@ -346,7 +346,8 @@ fn the_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
             }
             let now = fixture.now();
             let mut inactive_accepted = false;
-            while let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") {
+            while let Pulled::Unit { frame, .. } = pull(&mut fixture.port, 8, now).expect("receive")
+            {
                 if frame.bytes()[25] == current {
                     events.push(Event::NewRx);
                 } else {
@@ -1031,7 +1032,7 @@ fn a_received_unit_keeps_its_bytes_and_owner_until_it_is_recycled() {
         fixture.start();
         fixture.deliver(1);
         let now = fixture.now();
-        let RxPull::Unit { frame, meta } = fixture.port.receive(8, now).expect("receive") else {
+        let Pulled::Unit { frame, meta } = pull(&mut fixture.port, 8, now).expect("receive") else {
             panic!("the received MPDU");
         };
         assert_eq!(meta.common().rate, RxEvidence::Unavailable);
@@ -1055,7 +1056,7 @@ fn a_lent_unit_lends_its_storage_and_its_drop_returns_it_to_the_ring() {
         fixture.start();
         fixture.deliver(1);
         let now = fixture.now();
-        let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+        let Pulled::Unit { frame, .. } = pull(&mut fixture.port, 8, now).expect("receive") else {
             panic!("the received MPDU");
         };
         let mut lent = fixture.port.lend(frame).ok().expect("lent");
@@ -1084,7 +1085,7 @@ fn a_loss_past_the_held_count_settles_nothing_and_keeps_the_earlier_cause() {
         fixture.start();
         fixture.deliver(1);
         let now = fixture.now();
-        let RxPull::Unit { frame: kept, .. } = fixture.port.receive(8, now).expect("receive")
+        let Pulled::Unit { frame: kept, .. } = pull(&mut fixture.port, 8, now).expect("receive")
         else {
             panic!("a received unit");
         };
@@ -1118,11 +1119,11 @@ fn a_loss_settles_exactly_the_units_it_read() {
         fixture.start();
         fixture.deliver(2);
         let now = fixture.now();
-        let RxPull::Unit { frame: lost, .. } = fixture.port.receive(8, now).expect("receive")
+        let Pulled::Unit { frame: lost, .. } = pull(&mut fixture.port, 8, now).expect("receive")
         else {
             panic!("a received unit");
         };
-        let RxPull::Unit { frame: later, .. } = fixture.port.receive(8, now).expect("receive")
+        let Pulled::Unit { frame: later, .. } = pull(&mut fixture.port, 8, now).expect("receive")
         else {
             panic!("a received unit");
         };
@@ -1145,11 +1146,11 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
         fixture.start();
         fixture.deliver(3);
         let now = fixture.now();
-        let RxPull::Unit { frame: lost, .. } = fixture.port.receive(8, now).expect("receive")
+        let Pulled::Unit { frame: lost, .. } = pull(&mut fixture.port, 8, now).expect("receive")
         else {
             panic!("a received unit");
         };
-        let RxPull::Unit { frame: kept, .. } = fixture.port.receive(8, now).expect("receive")
+        let Pulled::Unit { frame: kept, .. } = pull(&mut fixture.port, 8, now).expect("receive")
         else {
             panic!("a received unit");
         };
@@ -1162,7 +1163,7 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
         };
         // Every later call answers with the loss.
         assert!(matches!(
-            fixture.port.receive(8, now),
+            pull(&mut fixture.port, 8, now),
             Err(Fault::ReceiveLost)
         ));
         assert!(matches!(
@@ -1209,7 +1210,7 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
         fixture.advance(COMMAND_BOUND);
         let now = fixture.now();
         assert!(matches!(
-            fixture.port.receive(8, now),
+            pull(&mut fixture.port, 8, now),
             Err(Fault::ReceiveLost)
         ));
         assert!(matches!(
@@ -1265,19 +1266,19 @@ fn a_continuous_burst_reaches_the_caller_through_its_pulls_within_the_continuati
                 "a transmit turn takes no unit"
             );
             let now = fixture.now();
-            match fixture.port.receive(32, now).expect("receive") {
-                RxPull::Unit { frame, .. } => {
+            match pull(&mut fixture.port, 32, now).expect("receive") {
+                Pulled::Unit { frame, .. } => {
                     assert!(fixture.port.recycle(frame).is_ok());
                     taken += 1;
                 }
-                RxPull::Later(at) => {
+                Pulled::Later(at) => {
                     assert!(
                         at.saturating_duration_since(now) <= CONTINUATION_WAIT,
                         "the ring continues within its bound"
                     );
                     fixture.advance(at.saturating_duration_since(now));
                 }
-                RxPull::Empty => panic!("the ring holds the burst"),
+                Pulled::Empty => panic!("the ring holds the burst"),
             }
         }
         assert_eq!(taken, FRAMES);
@@ -1305,7 +1306,8 @@ fn lent_units_beyond_the_held_bound_reach_the_caller_through_facts_without_a_tim
             let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
             assert!(facts.rx, "unit {taken} is announced by a receive fact");
             let now = fixture.now();
-            let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+            let Pulled::Unit { frame, .. } = pull(&mut fixture.port, 8, now).expect("receive")
+            else {
                 panic!("unit {taken} reaches the caller");
             };
             // A transmit turn runs between the take and the lend.
@@ -1353,7 +1355,7 @@ fn idle_fact_polls_leave_the_ring_unpulled_until_it_holds_a_unit() {
         let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
         assert!(facts.rx, "the staged unit is a receive fact");
         let now = fixture.now();
-        let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+        let Pulled::Unit { frame, .. } = pull(&mut fixture.port, 8, now).expect("receive") else {
             panic!("the announced unit");
         };
         assert!(fixture.port.recycle(frame).is_ok());
@@ -1462,7 +1464,8 @@ fn a_unit_a_cut_drains_past_the_held_units_goes_back_to_the_ring_beside_the_faul
         let now = fixture.now();
         let mut held = Vec::new();
         while held.len() < RX_HELD {
-            let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+            let Pulled::Unit { frame, .. } = pull(&mut fixture.port, 8, now).expect("receive")
+            else {
                 panic!("a received unit");
             };
             held.push(frame);

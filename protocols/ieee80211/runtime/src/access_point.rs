@@ -102,7 +102,7 @@ use oer_protocols_ieee80211_contracts_port::{
     ConfigurePermission, Configured, ConnectionFrame, DataPort, Facts, GroupKeyId, Input,
     InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey, PhyRate, PortSink,
     PortTypes, Protection, ReceiveAccounting, ReceiveFilter, RecycleRefused, Removed, RemovedKey,
-    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopCause,
+    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxThen, SingleEnd, StopCause,
     StopObservations, StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower,
     SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory,
     TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxNetworkPool, TxOperation, TxOutcome, TxPower,
@@ -2722,22 +2722,36 @@ where
 
     /// Pull the received units of this turn and act on each.
     fn receive(&mut self, now: Instant) -> Result<(), Halt<'id, P, C, PortFault<'id, P>>> {
+        let mut taken = 0_usize;
+        // A batch that gives no unit still ends one of these: the turn's
+        // receive work is bounded by its batches as by its units.
         for _ in 0..RECEIVE_BUDGET {
-            let pulled = match self.port.receive(RECEIVE_ROOM, now) {
-                Ok(pulled) => pulled,
-                Err(fault) => return Err(Halt::Faulted(fault)),
-            };
-            let RxPull::Unit { frame, meta } = pulled else {
+            if taken >= RECEIVE_BUDGET {
                 break;
-            };
-            self.homes.taken = self.homes.taken.wrapping_add(1);
-            let result = self.received(
-                oer_protocols_ieee80211_contracts_port::RxBuffer::bytes(&frame),
-                integrity(&meta),
-                now,
-            );
-            self.recycle(frame)?;
-            result?;
+            }
+            let mut batch = self
+                .port
+                .begin_receive(RECEIVE_ROOM, now)
+                .map_err(Halt::Faulted)?;
+            while taken < RECEIVE_BUDGET {
+                let Some((frame, meta)) =
+                    self.port.take_ready(&mut batch).map_err(Halt::Faulted)?
+                else {
+                    break;
+                };
+                taken = taken.saturating_add(1);
+                self.homes.taken = self.homes.taken.wrapping_add(1);
+                let result = self.received(
+                    oer_protocols_ieee80211_contracts_port::RxBuffer::bytes(&frame),
+                    integrity(&meta),
+                    now,
+                );
+                self.recycle(frame)?;
+                result?;
+            }
+            if batch.then() != RxThen::More {
+                break;
+            }
         }
         Ok(())
     }

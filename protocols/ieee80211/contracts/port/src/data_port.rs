@@ -141,15 +141,11 @@ impl Facts {
     }
 }
 
-/// What one [`DataPort::receive`] gave.
-pub enum RxPull<F, M> {
-    /// One received MPDU, which the caller recycles or lends.
-    Unit {
-        /// The frame, from its header to the end of its body.
-        frame: F,
-        /// What the hardware observed of it.
-        meta: M,
-    },
+/// How the ring goes on once a receive batch's units are taken.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RxThen {
+    /// The ring has more work now: the caller's next batch takes it.
+    More,
     /// The ring holds nothing to take now; its next unit raises the
     /// receive signal.
     Empty,
@@ -157,6 +153,58 @@ pub enum RxPull<F, M> {
     /// alarm keeps; an instant not after the call's is work the call left
     /// at its own bound, which the caller takes after a repost.
     Later(Instant),
+}
+
+/// One receive batch ([`DataPort::begin_receive`]): at most
+/// [`Self::remaining`] units the caller takes one by one
+/// ([`DataPort::take_ready`]), each its own owner from the moment it is
+/// taken, then how the ring goes on ([`Self::then`]). A batch the caller
+/// stops taking leaves its other units with the port, for a later batch:
+/// nothing of it is lost or held by the batch itself.
+#[derive(Debug, Eq, PartialEq)]
+pub struct RxBatch {
+    remaining: u8,
+    then: RxThen,
+}
+
+impl RxBatch {
+    /// A batch of at most `remaining` units, then `then`.
+    pub const fn new(remaining: u8, then: RxThen) -> Self {
+        Self { remaining, then }
+    }
+
+    /// How many units the batch may still give.
+    pub const fn remaining(&self) -> u8 {
+        self.remaining
+    }
+
+    /// How the ring goes on after the batch.
+    pub const fn then(&self) -> RxThen {
+        self.then
+    }
+
+    /// Spend one place of the batch: whether it had one.
+    pub fn spend(&mut self) -> bool {
+        match self.remaining.checked_sub(1) {
+            Some(left) => {
+                self.remaining = left;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The batch gives nothing more.
+    pub fn end(&mut self) {
+        self.remaining = 0;
+    }
+
+    /// The batch gives nothing more, and the ring goes on as `then` says:
+    /// a port that found the ring's end before the batch's.
+    pub fn end_with(&mut self, then: RxThen) {
+        self.remaining = 0;
+        self.then = then;
+    }
 }
 
 /// Where the port puts what a call produced besides its return value, in
@@ -620,9 +668,13 @@ pub type PortCompleted<'id, P> = ArenaCompleted<
 /// A received unit of the port `P`.
 pub type PortRxBuffer<'id, P> = <<P as DataPort<'id>>::Types as PortTypes<'id>>::RxBuffer;
 
-/// The one receive pull of the port `P`.
-pub type PortRxPull<'id, P> =
-    RxPull<PortRxBuffer<'id, P>, <<P as DataPort<'id>>::Types as PortTypes<'id>>::RxMeta>;
+/// One received unit of the port `P`: the frame, from its header to the
+/// end of its body, which the caller recycles or lends, and what the
+/// hardware observed of it.
+pub type PortRxUnit<'id, P> = (
+    PortRxBuffer<'id, P>,
+    <<P as DataPort<'id>>::Types as PortTypes<'id>>::RxMeta,
+);
 
 /// The radio of one installation `'id`, owned by the station's datapath
 /// actor and called only in its turns.
@@ -744,12 +796,28 @@ pub trait DataPort<'id> {
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> SubmitAnswer<'id, Self::Types, Self::Admitted>;
 
-    /// One received unit, while the caller holds fewer than `room`.
+    /// Begin a receive batch at `now` for a caller that takes at most
+    /// `room` more units: the port's checks, its settlement of units the
+    /// network returned, the receive facts and the ring's service, once for
+    /// the batch. Its units are taken by [`Self::take_ready`].
     ///
     /// # Errors
     ///
-    /// The backend's contract fault.
-    fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, Self::Fault>;
+    /// The backend's contract fault, before any unit of the batch left.
+    fn begin_receive(&mut self, room: u8, now: Instant) -> Result<RxBatch, Self::Fault>;
+
+    /// The next unit of `batch`; `None` once the batch gives no more.
+    /// Every unit taken before is the caller's, whatever a later call
+    /// answers.
+    ///
+    /// # Errors
+    ///
+    /// The backend's contract fault: the batch ends, and the units not yet
+    /// taken stay with the port.
+    fn take_ready(
+        &mut self,
+        batch: &mut RxBatch,
+    ) -> Result<Option<PortRxUnit<'id, Self>>, Self::Fault>;
 
     /// Return a received unit to the ring. The port checks its count of
     /// the caller's units before it touches the unit.

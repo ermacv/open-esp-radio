@@ -1497,7 +1497,7 @@ fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keep
             "no terminal returns the owners"
         );
         let now = fixture.now();
-        assert!(matches!(fixture.port.receive(4, now), Err(found) if found == fault));
+        assert!(matches!(pull(&mut fixture.port, 4, now), Err(found) if found == fault));
         let waker = fixture.waker();
         assert!(matches!(
             fixture

@@ -4,6 +4,7 @@
 use super::*;
 use crate::mac::tx::TxBacking;
 use crate::port::{PortDriver, PortInstallation};
+use oer_protocols_ieee80211_contracts_port::RxThen;
 use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaFormat, ArenaPublication, TxArena,
 };
@@ -11,6 +12,7 @@ use oer_protocols_ieee80211_contracts_port::{Unconsumed, UnconsumedRefused};
 use oer_protocols_ieee80211_testing_conformance::data_port::{
     self as cases, Case, DataPortHarness,
 };
+use oer_protocols_ieee80211_testing_conformance::pull::{Pulled, pull};
 use oer_protocols_radio_port::{Installations, Minted};
 use std::sync::{
     Arc,
@@ -752,7 +754,7 @@ fn no_data_port_call_wakes_its_caller() {
         }
         let now = fixture.now();
         let mut units = Vec::new();
-        while let Ok(RxPull::Unit { frame, .. }) = fixture.port.receive(8, now) {
+        while let Ok(Pulled::Unit { frame, .. }) = pull(&mut fixture.port, 8, now) {
             units.push(frame);
         }
         assert_eq!(units.len(), 2);
@@ -804,7 +806,7 @@ fn a_recycle_its_count_refuses_comes_back_whole_and_latches_no_fault() {
         fixture.start();
         fixture.deliver(1);
         let now = fixture.now();
-        let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+        let Pulled::Unit { frame, .. } = pull(&mut fixture.port, 8, now).expect("receive") else {
             panic!("one unit");
         };
         let bytes = frame.bytes().to_vec();
@@ -827,13 +829,57 @@ fn a_recycle_its_count_refuses_comes_back_whole_and_latches_no_fault() {
             "the unit, unchanged"
         );
         // No fault latched: the next call serves, and the count stayed.
-        assert!(matches!(fixture.port.receive(8, now), Ok(RxPull::Empty)));
+        assert!(matches!(pull(&mut fixture.port, 8, now), Ok(Pulled::Empty)));
         assert_eq!(fixture.port.held_for_test(), 0);
         // The same unit goes back once its count holds it.
         fixture.port.set_held_for_test(1);
         assert!(fixture.port.recycle(refused.unit).is_ok());
         assert_eq!(fixture.port.held_for_test(), 0);
         fixture.stop();
+    });
+}
+
+/// One batch gives the ready units one by one, each the caller's once
+/// taken; a batch the caller stops taking leaves the rest with the port,
+/// which the next batch gives, none lost and none twice.
+#[test]
+fn a_batch_left_part_taken_keeps_its_other_units_for_the_next() {
+    with_fixture(|fixture| {
+        fixture.start();
+        fixture.deliver(6);
+        let now = fixture.now();
+        let mut batch = fixture.port.begin_receive(32, now).expect("a batch");
+        assert_eq!(batch.remaining(), 6, "every staged unit is ready");
+        let mut held = Vec::new();
+        for _ in 0..2 {
+            let (frame, _) = fixture
+                .port
+                .take_ready(&mut batch)
+                .expect("take")
+                .expect("a unit");
+            held.push(frame);
+        }
+        // The caller stops: the batch's other four stay with the port.
+        drop(batch);
+        assert_eq!(
+            fixture.port.held_for_test(),
+            2,
+            "only the taken ones are out"
+        );
+        let mut batch = fixture.port.begin_receive(32, now).expect("the next batch");
+        assert_eq!(batch.remaining(), 4);
+        while let Some((frame, _)) = fixture.port.take_ready(&mut batch).expect("take") {
+            held.push(frame);
+        }
+        assert_eq!(held.len(), 6, "each unit once");
+        assert_eq!(batch.then(), RxThen::More);
+        let batch = fixture.port.begin_receive(32, now).expect("an empty batch");
+        assert_eq!(batch.remaining(), 0);
+        assert_eq!(batch.then(), RxThen::Empty);
+        for frame in held {
+            assert!(fixture.port.recycle(frame).is_ok());
+        }
+        assert_eq!(fixture.port.held_for_test(), 0);
     });
 }
 
@@ -844,7 +890,7 @@ fn a_receive_pull_stops_at_the_held_units_and_keeps_the_rest_on_the_ring() {
         fixture.deliver(RX_HELD + 4);
         let now = fixture.now();
         let mut held = Vec::new();
-        while let RxPull::Unit { frame, .. } = fixture.port.receive(32, now).expect("receive") {
+        while let Pulled::Unit { frame, .. } = pull(&mut fixture.port, 32, now).expect("receive") {
             held.push(frame);
         }
         // The port gives at most RX_HELD units out at once.
@@ -852,14 +898,14 @@ fn a_receive_pull_stops_at_the_held_units_and_keeps_the_rest_on_the_ring() {
         assert_eq!(fixture.observed.borrow().received.len(), 4);
         assert!(fixture.port.recycle(held.pop().expect("unit")).is_ok());
         assert!(matches!(
-            fixture.port.receive(32, now),
-            Ok(RxPull::Unit { .. })
+            pull(&mut fixture.port, 32, now),
+            Ok(Pulled::Unit { .. })
         ));
         assert_eq!(fixture.observed.borrow().received.len(), 3);
         // A caller without room takes nothing and leaves the ring as it is.
         assert!(!matches!(
-            fixture.port.receive(0, now),
-            Ok(RxPull::Unit { .. })
+            pull(&mut fixture.port, 0, now),
+            Ok(Pulled::Unit { .. })
         ));
         assert_eq!(fixture.observed.borrow().received.len(), 3);
         for frame in held {
@@ -877,10 +923,10 @@ fn a_served_receive_continuation_leaves_the_ports_deadline() {
         let now = fixture.now();
         let mut held = Vec::new();
         let at = loop {
-            match fixture.port.receive(32, now).expect("receive") {
-                RxPull::Unit { frame, .. } => held.push(frame),
-                RxPull::Later(at) => break at,
-                RxPull::Empty => panic!("the ring continues later"),
+            match pull(&mut fixture.port, 32, now).expect("receive") {
+                Pulled::Unit { frame, .. } => held.push(frame),
+                Pulled::Later(at) => break at,
+                Pulled::Empty => panic!("the ring continues later"),
             }
         };
         assert!(at > now);
@@ -889,8 +935,8 @@ fn a_served_receive_continuation_leaves_the_ports_deadline() {
         fixture.advance(at.saturating_duration_since(now));
         let now = fixture.now();
         assert!(matches!(
-            fixture.port.receive(32, now),
-            Ok(RxPull::Unit { .. })
+            pull(&mut fixture.port, 32, now),
+            Ok(Pulled::Unit { .. })
         ));
         // The served continuation no longer bounds the port: a passed
         // deadline is work for the port's next service.
@@ -915,7 +961,7 @@ fn a_network_return_is_one_receive_fact() {
         fixture.start();
         fixture.deliver(1);
         let now = fixture.now();
-        let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
+        let Pulled::Unit { frame, .. } = pull(&mut fixture.port, 8, now).expect("receive") else {
             panic!("a unit");
         };
         let lent = fixture.port.lend(frame).ok().expect("lent");
@@ -1194,7 +1240,7 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
         fixture.start();
         fixture.deliver(1);
         let now = fixture.now();
-        let Ok(RxPull::Unit { frame, .. }) = fixture.port.receive(4, now) else {
+        let Ok(Pulled::Unit { frame, .. }) = pull(&mut fixture.port, 4, now) else {
             panic!("received unit");
         };
         let lent = fixture.port.lend(frame).ok().expect("lent");
@@ -1227,7 +1273,7 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
         let rearmed = second.observed.borrow().returned;
         drop(lent);
         let now = second.now();
-        let _ = second.port.receive(4, now).expect("receive");
+        let _ = pull(&mut second.port, 4, now).expect("receive");
         assert_eq!(second.port.lent(), 0);
         assert_eq!(
             second.observed.borrow().returned,

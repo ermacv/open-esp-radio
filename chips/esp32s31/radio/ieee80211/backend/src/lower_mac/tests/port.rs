@@ -512,11 +512,7 @@ impl Device<512> for TestDevice {
         self.capture();
         Ok(!self.observed.borrow().received.is_empty())
     }
-    fn pull_unit(
-        &mut self,
-        receive_room: usize,
-        now: Instant,
-    ) -> Result<DevicePull<TestReceive>, Fault> {
+    fn pull_batch(&mut self, receive_room: usize, now: Instant) -> Result<DevicePull, Fault> {
         self.capture();
         let mut observed = self.observed.borrow_mut();
         observed.pulls += 1;
@@ -532,9 +528,19 @@ impl Device<512> for TestDevice {
             Some(_) => observed.rx_continuation = None,
             None => {}
         }
-        let Some(frame) = observed.received.pop_front() else {
+        let mut ready = observed.received.len().min(receive_room);
+        if observed.continuous_rx {
+            // A continuous ring pauses after every fourth unit.
+            ready = ready.min(4 - observed.rx_delivered % 4);
+        }
+        if ready == 0 {
             return Ok(DevicePull::Empty);
-        };
+        }
+        Ok(DevicePull::Ready(ready))
+    }
+    fn take_staged(&mut self, now: Instant) -> Option<TestReceive> {
+        let mut observed = self.observed.borrow_mut();
+        let frame = observed.received.pop_front()?;
         if observed.continuous_rx {
             observed.rx_delivered += 1;
             if observed.rx_delivered.is_multiple_of(4) {
@@ -542,7 +548,7 @@ impl Device<512> for TestDevice {
                     Some(now.saturating_add(crate::rx::receive::CONTINUATION_WAIT));
             }
         }
-        Ok(DevicePull::Unit(frame))
+        Some(frame)
     }
     fn recycle(&mut self, frame: TestReceive) {
         self.assert_task_context();

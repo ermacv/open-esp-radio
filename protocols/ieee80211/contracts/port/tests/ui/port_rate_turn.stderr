@@ -4,8 +4,8 @@ error[E0502]: cannot borrow `*port` as mutable because it is also borrowed as im
  8 |     let rate = port.rate(raw)?;
    |                ---- immutable borrow occurs here
  9 |     #[cfg(all())]
-10 |     let _ = port.receive(1, now); // ui-error: E0502
-   |             ^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
+10 |     let _ = port.begin_receive(1, now); // ui-error: E0502
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
 ...
 13 |     Some(rate.get())
    |          ---- immutable borrow later used here

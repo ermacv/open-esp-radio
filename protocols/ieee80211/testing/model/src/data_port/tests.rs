@@ -15,6 +15,7 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_testing_conformance::data_port::{
     self as cases, Case, DataPortHarness,
 };
+use oer_protocols_ieee80211_testing_conformance::pull::{Pulled, pull};
 use oer_protocols_ieee80211_wire::{frame::FrameControl, phy::LegacyRate};
 use oer_protocols_radio_port::{LocalId, SlotClaim, with_local_slot};
 
@@ -817,11 +818,11 @@ fn no_data_port_call_wakes_its_caller() {
             .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
             .unwrap()
             .unwrap();
-        let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
+        let Pulled::Unit { frame, .. } = pull(&mut harness.port, 4, now).unwrap() else {
             panic!("a delivered unit");
         };
         assert!(harness.port.recycle(frame).is_ok());
-        let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
+        let Pulled::Unit { frame, .. } = pull(&mut harness.port, 4, now).unwrap() else {
             panic!("the second unit");
         };
         let lent = harness.port.lend(frame).ok().unwrap();
@@ -851,7 +852,7 @@ fn a_recycle_its_count_refuses_comes_back_whole_and_the_count_stays() {
         harness.start();
         harness.deliver(1);
         let now = harness.clock.now();
-        let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
+        let Pulled::Unit { frame, .. } = pull(&mut harness.port, 1, now).unwrap() else {
             panic!("one unit");
         };
         let bytes = frame.bytes().to_vec();
@@ -871,13 +872,13 @@ fn a_recycle_its_count_refuses_comes_back_whole_and_the_count_stays() {
         // Nothing was taken: the held unit still fills the room, and no
         // fault was recorded.
         assert!(matches!(
-            harness.port.receive(1, now).unwrap(),
-            RxPull::Empty
+            pull(&mut harness.port, 1, now).unwrap(),
+            Pulled::Empty
         ));
         assert!(harness.port.recycle(refused.unit).is_ok());
         assert!(matches!(
-            harness.port.receive(1, now).unwrap(),
-            RxPull::Empty
+            pull(&mut harness.port, 1, now).unwrap(),
+            Pulled::Empty
         ));
     });
 }
@@ -888,11 +889,11 @@ fn a_receive_pull_takes_one_unit_within_the_callers_room() {
         harness.start();
         harness.deliver(2);
         let now = harness.clock.now();
-        let RxPull::Unit { frame: first, .. } = harness.port.receive(1, now).unwrap() else {
+        let Pulled::Unit { frame: first, .. } = pull(&mut harness.port, 1, now).unwrap() else {
             panic!("one unit within the room");
         };
         assert!(
-            matches!(harness.port.receive(0, now).unwrap(), RxPull::Empty),
+            matches!(pull(&mut harness.port, 0, now).unwrap(), Pulled::Empty),
             "no room takes no unit"
         );
         assert_eq!(
@@ -901,13 +902,13 @@ fn a_receive_pull_takes_one_unit_within_the_callers_room() {
             "the other unit waits in the ring"
         );
         assert!(harness.port.recycle(first).is_ok());
-        let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
+        let Pulled::Unit { frame, .. } = pull(&mut harness.port, 1, now).unwrap() else {
             panic!("the waiting unit");
         };
         assert!(harness.port.recycle(frame).is_ok());
         assert!(matches!(
-            harness.port.receive(1, now).unwrap(),
-            RxPull::Empty
+            pull(&mut harness.port, 1, now).unwrap(),
+            Pulled::Empty
         ));
     });
 }
@@ -1139,7 +1140,7 @@ fn the_receive_limits_bind_each_at_its_own_place() {
         harness.deliver(5);
         let now = harness.clock.now();
         let mut units = Vec::new();
-        while let RxPull::Unit { frame, .. } = harness.port.receive(u8::MAX, now).unwrap() {
+        while let Pulled::Unit { frame, .. } = pull(&mut harness.port, u8::MAX, now).unwrap() {
             units.push(frame);
         }
         assert_eq!(units.len(), 3);
@@ -1208,7 +1209,7 @@ fn the_model_holds_its_receive_bound_and_keeps_the_rest_in_the_ring() {
         harness.deliver(MODEL_RX_EVENTS + 1);
         let now = harness.clock.now();
         let mut held = Vec::new();
-        while let RxPull::Unit { frame, .. } = harness.port.receive(u8::MAX, now).unwrap() {
+        while let Pulled::Unit { frame, .. } = pull(&mut harness.port, u8::MAX, now).unwrap() {
             held.push(frame);
         }
         assert_eq!(held.len(), MODEL_RX_EVENTS);
@@ -1216,7 +1217,7 @@ fn the_model_holds_its_receive_bound_and_keeps_the_rest_in_the_ring() {
         for frame in held {
             assert!(harness.port.recycle(frame).is_ok());
         }
-        let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
+        let Pulled::Unit { frame, .. } = pull(&mut harness.port, 1, now).unwrap() else {
             panic!("room again");
         };
         assert!(harness.port.recycle(frame).is_ok());
@@ -1490,7 +1491,7 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
             .unwrap();
         harness.service();
         harness.deliver(1);
-        let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
+        let Pulled::Unit { frame, .. } = pull(&mut harness.port, 1, now).unwrap() else {
             panic!("a unit");
         };
         harness.air.poison();
@@ -1527,7 +1528,7 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         harness.start();
         harness.deliver(1);
         let now = harness.clock.now();
-        let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
+        let Pulled::Unit { frame, .. } = pull(&mut harness.port, 1, now).unwrap() else {
             panic!("a unit");
         };
         let lent = harness.port.lend(frame).ok().unwrap();

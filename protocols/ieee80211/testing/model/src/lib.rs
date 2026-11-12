@@ -1886,6 +1886,8 @@ pub struct ModelAir {
     refuse_recycle: Cell<u8>,
     /// Where the port's next call stops on an item its sink refused.
     unkeep: Cell<Option<crate::data_port::ModelUnkeep>>,
+    /// The instant of the receive batch the port began last.
+    pub(crate) batch_now: Cell<Option<Instant>>,
     /// Network memories the port holds with no attempt to carry them home,
     /// as a hardware completion for no attempt leaves one
     /// ([`Self::hold_network_memory`]).
@@ -1984,6 +1986,7 @@ impl ModelAir {
             refuse_enable: Default::default(),
             refuse_recycle: Default::default(),
             unkeep: Cell::new(None),
+            batch_now: Cell::new(None),
             orphans: Cell::new(alloc::vec::Vec::new()),
             refuse_access_point: Default::default(),
             refuse_he_association: Default::default(),

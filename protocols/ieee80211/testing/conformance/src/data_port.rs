@@ -23,7 +23,7 @@ use core::task::{Context, Poll, Waker};
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    CommandKind, CommandProgress, CommandRefusal, DataPort, PortCommand, PortSink, RxPull,
+    CommandKind, CommandProgress, CommandRefusal, DataPort, PortCommand, PortSink, RxThen,
     SubmitRefusal, SupportedChannel, TxFacts,
 };
 
@@ -382,12 +382,10 @@ fn quiet_calls<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Viol
         Violation::Unkept,
     )?
     .map_err(|_| Violation::Fault)?;
-    match port.receive(8, now).map_err(|_| Violation::Fault)? {
-        RxPull::Unit { frame, .. } => {
-            let _recycled = port.recycle(frame);
-            return Err(Violation::Receive);
-        }
-        RxPull::Empty | RxPull::Later(_) => {}
+    let mut batch = port.begin_receive(8, now).map_err(|_| Violation::Fault)?;
+    if let Some((frame, _)) = port.take_ready(&mut batch).map_err(|_| Violation::Fault)? {
+        let _recycled = port.recycle(frame);
+        return Err(Violation::Receive);
     }
     let _ = port.poll_lend_room(&mut cx);
     let _ = port.poll_lent_returned(&mut cx);
@@ -433,7 +431,8 @@ fn receive_room<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
     harness.deliver(3);
     let now = harness.now();
     let (port, _) = harness.parts();
-    if let RxPull::Unit { frame, .. } = port.receive(0, now).map_err(|_| Violation::Fault)? {
+    let mut batch = port.begin_receive(0, now).map_err(|_| Violation::Fault)?;
+    if let Some((frame, _)) = port.take_ready(&mut batch).map_err(|_| Violation::Fault)? {
         let _recycled = port.recycle(frame);
         return Err(Violation::Receive);
     }
@@ -441,14 +440,20 @@ fn receive_room<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
     for _ in 0..PROGRESS_STEPS {
         let now = harness.now();
         let (port, _) = harness.parts();
-        match port.receive(3, now).map_err(|_| Violation::Fault)? {
-            RxPull::Unit { frame, .. } => {
-                port.recycle(frame).map_err(|_| Violation::Receive)?;
-                taken += 1;
-            }
-            RxPull::Later(at) if at <= now => {}
-            RxPull::Later(at) => harness.advance(at.saturating_duration_since(now)),
-            RxPull::Empty => break,
+        // Room for the three units the caller takes, never more.
+        let room = 3_u8.saturating_sub(taken);
+        let mut batch = port
+            .begin_receive(room, now)
+            .map_err(|_| Violation::Fault)?;
+        while let Some((frame, _)) = port.take_ready(&mut batch).map_err(|_| Violation::Fault)? {
+            port.recycle(frame).map_err(|_| Violation::Receive)?;
+            taken += 1;
+        }
+        match batch.then() {
+            RxThen::More => {}
+            RxThen::Later(at) if at <= now => {}
+            RxThen::Later(at) => harness.advance(at.saturating_duration_since(now)),
+            RxThen::Empty => break,
         }
     }
     if taken != 3 {

@@ -829,11 +829,11 @@ where
             || !self.received.0.get_mut().is_empty()
             || ((self.rx_pending || self.rx_raised) && self.continuation.is_none()))
     }
-    fn pull_unit(
-        &mut self,
-        receive_room: usize,
-        now: Instant,
-    ) -> Result<DevicePull<Self::Receive>, Fault> {
+    fn take_staged(&mut self, now: Instant) -> Option<Self::Receive> {
+        let frame = self.received.0.get_mut().pop_front()?;
+        Some(self.hand_over(frame, Some(now)))
+    }
+    fn pull_batch(&mut self, receive_room: usize, now: Instant) -> Result<DevicePull, Fault> {
         #[cfg(oer_trace)]
         {
             self.stall.pulled = true;
@@ -852,8 +852,9 @@ where
             .map_err(Fault::Receive)?;
         self.rx_pending |= !facts.is_empty();
         self.rx_raised = false;
-        if let Some(frame) = self.received.0.get_mut().pop_front() {
-            return Ok(DevicePull::Unit(self.hand_over(frame, Some(now))));
+        let staged = self.received.0.get_mut().len();
+        if staged > 0 {
+            return Ok(DevicePull::Ready(staged.min(receive_room)));
         }
         if !self.rx_pending {
             return Ok(DevicePull::Empty);
@@ -898,12 +899,14 @@ where
             Progress::StageCapacityBlocked => self.recycled.reset(),
             progress => again = self.keep_masked(progress, now),
         }
-        Ok(match self.received.0.get_mut().pop_front() {
-            Some(frame) => DevicePull::Unit(self.hand_over(frame, Some(now))),
-            None if again => DevicePull::Again,
-            None => self
-                .continuation
-                .map_or(DevicePull::Empty, DevicePull::Later),
+        let staged = self.received.0.get_mut().len();
+        Ok(if staged > 0 {
+            DevicePull::Ready(staged.min(receive_room))
+        } else if again {
+            DevicePull::Again
+        } else {
+            self.continuation
+                .map_or(DevicePull::Empty, DevicePull::Later)
         })
     }
     fn recycle(&mut self, frame: Self::Receive) {

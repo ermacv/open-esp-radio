@@ -1754,12 +1754,15 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     fn poll_rx_work(&mut self, cx: &mut Context<'_>) -> Result<bool, Fault> {
         <Inner<W> as port::Device<TX>>::poll_rx_work(&mut self.0, cx)
     }
-    fn pull_unit(
+    fn pull_batch(
         &mut self,
         room: usize,
         now: oer_portable_time::Instant,
-    ) -> Result<port::DevicePull<Self::Receive>, Fault> {
-        <Inner<W> as port::Device<TX>>::pull_unit(&mut self.0, room, now)
+    ) -> Result<port::DevicePull, Fault> {
+        <Inner<W> as port::Device<TX>>::pull_batch(&mut self.0, room, now)
+    }
+    fn take_staged(&mut self, now: oer_portable_time::Instant) -> Option<Self::Receive> {
+        <Inner<W> as port::Device<TX>>::take_staged(&mut self.0, now)
     }
     fn recycle(&mut self, frame: Self::Receive) {
         <Inner<W> as port::Device<TX>>::recycle(&mut self.0, frame)

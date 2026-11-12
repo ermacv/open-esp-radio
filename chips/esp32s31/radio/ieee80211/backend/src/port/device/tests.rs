@@ -221,10 +221,16 @@ impl Bench {
             .expect("the receive work")
     }
 
-    /// The turn's receive service at the clock's instant.
-    fn pull(&mut self) -> DevicePull<StagedReceive<Q, RB>> {
+    /// The turn's receive service at the clock's instant; a batch's first
+    /// unit is taken, as a caller's first take does.
+    fn pull(&mut self) -> DevicePull {
         let now = self.clock.now();
-        <Model as Device<TX>>::pull_unit(self.device, Q, now).expect("the receive pull")
+        let pulled =
+            <Model as Device<TX>>::pull_batch(self.device, Q, now).expect("the receive pull");
+        if let DevicePull::Ready(_) = pulled {
+            drop(<Model as Device<TX>>::take_staged(self.device, now).expect("a staged unit"));
+        }
+        pulled
     }
 
     /// A data frame lands in the ring; with `edge`, its RX edge runs the
@@ -312,7 +318,7 @@ fn a_receive_fact_stays_raised_until_the_pull_that_serves_it() {
     assert!(bench.facts(), "and leave it raised");
     service::<Deferred>();
     assert_eq!(bench.woken(), woken + 1, "the raise's wake stays owed");
-    assert!(matches!(bench.pull(), DevicePull::Unit(_)));
+    assert!(matches!(bench.pull(), DevicePull::Ready(_)));
     // Served: no fact is left, and no round wakes the task for it again.
     service::<Deferred>();
     assert_eq!(bench.woken(), woken + 1);
@@ -365,11 +371,11 @@ fn a_pull_without_room_leaves_the_receive_fact_raised() {
     bench.land(true);
     let now = bench.clock.now();
     assert!(matches!(
-        <Model as Device<TX>>::pull_unit(bench.device, 0, now).expect("the receive pull"),
+        <Model as Device<TX>>::pull_batch(bench.device, 0, now).expect("the receive pull"),
         DevicePull::Empty
     ));
     assert!(bench.facts(), "the fact still waits");
-    assert!(matches!(bench.pull(), DevicePull::Unit(_)));
+    assert!(matches!(bench.pull(), DevicePull::Ready(_)));
     assert!(matches!(bench.pull(), DevicePull::Empty));
     assert!(!bench.facts());
 }
@@ -382,7 +388,7 @@ fn the_snapshot_precedes_the_turn_s_service_and_the_resume_follows_it() {
     // One unit through the ordinary path: the boundaries have moved once.
     bench.land(true);
     assert!(bench.facts());
-    assert!(matches!(bench.pull(), DevicePull::Unit(_)));
+    assert!(matches!(bench.pull(), DevicePull::Ready(_)));
     bench.pass(1_000);
 
     // A unit completes and its edge posts the fact; then a reader asks.
@@ -425,7 +431,7 @@ fn the_snapshot_precedes_the_turn_s_service_and_the_resume_follows_it() {
 
     // The turn's service hands the unit on; the next facts record that.
     bench.pass(20);
-    assert!(matches!(bench.pull(), DevicePull::Unit(_)));
+    assert!(matches!(bench.pull(), DevicePull::Ready(_)));
     assert_eq!(bench.read(ticket).unwrap().resume, None);
     bench.pass(30);
     bench.facts();

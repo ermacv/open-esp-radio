@@ -7,7 +7,7 @@ use oer_protocols_ieee80211_contracts_port::{DataPort, PhyRate, PortRate};
 pub fn turn<'id, P: DataPort<'id>>(port: &mut P, raw: PhyRate, now: Instant) -> Option<PhyRate> {
     let rate = port.rate(raw)?;
     #[cfg(ui_reject)]
-    let _ = port.receive(1, now); // ui-error: E0502
+    let _ = port.begin_receive(1, now); // ui-error: E0502
     #[cfg(not(ui_reject))]
     let _ = now;
     Some(rate.get())

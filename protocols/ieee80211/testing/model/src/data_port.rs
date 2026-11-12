@@ -33,10 +33,10 @@ use oer_protocols_ieee80211_contracts_port::{
     AccessPointCommandFailed, AdmittedTxParts, CleanupRefused, CommandFailed, CommandKind,
     CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input, LendRefusal,
     LendRefused, PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed,
-    PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull,
-    StartFailure, StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed,
-    SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts, Unconsumed, UnconsumedRefused, Unkeeping,
-    Unkept,
+    PortCommands, PortCompleted, PortRxBuffer, PortRxUnit, PortSink, Removed, RemovedKey, RxBatch,
+    RxThen, StartFailure, StartRefused, StationSubmission, StopCause, StopObservations,
+    StopUnconfirmed, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts, Unconsumed,
+    UnconsumedRefused, Unkeeping, Unkept,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
@@ -1666,7 +1666,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         self.answer(answer).map_err(SubmitHalt::Unkeeping)
     }
 
-    fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, ModelPortFault> {
+    fn begin_receive(&mut self, room: u8, now: Instant) -> Result<RxBatch, ModelPortFault> {
         self.check(ModelPortCall::Receive)?;
         if self.air.tbtt_landing.take() {
             self.air.tbtt.set(true);
@@ -1675,13 +1675,40 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             || self.radio != Radio::Running
             || self.held.rx_out.get() >= self.air.rx_limits.get().held
         {
-            return Ok(RxPull::Empty);
+            return Ok(RxBatch::new(0, RxThen::Empty));
         }
         let air = self.air.clone();
         let _turn = Turn::at(&air, now);
         if let Some(at) = air.receive_later(now) {
-            return Ok(RxPull::Later(at));
+            return Ok(RxBatch::new(0, RxThen::Later(at)));
         }
+        // The model's ring finds its end unit by unit ([`Self::take_ready`]).
+        air.batch_now.set(Some(now));
+        Ok(RxBatch::new(room, RxThen::More))
+    }
+
+    fn take_ready(
+        &mut self,
+        batch: &mut RxBatch,
+    ) -> Result<Option<PortRxUnit<'id, Self>>, ModelPortFault> {
+        if let Err(fault) = self.check(ModelPortCall::Receive) {
+            batch.end();
+            return Err(fault);
+        }
+        let Some(now) = self.air.batch_now.get() else {
+            batch.end();
+            return Ok(None);
+        };
+        if self.radio != Radio::Running || self.held.rx_out.get() >= self.air.rx_limits.get().held {
+            batch.end_with(RxThen::Empty);
+            return Ok(None);
+        }
+        // The batch's places are spent: the ring goes on in the next one.
+        if !batch.spend() {
+            return Ok(None);
+        }
+        let air = self.air.clone();
+        let _turn = Turn::at(&air, now);
         let unit = if let Some(unit) = air.rx.pop_front() {
             Some(unit)
         } else {
@@ -1705,11 +1732,13 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         let Some((bytes, meta)) = unit else {
             // A unit may land right after the ring was read, unannounced.
             air.land();
-            return Ok(RxPull::Empty);
+            batch.end_with(RxThen::Empty);
+            return Ok(None);
         };
         if !self.held.charge_rx() {
+            batch.end_with(RxThen::Empty);
             self.check(ModelPortCall::Receive)?;
-            return Ok(RxPull::Empty);
+            return Ok(None);
         }
         let owner = OwnedRxBuffer {
             identity: PhantomData,
@@ -1718,10 +1747,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             recycled: false,
             air: Rc::downgrade(&air),
         };
-        Ok(RxPull::Unit {
-            frame: owner.lend(&self.loan),
-            meta,
-        })
+        Ok(Some((owner.lend(&self.loan), meta)))
     }
 
     fn recycle(

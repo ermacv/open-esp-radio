@@ -26,8 +26,8 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 use oer_protocols_ieee80211_contracts_port::{
     CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input,
     PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed, PortCommands,
-    PortCompleted, PortRxBuffer, PortRxPull, PortSink, ReceiveAccounting, ReceiveOperation,
-    RecycleRefused, RxPull, StartFailure, StartRefused, StationSubmission, StopCause,
+    PortCompleted, PortRxBuffer, PortRxUnit, PortSink, ReceiveAccounting, ReceiveOperation,
+    RecycleRefused, RxBatch, RxThen, StartFailure, StartRefused, StationSubmission, StopCause,
     StopObservations, StopUnconfirmed, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts,
     Unconsumed, UnconsumedRefused, Unkeeping,
 };
@@ -2772,55 +2772,80 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.answer(submitted).map_err(SubmitHalt::Unkeeping)
     }
 
-    fn receive(&mut self, room: u8, now: Instant) -> Result<PortRxPull<'id, Self>, Self::Fault> {
+    fn begin_receive(&mut self, room: u8, now: Instant) -> Result<RxBatch, Self::Fault> {
         self.check()?;
         self.now = now;
         if !self.running() {
-            return Ok(RxPull::Empty);
+            return Ok(RxBatch::new(0, RxThen::Empty));
         }
         settle_lent(&self.shared.network, &self.rx_out, self.device)
             .map_err(|fault| self.record(fault))?;
-        // This pull serves the continuation the last one named: a passed
+        // This batch serves the continuation the last one named: a passed
         // one no longer bounds the deadline, which would otherwise ask for
         // a transmit service at every turn.
         if self.rx_later.is_some_and(|at| at <= now) {
             self.rx_later = None;
             self.recompute_deadline();
         }
+        let room = usize::from(room).min(RX_HELD.saturating_sub(self.rx_out.get()));
         for _ in 0..RECEIVE_STEPS {
-            let room = usize::from(room).min(RX_HELD.saturating_sub(self.rx_out.get()));
             let pulled = self
                 .device
-                .pull_unit(room, now)
+                .pull_batch(room, now)
                 .map_err(|fault| self.record(fault))?;
             match pulled {
-                DevicePull::Unit(unit) => {
-                    let admitted = self
-                        .driver
-                        .admit(self.device, &self.rx_out, self.shared, unit)
-                        .map_err(|fault| self.record(fault))?;
-                    if let Some((frame, meta)) = admitted {
-                        return Ok(RxPull::Unit {
-                            frame: frame.lend(),
-                            meta,
-                        });
-                    }
+                // The ring may hold more behind the batch: the caller's next
+                // batch asks.
+                DevicePull::Ready(staged) => {
+                    let ready = u8::try_from(staged).unwrap_or(u8::MAX);
+                    return Ok(RxBatch::new(ready, RxThen::More));
                 }
                 DevicePull::Again => {}
                 DevicePull::Empty => {
-                    self.rx_later = None;
-                    self.recompute_deadline();
-                    return Ok(RxPull::Empty);
+                    if self.rx_later.take().is_some() {
+                        self.recompute_deadline();
+                    }
+                    return Ok(RxBatch::new(0, RxThen::Empty));
                 }
                 DevicePull::Later(at) => {
-                    self.rx_later = Some(at);
-                    self.recompute_deadline();
-                    return Ok(RxPull::Later(at));
+                    if self.rx_later.replace(at) != Some(at) {
+                        self.recompute_deadline();
+                    }
+                    return Ok(RxBatch::new(0, RxThen::Later(at)));
                 }
             }
         }
         // Ring work is left beyond this call's steps.
-        Ok(RxPull::Later(now))
+        Ok(RxBatch::new(0, RxThen::Later(now)))
+    }
+
+    fn take_ready(
+        &mut self,
+        batch: &mut RxBatch,
+    ) -> Result<Option<PortRxUnit<'id, Self>>, Self::Fault> {
+        if let Err(fault) = self.check() {
+            batch.end();
+            return Err(fault);
+        }
+        while batch.spend() {
+            let Some(unit) = self.device.take_staged(self.now) else {
+                batch.end();
+                return Ok(None);
+            };
+            match self
+                .driver
+                .admit(self.device, &self.rx_out, self.shared, unit)
+            {
+                Ok(Some((frame, meta))) => return Ok(Some((frame.lend(), meta))),
+                // A unit the core filtered went back to its ring.
+                Ok(None) => {}
+                Err(fault) => {
+                    batch.end();
+                    return Err(self.record(fault));
+                }
+            }
+        }
+        Ok(None)
     }
 
     fn recycle(

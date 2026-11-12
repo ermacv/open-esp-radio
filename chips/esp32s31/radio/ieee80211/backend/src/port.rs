@@ -300,16 +300,15 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// service is timed, or the ring keeps armed descriptors whose frames
     /// bring it ([`ReturnQuiet`](crate::rx::receive::ReturnQuiet)).
     fn returns_quiet(&mut self, held: usize, returned: bool) -> bool;
-    /// The data port's receive pull at the turn's `now`: a staged unit, or
-    /// the ring serviced once, while the caller has `receive_room`; a pull
-    /// with room takes the raised receive facts it serves. It never wakes:
-    /// ring work left now is [`DevicePull::Again`], work waiting for its
-    /// continuation [`DevicePull::Later`].
-    fn pull_unit(
-        &mut self,
-        receive_room: usize,
-        now: Instant,
-    ) -> Result<DevicePull<Self::Receive>, Fault>;
+    /// The data port's receive batch at the turn's `now`: the units staged
+    /// already, or the ring serviced once, while the caller has
+    /// `receive_room`; a pull with room takes the raised receive facts it
+    /// serves. It never wakes: ring work left now is [`DevicePull::Again`],
+    /// work waiting for its continuation [`DevicePull::Later`].
+    fn pull_batch(&mut self, receive_room: usize, now: Instant) -> Result<DevicePull, Fault>;
+    /// The next staged unit of a batch [`Self::pull_batch`] found, handed
+    /// over at the batch's `now`.
+    fn take_staged(&mut self, now: Instant) -> Option<Self::Receive>;
     fn recycle(&mut self, frame: Self::Receive);
     /// The network dropped a lent unit: rearm what the ring got back.
     fn returned(&mut self);
@@ -323,10 +322,12 @@ pub enum DeviceEvent {
     Tbtt,
 }
 
-/// What the data port's receive pull found ([`Device::pull_unit`]).
-pub enum DevicePull<R> {
-    /// One received unit.
-    Unit(R),
+/// What the data port's receive pull found ([`Device::pull_batch`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DevicePull {
+    /// This many staged units, at least one, which [`Device::take_staged`]
+    /// hands over.
+    Ready(usize),
     /// Nothing now: the ring's next unit raises the receive signal.
     Empty,
     /// The ring has work left now; pull again within the turn's budget.
