@@ -495,6 +495,9 @@ where
     /// A network's memory the network's queue back refused
     /// ([`ApContract::NetworkReturn`]).
     NetworkMemory(NetworkMemory<'id, P>),
+    /// An earlier association's memory the queue back refused as the place
+    /// passed on, and the new association's frame that was being placed.
+    NetworkMemories([NetworkMemory<'id, P>; 2]),
     /// A refused submission whose ticket found no place, with the owner its
     /// source returned.
     Submission(Ticket<'id, P>, Source<'id, P, C>),
@@ -1832,7 +1835,8 @@ where
                 .flatten()
                 .is_some_and(|owner| owner.address() == peer);
             if gone {
-                self.release_place(place)?;
+                self.release_place(place)
+                    .map_err(|memory| (ApContract::NetworkReturn, Kept::NetworkMemory(memory)))?;
             }
         }
         Ok(())
@@ -1856,14 +1860,14 @@ where
     /// Hand the network back what client place `place`'s ended association
     /// left in its queues, and start the place's accounts anew.
     ///
-    /// A refusal of the queue back stops it there, the refused memory in the
-    /// error and the rest still the place's.
-    fn release_place(&mut self, place: usize) -> Result<(), Stray<'id, P, C>> {
+    /// A refusal of the queue back stops it there: the refused memory comes
+    /// back, and the rest stay the place's.
+    fn release_place(&mut self, place: usize) -> Result<(), NetworkMemory<'id, P>> {
         let Some(peer) = u8::try_from(place).ok() else {
             return Ok(());
         };
         while let Some(msdu) = self.queues.pop_peer(peer) {
-            self.give_memory(msdu.memory)?;
+            self.network.give_back(msdu.memory)?;
         }
         self.queues.reset_peer(peer);
         if let Some(owner) = self.owners.get_mut(place) {
@@ -1877,11 +1881,12 @@ where
     ///
     /// # Errors
     ///
-    /// The queue back refused an earlier association's memory.
+    /// The queue back refused an earlier association's memory: it comes
+    /// back, and the place stays the earlier association's.
     fn place_of(
         &mut self,
         association: ApAssociationIdentity,
-    ) -> Result<Option<u8>, Stray<'id, P, C>> {
+    ) -> Result<Option<u8>, NetworkMemory<'id, P>> {
         let Some(place) = association.association_id().checked_sub(1).map(usize::from) else {
             return Ok(None);
         };
@@ -2232,6 +2237,9 @@ where
         self.homes.phase = Phase::StoppingRadio;
         self.homes.status.running = false;
         self.homes.network.set_link(false);
+        // Nothing carries the network's frames once the stop finishes: those
+        // a halt left behind its owners go back now.
+        self.return_left_frames();
         let watched = self
             .watch_stop(clock, |observed| -> ControlFlow<Infallible> {
                 unconfirmed(observed);
@@ -2434,13 +2442,9 @@ where
         let end = self.halt_end(halt);
         // Nothing carries the network's frames now: they go back, unless a
         // halt's owners already wait to be taken, which a refused return's
-        // memory could not sit beside; then they stay in the queues and the
-        // transport, the network's, until the next stop returns them.
-        if self.homes.stopped_on.is_none()
-            && let Err(kept) = self.homes.return_network_frames()
-        {
-            self.homes.stopped_on = Some(kept);
-        }
+        // memory could not sit beside; then they stay queued until those
+        // owners are taken or the stop finishes.
+        self.return_left_frames();
         shared.publish(self.homes.status);
         end
     }
@@ -2494,12 +2498,29 @@ where
 
     /// The owners of an operation that stopped on one without a home of
     /// the runner's, whole: a step's first, then a terminal's; each once.
+    ///
+    /// Once a halt's owners are taken, the network's frames a halt left with
+    /// them go back now ([`Self::return_left_frames`]).
     pub fn take_kept(&mut self) -> Option<Kept<'id, P, C>> {
-        self.homes
+        let kept = self
+            .homes
             .stopped_on
             .take()
             .or_else(|| self.homes.kept.take())
-            .map(|(_, kept)| kept)
+            .map(|(_, kept)| kept);
+        self.return_left_frames();
+        kept
+    }
+
+    /// Give the network back the frames still queued or in its transport,
+    /// unless a halt's owners wait to be taken: a refusal's memory then
+    /// becomes those owners, and the rest stay queued for the next call.
+    fn return_left_frames(&mut self) {
+        if self.homes.stopped_on.is_none()
+            && let Err(kept) = self.homes.return_network_frames()
+        {
+            self.homes.stopped_on = Some(kept);
+        }
     }
 
     /// The unit whose recycle the port refused, with the count that
@@ -2857,7 +2878,17 @@ where
                 continue;
             };
             let place = match association {
-                Some(association) => homes.place_of(association)?,
+                Some(association) => match homes.place_of(association) {
+                    Ok(place) => place,
+                    // Both owners come back: the earlier association's
+                    // memory the queue refused, and this frame.
+                    Err(refused) => {
+                        return Err(Halt::Kept(
+                            ApContract::NetworkReturn,
+                            Kept::NetworkMemories([refused, outgoing.memory]),
+                        ));
+                    }
+                },
                 None => Some(GROUP_PEER),
             };
             let msdu = OutboundMsdu {
@@ -2895,7 +2926,12 @@ where
                 match owner.filter(|owner| homes.engine.association_is_current(*owner)) {
                     Some(owner) => Some(owner),
                     None => {
-                        homes.release_place(usize::from(queue.peer()))?;
+                        if let Err(memory) = homes.release_place(usize::from(queue.peer())) {
+                            return Err(Halt::Kept(
+                                ApContract::NetworkReturn,
+                                Kept::NetworkMemory(memory),
+                            ));
+                        }
                         continue;
                     }
                 }
