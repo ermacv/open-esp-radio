@@ -24,7 +24,8 @@ pub struct DevicePort<D, X> {
     transmit: X,
     /// What the last refused frame needs.
     waiting: Waiting,
-    /// The device's receive queue broke in a give-back: it is read no more.
+    /// The device's receive queue broke, in a batch or a give-back: the
+    /// first fault, kept; the queue is read no more.
     broken: Option<ReceiveFault>,
 }
 
@@ -57,18 +58,9 @@ impl<D: NetDevice, X: OwnedTransmit> DevicePort<D, X> {
     pub fn give_back(&mut self) -> Result<(), ReceiveFault> {
         // Every frame the queue holds, in batches; a broken queue is read no
         // further, and what it still holds stays the device's.
-        if self.broken.is_none() {
-            loop {
-                match self.device.receive(usize::MAX, |frame| drop(frame)).end {
-                    BatchEnd::Limit => {}
-                    BatchEnd::Drained => break,
-                    BatchEnd::Fault(fault) => {
-                        self.broken = Some(fault);
-                        break;
-                    }
-                }
-            }
-        }
+        while self.broken.is_none()
+            && self.receive(usize::MAX, |frame| drop(frame)).end == BatchEnd::Limit
+        {}
         self.transmit.reclaim();
         // The service whose policy those frames' ends settle has ended, its
         // account with it: each end frees its buffer and goes to no policy.
@@ -77,6 +69,26 @@ impl<D: NetDevice, X: OwnedTransmit> DevicePort<D, X> {
         // service over this port is not woken for one.
         self.waiting = Waiting::Nothing;
         self.broken.map_or(Ok(()), Err)
+    }
+
+    /// One batch of the device, unless its queue broke before: then its
+    /// first fault, unread. A fault is kept.
+    fn receive(
+        &mut self,
+        limit: usize,
+        take: impl FnMut(Incoming<'_, LentFrame<D::Storage>>),
+    ) -> ReceivedBatch {
+        if let Some(fault) = self.broken {
+            return ReceivedBatch {
+                taken: 0,
+                end: BatchEnd::Fault(fault),
+            };
+        }
+        let batch = self.device.receive(limit, take);
+        if let BatchEnd::Fault(fault) = batch.end {
+            self.broken = Some(fault);
+        }
+        batch
     }
 
     /// End the port: [`Self::give_back`], then let it go, its device's
@@ -173,12 +185,14 @@ impl<D: NetDevice, X: OwnedTransmit> FrameSource for DevicePort<D, X> {
     /// A lent frame's own buffer, for a reader that keeps it.
     type Held = LentFrame<D::Storage>;
 
+    /// A queue that broke once is read no more: every later batch answers
+    /// its first fault.
     fn take_frames(
         &mut self,
         limit: usize,
         take: impl FnMut(Incoming<'_, Self::Held>),
     ) -> ReceivedBatch {
-        self.device.receive(limit, take)
+        self.receive(limit, take)
     }
 
     fn take_notice(&mut self) -> Option<X::Notice> {
