@@ -4,7 +4,7 @@ use core::task::Context;
 
 use oer_protocols_network_port::{
     BatchEnd, FrameMeta, FramePort, FrameSource, Incoming, LentFrame, LinkSnapshot, NetDevice,
-    OwnedTransmit, PortReady, PortRefusal, ReceivedBatch, Unpublished,
+    OwnedTransmit, PortReady, PortRefusal, ReceiveFault, ReceivedBatch, Unpublished,
 };
 
 /// What a refused frame needs before it is worth another try.
@@ -24,6 +24,8 @@ pub struct DevicePort<D, X> {
     transmit: X,
     /// What the last refused frame needs.
     waiting: Waiting,
+    /// The device's receive queue broke in a give-back: it is read no more.
+    broken: Option<ReceiveFault>,
 }
 
 impl<D, X> DevicePort<D, X> {
@@ -32,6 +34,7 @@ impl<D, X> DevicePort<D, X> {
             device,
             transmit,
             waiting: Waiting::Nothing,
+            broken: None,
         }
     }
 }
@@ -43,10 +46,29 @@ impl<D: NetDevice, X: OwnedTransmit> DevicePort<D, X> {
     /// account with it. The device's queues outlive this port,
     /// so dropping the port returns none of them: a stop calls this before
     /// it tells the device it is over.
-    pub fn give_back(&mut self) {
+    ///
+    /// # Errors
+    ///
+    /// The device's receive queue broke ([`ReceiveFault`]): the frames
+    /// before the break went back, the transmit memory and notices too, and
+    /// the frames after it stay in the queue, which this port alone reaches
+    /// and never reads again. A dropped port strands them: its owner keeps
+    /// it. Each later give-back answers the same fault without reading.
+    pub fn give_back(&mut self) -> Result<(), ReceiveFault> {
         // Every frame the queue holds, in batches; a broken queue is read no
         // further, and what it still holds stays the device's.
-        while self.device.receive(usize::MAX, |frame| drop(frame)).end == BatchEnd::Limit {}
+        if self.broken.is_none() {
+            loop {
+                match self.device.receive(usize::MAX, |frame| drop(frame)).end {
+                    BatchEnd::Limit => {}
+                    BatchEnd::Drained => break,
+                    BatchEnd::Fault(fault) => {
+                        self.broken = Some(fault);
+                        break;
+                    }
+                }
+            }
+        }
         self.transmit.reclaim();
         // The service whose policy those frames' ends settle has ended, its
         // account with it: each end frees its buffer and goes to no policy.
@@ -54,6 +76,22 @@ impl<D: NetDevice, X: OwnedTransmit> DevicePort<D, X> {
         // The exchange ended: no refused frame waits for anything, so a next
         // service over this port is not woken for one.
         self.waiting = Waiting::Nothing;
+        self.broken.map_or(Ok(()), Err)
+    }
+
+    /// End the port: [`Self::give_back`], then let it go, its device's
+    /// queues emptied.
+    ///
+    /// # Errors
+    ///
+    /// The device's receive queue broke ([`BrokenPort`]): the port comes
+    /// back with the fault, for its owner to keep, as it alone reaches the
+    /// frames after the break.
+    pub fn close(mut self) -> Result<(), BrokenPort<Self>> {
+        match self.give_back() {
+            Ok(()) => Ok(()),
+            Err(fault) => Err(BrokenPort { fault, port: self }),
+        }
     }
 
     /// [`Self::give_back`], then register `cx` for the device's next frame
@@ -63,17 +101,31 @@ impl<D: NetDevice, X: OwnedTransmit> DevicePort<D, X> {
     /// what the device hands over or gives back keeps coming home without
     /// the service. Only a composition that has such an owner gets this
     /// return; cancelling the network without one serves nothing.
-    pub fn serve_returns(&mut self, cx: &mut Context<'_>) {
+    ///
+    /// # Errors
+    ///
+    /// The device's receive queue broke ([`Self::give_back`]): its frames
+    /// are served no more, and `cx` hears only returned transmit memory.
+    pub fn serve_returns(&mut self, cx: &mut Context<'_>) -> Result<(), ReceiveFault> {
         loop {
-            self.give_back();
-            let received = self.device.poll_receive_ready(cx).is_ready();
+            let given = self.give_back();
             // Takes back what came meanwhile and registers for the next.
             let _room = self.transmit.poll_room(cx);
-            if !received {
-                return;
+            given?;
+            if !self.device.poll_receive_ready(cx).is_ready() {
+                return Ok(());
             }
         }
     }
+}
+
+/// A port [`DevicePort::close`] could not end: its device's receive queue
+/// broke, and the frames after the break stay in it, reached through this
+/// port alone, which is never read again.
+#[derive(Debug)]
+pub struct BrokenPort<P> {
+    pub fault: ReceiveFault,
+    pub port: P,
 }
 
 impl<D, X: OwnedTransmit> FramePort for DevicePort<D, X> {

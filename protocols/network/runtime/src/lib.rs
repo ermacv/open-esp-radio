@@ -44,7 +44,7 @@ mod service;
 mod socket;
 mod watch;
 
-pub use device::DevicePort;
+pub use device::{BrokenPort, DevicePort};
 pub use diagnostics::{Diagnosis, Diagnostics, STAGES, Stage};
 pub use local::{
     Interest, LocalEnd, LocalRefused, Next, Offer, Produce, Producer, Producers, Work,

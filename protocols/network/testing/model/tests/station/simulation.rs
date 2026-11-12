@@ -72,9 +72,7 @@ use oer_protocols_ieee80211_testing_model::{
 use oer_protocols_ieee80211_wire::address::{IndividualAddress, OwnAddress};
 use oer_protocols_ieee80211_wire::station::AssociationCapabilities;
 use oer_protocols_network_core::{Configuration, Group, Interface, NetworkOwner, Remote, claim};
-use oer_protocols_network_port::{
-    EthernetFrameView, FramePort, FrameSource, LinkSnapshot, PortRefusal, Unpublished,
-};
+use oer_protocols_network_port::{FramePort, FrameSource, LinkSnapshot, PortRefusal, Unpublished};
 use oer_protocols_network_runtime::{
     ConfigurationWatch, DevicePort, EndCause, Ended, LendingLanes, LendingSocket, LocalEnd,
     MemoryPolicy, Observer, Producer, Received as Delivered, Sent, Service, Socket, SocketLanes,
@@ -354,6 +352,9 @@ pub struct Report {
     pub actor: Option<ActorEnd<ModelPortFault>>,
     /// Why the network's service ended.
     pub network: Option<EndCause>,
+    /// How the port's give-back at the network's end went; `None` without
+    /// a port.
+    pub give_back: Option<Result<(), oer_protocols_network_port::ReceiveFault>>,
     /// The actor saw the network's stop participant lost.
     pub network_lost: bool,
     /// The network's blocks in its pool after the run.
@@ -401,6 +402,11 @@ impl Report {
             self.actor
         );
         assert_eq!(self.network, Some(EndCause::Stopped), "the network stopped");
+        assert!(
+            self.give_back.is_none_or(|given| given.is_ok()),
+            "every received frame went back: {:?}",
+            self.give_back
+        );
         assert_eq!(self.blocks_free, BLOCKS, "every block is in the pool");
         assert_eq!(self.loans_out, 0, "every loan came back");
         assert_eq!(self.counts.tokens_lost, 0, "no station token is lost");
@@ -1227,6 +1233,8 @@ async fn run<'s, T: 'static>(
         let actor_end = RefCell::new(None);
         let lifecycle_end = RefCell::new(None);
         let network_end: RefCell<Option<NetEnded<'_, T, Stream, u32>>> = RefCell::new(None);
+        let given_back: Cell<Option<Result<(), oer_protocols_network_port::ReceiveFault>>> =
+            Cell::new(None);
         let station_done = Signal::default();
         {
             let running = lifecycle.take().expect("the session's lifecycle");
@@ -1270,26 +1278,29 @@ async fn run<'s, T: 'static>(
                     // A dropped run: the composition serves the port's
                     // returns until the station asks the network to stop.
                     if cause.is_none() {
-                        let serving = std::future::poll_fn(|cx| {
-                            port.serve_returns(cx);
-                            Poll::<()>::Pending
+                        // A broken queue ends the service of its frames;
+                        // the give-back below names it.
+                        let serving = std::future::poll_fn(|cx| match port.serve_returns(cx) {
+                            Ok(()) => Poll::<()>::Pending,
+                            Err(_) => Poll::Ready(()),
                         });
                         let _asked = select(serving, network_stop.requested()).await;
                     }
                     // The queues outlive the port, so its frames go back and
                     // the returned memory comes home first, as the
-                    // application's stop does.
-                    port.give_back();
+                    // application's stop does. A broken queue keeps its
+                    // frames with the port, which the ended service keeps.
+                    given_back.set(Some(port.give_back()));
                     if world.network_loses_its_stop.get() {
                         // The participant goes unreported; the composition
                         // still serves the returns until the station ended.
                         network_stop.lost();
-                        let serving = std::future::poll_fn(|cx| {
-                            port.serve_returns(cx);
-                            Poll::<()>::Pending
+                        let serving = std::future::poll_fn(|cx| match port.serve_returns(cx) {
+                            Ok(()) => Poll::<()>::Pending,
+                            Err(_) => Poll::Ready(()),
                         });
                         let _done = select(serving, station_done.wait()).await;
-                        port.give_back();
+                        given_back.set(Some(port.give_back()));
                     } else {
                         network_stop.stopped();
                     }
@@ -1348,6 +1359,7 @@ async fn run<'s, T: 'static>(
             lifecycle: end,
             actor: actor_end.borrow_mut().take(),
             network: Some(ended.cause),
+            give_back: given_back.get(),
             network_lost: actor.network_lost(),
             blocks_free: ended.retired.pool.free(),
             memory_free: free.free(),

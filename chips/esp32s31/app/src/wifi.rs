@@ -56,7 +56,7 @@ pub use oer_portable_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle,
 pub use oer_protocols_ieee80211_runtime::station::contract::{
     CommandRefusal, DisconnectReason, LinkPhy,
 };
-pub use oer_protocols_network_port::{LinkSnapshot, LinkState};
+pub use oer_protocols_network_port::{LinkSnapshot, LinkState, ReceiveFault};
 pub use wifi::Restarts;
 
 use super::{

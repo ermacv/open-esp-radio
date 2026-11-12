@@ -25,7 +25,10 @@
 //! the station's transmit buffer itself. A stop ends the sockets, ends each
 //! of the producer's open works `Retired` and sets its end flag, and gives
 //! back every frame in the port's queue, so the station has its received
-//! buffers back. Once the stop is confirmed, the network's task takes back
+//! buffers back. A queue that broke there keeps the port, the only end that
+//! reaches the frames after the break, parked with the network's other
+//! owners and never read again; the stop is still confirmed, and
+//! [`Network::port_end`] tells the fault. Once the stop is confirmed, the network's task takes back
 //! the loan of each buffer a lending socket still held as it returns, until
 //! the pool's account is closed. The other owners stay parked for the rest
 //! of the boot: nothing starts a second network, and no contract ends the
@@ -36,6 +39,7 @@ use oer_portable_memory::WakingSpscSender;
 use oer_protocols_network_core::{
     ClaimRefused, Group, Interface, InterfaceError, NetworkOwner, OpenRefused, Retired, claim,
 };
+use oer_protocols_network_port::ReceiveFault;
 use oer_protocols_network_runtime::ConfigurationWatch;
 use oer_protocols_network_runtime::{
     DevicePort, EndCause, Ended, LocalRefused, MemoryPolicy, Producer, Service, SocketLanes,
@@ -321,6 +325,43 @@ pub struct NetworkStorage<P: Produce + 'static, R: ReceiveMode> {
     watch: ConfigurationWatch,
     /// The channel socket's lanes.
     lanes: R::Lanes,
+    /// How the network's task gave its port's frames back at its end.
+    port_end: PortEnd,
+}
+
+/// How the network's task gave its port's frames back once its service
+/// ended, as it records it: the stop it confirms is a separate fact.
+struct PortEnd(core::sync::atomic::AtomicU8);
+
+impl PortEnd {
+    const RUNNING: u8 = 0;
+    const GIVEN_BACK: u8 = 1;
+    const LOST: u8 = 2;
+    const UNFILLED: u8 = 3;
+
+    const fn new() -> Self {
+        Self(core::sync::atomic::AtomicU8::new(Self::RUNNING))
+    }
+
+    fn record(&self, given: Result<(), ReceiveFault>) {
+        let code = match given {
+            Ok(()) => Self::GIVEN_BACK,
+            Err(ReceiveFault::Lost) => Self::LOST,
+            Err(ReceiveFault::Unfilled) => Self::UNFILLED,
+        };
+        self.0.store(code, core::sync::atomic::Ordering::Release);
+    }
+
+    /// `None` while the network runs; then whether every frame went back,
+    /// or the receive fault that kept the frames after it in the queue.
+    fn read(&self) -> Option<Result<(), ReceiveFault>> {
+        match self.0.load(core::sync::atomic::Ordering::Acquire) {
+            Self::GIVEN_BACK => Some(Ok(())),
+            Self::LOST => Some(Err(ReceiveFault::Lost)),
+            Self::UNFILLED => Some(Err(ReceiveFault::Unfilled)),
+            _ => None,
+        }
+    }
 }
 
 impl<P: Produce + 'static, R: ReceiveMode> NetworkStorage<P, R> {
@@ -331,6 +372,7 @@ impl<P: Produce + 'static, R: ReceiveMode> NetworkStorage<P, R> {
             end: LocalEnd::new(),
             watch: ConfigurationWatch::new(),
             lanes: R::LANES,
+            port_end: PortEnd::new(),
         }
     }
 }
@@ -406,6 +448,7 @@ impl From<NetworkError> for Error {
 pub struct Network<P: Produce + 'static, R: ReceiveMode> {
     end: &'static LocalEnd,
     watch: &'static ConfigurationWatch,
+    port_end: &'static PortEnd,
     producer: core::marker::PhantomData<(P, R)>,
 }
 
@@ -415,6 +458,7 @@ pub struct NetworkStart<P: Produce + 'static> {
     service: Placed<P>,
     stop: WakingSpscSender<'static, (), 1>,
     stopper: wifi::NetworkStopper<'static, Notifies>,
+    port_end: &'static PortEnd,
 }
 
 impl<P: Produce + 'static> crate::NetTask for NetworkStart<P> {
@@ -453,8 +497,13 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
             end,
             watch,
             lanes,
+            port_end,
         } = storage;
-        let (end, watch): (&'static LocalEnd, &'static ConfigurationWatch) = (end, watch);
+        let (end, watch, port_end): (
+            &'static LocalEnd,
+            &'static ConfigurationWatch,
+            &'static PortEnd,
+        ) = (end, watch, port_end);
         let (stop, stopping) = stop.split();
         let port = DevicePort::new(network, transmit);
         let owner = NetworkOwner::new(brand, interface, pool, port);
@@ -472,6 +521,7 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
             Self {
                 end,
                 watch,
+                port_end,
                 producer: core::marker::PhantomData,
             },
             socket,
@@ -479,8 +529,17 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
                 service,
                 stop,
                 stopper,
+                port_end,
             }),
         ))
+    }
+
+    /// How the network's task gave its port's frames back at its end:
+    /// `None` while it runs; a [`ReceiveFault`] when the station's receive
+    /// queue broke there, the frames after the break kept in the queue with
+    /// the port, which stays parked and is never read again.
+    pub fn port_end(&self) -> Option<Result<(), ReceiveFault>> {
+        self.port_end.read()
     }
 
     /// The producer's end flag: set once the service calls it no more, after
@@ -519,6 +578,7 @@ async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
         service,
         stop,
         stopper,
+        port_end,
     } = start;
     let cause = match service.as_mut() {
         Some(running) => {
@@ -561,10 +621,21 @@ async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
         mut port,
     } = retired;
     // The queues outlive the port, so dropping it returns no frame and
-    // takes back no memory: both happen here first.
-    port.give_back();
-    drop(port);
-    // The stop is confirmed first: it waits for no lent buffer.
+    // takes back no memory: both happen here first. A queue that broke
+    // keeps the frames after the break, which only the port reaches: it
+    // stays parked below, never read again, its fault recorded.
+    let port = match port.close() {
+        Ok(()) => {
+            port_end.record(Ok(()));
+            None
+        }
+        Err(broken) => {
+            port_end.record(Err(broken.fault));
+            Some(broken.port)
+        }
+    };
+    // The stop is confirmed first: it waits for no lent buffer. The
+    // give-back's fault stays beside it.
     stopper.stopped();
     // Then this task takes each lent buffer's loan back as it returns,
     // until the pool's account is closed. A buffer held for ever keeps it
@@ -576,6 +647,7 @@ async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
     .await;
     // Memory, lanes and result places are all static, so what a late socket
     // or observer reaches stays.
-    let _parked =
-        core::mem::ManuallyDrop::new((results, pool, brand, sockets, adopted, returns, producers));
+    let _parked = core::mem::ManuallyDrop::new((
+        results, pool, brand, sockets, adopted, returns, producers, port,
+    ));
 }

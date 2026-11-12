@@ -582,6 +582,10 @@ struct Ends<T: 'static> {
     service: Option<NetEnded<T>>,
     /// The cause the network's task saw.
     cause: Option<EndCause>,
+    /// How the port's give-back at the network's end went: a broken
+    /// receive queue keeps the port, with the frames after the break, in
+    /// `service`.
+    give_back: Option<Result<(), oer_protocols_network_port::ReceiveFault>>,
     actor: Option<ActorEndSeen>,
     /// The device came back from the retired port, and its frontier.
     released: Option<bool>,
@@ -593,6 +597,7 @@ impl<T: 'static> Default for Ends<T> {
         Self {
             service: None,
             cause: None,
+            give_back: None,
             actor: None,
             released: None,
             frontier: None,
@@ -728,16 +733,23 @@ async fn serve_network<T: 'static>(
     };
     let mut ended = service.retire();
     // The queue outlives the port, so its frames are given back first, as the
-    // application's stop does.
-    if let Some(port) = ended.retired.port.inner.as_mut() {
-        port.give_back();
-    }
-    ended.retired.port.inner = None;
+    // application's stop does. A broken queue keeps the port, which alone
+    // reaches the frames after the break, with the ended service.
+    let given = match ended.retired.port.inner.take().map(DevicePort::close) {
+        None | Some(Ok(())) => Ok(()),
+        Some(Err(broken)) => {
+            ended.retired.port.inner = Some(broken.port);
+            Err(broken.fault)
+        }
+    };
     {
         let mut ends = ends.borrow_mut();
         ends.cause = Some(cause);
+        ends.give_back = Some(given);
         ends.service = Some(ended);
     }
+    // The network stopped either way: the stop is confirmed, and the give-back's
+    // fault stays beside it.
     stopper.stopped();
 }
 
@@ -1720,6 +1732,17 @@ fn account_for_every_owner<T: 'static>(bench: &mut Bench<'_, '_, T>, held: NetDa
     {
         let ends = bench.ends.borrow();
         assert_eq!(ends.cause, Some(EndCause::Stopped));
+        assert_eq!(
+            ends.give_back,
+            Some(Ok(())),
+            "every received frame went back"
+        );
+        assert!(
+            ends.service
+                .as_ref()
+                .is_some_and(|ended| ended.retired.port.inner.is_none()),
+            "a whole give-back lets the port go"
+        );
         assert_eq!(ends.actor, Some(ActorEndSeen::Retired));
         assert_eq!(ends.released, Some(true), "the port gave its device");
         assert!(ends.frontier.is_some(), "the device gave its frontier");

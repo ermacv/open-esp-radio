@@ -68,6 +68,8 @@ struct Device {
     link_changed: bool,
     /// The receive queue's break, which every later read answers.
     fault: Option<oer_protocols_network_port::ReceiveFault>,
+    /// Receive batches asked of it.
+    receives: usize,
 }
 
 impl NetDevice for Device {
@@ -100,6 +102,7 @@ impl NetDevice for Device {
         limit: usize,
         mut take: impl FnMut(Incoming<'_, LentFrame<Lent>>),
     ) -> ReceivedBatch {
+        self.receives += 1;
         if let Some(fault) = self.fault {
             return ReceivedBatch {
                 taken: 0,
@@ -333,7 +336,7 @@ fn a_kept_lent_frame_is_the_reader_s_until_it_drops() {
             kept = Some(frame);
         }
     });
-    let mut kept = kept.expect("a lendable frame comes lent");
+    let kept = kept.expect("a lendable frame comes lent");
     assert_eq!(returned.load(Ordering::SeqCst), 0, "the reader holds it");
     assert_eq!(kept.view().unwrap().payload, b"kept");
     drop(kept);
@@ -365,9 +368,40 @@ fn a_broken_receive_queue_is_a_fault_not_an_empty_queue() {
     let batch = port.take_frames(8, |_| panic!("no frame is shown"));
     assert_eq!(batch.end, BatchEnd::Fault(ReceiveFault::Unfilled));
     assert!(!batch.found());
-    // The give-back stops at the break and leaves the device's frames.
-    port.give_back();
+    // The give-back stops at the break, says so, and leaves the device's
+    // frames to the port's owner.
+    assert_eq!(port.give_back(), Err(ReceiveFault::Unfilled));
     assert_eq!(port.device.incoming.len(), 1);
+}
+
+/// A give-back that meets a broken queue names the fault, still takes back
+/// the transmit memory and notices, and never reads the queue again: a
+/// later give-back or return service answers the same fault unread.
+#[test]
+fn a_give_back_that_meets_a_broken_queue_names_it_and_reads_it_no_more() {
+    use oer_protocols_network_port::ReceiveFault;
+    let mut port = port();
+    port.device.incoming.push_back(lent(&[1, 2]));
+    port.device.fault = Some(ReceiveFault::Lost);
+    port.transmit.ended.push_back(7);
+    assert_eq!(port.give_back(), Err(ReceiveFault::Lost));
+    assert!(port.transmit.ended.is_empty(), "the notices were taken");
+    let reads = port.device.receives;
+    assert_eq!(port.give_back(), Err(ReceiveFault::Lost));
+    let waker = Waker::from(std::sync::Arc::new(Woken::default()));
+    assert_eq!(
+        port.serve_returns(&mut Context::from_waker(&waker)),
+        Err(ReceiveFault::Lost)
+    );
+    assert_eq!(
+        port.device.receives, reads,
+        "the broken queue is read no more"
+    );
+    assert_eq!(
+        port.device.incoming.len(),
+        1,
+        "its frames stay with the port"
+    );
 }
 
 #[test]
@@ -504,7 +538,7 @@ fn a_port_without_its_service_still_gives_back_and_takes_back() {
     port.transmit.returned = 2;
     let woken = std::sync::Arc::new(Woken::default());
     let waker = Waker::from(woken.clone());
-    port.serve_returns(&mut Context::from_waker(&waker));
+    assert_eq!(port.serve_returns(&mut Context::from_waker(&waker)), Ok(()));
     assert_eq!(returned.load(Ordering::SeqCst), 1);
     assert_eq!(port.transmit.taken_back, 2);
     assert!(port.device.incoming.is_empty());
@@ -526,7 +560,7 @@ fn a_stop_gives_back_every_frame_and_takes_back_the_returned_memory() {
         "a frame waits for room"
     );
     port.transmit.full = false;
-    port.give_back();
+    assert_eq!(port.give_back(), Ok(()));
     assert!(
         !ready_at_once(&mut port),
         "the ended exchange leaves no frame waiting for room"
@@ -584,7 +618,109 @@ fn a_give_back_frees_the_buffers_of_ends_no_policy_settles() {
     let second = port.publish(meta(4), octets).unwrap();
     port.transmit.ended.extend([first, second]);
     assert_eq!(port.transmit.free, 0);
-    port.give_back();
+    assert_eq!(port.give_back(), Ok(()));
     assert_eq!(port.transmit.free, 2);
     assert_eq!(port.take_notice(), None);
+}
+
+/// Over a real slot queue: an empty published slot breaks it, with a lent
+/// frame after the break. The give-back names the fault instead of ending
+/// as a drained queue, and the frame stays in the queue's slot, reached
+/// through the port its owner keeps, never through a dropped one.
+#[test]
+fn a_give_back_over_a_broken_slot_queue_names_its_fault_and_the_port_keeps_the_rest() {
+    use oer_portable_memory::{SlotReceiveError, SlotReceiver, WakingSlotQueue};
+    use oer_protocols_network_port::ReceiveFault;
+    struct Slots<'a>(SlotReceiver<'a, Option<LentFrame<Lent>>, 2>);
+    impl NetDevice for Slots<'_> {
+        type Storage = Lent;
+        fn link(&self) -> LinkSnapshot {
+            LinkSnapshot::DOWN
+        }
+        fn poll_link(&mut self, _: &mut Context<'_>) -> Poll<LinkSnapshot> {
+            Poll::Pending
+        }
+        fn receive_queue_len(&self) -> usize {
+            self.0.len()
+        }
+        fn poll_receive_ready(&mut self, _: &mut Context<'_>) -> Poll<()> {
+            if self.0.is_empty() {
+                Poll::Pending
+            } else {
+                Poll::Ready(())
+            }
+        }
+        fn receive(
+            &mut self,
+            limit: usize,
+            mut take: impl FnMut(Incoming<'_, LentFrame<Lent>>),
+        ) -> ReceivedBatch {
+            let mut taken = 0;
+            let end = loop {
+                if taken >= limit {
+                    break BatchEnd::Limit;
+                }
+                match self.0.try_receive_held_with(Option::take) {
+                    Ok(Some(frame)) => {
+                        taken += 1;
+                        take(Incoming::Lent(frame));
+                    }
+                    Ok(None) => break BatchEnd::Fault(ReceiveFault::Unfilled),
+                    Err(SlotReceiveError::Lost) => break BatchEnd::Fault(ReceiveFault::Lost),
+                    Err(SlotReceiveError::Empty) => break BatchEnd::Drained,
+                }
+            };
+            self.0.commit();
+            ReceivedBatch { taken, end }
+        }
+    }
+    let returned = Arc::new(AtomicU32::new(0));
+    let mut queue = WakingSlotQueue::<Option<LentFrame<Lent>>, 2>::new();
+    let (mut sender, receiver) = queue.split(|| None);
+    assert!(
+        sender
+            .try_send_with(|slot| {
+                *slot = None;
+                Ok::<_, ()>(())
+            })
+            .is_ok()
+    );
+    let Queued::Lent(frame) = lent_from(Lent(b"after".to_vec(), Some(returned.clone()))) else {
+        panic!("a lent frame");
+    };
+    assert!(
+        sender
+            .try_send_with(|slot| {
+                *slot = Some(frame);
+                Ok::<_, ()>(())
+            })
+            .is_ok()
+    );
+    let port = DevicePort::new(Slots(receiver), Transmit::default());
+    // A stop's end of the port: it does not go, it comes back with its fault.
+    let Err(broken) = port.close() else {
+        panic!("a broken queue is no closed port");
+    };
+    assert_eq!(broken.fault, ReceiveFault::Unfilled);
+    let mut port = broken.port;
+    assert_eq!(
+        port.give_back(),
+        Err(ReceiveFault::Unfilled),
+        "and again, unread"
+    );
+    assert_eq!(
+        port.device.0.len(),
+        1,
+        "the frame after the break stays queued"
+    );
+    assert_eq!(
+        returned.load(Ordering::SeqCst),
+        0,
+        "held, not lost or dropped"
+    );
+    // Whoever keeps the port decides the frame's end: dropped with the queue,
+    // it goes back once.
+    drop(port);
+    drop(queue);
+    assert_eq!(returned.load(Ordering::SeqCst), 1);
 }
