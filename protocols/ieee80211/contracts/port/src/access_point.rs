@@ -743,6 +743,14 @@ pub trait AccessPointPort<'id>:
         memory: <Self::Types as crate::PortTypes<'id>>::DataMemory,
     ) -> crate::NetworkTxBuffer<'id, Self::Types>;
 
+    /// The network's transmit memory the port holds with no attempt to
+    /// carry it home: a completion came for no attempt, and the hardware
+    /// no longer holds the memory. Its home is the network: the caller
+    /// gives it back there. Each memory leaves once; `None` while the port
+    /// holds none.
+    fn take_network_memory(&mut self)
+    -> Option<<Self::Types as crate::PortTypes<'id>>::DataMemory>;
+
     /// Accept a sealed access-point attempt, dropping its borrow of the
     /// port; [`DataPort::submit`] queues it as the access point's.
     fn admit_access_point<'k, 'p>(

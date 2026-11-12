@@ -2394,10 +2394,11 @@ fn a_completion_whose_buffer_refuses_its_memory_keeps_the_attempt_published() {
     });
 }
 
-/// A refused return leaves the lease whole on its descriptor and the
-/// attempt beside it: the stop recovers and confirms, its cleanup gives the
-/// lease back to its attempt, which ends withdrawn with its memory, and the
-/// port, its descriptors idle, reinstalls.
+/// A delivered MPDU whose buffer refuses its lease back: the lease stays
+/// whole on its descriptor and the attempt beside it with its known end;
+/// the stop recovers and confirms, its cleanup gives the lease back to the
+/// attempt, which ends delivered, as its completion said, with its memory,
+/// and the port, its descriptors idle, reinstalls.
 #[test]
 fn a_refused_return_s_lease_goes_home_at_the_cleanup_and_the_port_reinstalls() {
     with_installations(|mut fixture, installations| {
@@ -2428,15 +2429,48 @@ fn a_refused_return_s_lease_goes_home_at_the_cleanup_and_the_port_reinstalls() {
         else {
             panic!("the attempt's one terminal");
         };
-        assert!(matches!(
-            completed.outcome(),
-            TxOutcome::Withdrawn(WithdrawCause::Disabled)
-        ));
+        assert!(
+            matches!(
+                completed.outcome(),
+                TxOutcome::Ended(SingleEnd::Delivered { .. })
+            ),
+            "a known delivery stays delivered: {:?}",
+            completed.outcome()
+        );
         // A retirement needs every bank place home and every descriptor
         // idle: the terminal's drop returns the memory it carries.
         assert!(
             reinstall(fixture, installations).is_ok(),
             "the memory came home with its attempt, every descriptor idle"
+        );
+    });
+}
+
+/// A completion on a queue whose attempt is gone: the lease its descriptor
+/// held goes home by its own home, a bank place at once, so the stop
+/// recovers and the port, every place home and every descriptor idle,
+/// reinstalls.
+#[test]
+fn a_completion_without_its_attempt_returns_a_bank_lease_to_its_place() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        fixture.submit_now(attempt);
+        fixture.port.forget_published_for_test();
+        serve_once(&mut fixture);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::CompletionWithoutPending { .. })
+        ));
+        assert!(fixture.port.recover_for_stop(), "every owner is home");
+        fixture.stop();
+        assert!(matches!(
+            fixture.port.clean_stopped(&mut fixture.outbox),
+            Ok(Ok(()))
+        ));
+        assert!(
+            reinstall(fixture, installations).is_ok(),
+            "the lease went home to its bank place"
         );
     });
 }

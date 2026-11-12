@@ -138,7 +138,10 @@ the types the port's owners and terminals carry:
   through the same `TxSource`, `check` and `TxBufferPool::prepare` as any
   buffer; its terminal returns the same memory, fresh or `Sent`, as
   `AnyTxBuffer` of that class, and `into_memory` hands it back to the
-  network, refused only while the hardware still holds it. A caller that
+  network, refused only while the hardware still holds it. A network's
+  memory the port holds with no attempt to carry it home (a completion
+  came for none) leaves through `AccessPointPort::take_network_memory`,
+  whole and once, to the caller, who gives it back to the network. A caller that
   carries the longest MSDU checks at compile time that the class holds
   `NETWORK_MPDU_LEN`.
 - **Data arenas.** The station's data goes through two DMA arenas the

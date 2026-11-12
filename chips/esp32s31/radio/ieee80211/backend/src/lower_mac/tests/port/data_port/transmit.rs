@@ -751,6 +751,89 @@ fn a_network_memory_goes_as_one_single_mpdu_and_comes_back_whole_with_its_cost()
     });
 }
 
+/// A completion on a queue whose network-memory attempt is gone: the
+/// memory stays whole on its descriptor until the port's owner takes it
+/// for the network, once, and nothing else gives it out.
+#[test]
+fn a_network_lease_without_its_attempt_goes_to_the_port_s_owner_once() {
+    use oer_portable_memory::StableDmaBacking as _;
+    type Network<Id> = NetworkFrames<Family<Id>>;
+    with_access(|fixture, _access| {
+        fixture.start();
+        fixture.hold_air(true);
+        let mut memory =
+            crate::mac::tx::test_support::model_backing::<512>().expect("model memory");
+        let at = memory.stable_dma_region().into_mut_slice().as_ptr();
+        let buffer = fixture.port.network_buffer(memory);
+        let ticket = fixture.tickets.pop().expect("ticket");
+        let rate = fixture
+            .port
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .expect("rate");
+        let header = HeaderSpec::new(
+            FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
+            0,
+            IndividualAddress::new(BSSID).expect("receiver"),
+            STATION,
+            BSSID,
+            SEQUENCE,
+            None,
+            None,
+            None,
+        )
+        .expect("header");
+        let frame = ClassFrame::<Network<_>, _>::new(TxFrame::Individual {
+            frame: SizedFrame::new(
+                AckHeader::new(header).expect("ACK"),
+                MpduLength::new(64).expect("length"),
+            )
+            .expect("frame"),
+            plan: RetryPlan::new(RetryStage {
+                rate,
+                transmissions: core::num::NonZeroU8::MIN,
+                protection: Protection::None,
+            }),
+        })
+        .ok()
+        .expect("class");
+        let source = TxSource::Fresh {
+            buffer,
+            frame,
+            body: None,
+            protection: TxProtection::Open,
+        }
+        .check()
+        .ok()
+        .expect("layout");
+        let source = <Family<_> as TxBufferPool<'_, Network<_>>>::prepare::<Station, Caps>(source)
+            .ok()
+            .expect("prepared");
+        submit!(fixture, ticket, source, WmmAccessCategory::BestEffort, 99);
+        assert!(
+            fixture.port.take_network_memory().is_none(),
+            "the hardware holds it"
+        );
+        fixture.port.forget_published_for_test();
+        fixture.hold_air(false);
+        for _ in 0..4 {
+            let _ = serve_once(fixture);
+        }
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(crate::port::Fault::CompletionWithoutPending { .. })
+        ));
+        let Some(mut memory) = fixture.port.take_network_memory() else {
+            panic!("the network's memory, for the port's owner");
+        };
+        assert_eq!(
+            memory.stable_dma_region().into_mut_slice().as_ptr(),
+            at,
+            "the same memory, whole"
+        );
+        assert!(fixture.port.take_network_memory().is_none(), "once");
+    });
+}
+
 #[test]
 fn a_collided_mpdu_withdrawn_behind_a_gate_goes_again_without_the_retry_bit() {
     // Its only publication collided and the gate closed meanwhile: the plan

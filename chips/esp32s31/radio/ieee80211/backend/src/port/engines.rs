@@ -1064,6 +1064,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.unkept.lose_right_for_test();
     }
 
+    /// Take every published attempt out of its place, as a core
+    /// completing a queue no attempt was published on would find it.
+    #[cfg(test)]
+    pub(crate) fn forget_published_for_test(&mut self) {
+        for place in &mut self.driver.running {
+            drop(place.take());
+        }
+    }
+
     /// Mark the radio's stop confirmed, as a stop whose core disable left
     /// completions with the driver ends.
     #[cfg(test)]

@@ -1886,6 +1886,10 @@ pub struct ModelAir {
     refuse_recycle: Cell<u8>,
     /// Where the port's next call stops on an item its sink refused.
     unkeep: Cell<Option<crate::data_port::ModelUnkeep>>,
+    /// Network memories the port holds with no attempt to carry them home,
+    /// as a hardware completion for no attempt leaves one
+    /// ([`Self::hold_network_memory`]).
+    orphans: Cell<alloc::vec::Vec<ModelNetworkMemory>>,
     /// The next enable fails after the MAC began it, its stop not
     /// confirmed: the port answers `StartRefused::Unstopped` and stops.
     unstop_enable: Cell<bool>,
@@ -1980,6 +1984,7 @@ impl ModelAir {
             refuse_enable: Default::default(),
             refuse_recycle: Default::default(),
             unkeep: Cell::new(None),
+            orphans: Cell::new(alloc::vec::Vec::new()),
             refuse_access_point: Default::default(),
             refuse_he_association: Default::default(),
             group_held: Default::default(),
@@ -2585,6 +2590,25 @@ impl ModelAir {
     /// and the count stays.
     pub fn refuse_recycles(&self, count: u8) {
         self.refuse_recycle.set(count);
+    }
+
+    /// Make the port hold `memory` as a completion for no attempt leaves a
+    /// network's memory: [`AccessPointPort::take_network_memory`] gives it
+    /// to the port's owner.
+    ///
+    /// [`AccessPointPort::take_network_memory`]: oer_protocols_ieee80211_contracts_port::AccessPointPort::take_network_memory
+    pub fn hold_network_memory(&self, memory: ModelNetworkMemory) {
+        let mut orphans = self.orphans.take();
+        orphans.push(memory);
+        self.orphans.set(orphans);
+    }
+
+    /// The next network memory the port holds without an attempt.
+    pub(crate) fn take_orphan(&self) -> Option<ModelNetworkMemory> {
+        let mut orphans = self.orphans.take();
+        let orphan = orphans.pop();
+        self.orphans.set(orphans);
+        orphan
     }
 
     /// Make the port's next call stop on the next item its sink refuses,

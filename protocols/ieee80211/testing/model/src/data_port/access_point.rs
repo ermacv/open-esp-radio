@@ -229,6 +229,13 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
         crate::ModelBuffer::network(memory, self.loan)
     }
 
+    /// The model hands every completion's memory to its attempt; it holds
+    /// one without its attempt only as the test placed it
+    /// ([`ModelAir::hold_network_memory`](crate::ModelAir::hold_network_memory)).
+    fn take_network_memory(&mut self) -> Option<crate::ModelNetworkMemory> {
+        self.air.take_orphan()
+    }
+
     fn admit_access_point<'k, 'p>(
         &self,
         attempt: AccessPointSubmission<'k, 'p, 'id, Self>,

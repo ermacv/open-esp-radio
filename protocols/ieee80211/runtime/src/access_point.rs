@@ -2499,17 +2499,16 @@ where
     /// The owners of an operation that stopped on one without a home of
     /// the runner's, whole: a step's first, then a terminal's; each once.
     ///
-    /// Once a halt's owners are taken, the network's frames a halt left with
-    /// them go back now ([`Self::return_left_frames`]).
+    /// Once a halt's owners are taken, the network's frames that halt left
+    /// behind them go back now ([`Self::return_left_frames`]); any other
+    /// call, a running access point's included, leaves every frame where
+    /// it is.
     pub fn take_kept(&mut self) -> Option<Kept<'id, P, C>> {
-        let kept = self
-            .homes
-            .stopped_on
-            .take()
-            .or_else(|| self.homes.kept.take())
-            .map(|(_, kept)| kept);
-        self.return_left_frames();
-        kept
+        if let Some((_, halted)) = self.homes.stopped_on.take() {
+            self.return_left_frames();
+            return Some(halted);
+        }
+        self.homes.kept.take().map(|(_, kept)| kept)
     }
 
     /// Give the network back the frames still queued or in its transport,
@@ -2517,10 +2516,21 @@ where
     /// becomes those owners, and the rest stay queued for the next call.
     fn return_left_frames(&mut self) {
         if self.homes.stopped_on.is_none()
-            && let Err(kept) = self.homes.return_network_frames()
+            && let Err(kept) = self.return_network_memories()
         {
             self.homes.stopped_on = Some(kept);
         }
+    }
+
+    /// Give the network every memory of its own the runner or the port
+    /// holds: the frames still queued or in its transport, and a memory the
+    /// port holds with no attempt to carry it home
+    /// ([`AccessPointPort::take_network_memory`]).
+    fn return_network_memories(&mut self) -> Result<(), Stray<'id, P, C>> {
+        while let Some(memory) = self.port.take_network_memory() {
+            self.homes.give_memory(memory)?;
+        }
+        self.homes.return_network_frames()
     }
 
     /// The unit whose recycle the port refused, with the count that

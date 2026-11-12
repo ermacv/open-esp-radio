@@ -212,9 +212,16 @@ only once the port gave the room.
   lease (`TxLease`): the queue's descriptor takes it whole at publication
   and gives it back whole at completion, and no memory is matched to a
   home afterwards. A lease its buffer refuses back stays whole on the
-  descriptor with its attempt beside it (`Fault::ReturnRefused`, which
-  lets a stop recover); after the confirmed stop the cleanup
-  (`clean_stopped`) gives it back to that attempt, which ends withdrawn. Where "no copy" holds: for a packet the network
+  descriptor with its attempt beside it and what is known of the attempt
+  (`Fault::ReturnRefused`, which lets a stop recover); after the confirmed
+  stop the cleanup (`clean_stopped`) gives it back to that attempt, which
+  ends with its known result: a delivery stays delivered, one never
+  published is withdrawn. A lease whose attempt is gone
+  (`Fault::CompletionWithoutPending`) goes home by its own home once the
+  completion released it: a bank's to its place at once, a network's to
+  the port's owner (`AccessPointPort::take_network_memory`), which the
+  runner gives back to the network whenever it returns the frames a halt
+  or a stop left. Where "no copy" holds: for a packet the network
   stack wrote in a transmit slot at its start; a packet written with
   headroom is moved to the slot's start (`TxPublisher::publish`), and a
   frame from outside the slots is copied into the spare slot

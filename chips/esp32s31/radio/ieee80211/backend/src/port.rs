@@ -374,7 +374,10 @@ pub enum Fault {
     GroupKeyIdRange,
     /// The core refused a VIF configuration.
     ConfigurationRefused,
-    /// A queue completed with no MPDU published on it.
+    /// A queue completed with no MPDU published on it. The lease its
+    /// descriptor held goes home by its own home: a bank's to its place at
+    /// once, a network's through
+    /// [`AccessPointPort::take_network_memory`](oer_protocols_ieee80211_contracts_port::AccessPointPort::take_network_memory).
     CompletionWithoutPending {
         /// The hardware queue.
         queue: u8,
@@ -566,6 +569,7 @@ impl Fault {
                 | Self::ReceiveLost
                 | Self::GroupReplacement(_)
                 | Self::ReturnRefused { .. }
+                | Self::CompletionWithoutPending { .. }
         )
     }
 }

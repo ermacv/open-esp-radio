@@ -1431,3 +1431,73 @@ fn frames_a_halt_left_go_back_once_its_owners_are_taken() {
         assert_eq!(free, super::network::AP_TX_DEPTH, "every memory came home");
     }));
 }
+
+/// A running access point with no halt's owners: taking the kept owners
+/// finds none and leaves the network's frame waiting to be sent.
+#[test]
+fn taking_no_kept_owner_leaves_a_running_access_point_s_frames() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, _shared);
+        runner.homes.network.set_link(true);
+        let mut frame = EthernetFrame::empty();
+        frame
+            .set_parts(MsduParts {
+                destination: STATION,
+                source: ACCESS_POINT,
+                ether_type: 0x0800,
+                payload: &[0x45; 28],
+            })
+            .unwrap();
+        assert!(transmit.try_transmit(frame).is_ok());
+        transmit.flush();
+        assert!(runner.homes.network.waiting());
+        assert!(runner.take_kept().is_none());
+        assert!(runner.homes.network.waiting(), "the frame stays to be sent");
+    }));
+}
+
+/// A network memory the port holds with no attempt to carry it home goes
+/// back to the network when the run halts: every memory is the network's
+/// again.
+#[test]
+fn a_memory_the_port_holds_without_an_attempt_goes_home_at_a_halt() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    let frame = || {
+        let mut frame = EthernetFrame::empty();
+        frame
+            .set_parts(MsduParts {
+                destination: STATION,
+                source: ACCESS_POINT,
+                ether_type: 0x0800,
+                payload: &[0x45; 28],
+            })
+            .unwrap();
+        frame
+    };
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, shared);
+        runner.homes.network.set_link(true);
+        assert!(transmit.try_transmit(frame()).is_ok());
+        transmit.flush();
+        let outgoing = runner.homes.network.take().expect("the frame");
+        // The port holds it now, as a completion for no attempt leaves it.
+        air.hold_network_memory(outgoing.memory);
+        let _end = runner.halted(
+            super::Halt::Contract(super::ApContract::CommandRefused),
+            &shared,
+        );
+        assert!(runner.take_kept().is_none(), "no owner stayed out");
+        transmit.reclaim();
+        runner.homes.network.set_link(true);
+        let mut free = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            free += 1;
+        }
+        assert_eq!(free, super::network::AP_TX_DEPTH, "every memory came home");
+    }));
+}
