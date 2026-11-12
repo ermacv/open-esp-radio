@@ -2935,3 +2935,41 @@ fn a_fault_inside_a_batch_publishes_the_staged_prefix_and_leaves_the_rest() {
         );
     });
 }
+
+/// The network's receive end closes with a slot of the queue claimed for
+/// good (a read that never returned): the actor's reclaim meets the claim,
+/// which nothing will release, and the run ends on the named violation once,
+/// instead of trying again every turn. The frame stays in its slot.
+#[test]
+fn a_reclaim_that_meets_a_claim_for_good_ends_the_run_named() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
+        bench.settle();
+        assert!(!bench.receive.is_empty(), "a frame is queued");
+        let spare = Box::leak(Box::new(oer_portable_memory::WakingSlotQueue::<
+            Option<Received<ModelLentRx>>,
+            RX_DEPTH,
+        >::new()));
+        let (_unused, replacement) = spare.split(|| None);
+        let mut receiver = core::mem::replace(&mut bench.receive, replacement);
+        // A read that unwinds keeps its slot claimed, as `ClaimCell::lend`
+        // documents.
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _read = receiver.try_receive_with(|_| panic!("a read that never returns"));
+        }));
+        assert!(unwound.is_err());
+        receiver.close();
+        bench.settle();
+        assert!(
+            matches!(
+                bench.end,
+                Some(ActorEnd::Faulted(ActorFault::Contract(
+                    ActorViolation::NetworkQueueClaimed
+                )))
+            ),
+            "the run ends on the claim, named"
+        );
+    });
+}

@@ -451,7 +451,7 @@ where
         let _moved: bool = self.poll_network_stop(cx, network);
         // Before the radio's stop waits for its units: a network whose
         // receive end ended leaves what the queue holds to the actor.
-        self.reclaim_received(network);
+        self.reclaim_received(network)?;
         self.drive_radio(cx)?;
         // A message may have released the link's data: the plane takes it
         // now, so the network's next MSDU wakes this actor.
@@ -1229,8 +1229,15 @@ where
     /// ended ([`SlotReceiver::close`](oer_portable_memory::SlotReceiver::close)),
     /// as a broken one does: by each slot's own claim, published or not, its
     /// buffer back to the ring, so the radio's stop finds every unit home.
-    /// Asked once a turn until done; a slot claimed elsewhere stops it,
-    /// the frames before it taken, and the next turn goes on.
+    /// Done once.
+    ///
+    /// # Errors
+    ///
+    /// A slot claimed elsewhere ([`ActorViolation::NetworkQueueClaimed`]):
+    /// with the consumer gone and the actor the queue's one producer, no
+    /// release is owed, so the run ends on it, not retried. The frames
+    /// before it went back; the queue keeps the rest and where the reclaim
+    /// stopped, with the network ends the run hands back.
     fn reclaim_received<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -1239,9 +1246,9 @@ where
     >(
         &mut self,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
-    ) {
+    ) -> Result<(), Failed<'id, D>> {
         if self.rx_reclaimed || !network.receive.consumer_ended() {
-            return;
+            return Ok(());
         }
         let mut frames = 0_u16;
         let reclaimed = network.receive.reclaim(|slot| {
@@ -1257,10 +1264,13 @@ where
             });
         }
         match reclaimed {
-            Ok(()) => self.rx_reclaimed = true,
-            // The consumer ended, so only a claim held elsewhere refuses:
-            // the next turn goes on where this one stopped.
-            Err(_) => self.again = true,
+            Ok(()) => {
+                self.rx_reclaimed = true;
+                Ok(())
+            }
+            // The consumer ended, checked above, so only a claim held
+            // elsewhere refuses.
+            Err(_) => Err(ActorFault::Contract(ActorViolation::NetworkQueueClaimed)),
         }
     }
 

@@ -41,7 +41,7 @@ use oer_portable_memory::WakingSpscSender;
 use oer_protocols_network_core::{
     ClaimRefused, Group, Interface, InterfaceError, NetworkOwner, OpenRefused, Retired, claim,
 };
-use oer_protocols_network_port::ReceiveFault;
+use oer_protocols_network_port::{OwnedTransmit, ReceiveFault};
 use oer_protocols_network_runtime::ConfigurationWatch;
 use oer_protocols_network_runtime::{
     DevicePort, EndCause, Ended, LocalRefused, MemoryPolicy, Producer, Service, SocketLanes,
@@ -547,6 +547,32 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
     /// stays after the stop, apart from it.
     pub fn port_end(&self) -> Option<Result<(), ReceiveFault>> {
         self.port_end.read()
+    }
+
+    /// The producer's end flag: set once the service calls it no more, after
+    /// every outcome it heard.
+    pub const fn end(&self) -> &'static LocalEnd {
+        self.end
+    }
+
+    /// The interface's address, its version and its lease, as the service
+    /// last published them; `None` once it ended.
+    ///
+    /// # Errors
+    /// [`WatchRefused`]: a publication holds the value at this moment.
+    pub fn configuration(&self) -> Result<Option<Configuration>, WatchRefused> {
+        Ok(self.watch.read()?.configuration)
+    }
+
+    /// A wrapping count of the service's publications.
+    pub fn changes(&self) -> u32 {
+        self.watch.changes()
+    }
+
+    /// Wait until the count of publications is no longer `seen`, and return
+    /// it. One task waits at a time.
+    pub async fn changed(&self, seen: u32) -> u32 {
+        self.watch.changed(seen).await
     }
 }
 

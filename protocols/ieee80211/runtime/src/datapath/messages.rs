@@ -405,6 +405,12 @@ pub enum ActorViolation {
     /// slot's index, which its free index excludes: the MSDU stays in its
     /// slot, unpublished.
     NetworkQueueLost,
+    /// The network's receive end of the queue closed, and taking back what
+    /// the queue holds met a slot claimed elsewhere: with the consumer gone
+    /// and the actor its one producer, no release of that claim is owed. The
+    /// frames before it went back to the ring; the queue keeps the rest and
+    /// where the reclaim stopped, with the actor's network ends.
+    NetworkQueueClaimed,
 }
 
 /// How the actor's run ended.
