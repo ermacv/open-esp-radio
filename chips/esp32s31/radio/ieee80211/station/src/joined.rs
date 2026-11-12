@@ -586,6 +586,8 @@ struct Ends<T: 'static> {
     /// receive queue keeps the port, with the frames after the break, in
     /// `service`.
     give_back: Option<Result<(), oer_protocols_network_port::ReceiveFault>>,
+    /// The actor's end of the receive queue, once its run ended.
+    producer: Option<crate::ReceiveProducer<Joined>>,
     actor: Option<ActorEndSeen>,
     /// The device came back from the retired port, and its frontier.
     released: Option<bool>,
@@ -598,6 +600,7 @@ impl<T: 'static> Default for Ends<T> {
             service: None,
             cause: None,
             give_back: None,
+            producer: None,
             actor: None,
             released: None,
             frontier: None,
@@ -774,6 +777,9 @@ enum Setup {
     /// starts and the station's configuration is asked, whose terminal the
     /// full queue refuses and the port keeps. Not connected.
     ReturnsFull,
+    /// As [`Self::Connected`], the receive queue to the network broken from
+    /// the start: its first published slot holds no frame.
+    ReceiveBroken,
 }
 
 fn joined_with<T: 'static>(
@@ -972,6 +978,19 @@ fn joined_with<T: 'static>(
                 receive_copied,
                 network: network_stop,
             };
+        if setup == Setup::ReceiveBroken {
+            // A published slot with no frame: the network's first intake
+            // meets the break.
+            assert!(
+                network_ends
+                    .receive
+                    .try_send_with(|slot| {
+                        *slot = None;
+                        Ok::<_, ()>(())
+                    })
+                    .is_ok()
+            );
+        }
 
         // The network, as the application's `configure` builds it.
         let memory = leak([[0_u8; BLOCK]; BLOCKS]);
@@ -1006,10 +1025,14 @@ fn joined_with<T: 'static>(
         let actor_clock = clock.clone();
         let actor_ends = ends.clone();
         let actor_task = async {
+            let mut network_ends = network_ends;
             let end = actor
                 .run(&mut lifecycle, &mut network_ends, &actor_clock)
                 .await;
             let mut ends = actor_ends.borrow_mut();
+            // The datapath's end hands back its end of the receive queue,
+            // as the station's `RetiredDatapath` does.
+            ends.producer = Some(network_ends.receive);
             ends.actor = Some(match end {
                 ActorEnd::Retired => ActorEndSeen::Retired,
                 ActorEnd::Reinstall => ActorEndSeen::Reinstall,
@@ -1086,7 +1109,7 @@ fn joined_with<T: 'static>(
                 filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).unwrap(),
             },
         }));
-        if setup == Setup::Connected {
+        if matches!(setup, Setup::Connected | Setup::ReceiveBroken) {
             bench.until("the station is configured", |bench| bench.configured == 1);
             bench.connect();
         } else {
@@ -2023,5 +2046,62 @@ fn a_completion_after_turns_that_took_none_puts_the_prepared_ppdu_on_the_air() {
             "the completion's turn published the prepared PPDU"
         );
         assert_eq!(bench.atoms.rule_breaks(), []);
+    });
+}
+
+/// The receive queue to the network breaks: the network's intake meets the
+/// fault and ends with it, and its port, which alone reaches what the queue
+/// holds, stays with the ended service. The station's stop is confirmed and
+/// its datapath ends; the queue gives up its slots only once the datapath's
+/// end of it is closed, once, and is closed then.
+#[test]
+fn a_broken_receive_queue_is_reclaimed_once_the_datapath_ended() {
+    use oer_portable_memory::ReclaimRefused;
+    use oer_protocols_network_port::ReceiveFault;
+    struct Network;
+    joined_with::<Network>(0, Setup::ReceiveBroken, |bench| {
+        bench.until("the network ends", |bench| {
+            bench.ends.borrow().cause.is_some()
+        });
+        assert_eq!(
+            bench.ends.borrow().cause,
+            Some(EndCause::ReceiveFault(ReceiveFault::Unfilled))
+        );
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stops,
+        });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        assert_eq!(
+            bench.stopped,
+            Some(StopOutcome::Confirmed),
+            "a separate fact"
+        );
+        bench.send(ToActor::Retire);
+        bench.until("the actor ends", |bench| {
+            bench.ends.borrow().actor.is_some()
+        });
+        let mut ends = bench.ends.borrow_mut();
+        assert_eq!(ends.give_back, Some(Err(ReceiveFault::Unfilled)));
+        let producer = ends
+            .producer
+            .take()
+            .expect("the datapath's end of the queue");
+        let port = ends
+            .service
+            .as_mut()
+            .and_then(|ended| ended.retired.port.inner.as_mut())
+            .expect("the broken port stays with its owner");
+        assert_eq!(
+            port.device_mut().reclaim(),
+            Err((ReclaimRefused::ProducerAlive, 0)),
+            "nothing is touched while the datapath's end is open"
+        );
+        producer.close();
+        assert_eq!(port.device_mut().reclaim(), Ok(0), "every slot, once");
+        assert_eq!(port.device_mut().reclaim(), Ok(0), "and nothing again");
+        drop(ends);
+        assert_eq!(bench.rx.detached(), 0, "every unit is back in the ring");
     });
 }

@@ -363,6 +363,25 @@ impl<N: Notifies> oer_protocols_network_port::FrameStorage for ReceivedStorage<N
         self.0.advance(by)
     }
 }
+/// The actor's end of the station's receive queue to the network: the
+/// datapath's end hands it back ([`NetworkSide`]'s `receive`), and closing
+/// it lets [`Network::reclaim`] give back what the queue still holds.
+pub type ReceiveProducer<N = SameHart> =
+    oer_portable_memory::SlotSender<'static, Option<Frame<N>>, RX_DEPTH, Net<N>, Station<N>>;
+impl<N: Notifies> Network<'_, N> {
+    /// Give every received frame left in the queue back to the radio, once
+    /// its producer was closed ([`ReceiveProducer`]): the end of a queue
+    /// whose indices broke, which the network could not give back. The
+    /// count of frames given back.
+    ///
+    /// # Errors
+    ///
+    /// The producer is open, or a slot was claimed elsewhere, with the
+    /// frames given back so far; a later reclaim goes on.
+    pub fn reclaim(&mut self) -> Result<usize, (oer_portable_memory::ReclaimRefused, usize)> {
+        self.inner.reclaim()
+    }
+}
 impl<N: Notifies> NetDevice for Network<'_, N> {
     type Storage = ReceivedStorage<N>;
     fn link(&self) -> LinkSnapshot {

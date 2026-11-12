@@ -108,7 +108,9 @@ pub use rx_external_handoff::{
     ExternalRxNetworkLease, ExternalRxRadioLease, ExternalRxReturn, ExternalRxReturnState,
 };
 pub use rx_handoff::{RxHandoffPool, RxNetworkLease, RxRadioLease};
-pub use slot_queue::{SlotReceiveError, SlotReceiver, SlotSendError, SlotSender, WakingSlotQueue};
+pub use slot_queue::{
+    ReclaimRefused, SlotReceiveError, SlotReceiver, SlotSendError, SlotSender, WakingSlotQueue,
+};
 pub use static_place::{PlacedFuture, StaticPlace};
 pub use static_ref::StaticRef;
 pub use volatile::{read_volatile, write_volatile};

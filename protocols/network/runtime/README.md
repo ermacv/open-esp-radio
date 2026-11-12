@@ -370,11 +370,16 @@ frame only, the room or buffer that frame waits for. `give_back` ends the exchan
 back every frame the device's queue holds and takes back the memory the device
 returned, as the device's queues outlive the port, and leaves no refused frame
 waiting, so a next service over the same port starts idle. A receive queue that
-breaks there is named (`ReceiveFault`): the frames after the break stay in the
-queue, which the port alone reaches and never reads again. `close` ends a port
-only after a whole give-back and otherwise hands it back with its fault
-(`BrokenPort`), so its owner keeps it; the S31 application parks it, still
-confirms the stop, and reports the fault (`Network::port_end`). `serve_returns` is the
+breaks, in the service's intake or in the give-back, is named
+(`ReceiveFault`): the port keeps the first fault and never reads that queue
+again; the frames after the break stay in it. `close` ends a port only after a
+whole give-back and otherwise hands it back with its fault (`BrokenPort`) to
+its owner, whose device then gives the frames back once the queue's producer
+closed (`SlotSender::close`, `SlotReceiver::reclaim`, by each slot's own
+claim). The S31 application confirms the stop, reports the fault
+(`Network::port_end`) and hands the port to its facade, whose
+`Network::reclaim_receive` takes the producer the station's datapath returns
+with its end. `serve_returns` is the
 return path of a port whose service no longer runs, for a composition that cancels
 its network: an owner that outlives the cancelled future keeps the service
 (`retire` takes it whenever) and drives the port's returns, frames given back and

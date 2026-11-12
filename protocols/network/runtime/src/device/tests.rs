@@ -678,6 +678,7 @@ fn a_give_back_over_a_broken_slot_queue_names_its_fault_and_the_port_keeps_the_r
     // Whoever keeps the port decides the frame's end: dropped with the queue,
     // it goes back once.
     drop(port);
+    sender.close();
     drop(queue);
     assert_eq!(returned.load(Ordering::SeqCst), 1);
 }

@@ -25,10 +25,11 @@
 //! the station's transmit buffer itself. A stop ends the sockets, ends each
 //! of the producer's open works `Retired` and sets its end flag, and gives
 //! back every frame in the port's queue, so the station has its received
-//! buffers back. A queue that broke there keeps the port, the only end that
-//! reaches the frames after the break, parked with the network's other
-//! owners and never read again; the stop is still confirmed, and
-//! [`Network::port_end`] tells the fault. Once the stop is confirmed, the network's task takes back
+//! buffers back. A queue that broke keeps the frames after the break, which
+//! only the port reaches: the stop is still confirmed, [`Network::port_end`]
+//! tells the fault, and the port goes to the facade, whose
+//! [`Network::reclaim_receive`] gives those frames back once the station's
+//! datapath ended and handed back its end of the queue. Once the stop is confirmed, the network's task takes back
 //! the loan of each buffer a lending socket still held as it returns, until
 //! the pool's account is closed. The other owners stay parked for the rest
 //! of the boot: nothing starts a second network, and no contract ends the
@@ -330,8 +331,30 @@ pub struct NetworkStorage<P: Produce + 'static, R: ReceiveMode> {
 }
 
 /// How the network's task gave its port's frames back once its service
-/// ended, as it records it: the stop it confirms is a separate fact.
-struct PortEnd(core::sync::atomic::AtomicU8);
+/// ended, as it records it, and the port a broken receive queue kept, handed
+/// to the network's facade: the stop the task confirms is a separate fact.
+struct PortEnd {
+    given: core::sync::atomic::AtomicU8,
+    /// The port whose receive queue broke, for [`Network::reclaim_receive`].
+    broken: oer_portable_memory::ClaimCell<Option<Port>>,
+}
+
+/// The producer [`Network::reclaim_receive`] closes is the one the station's
+/// datapath hands back with its end: the types agree when this compiles.
+const _RECEIVE_PRODUCER: fn(
+    wifi::NetworkSide<super::binding::Binding>,
+) -> wifi::ReceiveProducer<Notifies> = |side| side.receive;
+
+/// Why [`Network::reclaim_receive`] gave nothing back.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReclaimError {
+    /// No port waits for it: the network runs, or its end gave every frame
+    /// back, or a reclaim finished. A producer passed comes back unclosed.
+    NotBroken,
+    /// The queue's reclaim stopped ([`oer_portable_memory::ReclaimRefused`])
+    /// after this many frames: the port stays, and a later call goes on.
+    Refused(oer_portable_memory::ReclaimRefused, usize),
+}
 
 impl PortEnd {
     const RUNNING: u8 = 0;
@@ -340,7 +363,26 @@ impl PortEnd {
     const UNFILLED: u8 = 3;
 
     const fn new() -> Self {
-        Self(core::sync::atomic::AtomicU8::new(Self::RUNNING))
+        Self {
+            given: core::sync::atomic::AtomicU8::new(Self::RUNNING),
+            broken: oer_portable_memory::ClaimCell::new(),
+        }
+    }
+
+    /// The task's end of its port: a whole give-back lets it go; a broken
+    /// queue hands it to the facade, before the fault is published.
+    fn end(&self, closed: Result<(), oer_protocols_network_runtime::BrokenPort<Port>>) {
+        let given = match closed {
+            Ok(()) => Ok(()),
+            Err(broken) => {
+                let fault = broken.fault;
+                // The cell was installed empty at the start and only this
+                // task fills it, once.
+                let _handed = self.broken.lend(|place| *place = Some(broken.port));
+                Err(fault)
+            }
+        };
+        self.record(given);
     }
 
     fn record(&self, given: Result<(), ReceiveFault>) {
@@ -349,13 +391,14 @@ impl PortEnd {
             Err(ReceiveFault::Lost) => Self::LOST,
             Err(ReceiveFault::Unfilled) => Self::UNFILLED,
         };
-        self.0.store(code, core::sync::atomic::Ordering::Release);
+        self.given
+            .store(code, core::sync::atomic::Ordering::Release);
     }
 
     /// `None` while the network runs; then whether every frame went back,
     /// or the receive fault that kept the frames after it in the queue.
     fn read(&self) -> Option<Result<(), ReceiveFault>> {
-        match self.0.load(core::sync::atomic::Ordering::Acquire) {
+        match self.given.load(core::sync::atomic::Ordering::Acquire) {
             Self::GIVEN_BACK => Some(Ok(())),
             Self::LOST => Some(Err(ReceiveFault::Lost)),
             Self::UNFILLED => Some(Err(ReceiveFault::Unfilled)),
@@ -504,6 +547,8 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
             &'static ConfigurationWatch,
             &'static PortEnd,
         ) = (end, watch, port_end);
+        // Empty until a broken receive queue hands its port here.
+        let _installed = port_end.broken.install(None);
         let (stop, stopping) = stop.split();
         let port = DevicePort::new(network, transmit);
         let owner = NetworkOwner::new(brand, interface, pool, port);
@@ -535,11 +580,54 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
     }
 
     /// How the network's task gave its port's frames back at its end:
-    /// `None` while it runs; a [`ReceiveFault`] when the station's receive
-    /// queue broke there, the frames after the break kept in the queue with
-    /// the port, which stays parked and is never read again.
+    /// `None` while it runs; the [`ReceiveFault`] when the station's receive
+    /// queue broke, whose frames after the break wait in the queue for
+    /// [`Self::reclaim_receive`]. The fault stays after that reclaim.
     pub fn port_end(&self) -> Option<Result<(), ReceiveFault>> {
         self.port_end.read()
+    }
+
+    /// Give back to the radio every frame a broken receive queue still holds
+    /// ([`Self::port_end`]): close `producer`, the queue's other end, which
+    /// the station's datapath hands back once it ended
+    /// ([`wifi::RetiredDatapath`]'s `network.receive`), then take each
+    /// slot's frame by the slot's own claim. The queue and the port end
+    /// then; the count of frames given back. `None` for a producer an
+    /// earlier call already closed.
+    ///
+    /// # Errors
+    ///
+    /// [`ReclaimError::NotBroken`], with `producer` back unclosed; or
+    /// [`ReclaimError::Refused`], the port kept for a later call.
+    #[allow(
+        clippy::result_large_err,
+        reason = "a producer this does not take comes back whole"
+    )]
+    pub fn reclaim_receive(
+        &self,
+        producer: Option<wifi::ReceiveProducer<Notifies>>,
+    ) -> Result<usize, (ReclaimError, Option<wifi::ReceiveProducer<Notifies>>)> {
+        let reclaimed = self.port_end.broken.lend(|place| {
+            let Some(port) = place.as_mut() else {
+                return Err((ReclaimError::NotBroken, producer));
+            };
+            if let Some(producer) = producer {
+                producer.close();
+            }
+            match port.device_mut().reclaim() {
+                Ok(given) => {
+                    // The queue is closed and empty: the port ends.
+                    *place = None;
+                    Ok(given)
+                }
+                Err((refused, given)) => Err((ReclaimError::Refused(refused, given), None)),
+            }
+        });
+        match reclaimed {
+            Ok(reclaimed) => reclaimed,
+            // The task holds the cell for an instant, or never installed it.
+            Err(_claimed) => Err((ReclaimError::NotBroken, None)),
+        }
     }
 
     /// The producer's end flag: set once the service calls it no more, after
@@ -618,22 +706,14 @@ async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
         results,
         mut pool,
         brand,
-        mut port,
+        port,
     } = retired;
     // The queues outlive the port, so dropping it returns no frame and
     // takes back no memory: both happen here first. A queue that broke
-    // keeps the frames after the break, which only the port reaches: it
-    // stays parked below, never read again, its fault recorded.
-    let port = match port.close() {
-        Ok(()) => {
-            port_end.record(Ok(()));
-            None
-        }
-        Err(broken) => {
-            port_end.record(Err(broken.fault));
-            Some(broken.port)
-        }
-    };
+    // keeps the frames after the break, which only the port reaches: the
+    // facade gets it, with the fault, for its reclaim once the station's
+    // datapath ended ([`Network::reclaim_receive`]).
+    port_end.end(port.close());
     // The stop is confirmed first: it waits for no lent buffer. The
     // give-back's fault stays beside it.
     stopper.stopped();
@@ -647,7 +727,6 @@ async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
     .await;
     // Memory, lanes and result places are all static, so what a late socket
     // or observer reaches stays.
-    let _parked = core::mem::ManuallyDrop::new((
-        results, pool, brand, sockets, adopted, returns, producers, port,
-    ));
+    let _parked =
+        core::mem::ManuallyDrop::new((results, pool, brand, sockets, adopted, returns, producers));
 }

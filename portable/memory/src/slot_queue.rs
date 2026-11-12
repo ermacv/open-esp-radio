@@ -37,6 +37,10 @@ pub struct WakingSlotQueue<T, const DEPTH: usize, C = AtomicWaker, P = AtomicWak
     consumer_wants: AtomicUsize,
     /// The producer found no free slot after its registration.
     producer_waits: AtomicBool,
+    /// The producer ended: closed or dropped. Set once its last fill and
+    /// publication are done; what it left in the slots is the consumer's to
+    /// reclaim ([`SlotReceiver::reclaim`]).
+    producer_ended: AtomicBool,
     installed: bool,
 }
 
@@ -83,6 +87,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
             producer,
             consumer_wants: AtomicUsize::new(0),
             producer_waits: AtomicBool::new(false),
+            producer_ended: AtomicBool::new(false),
             installed: false,
         }
     }
@@ -140,6 +145,9 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
         // A new pair starts with neither end waiting: each registers again.
         waits.consumer.store(0, Ordering::SeqCst);
         waits.producer.store(false, Ordering::SeqCst);
+        // Its producer is alive.
+        *self.producer_ended.get_mut() = false;
+        let ended = &self.producer_ended;
         (
             SlotSender {
                 slots: &self.slots,
@@ -149,6 +157,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
                 consumer,
                 producer,
                 waits,
+                ended,
                 #[cfg(test)]
                 refuse_stage: false,
             },
@@ -159,6 +168,9 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
                 consumer,
                 producer,
                 waits,
+                ended,
+                reclaim_from: 0,
+                reclaimed: false,
             },
         )
     }
@@ -238,12 +250,27 @@ pub struct SlotSender<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWake
     consumer: &'a C,
     producer: &'a P,
     waits: Waits<'a>,
+    /// Set when this producer ends.
+    ended: &'a AtomicBool,
     /// Refuse the next fill's index as a broken queue would.
     #[cfg(test)]
     refuse_stage: bool,
 }
 
+impl<T, const DEPTH: usize, C, P> Drop for SlotSender<'_, T, DEPTH, C, P> {
+    /// A producer that goes ends: it fills and publishes no more.
+    fn drop(&mut self) {
+        self.ended.store(true, Ordering::Release);
+    }
+}
+
 impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DEPTH, C, P> {
+    /// End this producer: it fills and publishes nothing more, and what it
+    /// left in the slots, published or not, becomes the consumer's to
+    /// reclaim ([`SlotReceiver::reclaim`]). A staged burst it did not flush
+    /// stays unpublished.
+    pub fn close(self) {}
+
     /// Slots free now; a concurrent receive may free another.
     pub fn free_capacity(&self) -> usize {
         self.free
@@ -441,6 +468,23 @@ pub struct SlotReceiver<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWa
     consumer: &'a C,
     producer: &'a P,
     waits: Waits<'a>,
+    /// Set once the producer ended.
+    ended: &'a AtomicBool,
+    /// The next slot a reclaim refused at visits first.
+    reclaim_from: usize,
+    /// Every slot was reclaimed: the queue is closed.
+    reclaimed: bool,
+}
+
+/// Why [`SlotReceiver::reclaim`] did not finish; the slots it visited stay
+/// visited, and the next reclaim goes on from where it stopped.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReclaimRefused {
+    /// The producer has not ended ([`SlotSender::close`]): no slot was
+    /// touched.
+    ProducerAlive,
+    /// This slot was claimed by another call: the reclaim stopped there.
+    Claimed { slot: u8 },
 }
 
 /// Why a receive read no slot.
@@ -453,13 +497,46 @@ pub enum SlotReceiveError {
 }
 
 impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotReceiver<'_, T, DEPTH, C, P> {
-    /// Filled slots now.
+    /// Filled slots now; none once reclaimed.
     pub fn len(&self) -> usize {
-        self.filled.len()
+        if self.reclaimed { 0 } else { self.filled.len() }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.filled.is_empty()
+        self.len() == 0
+    }
+
+    /// The consumer's last act on this queue, once its producer ended: run
+    /// `each` once on every slot, by the slot's own claim and not by the
+    /// queue's indices, so a queue whose indices broke gives up its values
+    /// too, published or filled and never published. `each` moves out what
+    /// it reclaims; it never meets a slot twice. Once every slot was visited
+    /// the queue is closed: nothing is received from it any more, and a
+    /// later reclaim visits nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`ReclaimRefused::ProducerAlive`] before the producer ended, with no
+    /// slot touched; [`ReclaimRefused::Claimed`] at a slot another call
+    /// holds, the slots before it visited, the next reclaim going on there.
+    pub fn reclaim(&mut self, mut each: impl FnMut(&mut T)) -> Result<(), ReclaimRefused> {
+        if self.reclaimed {
+            return Ok(());
+        }
+        // Pairs with the producer's end: what it wrote is seen here.
+        if !self.ended.load(Ordering::Acquire) {
+            return Err(ReclaimRefused::ProducerAlive);
+        }
+        while let Some(slot) = self.slots.get(self.reclaim_from) {
+            if slot.lend(&mut each).is_err() {
+                return Err(ReclaimRefused::Claimed {
+                    slot: u8::try_from(self.reclaim_from).unwrap_or(u8::MAX),
+                });
+            }
+            self.reclaim_from = self.reclaim_from.saturating_add(1);
+        }
+        self.reclaimed = true;
+        Ok(())
     }
 
     /// Run `read` on the oldest filled slot, then free it and wake the
@@ -489,6 +566,10 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotReceiver<'_, T, 
         &mut self,
         read: impl FnOnce(&mut T) -> R,
     ) -> Result<R, SlotReceiveError> {
+        // A reclaimed queue is closed: nothing comes from it.
+        if self.reclaimed {
+            return Err(SlotReceiveError::Empty);
+        }
         let index = self.filled.take().ok_or(SlotReceiveError::Empty)?;
         let slot = self
             .slots

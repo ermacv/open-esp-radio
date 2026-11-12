@@ -15,7 +15,8 @@ use core::{
 };
 use embassy_futures::select::{Either, select};
 use oer_portable_memory::{
-    QueueNotify, SlotReceiveError, SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender,
+    QueueNotify, ReclaimRefused, SlotReceiveError, SlotReceiver, SlotSender, WakingSpscReceiver,
+    WakingSpscSender,
 };
 use oer_portable_sync::PriorityWaker;
 use oer_portable_time::connected_tasks::{
@@ -631,6 +632,32 @@ impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
         }
     }
 }
+impl<L, const RX: usize, N: Notifies> Device<'_, L, RX, N> {
+    /// Give every received frame left in the queue back to its buffer,
+    /// once the actor's end of the queue was closed
+    /// ([`SlotSender::close`]): by each slot's own claim, published or not,
+    /// so a queue whose indices broke gives up the frames after the break
+    /// too. The queue is closed then; the count of frames given back.
+    ///
+    /// # Errors
+    ///
+    /// [`ReclaimRefused`]: the actor's end is open (nothing touched), or a
+    /// slot was claimed elsewhere; a later reclaim goes on where this one
+    /// stopped, and the count of either is the frames given back so far.
+    pub fn reclaim(&mut self) -> Result<usize, (ReclaimRefused, usize)> {
+        let mut given = 0_usize;
+        self.receive
+            .reclaim(|slot| {
+                if let Some(frame) = slot.take() {
+                    given = given.saturating_add(1);
+                    drop(frame);
+                }
+            })
+            .map(|()| given)
+            .map_err(|refused| (refused, given))
+    }
+}
+
 impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N: Notifies>
     NetDevice for Device<'_, L, RX, N>
 {

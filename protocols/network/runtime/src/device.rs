@@ -30,6 +30,13 @@ pub struct DevicePort<D, X> {
 }
 
 impl<D, X> DevicePort<D, X> {
+    /// The device, for its owner's own end of it, such as giving back what
+    /// a broken receive queue still holds once its producer closed. The
+    /// port reads a queue it found broken no more, whatever this does.
+    pub const fn device_mut(&mut self) -> &mut D {
+        &mut self.device
+    }
+
     pub const fn new(device: D, transmit: X) -> Self {
         Self {
             device,
