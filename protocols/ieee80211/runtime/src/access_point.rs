@@ -632,6 +632,9 @@ pub struct ApStatus {
     /// header than a QoS one (a group frame, a non-QoS peer's): a QoS
     /// peer's frame goes where the network wrote it.
     pub payload_moves: u32,
+    /// Network memories the queue back refused, kept out of reach: zero
+    /// unless that queue broke, since it holds every network memory.
+    pub network_quarantined: u32,
 }
 
 /// What the application and the runner share: the stop request and the
@@ -657,6 +660,7 @@ impl ApShared {
                 refused: 0,
                 rx_dropped: 0,
                 payload_moves: 0,
+                network_quarantined: 0,
             }),
             status_waker: oer_portable_sync::PriorityWaker::new(),
         }
@@ -1569,6 +1573,11 @@ where
         // One key a peer: a key it still had is superseded and comes off, so
         // the key a frame is checked against is the key it is numbered by.
         if let Some(at) = self.keys.iter().position(|(owner, _)| *owner == peer) {
+            // Room for its removal first: refused, the new key comes back
+            // whole and the old one stays installed.
+            if self.removals.is_full() {
+                return Err((ApContract::ForeignKey, Kept::Installed((peer, installed))));
+            }
             let (_, superseded) = self.keys.swap_remove(at);
             if let Err(key) = self.removals.push_back(superseded.into_key()) {
                 return Err((ApContract::ForeignKey, Kept::PairwiseKey(key)));
@@ -2033,6 +2042,7 @@ where
             if let Err(halt) = self.turn(now, core::mem::take(&mut facts)) {
                 return self.halted(halt, shared);
             }
+            self.homes.status.network_quarantined = self.homes.network.quarantined();
             shared.publish(self.homes.status);
             if self.homes.phase == Phase::StoppingRadio {
                 break;
@@ -2126,6 +2136,7 @@ where
             };
         }
         self.homes.status.running = false;
+        self.homes.status.network_quarantined = self.homes.network.quarantined();
         shared.publish(self.homes.status);
         let watched = self.watch_stop(clock, ControlFlow::Break).await;
         if let Some(refused) = self.homes.unrecycled.as_ref() {
@@ -2390,6 +2401,7 @@ where
         self.homes.status.running = false;
         self.homes.network.set_link(false);
         self.homes.return_network_frames();
+        self.homes.status.network_quarantined = self.homes.network.quarantined();
         shared.publish(self.homes.status);
         match halt {
             Halt::Faulted(fault) => {

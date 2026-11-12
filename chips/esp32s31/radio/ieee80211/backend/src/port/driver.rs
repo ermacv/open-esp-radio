@@ -1256,9 +1256,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             ));
         };
         if let Err(lease) = slot.as_mut().attach(lease) {
-            // The lease goes back to the buffer it left, which is published:
-            // its return cannot refuse.
-            let _returned = mpdu.buffer.complete(lease).is_ok();
+            // The lease goes back to the buffer it left, which published
+            // exactly it. Refused, the memory is out of every pool, kept, and
+            // the fault names the return.
+            if let Err(lease) = mpdu.buffer.complete(lease) {
+                let _quarantined = core::mem::ManuallyDrop::new(lease);
+                return Err(self.unadmit(
+                    hardware,
+                    env,
+                    vacancy,
+                    index,
+                    (pending, admission),
+                    Some((queue, Some(slot))),
+                    Fault::ReturnRefused { queue: at },
+                ));
+            }
             return Err(self.unadmit(
                 hardware,
                 env,
@@ -1615,9 +1627,23 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         };
         {
             let buffer = &mut pending.operation.execute().mpdu.buffer;
-            // The buffer is published, so its memory's return cannot
-            // refuse.
-            let _returned = buffer.complete(memory).is_ok();
+            // The buffer published exactly this memory. Refused, the memory
+            // goes back to the descriptor it just left, which keeps it out of
+            // every pool, and every owner goes back with the fault.
+            if let Err(memory) = buffer.complete(memory) {
+                if let Err(memory) = slot.as_mut().attach(memory) {
+                    let _quarantined = core::mem::ManuallyDrop::new(memory);
+                }
+                return Err(self.unadmit(
+                    hardware,
+                    env,
+                    vacancy,
+                    index,
+                    (pending, admission),
+                    Some((queue, Some(slot))),
+                    Fault::ReturnRefused { queue: index as u8 },
+                ));
+            }
         }
         self.free.put_paired(queue, slot);
         self.returned_ticket(hardware, admission);
