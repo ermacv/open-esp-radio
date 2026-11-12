@@ -357,6 +357,16 @@ pub struct AffineSpscSendPermit<'sender, T, const DEPTH: usize, C: SpscCursor = 
 impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscSendPermit<'_, T, DEPTH, C> {
     /// Publish into the reserved cell, transferring the complete owner.
     pub fn send(self, value: T) {
+        self.send_with(|| Some(value));
+    }
+
+    /// Build the owner at its reserved destination. The closure runs only
+    /// when this permit publishes; `None` leaves the cell vacant, as does
+    /// dropping an unused permit.
+    pub fn send_with(self, make: impl FnOnce() -> Option<T>) -> bool {
+        let Some(value) = make() else {
+            return false;
+        };
         #[allow(
             unsafe_code,
             reason = "the sole producer's permit retains its proven vacant cell"
@@ -373,6 +383,7 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscSendPermit<'_, T, DEPTH, C>
             AffineSpscQueue::<T, DEPTH, C>::advance(self.producer),
             Ordering::Release,
         );
+        true
     }
 }
 

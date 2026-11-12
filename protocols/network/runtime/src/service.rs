@@ -1100,11 +1100,13 @@ impl<
         tally: &mut Tally<D>,
     ) -> oer_protocols_network_core::Intake {
         let (bound, lenders) = (&mut self.bound, &self.lenders);
-        let intake = self
-            .owner
-            .take_frames(now, TURN_FRAMES, events, tally.steps(), |datagram| {
-                lend(bound, lenders, datagram)
-            });
+        let intake = self.owner.take_frames(
+            now,
+            TURN_FRAMES,
+            events,
+            tally.steps(),
+            |datagram, frame| lend(bound, lenders, datagram, frame),
+        );
         // The batch's lent datagrams are published, each socket woken once,
         // before anything waits.
         for lent in self
@@ -1789,7 +1791,8 @@ fn lend<
 >(
     bound: &mut [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, H>>],
     lenders: &[Option<u8>],
-    datagram: LentDatagram<B, H>,
+    datagram: LentDatagram<B>,
+    frame: &mut Option<H>,
 ) -> Result<(), Unlent<B>> {
     let flow = datagram.flow;
     // The place holds the socket while its flow is open: a close or an
@@ -1809,12 +1812,11 @@ fn lend<
         })
         .and_then(|bound| bound.lent.as_mut());
     match end {
-        Some(end) => end.lend(datagram),
+        Some(end) => end.lend(datagram, frame),
         // The core lends only to an open lending socket, which a lending
         // bind holds here.
         None => {
-            let LentDatagram { frame, loan, .. } = datagram;
-            drop(frame);
+            let LentDatagram { loan, .. } = datagram;
             Err(Unlent::NoSocket(loan))
         }
     }

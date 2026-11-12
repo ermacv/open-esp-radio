@@ -295,6 +295,50 @@ fn a_held_burst_tells_the_consumer_once_and_only_a_waiting_producer_hears_of_roo
 }
 
 #[test]
+fn a_held_builder_takes_an_owner_only_with_room_and_flush_notifies_once() {
+    let (consumer, producer) = (Counted::default(), Counted::default());
+    let mut queue =
+        WakingSpscQueue::<std::boxed::Box<u8>, 1, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, receiver) = queue.split();
+    let mut first = Some(std::boxed::Box::new(7));
+    assert!(sender.try_send_held_with(|| first.take()));
+    assert!(first.is_none());
+    let mut second = Some(std::boxed::Box::new(8));
+    assert!(!sender.try_send_held_with(|| second.take()));
+    assert!(
+        second.is_some(),
+        "a full destination never takes the source owner"
+    );
+    assert_eq!(consumer.counts().1, 0);
+    sender.flush();
+    sender.flush();
+    assert_eq!(consumer.counts().1, 1);
+    assert_eq!(receiver.try_receive().as_deref(), Some(&7));
+    assert!(!sender.try_send_held_with(|| None));
+    assert!(
+        receiver.try_receive().is_none(),
+        "a declined build publishes nothing"
+    );
+    sender.flush();
+    assert_eq!(consumer.counts().1, 1);
+    assert!(sender.try_send_held_with(|| second.take()));
+    assert_eq!(receiver.try_receive().as_deref(), Some(&8));
+}
+
+#[test]
+fn an_unwinding_builder_publishes_nothing_and_releases_its_permit() {
+    let mut queue = WakingSpscQueue::<u8, 1>::new();
+    let (mut sender, receiver) = queue.split();
+    let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        sender.try_send_held_with(|| panic!("builder stopped"));
+    }));
+    assert!(failed.is_err());
+    assert!(receiver.try_receive().is_none());
+    assert!(sender.try_send_held_with(|| Some(9)));
+    assert_eq!(receiver.try_receive(), Some(9));
+}
+
+#[test]
 fn a_producer_that_found_a_cell_and_waits_for_more_hears_of_the_next_one() {
     let (consumer, producer) = (Counted::default(), Counted::default());
     let mut queue = WakingSpscQueue::<u8, 3, _, _>::across_harts(&consumer, &producer);

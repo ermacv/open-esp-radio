@@ -86,17 +86,17 @@ pub enum Unlent<B> {
     LaneFull(Option<Loan<B>>),
 }
 
-/// A datagram a lending socket receives in the port's buffer. The buffer goes
-/// back to the port when `frame` drops; `loan` goes back to the pool's
-/// [`Loans`](crate::Loans) only then, so a credit frees once its memory has.
+/// The checked metadata and credit for a lending socket's datagram. Its
+/// buffer stays in the separate source cell until the receiver takes it
+/// directly into its destination. The credit frees only after that buffer
+/// has returned to the port.
 #[derive(Debug)]
-pub struct LentDatagram<B, H> {
+pub struct LentDatagram<B> {
     /// The socket's flow, as [`SocketId::flow`] names it.
     pub flow: u8,
     pub remote: Remote,
     /// Where the datagram's data lies in the frame's Ethernet payload.
     pub data: core::ops::Range<usize>,
-    pub frame: H,
     pub loan: Loan<B>,
 }
 
@@ -377,7 +377,9 @@ impl<
     /// with a loan of that socket's credit, taken before the buffer moves on:
     /// with one, `lend` gets the datagram, its socket named by the core's own
     /// lookup ([`LentDatagram::flow`]), and says why it could not hand one
-    /// on ([`Unlent`]), its buffer dropped first. Without credit the
+    /// on ([`Unlent`]). The callback reads the buffer through its cell and
+    /// takes it only into the final destination. A buffer left in the cell
+    /// is dropped before a refused loan returns to the account. Without credit the
     /// datagram is dropped with [`NotLent`] counted, its buffer back with the
     /// port, and the batch goes on: one socket's credit stops no other.
     /// `count` hears a refusal for want of credit with the loans then out
@@ -388,7 +390,7 @@ impl<
         limit: usize,
         events: &mut impl EventSink<NetEvent>,
         count: &C,
-        mut lend: impl FnMut(LentDatagram<B, P::Held>) -> Result<(), Unlent<B>>,
+        mut lend: impl FnMut(LentDatagram<B>, &mut Option<P::Held>) -> Result<(), Unlent<B>>,
     ) -> Intake
     where
         P: FrameSource,
@@ -406,8 +408,12 @@ impl<
                 let _never = core.input_view(now, view, Holding::Copied(reason), pool, events);
             }
             Incoming::Copied { frame: Err(_), .. } => report(events, || NetEvent::Malformed),
-            Incoming::Lent(mut frame) => {
-                let to = match frame.view() {
+            Incoming::Lent(frame) => {
+                let Some(held) = frame.as_mut() else {
+                    report(events, || NetEvent::Malformed);
+                    return;
+                };
+                let to = match held.view() {
                     Ok(view) => core.input_view(now, view, Holding::Lendable, pool, events),
                     Err(_) => {
                         report(events, || NetEvent::Malformed);
@@ -424,10 +430,13 @@ impl<
                             flow: to.flow,
                             remote: to.remote,
                             data: to.data,
-                            frame,
                             loan,
                         };
-                        let lent_to = lend(datagram);
+                        let lent_to = lend(datagram, frame);
+                        // A refusal leaves the buffer in its source cell.
+                        // Return it before returning its credit; a successful
+                        // handoff has already emptied the cell.
+                        drop(frame.take());
                         if lent_to.is_ok() {
                             lent = lent.saturating_add(1);
                         } else {

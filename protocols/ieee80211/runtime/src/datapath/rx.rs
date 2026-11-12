@@ -29,7 +29,7 @@ use super::turn::{Failed, PortBlockAcks};
 use super::*;
 use crate::station::{CopiedMark, NetworkRx, RxDrop, RxMsdusCopied, RxMsdusRefused, ServiceEvent};
 use oer_portable_memory::SlotSendError;
-use oer_protocols_ieee80211_contracts_port::{LendRefusal, LendRefused, RxThen};
+use oer_protocols_ieee80211_contracts_port::{LendRefusal, LendRefused, RxBatch, RxThen};
 use oer_protocols_ieee80211_core_roles_sta::data::{
     MAX_ETHERNET_PAYLOAD_LEN, MsduDelivery, MsduPlan, PlannedCopyError,
 };
@@ -153,7 +153,7 @@ fn queue_lent<
         return Ok(Some(Refusal::TooLong));
     }
     match LentFrame::new(NetworkRx(lent), destination, source, ether_type, payload) {
-        Ok(frame) => staged(stage(network, Received::Lent(frame))),
+        Ok(frame) => staged(stage(network, Received::Lent(Some(frame)))),
         // The payload lies in the MPDU, which starts the lent storage.
         Err(_storage) => Ok(Some(Refusal::TooLong)),
     }
@@ -219,6 +219,14 @@ fn range_in(whole: &[u8], part: &[u8]) -> Option<core::ops::Range<u16>> {
         return None;
     }
     Some(u16::try_from(start).ok()?..u16::try_from(end).ok()?)
+}
+
+/// Where the ordinary ready-data loop stopped. A nonordinary owner is
+/// handed back to its caller, which handles it before resuming this batch.
+enum ReadyEnd<'id, D: DatapathPort<'id>> {
+    Empty,
+    Other(ActorRxBuffer<'id, D>, ActorRxMeta<'id, D>),
+    Pressure,
 }
 
 impl<'id, D: DatapathPort<'id>, S, O> Actor<'id, D, S, O>
@@ -318,28 +326,26 @@ where
                     .port
                     .begin_receive(room, now)
                     .map_err(ActorFault::Port)?;
-                while let Some((frame, meta)) =
-                    self.port.take_ready(&mut batch).map_err(ActorFault::Port)?
-                {
-                    pulled = pulled.saturating_add(1);
-                    self.progressed = true;
-                    D::received(frame.bytes(), &meta);
-                    if matches!(self.radio, Radio::Stopping { .. } | Radio::Unstopped) {
-                        // A stopping radio's units go back unread.
-                        self.recycle(frame)?;
-                        report(&mut self.events, || {
-                            ServiceEvent::RxFrameDropped(RxDrop::Draining)
-                        });
-                    } else if self.immediate(&frame, &meta, network) {
-                        // The ordinary data MPDU the agreements let out at
-                        // once: routed in its position, never moved through
-                        // the agreements.
-                        self.route(frame, meta, lifecycle, network)?;
-                    } else {
-                        // Anything else: its own handler, in its position.
-                        self.received(frame, meta, lifecycle, network)?;
+                if matches!(self.radio, Radio::Stopping { .. } | Radio::Unstopped) {
+                    if self.drain_ready(&mut batch, &mut pulled, network)? {
+                        self.held_back.get_or_insert(now);
+                        self.facts.rx = true;
+                        break;
                     }
-                    if self.receive.has_ready() && self.holds_back(network) {
+                } else {
+                    loop {
+                        match self.data_ready(&mut batch, &mut pulled, lifecycle, network)? {
+                            ReadyEnd::Empty => break,
+                            ReadyEnd::Other(frame, meta) => {
+                                // Control and reorder run in their position,
+                                // outside the ordinary data loop.
+                                self.received(frame, meta, lifecycle, network)?;
+                                if !self.receive.has_ready() || !self.holds_back(network) {
+                                    continue;
+                                }
+                            }
+                            ReadyEnd::Pressure => {}
+                        }
                         // The rest of the batch stays with the port.
                         self.held_back.get_or_insert(now);
                         self.facts.rx = true;
@@ -377,6 +383,65 @@ where
             return Err(ActorFault::Contract(ActorViolation::ReorderOverflow));
         }
         Ok(())
+    }
+
+    /// Only ordinary data: take a ready owner, check the agreement by
+    /// reference, route it, repeat. No management, stop or recovery code is
+    /// inlined into this loop. The first other frame ends its ready prefix.
+    #[inline(never)]
+    fn data_ready<
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        batch: &mut RxBatch,
+        pulled: &mut u8,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> Result<ReadyEnd<'id, D>, Failed<'id, D>> {
+        while let Some((frame, meta)) = self.port.take_ready(batch).map_err(ActorFault::Port)? {
+            *pulled = pulled.saturating_add(1);
+            self.progressed = true;
+            D::received(frame.bytes(), &meta);
+            if !self.immediate(&frame, &meta, network) {
+                return Ok(ReadyEnd::Other(frame, meta));
+            }
+            self.route(frame, meta, lifecycle, network)?;
+            if self.receive.has_ready() && self.holds_back(network) {
+                return Ok(ReadyEnd::Pressure);
+            }
+        }
+        Ok(ReadyEnd::Empty)
+    }
+
+    /// A stopping radio returns the batch's owners unread. Kept outside
+    /// the ordinary data loop, including its recycle failures.
+    #[cold]
+    #[inline(never)]
+    fn drain_ready<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
+        &mut self,
+        batch: &mut RxBatch,
+        pulled: &mut u8,
+        network: &NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> Result<bool, Failed<'id, D>> {
+        while let Some((frame, meta)) = self.port.take_ready(batch).map_err(ActorFault::Port)? {
+            *pulled = pulled.saturating_add(1);
+            self.progressed = true;
+            D::received(frame.bytes(), &meta);
+            self.recycle(frame)?;
+            report(&mut self.events, || {
+                ServiceEvent::RxFrameDropped(RxDrop::Draining)
+            });
+            if self.receive.has_ready() && self.holds_back(network) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// Whether the ring gives units now: the radio runs or winds down.
@@ -574,6 +639,7 @@ where
     /// network and its EAPOL to the lifecycle; any other frame, and every
     /// frame before the link, is the station's. A frame that delivered
     /// exactly one MSDU and nothing for the station is lent in place.
+    #[inline(never)]
     fn route<
         const TO: usize,
         const FROM: usize,

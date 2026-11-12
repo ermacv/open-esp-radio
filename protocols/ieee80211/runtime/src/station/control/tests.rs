@@ -358,6 +358,22 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         )
     );
     assert_eq!(received.free_capacity(), free);
+    // A lent mark whose owner is missing is the same named queue fault.
+    assert!(
+        received
+            .try_send_with(|slot| {
+                *slot = Some(Received::Lent(None));
+                Ok::<_, core::convert::Infallible>(())
+            })
+            .is_ok()
+    );
+    assert_eq!(
+        device.receive(8, |_| panic!("no owner to show")).end,
+        oer_protocols_network_port::BatchEnd::Fault(
+            oer_protocols_network_port::ReceiveFault::Unfilled
+        )
+    );
+    assert_eq!(received.free_capacity(), free);
     // Cooperative stop is independent of a full command queue.
     assert!(control.try_command(ControlCommand::Stop).is_ok());
     control.stop(oer_portable_time::Instant::from_micros(u64::MAX));

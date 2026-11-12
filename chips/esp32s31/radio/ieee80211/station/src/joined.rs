@@ -510,7 +510,9 @@ impl FrameSource for Counted {
                 inner.take_frames(limit, |mut incoming| {
                     match &mut incoming {
                         Incoming::Lent(frame) => {
-                            if let Ok(view) = frame.view() {
+                            if let Some(frame) = frame.as_mut()
+                                && let Ok(view) = frame.view()
+                            {
                                 count(view.payload.len());
                             }
                         }

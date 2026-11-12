@@ -271,7 +271,7 @@ impl FrameSource for WirePort {
             out.set(out.get() + 1);
             let mut held = WireHeld { frame, out };
             match holding {
-                Holding::Lendable => take(Incoming::Lent(held)),
+                Holding::Lendable => take(Incoming::Lent(&mut Some(held))),
                 Holding::Copied(reason) => take(Incoming::Copied {
                     frame: held.view(),
                     reason,

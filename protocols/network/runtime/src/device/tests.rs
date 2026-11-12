@@ -119,7 +119,7 @@ impl NetDevice for Device {
             };
             taken += 1;
             match frame {
-                Queued::Lent(frame) => take(Incoming::Lent(frame)),
+                Queued::Lent(frame) => take(Incoming::Lent(&mut Some(frame))),
                 Queued::Copied => take(Incoming::Copied {
                     frame: if self.bad_copy {
                         Err(FrameLengthError::MissingCopy)
@@ -286,7 +286,10 @@ impl std::task::Wake for Woken {
 fn shown(port: &mut Port, limit: usize) -> (Vec<(Vec<u8>, bool)>, ReceivedBatch) {
     let mut seen = Vec::new();
     let batch = port.take_frames(limit, |incoming| match incoming {
-        Incoming::Lent(frame) => seen.push((frame.view().unwrap().payload.to_vec(), true)),
+        Incoming::Lent(frame) => seen.push((
+            frame.as_mut().unwrap().view().unwrap().payload.to_vec(),
+            true,
+        )),
         Incoming::Copied { frame, reason } => {
             assert_eq!(reason, CopyReason::Pressure);
             seen.push((
@@ -333,7 +336,7 @@ fn a_kept_lent_frame_is_the_reader_s_until_it_drops() {
     let mut kept = None;
     let _batch = port.take_frames(1, |incoming| {
         if let Incoming::Lent(frame) = incoming {
-            kept = Some(frame);
+            kept = frame.take();
         }
     });
     let kept = kept.expect("a lendable frame comes lent");
@@ -734,7 +737,7 @@ impl NetDevice for Slots<'_> {
             match self.0.try_receive_held_with(Option::take) {
                 Ok(Some(frame)) => {
                     taken += 1;
-                    take(Incoming::Lent(frame));
+                    take(Incoming::Lent(&mut Some(frame)));
                 }
                 Ok(None) => {
                     break BatchEnd::Fault(oer_protocols_network_port::ReceiveFault::Unfilled);

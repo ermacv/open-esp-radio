@@ -382,7 +382,8 @@ impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice
             let lent_slots = self.lent;
             let batch = self.device.receive(room.max(1), |incoming| {
                 let published = match incoming {
-                    Incoming::Lent(lent) => {
+                    Incoming::Lent(cell) => {
+                        let Some(lent) = cell.take() else { return };
                         if let Ok(view) = lent.view() {
                             received(view);
                         }

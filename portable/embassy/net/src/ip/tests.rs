@@ -233,7 +233,7 @@ impl NetDevice for IpPort {
             };
             taken += 1;
             match frame {
-                Frame::Lent(frame) => take(Incoming::Lent(frame)),
+                Frame::Lent(frame) => take(Incoming::Lent(&mut Some(frame))),
                 mut plain @ Frame::Plain => take(Incoming::Copied {
                     frame: plain.view(),
                     reason: CopyReason::Format,

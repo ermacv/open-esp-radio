@@ -145,6 +145,10 @@ position. For a datagram of a lending socket the core's own lookup names the
 socket (`LentDatagram::flow`), and the service finds its lane at the place it
 keeps for that flow, with no second search: the loan is the socket's credit,
 the buffer the port's, the lane place the transport's, each counted apart.
+The core reads a lent frame by reference in its port cell. Only a reserved
+socket cell takes its owner; the metadata passed through `LentDatagram`
+owns the loan, with no intermediate frame owner. A refusal leaves the frame
+in its source cell until it drops, before the loan returns to its account.
 One socket out of credit drops its datagram (`NetEvent::NotLent`), and the
 batch goes on for the others. A broken queue ends the batch after the frames
 before it, which stay handed.

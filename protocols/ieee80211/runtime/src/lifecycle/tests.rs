@@ -730,7 +730,7 @@ impl<'b> World<'b> {
             frames.push(match received {
                 Received::Lent(frame) => {
                     self.lent.set(self.lent.get() + 1);
-                    bytes(frame.view().unwrap())
+                    bytes(frame.unwrap().view().unwrap())
                 }
                 Received::Copied(_) => {
                     let mut copy = self.copies.borrow().try_receive().unwrap();

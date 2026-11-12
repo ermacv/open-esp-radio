@@ -89,12 +89,12 @@ impl FrameSource for Port {
             };
             taken += 1;
             if lends {
-                take(Incoming::Lent(wifi::HostHeld {
+                take(Incoming::Lent(&mut Some(wifi::HostHeld {
                     frame,
                     broken: breaks,
                     shown: false,
                     back,
-                }));
+                })));
             } else {
                 let (header, payload) = EthernetHeader::parse(&frame).unwrap();
                 take(Incoming::Copied {

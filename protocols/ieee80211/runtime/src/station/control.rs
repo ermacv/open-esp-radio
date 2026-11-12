@@ -678,31 +678,36 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
             if taken >= limit {
                 break BatchEnd::Limit;
             }
-            let frame = match self.receive.try_receive_held_with(Option::take) {
-                Ok(Some(frame)) => frame,
-                Err(SlotReceiveError::Empty) => break BatchEnd::Drained,
-                // A slot the queue's indices named and it does not hold.
-                Err(SlotReceiveError::Lost) => break BatchEnd::Fault(ReceiveFault::Lost),
-                // A published slot without its frame: the actor stages a
-                // frame in every slot it publishes.
-                Ok(None) => break BatchEnd::Fault(ReceiveFault::Unfilled),
-            };
-            taken = taken.saturating_add(1);
-            match frame {
-                Received::Lent(frame) => take(Incoming::Lent(frame)),
-                Received::Copied(mark) => {
-                    // Rare (an A-MSDU, or a buffer the backend kept): the
-                    // copy leaves its queue by value, in the marks' order.
-                    let mut copy = self.copied.try_receive();
-                    let frame = copy.as_mut().map_or(
-                        Err(oer_protocols_network_port::FrameLengthError::MissingCopy),
-                        oer_protocols_network_port::EthernetFrame::view,
-                    );
-                    take(Incoming::Copied {
-                        frame,
-                        reason: mark.reason(),
-                    });
+            let copied = &mut self.copied;
+            let read = self.receive.try_receive_held_with(|slot| {
+                match slot.as_mut() {
+                    Some(Received::Lent(frame)) if frame.is_some() => {
+                        take(Incoming::Lent(frame));
+                    }
+                    Some(Received::Copied(mark)) => {
+                        // Copies leave their separate queue in mark order.
+                        let mut copy = copied.try_receive();
+                        let frame = copy.as_mut().map_or(
+                            Err(oer_protocols_network_port::FrameLengthError::MissingCopy),
+                            oer_protocols_network_port::EthernetFrame::view,
+                        );
+                        take(Incoming::Copied {
+                            frame,
+                            reason: mark.reason(),
+                        });
+                    }
+                    _ => return false,
                 }
+                // A reader that did not keep the frame returns its buffer
+                // here, while this slot is still exclusively claimed.
+                *slot = None;
+                true
+            });
+            match read {
+                Ok(true) => taken = taken.saturating_add(1),
+                Err(SlotReceiveError::Empty) => break BatchEnd::Drained,
+                Err(SlotReceiveError::Lost) => break BatchEnd::Fault(ReceiveFault::Lost),
+                Ok(false) => break BatchEnd::Fault(ReceiveFault::Unfilled),
             }
         };
         // The slots read, the one a fault met among them, go back at once.

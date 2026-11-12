@@ -113,7 +113,7 @@ impl oer_protocols_network_port::FrameSource for Port {
             taken += 1;
             let mut held = Held(bytes);
             match holding {
-                Holding::Lendable => take(Incoming::Lent(held)),
+                Holding::Lendable => take(Incoming::Lent(&mut Some(held))),
                 Holding::Copied(reason) => take(Incoming::Copied {
                     frame: held.view(),
                     reason,
@@ -1977,8 +1977,17 @@ mod produced;
 pub(crate) enum Took<B, H> {
     Empty,
     Read,
-    Lent(crate::LentDatagram<B, H>),
+    Lent(HeldDatagram<B, H>),
     Broken(oer_protocols_network_port::ReceiveFault),
+}
+
+#[derive(Debug)]
+pub(crate) struct HeldDatagram<B, H> {
+    pub flow: u8,
+    pub remote: crate::Remote,
+    pub data: core::ops::Range<usize>,
+    pub frame: H,
+    pub loan: crate::Loan<B>,
 }
 
 impl<
@@ -2002,8 +2011,14 @@ impl<
         count: &C,
     ) -> Took<B, P::Held> {
         let mut lent = None;
-        let intake = self.take_frames(now, 1, events, count, |datagram| {
-            lent = Some(datagram);
+        let intake = self.take_frames(now, 1, events, count, |datagram, frame| {
+            lent = Some(HeldDatagram {
+                flow: datagram.flow,
+                remote: datagram.remote,
+                data: datagram.data,
+                frame: frame.take().unwrap(),
+                loan: datagram.loan,
+            });
             Ok(())
         });
         match (intake.batch.end, lent) {

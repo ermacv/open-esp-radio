@@ -43,11 +43,10 @@ impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
 /// for, in their order.
 pub const RX_COPIED_DEPTH: usize = 4;
 
-/// One received MSDU for the network stack: small, since every queue and
-/// bridge hop moves it by value.
+/// One received MSDU for the network stack, read in its queue cell.
 pub enum Received<L> {
     /// In the backend's receive buffer, lent to the network.
-    Lent(LentFrame<NetworkRx<L>>),
+    Lent(Option<LentFrame<NetworkRx<L>>>),
     /// The actor's own copy, the oldest one in the copies' queue.
     Copied(CopiedMark),
 }

@@ -128,6 +128,55 @@ fn lent_out(wire: &WirePort) -> usize {
 }
 
 #[test]
+fn a_refused_destination_returns_the_source_buffer_before_its_loan() {
+    struct Net;
+    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+    let (mut pool, brand) = claim::<Net, SIZE, BLOCKS>(memory).unwrap();
+    pool.loans().pool(4, 1).unwrap();
+    let group = pool.group(2).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let wire = WirePort::default();
+    holding(&wire, Holding::Lendable);
+    let mut owner = NetworkOwner::<_, SIZE, 2, CREDITS, RECEIVED, 2, BLOCKS, _, ()>::new(
+        brand,
+        interface,
+        pool,
+        wire.clone(),
+    );
+    let _socket = owner
+        .open_lending(LENDING, Dscp::default(), group, 1)
+        .unwrap();
+    arrive(&wire, LENDING, b"first");
+    arrive(&wire, LENDING, b"next");
+    struct Returned(WirePort);
+    impl EventSink<NetEvent> for Returned {
+        fn event(&mut self, event: NetEvent) {
+            assert_eq!(event, NetEvent::LentLaneFull);
+            assert_eq!(
+                lent_out(&self.0),
+                0,
+                "buffer back before the refusal is settled"
+            );
+        }
+    }
+    let intake = owner.take_frames(
+        oer_portable_time::Instant::from_micros(0),
+        8,
+        &mut Returned(wire.clone()),
+        &(),
+        |datagram, frame| {
+            assert!(frame.is_some(), "the source still owns its buffer");
+            Err(oer_protocols_network_core::Unlent::LaneFull(Some(
+                datagram.loan,
+            )))
+        },
+    );
+    assert_eq!((intake.batch.taken, intake.lent, intake.unlent), (2, 0, 2));
+    assert!(owner.pool().loans().released());
+    assert_eq!(lent_out(&wire), 0);
+}
+
+#[test]
 fn a_slow_lending_socket_leaves_the_copying_socket_and_control_their_own() {
     #[derive(Debug)]
     struct Net;

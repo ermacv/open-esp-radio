@@ -155,6 +155,20 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscSender<'_,
         Ok(())
     }
 
+    /// Build a value at a vacant cell, deferring its notification to
+    /// [`Self::flush`]. A full queue runs no builder and returns `false`;
+    /// a builder returning `None` also publishes nothing.
+    pub fn try_send_held_with(&mut self, make: impl FnOnce() -> Option<T>) -> bool {
+        let Ok(permit) = self.sender.try_reserve() else {
+            return false;
+        };
+        let sent = permit.send_with(make);
+        if sent {
+            self.held.set(true);
+        }
+        sent
+    }
+
     /// End a burst: notify the consumer if a held value waits for it.
     pub fn flush(&self) {
         if self.held.take() {

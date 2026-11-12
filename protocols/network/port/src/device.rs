@@ -159,9 +159,10 @@ impl<S: FrameStorage> EthernetFrame for LentFrame<S> {
 /// reader may keep, or in the device's own copy, shown for the call only.
 #[derive(Debug)]
 pub enum Incoming<'a, H> {
-    /// A frame in a buffer the device lends: the reader's owner now.
-    /// Dropping it gives the buffer back to the device.
-    Lent(H),
+    /// A frame in the device's receive cell. Read it by reference; take its
+    /// owner only into the final destination. A frame left here is dropped
+    /// by the device after the call, returning its buffer.
+    Lent(&'a mut Option<H>),
     /// A frame in the device's own copy, for this reason: readable only
     /// within the call, and released after it. `Err` names a copy the
     /// device could not show.
@@ -249,7 +250,7 @@ pub trait NetDevice {
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
     /// Hand the oldest received frames to `take`, at most `limit` of them,
     /// in order: the prefix ready now, never waiting for more. A lent frame
-    /// is `take`'s owner once handed; a copy is shown and released. The
+    /// stays in its cell until `take` takes it; a copy is shown and released. The
     /// queue's places of the frames handed are freed together, once, after
     /// the last of them, the batch's end among them.
     ///

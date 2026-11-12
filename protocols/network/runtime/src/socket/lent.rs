@@ -171,35 +171,41 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
     /// [`Self::flush`] before its service waits.
     ///
     /// # Errors
-    /// The lane had no room ([`Unlent::LaneFull`]): the datagram is dropped,
-    /// its buffer back with the port, and its loan counted back, by the
-    /// account or by the drop of its lent datagram.
-    pub(crate) fn lend(&mut self, datagram: LentDatagram<B, H>) -> Result<(), Unlent<B>> {
+    /// The lane had no room ([`Unlent::LaneFull`]): the buffer stays in the
+    /// source cell and the loan is returned. The caller drops that buffer
+    /// before giving the loan back to its account.
+    pub(crate) fn lend(
+        &mut self,
+        datagram: LentDatagram<B>,
+        frame: &mut Option<H>,
+    ) -> Result<(), Unlent<B>> {
         let LentDatagram {
-            remote,
-            data,
-            frame,
-            loan,
-            ..
+            remote, data, loan, ..
         } = datagram;
         let Some(place) = self.loans.iter_mut().find(|place| place.is_none()) else {
             // More out than the credit, which the lane bounds: the buffer
             // goes back before its loan.
-            drop(frame);
             return Err(Unlent::LaneFull(Some(loan)));
         };
-        *place = Some(loan);
-        let lent = Lent {
-            frame,
-            data,
-            remote,
-            _back: Back(self.returns),
-        };
-        // A refused one drops here, and counts itself back. The socket hears
-        // the batch's datagrams once, at [`Self::flush`].
-        self.lent
-            .try_send_held(lent)
-            .map_err(|_| Unlent::LaneFull(None))
+        let mut loan = Some(loan);
+        // Build at the socket's vacant cell. Until it is reserved the frame
+        // stays in the port's cell and the loan stays here. No intermediate
+        // datagram owns the frame, and a refusal counts no synthetic return.
+        let sent = self.lent.try_send_held_with(|| {
+            let frame = frame.take()?;
+            *place = loan.take();
+            Some(Lent {
+                frame,
+                data,
+                remote,
+                _back: Back(self.returns),
+            })
+        });
+        if sent {
+            Ok(())
+        } else {
+            Err(Unlent::LaneFull(loan))
+        }
     }
 
     /// End a batch of lends: the socket hears its datagrams once.
@@ -493,10 +499,13 @@ mod tests {
                 flow: 0,
                 remote: PEER,
                 data: 0..1,
-                frame: Frame(std::vec![n as u8]),
                 loan,
             };
-            assert!(ends.lent.lend(datagram).is_ok());
+            assert!(
+                ends.lent
+                    .lend(datagram, &mut Some(Frame(std::vec![n as u8])))
+                    .is_ok()
+            );
         }
     }
 

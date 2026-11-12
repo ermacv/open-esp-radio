@@ -198,10 +198,9 @@ fn a_lane_that_takes_no_datagram_ends_the_loan_at_once() {
         arrives(stack, b"next", Holding::Lendable);
         let mut dropped = Dropped::default();
         let mut offered = 0;
-        let intake = stack.take_frames(at(0), 8, &mut dropped, &(), |datagram| {
+        let intake = stack.take_frames(at(0), 8, &mut dropped, &(), |datagram, _frame| {
             offered += 1;
-            let crate::LentDatagram { frame, loan, .. } = datagram;
-            drop(frame);
+            let crate::LentDatagram { loan, .. } = datagram;
             Err(crate::Unlent::LaneFull(Some(loan)))
         });
         assert_eq!((intake.batch.taken, intake.lent, intake.unlent), (2, 0, 2));

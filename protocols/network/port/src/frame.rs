@@ -163,8 +163,9 @@ pub trait FrameSource {
 
     /// Hand the oldest received frames to `take`, at most `limit`, in
     /// order, as [`NetDevice::receive`](crate::NetDevice::receive) does: a
-    /// frame in a buffer the port may lend comes as [`Incoming::Lent`],
-    /// the reader's to keep or drop; any other is shown and stays the
+    /// frame in a buffer the port may lend comes by cell reference as
+    /// [`Incoming::Lent`], the reader's to take or leave to be dropped;
+    /// any other is shown and stays the
     /// port's. The port's places of the frames handed are freed once, after
     /// the last; a broken queue ends the batch after the frames before it.
     fn take_frames(
