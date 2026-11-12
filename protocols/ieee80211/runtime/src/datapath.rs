@@ -508,6 +508,9 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     frames_out: u8,
     /// The network side's stop.
     network_stopping: NetworkStopping,
+    /// The network's receive end of the queue ended, and the actor took
+    /// back every frame the queue held.
+    rx_reclaimed: bool,
     /// The network's MSDUs a stop found left in the transmit queue, at its
     /// last count: what a stop still holds of the network's memory beside
     /// the ended frames' (`DataTx::freed`).
@@ -621,6 +624,7 @@ where
             },
             frames_out: 0,
             network_stopping: NetworkStopping::NotAsked,
+            rx_reclaimed: false,
             queued: 0,
             retiring: false,
             finishing: false,
@@ -694,6 +698,7 @@ where
                 },
                 frames_out: 0,
                 network_stopping: NetworkStopping::NotAsked,
+                rx_reclaimed: false,
                 queued: 0,
                 retiring: false,
                 finishing: false,

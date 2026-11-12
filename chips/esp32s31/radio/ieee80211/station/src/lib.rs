@@ -104,6 +104,7 @@ pub struct Control<'a, N: Notifies = SameHart> {
     start: &'a StartState,
     restarts: &'a RestartState,
     stop: &'a StopState<Exit>,
+    network_stop: &'a NetworkStopState<N>,
     inner: runtime::Control<'a, Caps, 2, Ch<N>>,
 }
 impl<'a, N: Notifies> Control<'a, N> {
@@ -172,6 +173,14 @@ impl<'a, N: Notifies> Control<'a, N> {
     /// ended. The copy reports the result; the runner keeps every owner.
     pub async fn wait_stopped(&mut self) -> Result<Exit, RunnerLost> {
         self.stop.wait().await
+    }
+    /// How the network's receive end of the station's queue ended, apart
+    /// from the stop: `None` while it reads, or once it ended whole; the
+    /// [`ReceiveFault`](oer_protocols_network_port::ReceiveFault) of a queue
+    /// that broke, whose frames the actor took back before its stop waited
+    /// for the radio's units. It stays through the stop's outcome.
+    pub fn network_receive_fault(&self) -> Option<oer_protocols_network_port::ReceiveFault> {
+        self.network_stop.receive_fault()
     }
 }
 /// The station runner ended without publishing its exit.
@@ -363,23 +372,13 @@ impl<N: Notifies> oer_protocols_network_port::FrameStorage for ReceivedStorage<N
         self.0.advance(by)
     }
 }
-/// The actor's end of the station's receive queue to the network: the
-/// datapath's end hands it back ([`NetworkSide`]'s `receive`), and closing
-/// it lets [`Network::reclaim`] give back what the queue still holds.
-pub type ReceiveProducer<N = SameHart> =
-    oer_portable_memory::SlotSender<'static, Option<Frame<N>>, RX_DEPTH, Net<N>, Station<N>>;
 impl<N: Notifies> Network<'_, N> {
-    /// Give every received frame left in the queue back to the radio, once
-    /// its producer was closed ([`ReceiveProducer`]): the end of a queue
-    /// whose indices broke, which the network could not give back. The
-    /// count of frames given back.
-    ///
-    /// # Errors
-    ///
-    /// The producer is open, or a slot was claimed elsewhere, with the
-    /// frames given back so far; a later reclaim goes on.
-    pub fn reclaim(&mut self) -> Result<usize, (oer_portable_memory::ReclaimRefused, usize)> {
-        self.inner.reclaim()
+    /// End the network's receive end of the station's queue for good, its
+    /// receive having broken: the actor takes back what the queue holds,
+    /// before its stop waits for the radio's units
+    /// ([`NetworkStopper::receive_closed`] comes first).
+    pub fn close(self) {
+        self.inner.close();
     }
 }
 impl<N: Notifies> NetDevice for Network<'_, N> {
@@ -494,6 +493,11 @@ pub struct NetworkStopState<N: Notifies> {
     lost: AtomicBool,
     /// The composition has no network: the station delivers no frame.
     absent: AtomicBool,
+    /// The network takes frames: no stop asked, a network present, its
+    /// receive end open. One word the actor reads per frame.
+    takes: AtomicBool,
+    /// How the network's receive end broke: 0 not, 1 `Lost`, 2 `Unfilled`.
+    receive_fault: core::sync::atomic::AtomicU8,
     network: <Ch<N> as runtime::Notifies>::NetworkWaker,
     station: <Ch<N> as runtime::Notifies>::StationWaker,
 }
@@ -515,6 +519,8 @@ impl<N: Notifies> NetworkStopState<N> {
             stopped: AtomicBool::new(false),
             lost: AtomicBool::new(false),
             absent: AtomicBool::new(false),
+            takes: AtomicBool::new(true),
+            receive_fault: core::sync::atomic::AtomicU8::new(0),
             network,
             station,
         }
@@ -523,13 +529,23 @@ impl<N: Notifies> NetworkStopState<N> {
         for flag in [&self.requested, &self.stopped, &self.lost, &self.absent] {
             flag.store(false, Ordering::Release);
         }
+        self.receive_fault.store(0, Ordering::Release);
+        self.takes.store(true, Ordering::Release);
+    }
+    fn receive_fault(&self) -> Option<oer_protocols_network_port::ReceiveFault> {
+        match self.receive_fault.load(Ordering::Acquire) {
+            1 => Some(oer_protocols_network_port::ReceiveFault::Lost),
+            2 => Some(oer_protocols_network_port::ReceiveFault::Unfilled),
+            _ => None,
+        }
     }
 }
 impl<N: Notifies> runtime::NetworkStop for NetworkStopState<N> {
     fn takes_frames(&self) -> bool {
-        !self.absent.load(Ordering::Acquire) && !self.requested.load(Ordering::Acquire)
+        self.takes.load(Ordering::Acquire)
     }
     fn request_stop(&self) {
+        self.takes.store(false, Ordering::Release);
         self.requested.store(true, Ordering::Release);
         self.network.notify();
     }
@@ -574,8 +590,31 @@ impl<N: Notifies> NetworkStopper<'_, N> {
     /// buffer goes back at once), and its stop needs no answer.
     pub fn no_network<E>(self, network: Network<'_, N>, transmit: E) {
         drop((network, transmit));
+        self.state.takes.store(false, Ordering::Release);
         self.state.absent.store(true, Ordering::Release);
         self.report(|state| &state.stopped);
+    }
+    /// The network's receive end of the station's queue broke with `fault`
+    /// and is closed ([`Network::close`]): the station delivers no frame
+    /// more, and its actor takes back what the queue holds, before its stop
+    /// waits for the radio's units. The fault stays apart from the stop's
+    /// report, which still follows ([`Self::stopped`]); its memory returns
+    /// are served on until then.
+    pub fn receive_closed(
+        &self,
+        network: Network<'_, N>,
+        fault: oer_protocols_network_port::ReceiveFault,
+    ) {
+        self.state.takes.store(false, Ordering::Release);
+        let code = match fault {
+            oer_protocols_network_port::ReceiveFault::Lost => 1,
+            oer_protocols_network_port::ReceiveFault::Unfilled => 2,
+        };
+        self.state.receive_fault.store(code, Ordering::Release);
+        // After the station's delivery ends: the actor that sees the end
+        // stages nothing after its reclaim.
+        network.close();
+        self.state.station.notify();
     }
     fn report(self, flag: impl FnOnce(&NetworkStopState<N>) -> &AtomicBool) {
         let state = self.state;
@@ -695,6 +734,7 @@ impl<N: Notifies, M> Channels<N, M> {
                 start: &self.start,
                 restarts: &self.restarts,
                 stop: &self.stop,
+                network_stop: &self.network_stop,
             },
             Network { inner: network },
             transmit_end,

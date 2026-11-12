@@ -1005,7 +1005,7 @@ fn service_rx(
             emit(StationRxKind::CopiedKept, copied.kept.into());
             emit(StationRxKind::CopiedShared, copied.shared.into());
         }
-        ServiceEvent::GroupKeyInstalled { .. } => {}
+        ServiceEvent::GroupKeyInstalled { .. } | ServiceEvent::RxReclaimed { .. } => {}
     }
 }
 

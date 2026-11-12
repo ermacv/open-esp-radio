@@ -514,12 +514,12 @@ fn an_unpublished_fill_comes_back_from_the_spare_slot_and_the_slot_serves_again(
     assert_eq!(receiver.try_receive_with(Option::take), Ok(Some(8)));
 }
 
-/// A live producer's queue is not reclaimed, and nothing in it changes;
-/// once the producer closed, every slot gives up its value once, a
-/// published tail and a staged, never published fill alike, and the queue
-/// is closed.
+/// A live consumer's queue is not reclaimed, and nothing in it changes;
+/// once the consumer closed, every slot gives its value back to the
+/// producer once, a published tail and a staged, never published fill
+/// alike.
 #[test]
-fn a_reclaim_waits_for_the_producer_s_end_and_gives_each_value_once() {
+fn a_reclaim_waits_for_the_consumer_s_end_and_gives_each_value_once() {
     let mut queue = WakingSlotQueue::<Option<u32>, 4>::new();
     let (mut sender, mut receiver) = queue.split(|| None);
     for value in [1, 2] {
@@ -543,29 +543,25 @@ fn a_reclaim_waits_for_the_producer_s_end_and_gives_each_value_once() {
     );
     let mut taken = std::vec::Vec::new();
     assert_eq!(
-        receiver.reclaim(|slot| taken.extend(slot.take())),
-        Err(ReclaimRefused::ProducerAlive)
+        sender.reclaim(|slot| taken.extend(slot.take())),
+        Err(ReclaimRefused::ConsumerAlive)
     );
     assert!(taken.is_empty(), "nothing touched");
+    assert!(!sender.consumer_ended());
     assert_eq!(receiver.try_receive_with(Option::take), Ok(Some(1)));
-    sender.close();
-    assert_eq!(receiver.reclaim(|slot| taken.extend(slot.take())), Ok(()));
+    receiver.close();
+    assert!(sender.consumer_ended());
+    assert_eq!(sender.reclaim(|slot| taken.extend(slot.take())), Ok(()));
     taken.sort_unstable();
     assert_eq!(taken, [2, 3], "the published tail and the unpublished fill");
     let mut again = 0;
-    assert_eq!(receiver.reclaim(|_| again += 1), Ok(()));
+    assert_eq!(sender.reclaim(|_| again += 1), Ok(()));
     assert_eq!(again, 0, "a second reclaim visits nothing");
-    assert!(receiver.is_empty());
-    assert_eq!(
-        receiver.try_receive_with(Option::take),
-        Err(SlotReceiveError::Empty),
-        "the reclaimed queue is closed"
-    );
 }
 
 /// A queue whose published slot holds nothing (its indices no longer match
-/// its values) still gives up the value after it by the slots' own claims;
-/// a dropped producer has ended as a closed one has.
+/// its values) still gives back the value after it by the slots' own
+/// claims; a dropped consumer has ended as a closed one has.
 #[test]
 fn a_reclaim_reaches_the_values_behind_a_broken_slot() {
     let mut queue = WakingSlotQueue::<Option<u32>, 2>::new();
@@ -581,8 +577,8 @@ fn a_reclaim_reaches_the_values_behind_a_broken_slot() {
         );
     }
     assert_eq!(receiver.try_receive_with(Option::take), Ok(None));
-    drop(sender);
+    drop(receiver);
     let mut taken = std::vec::Vec::new();
-    assert_eq!(receiver.reclaim(|slot| taken.extend(slot.take())), Ok(()));
+    assert_eq!(sender.reclaim(|slot| taken.extend(slot.take())), Ok(()));
     assert_eq!(taken, [9]);
 }

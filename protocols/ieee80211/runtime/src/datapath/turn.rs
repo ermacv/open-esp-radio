@@ -371,6 +371,11 @@ where
         if self.poll_network_stop(cx, network) {
             ready = true;
         }
+        // The network's receive end closing hands what the queue holds to
+        // the actor ([`Self::reclaim_received`]).
+        if !self.rx_reclaimed && network.receive.poll_consumer_ended(cx) {
+            ready = true;
+        }
         // What the outbox refused waits in the port, which signals nothing
         // for it: the lifecycle's room wakes the actor, each queue's wait
         // armed before its room is checked again.
@@ -444,6 +449,9 @@ where
         // Before the radio's deadline judges it: a stop that asked this turn
         // reads the answer the network already has.
         let _moved: bool = self.poll_network_stop(cx, network);
+        // Before the radio's stop waits for its units: a network whose
+        // receive end ended leaves what the queue holds to the actor.
+        self.reclaim_received(network);
         self.drive_radio(cx)?;
         // A message may have released the link's data: the plane takes it
         // now, so the network's next MSDU wakes this actor.
@@ -1215,6 +1223,45 @@ where
             _ => {}
         }
         self.network_stopping != before
+    }
+
+    /// Take back every frame the network's queue holds once its receive end
+    /// ended ([`SlotReceiver::close`](oer_portable_memory::SlotReceiver::close)),
+    /// as a broken one does: by each slot's own claim, published or not, its
+    /// buffer back to the ring, so the radio's stop finds every unit home.
+    /// Asked once a turn until done; a slot claimed elsewhere stops it,
+    /// the frames before it taken, and the next turn goes on.
+    fn reclaim_received<
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) {
+        if self.rx_reclaimed || !network.receive.consumer_ended() {
+            return;
+        }
+        let mut frames = 0_u16;
+        let reclaimed = network.receive.reclaim(|slot| {
+            if let Some(received) = slot.take() {
+                frames = frames.saturating_add(1);
+                // A lent frame's buffer goes back to the port with its drop.
+                drop(received);
+            }
+        });
+        if frames != 0 {
+            report(&mut self.events, || {
+                crate::station::ServiceEvent::RxReclaimed { frames }
+            });
+        }
+        match reclaimed {
+            Ok(()) => self.rx_reclaimed = true,
+            // The consumer ended, so only a claim held elsewhere refuses:
+            // the next turn goes on where this one stopped.
+            Err(_) => self.again = true,
+        }
     }
 
     /// Whether the network side owes the stop nothing: no stop asked it to

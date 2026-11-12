@@ -374,12 +374,12 @@ breaks, in the service's intake or in the give-back, is named
 (`ReceiveFault`): the port keeps the first fault and never reads that queue
 again; the frames after the break stay in it. `close` ends a port only after a
 whole give-back and otherwise hands it back with its fault (`BrokenPort`) to
-its owner, whose device then gives the frames back once the queue's producer
-closed (`SlotSender::close`, `SlotReceiver::reclaim`, by each slot's own
-claim). The S31 application confirms the stop, reports the fault
-(`Network::port_end`) and hands the port to its facade, whose
-`Network::reclaim_receive` takes the producer the station's datapath returns
-with its end. `serve_returns` is the
+its owner, which takes it apart (`into_parts`): the device's receive end is
+closed for good, so the queue's producer takes back what the slots hold by
+each slot's own claim (`SlotReceiver::close`, `SlotSender::reclaim`), and the
+transmit half goes on serving the returned memory until the device's owner
+asks the network to stop. The S31 station's actor does that reclaim before its
+stop waits for the radio's units (`NetworkStopper::receive_closed`). `serve_returns` is the
 return path of a port whose service no longer runs, for a composition that cancels
 its network: an owner that outlives the cancelled future keeps the service
 (`retire` takes it whenever) and drives the port's returns, frames given back and

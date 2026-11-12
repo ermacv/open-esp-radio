@@ -24,6 +24,10 @@ pub enum ServiceEvent {
     /// Some MSDUs of one received frame were copied instead of lending its
     /// buffer: one event per frame, beside its refusals.
     RxMsdusCopied(super::RxMsdusCopied),
+    /// The network's receive end of the queue ended with frames in it, as
+    /// a broken one does: the actor took them back, each once, their
+    /// buffers to the ring.
+    RxReclaimed { frames: u16 },
     /// A group key was installed: the station's first or a replacement.
     /// `key_id` is 0..=3.
     GroupKeyInstalled { key_id: u8, replaced: bool },

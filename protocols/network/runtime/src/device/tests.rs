@@ -625,8 +625,8 @@ fn a_give_back_frees_the_buffers_of_ends_no_policy_settles() {
 
 /// Over a real slot queue: an empty published slot breaks it, with a lent
 /// frame after the break. The give-back names the fault instead of ending
-/// as a drained queue, and the frame stays in the queue's slot, reached
-/// through the port its owner keeps, never through a dropped one.
+/// as a drained queue, and the frame stays in the queue's slot until the
+/// port's owner closes the receive end; then the producer takes it back.
 #[test]
 fn a_give_back_over_a_broken_slot_queue_names_its_fault_and_the_port_keeps_the_rest() {
     use oer_portable_memory::WakingSlotQueue;
@@ -675,12 +675,30 @@ fn a_give_back_over_a_broken_slot_queue_names_its_fault_and_the_port_keeps_the_r
         0,
         "held, not lost or dropped"
     );
-    // Whoever keeps the port decides the frame's end: dropped with the queue,
-    // it goes back once.
-    drop(port);
-    sender.close();
-    drop(queue);
-    assert_eq!(returned.load(Ordering::SeqCst), 1);
+    // Its owner takes it apart and closes the receive end: the producer
+    // takes the frame back by the slot's own claim, once.
+    let (device, _transmit) = port.into_parts();
+    let mut taken = 0;
+    assert_eq!(
+        sender.reclaim(|slot| {
+            if slot.take().is_some() {
+                taken += 1;
+            }
+        }),
+        Err(oer_portable_memory::ReclaimRefused::ConsumerAlive),
+        "nothing before the receive end closed"
+    );
+    drop(device);
+    assert_eq!(
+        sender.reclaim(|slot| {
+            if slot.take().is_some() {
+                taken += 1;
+            }
+        }),
+        Ok(())
+    );
+    assert_eq!(taken, 1);
+    assert_eq!(returned.load(Ordering::SeqCst), 1, "its buffer went back");
 }
 
 /// A station-like device over a real slot queue: held reads, one commit.
