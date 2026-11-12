@@ -22,14 +22,14 @@ mod device;
 mod frame;
 mod slot;
 pub use device::{
-    CopyReason, EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot,
-    NetDevice, NetTransmit, ReceiveFault, ReceivedFrame, StorageAdvanceRefused, TransmitError,
-    TransmitRefused, TxStorage,
+    BatchEnd, CopyReason, EthernetFrame, EthernetFrameView, FrameStorage, Incoming, LentFrame,
+    LentParts, LinkSnapshot, NetDevice, NetTransmit, ReceiveFault, ReceivedBatch,
+    StorageAdvanceRefused, TransmitError, TransmitRefused, TxStorage,
 };
 
 pub use frame::{
-    Class, FrameMeta, FramePort, FrameSource, Holding, Keep, NeverHeld, OwnedTransmit, PortRefusal,
-    Ready, Taken, Unpublished,
+    Class, FrameMeta, FramePort, FrameSource, Holding, NeverHeld, OwnedTransmit, PortReady,
+    PortRefusal, Ready, Unpublished,
 };
 pub use slot::{Held, Slot};
 

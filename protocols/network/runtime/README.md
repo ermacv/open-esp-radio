@@ -128,7 +128,7 @@ Dropping a `LateSocket` or a `Service` with commands in a request lane still str
 what those hold: that has no contract yet.
 
 A turn first reads the port's link into the core, then takes commands (four a
-lane), the returns, received frames (eight) and the port's notices (up to 64, a
+lane), the returns, received frames (one batch of up to eight) and the port's notices (up to 64, a
 Block Ack's whole ends), then, once it has
 read them all, asks its producer for offers, chooses work and publishes it (eight,
 over the transmit plan below),
@@ -137,6 +137,27 @@ starves the others, and sockets waiting for blocks take turns. Every exit of a
 turn goes through that last part, a fault's too: after a port fault the
 turn publishes nothing more, and only hands back what it knows, so at an await
 each open work truly was not published.
+
+Received frames come as one batch (`FrameSource::take_frames`): the ready
+prefix of the port's queue, never waiting for more, whose queue places the
+port frees once, after its last frame. Each frame goes through the core in its
+position. For a datagram of a lending socket the core's own lookup names the
+socket (`LentDatagram::flow`), and the service finds its lane at the place it
+keeps for that flow, with no second search: the loan is the socket's credit,
+the buffer the port's, the lane place the transport's, each counted apart.
+One socket out of credit drops its datagram (`NetEvent::NotLent`), and the
+batch goes on for the others. A broken queue ends the batch after the frames
+before it, which stay handed.
+
+A wait that ends for received frames alone, with no control work pending,
+is followed by a receive turn: the link, the returns at the batch's edge, and
+one intake batch, each lent datagram's owner moved to its socket's lane in the
+batch. It asks no producer, publishes nothing and hands back no results. A
+frame other than a datagram for a lending socket may leave the core work (a
+reply, a copy for a socket, an address), so a full turn follows it at once;
+any other work is named by a wake, which the wait after the receive turn
+reads with every source, so ready transmission, control, time and a stop wait
+at most one batch.
 
 ## Returns and waiting
 
@@ -164,7 +185,7 @@ and ordinary work is known apart from returns:
 | Source | Ready when the pass registers |
 | --- | --- |
 | stop, each lane | a message waits; a blocked receive lane has room |
-| port (`FrameSource::register`) | its return value: a frame or a notice not yet taken, a link changed since the last registration, room for the frame it last refused |
+| port (`FrameSource::register`) | its return value: a frame not yet taken (`PortReady::received`), or a notice not yet taken, a link changed since the last registration, room for the frame it last refused (`PortReady::other`) |
 | producer (`Produce::register`) | with offers wanted, its return value (data `offer` has not handed out); always, a generation the service has not checked yet, or a hold no longer current, which the service reads itself |
 | returns | taken at once, as above: ready only if a block came home for a socket that waits for one |
 | time | the deadline (the core's, memory pressure's, the producer's) has come |
@@ -314,7 +335,7 @@ only these:
 | `walked` | each running place a walk of the sockets' running chains visits, ready or not (`Core::demands`); a turn whose core is idle walks nothing |
 | `told` | each end an ended chain tells (`Core::next_end`), the sockets' in the delivery and the producer's |
 | `return_batches`, `blocks_returned`, `credits_restored` | each return batch that took something (`returns_of`, in a turn or a pass of the wait), the blocks it brought home and the receive loans it gave back to the pool's account |
-| `no_credit`, `no_credit_loans`, `no_credit_unreturned` | each `NotLent::NoCredit` refusal in `NetworkOwner::take_frame`, the loans out of the account at the refusal, and the lent buffers back with their port whose loans the service had not yet taken back, read right after the refusal's frame |
+| `no_credit`, `no_credit_loans`, `no_credit_unreturned` | each `NotLent::NoCredit` refusal in `NetworkOwner::take_frames`, the loans out of the account at the refusal, and the lent buffers back with their port whose loans the service had not yet taken back, read right after the refusal's batch |
 | `materialised` | each frame `NetworkOwner::transmit` wrote whole in the port's slot, whatever the port answers |
 | `stage_ticks` | the clock between stage ends: `Intake` (link, tick, commands), `Returns` (returns, blocks given), `Receive`, `Notices`, `Publish` (offers, frames), `Settle` (eviction, delivery, the turn's end), and `Waiting`, a pass's return servicing |
 
@@ -338,13 +359,14 @@ DSCP from the `FrameMeta` its publisher gives, not from the written frame. A
 frame the device took carries the transmit half's ticket, and its notices
 are those frames' ends: a buffer
 the device gave back is free again only when its end is handed on, so no more
-frames are unsettled than there are buffers. It shows a lent received frame as
-lendable and hands its buffer over when the reader keeps it; a frame the
-device copied stays the device's, with its copy's reason. Each
+frames are unsettled than there are buffers. It passes the device's receive
+batch on as it is (`NetDevice::receive`): a lent frame's buffer is the reader's
+to keep or drop, and a frame the device copied is shown with its copy's reason
+and stays the device's. Each
 registration asks the transmit half for the memory the device returned, so that
 memory comes home whether or not the service sends. It returns whether a
-received frame, a link change, a notice or, for a refused frame only, the room
-or buffer that frame waits for is there. `give_back` ends the exchange before the port ends: it gives
+received frame is there, apart from a link change, a notice or, for a refused
+frame only, the room or buffer that frame waits for. `give_back` ends the exchange before the port ends: it gives
 back every frame the device's queue holds and takes back the memory the device
 returned, as the device's queues outlive the port, and leaves no refused frame
 waiting, so a next service over the same port starts idle. `serve_returns` is the

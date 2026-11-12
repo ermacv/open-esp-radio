@@ -4,17 +4,17 @@ use core::future::poll_fn;
 use core::pin::pin;
 use core::task::{Context, Poll};
 
-use embassy_futures::select::select;
+use embassy_futures::select::{Either, select};
 use embassy_futures::yield_now;
 use oer_portable_events::{EventSink, report};
 use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver};
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_network_core::{
-    Broken, CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, Intake,
-    LentDatagram, LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool,
-    Retired, SocketId, Unsent,
+    Broken, CommandId, CommandState, Count, Ends, Eviction, Group, GroupsFull, LentDatagram,
+    LoansRefused, NetEvent, NetworkOwner, OpenRefused, Outcome, Payload, Pool, Retired, SocketId,
+    Unlent, Unsent,
 };
-use oer_protocols_network_port::{FramePort, FrameSource};
+use oer_protocols_network_port::{BatchEnd, FramePort, FrameSource};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::diagnostics::{Diagnostics, Stage, Tally};
@@ -79,6 +79,24 @@ enum Turn {
     /// publication, then delivery. Taken only when no control work is
     /// pending ([`Service::control_pending`]).
     Packets,
+    /// The received frames only: returns at the batch's edge, then one
+    /// intake batch, each lent datagram on to its socket in its position.
+    /// No producer, publication or delivery of results: taken only when a
+    /// wait ended for received frames alone and no control work is pending.
+    /// A frame that may have left the core other work is followed by a full
+    /// turn at once; any other work by the wait after it, which reads every
+    /// source, so it waits at most one batch.
+    Receive,
+}
+
+/// How a wait ended.
+#[derive(Clone, Copy, Debug)]
+struct Woke {
+    /// It was over at its first poll.
+    at_once: bool,
+    /// Only received frames ended it: no stop, lane, producer, notice,
+    /// link, room, block for a waiting socket or due time.
+    received_only: bool,
 }
 
 /// What one batch of returns did.
@@ -328,6 +346,10 @@ pub struct Service<
 > {
     owner: NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, L::Tag>,
     bound: [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, P::Held>>; SOCKETS],
+    /// The place in `bound` of each open lending socket, by its flow: the
+    /// core names a lent datagram's socket once, and its lane is found here
+    /// without another search.
+    lenders: [Option<u8>; SOCKETS],
     stop: WakingSpscReceiver<'a, (), 1>,
     /// Why [`Self::run`] ended; it serves no more once this is set.
     ended: Option<EndCause>,
@@ -500,6 +522,7 @@ impl<
         Self {
             owner,
             bound: [const { None }; SOCKETS],
+            lenders: [None; SOCKETS],
             stop,
             ended: None,
             next_block: 0,
@@ -525,6 +548,7 @@ impl<
         let Self {
             owner,
             bound,
+            lenders,
             stop,
             ended,
             next_block,
@@ -539,6 +563,7 @@ impl<
         Service {
             owner,
             bound,
+            lenders,
             stop,
             ended,
             next_block,
@@ -810,7 +835,12 @@ impl<
                 panic!("a lending socket's credit is at least one, and its lane holds it");
             }
         };
-        let Some(place) = self.bound.iter_mut().find(|place| place.is_none()) else {
+        let Some((index, place)) = self
+            .bound
+            .iter_mut()
+            .enumerate()
+            .find(|(_, place)| place.is_none())
+        else {
             return Err(BindRefused {
                 reason: OpenRefused::NoSocket,
                 storage,
@@ -821,6 +851,12 @@ impl<
             Err(reason) => return Err(BindRefused { reason, storage }),
         };
         let (socket, end, lent) = lending_lanes(storage);
+        if let (Some(lender), Ok(index)) = (
+            self.lenders.get_mut(usize::from(id.flow())),
+            u8::try_from(index),
+        ) {
+            *lender = Some(index);
+        }
         *place = Some(Bound {
             end,
             lent: Some(lent),
@@ -848,6 +884,8 @@ impl<
     ) -> EndCause {
         // Whether the last turn left only frames.
         let mut only_frames = false;
+        // Whether the last wait ended for received frames alone.
+        let mut received_only = false;
         loop {
             if let Some(cause) = self.ended {
                 return cause;
@@ -857,12 +895,21 @@ impl<
                 continue;
             }
             let now = clock.now();
-            let kind = if only_frames && !self.control_pending(now) {
-                Turn::Packets
+            let kind = if (only_frames || received_only) && !self.control_pending(now) {
+                if received_only {
+                    Turn::Receive
+                } else {
+                    Turn::Packets
+                }
             } else {
                 Turn::Full
             };
-            let turned = self.turn(now, kind, events);
+            received_only = false;
+            let turned = if kind == Turn::Receive {
+                self.receive_turn(now, events)
+            } else {
+                self.turn(now, kind, events)
+            };
             only_frames = turned.packets;
             if let Some(broken) = self.owner.broken() {
                 self.ended = Some(match broken {
@@ -875,13 +922,17 @@ impl<
                 // takes it, once the executor had its turn.
                 report(events, || ServiceEvent::Yielded);
                 yield_now().await;
-            } else if self.wait(clock, events).await {
-                // The wait was over at its first poll, by work or by a time
-                // already due: no turn follows another within the same poll,
-                // and a source that says it is ready for good cannot hold
-                // the executor.
-                report(events, || ServiceEvent::Yielded);
-                yield_now().await;
+            } else {
+                let woke = self.wait(clock, events).await;
+                received_only = woke.received_only;
+                if woke.at_once {
+                    // The wait was over at its first poll, by work or by a
+                    // time already due: no turn follows another within the
+                    // same poll, and a source that says it is ready for good
+                    // cannot hold the executor.
+                    report(events, || ServiceEvent::Yielded);
+                    yield_now().await;
+                }
             }
         }
     }
@@ -920,29 +971,8 @@ impl<
             self.give_blocks();
         }
         tally.stage(Stage::Returns, &mut self.diagnostics);
-        let mut intake_full = true;
-        for _ in 0..TURN_FRAMES {
-            let intake = self.owner.take_frame(now, events, tally.steps());
-            // Read right after the refusal's frame, before anything else
-            // moves the loans.
-            let bound = &self.bound;
-            tally.read_unreturned(|| Self::unreturned(bound));
-            match intake {
-                Intake::Empty => {
-                    intake_full = false;
-                    break;
-                }
-                Intake::Read => {}
-                Intake::Lent(datagram) => self.lend(datagram, events),
-                // The owner records the broken queue, which ends the run.
-                Intake::Broken(_) => {
-                    intake_full = false;
-                    break;
-                }
-            }
-            report(events, || ServiceEvent::FrameTaken);
-        }
-        seen(events, || intake_full.then_some(ServiceEvent::IntakeFull));
+        // A broken queue the owner records, which ends the run.
+        let intake_full = self.intake(now, events, &mut tally).batch.end == BatchEnd::Limit;
         packets |= intake_full;
         tally.stage(Stage::Receive, &mut self.diagnostics);
         let mut told_all = false;
@@ -988,6 +1018,39 @@ impl<
         }
     }
 
+    /// The receive turn ([`Turn::Receive`]): the link, the returns at the
+    /// batch's edge, then one intake batch. A lent datagram's owner moves to
+    /// its socket's lane within the batch; a frame that may have left the
+    /// core other work asks for a full turn next.
+    fn receive_turn(
+        &mut self,
+        now: Instant,
+        events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
+    ) -> Turned {
+        let mut tally = Tally::turn(&mut self.diagnostics);
+        report(events, || ServiceEvent::TurnBegan);
+        report(events, || ServiceEvent::ReceiveTurn);
+        // A link that changed ends what was prepared for the old one: every
+        // turn sees it before a frame moves.
+        self.owner.observe_link(now);
+        tally.stage(Stage::Intake, &mut self.diagnostics);
+        self.take_returns(&mut tally);
+        tally.stage(Stage::Returns, &mut self.diagnostics);
+        let intake = self.intake(now, events, &mut tally);
+        tally.stage(Stage::Receive, &mut self.diagnostics);
+        self.turn_ended(events);
+        tally.stage(Stage::Settle, &mut self.diagnostics);
+        tally.end(&mut self.diagnostics);
+        // A frame other than a datagram for a lending socket may have left
+        // the core work a receive turn does not take (a reply to publish, a
+        // copy to deliver, an address to publish): a full turn follows at
+        // once. Anything else is named by a wake, which the wait reads.
+        Turned {
+            again: intake.read() != 0,
+            packets: false,
+        }
+    }
+
     /// Whether control work is pending that a packet turn would leave, each
     /// a step only the full turn takes: a socket's request or abandon (its
     /// commands), a due time of the core, the producer or the pool's
@@ -1026,38 +1089,42 @@ impl<
             .fold(0_u32, |sum, lent| sum.saturating_add(lent.unreturned()))
     }
 
-    /// Hand a lent datagram to its socket, or say why not: its buffer then
-    /// goes back to the port, and its loan to the account.
-    fn lend(&mut self, datagram: LentDatagram<B, P::Held>, events: &mut impl EventSink<NetEvent>) {
-        let flow = datagram.flow;
-        let end = self
+    /// Take one batch of the port's ready frames: each through the core in
+    /// its position, a lent datagram on to its socket's lane by the place the
+    /// core's lookup named, and the queue's places freed once. How the batch
+    /// ended, with [`ServiceEvent::IntakeFull`] when it took its limit.
+    fn intake(
+        &mut self,
+        now: Instant,
+        events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
+        tally: &mut Tally<D>,
+    ) -> oer_protocols_network_core::Intake {
+        let (bound, lenders) = (&mut self.bound, &self.lenders);
+        let intake = self
+            .owner
+            .take_frames(now, TURN_FRAMES, events, tally.steps(), |datagram| {
+                lend(bound, lenders, datagram)
+            });
+        // The batch's lent datagrams are published, each socket woken once,
+        // before anything waits.
+        for lent in self
             .bound
-            .iter_mut()
+            .iter()
             .flatten()
-            .filter(|bound| !bound.abandoned)
-            .find(|bound| {
-                bound
-                    .open
-                    .as_ref()
-                    .is_some_and(|open| open.id.flow() == flow)
-            })
-            .and_then(|bound| bound.lent.as_mut());
-        let account = self.owner.pool().loans();
-        match end {
-            Some(end) => {
-                if end.lend(datagram, account).is_err() {
-                    report(events, || NetEvent::LentLaneFull);
-                }
-            }
-            // The core lends only to an open lending socket, which a lending
-            // bind holds here.
-            None => {
-                let LentDatagram { frame, loan, .. } = datagram;
-                drop(frame);
-                account.give_back(loan);
-                report(events, || NetEvent::NoSocket);
-            }
+            .filter_map(|bound| bound.lent.as_ref())
+        {
+            lent.flush();
         }
+        // Read right after the batch, before anything else moves the loans.
+        let bound = &self.bound;
+        tally.read_unreturned(|| Self::unreturned(bound));
+        for _ in 0..intake.batch.taken {
+            report(events, || ServiceEvent::FrameTaken);
+        }
+        seen(events, || {
+            (intake.batch.end == BatchEnd::Limit).then_some(ServiceEvent::IntakeFull)
+        });
+        intake
     }
 
     /// The turn's epilogue: hand every result the core knows to its client,
@@ -1154,7 +1221,9 @@ impl<
             return false;
         };
         if let Some(inbound) = bound.end.abandon.try_receive() {
-            bound.abort(inbound, &mut self.owner);
+            if let Some(flow) = bound.abort(inbound, &mut self.owner) {
+                forget_lender(&mut self.lenders, flow, index);
+            }
             return true;
         }
         let mut moved = false;
@@ -1199,6 +1268,7 @@ impl<
                 // granted stays its own.
                 Request::Close => {
                     if let Some(Open { id, .. }) = bound.open.take() {
+                        forget_lender(&mut self.lenders, id.flow(), index);
                         match self.owner.close(id) {
                             Ok(close) => bound.closing = Some(close),
                             Err(_) => bound.closed(),
@@ -1365,12 +1435,13 @@ impl<
     /// [`Produce::register`](crate::Produce::register)), so what comes between
     /// is missed by neither, and ordinary work is known apart from returns. A
     /// pass with nothing ready waits on, whatever woke it. Whether the whole
-    /// wait, its time included, was over at its first poll.
+    /// wait, its time included, was over at its first poll, and whether only
+    /// received frames ended it.
     async fn wait<T: Timer>(
         &mut self,
         clock: &T,
         events: &mut impl EventSink<ServiceEvent>,
-    ) -> bool {
+    ) -> Woke {
         let deadline = [
             self.owner.poll_deadline(),
             self.pressure_at,
@@ -1389,9 +1460,12 @@ impl<
             diagnostics,
             ..
         } = self;
+        // Whether the last pass found received frames and nothing else.
+        let received_only = core::cell::Cell::new(false);
         let ready = poll_fn(|cx| {
             let mut ready = pin!(stop.ready()).poll(cx).is_ready();
-            ready |= owner.register_port(cx);
+            let port = owner.register_port(cx);
+            ready |= port.other;
             ready |= local.register(cx, events);
             let mut returned = false;
             for bound in bound.iter_mut().flatten() {
@@ -1412,8 +1486,11 @@ impl<
                 report(events, || ServiceEvent::Returned { work: taken.work });
                 ready |= taken.work;
             }
-            report(events, || ServiceEvent::Waited { ready });
-            if ready {
+            report(events, || ServiceEvent::Waited {
+                ready: ready || port.received,
+            });
+            received_only.set(port.received && !ready);
+            if ready || port.received {
                 Poll::Ready(())
             } else {
                 Poll::Pending
@@ -1421,19 +1498,28 @@ impl<
         });
         let mut wait = pin!(async {
             match deadline {
-                Some(deadline) => {
-                    let _first = select(ready, clock.wait_until(deadline)).await;
+                // A time that came is control work: the ready pass's word
+                // counts only when it ended the wait.
+                Some(deadline) => matches!(
+                    select(ready, clock.wait_until(deadline)).await,
+                    Either::First(())
+                ),
+                None => {
+                    ready.await;
+                    true
                 }
-                None => ready.await,
             }
         });
         let mut polls = 0_u32;
-        poll_fn(|cx| {
+        let by_ready = poll_fn(|cx| {
             polls = polls.saturating_add(1);
             wait.as_mut().poll(cx)
         })
         .await;
-        polls == 1
+        Woke {
+            at_once: polls == 1,
+            received_only: by_ready && received_only.get(),
+        }
     }
 
     /// End: nothing more is published, every known result goes to its place,
@@ -1527,7 +1613,7 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
     }
 
     /// The socket was dropped: its accepted commands end, and every block
-    /// in its lanes goes back to the pool.
+    /// in its lanes goes back to the pool. The flow it held open, if any.
     fn abort<
         const SOCKETS: usize,
         const RECEIVED: usize,
@@ -1539,17 +1625,20 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
         &mut self,
         inbound: Inbound<'a, 'm, B, SIZE, DEPTH, LANE>,
         owner: &mut NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, T>,
-    ) {
+    ) -> Option<u8> {
         let this = &*self;
         drain_requests(&this.end.requests, owner.pool(), |tag| {
             this.ended(tag, Sent::Ended(Outcome::Closed));
         });
-        if let Some(Open { id, .. }) = self.open.take() {
+        let flow = self.open.take().map(|Open { id, .. }| {
+            let flow = id.flow();
             self.closing = owner.close(id).ok();
-        }
+            flow
+        });
         inbound.drain(owner.pool());
         self.blocked = false;
         self.abandoned = true;
+        flow
     }
 
     /// Hand results and datagrams back; whether any went.
@@ -1682,5 +1771,61 @@ impl<'a, 'm, B, const SIZE: usize, const DEPTH: usize, const LANE: usize, const 
             dropped,
             loans,
         }
+    }
+}
+
+/// Hand a lent datagram to the lane of the socket the core named, found at
+/// the place `lenders` keeps for its flow; or say why not: its buffer then
+/// goes back to the port before its loan.
+fn lend<
+    'a,
+    'm,
+    B,
+    const SIZE: usize,
+    const DEPTH: usize,
+    const LANE: usize,
+    const CREDITS: usize,
+    H,
+>(
+    bound: &mut [Option<Bound<'a, 'm, B, SIZE, DEPTH, LANE, CREDITS, H>>],
+    lenders: &[Option<u8>],
+    datagram: LentDatagram<B, H>,
+) -> Result<(), Unlent<B>> {
+    let flow = datagram.flow;
+    // The place holds the socket while its flow is open: a close or an
+    // abandon forgets it first. The check below costs no search.
+    let end = lenders
+        .get(usize::from(flow))
+        .copied()
+        .flatten()
+        .and_then(|place| bound.get_mut(usize::from(place)))
+        .and_then(Option::as_mut)
+        .filter(|bound| {
+            !bound.abandoned
+                && bound
+                    .open
+                    .as_ref()
+                    .is_some_and(|open| open.id.flow() == flow)
+        })
+        .and_then(|bound| bound.lent.as_mut());
+    match end {
+        Some(end) => end.lend(datagram),
+        // The core lends only to an open lending socket, which a lending
+        // bind holds here.
+        None => {
+            let LentDatagram { frame, loan, .. } = datagram;
+            drop(frame);
+            Err(Unlent::NoSocket(loan))
+        }
+    }
+}
+
+/// Forget the lending socket at `place` for `flow`, which it no longer holds
+/// open.
+fn forget_lender(lenders: &mut [Option<u8>], flow: u8, place: usize) {
+    if let Some(lender) = lenders.get_mut(usize::from(flow))
+        && lender.is_some_and(|held| usize::from(held) == place)
+    {
+        *lender = None;
     }
 }

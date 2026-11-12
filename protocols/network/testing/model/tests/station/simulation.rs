@@ -159,9 +159,7 @@ type NetEnded<'c, T, R = (), U = ()> =
 /// The application's socket.
 pub type Sock<T> = Socket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS>;
 /// A received frame's buffer the station lends the network.
-type LentBuffer = oer_protocols_network_port::LentFrame<
-    <StationReceived<ModelLentRx> as oer_protocols_network_port::ReceivedFrame>::Storage,
->;
+type LentBuffer = oer_protocols_network_port::LentFrame<runtime::NetworkRx<ModelLentRx>>;
 /// The application's socket when it lends ([`Setup::lending`]).
 type LendSock<T> = LendingSocket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS, LentBuffer>;
 /// A datagram the application received: a copy, or the station's buffer.
@@ -560,18 +558,18 @@ impl<I: FramePort<Refusal = PortRefusal>> FramePort for Held<I> {
 impl<I: FrameSource<Notice = composition::Notice>> FrameSource for Held<I> {
     type Notice = I::Notice;
     type Held = I::Held;
-    fn take_frame(
+    fn take_frames(
         &mut self,
-        read: impl FnOnce(
-            EthernetFrameView<'_>,
-            oer_protocols_network_port::Holding,
-        ) -> oer_protocols_network_port::Keep,
-    ) -> oer_protocols_network_port::Taken<I::Held> {
-        self.0
-            .as_mut()
-            .map_or(oer_protocols_network_port::Taken::Empty, |inner| {
-                inner.take_frame(read)
-            })
+        limit: usize,
+        take: impl FnMut(oer_protocols_network_port::Incoming<'_, I::Held>),
+    ) -> oer_protocols_network_port::ReceivedBatch {
+        self.0.as_mut().map_or(
+            oer_protocols_network_port::ReceivedBatch {
+                taken: 0,
+                end: oer_protocols_network_port::BatchEnd::Drained,
+            },
+            |inner| inner.take_frames(limit, take),
+        )
     }
     fn take_notice(&mut self) -> Option<I::Notice> {
         self.0.as_mut().and_then(FrameSource::take_notice)
@@ -581,8 +579,10 @@ impl<I: FrameSource<Notice = composition::Notice>> FrameSource for Held<I> {
             .as_ref()
             .map_or(LinkSnapshot::DOWN, FrameSource::link)
     }
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
-        self.0.as_mut().is_some_and(|inner| inner.register(cx))
+    fn register(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
+        self.0
+            .as_mut()
+            .map_or_else(Default::default, |inner| inner.register(cx))
     }
 }
 

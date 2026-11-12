@@ -82,6 +82,9 @@ pub enum ServiceEvent {
     /// The turn that began takes only the frames: no control work was
     /// pending, and the last turn left only frames.
     PacketTurn,
+    /// The turn that began takes only the received frames: a wait ended
+    /// for them alone, and no control work was pending.
+    ReceiveTurn,
     /// The turn took this request from a socket's lane.
     Took(RequestKind),
     /// A socket's lane still held requests once the turn had taken its budget

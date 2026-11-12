@@ -16,10 +16,12 @@ pub use oer_portable_memory::{AtomicWaker, ClaimCell};
 pub use oer_protocols_network_port::FrameLengthError;
 
 /// A buffer a test's port lends: its frame's octets, and whether its
-/// storage broke after the port showed it. Its drop counts it back.
+/// storage breaks once it was shown. Its drop counts it back.
 pub struct HostHeld {
     pub frame: std::vec::Vec<u8>,
     pub broken: bool,
+    /// It was shown once: a broken storage shows nothing more.
+    pub shown: bool,
     pub back: std::rc::Rc<core::cell::Cell<usize>>,
 }
 
@@ -31,17 +33,25 @@ impl Drop for HostHeld {
 
 impl EthernetFrame for HostHeld {
     fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        if self.broken {
+        if self.broken && self.shown {
             return Err(FrameLengthError::OutsideStorage);
         }
-        let payload = self
-            .frame
-            .get(14..)
-            .ok_or(FrameLengthError::OutsideStorage)?;
+        self.shown = true;
+        let field = |range: core::ops::Range<usize>| {
+            self.frame
+                .get(range)
+                .ok_or(FrameLengthError::OutsideStorage)
+        };
+        let mut destination = [0; 6];
+        destination.copy_from_slice(field(0..6)?);
+        let mut source = [0; 6];
+        source.copy_from_slice(field(6..12)?);
+        let ether_type = u16::from_be_bytes([field(12..13)?[0], field(13..14)?[0]]);
+        let payload = field(14..self.frame.len())?;
         Ok(EthernetFrameView {
-            destination: [0; 6],
-            source: [0; 6],
-            ether_type: 0x0800,
+            destination,
+            source,
+            ether_type,
             payload,
         })
     }

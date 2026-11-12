@@ -644,6 +644,7 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
                 ServiceEvent::Waited { ready } => profile.waited(&PROFILE, ready),
                 ServiceEvent::BudgetSpent
                 | ServiceEvent::PacketTurn
+                | ServiceEvent::ReceiveTurn
                 | ServiceEvent::IntakeFull
                 | ServiceEvent::NoticesFull
                 | ServiceEvent::Published(_)
@@ -655,6 +656,7 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
         match event {
             ServiceEvent::TurnBegan
             | ServiceEvent::PacketTurn
+            | ServiceEvent::ReceiveTurn
             | ServiceEvent::FrameTaken
             | ServiceEvent::Noticed
             | ServiceEvent::Returned { .. } => {}

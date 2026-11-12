@@ -21,8 +21,8 @@ use oer_protocols_network_core::{
     claim,
 };
 use oer_protocols_network_port::{
-    CopyReason, EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource,
-    Holding, Keep, LinkSnapshot, LinkState, Taken, Unpublished,
+    BatchEnd, CopyReason, EthernetFrame, EthernetFrameView, FrameLengthError, FramePort,
+    FrameSource, Holding, Incoming, LinkSnapshot, LinkState, PortReady, ReceivedBatch, Unpublished,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
@@ -237,31 +237,51 @@ impl FrameSource for WirePort {
         notice
     }
 
-    fn take_frame(
+    /// A batch is one take: `takes` counts batches, `empty_takes` those
+    /// that found no frame.
+    fn take_frames(
         &mut self,
-        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
-    ) -> Taken<WireHeld> {
-        let (frame, holding, out) = {
+        limit: usize,
+        mut take: impl FnMut(Incoming<'_, WireHeld>),
+    ) -> ReceivedBatch {
+        {
             let mut wire = self.0.borrow_mut();
             wire.takes += 1;
             if let Some(fault) = wire.receive_fault {
-                return Taken::Fault(fault);
+                return ReceivedBatch {
+                    taken: 0,
+                    end: BatchEnd::Fault(fault),
+                };
             }
-            let Some(frame) = wire.incoming.pop_front() else {
-                wire.empty_takes += 1;
-                return Taken::Empty;
-            };
-            let holding = wire.holding.unwrap_or(Holding::Copied(CopyReason::Format));
-            (frame, holding, wire.lent_out.clone())
-        };
-        out.set(out.get() + 1);
-        let mut held = WireHeld { frame, out };
-        let keep = read(held.view().unwrap(), holding);
-        if keep == Keep::Keep && holding == Holding::Lendable {
-            Taken::Kept(held)
-        } else {
-            Taken::Read
         }
+        let mut taken = 0;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let (frame, holding, out) = {
+                let mut wire = self.0.borrow_mut();
+                let Some(frame) = wire.incoming.pop_front() else {
+                    break BatchEnd::Drained;
+                };
+                let holding = wire.holding.unwrap_or(Holding::Copied(CopyReason::Format));
+                (frame, holding, wire.lent_out.clone())
+            };
+            taken += 1;
+            out.set(out.get() + 1);
+            let mut held = WireHeld { frame, out };
+            match holding {
+                Holding::Lendable => take(Incoming::Lent(held)),
+                Holding::Copied(reason) => take(Incoming::Copied {
+                    frame: held.view(),
+                    reason,
+                }),
+            }
+        };
+        if taken == 0 {
+            self.0.borrow_mut().empty_takes += 1;
+        }
+        ReceivedBatch { taken, end }
     }
 
     fn link(&self) -> LinkSnapshot {
@@ -271,11 +291,14 @@ impl FrameSource for WirePort {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
+    fn register(&mut self, cx: &mut Context<'_>) -> PortReady {
         let mut wire = self.0.borrow_mut();
         wire.waker = Some(cx.waker().clone());
         wire.registers += 1;
-        !wire.incoming.is_empty() || !wire.ended.is_empty() || (wire.refused && !wire.full)
+        PortReady {
+            received: !wire.incoming.is_empty(),
+            other: !wire.ended.is_empty() || (wire.refused && !wire.full),
+        }
     }
 }
 

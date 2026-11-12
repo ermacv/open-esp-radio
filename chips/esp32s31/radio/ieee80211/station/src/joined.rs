@@ -105,8 +105,8 @@ use oer_protocols_ieee80211_wire::{
 };
 use oer_protocols_network_core::{Datagram, Group, Interface, NetworkOwner, Outcome, Remote};
 use oer_protocols_network_port::{
-    EthernetFrameView, FramePort, FrameSource, Holding, Keep, LinkSnapshot, LinkState,
-    OwnedTransmit, PortRefusal, Taken, Unpublished,
+    BatchEnd, EthernetFrame, FramePort, FrameSource, Incoming, LinkSnapshot, LinkState,
+    OwnedTransmit, PortReady, PortRefusal, ReceivedBatch, Unpublished,
 };
 use oer_protocols_network_runtime::{
     DevicePort, EndCause, Ended, MemoryPolicy, Observer, Sent, Service, Socket, SocketLanes,
@@ -444,20 +444,40 @@ impl FramePort for Counted {
 impl FrameSource for Counted {
     type Notice = ();
     type Held = <Inner as FrameSource>::Held;
-    fn take_frame(
+    fn take_frames(
         &mut self,
-        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
-    ) -> Taken<Self::Held> {
+        limit: usize,
+        mut take: impl FnMut(Incoming<'_, Self::Held>),
+    ) -> ReceivedBatch {
         let moved = &self.moved;
-        self.inner.as_mut().map_or(Taken::Empty, |inner| {
-            inner.take_frame(|view, holding| {
-                let mut count = moved.get();
-                count.rx_frames += 1;
-                count.rx_bytes += u32::try_from(view.payload.len()).unwrap();
-                moved.set(count);
-                read(view, holding)
-            })
-        })
+        let count = |payload: usize| {
+            let mut count = moved.get();
+            count.rx_frames += 1;
+            count.rx_bytes += u32::try_from(payload).unwrap();
+            moved.set(count);
+        };
+        self.inner.as_mut().map_or(
+            ReceivedBatch {
+                taken: 0,
+                end: BatchEnd::Drained,
+            },
+            |inner| {
+                inner.take_frames(limit, |mut incoming| {
+                    match &mut incoming {
+                        Incoming::Lent(frame) => {
+                            if let Ok(view) = frame.view() {
+                                count(view.payload.len());
+                            }
+                        }
+                        Incoming::Copied {
+                            frame: Ok(view), ..
+                        } => count(view.payload.len()),
+                        Incoming::Copied { frame: Err(_), .. } => {}
+                    }
+                    take(incoming);
+                })
+            },
+        )
     }
     fn take_notice(&mut self) -> Option<()> {
         // The direct egress settles nothing: an end only frees its buffer.
@@ -471,8 +491,10 @@ impl FrameSource for Counted {
             .as_ref()
             .map_or(LinkSnapshot::DOWN, FrameSource::link)
     }
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
-        self.inner.as_mut().is_some_and(|inner| inner.register(cx))
+    fn register(&mut self, cx: &mut Context<'_>) -> PortReady {
+        self.inner
+            .as_mut()
+            .map_or_else(PortReady::default, |inner| inner.register(cx))
     }
 }
 

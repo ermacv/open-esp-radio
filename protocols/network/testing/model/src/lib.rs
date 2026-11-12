@@ -470,29 +470,34 @@ impl FrameSource for Medium {
     /// The medium lends no buffer: each frame is its copy.
     type Held = oer_protocols_network_port::NeverHeld;
 
-    fn take_frame(
+    fn take_frames(
         &mut self,
-        read: impl FnOnce(
-            EthernetFrameView<'_>,
-            oer_protocols_network_port::Holding,
-        ) -> oer_protocols_network_port::Keep,
-    ) -> oer_protocols_network_port::Taken<Self::Held> {
-        use oer_protocols_network_port::{CopyReason, Holding, Taken};
-        let Some(frame) = self.0.borrow_mut().received.pop_front() else {
-            return Taken::Empty;
+        limit: usize,
+        mut take: impl FnMut(oer_protocols_network_port::Incoming<'_, Self::Held>),
+    ) -> oer_protocols_network_port::ReceivedBatch {
+        use oer_protocols_network_port::{BatchEnd, CopyReason, Incoming, ReceivedBatch};
+        let mut taken = 0_usize;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let Some(frame) = self.0.borrow_mut().received.pop_front() else {
+                break BatchEnd::Drained;
+            };
+            taken = taken.saturating_add(1);
+            take(Incoming::Copied {
+                frame: EthernetHeader::parse(&frame)
+                    .map(|(header, payload)| EthernetFrameView {
+                        destination: header.destination,
+                        source: header.source,
+                        ether_type: header.ether_type.value(),
+                        payload,
+                    })
+                    .map_err(|_| oer_protocols_network_port::FrameLengthError::TooShort),
+                reason: CopyReason::Format,
+            });
         };
-        if let Ok((header, payload)) = EthernetHeader::parse(&frame) {
-            let _copied = read(
-                EthernetFrameView {
-                    destination: header.destination,
-                    source: header.source,
-                    ether_type: header.ether_type.value(),
-                    payload,
-                },
-                Holding::Copied(CopyReason::Format),
-            );
-        }
-        Taken::Read
+        ReceivedBatch { taken, end }
     }
 
     fn take_notice(&mut self) -> Option<Self::Notice> {
@@ -516,11 +521,14 @@ impl FrameSource for Medium {
         }
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
+    fn register(&mut self, cx: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
         let mut state = self.0.borrow_mut();
         state.waker = Some(cx.waker().clone());
         let changed = core::mem::take(&mut state.changed);
-        changed || !state.received.is_empty() || !state.notices.is_empty()
+        oer_protocols_network_port::PortReady {
+            received: !state.received.is_empty(),
+            other: changed || !state.notices.is_empty(),
+        }
     }
 }
 

@@ -13,7 +13,7 @@
 //! [`DataPort::lend`]: oer_protocols_ieee80211_contracts_port::DataPort::lend
 
 use oer_protocols_ieee80211_contracts_port::LentRxBuffer;
-use oer_protocols_network_port::{CopyReason, FrameStorage, LentFrame, ReceivedFrame};
+use oer_protocols_network_port::{CopyReason, FrameStorage, LentFrame};
 
 /// A lent receive buffer as network storage: the MPDU, then the rest of its
 /// allocation.
@@ -53,9 +53,10 @@ pub enum Received<L> {
 }
 
 /// What stands for one of the actor's copies in the network queue; the
-/// device reads the copy in place ([`NetDevice::read_copied`]).
+/// device shows the copy in place as its batch hands the mark over
+/// ([`NetDevice::receive`]).
 ///
-/// [`NetDevice::read_copied`]: oer_protocols_network_port::NetDevice::read_copied
+/// [`NetDevice::receive`]: oer_protocols_network_port::NetDevice::receive
 #[derive(Debug)]
 pub struct CopiedMark(CopyReason);
 
@@ -67,20 +68,6 @@ impl CopiedMark {
     /// Why the actor copied the MSDU.
     pub const fn reason(&self) -> CopyReason {
         self.0
-    }
-}
-
-impl<L: LentRxBuffer> ReceivedFrame for Received<L> {
-    type Storage = NetworkRx<L>;
-    type Copied = CopiedMark;
-    fn into_lent(self) -> Result<LentFrame<NetworkRx<L>>, CopiedMark> {
-        match self {
-            Self::Lent(frame) => Ok(frame),
-            Self::Copied(mark) => Err(mark),
-        }
-    }
-    fn copy_reason(copied: &CopiedMark) -> CopyReason {
-        copied.reason()
     }
 }
 

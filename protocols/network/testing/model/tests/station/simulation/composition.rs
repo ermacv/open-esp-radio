@@ -110,10 +110,11 @@ pub struct Counts {
     pub rx_pressure: usize,
     /// A lending socket's datagrams the network dropped for want of credit.
     pub no_credit: usize,
-    /// The network service's turns, and those of them that took only the
-    /// frames.
+    /// The network service's turns, those of them that took only the
+    /// frames, and those that took only the received frames.
     pub turns: usize,
     pub packet_turns: usize,
+    pub receive_turns: usize,
     /// Received frames the network's turns took in, and the turns that took
     /// their whole budget of them.
     pub frames_taken: usize,
@@ -157,6 +158,7 @@ impl EventSink<oer_protocols_network_runtime::ServiceEvent> for Observed {
         match event {
             Event::TurnBegan => counts.turns += 1,
             Event::PacketTurn => counts.packet_turns += 1,
+            Event::ReceiveTurn => counts.receive_turns += 1,
             Event::FrameTaken => counts.frames_taken += 1,
             Event::IntakeFull => counts.intake_full += 1,
             Event::Accepted => counts.accepted += 1,

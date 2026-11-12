@@ -491,19 +491,12 @@ async fn drive<'r, X: ExecutionContext, const RX: usize, D: NetDevice, const LEN
             Lifecycle::Running => {}
         }
         if state.stop.get() {
-            return finish(state, bridge, iface, &mut events);
+            return finish(state, bridge, iface, &mut events, None);
         }
         if let Err(fault) = bridge.poll(cx, &mut received, &mut refused, &mut copied) {
-            // The device is read no more: the service ends failed, named.
-            let error = Error::ReceiveFault(fault);
-            state.publish(
-                Status {
-                    lifecycle: Lifecycle::Failed(error),
-                    ..state.status.get()
-                },
-                &mut events,
-            );
-            return Poll::Ready(Err(error));
+            // The device is read no more: the service ends failed, named,
+            // after the same cleanup as a stop.
+            return finish(state, bridge, iface, &mut events, Some(fault));
         }
         let link = bridge.link();
         let previous = state.status.get();
@@ -554,9 +547,19 @@ fn finish<'r, X: ExecutionContext, const RX: usize, D: NetDevice, const LENT: us
     bridge: &mut EthernetBridge<'r, X, RX, D, LENT>,
     iface: &impl Interface,
     events: &mut impl FnMut(StatusChanged),
+    broken: Option<oer_protocols_network_port::ReceiveFault>,
 ) -> Poll<Result<(), Error>> {
-    // The rest is given back whatever the device's queue answers.
-    let stopped = bridge.stop().map_err(Error::ReceiveFault);
+    // A stop gives the rest back whatever the device's queue answers. A
+    // queue that broke is not read again: the link goes down, the frames
+    // after the break stay the device's, and the break is the service's
+    // error whatever the cleanup below answers.
+    let stopped = match broken {
+        None => bridge.stop().map_err(Error::ReceiveFault),
+        Some(fault) => {
+            bridge.halt();
+            Err(Error::ReceiveFault(fault))
+        }
+    };
     iface.drop_received();
     // The packets the interface held may be lent frames: return them now,
     // the service polls its bridge no more.

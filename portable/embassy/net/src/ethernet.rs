@@ -2,8 +2,8 @@
 
 use crate::OwnedNetworkTxFrame;
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, FrameStorage, LentFrame, LentParts,
-    NetDevice, ReceivedFrame, TransmitError, TransmitRefused, TxStorage,
+    BatchEnd, EthernetFrame, EthernetFrameView, FrameLengthError, FrameStorage, Incoming,
+    LentFrame, LentParts, NetDevice, TransmitError, TransmitRefused, TxStorage,
 };
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 
@@ -282,7 +282,7 @@ pub struct EthernetBridge<
 }
 
 /// The storage of a device's lent frames.
-pub type Lent<D> = <<D as NetDevice>::RxFrame as ReceivedFrame>::Storage;
+pub type Lent<D> = <D as NetDevice>::Storage;
 
 impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice, const LENT: usize>
     EthernetBridge<'r, X, RX, D, LENT>
@@ -314,12 +314,25 @@ impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice
     /// The device's receive queue broke: the frames after the break stay
     /// with the device.
     pub(crate) fn stop(&mut self) -> Result<(), oer_protocols_network_port::ReceiveFault> {
-        self.radio.link_controller().set_link_up(false);
-        while let Some(frame) = self.device.try_receive()? {
-            drop(frame);
+        self.halt();
+        loop {
+            match self.device.receive(usize::MAX, |frame| drop(frame)).end {
+                BatchEnd::Drained => break,
+                BatchEnd::Limit => {}
+                BatchEnd::Fault(fault) => {
+                    self.reclaim_lent();
+                    return Err(fault);
+                }
+            }
         }
         self.reclaim_lent();
         Ok(())
+    }
+
+    /// Take the link down without reading the device: what it still queues
+    /// stays its own. The stop of a device whose receive queue broke.
+    pub(crate) fn halt(&mut self) {
+        self.radio.link_controller().set_link_up(false);
     }
 
     /// Return to the device every lent frame whose packet the stack
@@ -362,29 +375,34 @@ impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice
         while self.radio.rx_publisher().poll_queue_room(cx).is_ready()
             && self.device.poll_receive_ready(cx).is_ready()
         {
-            let Some(frame) = self.device.try_receive()? else {
-                break;
-            };
-            let published = match frame.into_lent() {
-                Ok(lent) => {
-                    if let Ok(view) = lent.view() {
-                        received(view);
+            // As many as the stack's queue has room for, in one batch: a
+            // lent frame needs no more, its packet is its own buffer.
+            let room = RX.saturating_sub(self.radio.rx_publisher().queue_len());
+            let publisher = self.radio.rx_publisher();
+            let lent_slots = self.lent;
+            let batch = self.device.receive(room.max(1), |incoming| {
+                let published = match incoming {
+                    Incoming::Lent(lent) => {
+                        if let Ok(view) = lent.view() {
+                            received(view);
+                        }
+                        publish_lent(publisher, lent_slots, lent, &mut copied)
                     }
-                    publish_lent(self.radio.rx_publisher(), self.lent, lent, &mut copied)
-                }
-                Err(copy) => {
-                    let publisher = self.radio.rx_publisher();
-                    self.device
-                        .read_copied(copy, |view| {
+                    Incoming::Copied { frame, .. } => frame
+                        .map_err(crate::RxEnqueueError::InvalidLength)
+                        .and_then(|view| {
                             received(view);
                             publish_view(publisher, view)
-                        })
-                        .map_err(crate::RxEnqueueError::InvalidLength)
-                        .and_then(|published| published)
+                        }),
+                };
+                if let Err(reason) = published {
+                    refused(reason);
                 }
-            };
-            if let Err(reason) = published {
-                refused(reason);
+            });
+            match batch.end {
+                BatchEnd::Drained => break,
+                BatchEnd::Limit => {}
+                BatchEnd::Fault(fault) => return Err(fault),
             }
         }
         Ok(())

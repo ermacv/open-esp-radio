@@ -515,3 +515,114 @@ fn a_run_cancelled_after_a_return_keeps_what_it_took() {
 }
 
 mod diagnostics;
+
+/// A lent datagram alone wakes the service for a receive turn: the datagram
+/// goes to its socket's lane in the batch, and the turn publishes nothing
+/// and runs no other step.
+#[test]
+fn a_lent_datagram_alone_takes_a_receive_turn() {
+    #[derive(Debug)]
+    struct Net;
+    let (mut service, _copying, mut lending, wire, stop) = lending::<Net>(4, 1);
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let tape = Tape::default();
+    let mut events = tape.clone();
+    let drive = async {
+        settle().await;
+        let mark = tape.len();
+        arrive(&wire, LENDING, b"fast");
+        let Received::Lent(mut lent) = lending.receive().await.unwrap() else {
+            panic!("a lendable datagram is lent");
+        };
+        assert_eq!(lent.data().unwrap(), b"fast");
+        let after = tape.since(mark);
+        let turn: Vec<_> = after
+            .iter()
+            .skip_while(|event| **event != ServiceEvent::TurnBegan)
+            .take_while(|event| !matches!(event, ServiceEvent::TurnEnded(_)))
+            .copied()
+            .collect();
+        assert_eq!(
+            turn,
+            [
+                ServiceEvent::TurnBegan,
+                ServiceEvent::ReceiveTurn,
+                ServiceEvent::FrameTaken
+            ],
+            "{after:?}"
+        );
+        drop(lent);
+        stop.try_send(()).ok().unwrap();
+    };
+    run_tasks(clock, service.run(clock, &mut events), drive);
+    assert_eq!(lent_out(&wire), 0);
+}
+
+/// A lending socket closed, and another bound on the same port in the core's
+/// freed place: a datagram goes to the open one, found by the place the core
+/// named, never to the closed one.
+#[test]
+fn a_rebound_lending_socket_gets_the_datagrams_of_its_flow() {
+    #[derive(Debug)]
+    struct Net;
+    let memory = Box::leak(Box::new([[0; SIZE]; BLOCKS]));
+    let (mut pool, brand) = claim::<Net, SIZE, BLOCKS>(memory).unwrap();
+    pool.loans().pool(4, 1).unwrap();
+    let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
+    let wire = WirePort::default();
+    holding(&wire, Holding::Lendable);
+    let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
+    let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
+    let mut service: Service<
+        'static,
+        'static,
+        Net,
+        SIZE,
+        2,
+        CREDITS,
+        RECEIVED,
+        2,
+        BLOCKS,
+        DEPTH,
+        RECEIVED,
+        WirePort,
+    > = Service::new(owner, MemoryPolicy::KEEP, stopping);
+    let group = service.group(2).unwrap();
+    let mut first = service
+        .bind_lending::<1>(LENDING, Dscp::default(), group, lending_storage::<Net>())
+        .ok()
+        .unwrap();
+    let clock = Box::leak(Box::new(VirtualClock::new()));
+    let mut drops = Drops::default();
+    // The first run closes the first socket, then is cancelled.
+    let (done, mut finished) = Box::leak(Box::new(StopLane::new())).split();
+    let closing = async {
+        first.socket().close().await;
+        done.try_send(()).ok().unwrap();
+    };
+    let serve = async {
+        let _ =
+            embassy_futures::select::select(service.run(clock, &mut drops), finished.ready()).await;
+    };
+    run_tasks(clock, serve, closing);
+    let group = service.group(2).unwrap();
+    let mut second = service
+        .bind_lending::<1>(LENDING, Dscp::default(), group, lending_storage::<Net>())
+        .ok()
+        .unwrap();
+    let drive = async {
+        arrive(&wire, LENDING, b"rebound");
+        let Received::Lent(mut lent) = second.receive().await.unwrap() else {
+            panic!("lent to the open socket");
+        };
+        assert_eq!(lent.data().unwrap(), b"rebound");
+        drop(lent);
+        stop.try_send(()).ok().unwrap();
+    };
+    run_tasks(clock, service.run(clock, &mut drops), drive);
+    assert!(drops.0.is_empty(), "{:?}", drops.0);
+    assert!(
+        first.try_receive().is_none(),
+        "the closed socket gets nothing"
+    );
+}

@@ -6,7 +6,7 @@ pub use operation::{Operation, OperationEnd, UnreadOperation};
 
 mod operation;
 use super::{AcrossHarts, Notifies, SameHart, ServiceCommand, ServiceOutput, ServiceOutputSink};
-use super::{CopiedMark, RX_COPIED_DEPTH, Received};
+use super::{RX_COPIED_DEPTH, Received};
 use core::{
     cell::Cell,
     fmt,
@@ -26,7 +26,8 @@ use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
 use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MAX_ETHERNET_PAYLOAD_LEN};
 use oer_protocols_ieee80211_core_roles_sta::machine::StaProfile;
 use oer_protocols_network_port::{
-    LinkSnapshot, LinkState, NetDevice, NetTransmit, ReceiveFault, TransmitError, TransmitRefused,
+    BatchEnd, Incoming, LentFrame, LinkSnapshot, LinkState, NetDevice, NetTransmit, ReceiveFault,
+    ReceivedBatch, TransmitError, TransmitRefused,
 };
 
 /// Latest product state. Events and command owners still reach the callback once.
@@ -633,7 +634,7 @@ impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
 impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N: Notifies>
     NetDevice for Device<'_, L, RX, N>
 {
-    type RxFrame = Received<L>;
+    type Storage = super::NetworkRx<L>;
     fn link(&self) -> LinkSnapshot {
         self.link.snapshot()
     }
@@ -654,30 +655,48 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         core::pin::pin!(self.receive.ready()).poll(cx)
     }
-    /// The oldest frame, its slot freed for the actor at once.
-    fn try_receive(&mut self) -> Result<Option<Self::RxFrame>, ReceiveFault> {
-        match self.receive.try_receive_with(Option::take) {
-            Ok(Some(frame)) => Ok(Some(frame)),
-            Err(SlotReceiveError::Empty) => Ok(None),
-            // A slot the queue's indices named and it does not hold.
-            Err(SlotReceiveError::Lost) => Err(ReceiveFault::Lost),
-            // A published slot without its frame: the actor stages a frame
-            // in every slot it publishes.
-            Ok(None) => Err(ReceiveFault::Unfilled),
-        }
-    }
-    fn read_copied<R>(
+    /// The ready prefix of the queue, each frame read out of its slot in
+    /// place; the slots go back to the actor together, after the last.
+    fn receive(
         &mut self,
-        _: CopiedMark,
-        read: impl FnOnce(oer_protocols_network_port::EthernetFrameView<'_>) -> R,
-    ) -> Result<R, oer_protocols_network_port::FrameLengthError> {
-        // Rare (an A-MSDU, or a buffer the backend kept): the copy leaves
-        // its queue by value.
-        let mut copy = self
-            .copied
-            .try_receive()
-            .ok_or(oer_protocols_network_port::FrameLengthError::MissingCopy)?;
-        oer_protocols_network_port::EthernetFrame::view(&mut copy).map(read)
+        limit: usize,
+        mut take: impl FnMut(Incoming<'_, LentFrame<Self::Storage>>),
+    ) -> ReceivedBatch {
+        let mut taken = 0_usize;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let frame = match self.receive.try_receive_held_with(Option::take) {
+                Ok(Some(frame)) => frame,
+                Err(SlotReceiveError::Empty) => break BatchEnd::Drained,
+                // A slot the queue's indices named and it does not hold.
+                Err(SlotReceiveError::Lost) => break BatchEnd::Fault(ReceiveFault::Lost),
+                // A published slot without its frame: the actor stages a
+                // frame in every slot it publishes.
+                Ok(None) => break BatchEnd::Fault(ReceiveFault::Unfilled),
+            };
+            taken = taken.saturating_add(1);
+            match frame {
+                Received::Lent(frame) => take(Incoming::Lent(frame)),
+                Received::Copied(mark) => {
+                    // Rare (an A-MSDU, or a buffer the backend kept): the
+                    // copy leaves its queue by value, in the marks' order.
+                    let mut copy = self.copied.try_receive();
+                    let frame = copy.as_mut().map_or(
+                        Err(oer_protocols_network_port::FrameLengthError::MissingCopy),
+                        oer_protocols_network_port::EthernetFrame::view,
+                    );
+                    take(Incoming::Copied {
+                        frame,
+                        reason: mark.reason(),
+                    });
+                }
+            }
+        };
+        // The slots read, the one a fault met among them, go back at once.
+        self.receive.commit();
+        ReceivedBatch { taken, end }
     }
 }
 

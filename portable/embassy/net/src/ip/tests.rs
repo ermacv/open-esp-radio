@@ -58,19 +58,6 @@ enum Frame {
     Plain,
     Lent(oer_protocols_network_port::LentFrame<Lent>),
 }
-impl oer_protocols_network_port::ReceivedFrame for Frame {
-    type Storage = Lent;
-    type Copied = Self;
-    fn into_lent(self) -> Result<oer_protocols_network_port::LentFrame<Lent>, Self> {
-        match self {
-            Self::Lent(frame) => Ok(frame),
-            plain @ Self::Plain => Err(plain),
-        }
-    }
-    fn copy_reason(_: &Self) -> oer_protocols_network_port::CopyReason {
-        oer_protocols_network_port::CopyReason::Format
-    }
-}
 impl EthernetFrame for Frame {
     fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         match self {
@@ -174,6 +161,10 @@ struct PortState {
     link_waker: Option<Waker>,
     rx_waker: Option<Waker>,
     rx: VecDeque<Frame>,
+    /// The fault the queue meets after its frames, once.
+    fault: Option<oer_protocols_network_port::ReceiveFault>,
+    /// Receive calls after the fault.
+    after_fault: usize,
 }
 impl PortState {
     fn wake(waker: &Option<Waker>) {
@@ -188,7 +179,7 @@ impl PortState {
 }
 struct IpPort(Rc<RefCell<PortState>>);
 impl NetDevice for IpPort {
-    type RxFrame = Frame;
+    type Storage = Lent;
     fn link(&self) -> LinkSnapshot {
         self.0.borrow().link
     }
@@ -203,21 +194,53 @@ impl NetDevice for IpPort {
     fn poll_receive_ready(&mut self, cx: &mut core::task::Context<'_>) -> Poll<()> {
         let mut state = self.0.borrow_mut();
         state.rx_waker = Some(cx.waker().clone());
-        if state.rx.is_empty() {
+        if state.rx.is_empty() && state.fault.is_none() {
             Poll::Pending
         } else {
             Poll::Ready(())
         }
     }
-    fn try_receive(&mut self) -> Result<Option<Frame>, oer_protocols_network_port::ReceiveFault> {
-        Ok(self.0.borrow_mut().rx.pop_front())
-    }
-    fn read_copied<R>(
+    fn receive(
         &mut self,
-        mut copied: Frame,
-        read: impl FnOnce(EthernetFrameView<'_>) -> R,
-    ) -> Result<R, FrameLengthError> {
-        copied.view().map(read)
+        limit: usize,
+        mut take: impl FnMut(
+            oer_protocols_network_port::Incoming<'_, oer_protocols_network_port::LentFrame<Lent>>,
+        ),
+    ) -> oer_protocols_network_port::ReceivedBatch {
+        use oer_protocols_network_port::{BatchEnd, CopyReason, Incoming, ReceivedBatch};
+        let mut taken = 0;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let next = {
+                let mut state = self.0.borrow_mut();
+                if state.after_fault > 0 {
+                    state.after_fault += 1;
+                }
+                match state.rx.pop_front() {
+                    Some(frame) => Ok(frame),
+                    None => Err(state.fault.take()),
+                }
+            };
+            let frame = match next {
+                Ok(frame) => frame,
+                Err(Some(fault)) => {
+                    self.0.borrow_mut().after_fault = 1;
+                    break BatchEnd::Fault(fault);
+                }
+                Err(None) => break BatchEnd::Drained,
+            };
+            taken += 1;
+            match frame {
+                Frame::Lent(frame) => take(Incoming::Lent(frame)),
+                mut plain @ Frame::Plain => take(Incoming::Copied {
+                    frame: plain.view(),
+                    reason: CopyReason::Format,
+                }),
+            }
+        };
+        ReceivedBatch { taken, end }
     }
 }
 fn port() -> (IpPort, Rc<RefCell<PortState>>) {
@@ -229,6 +252,8 @@ fn port() -> (IpPort, Rc<RefCell<PortState>>) {
         link_waker: None,
         rx_waker: None,
         rx: VecDeque::new(),
+        fault: None,
+        after_fault: 0,
     }));
     (IpPort(state.clone()), state)
 }
@@ -482,7 +507,7 @@ fn public_stop_clears_static_configuration() {
     // Prime the bridge without polling Embassy's time ABI.
     let waker = Waker::noop();
     let mut cx = core::task::Context::from_waker(waker);
-    service.bridge.poll(&mut cx, |_| {}, |_| {}, |_| {});
+    let _ = service.bridge.poll(&mut cx, |_| {}, |_| {}, |_| {});
     assert!(iface.has_ip_addr(Ipv4Addr::from(CONFIG.address)));
     assert_eq!(service.stack().routes().len(), 1);
     control.stop();
@@ -712,4 +737,71 @@ fn a_stop_returns_the_lent_buffers_an_open_socket_queues() {
         "the stop returns the lent buffers of the socket the image still holds"
     );
     assert!(!socket.is_open());
+}
+
+/// A receive queue that breaks while the stack holds lent buffers: the
+/// service ends with that fault, after the cleanup a stop does (the stack's
+/// packets dropped, lent buffers back, the configuration cleared), and reads
+/// the broken queue no more.
+#[test]
+fn a_broken_receive_queue_ends_the_service_with_its_fault_after_a_full_cleanup() {
+    let slots: &'static crate::ethernet::LentSlots<Lent, 4> =
+        Box::leak(Box::new(crate::ethernet::LentSlots::new()));
+    let (_control, mut service, port, _) =
+        start_lent::<HostContext>(Configuration::Static(CONFIG), Some(slots));
+    let mut socket = owned_embassy_net::udp::UdpSocket::new(service.stack()).unwrap();
+    socket
+        .bind(1234, owned_embassy_net::wire::ListenSocketAddr::UNSPECIFIED)
+        .unwrap();
+    let mut statuses = Vec::new();
+    let scheduled = Arc::new(Scheduled(AtomicBool::new(true)));
+    let waker = Waker::from(scheduled.clone());
+    let mut cx = core::task::Context::from_waker(&waker);
+    let returned = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    {
+        let mut task =
+            core::pin::pin!(service.run(|status| statuses.push(status), |_| {}, |_| {}, |_| {}));
+        settle(&mut task, &scheduled, &mut cx);
+        for payload in [[1, 2, 3], [4, 5, 6]] {
+            port.borrow_mut()
+                .rx
+                .push_back(lent(0x0800, &udp_datagram(1234, &payload), &returned));
+        }
+        port.borrow_mut().fault = Some(oer_protocols_network_port::ReceiveFault::Unfilled);
+        PortState::wake(&port.borrow().rx_waker);
+        let mut ended = None;
+        for _ in 0..8 {
+            if let Poll::Ready(result) = task.as_mut().poll(&mut cx) {
+                ended = Some(result);
+                break;
+            }
+        }
+        assert_eq!(
+            ended,
+            Some(Err(Error::ReceiveFault(
+                oer_protocols_network_port::ReceiveFault::Unfilled
+            ))),
+            "the original fault ends the service"
+        );
+    }
+    assert_eq!(
+        returned.load(Ordering::Relaxed),
+        2,
+        "the lent buffers the socket queued are back"
+    );
+    assert_eq!(
+        port.borrow().after_fault,
+        1,
+        "the broken queue is read no more"
+    );
+    assert!(!socket.is_open(), "the stack's sockets are closed");
+    let last = statuses.last().unwrap().current;
+    assert_eq!(last.link.state, LinkState::Down);
+    assert_eq!(last.ipv4, Ipv4Status::Unconfigured);
+    assert_eq!(
+        last.lifecycle,
+        Lifecycle::Failed(Error::ReceiveFault(
+            oer_protocols_network_port::ReceiveFault::Unfilled
+        ))
+    );
 }

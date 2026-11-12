@@ -15,7 +15,7 @@ use core::task::Context;
 
 use embassy_futures::select::select4;
 use oer_portable_memory::{AtomicWaker, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
-use oer_protocols_network_core::{Datagram, GROUPS, LentDatagram, Loan, Loans, Remote};
+use oer_protocols_network_core::{Datagram, GROUPS, LentDatagram, Loan, Loans, Remote, Unlent};
 use oer_protocols_network_port::{EthernetFrame, FrameLengthError};
 
 use super::{Socket, SocketClosed, SocketLanes, lanes};
@@ -167,16 +167,14 @@ pub(crate) struct LentEnd<'a, B, H, const RECEIVED: usize> {
 }
 
 impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
-    /// Hand `datagram` to the socket.
+    /// Hand `datagram` to the socket, within a batch that ends with
+    /// [`Self::flush`] before its service waits.
     ///
     /// # Errors
-    /// The lane had no room: the datagram is dropped, its buffer back with
-    /// the port, and its loan counted back.
-    pub(crate) fn lend(
-        &mut self,
-        datagram: LentDatagram<B, H>,
-        account: &mut Loans<B, GROUPS>,
-    ) -> Result<(), LentLaneFull> {
+    /// The lane had no room ([`Unlent::LaneFull`]): the datagram is dropped,
+    /// its buffer back with the port, and its loan counted back, by the
+    /// account or by the drop of its lent datagram.
+    pub(crate) fn lend(&mut self, datagram: LentDatagram<B, H>) -> Result<(), Unlent<B>> {
         let LentDatagram {
             remote,
             data,
@@ -188,8 +186,7 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
             // More out than the credit, which the lane bounds: the buffer
             // goes back before its loan.
             drop(frame);
-            account.give_back(loan);
-            return Err(LentLaneFull);
+            return Err(Unlent::LaneFull(Some(loan)));
         };
         *place = Some(loan);
         let lent = Lent {
@@ -198,8 +195,16 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
             remote,
             _back: Back(self.returns),
         };
-        // A refused one drops here, and counts itself back.
-        self.lent.try_send(lent).map_err(|_| LentLaneFull)
+        // A refused one drops here, and counts itself back. The socket hears
+        // the batch's datagrams once, at [`Self::flush`].
+        self.lent
+            .try_send_held(lent)
+            .map_err(|_| Unlent::LaneFull(None))
+    }
+
+    /// End a batch of lends: the socket hears its datagrams once.
+    pub(crate) fn flush(&self) {
+        self.lent.flush();
     }
 
     /// Give back to `account` the loans whose buffers came back; whether any.
@@ -226,10 +231,6 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
         }
     }
 }
-
-/// The lent lane had no room.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct LentLaneFull;
 
 /// Give back as many of `loans` as `returns` counts.
 fn give_back<B, const RECEIVED: usize>(
@@ -495,7 +496,7 @@ mod tests {
                 frame: Frame(std::vec![n as u8]),
                 loan,
             };
-            ends.lent.lend(datagram, ends.pool.loans()).unwrap();
+            assert!(ends.lent.lend(datagram).is_ok());
         }
     }
 

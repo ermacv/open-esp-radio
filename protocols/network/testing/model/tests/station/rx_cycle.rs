@@ -104,7 +104,8 @@ fn bursts_past_a_turn_s_budget_keep_the_lend_cycle_whole_while_the_socket_sends(
 }
 
 /// Bursts past the turn's budget and nothing sent: received frames are the
-/// only work, so the turns after a full intake take only the frames. The
+/// only work, so the turns after a full intake take only the received
+/// frames, each after a wait that read every source. The
 /// cycle stays whole: each datagram is taken or dropped for credit, none is
 /// refused for pressure, and every loan comes home.
 #[test]
@@ -134,7 +135,7 @@ fn bursts_past_a_turn_s_budget_alone_keep_the_lend_cycle_whole() {
             }
             let counts = world.counts();
             assert!(counts.intake_full > 0, "a burst filled a turn's intake");
-            assert!(counts.packet_turns > 0, "packet turns ran: {counts:?}");
+            assert!(counts.receive_turns > 0, "receive turns ran: {counts:?}");
             assert_eq!(counts.rx_frames_dropped, 0);
             assert_eq!(counts.rx_pressure, 0, "nothing refused for pressure");
             assert_eq!(taken + counts.no_credit, usize::from(BURSTS * BURST));

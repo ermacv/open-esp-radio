@@ -120,9 +120,10 @@ fn a_turn_with_nothing_ready_walks_nothing_and_work_after_it_goes() {
     );
 }
 
-/// Control work a received frame makes goes in that frame's turn.
+/// Control work a received frame makes goes in the turn right after that
+/// frame's receive turn, which publishes nothing: one turn's delay, bounded.
 #[test]
-fn control_work_after_a_received_frame_goes_in_its_turn() {
+fn control_work_after_a_received_frame_goes_in_the_next_turn() {
     brand!(Net);
     let PlanBench {
         service,
@@ -143,8 +144,9 @@ fn control_work_after_a_received_frame_goes_in_its_turn() {
         }
         settle().await;
         let turns = turns_after(&policy, mark);
-        assert_eq!(turns.first().map(Vec::as_slice), Some(ONE_FRAME));
-        assert!(turns[1..].iter().all(|turn| turn == NOTHING), "{turns:?}");
+        assert_eq!(turns.first().map(Vec::len), Some(0), "the receive turn");
+        assert_eq!(turns.get(1).map(Vec::as_slice), Some(ONE_FRAME));
+        assert!(turns[2..].iter().all(|turn| turn == NOTHING), "{turns:?}");
         let sent = wire.0.borrow().sent.clone();
         assert_eq!(sent.len(), 1);
         assert!(is_arp_reply(&sent[0]));

@@ -62,8 +62,6 @@ struct Port {
     up: Option<u64>,
     /// Frames to take, each held as said.
     received: std::collections::VecDeque<(Vec<u8>, oer_protocols_network_port::Holding)>,
-    /// Keeps no buffer it is asked to.
-    keeps_nothing: bool,
     /// Writes every frame into one buffer it keeps, and the run of one octet
     /// that buffer holds, as a port that keeps its buffers' runs does.
     keeps_buffer: bool,
@@ -96,27 +94,33 @@ impl oer_protocols_network_port::FrameSource for Port {
     type Notice = ();
     type Held = Held;
 
-    fn take_frame(
+    fn take_frames(
         &mut self,
-        read: impl FnOnce(
-            oer_protocols_network_port::EthernetFrameView<'_>,
-            oer_protocols_network_port::Holding,
-        ) -> oer_protocols_network_port::Keep,
-    ) -> oer_protocols_network_port::Taken<Held> {
-        use oer_protocols_network_port::{EthernetFrame, Holding, Keep, Taken};
-        let Some((bytes, holding)) = self.received.pop_front() else {
-            return Taken::Empty;
+        limit: usize,
+        mut take: impl FnMut(oer_protocols_network_port::Incoming<'_, Held>),
+    ) -> oer_protocols_network_port::ReceivedBatch {
+        use oer_protocols_network_port::{
+            BatchEnd, EthernetFrame, Holding, Incoming, ReceivedBatch,
         };
-        let mut held = Held(bytes);
-        let Ok(view) = held.view() else {
-            return Taken::Read;
+        let mut taken = 0;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let Some((bytes, holding)) = self.received.pop_front() else {
+                break BatchEnd::Drained;
+            };
+            taken += 1;
+            let mut held = Held(bytes);
+            match holding {
+                Holding::Lendable => take(Incoming::Lent(held)),
+                Holding::Copied(reason) => take(Incoming::Copied {
+                    frame: held.view(),
+                    reason,
+                }),
+            }
         };
-        let keep = read(view, holding);
-        if keep == Keep::Keep && holding == Holding::Lendable && !self.keeps_nothing {
-            Taken::Kept(held)
-        } else {
-            Taken::Read
-        }
+        ReceivedBatch { taken, end }
     }
 
     fn take_notice(&mut self) -> Option<()> {
@@ -133,8 +137,14 @@ impl oer_protocols_network_port::FrameSource for Port {
             })
     }
 
-    fn register(&mut self, _: &mut core::task::Context<'_>) -> bool {
-        !self.received.is_empty()
+    fn register(
+        &mut self,
+        _: &mut core::task::Context<'_>,
+    ) -> oer_protocols_network_port::PortReady {
+        oer_protocols_network_port::PortReady {
+            received: !self.received.is_empty(),
+            other: false,
+        }
     }
 }
 
@@ -1960,3 +1970,47 @@ mod lending;
 mod materialised;
 mod prepared;
 mod produced;
+
+/// What one frame of an intake batch of one came to, for the tests that
+/// take frames one at a time.
+#[derive(Debug)]
+pub(crate) enum Took<B, H> {
+    Empty,
+    Read,
+    Lent(crate::LentDatagram<B, H>),
+    Broken(oer_protocols_network_port::ReceiveFault),
+}
+
+impl<
+    'm,
+    B,
+    const SIZE: usize,
+    const SOCKETS: usize,
+    const CREDITS: usize,
+    const RECEIVED: usize,
+    const NEIGHBORS: usize,
+    const BLOCKS: usize,
+    P: FramePort + oer_protocols_network_port::FrameSource,
+    T: Copy,
+> NetworkOwner<'m, B, SIZE, SOCKETS, CREDITS, RECEIVED, NEIGHBORS, BLOCKS, P, T>
+{
+    /// One batch of at most one frame, a lent datagram kept by the test.
+    pub(crate) fn take_one<C: crate::Count + ?Sized>(
+        &mut self,
+        now: Instant,
+        events: &mut impl EventSink<NetEvent>,
+        count: &C,
+    ) -> Took<B, P::Held> {
+        let mut lent = None;
+        let intake = self.take_frames(now, 1, events, count, |datagram| {
+            lent = Some(datagram);
+            Ok(())
+        });
+        match (intake.batch.end, lent) {
+            (oer_protocols_network_port::BatchEnd::Fault(fault), _) => Took::Broken(fault),
+            (_, Some(datagram)) => Took::Lent(datagram),
+            _ if intake.batch.taken == 0 => Took::Empty,
+            _ => Took::Read,
+        }
+    }
+}

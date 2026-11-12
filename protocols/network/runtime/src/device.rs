@@ -3,8 +3,8 @@
 use core::task::Context;
 
 use oer_protocols_network_port::{
-    EthernetFrameView, FrameMeta, FramePort, FrameSource, Holding, Keep, LentFrame, LinkSnapshot,
-    NetDevice, OwnedTransmit, PortRefusal, ReceivedFrame, Taken, Unpublished,
+    BatchEnd, FrameMeta, FramePort, FrameSource, Incoming, LentFrame, LinkSnapshot, NetDevice,
+    OwnedTransmit, PortReady, PortRefusal, ReceivedBatch, Unpublished,
 };
 
 /// What a refused frame needs before it is worth another try.
@@ -24,8 +24,6 @@ pub struct DevicePort<D, X> {
     transmit: X,
     /// What the last refused frame needs.
     waiting: Waiting,
-    /// Frames the device handed over and could not show.
-    unreadable: u32,
 }
 
 impl<D, X> DevicePort<D, X> {
@@ -34,13 +32,7 @@ impl<D, X> DevicePort<D, X> {
             device,
             transmit,
             waiting: Waiting::Nothing,
-            unreadable: 0,
         }
-    }
-
-    /// Frames the device handed over and could not show.
-    pub const fn unreadable(&self) -> u32 {
-        self.unreadable
     }
 }
 
@@ -52,7 +44,9 @@ impl<D: NetDevice, X: OwnedTransmit> DevicePort<D, X> {
     /// so dropping the port returns none of them: a stop calls this before
     /// it tells the device it is over.
     pub fn give_back(&mut self) {
-        while self.take_frame(|_, _| Keep::Drop).found() {}
+        // Every frame the queue holds, in batches; a broken queue is read no
+        // further, and what it still holds stays the device's.
+        while self.device.receive(usize::MAX, |frame| drop(frame)).end == BatchEnd::Limit {}
         self.transmit.reclaim();
         // The service whose policy those frames' ends settle has ended, its
         // account with it: each end frees its buffer and goes to no policy.
@@ -125,38 +119,14 @@ impl<D: NetDevice, X: OwnedTransmit> FrameSource for DevicePort<D, X> {
     type Notice = X::Notice;
 
     /// A lent frame's own buffer, for a reader that keeps it.
-    type Held = LentFrame<<D::RxFrame as ReceivedFrame>::Storage>;
+    type Held = LentFrame<D::Storage>;
 
-    fn take_frame(
+    fn take_frames(
         &mut self,
-        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
-    ) -> Taken<Self::Held> {
-        let frame = match self.device.try_receive() {
-            Ok(Some(frame)) => frame,
-            Ok(None) => return Taken::Empty,
-            Err(fault) => return Taken::Fault(fault),
-        };
-        match frame.into_lent() {
-            Ok(lent) => match lent.view().map(|view| read(view, Holding::Lendable)) {
-                Ok(Keep::Keep) => Taken::Kept(lent),
-                Ok(Keep::Drop) => Taken::Read,
-                Err(_) => {
-                    self.unreadable = self.unreadable.saturating_add(1);
-                    Taken::Read
-                }
-            },
-            Err(copied) => {
-                let reason = <D::RxFrame as ReceivedFrame>::copy_reason(&copied);
-                // A copy stays the device's, whatever its reader answers.
-                let shown = self
-                    .device
-                    .read_copied(copied, |view| read(view, Holding::Copied(reason)));
-                if shown.is_err() {
-                    self.unreadable = self.unreadable.saturating_add(1);
-                }
-                Taken::Read
-            }
-        }
+        limit: usize,
+        take: impl FnMut(Incoming<'_, Self::Held>),
+    ) -> ReceivedBatch {
+        self.device.receive(limit, take)
     }
 
     fn take_notice(&mut self) -> Option<X::Notice> {
@@ -167,7 +137,7 @@ impl<D: NetDevice, X: OwnedTransmit> FrameSource for DevicePort<D, X> {
         self.device.link()
     }
 
-    fn register(&mut self, cx: &mut Context<'_>) -> bool {
+    fn register(&mut self, cx: &mut Context<'_>) -> PortReady {
         let received = self.device.poll_receive_ready(cx).is_ready();
         let link = self.device.poll_link(cx).is_ready();
         // The transmit half takes back the memory the device returned and
@@ -180,7 +150,10 @@ impl<D: NetDevice, X: OwnedTransmit> FrameSource for DevicePort<D, X> {
         // wake the service to the same refusal, for ever, and an idle port
         // needs nothing.
         let room = self.waiting == Waiting::Room && has_room;
-        received || link || room || ended
+        PortReady {
+            received,
+            other: link || room || ended,
+        }
     }
 }
 

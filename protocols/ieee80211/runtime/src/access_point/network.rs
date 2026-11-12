@@ -21,8 +21,8 @@ use oer_portable_sync::PriorityWaker;
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::data::MsduParts;
 use oer_protocols_network_port::{
-    EthernetFrameView, FrameLengthError, FrameStorage, LentFrame, LinkSnapshot, LinkState,
-    NetDevice, ReceivedFrame, StorageAdvanceRefused,
+    BatchEnd, CopyReason, EthernetFrameView, FrameStorage, Incoming, LentFrame, LinkSnapshot,
+    LinkState, NetDevice, ReceivedBatch, StorageAdvanceRefused,
 };
 
 use crate::station::{DeviceTransmit, LinkView, Outgoing, SameHart, TxEnded, TxSupply};
@@ -86,7 +86,6 @@ impl<M> ApNetworkStorage<M> {
                 receive: receive_receiver,
                 link,
                 observed: LinkSnapshot::DOWN,
-                marked: 0,
             },
             DeviceTransmit::with_link(transmit_sender, returned_receiver, supply, link),
             ApNetworkEnd {
@@ -201,13 +200,7 @@ pub struct ApNetDevice<'a> {
     link: &'a ApLink,
     /// The link the stack last observed.
     observed: LinkSnapshot,
-    /// The copies handed over as marks and not yet read.
-    marked: usize,
 }
-
-/// A received MSDU the device keeps: [`NetDevice::read_copied`] reads it.
-#[derive(Debug)]
-pub struct ApCopied(());
 
 /// The storage no lent frame of the access point uses: every received MSDU
 /// is a copy.
@@ -225,20 +218,8 @@ impl FrameStorage for NoStorage {
     }
 }
 
-impl ReceivedFrame for ApCopied {
-    type Storage = NoStorage;
-    type Copied = ApCopied;
-    fn into_lent(self) -> Result<LentFrame<NoStorage>, ApCopied> {
-        Err(self)
-    }
-    /// The access point's device lends no buffer at all.
-    fn copy_reason(_: &ApCopied) -> oer_protocols_network_port::CopyReason {
-        oer_protocols_network_port::CopyReason::Format
-    }
-}
-
 impl NetDevice for ApNetDevice<'_> {
-    type RxFrame = ApCopied;
+    type Storage = NoStorage;
     fn link(&self) -> LinkSnapshot {
         self.link.snapshot.get()
     }
@@ -259,38 +240,39 @@ impl NetDevice for ApNetDevice<'_> {
         let ready = core::pin::pin!(self.receive.ready());
         ready.poll(cx)
     }
-    fn try_receive(
+    /// Every MSDU is the device's own copy, shown in place and released.
+    fn receive(
         &mut self,
-    ) -> Result<Option<ApCopied>, oer_protocols_network_port::ReceiveFault> {
-        // The copy stays in the queue until its mark is read, in order.
-        if self.receive.len() <= self.marked {
-            return Ok(None);
-        }
-        self.marked = self.marked.saturating_add(1);
-        Ok(Some(ApCopied(())))
-    }
-    fn read_copied<R>(
-        &mut self,
-        _: ApCopied,
-        read: impl FnOnce(EthernetFrameView<'_>) -> R,
-    ) -> Result<R, FrameLengthError> {
-        self.marked = self.marked.saturating_sub(1);
-        let frame = self
-            .receive
-            .try_receive()
-            .ok_or(FrameLengthError::MissingCopy)?;
-        let MsduParts {
-            destination,
-            source,
-            ether_type,
-            payload,
-        } = frame.parts();
-        Ok(read(EthernetFrameView {
-            destination,
-            source,
-            ether_type,
-            payload,
-        }))
+        limit: usize,
+        mut take: impl FnMut(Incoming<'_, LentFrame<NoStorage>>),
+    ) -> ReceivedBatch {
+        let mut taken = 0_usize;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let Some(frame) = self.receive.try_receive() else {
+                break BatchEnd::Drained;
+            };
+            taken = taken.saturating_add(1);
+            let MsduParts {
+                destination,
+                source,
+                ether_type,
+                payload,
+            } = frame.parts();
+            take(Incoming::Copied {
+                frame: Ok(EthernetFrameView {
+                    destination,
+                    source,
+                    ether_type,
+                    payload,
+                }),
+                // The access point's device lends no buffer at all.
+                reason: CopyReason::Format,
+            });
+        };
+        ReceivedBatch { taken, end }
     }
 }
 

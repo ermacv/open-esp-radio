@@ -4,7 +4,10 @@ use core::task::Context;
 
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
-use oer_protocols_network_port::{FramePort, FrameSource, Keep, Taken, Unpublished};
+use oer_protocols_network_port::{
+    BatchEnd, EthernetFrame, FramePort, FrameSource, Holding, Incoming, PortReady, ReceivedBatch,
+    Unpublished,
+};
 use oer_protocols_network_wire::ip::Dscp;
 
 use crate::block::{Block, CoreBrand, Group, Pool};
@@ -46,25 +49,41 @@ pub struct Transmitted<K, T> {
     pub ended: Option<(WorkId, T)>,
 }
 
-/// What a look for a received frame found.
-#[derive(Debug)]
-pub enum Intake<B, H> {
-    /// No frame waited.
-    Empty,
-    /// A frame was read, and its buffer stayed the port's.
-    Read,
-    /// A datagram for a lending socket, in its buffer, with its loan.
-    Lent(LentDatagram<B, H>),
-    /// The port's receive queue broke ([`Broken::Receive`]): no frame, and
-    /// none to look for again.
-    Broken(oer_protocols_network_port::ReceiveFault),
+/// What one intake batch did ([`NetworkOwner::take_frames`]).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Intake {
+    /// The port's batch: the frames it handed and how it ended. A broken
+    /// queue ([`BatchEnd::Fault`]) is recorded too ([`Broken::Receive`]).
+    pub batch: ReceivedBatch,
+    /// Of those frames, the datagrams handed on in their buffers with a loan.
+    pub lent: usize,
+    /// Of those frames, the datagrams for a lending socket dropped with their
+    /// buffer: no credit, or no lane took them.
+    pub unlent: usize,
 }
 
-impl<B, H> Intake<B, H> {
-    /// Whether a frame was there.
-    pub const fn found(&self) -> bool {
-        matches!(self, Self::Read | Self::Lent(_))
+impl Intake {
+    /// The frames taken that were not datagrams for a lending socket: each
+    /// may have left the core work (a reply, a copy for a socket, a change
+    /// of address).
+    pub const fn read(&self) -> usize {
+        self.batch
+            .taken
+            .saturating_sub(self.lent)
+            .saturating_sub(self.unlent)
     }
+}
+
+/// Why the holder of a lending socket's lane did not take a lent datagram:
+/// its buffer is back with the port, and a loan it names goes back to the
+/// account.
+#[derive(Debug)]
+pub enum Unlent<B> {
+    /// No open lending socket holds the datagram's flow.
+    NoSocket(Loan<B>),
+    /// The socket's lane had no room; `None` when the dropped datagram
+    /// counts its own loan back, as a lent one does.
+    LaneFull(Option<Loan<B>>),
 }
 
 /// A datagram a lending socket receives in the port's buffer. The buffer goes
@@ -352,69 +371,99 @@ impl<
         self.core.input(now, frame, &mut self.pool, events);
     }
 
-    /// Take one frame from the port, if one waits. A datagram for a lending
-    /// socket keeps its buffer only with a loan of that socket's credit,
-    /// taken before the port hands the buffer over; without one it is
-    /// dropped with [`NotLent`] counted, and its buffer stays the port's.
+    /// Take the port's ready frames, at most `limit`, in one batch whose
+    /// queue places the port frees once. Each frame goes through the core in
+    /// its position. A datagram for a lending socket keeps its buffer only
+    /// with a loan of that socket's credit, taken before the buffer moves on:
+    /// with one, `lend` gets the datagram, its socket named by the core's own
+    /// lookup ([`LentDatagram::flow`]), and says why it could not hand one
+    /// on ([`Unlent`]), its buffer dropped first. Without credit the
+    /// datagram is dropped with [`NotLent`] counted, its buffer back with the
+    /// port, and the batch goes on: one socket's credit stops no other.
     /// `count` hears a refusal for want of credit with the loans then out
     /// ([`Count::no_credit`]).
-    pub fn take_frame<C: Count + ?Sized>(
+    pub fn take_frames<C: Count + ?Sized>(
         &mut self,
         now: Instant,
+        limit: usize,
         events: &mut impl EventSink<NetEvent>,
         count: &C,
-    ) -> Intake<B, P::Held>
+        mut lend: impl FnMut(LentDatagram<B, P::Held>) -> Result<(), Unlent<B>>,
+    ) -> Intake
     where
         P: FrameSource,
     {
         let core = &mut self.core;
         let pool = &mut self.pool;
-        let mut lent = None;
-        let taken = self.port.take_frame(|frame, holding| {
-            let Some(to) = core.input_view(now, frame, holding, pool, events) else {
-                return Keep::Drop;
-            };
-            match pool.loans().lend(usize::from(to.flow)) {
-                Ok(loan) => {
-                    lent = Some((to, loan));
-                    Keep::Keep
-                }
-                Err(refused) => {
-                    if refused == NotLent::NoCredit {
-                        counted(count, |count| count.no_credit(pool.loans().outstanding()));
+        let mut lent = 0_usize;
+        let mut unlent = 0_usize;
+        let batch = self.port.take_frames(limit, |incoming| match incoming {
+            Incoming::Copied {
+                frame: Ok(view),
+                reason,
+            } => {
+                // A copy is never lent: the core copies what it keeps.
+                let _never = core.input_view(now, view, Holding::Copied(reason), pool, events);
+            }
+            Incoming::Copied { frame: Err(_), .. } => report(events, || NetEvent::Malformed),
+            Incoming::Lent(mut frame) => {
+                let to = match frame.view() {
+                    Ok(view) => core.input_view(now, view, Holding::Lendable, pool, events),
+                    Err(_) => {
+                        report(events, || NetEvent::Malformed);
+                        None
                     }
-                    report(events, || NetEvent::NotLent(refused));
-                    Keep::Drop
+                };
+                // Anything but a lent datagram leaves its buffer here.
+                let Some(to) = to else {
+                    return;
+                };
+                match pool.loans().lend(usize::from(to.flow)) {
+                    Ok(loan) => {
+                        let datagram = LentDatagram {
+                            flow: to.flow,
+                            remote: to.remote,
+                            data: to.data,
+                            frame,
+                            loan,
+                        };
+                        let lent_to = lend(datagram);
+                        if lent_to.is_ok() {
+                            lent = lent.saturating_add(1);
+                        } else {
+                            unlent = unlent.saturating_add(1);
+                        }
+                        match lent_to {
+                            Ok(()) => {}
+                            Err(Unlent::NoSocket(loan)) => {
+                                pool.loans().give_back(loan);
+                                report(events, || NetEvent::NoSocket);
+                            }
+                            Err(Unlent::LaneFull(loan)) => {
+                                if let Some(loan) = loan {
+                                    pool.loans().give_back(loan);
+                                }
+                                report(events, || NetEvent::LentLaneFull);
+                            }
+                        }
+                    }
+                    Err(refused) => {
+                        unlent = unlent.saturating_add(1);
+                        if refused == NotLent::NoCredit {
+                            counted(count, |count| count.no_credit(pool.loans().outstanding()));
+                        }
+                        report(events, || NetEvent::NotLent(refused));
+                    }
                 }
             }
         });
-        match (taken, lent) {
-            (Taken::Empty, None) => Intake::Empty,
-            (Taken::Kept(frame), Some((to, loan))) => Intake::Lent(LentDatagram {
-                flow: to.flow,
-                remote: to.remote,
-                data: to.data,
-                frame,
-                loan,
-            }),
-            // A port that kept what it was not asked to: the buffer goes back
-            // with the drop.
-            (Taken::Kept(_frame), None) => Intake::Read,
-            // A port that kept nothing it was asked to: the loan ends here.
-            (Taken::Empty | Taken::Read, Some((_, loan))) => {
-                pool.loans().give_back(loan);
-                Intake::Read
-            }
-            (Taken::Read, None) => Intake::Read,
-            // No frame came: a loan asked for none, and the queue's fault
-            // is the port's, for good.
-            (Taken::Fault(fault), lent) => {
-                if let Some((_, loan)) = lent {
-                    pool.loans().give_back(loan);
-                }
-                self.broken = Some(Broken::Receive(fault));
-                Intake::Broken(fault)
-            }
+        if let BatchEnd::Fault(fault) = batch.end {
+            self.broken = Some(Broken::Receive(fault));
+        }
+        Intake {
+            batch,
+            lent,
+            unlent,
         }
     }
 
@@ -431,9 +480,9 @@ impl<
         self.port.take_notice()
     }
 
-    /// Make `cx` the one the port wakes, and say whether the port has
-    /// something already ([`FrameSource::register`]).
-    pub fn register_port(&mut self, cx: &mut Context<'_>) -> bool
+    /// Make `cx` the one the port wakes, and say what the port has
+    /// already ([`FrameSource::register`]).
+    pub fn register_port(&mut self, cx: &mut Context<'_>) -> PortReady
     where
         P: FrameSource,
     {

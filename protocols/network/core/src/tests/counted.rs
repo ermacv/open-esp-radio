@@ -10,7 +10,8 @@ use std::vec::Vec;
 use oer_protocols_network_port::Holding;
 
 use super::*;
-use crate::{Count, Intake};
+use crate::Count;
+use crate::tests::Took;
 
 /// A count a test switches.
 #[derive(Default)]
@@ -226,13 +227,13 @@ fn a_refusal_for_credit_counts_the_loans_then_out() {
         }
         let counter = Counter::on();
         let mut dropped = Dropped::default();
-        let Intake::Lent(first) = stack.take_frame(at(0), &mut dropped, &counter) else {
+        let Took::Lent(first) = stack.take_one(at(0), &mut dropped, &counter) else {
             panic!("the credit takes one");
         };
         assert!(counter.no_credit.take().is_empty(), "a loan is no refusal");
         assert!(matches!(
-            stack.take_frame(at(0), &mut dropped, &counter),
-            Intake::Read
+            stack.take_one(at(0), &mut dropped, &counter),
+            Took::Read
         ));
         assert_eq!(counter.no_credit.take(), [1], "one refusal, one loan out");
         stack.pool().loans().give_back(first.loan);

@@ -109,22 +109,20 @@ fn each_turn_s_stages_take_the_clock_between_their_ends() {
     let total = probed.total;
     let turns = u64::from(total.turns);
     // The probe's clock moves one tick a read: a turn reads it at its start
-    // and at each of its six stages' ends.
-    for stage in [
-        Stage::Intake,
-        Stage::Returns,
-        Stage::Receive,
-        Stage::Notices,
-        Stage::Publish,
-        Stage::Settle,
-    ] {
+    // and at each of its stages' ends; a receive turn has no notices and no
+    // publication, so four stages, the others six.
+    let receive = turns - total.ticks(Stage::Notices);
+    for stage in [Stage::Intake, Stage::Returns, Stage::Receive, Stage::Settle] {
         assert_eq!(total.ticks(stage), turns, "{stage:?}");
     }
+    for stage in [Stage::Notices, Stage::Publish] {
+        assert_eq!(total.ticks(stage), turns - receive, "{stage:?}");
+    }
     assert_eq!(total.ticks(Stage::Waiting), 0, "no returns came to a wait");
-    assert_eq!(probed.clock, 7 * turns);
+    assert_eq!(probed.clock, 7 * turns - 2 * receive);
     assert_eq!(
         total.stage_ticks.iter().sum::<u64>(),
-        6 * turns,
+        6 * turns - 2 * receive,
         "{STAGES} stages"
     );
 }

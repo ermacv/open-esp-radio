@@ -346,14 +346,7 @@ impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSu
         self.inner.flush();
     }
 }
-/// One received MSDU: in the station's receive buffer, or the mark of a
-/// copy [`Network`] keeps.
-pub struct Received<N: Notifies = SameHart> {
-    inner: Frame<N>,
-}
-/// What stands for a copied [`Received`] that [`Network`] keeps.
-pub struct Copied(runtime::CopiedMark);
-/// The receive buffer a lent [`Received`] keeps its frame in. Dropping it
+/// The receive buffer a lent frame of [`Network`] keeps its bytes in. Dropping it
 /// returns the buffer to the radio.
 pub struct ReceivedStorage<N: Notifies = SameHart>(runtime::NetworkRx<LentRx<N>>);
 impl<N: Notifies> oer_protocols_network_port::FrameStorage for ReceivedStorage<N> {
@@ -370,23 +363,8 @@ impl<N: Notifies> oer_protocols_network_port::FrameStorage for ReceivedStorage<N
         self.0.advance(by)
     }
 }
-impl<N: Notifies> oer_protocols_network_port::ReceivedFrame for Received<N> {
-    type Storage = ReceivedStorage<N>;
-    type Copied = Copied;
-    fn into_lent(
-        self,
-    ) -> Result<oer_protocols_network_port::LentFrame<ReceivedStorage<N>>, Copied> {
-        match self.inner {
-            runtime::Received::Lent(frame) => Ok(frame.map_storage(ReceivedStorage)),
-            runtime::Received::Copied(mark) => Err(Copied(mark)),
-        }
-    }
-    fn copy_reason(copied: &Copied) -> oer_protocols_network_port::CopyReason {
-        copied.0.reason()
-    }
-}
 impl<N: Notifies> NetDevice for Network<'_, N> {
-    type RxFrame = Received<N>;
+    type Storage = ReceivedStorage<N>;
     fn link(&self) -> LinkSnapshot {
         self.inner.link()
     }
@@ -399,17 +377,23 @@ impl<N: Notifies> NetDevice for Network<'_, N> {
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.inner.poll_receive_ready(cx)
     }
-    fn try_receive(
+    fn receive(
         &mut self,
-    ) -> Result<Option<Received<N>>, oer_protocols_network_port::ReceiveFault> {
-        Ok(self.inner.try_receive()?.map(|inner| Received { inner }))
-    }
-    fn read_copied<R>(
-        &mut self,
-        copied: Copied,
-        read: impl FnOnce(oer_protocols_network_port::EthernetFrameView<'_>) -> R,
-    ) -> Result<R, oer_protocols_network_port::FrameLengthError> {
-        self.inner.read_copied(copied.0, read)
+        limit: usize,
+        mut take: impl FnMut(
+            oer_protocols_network_port::Incoming<
+                '_,
+                oer_protocols_network_port::LentFrame<ReceivedStorage<N>>,
+            >,
+        ),
+    ) -> oer_protocols_network_port::ReceivedBatch {
+        use oer_protocols_network_port::Incoming;
+        self.inner.receive(limit, |incoming| {
+            take(match incoming {
+                Incoming::Lent(frame) => Incoming::Lent(frame.map_storage(ReceivedStorage)),
+                Incoming::Copied { frame, reason } => Incoming::Copied { frame, reason },
+            });
+        })
     }
 }
 /// Why the station did not start.

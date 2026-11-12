@@ -51,16 +51,6 @@ fn allocator<const N: usize>() -> PacketBufAllocator {
     Box::leak(Box::new(PacketPool::new(storage))).allocator()
 }
 struct Frame(u8);
-impl oer_protocols_network_port::ReceivedFrame for Frame {
-    type Storage = core::convert::Infallible;
-    type Copied = Self;
-    fn into_lent(self) -> Result<oer_protocols_network_port::LentFrame<Self::Storage>, Self> {
-        Err(self)
-    }
-    fn copy_reason(_: &Self) -> oer_protocols_network_port::CopyReason {
-        oer_protocols_network_port::CopyReason::Format
-    }
-}
 impl EthernetFrame for Frame {
     fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         Ok(EthernetFrameView {
@@ -116,7 +106,7 @@ impl NetTransmit for NoTransmit {
     }
 }
 impl NetDevice for Port {
-    type RxFrame = Frame;
+    type Storage = core::convert::Infallible;
     fn link(&self) -> LinkSnapshot {
         self.0.borrow().link
     }
@@ -142,15 +132,32 @@ impl NetDevice for Port {
             Poll::Ready(())
         }
     }
-    fn try_receive(&mut self) -> Result<Option<Frame>, oer_protocols_network_port::ReceiveFault> {
-        Ok(self.0.borrow_mut().rx.pop_front())
-    }
-    fn read_copied<R>(
+    fn receive(
         &mut self,
-        mut copied: Frame,
-        read: impl FnOnce(EthernetFrameView<'_>) -> R,
-    ) -> Result<R, FrameLengthError> {
-        copied.view().map(read)
+        limit: usize,
+        mut take: impl FnMut(
+            oer_protocols_network_port::Incoming<
+                '_,
+                oer_protocols_network_port::LentFrame<core::convert::Infallible>,
+            >,
+        ),
+    ) -> oer_protocols_network_port::ReceivedBatch {
+        use oer_protocols_network_port::{BatchEnd, CopyReason, Incoming, ReceivedBatch};
+        let mut taken = 0;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let Some(mut frame) = self.0.borrow_mut().rx.pop_front() else {
+                break BatchEnd::Drained;
+            };
+            taken += 1;
+            take(Incoming::Copied {
+                frame: frame.view(),
+                reason: CopyReason::Format,
+            });
+        };
+        ReceivedBatch { taken, end }
     }
 }
 

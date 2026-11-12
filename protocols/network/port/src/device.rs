@@ -167,19 +167,47 @@ impl<S: FrameStorage> EthernetFrame for LentFrame<S> {
     }
 }
 
-/// A received frame a [`NetDevice`] hands over: lent in its owner's
-/// storage, or a copy the device keeps, which [`NetDevice::read_copied`]
-/// reads where it lies. The frame a device hands over stays small either
-/// way: queues and the bridge move it by value.
-pub trait ReceivedFrame: Sized {
-    /// The storage a lent frame keeps its bytes in.
-    type Storage: FrameStorage;
-    /// What stands for a copy the device keeps.
-    type Copied;
-    /// The frame in its owner's storage, or what stands for its copy.
-    fn into_lent(self) -> Result<LentFrame<Self::Storage>, Self::Copied>;
-    /// Why the device copied the frame `copied` stands for.
-    fn copy_reason(copied: &Self::Copied) -> CopyReason;
+/// One received frame as a receive batch hands it over: in a buffer its
+/// reader may keep, or in the device's own copy, shown for the call only.
+#[derive(Debug)]
+pub enum Incoming<'a, H> {
+    /// A frame in a buffer the device lends: the reader's owner now.
+    /// Dropping it gives the buffer back to the device.
+    Lent(H),
+    /// A frame in the device's own copy, for this reason: readable only
+    /// within the call, and released after it. `Err` names a copy the
+    /// device could not show.
+    Copied {
+        frame: Result<EthernetFrameView<'a>, FrameLengthError>,
+        reason: CopyReason,
+    },
+}
+
+/// How a receive batch ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BatchEnd {
+    /// No frame was left: the batch handed every one that waited.
+    Drained,
+    /// The batch handed its limit: more may wait.
+    Limit,
+    /// The device's receive queue broke after the frames handed before it:
+    /// no frame is handed after it, and the device is not to be read again.
+    Fault(ReceiveFault),
+}
+
+/// What one receive batch handed over.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReceivedBatch {
+    /// The frames handed, each its reader's once handed.
+    pub taken: usize,
+    pub end: BatchEnd,
+}
+
+impl ReceivedBatch {
+    /// Whether a frame was handed.
+    pub const fn found(&self) -> bool {
+        self.taken != 0
+    }
 }
 
 /// Why a device copied a received frame instead of lending its buffer.
@@ -219,10 +247,11 @@ pub enum ReceiveFault {
 
 /// The link and receive half of one affine Ethernet port. Poll methods
 /// register before observing readiness. Cancelling a readiness wait consumes
-/// no frame. RX transfers its concrete owner by value. The endpoints and
-/// their task wakers stay on their executor's hart.
+/// no frame. RX transfers its concrete owners by value, in bounded batches.
+/// The endpoints and their task wakers stay on their executor's hart.
 pub trait NetDevice {
-    type RxFrame: ReceivedFrame;
+    /// The storage a lent frame keeps its bytes in.
+    type Storage: FrameStorage;
     fn link(&self) -> LinkSnapshot;
     /// Ready once what the device publishes with its link changed since the
     /// last ready: the link, or what is published in the same word with it
@@ -230,25 +259,20 @@ pub trait NetDevice {
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot>;
     fn receive_queue_len(&self) -> usize;
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
-    /// The oldest received frame, `None` while none waits.
+    /// Hand the oldest received frames to `take`, at most `limit` of them,
+    /// in order: the prefix ready now, never waiting for more. A lent frame
+    /// is `take`'s owner once handed; a copy is shown and released. The
+    /// queue's places of the frames handed are freed together, once, after
+    /// the last of them, the batch's end among them.
     ///
-    /// # Errors
-    ///
-    /// The device's receive queue broke ([`ReceiveFault`]): no frame is
-    /// given, and the device is not to be read again.
-    fn try_receive(&mut self) -> Result<Option<Self::RxFrame>, ReceiveFault>;
-    /// Read the copy `copied` stands for, in place, and release it. A copy
-    /// is read in the order the device handed its frames over.
-    ///
-    /// # Errors
-    ///
-    /// [`FrameLengthError`] when the copy is not a frame the device can
-    /// view; the copy is released all the same.
-    fn read_copied<R>(
+    /// A fault of the queue ([`BatchEnd::Fault`]) ends the batch after the
+    /// frames handed before it, which stay handed and whose places are
+    /// freed all the same; no frame is handed after it.
+    fn receive(
         &mut self,
-        copied: <Self::RxFrame as ReceivedFrame>::Copied,
-        read: impl FnOnce(EthernetFrameView<'_>) -> R,
-    ) -> Result<R, FrameLengthError>;
+        limit: usize,
+        take: impl FnMut(Incoming<'_, LentFrame<Self::Storage>>),
+    ) -> ReceivedBatch;
 }
 
 /// The transmit half of one affine Ethernet port, owned by the network

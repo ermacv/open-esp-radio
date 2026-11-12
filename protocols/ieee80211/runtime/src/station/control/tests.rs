@@ -1,5 +1,5 @@
 use super::*;
-use crate::station::{Outgoing, TxEnded};
+use crate::station::{CopiedMark, Outgoing, TxEnded};
 
 /// `memory` back from an MSDU that never reached the air.
 fn ended(memory: Vec<u8>) -> TxEnded<Vec<u8>> {
@@ -245,7 +245,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
     let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
-    let mut rx = oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, 1>::new();
+    let mut rx = oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, 2>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (mut control, _runner) = Control::new(sender, &state).unwrap();
@@ -254,7 +254,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let (mut received, receive) = rx.split(|| None);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (copy, copied) = copies.split();
-    let mut device: Device<'_, _, 1> = Device::new(receive, copied, &state);
+    let mut device: Device<'_, _, 2> = Device::new(receive, copied, &state);
     let _transmit: DeviceTransmit<'_, Frame, _, 1> =
         DeviceTransmit::new(sender, back, Supply::with(1), &state);
     let wake = Arc::new(WakeCount(AtomicUsize::new(0)));
@@ -304,35 +304,44 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     })
     .unwrap();
     assert!(copy.try_send(frame).is_ok());
-    assert!(
-        received
-            .try_send_with(|slot| {
-                *slot = Some(Received::Copied(CopiedMark::new(
-                    oer_protocols_network_port::CopyReason::Format,
-                )));
-                Ok::<_, core::convert::Infallible>(())
-            })
-            .is_ok()
-    );
+    let free = received.free_capacity();
+    // Two marks, one copy: the second mark finds none.
+    for _ in 0..2 {
+        assert!(
+            received
+                .try_send_with(|slot| {
+                    *slot = Some(Received::Copied(CopiedMark::new(
+                        oer_protocols_network_port::CopyReason::Format,
+                    )));
+                    Ok::<_, core::convert::Infallible>(())
+                })
+                .is_ok()
+        );
+    }
     assert!(device.poll_receive_ready(&mut cx).is_ready());
-    let Ok(Some(Received::Copied(mark))) = device.try_receive() else {
-        panic!("the copied frame's mark");
-    };
-    // The copy is read where it lies, once.
+    let mut shown = Vec::new();
+    let batch = device.receive(8, |incoming| match incoming {
+        oer_protocols_network_port::Incoming::Copied { frame, reason } => {
+            assert_eq!(reason, oer_protocols_network_port::CopyReason::Format);
+            shown.push(frame.map(|view| view.payload.to_vec()));
+        }
+        oer_protocols_network_port::Incoming::Lent(_) => panic!("only copies were queued"),
+    });
+    // The copy is read where it lies, once, in the marks' order.
     assert_eq!(
-        device.read_copied(mark, |view| view.payload.to_vec()),
-        Ok(std::vec![3; 4])
+        shown,
+        [Ok(std::vec![3; 4]), Err(FrameLengthError::MissingCopy)]
     );
     assert_eq!(
-        device.read_copied(
-            CopiedMark::new(oer_protocols_network_port::CopyReason::Format),
-            |_| ()
-        ),
-        Err(FrameLengthError::MissingCopy)
+        batch,
+        oer_protocols_network_port::ReceivedBatch {
+            taken: 2,
+            end: oer_protocols_network_port::BatchEnd::Drained
+        }
     );
-    assert!(matches!(device.try_receive(), Ok(None)));
+    assert_eq!(received.free_capacity(), free, "both slots back, at once");
     // A slot published without its frame is the queue's fault, not an
-    // empty queue.
+    // empty queue: the batch ends there, its slot freed all the same.
     assert!(
         received
             .try_send_with(|slot| {
@@ -341,10 +350,14 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
             })
             .is_ok()
     );
+    let broken = device.receive(8, |_| panic!("no frame after the break"));
     assert_eq!(
-        device.try_receive().err(),
-        Some(oer_protocols_network_port::ReceiveFault::Unfilled)
+        broken.end,
+        oer_protocols_network_port::BatchEnd::Fault(
+            oer_protocols_network_port::ReceiveFault::Unfilled
+        )
     );
+    assert_eq!(received.free_capacity(), free);
     // Cooperative stop is independent of a full command queue.
     assert!(control.try_command(ControlCommand::Stop).is_ok());
     control.stop(oer_portable_time::Instant::from_micros(u64::MAX));

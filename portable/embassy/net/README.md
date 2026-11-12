@@ -42,7 +42,12 @@ Pools, stack, bridge and socket handles remain in place across reconnects.
 service lowers its stack link, closes every UDP and raw socket of its stack (dropping what each queued), clears IP
 addresses/routes and returns its typed stop/error. It retains its owners in
 terminal state; subsequent runs return that same terminal without polling the
-stack. Control and runner stay on the same executor/hart. The neutral device's
+stack. A device whose receive queue broke ends the service with the same
+cleanup and its own error (`Error::ReceiveFault`): the link goes down, the
+stack's packets and sockets are dropped, lent buffers go back and the
+configuration is cleared, and the broken queue is not read again; what it
+still holds stays the device's. The bridge takes the device's frames in
+batches of at most the stack queue's room (`NetDevice::receive`). Control and runner stay on the same executor/hart. The neutral device's
 radio lifecycle is controlled by its own facade, not by stopping IP.
 
 `Service::stack` and `interface` expose the pinned stack for socket

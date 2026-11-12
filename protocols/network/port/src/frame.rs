@@ -5,7 +5,7 @@ use core::task::{Context, Poll};
 
 use oer_protocols_network_wire::ip::Dscp;
 
-use crate::device::{EthernetFrame, EthernetFrameView, LinkSnapshot};
+use crate::device::{EthernetFrame, EthernetFrameView, Incoming, LinkSnapshot, ReceivedBatch};
 use crate::slot::Slot;
 
 /// Why a port took no frame, which names what it waits for.
@@ -157,17 +157,21 @@ pub trait FrameSource {
     type Notice;
 
     /// A received frame's buffer the port lets its reader keep:
-    /// [`NeverHeld`] for a port that lends none.
+    /// [`NeverHeld`] for a port that lends none. Dropping it gives the
+    /// buffer back to the port.
     type Held: EthernetFrame;
 
-    /// Show the next received frame to `read`, with how the port holds it.
-    /// A frame in a buffer the port may lend ([`Holding::Lendable`]) is
-    /// handed over when `read` answers [`Keep::Keep`]; any other frame stays
-    /// the port's whatever the answer.
-    fn take_frame(
+    /// Hand the oldest received frames to `take`, at most `limit`, in
+    /// order, as [`NetDevice::receive`](crate::NetDevice::receive) does: a
+    /// frame in a buffer the port may lend comes as [`Incoming::Lent`],
+    /// the reader's to keep or drop; any other is shown and stays the
+    /// port's. The port's places of the frames handed are freed once, after
+    /// the last; a broken queue ends the batch after the frames before it.
+    fn take_frames(
         &mut self,
-        read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
-    ) -> Taken<Self::Held>;
+        limit: usize,
+        take: impl FnMut(Incoming<'_, Self::Held>),
+    ) -> ReceivedBatch;
 
     /// The next notice.
     fn take_notice(&mut self) -> Option<Self::Notice>;
@@ -177,13 +181,31 @@ pub trait FrameSource {
     fn link(&self) -> LinkSnapshot;
 
     /// Make `cx` the one the next received frame, notice, change of link or
-    /// room for a refused frame wakes, and return whether one is here
-    /// already: a frame or a notice not yet taken, a link changed since the
-    /// last registration, or room for the frame the port last refused. This
-    /// is the caller's readiness, checked after registering, so nothing that
-    /// comes between the two is missed. A `true` is not also a wake: `cx` is
-    /// woken for what comes after this call.
-    fn register(&mut self, cx: &mut Context<'_>) -> bool;
+    /// room for a refused frame wakes, and return what is here already: a
+    /// frame not yet taken ([`PortReady::received`]), or a notice not yet
+    /// taken, a link changed since the last registration, or room for the
+    /// frame the port last refused ([`PortReady::other`]). This is the
+    /// caller's readiness, checked after registering, so nothing that comes
+    /// between the two is missed. Readiness is not also a wake: `cx` is woken
+    /// for what comes after this call.
+    fn register(&mut self, cx: &mut Context<'_>) -> PortReady;
+}
+
+/// What a port had for its reader when it registered
+/// ([`FrameSource::register`]).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PortReady {
+    /// A received frame waits.
+    pub received: bool,
+    /// Anything else: a notice, a changed link, or room for a refused frame.
+    pub other: bool,
+}
+
+impl PortReady {
+    /// Whether anything waits.
+    pub const fn any(self) -> bool {
+        self.received || self.other
+    }
 }
 
 /// The buffer of a port that lends none: it cannot be.
@@ -203,35 +225,6 @@ pub enum Holding {
     Lendable,
     /// In the device's own copy, for this reason.
     Copied(crate::CopyReason),
-}
-
-/// What a reader of a received frame does with its buffer.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Keep {
-    /// Done with it: the buffer stays the port's.
-    Drop,
-    /// Keep a lendable frame's buffer.
-    Keep,
-}
-
-/// What a look for a received frame found.
-#[derive(Debug)]
-pub enum Taken<H> {
-    /// No frame waited.
-    Empty,
-    /// A frame was shown, and its buffer stayed the port's.
-    Read,
-    /// A frame was shown and its buffer kept: the reader's now.
-    Kept(H),
-    /// The port's receive queue broke: no frame, and none to look for again.
-    Fault(crate::ReceiveFault),
-}
-
-impl<H> Taken<H> {
-    /// Whether a frame was there.
-    pub const fn found(&self) -> bool {
-        matches!(self, Self::Read | Self::Kept(_))
-    }
 }
 
 /// What kind of work a frame is.

@@ -8,9 +8,9 @@ use std::vec::Vec;
 use core::task::{Context, Poll, Waker};
 
 use oer_protocols_network_port::{
-    CopyReason, EthernetFrameView, FrameLengthError, FrameMeta, FramePort, FrameSource,
-    FrameStorage, Holding, Keep, LentFrame, LinkSnapshot, LinkState, NetDevice, OwnedTransmit,
-    PortRefusal, ReceivedFrame, StorageAdvanceRefused, Taken, Unpublished,
+    BatchEnd, CopyReason, EthernetFrameView, FrameLengthError, FrameMeta, FramePort, FrameSource,
+    FrameStorage, Incoming, LentFrame, LinkSnapshot, LinkState, NetDevice, OwnedTransmit,
+    PortRefusal, ReceivedBatch, StorageAdvanceRefused, Unpublished,
 };
 
 use super::DevicePort;
@@ -40,34 +40,21 @@ impl FrameStorage for Lent {
     }
 }
 
-enum Incoming {
+/// A frame the device queues.
+enum Queued {
     Lent(LentFrame<Lent>),
     Copied,
 }
 
-impl ReceivedFrame for Incoming {
-    type Storage = Lent;
-    type Copied = ();
-    fn into_lent(self) -> Result<LentFrame<Lent>, ()> {
-        match self {
-            Self::Lent(frame) => Ok(frame),
-            Self::Copied => Err(()),
-        }
-    }
-    fn copy_reason((): &()) -> CopyReason {
-        CopyReason::Pressure
-    }
-}
-
 const FIELDS: [u8; 6] = [2, 0, 0, 0, 0, 1];
 
-fn lent(payload: &[u8]) -> Incoming {
+fn lent(payload: &[u8]) -> Queued {
     lent_from(Lent(payload.to_vec(), None))
 }
 
-fn lent_from(storage: Lent) -> Incoming {
+fn lent_from(storage: Lent) -> Queued {
     let range = 0..storage.0.len();
-    Incoming::Lent(
+    Queued::Lent(
         LentFrame::new(storage, FIELDS, FIELDS, 0x0800, range)
             .ok()
             .unwrap(),
@@ -76,7 +63,7 @@ fn lent_from(storage: Lent) -> Incoming {
 
 #[derive(Default)]
 struct Device {
-    incoming: VecDeque<Incoming>,
+    incoming: VecDeque<Queued>,
     bad_copy: bool,
     link_changed: bool,
     /// The receive queue's break, which every later read answers.
@@ -84,7 +71,7 @@ struct Device {
 }
 
 impl NetDevice for Device {
-    type RxFrame = Incoming;
+    type Storage = Lent;
     fn link(&self) -> LinkSnapshot {
         LinkSnapshot {
             state: LinkState::Up,
@@ -108,28 +95,44 @@ impl NetDevice for Device {
             Poll::Ready(())
         }
     }
-    fn try_receive(
+    fn receive(
         &mut self,
-    ) -> Result<Option<Incoming>, oer_protocols_network_port::ReceiveFault> {
-        match self.fault {
-            Some(fault) => Err(fault),
-            None => Ok(self.incoming.pop_front()),
+        limit: usize,
+        mut take: impl FnMut(Incoming<'_, LentFrame<Lent>>),
+    ) -> ReceivedBatch {
+        if let Some(fault) = self.fault {
+            return ReceivedBatch {
+                taken: 0,
+                end: BatchEnd::Fault(fault),
+            };
         }
-    }
-    fn read_copied<R>(
-        &mut self,
-        (): (),
-        read: impl FnOnce(EthernetFrameView<'_>) -> R,
-    ) -> Result<R, FrameLengthError> {
-        if self.bad_copy {
-            return Err(FrameLengthError::MissingCopy);
-        }
-        Ok(read(EthernetFrameView {
-            destination: FIELDS,
-            source: FIELDS,
-            ether_type: 0x0800,
-            payload: b"copied",
-        }))
+        let mut taken = 0;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let Some(frame) = self.incoming.pop_front() else {
+                break BatchEnd::Drained;
+            };
+            taken += 1;
+            match frame {
+                Queued::Lent(frame) => take(Incoming::Lent(frame)),
+                Queued::Copied => take(Incoming::Copied {
+                    frame: if self.bad_copy {
+                        Err(FrameLengthError::MissingCopy)
+                    } else {
+                        Ok(EthernetFrameView {
+                            destination: FIELDS,
+                            source: FIELDS,
+                            ether_type: 0x0800,
+                            payload: b"copied",
+                        })
+                    },
+                    reason: CopyReason::Pressure,
+                }),
+            }
+        };
+        ReceivedBatch { taken, end }
     }
 }
 
@@ -259,7 +262,7 @@ fn unreachable_fill(
 fn ready_at_once(port: &mut Port) -> bool {
     let woken = std::sync::Arc::new(Woken::default());
     let waker = Waker::from(woken.clone());
-    let ready = port.register(&mut Context::from_waker(&waker));
+    let ready = port.register(&mut Context::from_waker(&waker)).any();
     assert!(
         !woken.0.load(std::sync::atomic::Ordering::SeqCst),
         "readiness is returned, not woken"
@@ -276,63 +279,79 @@ impl std::task::Wake for Woken {
     }
 }
 
-#[test]
-fn a_lent_frame_and_a_copied_one_are_both_shown() {
-    let mut port = port();
-    port.device
-        .incoming
-        .extend([lent(b"lent"), Incoming::Copied]);
+/// What one batch showed: each frame's payload and whether it was lent.
+fn shown(port: &mut Port, limit: usize) -> (Vec<(Vec<u8>, bool)>, ReceivedBatch) {
     let mut seen = Vec::new();
-    let mut show = |frame: EthernetFrameView<'_>, holding| {
-        seen.push((frame.payload.to_vec(), holding));
-        Keep::Drop
-    };
-    assert!(matches!(port.take_frame(&mut show), Taken::Read));
-    assert!(matches!(port.take_frame(&mut show), Taken::Read));
-    assert!(matches!(
-        port.take_frame(|_, _| panic!("nothing waits")),
-        Taken::Empty
-    ));
-    assert_eq!(
-        seen,
-        [
-            (b"lent".to_vec(), Holding::Lendable),
-            (b"copied".to_vec(), Holding::Copied(CopyReason::Pressure))
-        ]
-    );
+    let batch = port.take_frames(limit, |incoming| match incoming {
+        Incoming::Lent(frame) => seen.push((frame.view().unwrap().payload.to_vec(), true)),
+        Incoming::Copied { frame, reason } => {
+            assert_eq!(reason, CopyReason::Pressure);
+            seen.push((
+                frame.map_or(Vec::new(), |view| view.payload.to_vec()),
+                false,
+            ));
+        }
+    });
+    (seen, batch)
 }
 
 #[test]
-fn a_kept_lent_frame_is_the_reader_s_until_it_drops_and_a_copy_stays_the_device_s() {
+fn a_batch_shows_the_ready_prefix_in_order_up_to_its_limit() {
+    let mut port = port();
+    port.device
+        .incoming
+        .extend([lent(b"lent"), Queued::Copied, lent(b"last")]);
+    let (seen, batch) = shown(&mut port, 2);
+    assert_eq!(
+        seen,
+        [(b"lent".to_vec(), true), (b"copied".to_vec(), false)]
+    );
+    assert_eq!(
+        batch,
+        ReceivedBatch {
+            taken: 2,
+            end: BatchEnd::Limit
+        }
+    );
+    let (seen, batch) = shown(&mut port, 8);
+    assert_eq!(seen, [(b"last".to_vec(), true)]);
+    assert_eq!(batch.end, BatchEnd::Drained, "never waits for a full batch");
+    let (seen, batch) = shown(&mut port, 8);
+    assert!(seen.is_empty() && !batch.found());
+}
+
+#[test]
+fn a_kept_lent_frame_is_the_reader_s_until_it_drops() {
     let returned = Arc::new(AtomicU32::new(0));
     let mut port = port();
     port.device
         .incoming
         .push_back(lent_from(Lent(b"kept".to_vec(), Some(returned.clone()))));
-    port.device.incoming.push_back(Incoming::Copied);
-    let Taken::Kept(kept) = port.take_frame(|_, _| Keep::Keep) else {
-        panic!("a lendable frame is kept");
-    };
+    let mut kept = None;
+    let _batch = port.take_frames(1, |incoming| {
+        if let Incoming::Lent(frame) = incoming {
+            kept = Some(frame);
+        }
+    });
+    let mut kept = kept.expect("a lendable frame comes lent");
     assert_eq!(returned.load(Ordering::SeqCst), 0, "the reader holds it");
     assert_eq!(kept.view().unwrap().payload, b"kept");
     drop(kept);
     assert_eq!(returned.load(Ordering::SeqCst), 1, "its drop returns it");
-    assert!(
-        matches!(port.take_frame(|_, _| Keep::Keep), Taken::Read),
-        "a copy is not the reader's to keep"
-    );
 }
 
 #[test]
-fn a_frame_the_device_cannot_show_is_counted() {
+fn a_copy_the_device_cannot_show_comes_as_its_error() {
     let mut port = port();
     port.device.bad_copy = true;
-    port.device.incoming.push_back(Incoming::Copied);
-    assert!(matches!(
-        port.take_frame(|_, _| panic!("unreadable")),
-        Taken::Read
-    ));
-    assert_eq!(port.unreadable(), 1);
+    port.device.incoming.push_back(Queued::Copied);
+    let mut errors = 0;
+    let batch = port.take_frames(1, |incoming| {
+        if let Incoming::Copied { frame: Err(_), .. } = incoming {
+            errors += 1;
+        }
+    });
+    assert_eq!((batch.taken, errors), (1, 1));
 }
 
 /// A broken receive queue is the port's named fault, never an empty
@@ -343,9 +362,9 @@ fn a_broken_receive_queue_is_a_fault_not_an_empty_queue() {
     let mut port = port();
     port.device.incoming.push_back(lent(&[1, 2]));
     port.device.fault = Some(ReceiveFault::Unfilled);
-    let taken = port.take_frame(|_, _| panic!("no frame is shown"));
-    assert!(matches!(taken, Taken::Fault(ReceiveFault::Unfilled)));
-    assert!(!taken.found());
+    let batch = port.take_frames(8, |_| panic!("no frame is shown"));
+    assert_eq!(batch.end, BatchEnd::Fault(ReceiveFault::Unfilled));
+    assert!(!batch.found());
     // The give-back stops at the break and leaves the device's frames.
     port.give_back();
     assert_eq!(port.device.incoming.len(), 1);
@@ -499,7 +518,7 @@ fn a_stop_gives_back_every_frame_and_takes_back_the_returned_memory() {
         let storage = Lent(b"held".to_vec(), Some(returned.clone()));
         port.device.incoming.push_back(lent_from(storage));
     }
-    port.device.incoming.push_back(Incoming::Copied);
+    port.device.incoming.push_back(Queued::Copied);
     port.transmit.returned = 2;
     port.transmit.full = true;
     assert!(

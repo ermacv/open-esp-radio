@@ -26,8 +26,8 @@ its own after a failed fill ends the work by the fill's cause. A port fault
 after a whole fill (`FramePort::is_fault`, such as a buffer its memory refused)
 ends the work `Outcome::Rejected`, since the frame did not go, not repeated,
 and stops publishing the same way (`Unsent::PortFault`, `Broken::Fault`). A port
-whose receive queue broke (`Taken::Fault`, a `ReceiveFault` of the device) gives no
-frame and is not read again (`Intake::Broken`, `Broken::Receive`). Every end at
+whose receive queue broke (`BatchEnd::Fault`, a `ReceiveFault` of the device) ends
+the batch after the frames before it and is not read again (`Broken::Receive`). Every end at
 publication, a frame taken or refused for good, passes the turn to the next
 socket.
 
@@ -58,7 +58,7 @@ slot stays the port's.
 
 ## Counting the core's steps
 
-`demands`, `next_end`, `transmit` and `take_frame` take a `Count`, which
+`demands`, `next_end`, `transmit` and `take_frames` take a `Count`, which
 hears the running places a readiness walk visits, each end told, each frame
 built whole in the port's slot and each lending refusal for want of credit
 with the loans then out: the core's part of the service's switchable

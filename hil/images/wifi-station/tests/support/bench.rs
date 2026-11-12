@@ -69,45 +69,46 @@ impl FramePort for Port {
 impl FrameSource for Port {
     type Notice = ();
     type Held = wifi::HostHeld;
-    fn take_frame(
+    fn take_frames(
         &mut self,
-        read: impl FnOnce(
-            EthernetFrameView<'_>,
-            oer_protocols_network_port::Holding,
-        ) -> oer_protocols_network_port::Keep,
-    ) -> oer_protocols_network_port::Taken<Self::Held> {
-        use oer_protocols_network_port::{CopyReason, Holding, Keep, Taken};
-        let (frame, lends, breaks, back) = {
-            let mut wire = self.0.borrow_mut();
-            let Some(frame) = wire.incoming.pop_front() else {
-                return Taken::Empty;
+        limit: usize,
+        mut take: impl FnMut(oer_protocols_network_port::Incoming<'_, Self::Held>),
+    ) -> oer_protocols_network_port::ReceivedBatch {
+        use oer_protocols_network_port::{BatchEnd, CopyReason, Incoming, ReceivedBatch};
+        let mut taken = 0;
+        let end = loop {
+            if taken >= limit {
+                break BatchEnd::Limit;
+            }
+            let (frame, lends, breaks, back) = {
+                let mut wire = self.0.borrow_mut();
+                let Some(frame) = wire.incoming.pop_front() else {
+                    break BatchEnd::Drained;
+                };
+                (frame, wire.lends, wire.breaks, wire.back.clone())
             };
-            (frame, wire.lends, wire.breaks, wire.back.clone())
+            taken += 1;
+            if lends {
+                take(Incoming::Lent(wifi::HostHeld {
+                    frame,
+                    broken: breaks,
+                    shown: false,
+                    back,
+                }));
+            } else {
+                let (header, payload) = EthernetHeader::parse(&frame).unwrap();
+                take(Incoming::Copied {
+                    frame: Ok(EthernetFrameView {
+                        destination: header.destination,
+                        source: header.source,
+                        ether_type: header.ether_type.value(),
+                        payload,
+                    }),
+                    reason: CopyReason::Format,
+                });
+            }
         };
-        let holding = if lends {
-            Holding::Lendable
-        } else {
-            Holding::Copied(CopyReason::Format)
-        };
-        let (header, payload) = EthernetHeader::parse(&frame).unwrap();
-        let keep = read(
-            EthernetFrameView {
-                destination: header.destination,
-                source: header.source,
-                ether_type: header.ether_type.value(),
-                payload,
-            },
-            holding,
-        );
-        if lends && keep == Keep::Keep {
-            Taken::Kept(wifi::HostHeld {
-                frame,
-                broken: breaks,
-                back,
-            })
-        } else {
-            Taken::Read
-        }
+        ReceivedBatch { taken, end }
     }
     fn take_notice(&mut self) -> Option<()> {
         None
@@ -118,8 +119,11 @@ impl FrameSource for Port {
             epoch: 1,
         }
     }
-    fn register(&mut self, _: &mut Context<'_>) -> bool {
-        !self.0.borrow().incoming.is_empty()
+    fn register(&mut self, _: &mut Context<'_>) -> oer_protocols_network_port::PortReady {
+        oer_protocols_network_port::PortReady {
+            received: !self.0.borrow().incoming.is_empty(),
+            other: false,
+        }
     }
 }
 pub(crate) type TestService = wifi::Served<Port>;

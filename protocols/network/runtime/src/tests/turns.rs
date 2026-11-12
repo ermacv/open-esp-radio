@@ -159,6 +159,7 @@ fn turns(events: &[ServiceEvent]) -> Vec<Turn> {
             ServiceEvent::IntakeFull
             | ServiceEvent::NoticesFull
             | ServiceEvent::PacketTurn
+            | ServiceEvent::ReceiveTurn
             | ServiceEvent::Yielded
             | ServiceEvent::Waited { .. }
             | ServiceEvent::Returned { .. }
