@@ -1,0 +1,28 @@
+error[E0277]: the trait bound `oer_chips_esp32s31_hal::radio::ieee80211::dma::space::HostDma: space::sealed::SharedArena` is not satisfied
+  --> tests/ui/host_dma_lands_only_on_its_thread.rs:17:24
+   |
+17 |     std::thread::spawn(move || storage.land_unit(&RefCell::new(RxWalkerModel::new()), &[9; 4]).is_ok()); // ui-error: E0277
+   |     ------------------ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `space::sealed::SharedArena` is not implemented for `oer_chips_esp32s31_hal::radio::ieee80211::dma::space::HostDma`
+   |     |
+   |     required by a bound introduced by this call
+   |
+help: the trait `space::sealed::SharedArena` is implemented for `ChipDma`
+  --> src/radio/ieee80211/dma/space.rs
+   |
+   | impl sealed::SharedArena for ChipDma {}
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: required for `RxDmaStorage<2, 16, 16, oer_chips_esp32s31_hal::radio::ieee80211::dma::space::HostDma>` to implement `Sync`
+   = note: required for `&RxDmaStorage<2, 16, 16, oer_chips_esp32s31_hal::radio::ieee80211::dma::space::HostDma>` to implement `Send`
+note: required because it's used within this closure
+  --> tests/ui/host_dma_lands_only_on_its_thread.rs:17:24
+   |
+17 |     std::thread::spawn(move || storage.land_unit(&RefCell::new(RxWalkerModel::new()), &[9; 4]).is_ok()); // ui-error: E0277
+   |                        ^^^^^^^
+note: required by a bound in `spawn`
+  --> $RUST/std/src/thread/functions.rs
+   |
+   | pub fn spawn<F, T>(f: F) -> JoinHandle<T>
+   |        ----- required by a bound in this function
+...
+   |     F: Send + 'static,
+   |        ^^^^ required by this bound in `spawn`
