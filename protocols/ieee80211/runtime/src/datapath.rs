@@ -444,6 +444,26 @@ impl<'id, D: DatapathPort<'id>> Owed<'id, D> {
         }
     }
 
+    /// Radio and link answers have priority over the coalesced facts.
+    /// Keep their sending paths out of an ordinary data turn.
+    fn answers_pending(&self) -> bool {
+        self.started.is_some()
+            || self.retuned.is_some()
+            || self.link_returned
+            || self.sequence.is_some()
+            || self.pairwise.is_some()
+            || self.gate.is_some()
+            || self.stopped.is_some()
+    }
+
+    /// Publication is needed only when a coalesced fact actually waits.
+    fn facts_pending(&self) -> bool {
+        self.tbtt.is_some()
+            || !self.refused.is_empty()
+            || self.bar.iter().any(Option::is_some)
+            || self.traffic.iter().any(|(_, next)| next.is_some())
+    }
+
     fn refused(&mut self, reason: MsduRefusal) {
         if let Some((_, count)) = self.refused.iter_mut().find(|(seen, _)| *seen == reason) {
             *count = count.saturating_add(1);

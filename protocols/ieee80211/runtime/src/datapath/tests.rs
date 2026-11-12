@@ -610,6 +610,35 @@ fn forty_received_units_take_a_full_turn_one_repost_and_a_short_one() {
 }
 
 #[test]
+fn an_answer_refused_by_a_full_lane_stays_ahead_of_traffic() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        // Fill the lifecycle lane with answers, then leave one answer owed.
+        for _ in 0..FROM {
+            bench.send(ToActor::Start(supported()));
+        }
+        bench.send(ToActor::Start(supported()));
+        // TX owes a fact too, while the lane has no place for either.
+        bench.send_msdu(msdu(0, &[1; 8]));
+        bench.poll();
+        for _ in 0..FROM {
+            assert!(matches!(
+                bench.next(),
+                Some(FromActor::Started(Err(StartRefused::Running)))
+            ));
+        }
+        bench.settle();
+        assert!(matches!(
+            bench.next(),
+            Some(FromActor::Started(Err(StartRefused::Running)))
+        ));
+        assert!(matches!(bench.next(), Some(FromActor::TxTraffic { .. })));
+        assert!(bench.next().is_none());
+    });
+}
+
+#[test]
 fn one_poll_carries_each_msdu_with_no_lifecycle_message() {
     bench(|bench| {
         bench.start();

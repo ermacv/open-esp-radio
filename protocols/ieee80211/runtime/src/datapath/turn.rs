@@ -581,7 +581,6 @@ where
     /// Serve the port's transmit facts, or its due deadline: terminals to
     /// the lifecycle, a data arena's end settled, then the next arena
     /// published.
-    #[inline(never)]
     fn transmit<
         const TO: usize,
         const FROM: usize,
@@ -654,7 +653,6 @@ where
     /// Hand on what the port staged in the last call: the units of a
     /// receive cut through the receive path, then the group change's
     /// terminal, applied to the link's replay epoch first, with its token.
-    #[inline(never)]
     pub(super) fn staged<
         const TO: usize,
         const FROM: usize,
@@ -724,7 +722,6 @@ where
     /// command held at its barrier runs first; while it waits, or while the
     /// radio starts or moves, the next message waits, but a stop behind a
     /// held command withdraws it and runs.
-    #[inline(never)]
     fn messages<
         const TO: usize,
         const FROM: usize,
@@ -809,7 +806,6 @@ where
     }
 
     /// Take one message of the lifecycle.
-    #[inline(never)]
     fn message<
         const TO: usize,
         const FROM: usize,
@@ -1002,7 +998,6 @@ where
 
     /// Run one port command, or keep it held at its barrier; a refusal goes
     /// back with its owners and the group token.
-    #[inline(never)]
     fn command<
         const TO: usize,
         const FROM: usize,
@@ -1201,7 +1196,6 @@ where
 
     /// Follow the network side's stop and its report; whether it moved,
     /// which the stop's turn then serves.
-    #[inline(never)]
     fn poll_network_stop<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -1364,7 +1358,6 @@ where
 
     /// Move the radio on: its start, its move and its stop run within the
     /// port's bounds, each answered once.
-    #[inline(never)]
     fn drive_radio(&mut self, cx: &mut Context<'_>) -> Result<(), Failed<'id, D>> {
         let now = self.now;
         match self.radio {
@@ -1504,8 +1497,85 @@ where
     /// Tell the lifecycle what it is owed, while its queue has room beyond
     /// the places the bounded producers keep: the answers first, then the
     /// coalesced facts.
-    #[inline(never)]
     fn flush<const TO: usize, const FROM: usize, const RETURNS: usize>(
+        &mut self,
+        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+    ) {
+        if self.owed.answers_pending() {
+            self.flush_answers(lifecycle);
+        }
+        // Most data turns owe no publication. In particular, TX traffic
+        // is coalesced over TX_TRAFFIC_REFRESH, not sent once per PPDU.
+        if self.owed.facts_pending()
+            || (self.reply_out.is_none() && self.receive.next_reply().is_some())
+        {
+            self.flush_facts(lifecycle);
+        }
+    }
+
+    /// A pending reply and the coalesced facts, in their original order.
+    /// Full lanes keep them pending; no presence flag can become stale.
+    #[cold]
+    #[inline(never)]
+    fn flush_facts<const TO: usize, const FROM: usize, const RETURNS: usize>(
+        &mut self,
+        lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+    ) {
+        let from = &lifecycle.from_actor;
+        if self.reply_out.is_none()
+            && let Some(reply) = self.receive.next_reply()
+            && from.try_send(FromActor::BlockAckReply(reply)).is_ok()
+        {
+            self.reply_out = Some(reply.place);
+        }
+        // Facts only take the places the bounded producers do not keep.
+        let reserve = LIFECYCLE_FRAMES.saturating_add(RETURNS);
+        let room =
+            |from: &ClosingSpscSender<'_, FromActor<'id, D>, FROM>| from.free_capacity() > reserve;
+        if let Some(event) = self.owed.tbtt
+            && room(from)
+            && from.try_send(FromActor::Tbtt(event)).is_ok()
+        {
+            self.owed.tbtt = None;
+        }
+        for tid in WmmUserPriority::ALL {
+            if let Some(head) = *tid.select(&self.owed.bar)
+                && room(from)
+                && from.try_send(FromActor::BarOwed { tid, head }).is_ok()
+            {
+                *tid.select_mut(&mut self.owed.bar) = None;
+            }
+            let (told, next) = tid.select_mut(&mut self.owed.traffic);
+            if let Some(sequence) = *next
+                && room(from)
+                && from
+                    .try_send(FromActor::TxTraffic {
+                        tid,
+                        next: sequence,
+                    })
+                    .is_ok()
+            {
+                *next = None;
+                *told = Some(self.now);
+            }
+        }
+        while let Some(&(reason, count)) = self.owed.refused.front() {
+            if !room(from)
+                || from
+                    .try_send(FromActor::MsduRefused { reason, count })
+                    .is_err()
+            {
+                break;
+            }
+            let _told = self.owed.refused.pop_front();
+        }
+    }
+
+    /// Radio and link answers, in their original order and before facts.
+    /// A refused owner stays owed for the next turn.
+    #[cold]
+    #[inline(never)]
+    fn flush_answers<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         lifecycle: &LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
     ) {
@@ -1558,53 +1628,6 @@ where
                 FromActor::Stopped(stopped) => Some(stopped),
                 _ => None,
             };
-        }
-        if self.reply_out.is_none()
-            && let Some(reply) = self.receive.next_reply()
-            && from.try_send(FromActor::BlockAckReply(reply)).is_ok()
-        {
-            self.reply_out = Some(reply.place);
-        }
-        // Facts only take the places the bounded producers do not keep.
-        let reserve = LIFECYCLE_FRAMES.saturating_add(RETURNS);
-        let room =
-            |from: &ClosingSpscSender<'_, FromActor<'id, D>, FROM>| from.free_capacity() > reserve;
-        if let Some(event) = self.owed.tbtt
-            && room(from)
-            && from.try_send(FromActor::Tbtt(event)).is_ok()
-        {
-            self.owed.tbtt = None;
-        }
-        for tid in WmmUserPriority::ALL {
-            if let Some(head) = *tid.select(&self.owed.bar)
-                && room(from)
-                && from.try_send(FromActor::BarOwed { tid, head }).is_ok()
-            {
-                *tid.select_mut(&mut self.owed.bar) = None;
-            }
-            let (told, next) = tid.select_mut(&mut self.owed.traffic);
-            if let Some(sequence) = *next
-                && room(from)
-                && from
-                    .try_send(FromActor::TxTraffic {
-                        tid,
-                        next: sequence,
-                    })
-                    .is_ok()
-            {
-                *next = None;
-                *told = Some(self.now);
-            }
-        }
-        while let Some(&(reason, count)) = self.owed.refused.front() {
-            if !room(from)
-                || from
-                    .try_send(FromActor::MsduRefused { reason, count })
-                    .is_err()
-            {
-                break;
-            }
-            let _told = self.owed.refused.pop_front();
         }
     }
 
