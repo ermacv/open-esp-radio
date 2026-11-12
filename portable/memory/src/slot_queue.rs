@@ -170,7 +170,6 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
                 producer,
                 waits,
                 ended,
-                ending: producer,
             },
         )
     }
@@ -493,7 +492,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
 }
 
 /// The consumer: reads the oldest filled slot in place.
-pub struct SlotReceiver<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWaker> {
+pub struct SlotReceiver<'a, T, const DEPTH: usize, C = AtomicWaker, P: QueueNotify = AtomicWaker> {
     slots: &'a [ClaimCell<T>; DEPTH],
     filled: BatchedSpscReceiver<'a, u8, DEPTH>,
     free: BatchedSpscSender<'a, u8, DEPTH>,
@@ -502,16 +501,14 @@ pub struct SlotReceiver<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWa
     waits: Waits<'a>,
     /// Set when this consumer ends.
     ended: &'a AtomicBool,
-    /// The producer's notify, which its end raises.
-    ending: &'a (dyn QueueNotify + Sync),
 }
 
-impl<T, const DEPTH: usize, C, P> Drop for SlotReceiver<'_, T, DEPTH, C, P> {
+impl<T, const DEPTH: usize, C, P: QueueNotify> Drop for SlotReceiver<'_, T, DEPTH, C, P> {
     /// A consumer that goes ends: it reads no more, and the producer hears.
     fn drop(&mut self) {
         self.ended.store(true, Ordering::Release);
         fence(Ordering::SeqCst);
-        self.ending.notify();
+        self.producer.notify();
     }
 }
 
