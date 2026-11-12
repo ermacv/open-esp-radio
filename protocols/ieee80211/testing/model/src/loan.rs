@@ -6,7 +6,7 @@ use oer_protocols_ieee80211_contracts_port::{BodyPayload, OwnedPayload};
 impl<'p, B: ModelComposition, C: ModelClass> ModelBuffer<'p, B, C> {
     fn into_owned(self, loan: &BodyLoan<'p, B::Identity, B>) -> ModelBuffer<'static, B, C> {
         ModelBuffer {
-            slot: loan.reclaim_slot(self.slot),
+            slot: self.slot.map(|slot| loan.reclaim_slot(slot)),
             loan: None,
             memory: self.memory,
             admitted_at: self.admitted_at,
@@ -17,7 +17,7 @@ impl<'p, B: ModelComposition, C: ModelClass> ModelBuffer<'p, B, C> {
 impl<B: ModelComposition, C: ModelClass> ModelBuffer<'static, B, C> {
     fn lend<'p>(self, loan: &BodyLoan<'p, B::Identity, B>) -> ModelBuffer<'p, B, C> {
         ModelBuffer {
-            slot: loan.lend_slot(self.slot),
+            slot: self.slot.map(|slot| loan.lend_slot(slot)),
             loan: Some(*loan),
             memory: self.memory,
             admitted_at: self.admitted_at,
@@ -60,6 +60,8 @@ impl<'p, B: ModelComposition> ModelAnyBuffer<'p, B> {
             Self::Large(buffer) => ModelAnyBuffer::Large(buffer.into_owned(loan)),
             Self::SmallSent(sent) => ModelAnyBuffer::SmallSent(sent.into_owned(loan)),
             Self::LargeSent(sent) => ModelAnyBuffer::LargeSent(sent.into_owned(loan)),
+            Self::Network(buffer) => ModelAnyBuffer::Network(buffer.into_owned(loan)),
+            Self::NetworkSent(sent) => ModelAnyBuffer::NetworkSent(sent.into_owned(loan)),
         }
     }
 }
@@ -70,6 +72,8 @@ impl<B: ModelComposition> ModelAnyBuffer<'static, B> {
             Self::Large(buffer) => ModelAnyBuffer::Large(buffer.lend(loan)),
             Self::SmallSent(sent) => ModelAnyBuffer::SmallSent(sent.lend(loan)),
             Self::LargeSent(sent) => ModelAnyBuffer::LargeSent(sent.lend(loan)),
+            Self::Network(buffer) => ModelAnyBuffer::Network(buffer.lend(loan)),
+            Self::NetworkSent(sent) => ModelAnyBuffer::NetworkSent(sent.lend(loan)),
         }
     }
 }

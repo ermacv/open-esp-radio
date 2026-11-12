@@ -79,6 +79,49 @@ fn protected_ap_frame_owns_from_ds_ccmp_and_plaintext_boundary() {
     assert_eq!(&output[42..46], &[1, 2, 3, 4]);
 }
 
+/// The in-place prefix is the frame's own octets in front of its payload,
+/// its CCMP header reserved: a QoS peer's 42, a group or non-QoS frame's 40.
+#[test]
+fn an_in_place_prefix_is_the_protected_frame_up_to_its_payload() {
+    let access_point = [2, 0, 0, 0, 0, 1];
+    let source = [2, 0, 0, 0, 0, 3];
+    for (peer, qos) in [([2, 0, 0, 0, 0, 2], true), ([1, 0, 0x5e, 0, 0, 1], false)] {
+        let payload = [1, 2, 3, 4];
+        let mut whole = [0; 96];
+        let len = ApProtectedDataFrame {
+            access_point,
+            peer,
+            sequence_number: seq(7),
+            user_priority: 0,
+            peer_qos: qos,
+            more_data: false,
+            ccmp_header: [0; 8],
+            msdu: msdu(peer, source, 0x0800, &payload),
+        }
+        .encode(&mut whole)
+        .unwrap();
+        let prefix = ApProtectedDataPrefix {
+            access_point,
+            peer,
+            sequence_number: seq(7),
+            user_priority: 0,
+            peer_qos: qos,
+            more_data: false,
+            msdu: msdu(peer, source, 0x0800, &[]).header(),
+        };
+        let at = prefix.prefix_len().unwrap();
+        assert_eq!(at, if qos { 42 } else { 40 });
+        let mut output = [0; 96];
+        output[at..at + 4].copy_from_slice(&payload);
+        assert_eq!(prefix.encode(&mut output[..at]), Ok(at));
+        assert_eq!(&output[..len], &whole[..len]);
+        // A region other than the prefix's length is refused, unwritten.
+        let mut short = [0xa5; 96];
+        assert!(prefix.encode(&mut short[..at - 1]).is_err());
+        assert!(short.iter().all(|octet| *octet == 0xa5));
+    }
+}
+
 #[test]
 fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
     let access_point = [2, 0, 0, 0, 0, 1];

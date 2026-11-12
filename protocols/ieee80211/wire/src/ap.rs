@@ -194,47 +194,145 @@ pub struct ApProtectedDataFrame<'frame> {
 
 impl ApProtectedDataFrame<'_> {
     pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
-        if crate::address::AddressFlags::from_bytes([self.access_point[0]]).group()
-            || self.access_point == [0; 6]
+        let planned = ProtectedDataPlan::new(
+            self.access_point,
+            self.peer,
+            self.sequence_number,
+            self.user_priority,
+            self.peer_qos,
+            self.more_data,
+            self.msdu.header(),
+        )?;
+        let header = planned.header()?;
+        crate::encoding::FrameParts([
+            header,
+            &self.ccmp_header,
+            &planned.llc_snap,
+            self.msdu.payload,
+        ])
+        .write(output)
+        .map_err(|required| ApDataFrameError::OutputTooSmall { required })
+    }
+}
+
+/// The prefix of one protected MSDU an AP sends to its authorized peer or
+/// to its BSS, written in place in front of the MSDU's payload: the MAC
+/// header, a reserved CCMP header the transmitter fills from the packet
+/// number its caller numbers (IEEE Std 802.11-2020, 12.5.3.2), and the RFC
+/// 1042 LLC/SNAP header of the MSDU's EtherType.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApProtectedDataPrefix {
+    pub access_point: [u8; 6],
+    pub peer: [u8; 6],
+    pub sequence_number: SequenceNumber,
+    pub user_priority: u8,
+    pub peer_qos: bool,
+    pub more_data: bool,
+    pub msdu: MsduHeader,
+}
+
+impl ApProtectedDataPrefix {
+    /// The prefix's length: the MAC header, the CCMP header and LLC/SNAP.
+    ///
+    /// # Errors
+    ///
+    /// The addresses or the priority are not an AP data frame's.
+    pub fn prefix_len(self) -> Result<usize, ApDataFrameError> {
+        let planned = self.planned()?;
+        Ok(usize::from(planned.plan.header_len).saturating_add(PROTECTED_PREFIX_TAIL))
+    }
+
+    /// Write the prefix into `output`, whose length is [`Self::prefix_len`]: the
+    /// octets right before the payload. Its length.
+    ///
+    /// # Errors
+    ///
+    /// The addresses or the priority are not an AP data frame's, or
+    /// `output` is not the prefix's length; nothing is written then.
+    pub fn encode(self, output: &mut [u8]) -> Result<usize, ApDataFrameError> {
+        let planned = self.planned()?;
+        let header = planned.header()?;
+        let required = header.len().saturating_add(PROTECTED_PREFIX_TAIL);
+        if output.len() != required {
+            return Err(ApDataFrameError::OutputTooSmall { required });
+        }
+        crate::encoding::FrameParts([header, &[0; CCMP_HEADER_LEN], &planned.llc_snap])
+            .write(output)
+            .map_err(|required| ApDataFrameError::OutputTooSmall { required })
+    }
+
+    fn planned(self) -> Result<ProtectedDataPlan, ApDataFrameError> {
+        ProtectedDataPlan::new(
+            self.access_point,
+            self.peer,
+            self.sequence_number,
+            self.user_priority,
+            self.peer_qos,
+            self.more_data,
+            self.msdu,
+        )
+    }
+}
+
+/// What a protected data MPDU's prefix holds after its MAC header: the CCMP
+/// header and LLC/SNAP.
+const PROTECTED_PREFIX_TAIL: usize = CCMP_HEADER_LEN + crate::data::LLC_SNAP_HEADER_LEN;
+
+/// The planned MAC header and LLC/SNAP header of one protected AP data
+/// MPDU, its Sequence Control written.
+struct ProtectedDataPlan {
+    plan: crate::data::DataEncapPlan,
+    llc_snap: [u8; crate::data::LLC_SNAP_HEADER_LEN],
+}
+
+impl ProtectedDataPlan {
+    fn new(
+        access_point: [u8; 6],
+        peer: [u8; 6],
+        sequence_number: SequenceNumber,
+        user_priority: u8,
+        peer_qos: bool,
+        more_data: bool,
+        msdu: MsduHeader,
+    ) -> Result<Self, ApDataFrameError> {
+        if crate::address::AddressFlags::from_bytes([access_point[0]]).group()
+            || access_point == [0; 6]
         {
             return Err(ApDataFrameError::InvalidAccessPoint);
         }
-        let priority = WmmUserPriority::new(self.user_priority)
-            .ok_or(ApDataFrameError::InvalidUserPriority)?;
-        // The initial AP owns one pairwise slot. A group-addressed MSDU
-        // needs the distinct GTK packet-number owner and is rejected by the
-        // chip engine before this codec is called.
-        let payload = self.msdu.payload;
+        let priority =
+            WmmUserPriority::new(user_priority).ok_or(ApDataFrameError::InvalidUserPriority)?;
         let mut plan = plan_data_encapsulation(
             DataInterfaceRole::AccessPoint,
-            self.access_point,
-            self.access_point,
-            self.msdu.header(),
+            access_point,
+            access_point,
+            msdu,
             priority,
-            self.peer_qos,
+            peer_qos,
             false,
         );
-        if plan.header[4..10] != self.peer {
+        if plan.header[4..10] != peer {
             return Err(ApDataFrameError::InvalidPeer);
         }
         plan.set_protected(true);
-        if self.more_data {
+        if more_data {
             plan.set_more_data(true);
         }
-        let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
-            &mut header,
-            &self.sequence_number.sequence_control().to_le_bytes(),
+            &mut plan.header,
+            &sequence_number.sequence_control().to_le_bytes(),
         );
-        let mut reader = oer_portable_wire::Reader::new(&header);
-        let header = reader.take(usize::from(plan.header_len)).map_err(|_| {
+        let llc_snap = plan.llc_snap;
+        Ok(Self { plan, llc_snap })
+    }
+
+    fn header(&self) -> Result<&[u8], ApDataFrameError> {
+        let mut reader = oer_portable_wire::Reader::new(&self.plan.header);
+        reader.take(usize::from(self.plan.header_len)).map_err(|_| {
             ApDataFrameError::OutputTooSmall {
-                required: usize::from(plan.header_len),
+                required: usize::from(self.plan.header_len),
             }
-        })?;
-        crate::encoding::FrameParts([header, &self.ccmp_header, &plan.llc_snap, payload])
-            .write(output)
-            .map_err(|required| ApDataFrameError::OutputTooSmall { required })
+        })
     }
 }
 

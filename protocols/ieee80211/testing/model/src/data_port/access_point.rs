@@ -222,6 +222,13 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
         access_point
     }
 
+    fn network_buffer(
+        &self,
+        memory: crate::ModelNetworkMemory,
+    ) -> crate::ModelBuffer<'id, Backend<Id, C, X>, crate::ModelNetworkClass> {
+        crate::ModelBuffer::network(memory, self.loan)
+    }
+
     fn admit_access_point<'k, 'p>(
         &self,
         attempt: AccessPointSubmission<'k, 'p, 'id, Self>,

@@ -1,7 +1,8 @@
 //! The network's transmit memory: the pool buffers the port does not hold.
 //! The network stack writes each frame into one where the station's data
-//! machine reads it, and the station writes the MPDU header in front of the
-//! payload, in place; the radio publishes that same buffer.
+//! machine, or the access point's runner, reads it, and the MAC writes the
+//! MPDU header in front of the payload, in place; the radio publishes that
+//! same buffer, which comes back to the network once its frame ended.
 /// A pool buffer's octets.
 const TX: usize = crate::FRAME_CAPACITY;
 use oer_chips_esp32s31_radio_ieee80211_backend::{
@@ -146,15 +147,21 @@ pub struct NetworkTx {
 }
 
 impl NetworkTx {
-    /// Every pool buffer the port does not hold, for the network to write.
+    /// Every pool buffer from the place `port` on, the ones a port's bank
+    /// of `port` buffers does not hold, for the network to write: the
+    /// station's from [`PORT_BUFFERS`], an access point's from its bank's
+    /// size, which is at least that.
     ///
     /// # Errors
     ///
     /// A buffer the pool does not give to a writer: the buffers taken so
     /// far are released.
-    pub(crate) fn claim(pool: &'static TxPool<TX>) -> Result<Self, oer_portable_memory::PoolError> {
+    pub(crate) fn claim(
+        pool: &'static TxPool<TX>,
+        port: u8,
+    ) -> Result<Self, oer_portable_memory::PoolError> {
         let mut slots = heapless::Vec::new();
-        for index in PORT_BUFFERS..=u8::MAX {
+        for index in port..=u8::MAX {
             if usize::from(index) >= TX_BUFFERS {
                 break;
             }

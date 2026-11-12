@@ -615,7 +615,8 @@ pub fn station<W: Binding>(
         )
         .unwrap_or_else(|| W::fail(InitializationError::Storage));
     let pool: &'static _ = pool;
-    let memory = crate::NetworkTx::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx));
+    let memory = crate::NetworkTx::claim(pool, crate::supply::PORT_BUFFERS)
+        .unwrap_or_else(|_| W::fail(InitializationError::Tx));
     let tx_state = &mut storage.tx_state;
     let (mut control, network, network_transmit, stopper, connection) = storage
         .channels

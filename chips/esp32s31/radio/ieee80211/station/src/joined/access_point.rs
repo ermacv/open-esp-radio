@@ -27,6 +27,59 @@ use oer_protocols_ieee80211_wire::{
 
 struct Nonces;
 
+/// The network's transmit memory as the bench holds it: each frame copied
+/// into a free pool buffer and published from there.
+struct Copied {
+    publisher: crate::supply::TxPublisher,
+    slots: std::vec::Vec<crate::supply::TxSlot>,
+}
+
+impl Copied {
+    fn new(network: NetworkTx) -> Self {
+        let (publisher, slots) = network.into_parts();
+        Self {
+            publisher,
+            slots: slots.collect(),
+        }
+    }
+}
+
+impl<F: oer_protocols_network_port::EthernetFrame>
+    oer_protocols_ieee80211_runtime::station::TxSupply<F> for Copied
+{
+    type Memory = TxMemory;
+    fn available(&self) -> bool {
+        !self.slots.is_empty()
+    }
+    fn write(
+        &mut self,
+        mut frame: F,
+    ) -> Result<TxMemory, oer_protocols_ieee80211_runtime::station::TxRefused<F>> {
+        use oer_protocols_network_port::TxStorage as _;
+        let Some(mut slot) = self.slots.pop() else {
+            return Err(oer_protocols_ieee80211_runtime::station::TxRefused::Kept(
+                oer_protocols_network_port::TransmitRefused {
+                    frame,
+                    reason: oer_protocols_network_port::TransmitError::QueueFull,
+                },
+            ));
+        };
+        let view = frame.view().expect("a whole frame");
+        let bytes = slot.bytes_mut();
+        bytes[..6].copy_from_slice(&view.destination);
+        bytes[6..12].copy_from_slice(&view.source);
+        bytes[12..14].copy_from_slice(&view.ether_type.to_be_bytes());
+        bytes[14..][..view.payload.len()].copy_from_slice(view.payload);
+        let len = 14 + view.payload.len();
+        self.publisher
+            .publish(slot, 0, len)
+            .map_err(|_| oer_protocols_ieee80211_runtime::station::TxRefused::Lost)
+    }
+    fn give(&mut self, memory: TxMemory) {
+        self.slots.push(self.publisher.slot(memory));
+    }
+}
+
 impl ApNonces for Nonces {
     fn nonce(&mut self) -> Option<[u8; 32]> {
         Some([4; 32])
@@ -147,7 +200,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             pairwise.push(slot).ok().expect("the runner's slots");
         }
         let [group, ..] = group_slots;
-        let ap_resources = ApResources {
+        let ap_resources = ApResources::<'_, _, port::BufferClass<TX>> {
             tickets,
             access: resources.terminal_access,
             buffers,
@@ -196,8 +249,13 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             Channel::ghz2_4(6, ChannelWidth::Mhz20).unwrap(),
             key_id,
         );
+        // The network's transmit memory: every pool buffer past the bank.
+        let network = NetworkTx::claim(pool, AP_BUFFERS as u8)
+            .ok()
+            .expect("network buffers");
         let (_device, _transmit, end) = leak(ApNetworkStorage::new())
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame>(
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _>(
+            Copied::new(network),
         );
         let mut runner = ApRunner::new(
             port,

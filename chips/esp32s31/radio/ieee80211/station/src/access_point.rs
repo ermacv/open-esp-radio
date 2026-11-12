@@ -5,7 +5,11 @@
 //! the channel and the BSS, then starts the radio and installs the port as
 //! the station's composition does, gives the runner the installation's access-point
 //! tokens, its tickets and the first [`AP_BANK`] transmit buffers, and runs
-//! it with the access point's own engine. The station's tokens of the
+//! it with the access point's own engine. Every other pool buffer is the
+//! network's transmit memory, in the same form as the station's
+//! ([`NetworkTxSupply`]): the network stack writes each frame into one, the
+//! runner writes its MPDU in place and sends that buffer, and gives it back
+//! once its frame ended. The station's tokens of the
 //! installation stay unused: an access-point-only image runs no station.
 //! Once the runner stopped the radio, the composition releases the radio's
 //! membership as the station's does.
@@ -13,6 +17,7 @@
 use crate::access_point_end::{Retired, Stop};
 use crate::chip::{Binding, Config, InitializationError, Resources};
 use crate::radio::{self, Port};
+use crate::supply::{NetworkTx, NetworkTxSupply, PORT_BUFFERS, TxMemory};
 use oer_chips_esp32s31_radio_ieee80211_backend::port::{BufferClass, PortInstallation, TX_TICKETS};
 use oer_chips_family_radio_ieee80211_policy::{access_point::ADVERTISEMENT, ccmp, lmac};
 use oer_portable_embassy_time::EmbassyClock;
@@ -25,7 +30,7 @@ use oer_protocols_ieee80211_core_security_rsn::{PmkDerivation, frames::RsnGtk};
 use oer_protocols_ieee80211_runtime::access_point::{
     AP_BUFFERS, AP_KEYS, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared, ApStatus,
     ApUnsupported, GROUP_KEY_ID,
-    network::{ApNetDevice, ApNetTransmit, ApNetworkEnd, ApNetworkStorage},
+    network::{AP_TX_DEPTH, ApNetDevice, ApNetTransmit, ApNetworkEnd, ApNetworkStorage},
     serves_beacons,
 };
 use oer_protocols_ieee80211_wire::{
@@ -46,6 +51,14 @@ const _: () = {
     }
     if <BufferClass<{ crate::chip::TX }>>::CAPACITY < AP_BEACON_CAPACITY {
         panic!("a beacon fits one transmit buffer");
+    }
+    // The network's memory is every place past the bank, as many as the
+    // runner's queue back holds, so each one always finds its way home.
+    if AP_BANK < PORT_BUFFERS {
+        panic!("the bank holds at least the station's port buffers");
+    }
+    if oer_chips_esp32s31_radio_ieee80211_backend::port::TX_BUFFERS - AP_BUFFERS > AP_TX_DEPTH {
+        panic!("the runner's queue back holds every network buffer");
     }
 };
 
@@ -144,7 +157,7 @@ impl ApSettings {
 pub struct AccessPointStorage {
     peers: AccessPointPeerStorage,
     template: [u8; AP_BEACON_CAPACITY],
-    network: ApNetworkStorage,
+    network: ApNetworkStorage<TxMemory>,
     shared: ApShared,
     start: StartSlot,
 }
@@ -310,7 +323,7 @@ pub type ApExit = ApExitOf<InitializationError>;
 pub struct AccessPointRunner<W: Binding> {
     boot: radio::Boot<W>,
     start: &'static StartSlot,
-    network: ApNetworkEnd<'static>,
+    network: ApNetworkEnd<'static, TxMemory>,
     peers: &'static mut AccessPointPeerStorage,
     template: &'static mut [u8; AP_BEACON_CAPACITY],
     shared: &'static ApShared,
@@ -362,7 +375,7 @@ pub struct ApInputs<W: Binding> {
     /// it ([`AccessPointEnd::Refused`]).
     pub boot: Option<radio::BootLeft<W>>,
     /// The runner's end to the network stack.
-    pub network: ApNetworkEnd<'static>,
+    pub network: ApNetworkEnd<'static, TxMemory>,
     /// The handshakes' nonce source.
     pub nonces: Nonces,
     /// The settings of the start, when one came.
@@ -420,10 +433,11 @@ pub type UnfinishedAccessPointOf<W> = crate::access_point_end::UnfinishedAccessP
 pub type ApNetwork = ApNetDevice<'static>;
 
 /// Assemble the access point over `resources`: its control, its network
-/// device and sending path for the stack's frames `F`, and its task, which
-/// waits for the control's start. `config` holds the radio's regulatory
-/// configuration until the start names the one it runs on.
-pub fn access_point<W: Binding, F: oer_protocols_network_port::EthernetFrame>(
+/// device and sending path over the network's transmit memory `S` (every
+/// pool buffer past the bank), which takes the stack's packets, and its
+/// task, which waits for the control's start. `config` holds the radio's
+/// regulatory configuration until the start names the one it runs on.
+pub fn access_point<W: Binding, S: NetworkTxSupply>(
     resources: Resources<W>,
     config: Config,
     storage: &'static mut AccessPointStorage,
@@ -431,7 +445,7 @@ pub fn access_point<W: Binding, F: oer_protocols_network_port::EthernetFrame>(
 ) -> (
     AccessPointControl,
     ApNetwork,
-    ApNetTransmit<'static, F>,
+    ApNetTransmit<'static, S::Packet, S>,
     AccessPointRunner<W>,
 ) {
     let Resources {
@@ -464,6 +478,10 @@ pub fn access_point<W: Binding, F: oer_protocols_network_port::EthernetFrame>(
                 .unwrap_or_else(|_| W::fail(InitializationError::Tx)),
         )
         .unwrap_or_else(|| W::fail(InitializationError::Storage));
+    let pool: &'static _ = pool;
+    // The network holds every buffer past the bank, before its end exists.
+    let memory =
+        NetworkTx::claim(pool, AP_BANK).unwrap_or_else(|_| W::fail(InitializationError::Tx));
     let AccessPointStorage {
         peers,
         template,
@@ -471,7 +489,7 @@ pub fn access_point<W: Binding, F: oer_protocols_network_port::EthernetFrame>(
         shared,
         start,
     } = storage;
-    let (device, transmit, end) = network.split::<F>();
+    let (device, transmit, end) = network.split::<S::Packet, S>(S::new(memory));
     let shared: &'static ApShared = shared;
     let start: &'static StartSlot = start;
     (

@@ -127,6 +127,20 @@ the types the port's owners and terminals carry:
   Retiring the original installation makes preparation refuse
   `RetransmissionKey`, even if the slot and key material are reused.
   `renew` returns memory and body explicitly.
+- **Network memory as a single MPDU.** A backend whose single-MPDU path
+  also sends from the network's memory implements `TxNetworkPool`: the
+  same `PortTypes::DataMemory` an arena takes is a buffer of the class
+  `NetworkFrames<T>` (its frame region from the MPDU's first octet, of the
+  backend's `NetworkCapacity`), which an `AccessPointPort` mints under its
+  installation (`network_buffer`). The caller writes the MPDU in place in
+  front of the payload the network wrote (`TxBufferMemory::bytes_mut`;
+  `frame_region` reads the raw memory before it is lent) and prepares it
+  through the same `TxSource`, `check` and `TxBufferPool::prepare` as any
+  buffer; its terminal returns the same memory, fresh or `Sent`, as
+  `AnyTxBuffer` of that class, and `into_memory` hands it back to the
+  network, refused only while the hardware still holds it. A caller that
+  carries the longest MSDU checks at compile time that the class holds
+  `NETWORK_MPDU_LEN`.
 - **Data arenas.** The station's data goes through two DMA arenas the
   port lends for one turn (`DataPort::arena`, a `PortArena` whose memory is
   `PortTypes::DataMemory`, the network's own frame memory, and whose

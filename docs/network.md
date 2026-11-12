@@ -180,9 +180,27 @@ only once the port gave the room.
   protection exchange). The reference model declares single MPDUs'
   costs unknown.
 - **Return.** A frame's buffer comes back to the network's one transmit
-  owner (`LocalTx`) when its MSDU ends, and is free again at once: no
-  separate settlement follows. A new link epoch or a stopped data plane
-  hands every queued MSDU back with its memory.
+  owner (`LocalTx`, or the IP service's `WifiTx`) when its MSDU ends, and
+  is free again at once: no separate settlement follows. A new link epoch
+  or a stopped data plane hands every queued MSDU back with its memory.
+- **The access point's data.** The access point's network memory is the
+  same S31 transmit pool as the station's (`NetworkTx`: every place its
+  port bank does not hold, in the station's `NetworkTxSupply` form), and
+  its frames go through the port's single-MPDU path from that memory
+  (`TxNetworkPool`): no copy into a port buffer. The network places the
+  payload where the longest data prefix ends (`MSDU_PAYLOAD_OFFSET` of the
+  frame region, the S31 region behind its 8-octet transmit metadata); the
+  runner checks the frame, its authorized destination, its key and a
+  packet number left, its rate and power, then draws the sequence number
+  as the engine writes the MAC header, a reserved CCMP header and
+  LLC/SNAP in front of the payload, in place, and only then the packet
+  number. A QoS peer's frame moves nothing; a 24-octet header (a group
+  frame, a non-QoS peer's) moves the payload down two octets once,
+  counted in `ApStatus::payload_moves`. A refusal returns the memory to
+  the network unwritten; the MPDU's terminal returns it through the
+  network's return queue (`TxEnded`), whose depth (`AP_TX_DEPTH`) holds
+  every network buffer, and so does a stop or a client place's takeover
+  for every frame still queued.
 
 ## Physical storage contracts (`oer-portable-embassy-net::datapath`)
 

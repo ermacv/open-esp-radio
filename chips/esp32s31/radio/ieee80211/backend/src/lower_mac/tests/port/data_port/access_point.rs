@@ -366,6 +366,9 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> ApFixture<'a, 'id, Id> {
             AnyBuffer::Sent(sent) => {
                 <Family<Id> as TxBufferPool<'id, BufferClass<512>>>::renew(sent).0
             }
+            AnyBuffer::Network(_) | AnyBuffer::NetworkSent(_) => {
+                panic!("the access point's cases send from the port's buffers")
+            }
         };
         buffer.renew_msdu().expect("renewed");
         fixture.buffers.push(buffer);

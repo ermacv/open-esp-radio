@@ -205,3 +205,77 @@ fn a_lost_message4_is_read_protected_by_the_key_installed_before_message3() {
         assert_eq!(air.installed_pairwise(VifRole::AccessPoint), 0);
     }));
 }
+
+/// The WMM Information element of a QoS station (WMM v1.2, 2.2.1).
+const WMM_INFORMATION: [u8; 9] = [221, 7, 0x00, 0x50, 0xf2, 0x02, 0x00, 0x01, 0x00];
+
+/// An authorized QoS peer's frame goes from the network's memory: its MPDU
+/// is written in place in front of the payload, which stays where the
+/// network wrote it (a QoS header is the longest prefix), nothing is
+/// counted as moved, and the memory comes back once after its terminal.
+#[test]
+fn a_qos_peers_frame_goes_from_the_networks_memory_without_moving_its_payload() {
+    use super::network_memory::{data_mpdus, frame, payload};
+    use oer_protocols_ieee80211_core_roles_sta::data::MSDU_PAYLOAD_OFFSET;
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, supply, shared);
+        let meta = ModelRxMeta::new(channel(), -40, -90);
+        let script = async {
+            counted.idle(64).await;
+            air.receive(&management(11, &[0, 0, 1, 0, 0, 0]), meta);
+            counted.idle(64).await;
+            let mut request = association_request();
+            request.extend_from_slice(&WMM_INFORMATION);
+            air.receive(&request, meta);
+            for _ in 0..4 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+            let (replay1, anonce) = counter_and_nonce(&eapol_sent(&air)[0]);
+            let ptk = station_ptk(anonce);
+            air.receive(&uplink(&message2(&ptk, replay1)), meta);
+            for _ in 0..4 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+            let (replay3, _) = counter_and_nonce(&eapol_sent(&air)[1]);
+            let protected = protected_uplink(ptk.temporal_key(), &message4(&ptk, replay3));
+            assert!(air.receive_protected(&protected, meta, VifRole::AccessPoint));
+            for _ in 0..4 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+            assert_eq!(shared.status().authorized, 1);
+
+            let memory = supply.next();
+            assert!(transmit.try_transmit(frame(PEER)).is_ok());
+            transmit.flush();
+            for _ in 0..8 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+            let sent = data_mpdus(&air);
+            let mpdu = sent
+                .iter()
+                .find(|mpdu| mpdu.get(4..10) == Some(&PEER[..]) && mpdu[0] == 0x88)
+                .expect("a QoS data MPDU to the peer");
+            assert_eq!(mpdu[1], 0x42, "protected, From-DS");
+            assert_eq!(mpdu.len(), MSDU_PAYLOAD_OFFSET + payload().len());
+            assert_eq!(mpdu[MSDU_PAYLOAD_OFFSET..], payload());
+            assert_eq!(shared.status().payload_moves, 0, "nothing moved");
+            transmit.reclaim();
+            assert_eq!(
+                supply.free(),
+                super::super::network::AP_TX_DEPTH,
+                "its memory came back, once"
+            );
+            let back = supply.memory(memory).expect("the same memory came back");
+            assert_eq!(back[..mpdu.len()], mpdu[..], "the MPDU was that memory's");
+            assert_eq!(
+                back[MSDU_PAYLOAD_OFFSET..][..payload().len()],
+                payload(),
+                "the payload where the network wrote it"
+            );
+            stop_and_finish(&counted, &air, &shared).await;
+        };
+        stopped(drive(runner.run(&shared, &counted), script).await);
+    }));
+}

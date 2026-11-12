@@ -847,7 +847,9 @@ fn joined_with<T: 'static>(
         drop(buffers);
 
         // The station's channels, as the facade's `station` splits them.
-        let network_tx = NetworkTx::claim(pool).ok().expect("network buffers");
+        let network_tx = NetworkTx::claim(pool, crate::supply::PORT_BUFFERS)
+            .ok()
+            .expect("network buffers");
         let channels: &'static mut Channels<Joined, TxMemory> = leak(Channels {
             network_stop: NetworkStopState::with(PriorityWaker::new(), PriorityWaker::new()),
             start: StartState::new(),

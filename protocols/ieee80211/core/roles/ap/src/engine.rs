@@ -30,15 +30,16 @@ use oer_protocols_ieee80211_wire::{
     address::{AddressFlags, Bssid, IndividualAddress},
     ap::{
         ApAssociationResponseError, ApDataFrame, ApDataFrameError, ApManagementRequest,
-        ApProtectedDataFrame, parse_ap_management_request, probe, profile::Advertisement,
+        ApProtectedDataPrefix, parse_ap_management_request, probe, profile::Advertisement,
         write_ap_peer_disconnect, write_ht_association_response_frame_for_security,
         write_open_authentication_response,
     },
     ccmp::{CCMP_HEADER_LEN, GroupKeyId},
     channel::Channel,
-    data::MsduParts,
+    data::{MsduHeader, MsduParts},
     frame::DecodedHeader,
     security::spp::SppScope,
+    sequence::SequenceNumber,
 };
 
 pub use oer_protocols_ieee80211_wire::{
@@ -990,27 +991,27 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         self.service.association_is_current(association)
     }
 
-    /// Write one MSDU of the network into `output` as a protected data
-    /// frame: to its authorized destination under the pairwise key, or to
-    /// the BSS under the group key. The caller numbers the frame's packet
-    /// number with the key [`ApFrame::kind`] names. `None` when the
-    /// destination is no authorized peer: the MSDU does not go.
+    /// How one MSDU of the network to `destination` from `source` goes, read
+    /// without numbering or writing anything: to its authorized destination
+    /// under the pairwise key, or to the BSS under the group key, as `tid`
+    /// for a QoS peer and best effort for any other frame, and the length of
+    /// the prefix written in front of its payload ([`Self::write_in_place`]).
+    /// `None` when the destination is no authorized peer: the MSDU does not
+    /// go.
     ///
     /// # Errors
     ///
-    /// `output` is too short or the MSDU's addresses are invalid.
-    pub fn encapsulate(
-        &mut self,
+    /// The MSDU's addresses are not an access point's data frame's.
+    pub fn plan_msdu(
+        &self,
         destination: [u8; 6],
         source: [u8; 6],
         ether_type: u16,
-        payload: &[u8],
         tid: WmmUserPriority,
-        output: &mut [u8],
-    ) -> Result<Option<ApFrame>, ApEngineError> {
+    ) -> Result<Option<ApMsduPlan>, ApEngineError> {
         let group = AddressFlags::from_bytes([destination[0]]).group();
-        let (peer, qos, kind) = if group {
-            (destination, false, ApFrameKind::Group)
+        let (qos, kind) = if group {
+            (false, ApFrameKind::Group)
         } else {
             let Some(status) = self
                 .service
@@ -1020,7 +1021,6 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
                 return Ok(None);
             };
             (
-                destination,
                 status.qos_supported,
                 ApFrameKind::Pairwise {
                     peer: destination,
@@ -1033,38 +1033,188 @@ impl<'s, S: SppScope> ApEngine<'s, S> {
         // A QoS peer's frame goes under its TID, numbered in that TID's
         // space; any other frame as best effort, in the shared space.
         let tid = if qos { tid } else { WmmUserPriority::UP0 };
-        let sequence = if qos {
+        let plan = ApMsduPlan {
+            peer: destination,
+            source,
+            ether_type,
+            qos,
+            tid,
+            kind,
+            prefix_len: 0,
+        };
+        let prefix_len = plan
+            .prefix(self.address(), SequenceNumber::ZERO)
+            .prefix_len()?;
+        Ok(Some(ApMsduPlan { prefix_len, ..plan }))
+    }
+
+    /// Write the MPDU of the MSDU `plan` names in place in `region`, from
+    /// its first octet: the payload of `payload_len` octets lies at
+    /// `payload_at`, and the prefix (MAC header, a reserved CCMP header the
+    /// transmitter fills from the caller's packet number, LLC/SNAP) goes
+    /// right in front of it. A prefix shorter than `payload_at` moves the
+    /// payload down to it first ([`ApInPlace::moved`]); a prefix of
+    /// `payload_at` octets leaves it where it is. The frame's sequence number
+    /// is drawn only once the region is known to hold the MPDU.
+    ///
+    /// # Errors
+    ///
+    /// The prefix is longer than `payload_at`, or the payload lies past the
+    /// region: nothing is drawn or written. The peer left or is no longer
+    /// authorized ([`ApServiceError::UnknownPeer`]): nothing is drawn.
+    pub fn write_in_place(
+        &mut self,
+        plan: ApMsduPlan,
+        region: &mut [u8],
+        payload_at: usize,
+        payload_len: usize,
+    ) -> Result<ApInPlace, ApEngineError> {
+        let end = payload_at
+            .checked_add(payload_len)
+            .filter(|end| *end <= region.len())
+            .ok_or(ApEngineError::Output)?;
+        let shift = payload_at
+            .checked_sub(plan.prefix_len)
+            .ok_or(ApEngineError::Output)?;
+        let len = plan
+            .prefix_len
+            .checked_add(payload_len)
+            .ok_or(ApEngineError::Output)?;
+        if let ApFrameKind::Pairwise { peer, .. } = plan.kind
+            && self
+                .service
+                .peer_status(peer)
+                .is_none_or(|status| status.phase != ApPeerPhase::Authorized)
+        {
+            return Err(ApServiceError::UnknownPeer.into());
+        }
+        // Every check passed: the number is drawn, then the prefix encoded
+        // apart, so nothing of the region changes before it is whole.
+        let sequence = if plan.qos {
             self.service
-                .next_qos_sequence(peer, tid.value())
+                .next_qos_sequence(plan.peer, plan.tid.value())
                 .ok_or(ApServiceError::UnknownPeer)?
         } else {
             self.service.next_data_sequence()
         };
-        let len = ApProtectedDataFrame {
-            access_point: self.address(),
-            peer,
-            sequence_number: sequence,
-            user_priority: tid.value(),
-            peer_qos: qos,
-            more_data: false,
-            // The transmitter writes the CCMP header from the packet
-            // number the caller numbers.
-            ccmp_header: [0; CCMP_HEADER_LEN],
-            msdu: MsduParts {
-                destination,
-                source,
-                ether_type,
-                payload,
-            },
+        let mut prefix = [0; MAX_DATA_PREFIX];
+        let encoded = prefix
+            .get_mut(..plan.prefix_len)
+            .ok_or(ApEngineError::Output)?;
+        plan.prefix(self.address(), sequence).encode(encoded)?;
+        if shift != 0 {
+            move_down(region, plan.prefix_len, payload_at, end).ok_or(ApEngineError::Output)?;
         }
-        .encode(output)?;
-        Ok(Some(ApFrame { len, kind }))
+        let place = region
+            .get_mut(..plan.prefix_len)
+            .ok_or(ApEngineError::Output)?;
+        for (octet, value) in place.iter_mut().zip(encoded.iter()) {
+            *octet = *value;
+        }
+        Ok(ApInPlace {
+            frame: ApFrame {
+                len,
+                kind: plan.kind,
+            },
+            moved: shift != 0,
+        })
     }
 
     /// The peer service, for the caller's status reads and its teardown.
     pub fn into_service(self) -> AccessPointService<'s, S> {
         self.service
     }
+}
+
+/// The longest prefix of a data MPDU the engine writes in place: a QoS
+/// Data header, the CCMP header and LLC/SNAP.
+const MAX_DATA_PREFIX: usize = oer_protocols_ieee80211_wire::data::IEEE80211_QOS_DATA_HEADER_LEN
+    + CCMP_HEADER_LEN
+    + oer_protocols_ieee80211_wire::data::LLC_SNAP_HEADER_LEN;
+
+/// How one MSDU of the network goes ([`ApEngine::plan_msdu`]): read before
+/// anything is numbered or written.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApMsduPlan {
+    peer: [u8; 6],
+    source: [u8; 6],
+    ether_type: u16,
+    qos: bool,
+    tid: WmmUserPriority,
+    kind: ApFrameKind,
+    prefix_len: usize,
+}
+
+impl ApMsduPlan {
+    /// How the frame goes: the key [`ApFrameKind`] names numbers it.
+    pub const fn kind(&self) -> ApFrameKind {
+        self.kind
+    }
+
+    /// The TID the frame goes as.
+    pub const fn tid(&self) -> WmmUserPriority {
+        self.tid
+    }
+
+    /// The prefix written in front of the payload: the MAC header (24
+    /// octets, or 26 for a QoS peer's), the CCMP header and LLC/SNAP.
+    pub const fn prefix_len(&self) -> usize {
+        self.prefix_len
+    }
+
+    fn prefix(
+        &self,
+        access_point: [u8; 6],
+        sequence_number: SequenceNumber,
+    ) -> ApProtectedDataPrefix {
+        ApProtectedDataPrefix {
+            access_point,
+            peer: self.peer,
+            sequence_number,
+            user_priority: self.tid.value(),
+            peer_qos: self.qos,
+            more_data: false,
+            msdu: MsduHeader {
+                destination: self.peer,
+                source: self.source,
+                ether_type: self.ether_type,
+            },
+        }
+    }
+}
+
+/// One MPDU [`ApEngine::write_in_place`] wrote from its region's first
+/// octet.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApInPlace {
+    /// The frame: its length, header to payload, without the MIC, and how
+    /// it goes.
+    pub frame: ApFrame,
+    /// The payload moved down to a prefix shorter than the longest one.
+    pub moved: bool,
+}
+
+/// Move the payload at `from..end` of `region` down to start at `to`, one
+/// shift-long run at a time: each run's source lies right behind its
+/// destination, so the two never overlap. `None`, nothing moved, for a
+/// range outside `region` or a move up.
+fn move_down(region: &mut [u8], to: usize, from: usize, end: usize) -> Option<()> {
+    let shift = from.checked_sub(to)?;
+    region.get(..end)?;
+    if shift == 0 {
+        return Some(());
+    }
+    let mut at = to;
+    while let Some(source) = at.checked_add(shift).filter(|&source| source < end) {
+        let (front, back) = region.split_at_mut_checked(source)?;
+        let run = shift.min(end.checked_sub(source)?);
+        let destination = front.get_mut(at..)?.get_mut(..run)?;
+        for (octet, value) in destination.iter_mut().zip(back.get(..run)?) {
+            *octet = *value;
+        }
+        at = source;
+    }
+    Some(())
 }
 
 /// The legacy rate of `rate_500kbps`, the highest the peer and the BSS

@@ -16,7 +16,7 @@ fn pool() -> &'static TxPool<TX> {
 #[test]
 fn the_network_holds_every_buffer_the_port_does_not() {
     let pool = pool();
-    let tx = NetworkTx::claim(pool).unwrap();
+    let tx = NetworkTx::claim(pool, PORT_BUFFERS).unwrap();
     let (_, slots) = tx.into_parts();
     assert_eq!(slots.count(), NETWORK_BUFFERS);
     // The port's buffers stay free for the port.
@@ -26,7 +26,7 @@ fn the_network_holds_every_buffer_the_port_does_not() {
 #[test]
 fn a_frame_goes_to_the_station_where_the_data_machine_reads_it_and_comes_back_writable() {
     let pool = pool();
-    let (publisher, mut slots) = NetworkTx::claim(pool).unwrap().into_parts();
+    let (publisher, mut slots) = NetworkTx::claim(pool, PORT_BUFFERS).unwrap().into_parts();
     let mut slot = slots.next().unwrap();
     // The stack wrote the frame 6 octets further in.
     slot.bytes_mut()[6..26].copy_from_slice(&[0x5a; 20]);
@@ -42,7 +42,7 @@ fn a_frame_goes_to_the_station_where_the_data_machine_reads_it_and_comes_back_wr
 #[test]
 fn a_frame_past_its_buffer_keeps_the_buffer() {
     let pool = pool();
-    let (publisher, mut slots) = NetworkTx::claim(pool).unwrap().into_parts();
+    let (publisher, mut slots) = NetworkTx::claim(pool, PORT_BUFFERS).unwrap().into_parts();
     let mut slot = slots.next().unwrap();
     let room = slot.bytes_mut().len();
     let Err(TxPublishRefused::Range(mut slot)) = publisher.publish(slot, 1, room) else {
@@ -54,9 +54,21 @@ fn a_frame_past_its_buffer_keeps_the_buffer() {
 #[test]
 fn each_network_buffer_has_its_own_place_below_the_network_s_count() {
     let pool = pool();
-    let (_, slots) = NetworkTx::claim(pool).unwrap().into_parts();
+    let (_, slots) = NetworkTx::claim(pool, PORT_BUFFERS).unwrap().into_parts();
     let mut places: std::vec::Vec<u8> = slots.map(|slot| slot.place()).collect();
     places.sort_unstable();
     let every: std::vec::Vec<u8> = (0..u8::try_from(NETWORK_BUFFERS).unwrap()).collect();
     assert_eq!(places, every);
+}
+
+#[test]
+fn an_access_point_s_network_holds_every_buffer_past_its_bank() {
+    let pool = pool();
+    let bank = 8;
+    let (_, slots) = NetworkTx::claim(pool, bank).unwrap().into_parts();
+    assert_eq!(slots.count(), TX_BUFFERS - usize::from(bank));
+    // The bank's places stay free for the port.
+    for place in 0..bank {
+        assert!(pool.claim_network(place).is_ok());
+    }
 }

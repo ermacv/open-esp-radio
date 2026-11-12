@@ -72,6 +72,11 @@ impl<K> InstalledCcmpTxKey<K> {
         self.key
     }
 
+    /// Whether [`Self::number`] numbers one more MPDU: nothing is drawn.
+    pub fn can_number(&self) -> bool {
+        self.packet_numbers.available()
+    }
+
     /// Number one protected MPDU: the key and its next CCMP packet number,
     /// or `None` once its packet numbers are exhausted. A retransmission
     /// keeps the number of its first transmission and does not call this.
@@ -246,6 +251,13 @@ impl CcmpTxPacketNumber {
 
     pub const fn step(&self) -> CcmpPacketNumberStep {
         self.step
+    }
+
+    /// Whether [`Self::allocate`] hands out a PN now: read only, nothing is
+    /// drawn, so a caller checks it before it changes anything else of the
+    /// MPDU it numbers.
+    pub fn available(&self) -> bool {
+        advance(self.last.get(), u64::from(self.step.get())).is_ok()
     }
 
     /// Allocate the PN of the next MPDU.

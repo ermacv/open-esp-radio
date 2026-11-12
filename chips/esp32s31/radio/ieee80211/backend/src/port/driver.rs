@@ -52,7 +52,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
     }
     /// When the port admitted its MPDU.
     fn admission(&self) -> Option<Instant> {
-        self.operation.payload().buffer.admission
+        self.operation.payload().buffer.admission()
     }
     /// One more transmission went out at `rate`. A plan bounds them, and the
     /// bound fits the count.
@@ -954,7 +954,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         {
             return Err(memory);
         }
-        pending.operation.execute().mpdu.buffer.dma.complete(memory)
+        pending.operation.execute().mpdu.buffer.complete(memory)
     }
     /// Keep an attempt a completion could not end in its queue's published
     /// place, which the completion just emptied.
@@ -1244,7 +1244,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let mpdu = pending.operation.execute().mpdu;
         // The hardware takes the memory through the queue's descriptor; the
         // buffer keeps its return right.
-        let Some(lease) = mpdu.buffer.dma.publish() else {
+        let Some(lease) = mpdu.buffer.publish() else {
             return Err(self.unadmit(
                 hardware,
                 env,
@@ -1258,7 +1258,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if let Err(lease) = slot.as_mut().attach(lease) {
             // The lease goes back to the buffer it left, which is published:
             // its return cannot refuse.
-            let _returned = mpdu.buffer.dma.complete(lease).is_ok();
+            let _returned = mpdu.buffer.complete(lease).is_ok();
             return Err(self.unadmit(
                 hardware,
                 env,
@@ -1522,7 +1522,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         fault: Fault,
     ) -> Fault {
         if let Some(memory) = slot.as_mut().detach()
-            && let Err(memory) = pending.operation.execute().mpdu.buffer.dma.complete(memory)
+            && let Err(memory) = pending.operation.execute().mpdu.buffer.complete(memory)
         {
             // The buffer is published, so this return does not refuse;
             // refused, the memory goes back to the free descriptor.
@@ -1617,7 +1617,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             let buffer = &mut pending.operation.execute().mpdu.buffer;
             // The buffer is published, so its memory's return cannot
             // refuse.
-            let _returned = buffer.dma.complete(memory).is_ok();
+            let _returned = buffer.complete(memory).is_ok();
         }
         self.free.put_paired(queue, slot);
         self.returned_ticket(hardware, admission);
@@ -2320,7 +2320,6 @@ fn owner_free_refusal<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
         .execute()
         .mpdu
         .buffer
-        .dma
         .memory_mut()
         .is_none()
     {

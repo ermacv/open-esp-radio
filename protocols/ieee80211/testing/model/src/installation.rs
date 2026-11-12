@@ -97,9 +97,9 @@ pub(super) fn installation_parts<B: ModelComposition>(
             small: small
                 .into_iter()
                 .map(|slot| ModelBuffer {
-                    slot,
+                    slot: Some(slot),
                     loan: None,
-                    memory: ModelMemory::Small(Box::new([0; ModelSmall::CAPACITY])),
+                    memory: Box::new([0; ModelSmall::CAPACITY]),
                     admitted_at: None,
                     admitted: None,
                 })
@@ -107,9 +107,9 @@ pub(super) fn installation_parts<B: ModelComposition>(
             large: large
                 .into_iter()
                 .map(|slot| ModelBuffer {
-                    slot,
+                    slot: Some(slot),
                     loan: None,
-                    memory: ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY])),
+                    memory: Box::new([0; ModelLarge::CAPACITY]),
                     admitted_at: None,
                     admitted: None,
                 })

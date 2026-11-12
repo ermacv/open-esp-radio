@@ -683,6 +683,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         access_point
     }
 
+    fn network_buffer(&self, memory: TxBacking<B>) -> NetworkBuffer<'id, Id, D, B, O> {
+        NetworkBuffer {
+            dma: NetworkDma::Free(memory),
+            admission: None,
+            loan: Some(self.loan),
+        }
+    }
+
     fn admit_access_point<'k, 'p>(
         &self,
         attempt: AccessPointSubmission<'k, 'p, 'id, Self>,

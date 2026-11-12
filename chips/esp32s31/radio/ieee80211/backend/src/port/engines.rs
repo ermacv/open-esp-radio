@@ -1177,7 +1177,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             for pending in self.driver.queues.iter().flat_map(|queue| queue.iter()) {
                 let payload = pending.operation.payload();
                 if let (Some(admitted), Some(table)) = (
-                    payload.buffer.admission,
+                    payload.buffer.admission(),
                     self.settings.edca.get(driver::vif(payload.role)),
                 ) {
                     add(Some(admitted.saturating_add(
@@ -2458,10 +2458,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         self.now = now;
         // Admission happens on this call: the MSDU ages from here.
-        let buffer = &mut attempt.operation.execute().mpdu.buffer;
-        if buffer.admission.is_none() {
-            buffer.admission = Some(now);
-        }
+        attempt.operation.execute().mpdu.buffer.admit(now);
         let index = queue(attempt.access_category);
         let attempt_role = attempt.operation.payload().role;
         let tries_left = attempt

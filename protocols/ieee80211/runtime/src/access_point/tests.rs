@@ -18,8 +18,8 @@ use oer_protocols_ieee80211_core_roles_ap::{
 };
 use oer_protocols_ieee80211_core_security_rsn::frames::RsnGtk;
 use oer_protocols_ieee80211_testing_model::{
-    ModelAccessPointTsf, ModelCaps24, ModelContext, ModelInstall, ModelLarge, ModelPort,
-    ModelRxMeta,
+    ModelAccessPointTsf, ModelCaps24, ModelContext, ModelInstall, ModelLarge, ModelNetworkMemory,
+    ModelPort, ModelRxMeta,
 };
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_ieee80211_wire::{
@@ -151,6 +151,9 @@ macro_rules! fixture {
         fixture!($claim, $clock => $runner, $air, $device, _transmit, $shared);
     };
     ($claim:ident, $clock:expr => $runner:ident, $air:ident, $device:ident, $transmit:ident, $shared:ident) => {
+        fixture!($claim, $clock => $runner, $air, $device, $transmit, _supply, $shared);
+    };
+    ($claim:ident, $clock:expr => $runner:ident, $air:ident, $device:ident, $transmit:ident, $supply:ident, $shared:ident) => {
         let mut installations = Installations::claim($claim);
         let (install, $air) = Port::install(
             &mut installations,
@@ -225,8 +228,11 @@ macro_rules! fixture {
             GroupKeyId::new(GROUP_KEY_ID).unwrap(),
         );
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
-        let ($device, mut $transmit, end) =
-            network.split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame>();
+        let $supply = ModelTx::new();
+        let ($device, mut $transmit, end) = network
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _>(
+                $supply.clone(),
+            );
         let mut $runner = ApRunner::new(
             port,
             commands,
@@ -241,6 +247,72 @@ macro_rules! fixture {
         );
         let $shared = ApShared::new();
     };
+}
+
+/// The network's transmit memory over the model: [`AP_TX_DEPTH`] memories,
+/// each frame copied into a free one where the access point reads its
+/// Ethernet header, as the stack's packets are written into theirs.
+#[derive(Clone)]
+struct ModelTx(Rc<core::cell::RefCell<Vec<ModelNetworkMemory>>>);
+
+impl ModelTx {
+    fn new() -> Self {
+        Self(Rc::new(core::cell::RefCell::new(
+            (0..super::network::AP_TX_DEPTH)
+                .map(|_| Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]))
+                .collect(),
+        )))
+    }
+}
+
+impl<F: oer_protocols_network_port::EthernetFrame> crate::station::TxSupply<F> for ModelTx {
+    type Memory = ModelNetworkMemory;
+    fn available(&self) -> bool {
+        !self.0.borrow().is_empty()
+    }
+    fn write(&mut self, mut frame: F) -> Result<ModelNetworkMemory, crate::station::TxRefused<F>> {
+        use oer_protocols_ieee80211_core_roles_sta::data::{
+            MSDU_ETHERNET_OFFSET, MSDU_PAYLOAD_OFFSET,
+        };
+        let Some(mut memory) = self.0.borrow_mut().pop() else {
+            return Err(crate::station::TxRefused::Kept(
+                oer_protocols_network_port::TransmitRefused {
+                    frame,
+                    reason: oer_protocols_network_port::TransmitError::QueueFull,
+                },
+            ));
+        };
+        let view = frame.view().unwrap();
+        memory[MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&view.destination);
+        memory[MSDU_ETHERNET_OFFSET + 6..][..6].copy_from_slice(&view.source);
+        memory[MSDU_ETHERNET_OFFSET + 12..][..2].copy_from_slice(&view.ether_type.to_be_bytes());
+        memory[MSDU_PAYLOAD_OFFSET..][..view.payload.len()].copy_from_slice(view.payload);
+        Ok(memory)
+    }
+    fn give(&mut self, memory: ModelNetworkMemory) {
+        self.0.borrow_mut().push(memory);
+    }
+}
+
+impl ModelTx {
+    /// The memories free for the network.
+    fn free(&self) -> usize {
+        self.0.borrow().len()
+    }
+
+    /// Where the memory the next frame goes into lies.
+    fn next(&self) -> *const u8 {
+        self.0.borrow().last().unwrap().as_ptr()
+    }
+
+    /// A copy of the free memory at `at`, if it is back.
+    fn memory(&self, at: *const u8) -> Option<Vec<u8>> {
+        self.0
+            .borrow()
+            .iter()
+            .find(|memory| memory.as_ptr() == at)
+            .map(|memory| memory.to_vec())
+    }
 }
 
 fn pmk() -> oer_protocols_ieee80211_core_security_rsn::Pmk {
@@ -1061,6 +1133,7 @@ mod handshake;
 mod ends;
 
 mod homes;
+mod network_memory;
 
 #[test]
 fn a_port_with_the_callers_timestamp_rule_serves_beacons() {

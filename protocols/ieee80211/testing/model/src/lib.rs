@@ -169,6 +169,7 @@ use core::{
 };
 use oer_portable_time::{Clock, Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::EdcaParameterSet;
+use oer_protocols_ieee80211_contracts_port::{NetworkCapacity, NetworkFrames, TxNetworkPool};
 use oer_protocols_ieee80211_contracts_port::{
     association,
     association::{
@@ -433,50 +434,51 @@ pub struct ModelGroupPermission<R>(PhantomData<fn() -> R>);
 pub enum ModelBlockAcks {}
 
 /// A transmit buffer of the class `C`: its token and its memory, which
-/// moves with it; only the install mints one.
+/// moves with it. The install mints the buffers of its classes, each with
+/// its slot; the port lends a network's memory as a buffer of
+/// [`ModelNetworkClass`], which has none.
 pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
-    slot: Slot<'id, C::Layout, C::Path<B::Identity>>,
+    slot: Option<ModelBufferSlot<'id, B, C>>,
     loan: Option<BodyLoan<'id, B::Identity, B>>,
-    memory: ModelMemory,
+    memory: C::Memory,
     admitted_at: Option<RadioInstant<Ieee80211Radio>>,
     admitted: Option<Instant>,
 }
 
-enum ModelMemory {
-    Small(Box<[u8; ModelSmall::CAPACITY]>),
-    Large(Box<[u8; ModelLarge::CAPACITY]>),
-}
+/// The slot of a model buffer of the class `C`.
+type ModelBufferSlot<'id, B, C> = Slot<
+    'id,
+    <C as ModelClass>::Layout,
+    <C as ModelClass>::Path<<B as ModelComposition>::Identity>,
+>;
+
 /// The memory a network fills with one data frame, which a model data
-/// arena's slot holds ([`PortTypes::DataMemory`]).
+/// arena's slot holds ([`PortTypes::DataMemory`]), and which the model's
+/// single-MPDU path sends as a buffer of [`ModelNetworkClass`]. The model has
+/// no transmit metadata: the frame region starts at the memory's first
+/// octet, and the MPDU with it.
 pub type ModelNetworkMemory = Box<[u8; ModelLarge::CAPACITY]>;
-impl core::ops::Deref for ModelMemory {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
-        match self {
-            Self::Small(bytes) => bytes.as_slice(),
-            Self::Large(bytes) => bytes.as_slice(),
-        }
+
+/// The octets of a model buffer's memory.
+pub trait ModelBytes {
+    /// Every octet of the memory.
+    fn bytes(&self) -> &[u8];
+    /// Every octet of the memory, writable.
+    fn bytes_mut(&mut self) -> &mut [u8];
+}
+impl<const N: usize> ModelBytes for Box<[u8; N]> {
+    fn bytes(&self) -> &[u8] {
+        self.as_slice()
+    }
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        self.as_mut_slice()
     }
 }
-impl core::ops::DerefMut for ModelMemory {
-    fn deref_mut(&mut self) -> &mut [u8] {
-        match self {
-            Self::Small(bytes) => bytes.as_mut_slice(),
-            Self::Large(bytes) => bytes.as_mut_slice(),
-        }
-    }
-}
-impl AsRef<[u8]> for ModelMemory {
-    fn as_ref(&self) -> &[u8] {
-        self
-    }
-}
-impl ModelMemory {
-    fn retry(&mut self) {
-        let bytes: &mut [u8] = self;
-        // Both memory classes hold at least a MAC header.
-        let _marked: bool = set_retry_bit(bytes);
-    }
+
+/// Mark a model memory's MPDU as retried.
+fn retry_memory(memory: &mut impl ModelBytes) {
+    // Every memory class holds at least a MAC header.
+    let _marked: bool = set_retry_bit(memory.bytes_mut());
 }
 
 impl<B: ModelComposition, C: ModelClass> ModelBuffer<'_, B, C> {
@@ -502,8 +504,13 @@ impl<B: ModelComposition, C: ModelClass> TxBufferMemory for ModelBuffer<'_, B, C
         self.admitted_at = None;
         Ok(())
     }
+    /// The class's octets from the memory's first: every memory holds its
+    /// class's capacity (checked at compile time beside each class).
     fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable> {
-        Ok(&mut self.memory)
+        self.memory
+            .bytes_mut()
+            .get_mut(..C::CAPACITY)
+            .ok_or(BufferMemoryUnavailable)
     }
 }
 
@@ -511,7 +518,7 @@ impl<B: ModelComposition, C: ModelClass> core::fmt::Debug for ModelBuffer<'_, B,
     fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter
             .debug_tuple("ModelBuffer")
-            .field(&self.slot.index())
+            .field(&self.slot.as_ref().map(Slot::index))
             .finish()
     }
 }
@@ -542,7 +549,7 @@ impl<'id, C: ModelClass, B: ModelComposition> ModelSent<'id, B, C> {
     }
 }
 
-/// A transmit buffer of either class, fresh or published.
+/// A transmit buffer of any class, fresh or published.
 pub enum ModelAnyBuffer<'id, B: ModelComposition> {
     /// Fresh small memory.
     Small(ModelBuffer<'id, B, ModelSmall>),
@@ -552,6 +559,10 @@ pub enum ModelAnyBuffer<'id, B: ModelComposition> {
     SmallSent(ModelSent<'id, B, ModelSmall>),
     /// The original large published MPDU, including its body.
     LargeSent(ModelSent<'id, B, ModelLarge>),
+    /// A network's fresh memory.
+    Network(ModelBuffer<'id, B, ModelNetworkClass>),
+    /// The original published MPDU in a network's memory.
+    NetworkSent(ModelSent<'id, B, ModelNetworkClass>),
 }
 
 impl<B: ModelComposition, C: ModelClass> core::fmt::Debug for ModelSent<'_, B, C> {
@@ -569,6 +580,8 @@ impl<B: ModelComposition> core::fmt::Debug for ModelAnyBuffer<'_, B> {
             Self::Large(buffer) => f.debug_tuple("Large").field(buffer).finish(),
             Self::SmallSent(buffer) => f.debug_tuple("SmallSent").field(buffer).finish(),
             Self::LargeSent(buffer) => f.debug_tuple("LargeSent").field(buffer).finish(),
+            Self::Network(buffer) => f.debug_tuple("Network").field(buffer).finish(),
+            Self::NetworkSent(buffer) => f.debug_tuple("NetworkSent").field(buffer).finish(),
         }
     }
 }
@@ -579,7 +592,8 @@ impl<B: ModelComposition> ModelAnyBuffer<'_, B> {
         match self {
             Self::SmallSent(mpdu) => mpdu.retry = true,
             Self::LargeSent(mpdu) => mpdu.retry = true,
-            Self::Small(_) | Self::Large(_) => {}
+            Self::NetworkSent(mpdu) => mpdu.retry = true,
+            Self::Small(_) | Self::Large(_) | Self::Network(_) => {}
         }
     }
     /// Whether a retransmission of this published MPDU carries Retry.
@@ -587,31 +601,37 @@ impl<B: ModelComposition> ModelAnyBuffer<'_, B> {
         match self {
             Self::SmallSent(mpdu) => mpdu.retry,
             Self::LargeSent(mpdu) => mpdu.retry,
-            Self::Small(_) | Self::Large(_) => false,
+            Self::NetworkSent(mpdu) => mpdu.retry,
+            Self::Small(_) | Self::Large(_) | Self::Network(_) => false,
         }
     }
     fn retry(&mut self) {
         match self {
-            Self::Small(buffer) => buffer.memory.retry(),
-            Self::Large(buffer) => buffer.memory.retry(),
-            Self::SmallSent(mpdu) => mpdu.buffer.memory.retry(),
-            Self::LargeSent(mpdu) => mpdu.buffer.memory.retry(),
+            Self::Small(buffer) => retry_memory(&mut buffer.memory),
+            Self::Large(buffer) => retry_memory(&mut buffer.memory),
+            Self::Network(buffer) => retry_memory(&mut buffer.memory),
+            Self::SmallSent(mpdu) => retry_memory(&mut mpdu.buffer.memory),
+            Self::LargeSent(mpdu) => retry_memory(&mut mpdu.buffer.memory),
+            Self::NetworkSent(mpdu) => retry_memory(&mut mpdu.buffer.memory),
         }
     }
 
     fn memory(&self) -> &[u8] {
         match self {
-            Self::Small(buffer) => &buffer.memory,
-            Self::Large(buffer) => &buffer.memory,
-            Self::SmallSent(mpdu) => &mpdu.buffer.memory,
-            Self::LargeSent(mpdu) => &mpdu.buffer.memory,
+            Self::Small(buffer) => buffer.memory.bytes(),
+            Self::Large(buffer) => buffer.memory.bytes(),
+            Self::Network(buffer) => buffer.memory.bytes(),
+            Self::SmallSent(mpdu) => mpdu.buffer.memory.bytes(),
+            Self::LargeSent(mpdu) => mpdu.buffer.memory.bytes(),
+            Self::NetworkSent(mpdu) => mpdu.buffer.memory.bytes(),
         }
     }
     fn packet_number(&self) -> Option<u64> {
         match self {
             Self::SmallSent(mpdu) => mpdu.packet_number,
             Self::LargeSent(mpdu) => mpdu.packet_number,
-            Self::Small(_) | Self::Large(_) => None,
+            Self::NetworkSent(mpdu) => mpdu.packet_number,
+            Self::Small(_) | Self::Large(_) | Self::Network(_) => None,
         }
     }
 }
@@ -780,7 +800,10 @@ impl<B: ModelComposition> ModelMpduExecution<'_, '_, B> {
         let memory = match &mut mpdu.buffer {
             ModelAnyBuffer::Small(buffer) => buffer.bytes_mut(),
             ModelAnyBuffer::Large(buffer) => buffer.bytes_mut(),
-            ModelAnyBuffer::SmallSent(_) | ModelAnyBuffer::LargeSent(_) => return Ok(()),
+            ModelAnyBuffer::Network(buffer) => buffer.bytes_mut(),
+            ModelAnyBuffer::SmallSent(_)
+            | ModelAnyBuffer::LargeSent(_)
+            | ModelAnyBuffer::NetworkSent(_) => return Ok(()),
         }
         .map_err(|_| ModelFault)?;
         let packet_number = match key {
@@ -862,6 +885,26 @@ impl<'id, B: ModelComposition> TxMpdu for ModelMpdu<'id, B> {
                 }),
                 None,
             ),
+            (
+                ModelAnyBuffer::Network(buffer),
+                Some(PublishedMpdu {
+                    role,
+                    key,
+                    packet_number,
+                }),
+            ) => (
+                ModelAnyBuffer::NetworkSent(ModelSent {
+                    role,
+                    buffer,
+                    layout,
+                    response,
+                    key,
+                    body,
+                    packet_number,
+                    retry,
+                }),
+                None,
+            ),
             // A retransmission's `Sent` keeps its own decision and gains this
             // one's.
             (mut buffer, _) => {
@@ -884,6 +927,10 @@ pub enum ModelBufferKind {
     SmallSent,
     /// A large published MPDU.
     LargeSent,
+    /// A network's fresh memory.
+    Network,
+    /// A published MPDU in a network's memory.
+    NetworkSent,
 }
 
 impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
@@ -896,15 +943,22 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
             (ModelAnyBuffer::Large(_), true) | (ModelAnyBuffer::LargeSent(_), _) => {
                 ModelBufferKind::LargeSent
             }
+            (ModelAnyBuffer::Network(_), true) | (ModelAnyBuffer::NetworkSent(_), _) => {
+                ModelBufferKind::NetworkSent
+            }
             (ModelAnyBuffer::Small(_), false) => ModelBufferKind::Small,
             (ModelAnyBuffer::Large(_), false) => ModelBufferKind::Large,
+            (ModelAnyBuffer::Network(_), false) => ModelBufferKind::Network,
         }
     }
     fn admit(&mut self, at: Instant) {
         match &mut self.buffer {
             ModelAnyBuffer::Small(buffer) => buffer.admit(at),
             ModelAnyBuffer::Large(buffer) => buffer.admit(at),
-            ModelAnyBuffer::SmallSent(_) | ModelAnyBuffer::LargeSent(_) => {}
+            ModelAnyBuffer::Network(buffer) => buffer.admit(at),
+            ModelAnyBuffer::SmallSent(_)
+            | ModelAnyBuffer::LargeSent(_)
+            | ModelAnyBuffer::NetworkSent(_) => {}
         }
     }
     fn project_admission(&mut self, air: &ModelAir) -> Result<(), ClockError> {
@@ -913,6 +967,8 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
             ModelAnyBuffer::Large(buffer) => buffer.project_admission(air),
             ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.project_admission(air),
             ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.project_admission(air),
+            ModelAnyBuffer::Network(buffer) => buffer.project_admission(air),
+            ModelAnyBuffer::NetworkSent(mpdu) => mpdu.buffer.project_admission(air),
         }
     }
     /// The monotonic instant the MPDU was admitted at, once it was.
@@ -922,6 +978,8 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
             ModelAnyBuffer::Large(buffer) => buffer.admitted,
             ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.admitted,
             ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.admitted,
+            ModelAnyBuffer::Network(buffer) => buffer.admitted,
+            ModelAnyBuffer::NetworkSent(mpdu) => mpdu.buffer.admitted,
         }
     }
     fn expired(&self, now: Instant, lifetime: Duration) -> bool {
@@ -930,6 +988,8 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
             ModelAnyBuffer::Large(buffer) => buffer.admitted,
             ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.admitted,
             ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.admitted,
+            ModelAnyBuffer::Network(buffer) => buffer.admitted,
+            ModelAnyBuffer::NetworkSent(mpdu) => mpdu.buffer.admitted,
         };
         admitted.is_some_and(|at| now.saturating_duration_since(at) >= lifetime)
     }
@@ -941,6 +1001,8 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
             ModelAnyBuffer::Large(buffer) => buffer.admission(),
             ModelAnyBuffer::SmallSent(mpdu) => mpdu.buffer.admission(),
             ModelAnyBuffer::LargeSent(mpdu) => mpdu.buffer.admission(),
+            ModelAnyBuffer::Network(buffer) => buffer.admission(),
+            ModelAnyBuffer::NetworkSent(mpdu) => mpdu.buffer.admission(),
         }
     }
 
@@ -953,7 +1015,7 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
         let fresh = self.published.is_none()
             && matches!(
                 self.buffer,
-                ModelAnyBuffer::Small(_) | ModelAnyBuffer::Large(_)
+                ModelAnyBuffer::Small(_) | ModelAnyBuffer::Large(_) | ModelAnyBuffer::Network(_)
             );
         if protected && fresh {
             memory
@@ -3729,25 +3791,25 @@ fn retry_stages<K>(
 }
 
 type PhaseProof<'p, T> = PhantomData<fn(&'p ()) -> (&'p (), T)>;
-type ModelSource<'k, 'p, 'id, C, K, R, B> = TxSource<
+type ModelSource<'k, 'p, 'id, C, K, R, B, F = C> = TxSource<
     ModelBuffer<'id, B, C>,
     ModelSent<'id, B, C>,
-    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, C, K>,
+    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, F, K>,
     ModelBodyOf<B>,
     <R as RoleKeys<'id, ModelTypes<B>>>::TxKey<'k>,
     RetransmissionPlan<'p, K>,
 >;
-type ModelCheckedSource<'k, 'p, 'id, C, K, R, B> = CheckedTxSource<
+type ModelCheckedSource<'k, 'p, 'id, C, K, R, B, F = C> = CheckedTxSource<
     ModelBuffer<'id, B, C>,
     ModelSent<'id, B, C>,
-    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, C, K>,
+    oer_protocols_ieee80211_contracts_port::ClassFrame<'p, F, K>,
     ModelBodyOf<B>,
     <R as RoleKeys<'id, ModelTypes<B>>>::TxKey<'k>,
     RetransmissionPlan<'p, K>,
 >;
-type ModelPreparation<'k, 'p, 'id, R, K, B, C> = Result<
+type ModelPreparation<'k, 'p, 'id, R, K, B, C, F = C> = Result<
     ModelPrepared<'k, 'p, 'id, R, K, B>,
-    PreparationRefused<ModelSource<'k, 'p, 'id, C, K, R, B>>,
+    PreparationRefused<ModelSource<'k, 'p, 'id, C, K, R, B, F>>,
 >;
 
 /// Closed preparation proof retaining role, port borrow, install and the key
@@ -3823,6 +3885,8 @@ impl<'id, R, K, B: ModelComposition + 'id> PreparedTx<'id> for ModelPrepared<'_,
 
 /// A model buffer class and its unique pool within the installation layout.
 pub trait ModelClass: TxBufferClass + Sized {
+    /// The memory of one buffer of the class, at least its capacity.
+    type Memory: ModelBytes;
     /// Nominal component of the backing memory slots.
     type Path<Id: SlotIdentity>: oer_protocols_radio_port::PoolPath<Identity = Id>;
     /// The layout of the class's buffer slots, `Slots<Self, N>`.
@@ -3848,6 +3912,7 @@ pub trait ModelClass: TxBufferClass + Sized {
 }
 
 impl ModelClass for ModelSmall {
+    type Memory = Box<[u8; ModelSmall::CAPACITY]>;
     type Path<Id: SlotIdentity> = ModelPool<Id, 2>;
     type Layout = oer_protocols_radio_port::Slots<Self, MODEL_SMALL_BUFFERS>;
     fn erase<'id, B: ModelComposition>(
@@ -3888,6 +3953,7 @@ impl ModelClass for ModelSmall {
     }
 }
 impl ModelClass for ModelLarge {
+    type Memory = Box<[u8; ModelLarge::CAPACITY]>;
     type Path<Id: SlotIdentity> = ModelPool<Id, 3>;
     type Layout = oer_protocols_radio_port::Slots<Self, MODEL_LARGE_BUFFERS>;
     fn erase<'id, B: ModelComposition>(
@@ -3928,6 +3994,146 @@ impl ModelClass for ModelLarge {
     }
 }
 
+/// The class of a network's memory as a buffer of the model's single-MPDU
+/// path ([`TxNetworkPool`]): the whole memory is its frame region, the MPDU
+/// from its first octet, the payload the network wrote at
+/// [`MSDU_PAYLOAD_OFFSET`](oer_protocols_ieee80211_contracts_port::NETWORK_MPDU_LEN)
+/// of the longest prefix. Its slots are nominal only, never minted: the
+/// port lends the network's own memory.
+#[derive(Debug)]
+pub enum ModelNetworkClass {}
+
+impl TxBufferClass for ModelNetworkClass {
+    const CAPACITY: usize = ModelLarge::CAPACITY;
+}
+
+impl<B: ModelComposition> NetworkCapacity for ModelTypes<B> {
+    const NETWORK_CAPACITY: usize = ModelNetworkClass::CAPACITY;
+}
+
+impl ModelClass for ModelNetworkClass {
+    type Memory = ModelNetworkMemory;
+    type Path<Id: SlotIdentity> = ModelPool<Id, 15>;
+    type Layout = oer_protocols_radio_port::Slots<Self, 0>;
+    fn erase<'id, B: ModelComposition>(
+        buffer: ModelBuffer<'id, B, Self>,
+    ) -> ModelAnyBuffer<'id, B> {
+        ModelAnyBuffer::Network(buffer)
+    }
+    fn erase_sent<'id, B: ModelComposition>(
+        mpdu: ModelSent<'id, B, Self>,
+    ) -> ModelAnyBuffer<'id, B> {
+        ModelAnyBuffer::NetworkSent(mpdu)
+    }
+    fn class<'id, B: ModelComposition>(
+        buffer: ModelAnyBuffer<'id, B>,
+    ) -> Result<ModelBuffer<'id, B, Self>, ModelAnyBuffer<'id, B>> {
+        match buffer {
+            ModelAnyBuffer::Network(buffer) => Ok(buffer),
+            buffer => Err(buffer),
+        }
+    }
+    fn sent<'id, B: ModelComposition>(
+        buffer: ModelAnyBuffer<'id, B>,
+    ) -> Result<ModelSent<'id, B, Self>, ModelAnyBuffer<'id, B>> {
+        match buffer {
+            ModelAnyBuffer::NetworkSent(buffer) => Ok(buffer),
+            buffer => Err(buffer),
+        }
+    }
+    fn class_of(kind: ModelBufferKind) -> Option<TxBufferForm> {
+        match kind {
+            ModelBufferKind::Network => Some(TxBufferForm::Fresh),
+            ModelBufferKind::NetworkSent => Some(TxBufferForm::Sent),
+            _ => None,
+        }
+    }
+}
+
+const _: () = {
+    // A network's memory holds the longest MPDU written in it in place.
+    if oer_protocols_ieee80211_contracts_port::NETWORK_MPDU_LEN > ModelNetworkClass::CAPACITY {
+        panic!("a model memory holds its class's MPDU");
+    }
+};
+
+/// The network's memory through the model's single-MPDU path, as the
+/// network class's buffer.
+impl<'id, B: ModelComposition + 'id> TxBufferPool<'id, NetworkFrames<ModelTypes<B>>>
+    for ModelTypes<B>
+{
+    type Buffer = ModelBuffer<'id, B, ModelNetworkClass>;
+    type Sent = ModelSent<'id, B, ModelNetworkClass>;
+
+    fn prepare<'k, 'p, R: RoleKeys<'id, Self>, K: Ieee80211Capabilities>(
+        source: CheckedPoolSource<'k, 'p, 'id, Self, NetworkFrames<Self>, K, R>,
+    ) -> oer_protocols_ieee80211_contracts_port::PoolPreparation<
+        'k,
+        'p,
+        'id,
+        Self,
+        NetworkFrames<Self>,
+        K,
+        R,
+    >
+    where
+        'id: 'k,
+    {
+        prepare_model(source)
+    }
+
+    fn erase(buffer: Self::Buffer) -> ModelAnyBuffer<'id, B> {
+        ModelNetworkClass::erase(buffer)
+    }
+
+    fn erase_sent(buffer: Self::Sent) -> ModelAnyBuffer<'id, B> {
+        ModelNetworkClass::erase_sent(buffer)
+    }
+
+    fn class(buffer: ModelAnyBuffer<'id, B>) -> Result<Self::Buffer, ModelAnyBuffer<'id, B>> {
+        ModelNetworkClass::class(buffer)
+    }
+
+    fn sent(buffer: ModelAnyBuffer<'id, B>) -> Result<Self::Sent, ModelAnyBuffer<'id, B>> {
+        ModelNetworkClass::sent(buffer)
+    }
+
+    fn renew(mpdu: Self::Sent) -> (Self::Buffer, Option<ModelBodyOf<B>>) {
+        (mpdu.buffer, mpdu.body)
+    }
+
+    fn class_of(mpdu: &ModelMpdu<'id, B>) -> Option<TxBufferForm> {
+        ModelNetworkClass::class_of(mpdu.returned_kind())
+    }
+}
+
+impl<'id, B: ModelComposition + 'id> TxNetworkPool<'id> for ModelTypes<B> {
+    /// The model has no transmit metadata: the region is the memory's
+    /// first [`ModelNetworkClass::CAPACITY`] octets.
+    fn frame_region(memory: &mut ModelNetworkMemory) -> Option<&mut [u8]> {
+        memory.get_mut(..ModelNetworkClass::CAPACITY)
+    }
+    /// The model's memory is never the hardware's: it always comes back.
+    fn into_memory(
+        buffer: ModelBuffer<'id, B, ModelNetworkClass>,
+    ) -> Result<ModelNetworkMemory, ModelBuffer<'id, B, ModelNetworkClass>> {
+        Ok(buffer.memory)
+    }
+}
+
+impl<'id, B: ModelComposition> ModelBuffer<'id, B, ModelNetworkClass> {
+    /// The network's `memory` under the installation's `loan`.
+    pub(crate) fn network(memory: ModelNetworkMemory, loan: BodyLoan<'id, B::Identity, B>) -> Self {
+        Self {
+            slot: None,
+            loan: Some(loan),
+            memory,
+            admitted_at: None,
+            admitted: None,
+        }
+    }
+}
+
 #[cfg_attr(
     target_pointer_width = "64",
     expect(
@@ -3943,9 +4149,10 @@ fn prepare_model<
     K: Ieee80211Capabilities,
     B: ModelComposition + 'id,
     C: ModelClass,
+    F: TxBufferClass,
 >(
-    source: ModelCheckedSource<'k, 'p, 'id, C, K, R, B>,
-) -> ModelPreparation<'k, 'p, 'id, R, K, B, C> {
+    source: ModelCheckedSource<'k, 'p, 'id, C, K, R, B, F>,
+) -> ModelPreparation<'k, 'p, 'id, R, K, B, C, F> {
     let (mpdu, plan, key, loan) = match source {
         CheckedTxSource::Fresh(fresh) => {
             let (fresh, layout) = fresh.into_parts();

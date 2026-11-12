@@ -1061,6 +1061,71 @@ pub trait TxBufferPool<'id, C: TxBufferClass>: PortTypes<'id> {
     }
 }
 
+/// The longest MSDU payload a network's transmit memory carries: an
+/// Ethernet payload, at most 1500 octets (IEEE Std 802.3-2022, 3.2.7).
+pub const NETWORK_MSDU_PAYLOAD: usize = 1500;
+
+/// The longest data MPDU written in place in front of a
+/// [`NETWORK_MSDU_PAYLOAD`] payload: a QoS Data header, the CCMP header and
+/// LLC/SNAP, without the MIC and FCS the transmitter appends.
+pub const NETWORK_MPDU_LEN: usize =
+    oer_protocols_ieee80211_wire::data::IEEE80211_QOS_DATA_HEADER_LEN
+        + oer_protocols_ieee80211_wire::ccmp::CCMP_HEADER_LEN
+        + oer_protocols_ieee80211_wire::data::LLC_SNAP_HEADER_LEN
+        + NETWORK_MSDU_PAYLOAD;
+
+/// The frame region a backend's network memory holds ([`TxNetworkPool`]).
+pub trait NetworkCapacity {
+    /// The longest MPDU the frame region holds, without its MIC and FCS.
+    const NETWORK_CAPACITY: usize;
+}
+
+/// The class of the phase types `T`'s network transmit memory as one single
+/// MPDU's buffer ([`TxNetworkPool`]): its frame region, from the MPDU's
+/// first octet, holds [`NetworkCapacity::NETWORK_CAPACITY`] octets. A
+/// caller that carries the longest MSDU checks at compile time that it is
+/// at least [`NETWORK_MPDU_LEN`].
+pub struct NetworkFrames<T>(core::marker::PhantomData<fn() -> T>);
+
+impl<T: NetworkCapacity> TxBufferClass for NetworkFrames<T> {
+    const CAPACITY: usize = T::NETWORK_CAPACITY;
+}
+
+/// A fresh buffer of the phase types `T` over a network's transmit memory.
+pub type NetworkTxBuffer<'id, T> = <T as TxBufferPool<'id, NetworkFrames<T>>>::Buffer;
+
+/// The phase types of a backend whose single-MPDU path also sends from a
+/// network's transmit memory ([`PortTypes::DataMemory`]): the same memory a
+/// data arena takes, as a buffer of the class [`NetworkFrames`]. The
+/// network wrote one MSDU's Ethernet frame into it; the caller writes the
+/// MPDU in place from the frame region's first octet
+/// ([`TxBufferMemory::bytes_mut`]), prepares it through
+/// [`TxBufferPool::prepare`] like any buffer of a class, and the terminal
+/// returns the same memory, fresh or `Sent`, through
+/// [`TxBufferPool::class`] and [`TxBufferPool::sent`]. A port mints the
+/// buffer under its installation
+/// ([`AccessPointPort::network_buffer`](crate::AccessPointPort::network_buffer));
+/// [`Self::into_memory`] hands the memory back to the network.
+pub trait TxNetworkPool<'id>: NetworkCapacity + TxBufferPool<'id, NetworkFrames<Self>> {
+    /// The frame region of the network's `memory` before it is lent: the
+    /// octets [`TxBufferMemory::bytes_mut`] of its buffer opens, which a
+    /// caller reads to choose the MSDU's queue before anything is lent.
+    /// `None` for memory that holds no frame region, which a backend's
+    /// geometry excludes.
+    fn frame_region(memory: &mut Self::DataMemory) -> Option<&mut [u8]>;
+
+    /// The network's memory of a fresh buffer, whole: it no longer names an
+    /// installation.
+    ///
+    /// # Errors
+    ///
+    /// The hardware still holds the memory (a completion never handed it
+    /// back): the buffer comes back unchanged.
+    fn into_memory(
+        buffer: NetworkTxBuffer<'id, Self>,
+    ) -> Result<Self::DataMemory, NetworkTxBuffer<'id, Self>>;
+}
+
 /// The form in which a buffer of a class comes back from its MPDU
 /// ([`TxBufferPool::class_of`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

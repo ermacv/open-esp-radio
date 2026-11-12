@@ -43,6 +43,8 @@ mod access_point;
 pub use access_point::*;
 #[cfg(not(feature = "network"))]
 mod ip_service;
+#[cfg(any(not(feature = "network"), feature = "access-point"))]
+mod tx_memory;
 #[cfg(not(feature = "network"))]
 pub use ip_service::*;
 #[cfg(feature = "network")]

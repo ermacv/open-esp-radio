@@ -161,6 +161,30 @@ fn transmit_packet_numbers_stop_at_the_48_bit_limit_without_wrapping() {
     assert_eq!(near.allocate(), Err(CcmpTxPacketNumberError::Exhausted));
 }
 
+#[test]
+fn availability_reads_the_next_allocation_without_drawing_it() {
+    let step = CcmpPacketNumberStep::new(3).unwrap();
+    let allocator = CcmpTxPacketNumber::continuing_after(
+        step,
+        CcmpPacketNumber::new(CCMP_PACKET_NUMBER_MAX - 3).unwrap(),
+    );
+    assert!(allocator.available());
+    assert!(allocator.available(), "a read draws nothing");
+    assert_eq!(
+        allocator.last(),
+        CcmpPacketNumber::new(CCMP_PACKET_NUMBER_MAX - 3).unwrap()
+    );
+    assert!(allocator.allocate().is_ok());
+    assert!(
+        !allocator.available(),
+        "exhausted: the next allocation fails"
+    );
+    assert_eq!(
+        allocator.allocate(),
+        Err(CcmpTxPacketNumberError::Exhausted)
+    );
+}
+
 /// The input's first eight octets as a CCMP header and receive sequence;
 /// each following pair as a lane and a packet number's low octet.
 fn parse_and_check(bytes: &[u8]) {
