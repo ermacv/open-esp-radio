@@ -414,6 +414,15 @@ impl<
         HEADROOM
     }
 
+    /// Which slot of which pool this lease holds: two leases of different
+    /// pools may share an index, never an identity.
+    pub fn identity(&self) -> TxSlotIdentity {
+        TxSlotIdentity {
+            slot: core::ptr::from_ref(self.slot).addr(),
+            index: self.index,
+        }
+    }
+
     pub fn ethernet_length(&self) -> usize {
         self.slot.length()
     }
@@ -510,6 +519,15 @@ unsafe impl<
     fn prepare_for_dma_read(&mut self) {
         P::prepare_for_dma_read(self.storage_mut());
     }
+}
+
+/// The slot a radio lease holds, by its pinned slot's address and its index
+/// in its pool: equal for the same slot of the same pool only. It names a
+/// slot and opens nothing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TxSlotIdentity {
+    slot: usize,
+    index: u8,
 }
 
 /// Stable DMA lease whose destructor releases its slot before its index is returned.

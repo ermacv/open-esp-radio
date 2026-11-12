@@ -36,6 +36,19 @@ pub const AP_RX_DEPTH: usize = 4;
 /// has room for every memory the runner returns.
 pub const AP_TX_DEPTH: usize = 64;
 
+/// The proof that the runner's queue back holds every memory a supply `S`
+/// can hold ([`TxSupply::MEMORIES`]): [`Holds::BACK`] does not compile
+/// otherwise. [`ApNetworkStorage::split`] reads it at its monomorphization.
+pub struct Holds<F, S>(core::marker::PhantomData<fn(F, S)>);
+
+impl<F, S: TxSupply<F>> Holds<F, S> {
+    pub const BACK: () = {
+        if S::MEMORIES > AP_TX_DEPTH {
+            panic!("the runner's queue back holds every network memory");
+        }
+    };
+}
+
 /// The two queues and the link of one access point's network end, and the
 /// queues between the stack and the runner, placed by the composition. `M`
 /// is the network's transmit memory.
@@ -59,10 +72,10 @@ impl<M> ApNetworkStorage<M> {
     /// Split the storage into the network's device, its transmit half over
     /// the network's transmit memory `supply`, which takes the stack's
     /// frames `F`, and the runner's end.
-    /// `MEMORIES` is how many memories `supply` holds: the runner's queue
-    /// back holds them all, which this proves at compile time, so every
-    /// memory it gives back finds room.
-    pub fn split<F, S: TxSupply<F, Memory = M>, const MEMORIES: usize>(
+    /// The runner's queue back holds every memory `supply` can hold
+    /// ([`TxSupply::MEMORIES`], its bounded storage's capacity), which this
+    /// proves at compile time, so every memory it gives back finds room.
+    pub fn split<F, S: TxSupply<F, Memory = M>>(
         &mut self,
         supply: S,
     ) -> (
@@ -70,11 +83,7 @@ impl<M> ApNetworkStorage<M> {
         ApNetTransmit<'_, F, S>,
         ApNetworkEnd<'_, M>,
     ) {
-        const {
-            if MEMORIES > AP_TX_DEPTH {
-                panic!("the runner's queue back holds every network memory");
-            }
-        }
+        let () = Holds::<F, S>::BACK;
         let (receive_sender, receive_receiver) = self.receive.split();
         let (transmit_sender, transmit_receiver) = self.transmit.split(|| None);
         let (returned_sender, returned_receiver) = self.returned.split(|| None);

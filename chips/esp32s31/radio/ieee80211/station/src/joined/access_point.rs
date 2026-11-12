@@ -31,8 +31,12 @@ struct Nonces;
 /// into a free pool buffer and published from there.
 struct Copied {
     publisher: crate::supply::TxPublisher,
-    slots: std::vec::Vec<crate::supply::TxSlot>,
+    slots: heapless::Vec<crate::supply::TxSlot, COPIED_MEMORIES>,
 }
+
+/// The most memories the bench's supply holds.
+const COPIED_MEMORIES: usize =
+    oer_chips_esp32s31_radio_ieee80211_backend::port::TX_BUFFERS - AP_BUFFERS;
 
 impl Copied {
     fn new(network: NetworkTx) -> Self {
@@ -48,6 +52,7 @@ impl<F: oer_protocols_network_port::EthernetFrame>
     oer_protocols_ieee80211_runtime::station::TxSupply<F> for Copied
 {
     type Memory = TxMemory;
+    const MEMORIES: usize = COPIED_MEMORIES;
     fn available(&self) -> bool {
         !self.slots.is_empty()
     }
@@ -76,7 +81,8 @@ impl<F: oer_protocols_network_port::EthernetFrame>
             .map_err(|_| oer_protocols_ieee80211_runtime::station::TxRefused::Lost)
     }
     fn give(&mut self, memory: TxMemory) {
-        self.slots.push(self.publisher.slot(memory));
+        // Past its capacity a memory leaves the supply.
+        let _held = self.slots.push(self.publisher.slot(memory));
     }
 }
 
@@ -254,9 +260,9 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             .ok()
             .expect("network buffers");
         let (_device, _transmit, end) = leak(ApNetworkStorage::new())
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, {
-            oer_chips_esp32s31_radio_ieee80211_backend::port::TX_BUFFERS - AP_BUFFERS
-        }>(Copied::new(network));
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _>(
+            Copied::new(network),
+        );
         let mut runner = ApRunner::new(
             port,
             commands,

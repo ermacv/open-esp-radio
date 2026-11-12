@@ -1,7 +1,7 @@
 use super::keys::RawKeyIdentity;
 use super::*;
 use crate::mac::tx::TxBacking;
-use oer_portable_memory::{IndexedStableDmaLease as _, StableDmaBacking as _};
+use oer_portable_memory::{StableDmaBacking as _, TxSlotIdentity};
 
 pub struct BufferClass<const B: usize>;
 impl<const B: usize> TxBufferClass for BufferClass<B> {
@@ -26,10 +26,13 @@ enum Dma<const B: usize> {
         memory: TxBacking<B>,
         home: ReturnRight<B>,
     },
-    /// The hardware owns the memory of pool place `index`; its return
-    /// right waits for the completion that hands that memory back. Dropped
-    /// here, the memory stays out.
-    Published { home: ReturnRight<B>, index: u8 },
+    /// The hardware owns the memory of the slot `slot`; its return right
+    /// waits for the completion that hands that memory back. Dropped here,
+    /// the memory stays out.
+    Published {
+        home: ReturnRight<B>,
+        slot: TxSlotIdentity,
+    },
     /// Neither: the place holds no memory, or its pair moved on.
     Released,
 }
@@ -58,7 +61,7 @@ impl<const B: usize> ReturnableBuffer<B> {
             Dma::Free { memory, home } => {
                 self.0 = Dma::Published {
                     home,
-                    index: memory.index(),
+                    slot: memory.identity(),
                 };
                 Some(memory)
             }
@@ -70,10 +73,12 @@ impl<const B: usize> ReturnableBuffer<B> {
     }
     /// The completion handed `memory` back: it rejoins its home. Refused,
     /// with the memory and no change, unless the hardware owned it and it
-    /// is the memory it published: another place's never joins this home.
+    /// is the memory it published, the same slot of the same pool: another
+    /// slot's, of this pool or another with the same index, never joins
+    /// this home.
     pub(super) fn complete(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
         match core::mem::replace(&mut self.0, Dma::Released) {
-            Dma::Published { home, index } if index == memory.index() => {
+            Dma::Published { home, slot } if slot == memory.identity() => {
                 self.0 = Dma::Free { memory, home };
                 Ok(())
             }
@@ -144,8 +149,8 @@ pub struct NetworkBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
 /// publication until its completion hands it back.
 pub(super) enum NetworkDma<const B: usize> {
     Free(TxBacking<B>),
-    /// The hardware owns the memory of pool place `index`.
-    Published(u8),
+    /// The hardware owns the memory of the slot named.
+    Published(TxSlotIdentity),
 }
 impl<const B: usize> NetworkDma<B> {
     fn memory_mut(&mut self) -> Option<&mut [u8]> {
@@ -155,23 +160,24 @@ impl<const B: usize> NetworkDma<B> {
         }
     }
     fn publish(&mut self) -> Option<TxBacking<B>> {
-        match core::mem::replace(self, Self::Published(0)) {
-            // The memory leaves, its place recorded.
+        match self {
             Self::Free(memory) => {
-                *self = Self::Published(memory.index());
-                Some(memory)
+                // The memory leaves, its slot recorded.
+                let slot = memory.identity();
+                match core::mem::replace(self, Self::Published(slot)) {
+                    Self::Free(memory) => Some(memory),
+                    Self::Published(_) => None,
+                }
             }
-            Self::Published(index) => {
-                *self = Self::Published(index);
-                None
-            }
+            Self::Published(_) => None,
         }
     }
     /// The completion handed `memory` back. Refused, with the memory and no
-    /// change, unless the hardware owned it and it is the memory published.
+    /// change, unless the hardware owned it and it is the memory published:
+    /// the same slot of the same pool, not merely its index.
     fn complete(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
         match self {
-            Self::Published(index) if *index == memory.index() => {
+            Self::Published(slot) if *slot == memory.identity() => {
                 *self = Self::Free(memory);
                 Ok(())
             }
@@ -794,8 +800,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> Result<TxBacking<B>, NetworkBuffer<'id, Id, D, B, O>> {
         match buffer.dma {
             NetworkDma::Free(memory) => Ok(memory),
-            NetworkDma::Published(index) => Err(NetworkBuffer {
-                dma: NetworkDma::Published(index),
+            NetworkDma::Published(slot) => Err(NetworkBuffer {
+                dma: NetworkDma::Published(slot),
                 admission: buffer.admission,
                 loan: buffer.loan,
             }),
@@ -907,6 +913,38 @@ mod tests {
     /// Free memory of another model pool.
     fn bank_memory() -> TxBacking<512> {
         crate::mac::tx::test_support::model_backing().expect("model buffer")
+    }
+
+    /// The same index of another pool is another slot: a completion that
+    /// returns pool B's place 0 for pool A's place 0 is refused, for a bank
+    /// buffer and a network buffer alike, and nothing moves.
+    #[test]
+    fn a_completion_with_the_same_index_of_another_pool_is_refused() {
+        use crate::mac::tx::test_support::{model_pool, pool_backing};
+        let first = model_pool::<512, 1>().expect("model pool");
+        let second = model_pool::<512, 1>().expect("another pool");
+        let bank = Box::leak(Box::new(Bank::new()));
+        assert!(
+            bank.seed(0, pool_backing(first, 0).expect("its place 0"))
+                .is_ok()
+        );
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        let own = buffer.publish().expect("the CPU owned it");
+        let foreign = pool_backing(second, 0).expect("the other pool's place 0");
+        let Err(foreign) = buffer.complete(foreign) else {
+            panic!("another pool's memory never joins this home");
+        };
+        assert!(buffer.memory_mut().is_none(), "still the hardware's");
+        assert!(buffer.complete(own).is_ok(), "its own memory rejoins");
+        let mut network = NetworkDma::Free(foreign);
+        let published = network.publish().expect("the CPU owned it");
+        let own = buffer.publish().expect("free again");
+        let Err(own) = network.complete(own) else {
+            panic!("another pool's memory never takes this one's");
+        };
+        assert!(network.memory_mut().is_none(), "still the hardware's");
+        assert!(network.complete(published).is_ok());
+        assert!(buffer.complete(own).is_ok());
     }
 
     /// Two places of one pool: a completion returning another place's

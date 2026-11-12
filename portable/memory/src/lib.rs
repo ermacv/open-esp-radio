@@ -100,7 +100,7 @@ pub use once_value::OnceValue;
 pub use pinned_tx::{
     Coherent, DmaIndexReturn, DmaReadPrepare, IndexedStableDmaLease, PinnedDmaTxNetworkLease,
     PinnedDmaTxPool, PinnedDmaTxPoolHandle, PinnedDmaTxRadioLease, ReturningStableDmaBacking,
-    TaggedStableDmaBacking,
+    TaggedStableDmaBacking, TxSlotIdentity,
 };
 pub use return_bank::{ReturnBank, ReturnToken};
 pub use rx_external_handoff::{

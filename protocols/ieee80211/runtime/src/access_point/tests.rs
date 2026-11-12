@@ -230,7 +230,7 @@ macro_rules! fixture {
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
         let $supply = ModelTx::new();
         let ($device, mut $transmit, end) = network
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, AP_TX_DEPTH>(
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _>(
                 $supply.clone(),
             );
         let mut $runner = ApRunner::new(
@@ -267,6 +267,7 @@ impl ModelTx {
 
 impl<F: oer_protocols_network_port::EthernetFrame> crate::station::TxSupply<F> for ModelTx {
     type Memory = ModelNetworkMemory;
+    const MEMORIES: usize = super::network::AP_TX_DEPTH;
     fn available(&self) -> bool {
         !self.0.borrow().is_empty()
     }
@@ -290,7 +291,11 @@ impl<F: oer_protocols_network_port::EthernetFrame> crate::station::TxSupply<F> f
         Ok(memory)
     }
     fn give(&mut self, memory: ModelNetworkMemory) {
-        self.0.borrow_mut().push(memory);
+        // Past its capacity a memory leaves the supply.
+        let mut free = self.0.borrow_mut();
+        if free.len() < super::network::AP_TX_DEPTH {
+            free.push(memory);
+        }
     }
 }
 

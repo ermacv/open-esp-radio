@@ -577,6 +577,10 @@ pub trait TxSupply<P> {
     /// The memory the station holds for one MSDU
     /// ([`DatapathPort::TxMemory`](crate::datapath::DatapathPort::TxMemory)).
     type Memory;
+    /// The most memories the supply holds: its bounded storage's capacity.
+    /// A memory given past it leaves the supply ([`Self::give`]), so no
+    /// more than this many of its memories are ever out at once.
+    const MEMORIES: usize;
     /// Whether the frame [`Self::write`] last refused for want of memory
     /// may go now: memory came back since, or none was refused.
     fn available(&self) -> bool;

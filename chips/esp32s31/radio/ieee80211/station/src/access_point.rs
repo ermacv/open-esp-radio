@@ -59,11 +59,6 @@ const _: () = {
     }
 };
 
-/// The pool buffers the access point's network holds: every place past
-/// the bank.
-const AP_NETWORK_BUFFERS: usize =
-    oer_chips_esp32s31_radio_ieee80211_backend::port::TX_BUFFERS - AP_BUFFERS;
-
 /// The transmissions of an individually addressed management frame of the
 /// access point (a response, an EAPOL-Key frame, a teardown): a named
 /// product policy of this composition, chosen, not taken from a source or
@@ -491,7 +486,7 @@ pub fn access_point<W: Binding, S: NetworkTxSupply>(
         shared,
         start,
     } = storage;
-    let (device, transmit, end) = network.split::<S::Packet, S, AP_NETWORK_BUFFERS>(S::new(memory));
+    let (device, transmit, end) = network.split::<S::Packet, S>(S::new(memory));
     let shared: &'static ApShared = shared;
     let start: &'static StartSlot = start;
     (
