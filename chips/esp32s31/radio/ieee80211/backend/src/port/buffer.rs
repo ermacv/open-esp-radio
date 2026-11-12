@@ -1,7 +1,8 @@
 use super::keys::RawKeyIdentity;
 use super::*;
 use crate::mac::tx::TxBacking;
-use oer_portable_memory::{StableDmaBacking as _, TxSlotIdentity};
+use crate::mac::tx::TxSlot;
+use oer_portable_memory::StableDmaBacking as _;
 
 pub struct BufferClass<const B: usize>;
 impl<const B: usize> TxBufferClass for BufferClass<B> {
@@ -26,13 +27,9 @@ enum Dma<const B: usize> {
         memory: TxBacking<B>,
         home: ReturnRight<B>,
     },
-    /// The hardware owns the memory of the slot `slot`; its return right
-    /// waits for the completion that hands that memory back. Dropped here,
-    /// the memory stays out.
-    Published {
-        home: ReturnRight<B>,
-        slot: TxSlotIdentity,
-    },
+    /// The memory and its return right are one lease on a descriptor until
+    /// the descriptor gives it back ([`MpduBuffer::take_back`]).
+    Published,
     /// Neither: the place holds no memory, or its pair moved on.
     Released,
 }
@@ -54,39 +51,33 @@ impl<const B: usize> ReturnableBuffer<B> {
             _ => None,
         }
     }
-    /// Hand the memory to the hardware, keeping its home; `None`, and no
-    /// change, unless the CPU owns it.
-    pub(super) fn publish(&mut self) -> Option<TxBacking<B>> {
-        match core::mem::replace(&mut self.0, Dma::Released) {
-            Dma::Free { memory, home } => {
-                self.0 = Dma::Published {
-                    home,
-                    slot: memory.identity(),
-                };
-                Some(memory)
-            }
+    /// Attach the memory and its return right to `slot` as one lease;
+    /// refused, both stay here.
+    pub(super) fn attach_to(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), AttachRefused> {
+        match core::mem::replace(&mut self.0, Dma::Published) {
+            Dma::Free { memory, home } => match slot.attach_bank(memory, home) {
+                Ok(()) => Ok(()),
+                Err((memory, home)) => {
+                    self.0 = Dma::Free { memory, home };
+                    Err(AttachRefused::Descriptor)
+                }
+            },
             other => {
                 self.0 = other;
-                None
+                Err(AttachRefused::NotFree)
             }
         }
     }
-    /// The completion handed `memory` back: it rejoins its home. Refused,
-    /// with the memory and no change, unless the hardware owned it and it
-    /// is the memory it published, the same slot of the same pool: another
-    /// slot's, of this pool or another with the same index, never joins
-    /// this home.
-    pub(super) fn complete(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
-        match core::mem::replace(&mut self.0, Dma::Released) {
-            Dma::Published { home, slot } if slot == memory.identity() => {
-                self.0 = Dma::Free { memory, home };
-                Ok(())
-            }
-            other => {
-                self.0 = other;
-                Err(memory)
-            }
+    /// Take the published lease back from `slot`, whole; refused, whatever
+    /// the descriptor holds stays there.
+    pub(super) fn take_back(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), TakeBackRefused> {
+        let refused = take_back_refusal(&slot);
+        if !matches!(self.0, Dma::Published) {
+            return Err(refused);
         }
+        let (memory, home) = slot.detach_bank().ok_or(refused)?;
+        self.0 = Dma::Free { memory, home };
+        Ok(())
     }
 }
 impl<const B: usize> Drop for ReturnableBuffer<B> {
@@ -145,44 +136,35 @@ pub struct NetworkBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>,
 }
 
-/// A network buffer's memory: the CPU's, or the hardware's from its
-/// publication until its completion hands it back.
+/// A network buffer's memory: the CPU's, or a lease on a descriptor from its
+/// publication until the descriptor gives it back.
 pub(super) enum NetworkDma<const B: usize> {
     Free(TxBacking<B>),
-    /// The hardware owns the memory of the slot named.
-    Published(TxSlotIdentity),
+    Published,
 }
 impl<const B: usize> NetworkDma<B> {
     fn memory_mut(&mut self) -> Option<&mut [u8]> {
         match self {
             Self::Free(memory) => Some(memory.stable_dma_region().into_mut_slice()),
-            Self::Published(_) => None,
+            Self::Published => None,
         }
     }
-    fn publish(&mut self) -> Option<TxBacking<B>> {
-        match self {
-            Self::Free(memory) => {
-                // The memory leaves, its slot recorded.
-                let slot = memory.identity();
-                match core::mem::replace(self, Self::Published(slot)) {
-                    Self::Free(memory) => Some(memory),
-                    Self::Published(_) => None,
-                }
-            }
-            Self::Published(_) => None,
-        }
-    }
-    /// The completion handed `memory` back. Refused, with the memory and no
-    /// change, unless the hardware owned it and it is the memory published:
-    /// the same slot of the same pool, not merely its index.
-    fn complete(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
-        match self {
-            Self::Published(slot) if *slot == memory.identity() => {
+    fn attach_to(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), AttachRefused> {
+        match core::mem::replace(self, Self::Published) {
+            Self::Free(memory) => slot.attach_network(memory).map_err(|memory| {
                 *self = Self::Free(memory);
-                Ok(())
-            }
-            Self::Published(_) | Self::Free(_) => Err(memory),
+                AttachRefused::Descriptor
+            }),
+            Self::Published => Err(AttachRefused::NotFree),
         }
+    }
+    fn take_back(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), TakeBackRefused> {
+        let refused = take_back_refusal(&slot);
+        if !matches!(self, Self::Published) {
+            return Err(refused);
+        }
+        *self = Self::Free(slot.detach_network().ok_or(refused)?);
+        Ok(())
     }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMemory
@@ -202,6 +184,36 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMe
             .and_then(|bytes| bytes.get_mut(..BufferClass::<B>::CAPACITY))
             .ok_or(BufferMemoryUnavailable)
     }
+}
+
+/// Why [`MpduBuffer::attach_to`] attached nothing; the buffer keeps its
+/// memory.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum AttachRefused {
+    /// The CPU does not own the memory.
+    NotFree,
+    /// The descriptor took no lease.
+    Descriptor,
+}
+
+/// The refusal of a take-back from `slot`: it holds no lease, or one the
+/// buffer does not take.
+fn take_back_refusal<const B: usize>(slot: &Pin<&mut TxSlot<B>>) -> TakeBackRefused {
+    if slot.home_kind().is_some() {
+        TakeBackRefused::Refused
+    } else {
+        TakeBackRefused::Missing
+    }
+}
+
+/// Why [`MpduBuffer::take_back`] took nothing; whatever lease the
+/// descriptor holds stays there.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum TakeBackRefused {
+    /// The descriptor holds no lease.
+    Missing,
+    /// The buffer does not take the lease it holds.
+    Refused,
 }
 
 /// The memory an MPDU is in: a port buffer of its bank, or a network's.
@@ -234,20 +246,23 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             Self::Network(buffer) => buffer.dma.memory_mut(),
         }
     }
-    /// Hand the memory to the hardware; `None`, and no change, unless the
-    /// CPU owns it.
-    pub(super) fn publish(&mut self) -> Option<TxBacking<B>> {
+    /// Attach the memory, with its home, to `slot` as one lease. Refused, the
+    /// buffer keeps its memory and nothing moved: the CPU does not own it,
+    /// or the descriptor took no lease.
+    pub(super) fn attach_to(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), AttachRefused> {
         match self {
-            Self::Bank(buffer) => buffer.dma.publish(),
-            Self::Network(buffer) => buffer.dma.publish(),
+            Self::Bank(buffer) => buffer.dma.attach_to(slot),
+            Self::Network(buffer) => buffer.dma.attach_to(slot),
         }
     }
-    /// The completion handed `memory` back; refused, with the memory, unless
-    /// the hardware owned it.
-    pub(super) fn complete(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
+    /// Take this buffer's lease back from `slot`, whole: its memory and, for
+    /// a bank buffer, its return right. Refused, the lease stays on the
+    /// descriptor and nothing moves: the buffer was not published, or the
+    /// descriptor holds no lease of its kind.
+    pub(super) fn take_back(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), TakeBackRefused> {
         match self {
-            Self::Bank(buffer) => buffer.dma.complete(memory),
-            Self::Network(buffer) => buffer.dma.complete(memory),
+            Self::Bank(buffer) => buffer.dma.take_back(slot),
+            Self::Network(buffer) => buffer.dma.take_back(slot),
         }
     }
     /// The bank place of a port buffer; `None` for a network's memory.
@@ -800,8 +815,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     ) -> Result<TxBacking<B>, NetworkBuffer<'id, Id, D, B, O>> {
         match buffer.dma {
             NetworkDma::Free(memory) => Ok(memory),
-            NetworkDma::Published(slot) => Err(NetworkBuffer {
-                dma: NetworkDma::Published(slot),
+            NetworkDma::Published => Err(NetworkBuffer {
+                dma: NetworkDma::Published,
                 admission: buffer.admission,
                 loan: buffer.loan,
             }),
@@ -870,112 +885,102 @@ mod tests {
         assert!(bank.take(0).is_some(), "the memory is back in its place");
     }
 
-    #[test]
-    fn a_published_buffer_keeps_its_right_and_its_place_stays_out_when_dropped() {
-        let bank = bank();
-        let mut buffer = ReturnableBuffer::taken(bank.take(0));
-        let memory = buffer.publish().expect("the CPU owned it");
-        assert!(buffer.memory_mut().is_none(), "the hardware owns it now");
-        assert!(buffer.publish().is_none(), "published once");
-        drop(buffer);
-        // The hardware never handed it back: nothing reuses the place.
-        assert!(bank.take(0).is_none());
-        drop(memory);
+    /// A model descriptor without a lease.
+    fn descriptor() -> core::pin::Pin<Box<TxSlot<512>>> {
+        Box::pin(TxSlot::new_model_descriptor().expect("model descriptor"))
     }
 
     #[test]
-    fn a_completion_rejoins_the_right_and_a_wrong_transition_changes_nothing() {
+    fn a_published_buffer_s_lease_stays_whole_on_its_descriptor_when_dropped() {
         let bank = bank();
+        let mut slot = descriptor();
         let mut buffer = ReturnableBuffer::taken(bank.take(0));
-        let memory = buffer.publish().expect("the CPU owned it");
-        let memory = match buffer.complete(memory) {
-            Ok(()) => buffer.publish().expect("free again"),
-            Err(_) => panic!("the hardware owned it"),
-        };
-        assert!(buffer.complete(memory).is_ok());
-        // A second completion is refused with its memory, unchanged.
-        let other = bank_memory();
-        assert!(buffer.complete(other).is_err());
-        assert!(buffer.memory_mut().is_some());
+        assert_eq!(buffer.attach_to(slot.as_mut()), Ok(()));
+        assert!(buffer.memory_mut().is_none(), "the descriptor holds it now");
+        assert_eq!(buffer.attach_to(slot.as_mut()), Err(AttachRefused::NotFree));
         drop(buffer);
-        assert!(bank.take(0).is_some());
+        // The descriptor holds the memory with its return right: the place
+        // stays out until the lease goes home.
+        assert!(bank.take(0).is_none());
+        let (memory, home) = slot.as_mut().detach_bank().expect("the lease, whole");
+        home.return_value(memory);
+        assert!(bank.take(0).is_some(), "home exactly once");
+    }
+
+    #[test]
+    fn a_lease_comes_back_whole_and_a_wrong_transition_moves_nothing() {
+        let bank = bank();
+        let mut slot = descriptor();
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        // Nothing published: nothing taken, the descriptor stays empty.
+        assert_eq!(
+            buffer.take_back(slot.as_mut()),
+            Err(TakeBackRefused::Missing)
+        );
+        assert_eq!(buffer.attach_to(slot.as_mut()), Ok(()));
+        assert_eq!(buffer.take_back(slot.as_mut()), Ok(()));
+        assert!(buffer.memory_mut().is_some(), "the CPU's again");
+        // A second take-back finds no lease.
+        assert_eq!(
+            buffer.take_back(slot.as_mut()),
+            Err(TakeBackRefused::Missing)
+        );
+        drop(buffer);
+        assert!(bank.take(0).is_some(), "the drop returned it home");
+    }
+
+    #[test]
+    fn a_lease_of_another_home_never_joins_a_buffer() {
+        let bank = bank();
+        let mut slot = descriptor();
+        let mut network = NetworkDma::Free(bank_memory());
+        assert_eq!(network.attach_to(slot.as_mut()), Ok(()));
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        // A bank buffer, published elsewhere, does not take a network lease.
+        let mut other = descriptor();
+        assert_eq!(buffer.attach_to(other.as_mut()), Ok(()));
+        assert_eq!(
+            buffer.take_back(slot.as_mut()),
+            Err(TakeBackRefused::Refused)
+        );
+        assert_eq!(slot.home_kind(), Some(crate::mac::tx::TxHomeKind::Network));
+        // Nor a network buffer a bank lease.
+        assert_eq!(
+            network.take_back(other.as_mut()),
+            Err(TakeBackRefused::Refused)
+        );
+        // Each takes its own.
+        assert_eq!(network.take_back(slot.as_mut()), Ok(()));
+        assert_eq!(buffer.take_back(other.as_mut()), Ok(()));
+    }
+
+    #[test]
+    fn a_descriptor_holding_a_lease_refuses_another_and_both_stay() {
+        let bank = bank();
+        let mut slot = descriptor();
+        let mut network = NetworkDma::Free(bank_memory());
+        assert_eq!(network.attach_to(slot.as_mut()), Ok(()));
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        assert_eq!(
+            buffer.attach_to(slot.as_mut()),
+            Err(AttachRefused::Descriptor)
+        );
+        assert!(buffer.memory_mut().is_some(), "the buffer kept its memory");
+        assert_eq!(slot.home_kind(), Some(crate::mac::tx::TxHomeKind::Network));
     }
 
     #[test]
     fn a_place_without_returned_memory_holds_nothing_to_return() {
         let bank = bank();
         let _held = bank.take(0);
+        let mut slot = descriptor();
         let mut buffer = ReturnableBuffer::taken(bank.take(0));
         assert!(buffer.memory_mut().is_none());
-        assert!(buffer.publish().is_none());
+        assert_eq!(buffer.attach_to(slot.as_mut()), Err(AttachRefused::NotFree));
     }
 
     /// Free memory of another model pool.
     fn bank_memory() -> TxBacking<512> {
         crate::mac::tx::test_support::model_backing().expect("model buffer")
-    }
-
-    /// The same index of another pool is another slot: a completion that
-    /// returns pool B's place 0 for pool A's place 0 is refused, for a bank
-    /// buffer and a network buffer alike, and nothing moves.
-    #[test]
-    fn a_completion_with_the_same_index_of_another_pool_is_refused() {
-        use crate::mac::tx::test_support::{model_pool, pool_backing};
-        let first = model_pool::<512, 1>().expect("model pool");
-        let second = model_pool::<512, 1>().expect("another pool");
-        let bank = Box::leak(Box::new(Bank::new()));
-        assert!(
-            bank.seed(0, pool_backing(first, 0).expect("its place 0"))
-                .is_ok()
-        );
-        let mut buffer = ReturnableBuffer::taken(bank.take(0));
-        let own = buffer.publish().expect("the CPU owned it");
-        let foreign = pool_backing(second, 0).expect("the other pool's place 0");
-        let Err(foreign) = buffer.complete(foreign) else {
-            panic!("another pool's memory never joins this home");
-        };
-        assert!(buffer.memory_mut().is_none(), "still the hardware's");
-        assert!(buffer.complete(own).is_ok(), "its own memory rejoins");
-        let mut network = NetworkDma::Free(foreign);
-        let published = network.publish().expect("the CPU owned it");
-        let own = buffer.publish().expect("free again");
-        let Err(own) = network.complete(own) else {
-            panic!("another pool's memory never takes this one's");
-        };
-        assert!(network.memory_mut().is_none(), "still the hardware's");
-        assert!(network.complete(published).is_ok());
-        assert!(buffer.complete(own).is_ok());
-    }
-
-    /// Two places of one pool: a completion returning another place's
-    /// memory is refused, with that memory, and the buffer stays the
-    /// hardware's until its own memory comes back.
-    #[test]
-    fn a_completion_with_another_place_s_memory_is_refused_and_moves_nothing() {
-        use crate::mac::tx::test_support::{model_pool, pool_backing};
-        let pool = model_pool::<512, 2>().expect("model pool");
-        let other = pool_backing(pool, 1).expect("the second place");
-        let bank = Box::leak(Box::new(Bank::new()));
-        assert!(
-            bank.seed(0, pool_backing(pool, 0).expect("the first place"))
-                .is_ok()
-        );
-        let mut buffer = ReturnableBuffer::taken(bank.take(0));
-        let own = buffer.publish().expect("the CPU owned it");
-        let Err(other) = buffer.complete(other) else {
-            panic!("another place's memory never joins this home");
-        };
-        assert!(buffer.memory_mut().is_none(), "still the hardware's");
-        assert!(buffer.complete(own).is_ok(), "its own memory rejoins");
-        // The network's memory checks its place the same way.
-        let mut network = NetworkDma::Free(other);
-        let published = network.publish().expect("the CPU owned it");
-        let own = buffer.publish().expect("free again");
-        let Err(own) = network.complete(own) else {
-            panic!("another place's memory never takes this one's");
-        };
-        assert!(network.memory_mut().is_none(), "still the hardware's");
-        assert!(network.complete(published).is_ok());
-        assert!(buffer.complete(own).is_ok());
     }
 }

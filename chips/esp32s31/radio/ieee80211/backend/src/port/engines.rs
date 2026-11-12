@@ -2604,6 +2604,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         if let Err(fault) = driver.collect(&mut env, &mut none, true) {
             return Err(CleanupRefused::Faulted(self.record(fault)));
         }
+        // An attempt a refused return left beside its lease takes it back,
+        // now that the stop released every descriptor; refused again, both
+        // stay for the owner's next call.
+        driver
+            .rejoin_stranded(&mut env)
+            .map_err(CleanupRefused::Faulted)?;
         // The cleanup's result is the owner's, never the port's recorded
         // fault: a later call goes on from where it stands, writing nothing
         // it wrote before.

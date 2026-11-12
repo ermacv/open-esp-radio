@@ -207,10 +207,14 @@ only once the port gave the room.
   and so does a stop or a client place's takeover for every frame still
   queued. A refusal after the sequence number was drawn, which the checks
   exclude, is the runner's named contract break
-  (`ApContract::NetworkAdmission`). A completion returns memory only into
-  the buffer it was published from: the S31 backend compares the slot's
-  identity, its pool and its index (`TxSlotIdentity`), and refuses
-  another's, of the same pool or another. Where "no copy" holds: for a packet the network
+  (`ApContract::NetworkAdmission`). In the S31 backend a buffer's memory and
+  the right that takes it home (its bank place, or the network) are one
+  lease (`TxLease`): the queue's descriptor takes it whole at publication
+  and gives it back whole at completion, and no memory is matched to a
+  home afterwards. A lease its buffer refuses back stays whole on the
+  descriptor with its attempt beside it (`Fault::ReturnRefused`, which
+  lets a stop recover); after the confirmed stop the cleanup
+  (`clean_stopped`) gives it back to that attempt, which ends withdrawn. Where "no copy" holds: for a packet the network
   stack wrote in a transmit slot at its start; a packet written with
   headroom is moved to the slot's start (`TxPublisher::publish`), and a
   frame from outside the slots is copied into the spare slot

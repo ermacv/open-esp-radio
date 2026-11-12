@@ -2394,6 +2394,53 @@ fn a_completion_whose_buffer_refuses_its_memory_keeps_the_attempt_published() {
     });
 }
 
+/// A refused return leaves the lease whole on its descriptor and the
+/// attempt beside it: the stop recovers and confirms, its cleanup gives the
+/// lease back to its attempt, which ends withdrawn with its memory, and the
+/// port, its descriptors idle, reinstalls.
+#[test]
+fn a_refused_return_s_lease_goes_home_at_the_cleanup_and_the_port_reinstalls() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        let attempt = fixture.station_mpdu().expect("attempt");
+        fixture.submit_now(attempt);
+        fixture
+            .port
+            .refuse_for_test(crate::port::TestRefusal::Return);
+        serve_once(&mut fixture);
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(Fault::ReturnRefused { .. })
+        ));
+        assert!(fixture.port.recover_for_stop(), "every owner stays whole");
+        fixture.stop();
+        assert_eq!(
+            fixture.take_completed(),
+            0,
+            "the attempt waits beside its lease"
+        );
+        assert!(matches!(
+            fixture.port.clean_stopped(&mut fixture.outbox),
+            Ok(Ok(()))
+        ));
+        let [LowerMacTerminal::TxCompleted(TxCompleted::Single(completed))] =
+            fixture.outbox.terminals.as_slice()
+        else {
+            panic!("the attempt's one terminal");
+        };
+        assert!(matches!(
+            completed.outcome(),
+            TxOutcome::Withdrawn(WithdrawCause::Disabled)
+        ));
+        // A retirement needs every bank place home and every descriptor
+        // idle: the terminal's drop returns the memory it carries.
+        assert!(
+            reinstall(fixture, installations).is_ok(),
+            "the memory came home with its attempt, every descriptor idle"
+        );
+    });
+}
+
 #[test]
 fn a_submission_the_core_refuses_goes_back_to_its_queue_with_its_ticket() {
     with_fixture(|fixture| {

@@ -384,7 +384,9 @@ pub enum Fault {
         /// The hardware queue.
         queue: u8,
     },
-    /// A completion returned memory its buffer had not published.
+    /// A buffer refused its lease back from its queue's descriptor: the
+    /// lease stays whole on the descriptor and the attempt beside it, until
+    /// the cleanup after a confirmed stop gives the lease back to it.
     ReturnRefused {
         /// The hardware queue.
         queue: u8,
@@ -560,7 +562,10 @@ impl Fault {
     pub(crate) const fn leaves_owners_whole(self) -> bool {
         matches!(
             self,
-            Self::Unpublished(_) | Self::ReceiveLost | Self::GroupReplacement(_)
+            Self::Unpublished(_)
+                | Self::ReceiveLost
+                | Self::GroupReplacement(_)
+                | Self::ReturnRefused { .. }
         )
     }
 }
