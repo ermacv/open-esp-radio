@@ -369,7 +369,12 @@ received frame is there, apart from a link change, a notice or, for a refused
 frame only, the room or buffer that frame waits for. `give_back` ends the exchange before the port ends: it gives
 back every frame the device's queue holds and takes back the memory the device
 returned, as the device's queues outlive the port, and leaves no refused frame
-waiting, so a next service over the same port starts idle. `serve_returns` is the
+waiting, so a next service over the same port starts idle. A receive queue that
+breaks there is named (`ReceiveFault`): the frames after the break stay in the
+queue, which the port alone reaches and never reads again. `close` ends a port
+only after a whole give-back and otherwise hands it back with its fault
+(`BrokenPort`), so its owner keeps it; the S31 application parks it, still
+confirms the stop, and reports the fault (`Network::port_end`). `serve_returns` is the
 return path of a port whose service no longer runs, for a composition that cancels
 its network: an owner that outlives the cancelled future keeps the service
 (`retire` takes it whenever) and drives the port's returns, frames given back and
