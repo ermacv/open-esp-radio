@@ -293,22 +293,19 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
         matches!(action, BlockAckAction::Delba { tid, initiator: true, .. } if tid == self.tid)
     }
 
-    /// Take the common in-order MPDU without a release list: `true` when
-    /// it is the window's start and no buffered MPDU follows it, so it goes
-    /// out at once and the window moves past it. Otherwise nothing changed
+    /// Take the common in-order MPDU without a release list or a slot:
+    /// `true` when `sequence` is the window's start and no buffered MPDU
+    /// follows it, so it goes out at once and the window moves past it
+    /// ([`RxReorderBuffer::advance_in_order`]). Otherwise nothing changed
     /// and the MPDU needs [`Self::ingest`]. The agreement's inactivity
     /// restarts as for an ingested MPDU; no hole opens or closes.
-    pub fn try_ingest_immediate(
+    pub fn advance_in_order(
         &mut self,
         now: Instant,
-        frame: RxReorderMpdu,
+        sequence: SequenceNumber,
     ) -> Result<bool, RxBlockAckError> {
         let inactivity = self.next_inactivity(now)?;
-        let taken = self
-            .reorder
-            .try_ingest_immediate(frame)
-            .map_err(RxBlockAckError::Reorder)?
-            .is_some();
+        let taken = self.reorder.advance_in_order(sequence);
         if taken {
             self.inactivity = inactivity;
         }

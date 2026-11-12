@@ -33,18 +33,49 @@ fn in_order_frames_are_released_immediately() {
 }
 
 #[test]
-fn immediate_ingest_avoids_a_release_list_only_without_a_buffered_successor() {
+fn an_in_order_advance_needs_no_release_list_only_without_a_buffered_successor() {
     let mut reorder = RxReorderBuffer::<WINDOW, 65>::new(seq(100), 16).unwrap();
-    assert_eq!(
-        reorder.try_ingest_immediate(frame(100, 64)),
-        Ok(Some(frame(100, 64)))
-    );
+    assert!(reorder.advance_in_order(seq(100)));
     assert_eq!(reorder.next_sequence(), seq(101));
-    assert_eq!(reorder.try_ingest_immediate(frame(103, 64)), Ok(None));
+    assert!(!reorder.advance_in_order(seq(103)), "a gap is ingested");
+    assert_eq!(reorder.next_sequence(), seq(101));
     assert!(reorder.ingest(frame(102, 2)).unwrap().buffered);
-    assert_eq!(reorder.try_ingest_immediate(frame(101, 64)), Ok(None));
+    assert!(
+        !reorder.advance_in_order(seq(101)),
+        "a buffered successor releases the run in order"
+    );
     let release = reorder.ingest(frame(101, 64)).unwrap();
     assert!(releases(&release, &[frame(101, 64), frame(102, 2)]));
+    assert_eq!(reorder.next_sequence(), seq(103));
+}
+
+#[test]
+fn an_in_order_advance_crosses_the_sequence_space_s_wrap() {
+    let mut reorder = Buffer::new(seq(4094), 8).unwrap();
+    for sequence in [4094, 4095, 0, 1] {
+        assert!(reorder.advance_in_order(seq(sequence)), "{sequence}");
+    }
+    assert_eq!(reorder.next_sequence(), seq(2));
+    // A frame behind the window after the wrap is no in-order frame: the
+    // ingest rejects it.
+    assert!(!reorder.advance_in_order(seq(4095)));
+    assert_eq!(
+        reorder.ingest(frame(4095, 3)).unwrap().rejected,
+        Some(frame(4095, 3))
+    );
+    assert_eq!(reorder.next_sequence(), seq(2));
+}
+
+#[test]
+fn a_duplicate_of_a_held_frame_is_no_in_order_frame_and_the_ingest_refuses_it() {
+    let mut reorder = Buffer::new(seq(10), 8).unwrap();
+    assert!(reorder.ingest(frame(12, 1)).unwrap().buffered);
+    assert!(!reorder.advance_in_order(seq(12)));
+    assert_eq!(
+        reorder.ingest(frame(12, 2)),
+        Err(RxReorderError::DuplicateSequence(seq(12)))
+    );
+    assert_eq!(reorder.occupied(), 1, "the held frame stays");
 }
 
 #[test]
@@ -238,15 +269,19 @@ fn a_non_power_of_two_window_keeps_distinct_sequences_across_wrap() {
 }
 
 #[test]
-fn immediate_ingest_refuses_a_slot_still_owned_by_a_later_frame() {
-    let mut reorder = Buffer::new(seq(100), 8).unwrap();
-    reorder.ingest(frame(103, 7)).unwrap();
+fn an_in_order_advance_names_no_slot_while_every_slot_is_held() {
+    let mut reorder = RxReorderBuffer::<WINDOW, 2>::new(seq(100), 8).unwrap();
+    reorder.ingest(frame(103, 0)).unwrap();
+    reorder.ingest(frame(105, 1)).unwrap();
+    assert!(reorder.advance_in_order(seq(100)));
+    assert!(reorder.advance_in_order(seq(101)));
+    assert_eq!(reorder.next_sequence(), seq(102));
+    // A held slot is still refused where a frame is held.
     assert_eq!(
-        reorder.try_ingest_immediate(frame(100, 7)),
-        Err(RxReorderError::SlotAlreadyOwned(7)),
+        reorder.ingest(frame(104, 1)),
+        Err(RxReorderError::SlotAlreadyOwned(1))
     );
-    assert_eq!(reorder.next_sequence(), seq(100));
-    assert!(releases(&reorder.stop(), &[frame(103, 7)]));
+    assert!(releases(&reorder.stop(), &[frame(103, 0), frame(105, 1)]));
 }
 
 #[test]
@@ -399,7 +434,7 @@ fn run_script<const CAPACITY: usize, const SLOT_CAPACITY: usize>(bytes: &[u8]) {
                 }
             }
             2 => {
-                let _ = reorder.try_ingest_immediate(frame);
+                let _ = reorder.advance_in_order(frame.sequence);
             }
             3 => {
                 if let Some(release) = reorder.move_window_to(sequence) {

@@ -23,21 +23,18 @@ fn in_order_frames_are_released_immediately() {
 }
 
 #[test]
-fn immediate_ingest_avoids_a_release_list_only_without_a_buffered_successor() {
+fn an_in_order_advance_avoids_a_release_list_only_without_a_buffered_successor() {
     let mut reorder =
         RxReorderBuffer::<64, 65>::new(SequenceNumber::new(100).unwrap(), 16).unwrap();
-    assert_eq!(
-        reorder.try_ingest_immediate(frame(100, 64)),
-        Ok(Some(frame(100, 64)))
-    );
+    assert!(reorder.advance_in_order(SequenceNumber::new(100).unwrap()));
     assert_eq!(reorder.next_sequence(), SequenceNumber::new(101).unwrap());
     assert_eq!(reorder.occupied(), 0);
 
-    assert_eq!(reorder.try_ingest_immediate(frame(103, 64)), Ok(None));
+    assert!(!reorder.advance_in_order(SequenceNumber::new(103).unwrap()));
     assert_eq!(reorder.next_sequence(), SequenceNumber::new(101).unwrap());
 
     assert!(reorder.ingest(frame(102, 2)).unwrap().buffered);
-    assert_eq!(reorder.try_ingest_immediate(frame(101, 64)), Ok(None));
+    assert!(!reorder.advance_in_order(SequenceNumber::new(101).unwrap()));
     let release = reorder.ingest(frame(101, 64)).unwrap();
     assert_eq!(
         release.iter().collect::<std::vec::Vec<_>>(),

@@ -922,3 +922,59 @@ fn an_immediate_take_moves_only_an_in_order_window_and_otherwise_changes_nothing
     // Delivery order empty again: 103 goes out at once.
     assert!(view.take_immediate(now(6), LOCAL, fields(&after), &meta(), 30, &mut ()));
 }
+
+/// An in-order MPDU is never held, so it needs no free slot: with every
+/// slot taken by deferred actions, it still goes out at once, by the try
+/// and by the full receive alike, while a frame the window would hold meets
+/// the full slots.
+#[test]
+fn an_in_order_mpdu_goes_out_with_every_slot_taken() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 2>::new([10], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
+        .unwrap();
+    // Replies owed fill their places: actions then wait, one per slot.
+    for _ in 0..PENDING {
+        let _ = view.offer(now(1), 7, bssid(), addba(3, 0), false, &mut port, &mut ());
+    }
+    assert!(!view.can_receive_management());
+    let mut action = std::vec![0xd0, 0, 0, 0];
+    action.extend_from_slice(&LOCAL);
+    action.extend_from_slice(&AP);
+    action.extend_from_slice(&AP);
+    action.extend_from_slice(&[0, 0, 3, 0]);
+    for _ in 0..2 {
+        assert!(matches!(
+            view.receive(now(2), Some(LOCAL), Frame(action.clone()), meta(), &mut ()),
+            RxDisposition::Retained
+        ));
+    }
+    let fields = |frame: &Frame| frame.fields().expect("a data header");
+    assert!(view.take_immediate(
+        now(3),
+        LOCAL,
+        fields(&qos_data(0, 100)),
+        &meta(),
+        30,
+        &mut ()
+    ));
+    assert!(matches!(
+        view.receive(now(3), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        RxDisposition::Deliver((frame, _)) if frame.0 == qos_data(0, 101).0
+    ));
+    // 103 would wait for 102: no slot is free for it.
+    assert!(matches!(
+        view.receive(now(3), Some(LOCAL), qos_data(0, 103), meta(), &mut ()),
+        RxDisposition::Capacity(_)
+    ));
+    // The window did not move for it: 102 is still in order.
+    assert!(view.take_immediate(
+        now(4),
+        LOCAL,
+        fields(&qos_data(0, 102)),
+        &meta(),
+        30,
+        &mut ()
+    ));
+}

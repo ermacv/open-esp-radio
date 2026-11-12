@@ -813,9 +813,6 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let Some((bank_index, sequence)) = key else {
             return RxDisposition::Deliver((frame, meta));
         };
-        let Some(slot) = self.frames.iter().position(Option::is_none) else {
-            return RxDisposition::Capacity(frame);
-        };
         let Some(active) = self
             .banks
             .get_mut(bank_index)
@@ -823,21 +820,12 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         else {
             return RxDisposition::Deliver((frame, meta));
         };
-        let slot_id = match u8::try_from(slot) {
-            Ok(slot) => slot,
-            Err(_) => return RxDisposition::Deliver((frame, meta)),
-        };
         // The common in-order MPDU, with no frame released ahead of it,
-        // goes out at once: it takes no slot and no place in delivery
-        // order. Any other MPDU, or a refusal, takes the full ingest.
+        // goes out at once: it takes no slot, needs no search for one and no
+        // check of who holds one, and takes no place in delivery order. Any
+        // other MPDU, or a refusal, takes the full ingest.
         if self.header.ready_len == 0
-            && let Ok(true) = active.try_ingest_immediate(
-                now,
-                RxReorderMpdu {
-                    sequence,
-                    slot: slot_id,
-                },
-            )
+            && let Ok(true) = active.advance_in_order(now, sequence)
         {
             let tid = active.tid();
             report(events, || RxBlockAckEvent::Reordered {
@@ -849,6 +837,22 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             });
             return RxDisposition::Deliver((frame, meta));
         }
+        // Only a frame the window may hold takes a slot.
+        let Some((slot, slot_id)) = self
+            .frames
+            .iter()
+            .position(Option::is_none)
+            .and_then(|slot| Some((slot, u8::try_from(slot).ok()?)))
+        else {
+            return RxDisposition::Capacity(frame);
+        };
+        let Some(active) = self
+            .banks
+            .get_mut(bank_index)
+            .and_then(|bank| bank.active.as_mut())
+        else {
+            return RxDisposition::Deliver((frame, meta));
+        };
         let release = active.ingest(
             now,
             RxReorderMpdu {
@@ -969,16 +973,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             contained(events);
             return true;
         };
-        // The immediate path still names a free slot, which the window's
-        // check reads: without one the frame takes the full receive.
-        let Some(slot) = self
-            .frames
-            .iter()
-            .position(Option::is_none)
-            .and_then(|slot| u8::try_from(slot).ok())
-        else {
-            return false;
-        };
+        // The in-order MPDU names no slot: it is never held.
         let Some(active) = self
             .banks
             .get_mut(bank_index)
@@ -986,10 +981,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         else {
             return false;
         };
-        if !matches!(
-            active.try_ingest_immediate(now, RxReorderMpdu { sequence, slot }),
-            Ok(true)
-        ) {
+        if !matches!(active.advance_in_order(now, sequence), Ok(true)) {
             return false;
         }
         let tid = active.tid();

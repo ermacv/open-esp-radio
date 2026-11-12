@@ -277,27 +277,25 @@ impl<const WINDOW_CAPACITY: usize, const SLOT_CAPACITY: usize>
         Ok(distance_after_advance != 0)
     }
 
-    /// Consume the common in-order MPDU without building a release list.
-    ///
-    /// A buffered successor still requires [`Self::ingest`], because the
-    /// missing MPDU at the window start must release the complete run in
-    /// sequence order. A gap, a stale MPDU or a window advance likewise
-    /// returns `None` without changing the buffer.
-    pub fn try_ingest_immediate(
-        &mut self,
-        frame: RxReorderMpdu,
-    ) -> Result<Option<RxReorderMpdu>, RxReorderError> {
-        self.check_received_slot(frame.slot)?;
-        if frame.sequence != self.next_sequence {
-            return Ok(None);
+    /// Consume the common in-order MPDU without building a release list:
+    /// `true` when `sequence` is the window's start and no buffered MPDU
+    /// follows it, so the window moves past it, across the sequence space's
+    /// wrap as anywhere. The MPDU is never retained, so it names no slot and
+    /// none is checked. Otherwise nothing changed and `false` sends the MPDU
+    /// to [`Self::ingest`]: a buffered successor (the run from the window's
+    /// start is released there, in order), a gap, a stale or a buffered
+    /// sequence (a duplicate is refused there).
+    pub fn advance_in_order(&mut self, sequence: SequenceNumber) -> bool {
+        if sequence != self.next_sequence {
+            return false;
         }
         let successor = self.next_sequence.wrapping_add(1);
         if self.has_sequence(successor) {
-            return Ok(None);
+            return false;
         }
         self.head = self.relative_index(1);
         self.next_sequence = successor;
-        Ok(Some(frame))
+        true
     }
 
     /// Accept one received MPDU (IEEE Std 802.11-2020 10.25.6.4): release
