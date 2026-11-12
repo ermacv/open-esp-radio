@@ -99,13 +99,15 @@ jobs:
       - name: Toolchain from rust-toolchain.toml
         run: rustup show active-toolchain || rustup toolchain install
       - name: Portable and chip libraries for the chip target
-        # Every library of protocols/, portable/ and chips/ builds for the chip;
+        # Libraries of protocols/, portable/ and chips/ build for the chip,
+        # except the network's host-only model (std), covered by the host job;
         # the platform packages (the board, the chip's bootstrap and the
         # staged runtime and bootstrap) are checked with the images.
         # chips/family/platform/interrupt-table is included by the chips/ selection.
         run: |
           packages=$(cargo metadata --format-version 1 --no-deps --locked \
             | jq -r '.packages[] | select(.manifest_path | test("/(protocols|portable|chips)/"))
+              | select(.name != "oer-protocols-network-testing-model")
               | select(.manifest_path | test("/chips/(esp32s31/platform/(board|bootstrap)|family/platform/(runtime|bootstrap))/") | not) | "-p " + .name')
           cargo check --locked --target riscv32imafc-unknown-none-elf $packages
       - name: Clippy for the chip target
