@@ -31,28 +31,13 @@ struct Nonces;
 /// into a free pool buffer and published from there.
 struct Copied {
     publisher: crate::supply::TxPublisher,
-    slots: heapless::Vec<crate::supply::TxSlot, COPIED_MEMORIES>,
-}
-
-/// The most memories the bench's supply holds.
-const COPIED_MEMORIES: usize =
-    oer_chips_esp32s31_radio_ieee80211_backend::port::TX_BUFFERS - AP_BUFFERS;
-
-impl Copied {
-    fn new(network: NetworkTx) -> Self {
-        let (publisher, slots) = network.into_parts();
-        Self {
-            publisher,
-            slots: slots.collect(),
-        }
-    }
+    slots: heapless::Vec<crate::supply::TxSlot, { crate::supply::NETWORK_BUFFERS }>,
 }
 
 impl<F: oer_protocols_network_port::EthernetFrame>
     oer_protocols_ieee80211_runtime::station::TxSupply<F> for Copied
 {
     type Memory = TxMemory;
-    const MEMORIES: usize = COPIED_MEMORIES;
     fn available(&self) -> bool {
         !self.slots.is_empty()
     }
@@ -259,9 +244,11 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
         let network = NetworkTx::claim(pool, AP_BUFFERS as u8)
             .ok()
             .expect("network buffers");
+        let (publisher, slots) = network.into_owned();
         let (_device, _transmit, end) = leak(ApNetworkStorage::new())
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _>(
-            Copied::new(network),
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, _, _>(
+            slots,
+            |slots| Copied { publisher, slots },
         );
         let mut runner = ApRunner::new(
             port,

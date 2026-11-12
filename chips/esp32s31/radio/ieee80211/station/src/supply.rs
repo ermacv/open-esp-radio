@@ -183,6 +183,14 @@ impl NetworkTx {
         (self.publisher, self.slots)
     }
 
+    /// The memory again, from the parts [`Self::into_owned`] gave.
+    pub(crate) fn from_owned(
+        publisher: TxPublisher,
+        slots: heapless::Vec<TxSlot, NETWORK_BUFFERS>,
+    ) -> Self {
+        Self { publisher, slots }
+    }
+
     /// The publisher and the buffers, last built first.
     pub fn into_parts(self) -> (TxPublisher, impl Iterator<Item = TxSlot>) {
         let mut slots = self.slots;

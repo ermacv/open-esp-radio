@@ -263,7 +263,7 @@ fn a_category_s_accounts_stay_small_beside_a_starved_lower_one() {
     );
 }
 
-/// A peer's drain returns its MSDUs once, starts its accounts anew and
+/// A peer's MSDUs come out once, its accounts start anew, and
 /// leaves the other peer's queues as they were.
 #[test]
 fn a_peer_s_drain_returns_its_msdus_and_only_its_own() {
@@ -274,7 +274,10 @@ fn a_peer_s_drain_returns_its_msdus_and_only_its_own() {
     queues.charge(of(0, BE), estimated(5_000));
     queues.block(of(0, BE3));
     let mut back = Vec::new();
-    queues.drain_peer(0, |msdu| back.push(msdu.memory));
+    while let Some(msdu) = queues.pop_peer(0) {
+        back.push(msdu.memory);
+    }
+    queues.reset_peer(0);
     back.sort_unstable();
     assert_eq!(back, [1, 2]);
     assert_eq!(

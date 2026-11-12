@@ -1004,7 +1004,6 @@ mod tests {
     struct NoMemory;
     impl<P> runtime::TxSupply<P> for NoMemory {
         type Memory = ();
-        const MEMORIES: usize = 0;
         fn available(&self) -> bool {
             false
         }

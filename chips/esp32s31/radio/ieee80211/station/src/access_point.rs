@@ -17,7 +17,7 @@
 use crate::access_point_end::{Retired, Stop};
 use crate::chip::{Binding, Config, InitializationError, Resources};
 use crate::radio::{self, Port};
-use crate::supply::{NetworkTx, NetworkTxSupply, PORT_BUFFERS, TxMemory};
+use crate::supply::{NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, PORT_BUFFERS, TxMemory};
 use oer_chips_esp32s31_radio_ieee80211_backend::port::{BufferClass, PortInstallation, TX_TICKETS};
 use oer_chips_family_radio_ieee80211_policy::{access_point::ADVERTISEMENT, ccmp, lmac};
 use oer_portable_embassy_time::EmbassyClock;
@@ -486,7 +486,13 @@ pub fn access_point<W: Binding, S: NetworkTxSupply>(
         shared,
         start,
     } = storage;
-    let (device, transmit, end) = network.split::<S::Packet, S>(S::new(memory));
+    // The queue back holds every buffer of the storage the network's
+    // memory is built over.
+    let (publisher, slots) = memory.into_owned();
+    let (device, transmit, end) = network
+        .split::<S::Packet, S, _, NETWORK_BUFFERS>(slots, |slots| {
+            S::new(NetworkTx::from_owned(publisher, slots))
+        });
     let shared: &'static ApShared = shared;
     let start: &'static StartSlot = start;
     (

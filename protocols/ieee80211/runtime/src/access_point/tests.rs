@@ -228,10 +228,11 @@ macro_rules! fixture {
             GroupKeyId::new(GROUP_KEY_ID).unwrap(),
         );
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
-        let $supply = ModelTx::new();
+        let $supply = ModelTx::empty();
         let ($device, mut $transmit, end) = network
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _>(
-                $supply.clone(),
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, _, _>(
+                ModelTx::memories(),
+                |memories| $supply.filled(memories),
             );
         let mut $runner = ApRunner::new(
             port,
@@ -256,18 +257,29 @@ macro_rules! fixture {
 struct ModelTx(Rc<core::cell::RefCell<Vec<ModelNetworkMemory>>>);
 
 impl ModelTx {
-    fn new() -> Self {
-        Self(Rc::new(core::cell::RefCell::new(
-            (0..super::network::AP_TX_DEPTH)
-                .map(|_| Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]))
-                .collect(),
-        )))
+    fn empty() -> Self {
+        Self(Rc::new(core::cell::RefCell::new(Vec::new())))
+    }
+
+    /// The network's memories, as many as the runner's queue back holds.
+    fn memories() -> heapless::Vec<ModelNetworkMemory, { super::network::AP_TX_DEPTH }> {
+        (0..super::network::AP_TX_DEPTH)
+            .map(|_| Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]))
+            .collect()
+    }
+
+    /// This supply over `memories`, a handle the test keeps beside it.
+    fn filled(
+        &self,
+        memories: heapless::Vec<ModelNetworkMemory, { super::network::AP_TX_DEPTH }>,
+    ) -> Self {
+        self.0.borrow_mut().extend(memories);
+        self.clone()
     }
 }
 
 impl<F: oer_protocols_network_port::EthernetFrame> crate::station::TxSupply<F> for ModelTx {
     type Memory = ModelNetworkMemory;
-    const MEMORIES: usize = super::network::AP_TX_DEPTH;
     fn available(&self) -> bool {
         !self.0.borrow().is_empty()
     }
@@ -291,11 +303,7 @@ impl<F: oer_protocols_network_port::EthernetFrame> crate::station::TxSupply<F> f
         Ok(memory)
     }
     fn give(&mut self, memory: ModelNetworkMemory) {
-        // Past its capacity a memory leaves the supply.
-        let mut free = self.0.borrow_mut();
-        if free.len() < super::network::AP_TX_DEPTH {
-            free.push(memory);
-        }
+        self.0.borrow_mut().push(memory);
     }
 }
 
@@ -1234,7 +1242,9 @@ fn a_client_place_s_queues_belong_to_one_association() {
         send(2);
         let old = ApAssociationIdentity::new(STATION, 1, 7).unwrap();
         let new = ApAssociationIdentity::new(STATION, 1, 8).unwrap();
-        let place = runner.homes.place_of(old).unwrap();
+        let Ok(Some(place)) = runner.homes.place_of(old) else {
+            panic!("the place is the old association's");
+        };
         let queue = QueueId::new(place, WmmUserPriority::UP0).unwrap();
         while let Some(outgoing) = runner.homes.network.take() {
             let msdu = OutboundMsdu {
@@ -1246,7 +1256,7 @@ fn a_client_place_s_queues_belong_to_one_association() {
         }
         assert!(runner.homes.owns(queue, Some(old)));
         // The same address reassociates in the same place.
-        assert_eq!(runner.homes.place_of(new), Some(place));
+        assert!(matches!(runner.homes.place_of(new), Ok(Some(taken)) if taken == place));
         assert!(runner.homes.queues.is_empty(), "the old frames went back");
         assert!(
             !runner.homes.owns(queue, Some(old)),

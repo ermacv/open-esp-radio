@@ -32,12 +32,8 @@ impl Supply {
 }
 /// Copies any frame into free memory, as the network end does for a
 /// packet that is not in its memory already.
-/// The most memories a test's supply holds.
-const SUPPLY_MEMORIES: usize = 16;
-
 impl<P: oer_protocols_network_port::EthernetFrame> TxSupply<P> for Supply {
     type Memory = Vec<u8>;
-    const MEMORIES: usize = SUPPLY_MEMORIES;
     fn available(&self) -> bool {
         self.free() != 0
     }
@@ -57,11 +53,7 @@ impl<P: oer_protocols_network_port::EthernetFrame> TxSupply<P> for Supply {
         Ok(memory)
     }
     fn give(&mut self, memory: Vec<u8>) {
-        // Past its capacity a memory leaves the supply.
-        let mut free = self.0.borrow_mut();
-        if free.len() < SUPPLY_MEMORIES {
-            free.push(memory);
-        }
+        self.0.borrow_mut().push(memory);
     }
 }
 
@@ -857,7 +849,6 @@ fn a_stopped_control_refuses_a_connect_and_keeps_no_profile() {
 struct Losing;
 impl<P> TxSupply<P> for Losing {
     type Memory = Vec<u8>;
-    const MEMORIES: usize = 0;
     fn available(&self) -> bool {
         true
     }

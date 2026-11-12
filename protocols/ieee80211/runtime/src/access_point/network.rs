@@ -36,19 +36,6 @@ pub const AP_RX_DEPTH: usize = 4;
 /// has room for every memory the runner returns.
 pub const AP_TX_DEPTH: usize = 64;
 
-/// The proof that the runner's queue back holds every memory a supply `S`
-/// can hold ([`TxSupply::MEMORIES`]): [`Holds::BACK`] does not compile
-/// otherwise. [`ApNetworkStorage::split`] reads it at its monomorphization.
-pub struct Holds<F, S>(core::marker::PhantomData<fn(F, S)>);
-
-impl<F, S: TxSupply<F>> Holds<F, S> {
-    pub const BACK: () = {
-        if S::MEMORIES > AP_TX_DEPTH {
-            panic!("the runner's queue back holds every network memory");
-        }
-    };
-}
-
 /// The two queues and the link of one access point's network end, and the
 /// queues between the stack and the runner, placed by the composition. `M`
 /// is the network's transmit memory.
@@ -70,20 +57,26 @@ impl<M> ApNetworkStorage<M> {
     }
 
     /// Split the storage into the network's device, its transmit half over
-    /// the network's transmit memory `supply`, which takes the stack's
-    /// frames `F`, and the runner's end.
-    /// The runner's queue back holds every memory `supply` can hold
-    /// ([`TxSupply::MEMORIES`], its bounded storage's capacity), which this
-    /// proves at compile time, so every memory it gives back finds room.
-    pub fn split<F, S: TxSupply<F, Memory = M>>(
+    /// the network's transmit memory, which takes the stack's frames `F`,
+    /// and the runner's end. The memory is the bounded storage `memories`,
+    /// at most `N` of them, which `supply` builds the network's transmit
+    /// memory over: the runner's queue back holds `N`, which this proves at
+    /// compile time, so every memory the runner gives back finds room.
+    pub fn split<F, S: TxSupply<F, Memory = M>, T, const N: usize>(
         &mut self,
-        supply: S,
+        memories: heapless::Vec<T, N>,
+        supply: impl FnOnce(heapless::Vec<T, N>) -> S,
     ) -> (
         ApNetDevice<'_>,
         ApNetTransmit<'_, F, S>,
         ApNetworkEnd<'_, M>,
     ) {
-        let () = Holds::<F, S>::BACK;
+        const {
+            if N > AP_TX_DEPTH {
+                panic!("the runner's queue back holds every network memory");
+            }
+        }
+        let supply = supply(memories);
         let (receive_sender, receive_receiver) = self.receive.split();
         let (transmit_sender, transmit_receiver) = self.transmit.split(|| None);
         let (returned_sender, returned_receiver) = self.returned.split(|| None);
@@ -101,7 +94,6 @@ impl<M> ApNetworkStorage<M> {
                 transmit: transmit_receiver,
                 returned: returned_sender,
                 link,
-                quarantined: 0,
             },
         )
     }
@@ -156,8 +148,6 @@ pub struct ApNetworkEnd<'a, M> {
     pub(crate) transmit: SlotReceiver<'a, Option<Outgoing<M>>, AP_TX_DEPTH>,
     returned: SlotSender<'a, Option<TxEnded<M>>, AP_TX_DEPTH>,
     link: &'a ApLink,
-    /// Memories a broken queue back refused, kept out of reach.
-    quarantined: u32,
 }
 
 impl<M> ApNetworkEnd<'_, M> {
@@ -185,25 +175,22 @@ impl<M> ApNetworkEnd<'_, M> {
         !self.transmit.is_empty()
     }
 
-    /// Memories a broken queue back refused, kept out of reach: the queue
-    /// holds every memory ([`ApNetworkStorage::split`]), so only a broken
-    /// queue refuses one.
-    pub const fn quarantined(&self) -> u32 {
-        self.quarantined
-    }
-
     /// Give `memory` back to the network: its frame ended, sent or not.
-    /// The queue back holds every network memory, so it has room; a broken
-    /// one keeps the memory quarantined and counted ([`Self::quarantined`]).
-    pub fn give_back(&mut self, memory: M) {
+    /// The queue back holds every network memory ([`ApNetworkStorage::split`]),
+    /// so only a broken queue refuses it.
+    ///
+    /// # Errors
+    ///
+    /// The queue refused it: the memory comes back whole.
+    pub fn give_back(&mut self, memory: M) -> Result<(), M> {
         let mut ended = Some(TxEnded { memory });
         let _sent = self.returned.try_send_with(|slot| {
             *slot = ended.take();
             Ok::<_, core::convert::Infallible>(())
         });
-        if let Some(ended) = ended {
-            let _quarantined = core::mem::ManuallyDrop::new(ended);
-            self.quarantined = self.quarantined.saturating_add(1);
+        match ended {
+            None => Ok(()),
+            Some(ended) => Err(ended.memory),
         }
     }
 }
@@ -309,3 +296,53 @@ impl NetDevice for ApNetDevice<'_> {
 /// frames `F` into the network's transmit memory `S`: the same transmit end
 /// as a station's.
 pub type ApNetTransmit<'a, F, S> = DeviceTransmit<'a, F, S, AP_TX_DEPTH, SameHart, ApLink>;
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "tests assert on fixed fixtures"
+)]
+mod tests {
+    extern crate std;
+
+    use super::*;
+    use crate::station::TxRefused;
+    use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
+    use oer_protocols_network_port::{TransmitError, TransmitRefused};
+
+    /// A supply that copies nothing and holds the memories it was built on.
+    struct Held(heapless::Vec<u8, AP_TX_DEPTH>);
+    impl TxSupply<EthernetFrame> for Held {
+        type Memory = u8;
+        fn available(&self) -> bool {
+            false
+        }
+        fn write(&mut self, frame: EthernetFrame) -> Result<u8, TxRefused<EthernetFrame>> {
+            Err(TxRefused::Kept(TransmitRefused {
+                frame,
+                reason: TransmitError::QueueFull,
+            }))
+        }
+        fn give(&mut self, memory: u8) {
+            let _held = self.0.push(memory);
+        }
+    }
+
+    /// The queue back holds every memory of the storage the network was
+    /// built over; one past it, which no real network has, comes back whole
+    /// to its giver, never kept out of reach.
+    #[test]
+    fn a_memory_the_queue_back_refuses_comes_back_whole() {
+        let storage = std::boxed::Box::leak(std::boxed::Box::new(ApNetworkStorage::<u8>::new()));
+        let memories: heapless::Vec<u8, AP_TX_DEPTH> = (0..AP_TX_DEPTH)
+            .map(|memory| u8::try_from(memory).unwrap())
+            .collect();
+        let (_device, _transmit, mut end) =
+            storage.split::<EthernetFrame, _, _, AP_TX_DEPTH>(memories, Held);
+        for memory in 0..AP_TX_DEPTH {
+            assert_eq!(end.give_back(u8::try_from(memory).unwrap()), Ok(()));
+        }
+        assert_eq!(end.give_back(200), Err(200), "the same memory, whole");
+    }
+}

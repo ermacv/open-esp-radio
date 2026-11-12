@@ -157,10 +157,6 @@ pub struct ParkedTx<S: TxStorage, const N: usize> {
 }
 
 impl<S: TxStorage, const N: usize> ParkedTx<S, N> {
-    /// The most memories it holds: the `N` its slots park and the spare;
-    /// [`Self::give`] past them lets the memory go.
-    pub const CAPACITY: usize = N + 1;
-
     /// Over the image's `slots`; the device's memory comes in through
     /// [`Self::give`].
     pub const fn new(slots: &'static TxSlots<S, N>) -> Self {

@@ -492,6 +492,9 @@ where
     Buffer(Buffer<'id, P, C>),
     /// A network's buffer whose memory the port still holds.
     Network(NetBuffer<'id, P>),
+    /// A network's memory the network's queue back refused
+    /// ([`ApContract::NetworkReturn`]).
+    NetworkMemory(NetworkMemory<'id, P>),
     /// A refused submission whose ticket found no place, with the owner its
     /// source returned.
     Submission(Ticket<'id, P>, Source<'id, P, C>),
@@ -608,6 +611,9 @@ pub enum ApContract {
     /// key gave no number, or the port's check refused what the runner's
     /// geometry admits.
     NetworkAdmission,
+    /// The network's queue back refused a memory, which it holds room for
+    /// by construction: the queue broke.
+    NetworkReturn,
 }
 
 /// The access point's state, as the application reads it.
@@ -632,9 +638,6 @@ pub struct ApStatus {
     /// header than a QoS one (a group frame, a non-QoS peer's): a QoS
     /// peer's frame goes where the network wrote it.
     pub payload_moves: u32,
-    /// Network memories the queue back refused, kept out of reach: zero
-    /// unless that queue broke, since it holds every network memory.
-    pub network_quarantined: u32,
 }
 
 /// What the application and the runner share: the stop request and the
@@ -660,7 +663,6 @@ impl ApShared {
                 refused: 0,
                 rx_dropped: 0,
                 payload_moves: 0,
-                network_quarantined: 0,
             }),
             status_waker: oer_portable_sync::PriorityWaker::new(),
         }
@@ -1092,7 +1094,7 @@ where
         self.phase = Phase::TearingDown;
         self.status.running = false;
         self.network.set_link(false);
-        self.return_network_frames();
+        self.return_network_frames()?;
         while let Some(teardown) = self.engine.stopping_peer() {
             self.teardown(teardown)?;
         }
@@ -1103,12 +1105,28 @@ where
     /// Hand the network back every frame it gave and none went: those in
     /// the queues and those still in its transport. Nothing carries them
     /// once the access point stops serving.
-    fn return_network_frames(&mut self) {
-        let network = &mut self.network;
-        self.queues.drain(|msdu| network.give_back(msdu.memory));
-        while let Some(outgoing) = self.network.take() {
-            self.network.give_back(outgoing.memory);
+    ///
+    /// A refusal of the queue back, which holds every network memory, stops
+    /// it there: the refused memory comes back in the error, and the rest
+    /// stay where they are, in the queues and the transport.
+    fn return_network_frames(&mut self) -> Result<(), Stray<'id, P, C>> {
+        while let Some(msdu) = self.queues.pop_any() {
+            self.give_memory(msdu.memory)?;
         }
+        self.queues.unblock();
+        while let Some(outgoing) = self.network.take() {
+            self.give_memory(outgoing.memory)?;
+        }
+        Ok(())
+    }
+
+    /// Give `memory` back to the network. Its queue back holds every network
+    /// memory, so a refusal is a broken queue: the memory comes back whole in
+    /// the named error.
+    fn give_memory(&mut self, memory: NetworkMemory<'id, P>) -> Result<(), Stray<'id, P, C>> {
+        self.network
+            .give_back(memory)
+            .map_err(|memory| (ApContract::NetworkReturn, Kept::NetworkMemory(memory)))
     }
 
     /// Queue a teardown of `peer`.
@@ -1766,10 +1784,7 @@ where
     /// whose memory the port still holds stops its operation.
     fn give_network(&mut self, buffer: NetBuffer<'id, P>) -> Result<(), Stray<'id, P, C>> {
         match <Ty<'id, P> as TxNetworkPool<'id>>::into_memory(buffer) {
-            Ok(memory) => {
-                self.network.give_back(memory);
-                Ok(())
-            }
+            Ok(memory) => self.give_memory(memory),
             Err(buffer) => Err((ApContract::BufferClass, Kept::Network(buffer))),
         }
     }
@@ -1817,7 +1832,7 @@ where
                 .flatten()
                 .is_some_and(|owner| owner.address() == peer);
             if gone {
-                self.release_place(place);
+                self.release_place(place)?;
             }
         }
         Ok(())
@@ -1840,28 +1855,46 @@ where
 
     /// Hand the network back what client place `place`'s ended association
     /// left in its queues, and start the place's accounts anew.
-    fn release_place(&mut self, place: usize) {
+    ///
+    /// A refusal of the queue back stops it there, the refused memory in the
+    /// error and the rest still the place's.
+    fn release_place(&mut self, place: usize) -> Result<(), Stray<'id, P, C>> {
         let Some(peer) = u8::try_from(place).ok() else {
-            return;
+            return Ok(());
         };
-        let network = &mut self.network;
-        self.queues
-            .drain_peer(peer, |msdu| network.give_back(msdu.memory));
+        while let Some(msdu) = self.queues.pop_peer(peer) {
+            self.give_memory(msdu.memory)?;
+        }
+        self.queues.reset_peer(peer);
         if let Some(owner) = self.owners.get_mut(place) {
             *owner = None;
         }
+        Ok(())
     }
 
     /// The queue place of `association`, its queues taken over from an
     /// earlier association of the place, whose frames go back.
-    fn place_of(&mut self, association: ApAssociationIdentity) -> Option<u8> {
-        let place = usize::from(association.association_id().checked_sub(1)?);
-        let owner = *self.owners.get(place)?;
+    ///
+    /// # Errors
+    ///
+    /// The queue back refused an earlier association's memory.
+    fn place_of(
+        &mut self,
+        association: ApAssociationIdentity,
+    ) -> Result<Option<u8>, Stray<'id, P, C>> {
+        let Some(place) = association.association_id().checked_sub(1).map(usize::from) else {
+            return Ok(None);
+        };
+        let Some(owner) = self.owners.get(place).copied() else {
+            return Ok(None);
+        };
         if owner != Some(association) {
-            self.release_place(place);
-            *self.owners.get_mut(place)? = Some(association);
+            self.release_place(place)?;
+            if let Some(slot) = self.owners.get_mut(place) {
+                *slot = Some(association);
+            }
         }
-        u8::try_from(place).ok()
+        Ok(u8::try_from(place).ok())
     }
 
     /// A frame of `purpose` did not go: what its terminal would have done
@@ -2042,7 +2075,6 @@ where
             if let Err(halt) = self.turn(now, core::mem::take(&mut facts)) {
                 return self.halted(halt, shared);
             }
-            self.homes.status.network_quarantined = self.homes.network.quarantined();
             shared.publish(self.homes.status);
             if self.homes.phase == Phase::StoppingRadio {
                 break;
@@ -2136,7 +2168,6 @@ where
             };
         }
         self.homes.status.running = false;
-        self.homes.status.network_quarantined = self.homes.network.quarantined();
         shared.publish(self.homes.status);
         let watched = self.watch_stop(clock, ControlFlow::Break).await;
         if let Some(refused) = self.homes.unrecycled.as_ref() {
@@ -2400,9 +2431,22 @@ where
     ) -> ApEnd<PortFault<'id, P>> {
         self.homes.status.running = false;
         self.homes.network.set_link(false);
-        self.homes.return_network_frames();
-        self.homes.status.network_quarantined = self.homes.network.quarantined();
+        let end = self.halt_end(halt);
+        // Nothing carries the network's frames now: they go back, unless a
+        // halt's owners already wait to be taken, which a refused return's
+        // memory could not sit beside; then they stay in the queues and the
+        // transport, the network's, until the next stop returns them.
+        if self.homes.stopped_on.is_none()
+            && let Err(kept) = self.homes.return_network_frames()
+        {
+            self.homes.stopped_on = Some(kept);
+        }
         shared.publish(self.homes.status);
+        end
+    }
+
+    /// What `halt` ends the run with, its owners in the runner's homes.
+    fn halt_end(&mut self, halt: Halt<'id, P, C, PortFault<'id, P>>) -> ApEnd<PortFault<'id, P>> {
         match halt {
             Halt::Faulted(fault) => {
                 self.homes.faulted = true;
@@ -2809,11 +2853,11 @@ where
                 .and_then(|destination| homes.engine.queue_of(destination, outgoing.priority));
             let Some((association, tid)) = queue else {
                 // No authorized peer of that destination: it does not go.
-                homes.network.give_back(outgoing.memory);
+                homes.give_memory(outgoing.memory)?;
                 continue;
             };
             let place = match association {
-                Some(association) => homes.place_of(association),
+                Some(association) => homes.place_of(association)?,
                 None => Some(GROUP_PEER),
             };
             let msdu = OutboundMsdu {
@@ -2824,10 +2868,10 @@ where
             match place.and_then(|place| QueueId::new(place, tid)) {
                 Some(queue) => {
                     if let Err(msdu) = homes.queues.push(queue, msdu) {
-                        homes.network.give_back(msdu.memory);
+                        homes.give_memory(msdu.memory)?;
                     }
                 }
-                None => homes.network.give_back(msdu.memory),
+                None => homes.give_memory(msdu.memory)?,
             }
         }
         for _ in 0..TRANSMIT_BUDGET {
@@ -2851,7 +2895,7 @@ where
                 match owner.filter(|owner| homes.engine.association_is_current(*owner)) {
                     Some(owner) => Some(owner),
                     None => {
-                        homes.release_place(usize::from(queue.peer()));
+                        homes.release_place(usize::from(queue.peer()))?;
                         continue;
                     }
                 }
@@ -2862,7 +2906,7 @@ where
             let Some(ticket) = homes.tickets.pop() else {
                 // Excluded by the check above: the frame waits in its queue.
                 if let Err(msdu) = homes.queues.push_front(queue, msdu) {
-                    homes.network.give_back(msdu.memory);
+                    homes.give_memory(msdu.memory)?;
                 }
                 break;
             };

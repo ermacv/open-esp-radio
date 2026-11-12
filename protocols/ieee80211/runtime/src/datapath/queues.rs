@@ -313,18 +313,21 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
         }
     }
 
-    /// Hand every MSDU of `peer`'s queues to `returned` and start its
-    /// accounts anew: what an association that ended left, which no later
-    /// one of its place may send or be charged for.
-    pub(crate) fn drain_peer(&mut self, peer: u8, mut returned: impl FnMut(OutboundMsdu<M>)) {
-        for tid in WmmUserPriority::ALL {
-            let Some(queue) = QueueId::new(peer, tid) else {
-                continue;
-            };
-            while let Some(msdu) = self.pop(queue) {
-                returned(msdu);
-            }
+    /// The oldest MSDU of any of `peer`'s queues: for an association that
+    /// ended, whose MSDUs go back one by one.
+    pub(crate) fn pop_peer(&mut self, peer: u8) -> Option<OutboundMsdu<M>> {
+        let mine = self.active & Self::peer_mask(peer);
+        if mine == 0 {
+            return None;
         }
+        let queue = QueueId(u8::try_from(mine.trailing_zeros()).ok()?);
+        self.pop(queue)
+    }
+
+    /// Start `peer`'s accounts anew and clear its waits, its queues empty:
+    /// no later association of its place is charged for an earlier one's
+    /// air or waits on its window.
+    pub(crate) fn reset_peer(&mut self, peer: u8) {
         self.blocked &= !Self::peer_mask(peer);
         if let Some(tids) = self.served.get_mut(usize::from(peer)) {
             *tids = [0; TIDS];

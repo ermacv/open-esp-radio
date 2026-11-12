@@ -39,7 +39,6 @@ impl wifi::NetworkTxSupply for WifiTx {
 
 impl TxSupply<TxPacket> for WifiTx {
     type Memory = wifi::TxMemory;
-    const MEMORIES: usize = ParkedTx::<wifi::TxSlot, { wifi::NETWORK_BUFFERS - 1 }>::CAPACITY;
     fn available(&self) -> bool {
         self.parked.available()
     }

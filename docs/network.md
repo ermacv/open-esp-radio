@@ -199,10 +199,11 @@ only once the port gave the room.
   counted in `ApStatus::payload_moves`. A refusal returns the memory to
   the network unwritten; the MPDU's terminal returns it through the
   network's return queue (`TxEnded`), whose depth (`AP_TX_DEPTH`) holds
-  every memory its supply can hold (`TxSupply::MEMORIES`, the supply's
-  bounded storage, which lets a memory past it go; `ApNetworkStorage::split`
-  proves it at compile time; a broken queue's refusal is counted,
-  `ApNetworkEnd::quarantined`),
+  every memory of the bounded storage the network's memory is built over
+  (`ApNetworkStorage::split` takes that storage and proves it at compile
+  time); a refusal, which only a broken queue makes, hands the memory back
+  whole in the named error `ApContract::NetworkReturn`, and the memories
+  not yet returned stay in the queues and the transport,
   and so does a stop or a client place's takeover for every frame still
   queued. A refusal after the sequence number was drawn, which the checks
   exclude, is the runner's named contract break
