@@ -223,12 +223,14 @@ pub enum Taken<H> {
     Read,
     /// A frame was shown and its buffer kept: the reader's now.
     Kept(H),
+    /// The port's receive queue broke: no frame, and none to look for again.
+    Fault(crate::ReceiveFault),
 }
 
 impl<H> Taken<H> {
     /// Whether a frame was there.
     pub const fn found(&self) -> bool {
-        !matches!(self, Self::Empty)
+        matches!(self, Self::Read | Self::Kept(_))
     }
 }
 

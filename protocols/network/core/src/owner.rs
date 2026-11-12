@@ -55,12 +55,15 @@ pub enum Intake<B, H> {
     Read,
     /// A datagram for a lending socket, in its buffer, with its loan.
     Lent(LentDatagram<B, H>),
+    /// The port's receive queue broke ([`Broken::Receive`]): no frame, and
+    /// none to look for again.
+    Broken(oer_protocols_network_port::ReceiveFault),
 }
 
 impl<B, H> Intake<B, H> {
     /// Whether a frame was there.
     pub const fn found(&self) -> bool {
-        !matches!(self, Self::Empty)
+        matches!(self, Self::Read | Self::Lent(_))
     }
 }
 
@@ -163,6 +166,8 @@ pub enum Broken {
     Contract,
     /// It failed after a fill ([`FramePort::is_fault`]).
     Fault,
+    /// Its receive queue broke.
+    Receive(oer_protocols_network_port::ReceiveFault),
 }
 
 impl<
@@ -401,6 +406,15 @@ impl<
                 Intake::Read
             }
             (Taken::Read, None) => Intake::Read,
+            // No frame came: a loan asked for none, and the queue's fault
+            // is the port's, for good.
+            (Taken::Fault(fault), lent) => {
+                if let Some((_, loan)) = lent {
+                    pool.loans().give_back(loan);
+                }
+                self.broken = Some(Broken::Receive(fault));
+                Intake::Broken(fault)
+            }
         }
     }
 

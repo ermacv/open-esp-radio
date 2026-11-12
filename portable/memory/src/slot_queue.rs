@@ -47,8 +47,14 @@ pub enum SlotSendError<E> {
     Full,
     /// The fill refused; the slot stays free.
     Refused(E),
-    /// A slot the indices named was not free: a broken queue.
+    /// A slot the indices named was not free: a broken queue. The fill did
+    /// not run: what it would have written is still the caller's.
     Lost,
+    /// The fill filled a slot whose index the queue then could not stage, as
+    /// a broken queue does: nothing is published, and the filled slot is
+    /// the sender's spare, whose value [`SlotSender::take_spare_with`] reads
+    /// back.
+    Unpublished,
 }
 
 impl<T, const DEPTH: usize> WakingSlotQueue<T, DEPTH> {
@@ -143,6 +149,8 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSlotQueue<T, D
                 consumer,
                 producer,
                 waits,
+                #[cfg(test)]
+                refuse_stage: false,
             },
             SlotReceiver {
                 slots: &self.slots,
@@ -230,6 +238,9 @@ pub struct SlotSender<'a, T, const DEPTH: usize, C = AtomicWaker, P = AtomicWake
     consumer: &'a C,
     producer: &'a P,
     waits: Waits<'a>,
+    /// Refuse the next fill's index as a broken queue would.
+    #[cfg(test)]
+    refuse_stage: bool,
 }
 
 impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DEPTH, C, P> {
@@ -310,8 +321,12 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
                 return Err(SlotSendError::Refused(refused));
             }
         };
-        // The index was free, so the filled queue has room for it.
-        self.filled.stage(index).map_err(|_| SlotSendError::Lost)?;
+        // The index was free, so the filled queue has room for it; refused,
+        // the filled slot stays the sender's, for its value to come back.
+        if self.refused_stage() || self.filled.stage(index).is_err() {
+            self.spare = Some(index);
+            return Err(SlotSendError::Unpublished);
+        }
         Ok(value)
     }
 
@@ -323,6 +338,33 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
         wake_wanting(self.waits.consumer, self.filled.len(), 1, || {
             consumer.notify();
         });
+    }
+
+    /// Read the sender's spare slot with `read`: the slot a refused fill
+    /// left free, or the one an [`SlotSendError::Unpublished`] fill left
+    /// filled, whose value `read` takes back. `None` without a spare, or
+    /// for a slot a broken queue holds elsewhere.
+    pub fn take_spare_with<R>(&mut self, read: impl FnOnce(&mut T) -> R) -> Option<R> {
+        let slot = self.slots.get(usize::from(self.spare?))?;
+        slot.lend(read).ok()
+    }
+
+    /// Whether a test asked the next fill's index to be refused.
+    fn refused_stage(&mut self) -> bool {
+        #[cfg(test)]
+        {
+            core::mem::take(&mut self.refuse_stage)
+        }
+        #[cfg(not(test))]
+        {
+            false
+        }
+    }
+
+    /// Refuse the next fill's index, as a broken queue would.
+    #[cfg(test)]
+    pub(crate) fn refuse_next_stage(&mut self) {
+        self.refuse_stage = true;
     }
 
     /// Filled slots staged in the burst, not yet published.
@@ -359,8 +401,12 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> SlotSender<'_, T, DE
                 return Err(SlotSendError::Refused(refused));
             }
         };
-        // The index was free, so the filled queue has room for it.
-        self.filled.stage(index).map_err(|_| SlotSendError::Lost)?;
+        // The index was free, so the filled queue has room for it; refused,
+        // the filled slot stays the sender's, for its value to come back.
+        if self.refused_stage() || self.filled.stage(index).is_err() {
+            self.spare = Some(index);
+            return Err(SlotSendError::Unpublished);
+        }
         // A single fill is a burst of one, published at once.
         self.publish_burst();
         Ok(value)

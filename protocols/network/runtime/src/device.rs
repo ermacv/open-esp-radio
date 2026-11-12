@@ -131,8 +131,10 @@ impl<D: NetDevice, X: OwnedTransmit> FrameSource for DevicePort<D, X> {
         &mut self,
         read: impl FnOnce(EthernetFrameView<'_>, Holding) -> Keep,
     ) -> Taken<Self::Held> {
-        let Some(frame) = self.device.try_receive() else {
-            return Taken::Empty;
+        let frame = match self.device.try_receive() {
+            Ok(Some(frame)) => frame,
+            Ok(None) => return Taken::Empty,
+            Err(fault) => return Taken::Fault(fault),
         };
         match frame.into_lent() {
             Ok(lent) => match lent.view().map(|view| read(view, Holding::Lendable)) {

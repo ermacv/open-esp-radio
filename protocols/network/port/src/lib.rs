@@ -23,8 +23,8 @@ mod frame;
 mod slot;
 pub use device::{
     CopyReason, EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot,
-    NetDevice, NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused,
-    TxStorage,
+    NetDevice, NetTransmit, ReceiveFault, ReceivedFrame, StorageAdvanceRefused, TransmitError,
+    TransmitRefused, TxStorage,
 };
 
 pub use frame::{

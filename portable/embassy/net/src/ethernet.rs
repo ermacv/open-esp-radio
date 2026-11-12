@@ -305,14 +305,21 @@ impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice
         self.link
     }
 
-    pub(crate) fn stop(&mut self) {
+    /// Take the link down and give back every frame the device still
+    /// queues, which may be lent: dropping one returns it to the device
+    /// before the device's own stop.
+    ///
+    /// # Errors
+    ///
+    /// The device's receive queue broke: the frames after the break stay
+    /// with the device.
+    pub(crate) fn stop(&mut self) -> Result<(), oer_protocols_network_port::ReceiveFault> {
         self.radio.link_controller().set_link_up(false);
-        // A received frame the device still queues may be lent: dropping it
-        // returns it to the device before the device's own stop.
-        while let Some(frame) = self.device.try_receive() {
+        while let Some(frame) = self.device.try_receive()? {
             drop(frame);
         }
         self.reclaim_lent();
+        Ok(())
     }
 
     /// Return to the device every lent frame whose packet the stack
@@ -327,13 +334,17 @@ impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice
     /// One turn: follow the link and drain RX. Always arm link and RX before
     /// observing them. No timer or time driver is needed to make an idle
     /// bridge run again.
+    ///
+    /// # Errors
+    ///
+    /// The device's receive queue broke: the turn reads no frame after it.
     pub fn poll(
         &mut self,
         cx: &mut core::task::Context<'_>,
         mut received: impl FnMut(EthernetFrameView<'_>),
         mut refused: impl FnMut(crate::RxEnqueueError),
         mut copied: impl FnMut(LentCopy),
-    ) {
+    ) -> Result<(), oer_protocols_network_port::ReceiveFault> {
         // A lent frame's packet dropped later wakes this task to return it:
         // register before reclaiming, so no release is missed.
         if let Some(lent) = self.lent {
@@ -351,7 +362,7 @@ impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice
         while self.radio.rx_publisher().poll_queue_room(cx).is_ready()
             && self.device.poll_receive_ready(cx).is_ready()
         {
-            let Some(frame) = self.device.try_receive() else {
+            let Some(frame) = self.device.try_receive()? else {
                 break;
             };
             let published = match frame.into_lent() {
@@ -376,5 +387,6 @@ impl<'r, X: oer_portable_memory::ExecutionContext, const RX: usize, D: NetDevice
                 refused(reason);
             }
         }
+        Ok(())
     }
 }

@@ -259,13 +259,15 @@ impl NetDevice for ApNetDevice<'_> {
         let ready = core::pin::pin!(self.receive.ready());
         ready.poll(cx)
     }
-    fn try_receive(&mut self) -> Option<ApCopied> {
+    fn try_receive(
+        &mut self,
+    ) -> Result<Option<ApCopied>, oer_protocols_network_port::ReceiveFault> {
         // The copy stays in the queue until its mark is read, in order.
         if self.receive.len() <= self.marked {
-            return None;
+            return Ok(None);
         }
         self.marked = self.marked.saturating_add(1);
-        Some(ApCopied(()))
+        Ok(Some(ApCopied(())))
     }
     fn read_copied<R>(
         &mut self,

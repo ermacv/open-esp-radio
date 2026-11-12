@@ -208,6 +208,15 @@ pub struct TransmitRefused<F> {
     pub reason: TransmitError,
 }
 
+/// How a device's receive queue broke: it gave no frame where it held one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReceiveFault {
+    /// The queue named a frame's place it does not hold.
+    Lost,
+    /// A frame's place the queue published held no frame.
+    Unfilled,
+}
+
 /// The link and receive half of one affine Ethernet port. Poll methods
 /// register before observing readiness. Cancelling a readiness wait consumes
 /// no frame. RX transfers its concrete owner by value. The endpoints and
@@ -221,7 +230,13 @@ pub trait NetDevice {
     fn poll_link(&mut self, cx: &mut Context<'_>) -> Poll<LinkSnapshot>;
     fn receive_queue_len(&self) -> usize;
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()>;
-    fn try_receive(&mut self) -> Option<Self::RxFrame>;
+    /// The oldest received frame, `None` while none waits.
+    ///
+    /// # Errors
+    ///
+    /// The device's receive queue broke ([`ReceiveFault`]): no frame is
+    /// given, and the device is not to be read again.
+    fn try_receive(&mut self) -> Result<Option<Self::RxFrame>, ReceiveFault>;
     /// Read the copy `copied` stands for, in place, and release it. A copy
     /// is read in the order the device handed its frames over.
     ///

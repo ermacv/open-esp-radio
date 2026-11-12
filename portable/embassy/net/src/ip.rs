@@ -58,6 +58,8 @@ pub enum Error {
     GatewayNotUnicast,
     RouteTableFull,
     DhcpMediumMismatch,
+    /// The device's receive queue broke: it gave no frame where it held one.
+    ReceiveFault(oer_protocols_network_port::ReceiveFault),
 }
 
 impl From<crate::EndpointSplitError> for Error {
@@ -491,7 +493,18 @@ async fn drive<'r, X: ExecutionContext, const RX: usize, D: NetDevice, const LEN
         if state.stop.get() {
             return finish(state, bridge, iface, &mut events);
         }
-        bridge.poll(cx, &mut received, &mut refused, &mut copied);
+        if let Err(fault) = bridge.poll(cx, &mut received, &mut refused, &mut copied) {
+            // The device is read no more: the service ends failed, named.
+            let error = Error::ReceiveFault(fault);
+            state.publish(
+                Status {
+                    lifecycle: Lifecycle::Failed(error),
+                    ..state.status.get()
+                },
+                &mut events,
+            );
+            return Poll::Ready(Err(error));
+        }
         let link = bridge.link();
         let previous = state.status.get();
         if link != previous.link {
@@ -542,12 +555,13 @@ fn finish<'r, X: ExecutionContext, const RX: usize, D: NetDevice, const LENT: us
     iface: &impl Interface,
     events: &mut impl FnMut(StatusChanged),
 ) -> Poll<Result<(), Error>> {
-    bridge.stop();
+    // The rest is given back whatever the device's queue answers.
+    let stopped = bridge.stop().map_err(Error::ReceiveFault);
     iface.drop_received();
     // The packets the interface held may be lent frames: return them now,
     // the service polls its bridge no more.
     bridge.reclaim_lent();
-    let result = iface.clear();
+    let result = stopped.and(iface.clear());
     state.publish(
         Status {
             link: LinkSnapshot {

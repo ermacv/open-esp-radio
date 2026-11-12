@@ -474,3 +474,42 @@ fn bursts_across_threads_move_every_value_once_in_order() {
         "every slot is free again"
     );
 }
+
+/// A fill whose index the queue cannot stage publishes nothing and is not
+/// lost: its slot is the sender's spare, whose value comes back whole, and
+/// the slot then serves the next fill.
+#[test]
+fn an_unpublished_fill_comes_back_from_the_spare_slot_and_the_slot_serves_again() {
+    let (consumer, producer) = (Told::default(), Told::default());
+    let mut queue = WakingSlotQueue::<Option<u8>, 2, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split(|| None);
+    sender.refuse_next_stage();
+    assert_eq!(
+        sender.try_stage_with(|slot| {
+            *slot = Some(7);
+            Ok::<_, ()>(())
+        }),
+        Err(SlotSendError::Unpublished)
+    );
+    sender.flush();
+    assert!(receiver.is_empty(), "nothing published");
+    assert_eq!(
+        sender.take_spare_with(Option::take),
+        Some(Some(7)),
+        "the value, whole"
+    );
+    assert_eq!(
+        sender.take_spare_with(Option::take),
+        Some(None),
+        "taken once"
+    );
+    assert_eq!(sender.free_capacity(), 2, "both slots serve again");
+    assert_eq!(
+        sender.try_send_with(|slot| {
+            *slot = Some(8);
+            Ok::<_, ()>(())
+        }),
+        Ok(())
+    );
+    assert_eq!(receiver.try_receive_with(Option::take), Ok(Some(8)));
+}

@@ -28,6 +28,7 @@
 use super::turn::{Failed, PortBlockAcks};
 use super::*;
 use crate::station::{CopiedMark, NetworkRx, RxDrop, RxMsdusCopied, RxMsdusRefused, ServiceEvent};
+use oer_portable_memory::SlotSendError;
 use oer_protocols_ieee80211_contracts_port::{LendRefusal, LendRefused, RxThen};
 use oer_protocols_ieee80211_core_roles_sta::data::{
     MAX_ETHERNET_PAYLOAD_LEN, MsduDelivery, MsduPlan, PlannedCopyError,
@@ -113,9 +114,7 @@ fn copy_received<
             if network.receive_copied.try_send(frame).is_err() {
                 return Ok(Some(Refusal::QueueFull));
             }
-            Ok(stage(network, Received::Copied(CopiedMark::new(reason)))?
-                .is_err()
-                .then_some(Refusal::QueueFull))
+            staged(stage(network, Received::Copied(CopiedMark::new(reason))))
         }
         // The link located the payload in this frame.
         Err(PlannedCopyError::TooLong(_) | PlannedCopyError::OutsideFrame) => {
@@ -152,35 +151,61 @@ fn queue_lent<
         return Ok(Some(Refusal::TooLong));
     }
     match LentFrame::new(NetworkRx(lent), destination, source, ether_type, payload) {
-        Ok(frame) => Ok(stage(network, Received::Lent(frame))?
-            .is_err()
-            .then_some(Refusal::QueueFull)),
+        Ok(frame) => staged(stage(network, Received::Lent(frame))),
         // The payload lies in the MPDU, which starts the lent storage.
         Err(_storage) => Ok(Some(Refusal::TooLong)),
     }
 }
 
+/// Why [`stage`] did not stage an MSDU; each refusal gives it back.
+enum StageRefused<L> {
+    /// Every slot is taken now: a temporary refusal.
+    Full(Received<L>),
+    /// The queue broke ([`ActorViolation::NetworkQueueLost`]): before its
+    /// fill, or after it, its filled slot read back. `None` only when the
+    /// queue holds that slot elsewhere too.
+    Broken(Option<Received<L>>),
+}
+
 /// Stage one received MSDU in its own slot of the network queue, published
-/// with the turn's others at its flush. A full queue gives the MSDU back;
-/// a dropped lent buffer returns to the port.
+/// with the turn's others at its flush.
 ///
 /// # Errors
 ///
-/// The queue took the MSDU into a slot and lost its index
-/// ([`ActorViolation::NetworkQueueLost`]).
+/// [`StageRefused`]: a full queue, or a broken one, the MSDU back with it.
 fn stage<L, NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies, M>(
     network: &mut NetworkEnds<'_, M, L, NS, TX_DEPTH, RX_DEPTH, N>,
     received: Received<L>,
-) -> Result<Result<(), Received<L>>, ActorViolation> {
+) -> Result<(), StageRefused<L>> {
     let mut received = Some(received);
     let staged = network.receive.try_stage_with(|slot| {
         *slot = received.take();
         Ok::<_, core::convert::Infallible>(())
     });
-    match (staged, received) {
-        (Ok(()), None) => Ok(Ok(())),
-        (_, Some(received)) => Ok(Err(received)),
-        (Err(_), None) => Err(ActorViolation::NetworkQueueLost),
+    match staged {
+        Ok(()) => Ok(()),
+        Err(SlotSendError::Full) => match received {
+            Some(received) => Err(StageRefused::Full(received)),
+            // A full queue runs no fill.
+            None => Err(StageRefused::Broken(None)),
+        },
+        Err(SlotSendError::Lost) => Err(StageRefused::Broken(received)),
+        // Filled and not published: the slot is the sender's spare.
+        Err(SlotSendError::Unpublished) => Err(StageRefused::Broken(
+            network.receive.take_spare_with(Option::take).flatten(),
+        )),
+        Err(SlotSendError::Refused(never)) => match never {},
+    }
+}
+
+/// The refusal a staging gives: a full queue's MSDU is dropped (a lent
+/// buffer returns to its port, once) and refused; a broken queue's too,
+/// and the violation ends the run.
+fn staged<L>(staged: Result<(), StageRefused<L>>) -> Result<Option<Refusal>, ActorViolation> {
+    match staged {
+        Ok(()) => Ok(None),
+        Err(StageRefused::Full(_received)) => Ok(Some(Refusal::QueueFull)),
+        Err(StageRefused::Broken(_received)) => Err(ActorViolation::NetworkQueueLost),
     }
 }
 
@@ -734,7 +759,7 @@ mod tests {
         for reason in reasons {
             assert!(matches!(
                 stage(&mut network, Received::Copied(CopiedMark::new(reason))),
-                Ok(Ok(()))
+                Ok(())
             ));
         }
         assert!(
@@ -750,6 +775,35 @@ mod tests {
             assert_eq!(CopiedMark::reason(&mark), reason);
         }
         assert!(network_receive.is_empty());
+        // Full: a temporary refusal, the MSDU back whole.
+        for _ in 0..DEPTH {
+            assert!(
+                stage(
+                    &mut network,
+                    Received::Copied(CopiedMark::new(CopyReason::Format))
+                )
+                .is_ok()
+            );
+        }
+        let refused = stage(
+            &mut network,
+            Received::Copied(CopiedMark::new(CopyReason::Pressure)),
+        );
+        let Err(StageRefused::Full(Received::Copied(mark))) = refused else {
+            panic!("a full queue's refusal, with its MSDU");
+        };
+        assert_eq!(CopiedMark::reason(&mark), CopyReason::Pressure);
+        assert!(matches!(
+            staged(Err(StageRefused::Full(Received::<ModelLentRx>::Copied(
+                mark
+            )))),
+            Ok(Some(Refusal::QueueFull))
+        ));
+        // Broken: the run's named violation, never an overflow.
+        assert!(matches!(
+            staged(Err(StageRefused::Broken(None::<Received<ModelLentRx>>))),
+            Err(ActorViolation::NetworkQueueLost)
+        ));
     }
 
     #[test]

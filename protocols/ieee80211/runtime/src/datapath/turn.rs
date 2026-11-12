@@ -447,6 +447,10 @@ where
             D::span(ActorSpan::Receive, false);
             let received = self.rx(facts.rx, lifecycle, network);
             D::span(ActorSpan::Receive, true);
+            // The MSDUs staged before a failure are the network's: they are
+            // published before the failure ends the turn, never left in
+            // their slots unseen.
+            network.receive.flush();
             received?;
         }
         network.receive.flush();

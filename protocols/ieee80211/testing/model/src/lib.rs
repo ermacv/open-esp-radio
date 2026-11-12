@@ -1892,6 +1892,8 @@ pub struct ModelAir {
     unkeep: Cell<Option<crate::data_port::ModelUnkeep>>,
     /// The instant of the receive batch the port began last.
     pub(crate) batch_now: Cell<Option<Instant>>,
+    /// Units the port's receive takes before it poisons the backend.
+    poison_after_takes: Cell<Option<usize>>,
     /// Network memories the port holds with no attempt to carry them home,
     /// as a hardware completion for no attempt leaves one
     /// ([`Self::hold_network_memory`]).
@@ -1991,6 +1993,7 @@ impl ModelAir {
             refuse_recycle: Default::default(),
             unkeep: Cell::new(None),
             batch_now: Cell::new(None),
+            poison_after_takes: Cell::new(None),
             orphans: Cell::new(alloc::vec::Vec::new()),
             refuse_access_point: Default::default(),
             refuse_he_association: Default::default(),
@@ -2669,6 +2672,25 @@ impl ModelAir {
     /// Poison the backend.
     pub fn poison(&self) {
         self.stream.set(ModelStream::Ended);
+    }
+
+    /// Poison the backend once the port's receive took `units` more units:
+    /// the next take meets the fault, inside its batch.
+    pub fn poison_after_takes(&self, units: usize) {
+        self.poison_after_takes.set(Some(units));
+    }
+
+    /// Count one take against [`Self::poison_after_takes`], poisoning the
+    /// backend at its end.
+    pub(crate) fn count_take(&self) {
+        match self.poison_after_takes.get() {
+            Some(0) => {
+                self.poison_after_takes.set(None);
+                self.poison();
+            }
+            Some(units) => self.poison_after_takes.set(Some(units.saturating_sub(1))),
+            None => {}
+        }
     }
 
     /// Poison the backend as the next transmit service begins: that

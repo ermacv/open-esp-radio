@@ -209,8 +209,8 @@ impl NetDevice for IpPort {
             Poll::Ready(())
         }
     }
-    fn try_receive(&mut self) -> Option<Frame> {
-        self.0.borrow_mut().rx.pop_front()
+    fn try_receive(&mut self) -> Result<Option<Frame>, oer_protocols_network_port::ReceiveFault> {
+        Ok(self.0.borrow_mut().rx.pop_front())
     }
     fn read_copied<R>(
         &mut self,

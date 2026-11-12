@@ -2902,3 +2902,36 @@ fn a_link_that_goes_returns_every_queued_msdu_once() {
         assert_eq!(back, 4, "and none again");
     });
 }
+
+/// A port fault inside a receive batch, after two of its MSDUs were staged
+/// for the network: the staged prefix is published before the fault ends
+/// the run, each MSDU once, and the units the batch did not take stay with
+/// the port.
+#[test]
+fn a_fault_inside_a_batch_publishes_the_staged_prefix_and_leaves_the_rest() {
+    bench(|bench| {
+        bench.start();
+        bench.connect(link(true, None));
+        for sequence in 1..=4 {
+            bench.air.receive(&data_from_ap(sequence, &[9; 4]), meta());
+        }
+        bench.air.poison_after_takes(2);
+        bench.settle();
+        assert!(bench.end.is_some(), "the fault ended the run");
+        for _ in 0..2 {
+            assert!(matches!(
+                bench.receive.try_receive_with(Option::take),
+                Ok(Some(Received::Lent(_)))
+            ));
+        }
+        assert!(
+            bench.receive.is_empty(),
+            "the staged prefix, published, each once"
+        );
+        assert_eq!(
+            bench.air.pending_rx(),
+            2,
+            "the untaken units stay with the port"
+        );
+    });
+}

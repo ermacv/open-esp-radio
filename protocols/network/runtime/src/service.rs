@@ -125,6 +125,10 @@ pub enum EndCause {
     /// others end `Outcome::Retired`, and the port goes back to its owner in
     /// [`Ended::retired`] with what it knows of its loss.
     PortFault,
+    /// The port's receive queue broke: it gave no frame where it held one.
+    /// No frame is read after it; the commands end `Outcome::Retired`, and
+    /// the port goes back to its owner in [`Ended::retired`].
+    ReceiveFault(oer_protocols_network_port::ReceiveFault),
 }
 
 /// What a service's end hands on. Dropping it strands what is still on its way
@@ -864,6 +868,7 @@ impl<
                 self.ended = Some(match broken {
                     Broken::Contract => EndCause::PortContract,
                     Broken::Fault => EndCause::PortFault,
+                    Broken::Receive(fault) => EndCause::ReceiveFault(fault),
                 });
             } else if turned.again {
                 // The turn left work no wake will name: the next turn
@@ -929,6 +934,11 @@ impl<
                 }
                 Intake::Read => {}
                 Intake::Lent(datagram) => self.lend(datagram, events),
+                // The owner records the broken queue, which ends the run.
+                Intake::Broken(_) => {
+                    intake_full = false;
+                    break;
+                }
             }
             report(events, || ServiceEvent::FrameTaken);
         }

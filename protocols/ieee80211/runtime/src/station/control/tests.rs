@@ -315,7 +315,7 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
             .is_ok()
     );
     assert!(device.poll_receive_ready(&mut cx).is_ready());
-    let Some(Received::Copied(mark)) = device.try_receive() else {
+    let Ok(Some(Received::Copied(mark))) = device.try_receive() else {
         panic!("the copied frame's mark");
     };
     // The copy is read where it lies, once.
@@ -330,7 +330,21 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
         ),
         Err(FrameLengthError::MissingCopy)
     );
-    assert!(device.try_receive().is_none());
+    assert!(matches!(device.try_receive(), Ok(None)));
+    // A slot published without its frame is the queue's fault, not an
+    // empty queue.
+    assert!(
+        received
+            .try_send_with(|slot| {
+                *slot = None;
+                Ok::<_, core::convert::Infallible>(())
+            })
+            .is_ok()
+    );
+    assert_eq!(
+        device.try_receive().err(),
+        Some(oer_protocols_network_port::ReceiveFault::Unfilled)
+    );
     // Cooperative stop is independent of a full command queue.
     assert!(control.try_command(ControlCommand::Stop).is_ok());
     control.stop(oer_portable_time::Instant::from_micros(u64::MAX));

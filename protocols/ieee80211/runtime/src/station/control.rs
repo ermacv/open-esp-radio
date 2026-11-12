@@ -15,7 +15,7 @@ use core::{
 };
 use embassy_futures::select::{Either, select};
 use oer_portable_memory::{
-    QueueNotify, SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender,
+    QueueNotify, SlotReceiveError, SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender,
 };
 use oer_portable_sync::PriorityWaker;
 use oer_portable_time::connected_tasks::{
@@ -26,7 +26,7 @@ use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
 use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MAX_ETHERNET_PAYLOAD_LEN};
 use oer_protocols_ieee80211_core_roles_sta::machine::StaProfile;
 use oer_protocols_network_port::{
-    LinkSnapshot, LinkState, NetDevice, NetTransmit, TransmitError, TransmitRefused,
+    LinkSnapshot, LinkState, NetDevice, NetTransmit, ReceiveFault, TransmitError, TransmitRefused,
 };
 
 /// Latest product state. Events and command owners still reach the callback once.
@@ -654,12 +654,17 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         core::pin::pin!(self.receive.ready()).poll(cx)
     }
-    /// The oldest frame, its slot freed for the actor at once. A slot the
-    /// queue lost, which its indices exclude, reads as no frame, as the
-    /// transmit return queue's does: the receive contract has no fault to
-    /// carry it.
-    fn try_receive(&mut self) -> Option<Self::RxFrame> {
-        self.receive.try_receive_with(Option::take).ok().flatten()
+    /// The oldest frame, its slot freed for the actor at once.
+    fn try_receive(&mut self) -> Result<Option<Self::RxFrame>, ReceiveFault> {
+        match self.receive.try_receive_with(Option::take) {
+            Ok(Some(frame)) => Ok(Some(frame)),
+            Err(SlotReceiveError::Empty) => Ok(None),
+            // A slot the queue's indices named and it does not hold.
+            Err(SlotReceiveError::Lost) => Err(ReceiveFault::Lost),
+            // A published slot without its frame: the actor stages a frame
+            // in every slot it publishes.
+            Ok(None) => Err(ReceiveFault::Unfilled),
+        }
     }
     fn read_copied<R>(
         &mut self,

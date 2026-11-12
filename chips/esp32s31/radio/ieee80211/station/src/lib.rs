@@ -399,8 +399,10 @@ impl<N: Notifies> NetDevice for Network<'_, N> {
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.inner.poll_receive_ready(cx)
     }
-    fn try_receive(&mut self) -> Option<Received<N>> {
-        self.inner.try_receive().map(|inner| Received { inner })
+    fn try_receive(
+        &mut self,
+    ) -> Result<Option<Received<N>>, oer_protocols_network_port::ReceiveFault> {
+        Ok(self.inner.try_receive()?.map(|inner| Received { inner }))
     }
     fn read_copied<R>(
         &mut self,

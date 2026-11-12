@@ -1691,6 +1691,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         &mut self,
         batch: &mut RxBatch,
     ) -> Result<Option<PortRxUnit<'id, Self>>, ModelPortFault> {
+        self.air.count_take();
         if let Err(fault) = self.check(ModelPortCall::Receive) {
             batch.end();
             return Err(fault);

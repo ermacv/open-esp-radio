@@ -79,6 +79,8 @@ struct Device {
     incoming: VecDeque<Incoming>,
     bad_copy: bool,
     link_changed: bool,
+    /// The receive queue's break, which every later read answers.
+    fault: Option<oer_protocols_network_port::ReceiveFault>,
 }
 
 impl NetDevice for Device {
@@ -106,8 +108,13 @@ impl NetDevice for Device {
             Poll::Ready(())
         }
     }
-    fn try_receive(&mut self) -> Option<Incoming> {
-        self.incoming.pop_front()
+    fn try_receive(
+        &mut self,
+    ) -> Result<Option<Incoming>, oer_protocols_network_port::ReceiveFault> {
+        match self.fault {
+            Some(fault) => Err(fault),
+            None => Ok(self.incoming.pop_front()),
+        }
     }
     fn read_copied<R>(
         &mut self,
@@ -326,6 +333,22 @@ fn a_frame_the_device_cannot_show_is_counted() {
         Taken::Read
     ));
     assert_eq!(port.unreadable(), 1);
+}
+
+/// A broken receive queue is the port's named fault, never an empty
+/// queue: no frame is shown, and a give-back stops at it.
+#[test]
+fn a_broken_receive_queue_is_a_fault_not_an_empty_queue() {
+    use oer_protocols_network_port::ReceiveFault;
+    let mut port = port();
+    port.device.incoming.push_back(lent(&[1, 2]));
+    port.device.fault = Some(ReceiveFault::Unfilled);
+    let taken = port.take_frame(|_, _| panic!("no frame is shown"));
+    assert!(matches!(taken, Taken::Fault(ReceiveFault::Unfilled)));
+    assert!(!taken.found());
+    // The give-back stops at the break and leaves the device's frames.
+    port.give_back();
+    assert_eq!(port.device.incoming.len(), 1);
 }
 
 #[test]

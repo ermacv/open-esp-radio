@@ -6,6 +6,7 @@
 //! then reads never misses one.
 
 use core::sync::atomic::{AtomicU32, Ordering, fence};
+use oer_protocols_network_port::ReceiveFault;
 
 use oer_portable_embassy_net::ip::{Ipv4Configuration, Ipv4Status, Lifecycle, Status};
 use oer_protocols_network_port::{LinkSnapshot, LinkState};
@@ -189,6 +190,8 @@ fn error_code(error: ServiceError) -> (u8, u32) {
         ServiceError::RouteTableFull => (10, 0),
         ServiceError::DhcpMediumMismatch => (11, 0),
         ServiceError::GeneralWaiterUnavailable => (13, 0),
+        ServiceError::ReceiveFault(ReceiveFault::Lost) => (14, 0),
+        ServiceError::ReceiveFault(ReceiveFault::Unfilled) => (14, 1),
     }
 }
 
@@ -208,6 +211,11 @@ fn error_of(code: u8, detail: u32) -> Option<ServiceError> {
         10 => ServiceError::RouteTableFull,
         11 => ServiceError::DhcpMediumMismatch,
         13 => ServiceError::GeneralWaiterUnavailable,
+        14 => ServiceError::ReceiveFault(match detail {
+            0 => ReceiveFault::Lost,
+            1 => ReceiveFault::Unfilled,
+            _ => return None,
+        }),
         _ => return None,
     })
 }

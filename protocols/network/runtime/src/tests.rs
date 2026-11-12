@@ -78,6 +78,8 @@ struct Wire {
     rejects: bool,
     /// The port loses the buffer of every frame written.
     loses: bool,
+    /// The port's receive queue is broken: every take answers it.
+    receive_fault: Option<oer_protocols_network_port::ReceiveFault>,
     /// The next frames the port refuses for good.
     rejections: usize,
     /// The port gives less room than a frame needs.
@@ -242,6 +244,9 @@ impl FrameSource for WirePort {
         let (frame, holding, out) = {
             let mut wire = self.0.borrow_mut();
             wire.takes += 1;
+            if let Some(fault) = wire.receive_fault {
+                return Taken::Fault(fault);
+            }
             let Some(frame) = wire.incoming.pop_front() else {
                 wire.empty_takes += 1;
                 return Taken::Empty;
@@ -2850,6 +2855,30 @@ fn a_port_that_loses_a_written_buffer_ends_the_service_with_its_fault() {
         sent_before,
         "nothing more went"
     );
+    returned(&mut ended, &mut socket);
+}
+
+/// A port whose receive queue breaks ends the service with that fault,
+/// named: no frame is read after it, and every block goes home.
+#[test]
+fn a_broken_receive_queue_ends_the_service_with_its_fault() {
+    use oer_protocols_network_port::ReceiveFault;
+    brand!(Net);
+    let (mut ended, mut socket, ()) = run(bench::<Net>(), async |socket, wire| {
+        send_one(socket, b"resolved").await;
+        {
+            let mut wire = wire.0.borrow_mut();
+            wire.receive_fault = Some(ReceiveFault::Lost);
+            // A frame waits, and its wake brings the turn whose intake
+            // finds the break.
+            wire.incoming.push_back(std::vec![0; 60]);
+            wire.wake();
+        }
+        while !socket.closed() {
+            yield_now().await;
+        }
+    });
+    assert_eq!(ended.cause, EndCause::ReceiveFault(ReceiveFault::Lost));
     returned(&mut ended, &mut socket);
 }
 
