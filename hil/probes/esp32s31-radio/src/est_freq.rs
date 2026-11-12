@@ -261,6 +261,14 @@ fn observation(phy: &mut impl SharedPhyAccess, tag: u32) -> Result<(), u32> {
     Ok(())
 }
 fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
+    const LOW: freq::FrequencyMemoryAddress = match freq::FrequencyMemoryAddress::new(0) {
+        Some(address) => address,
+        None => panic!("the diagnostic address fits eleven bits"),
+    };
+    const HIGH: freq::FrequencyMemoryAddress = match freq::FrequencyMemoryAddress::new(0x400) {
+        Some(address) => address,
+        None => panic!("the diagnostic address fits eleven bits"),
+    };
     let Some(saved) = freq::capture_read_configuration(phy) else {
         return Err(11);
     };
@@ -281,11 +289,11 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
         observation(phy, 0x1522)?;
         // SOURCE: PhyFrequencyI2cTransition's final descriptor initializes
         // address 0 with the BBTOP03 command in a complete cold registration.
-        for (address, tag) in [(0, 0x1524), (0x400, 0x1526), (0, 0x1528)] {
-            let value = freq::read_memory(phy, address, 0);
+        for (address, tag) in [(LOW, 0x1524), (HIGH, 0x1526), (LOW, 0x1528)] {
+            let value = freq::read_memory_mode0(phy, address);
             emit(
                 tag + 0x100,
-                u32::from(address),
+                u32::from(address.get()),
                 value,
                 oer_portable_riscv::cycle32(),
             );
@@ -307,7 +315,7 @@ fn frequency(phy: &mut impl SharedPhyAccess) -> Result<(), u32> {
         }
         freq::reset_module(phy);
         observation(phy, 0x152a)?;
-        let value = freq::read_memory(phy, 0, 0);
+        let value = freq::read_memory_mode0(phy, LOW);
         emit(0x162c, 0, value, oer_portable_riscv::cycle32());
         observation(phy, 0x152c)
     })();
