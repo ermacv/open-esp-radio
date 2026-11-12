@@ -1501,3 +1501,134 @@ fn a_memory_the_port_holds_without_an_attempt_goes_home_at_a_halt() {
         assert_eq!(free, super::network::AP_TX_DEPTH, "every memory came home");
     }));
 }
+
+/// The port frees a network memory while the stop's watch waits: once the
+/// stop confirms, it is the network's again with every other one.
+#[test]
+fn a_memory_the_port_frees_during_the_stop_s_watch_goes_home_at_its_confirmation() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    let frame = || {
+        let mut frame = EthernetFrame::empty();
+        frame
+            .set_parts(MsduParts {
+                destination: STATION,
+                source: ACCESS_POINT,
+                ether_type: 0x0800,
+                payload: &[0x45; 28],
+            })
+            .unwrap();
+        frame
+    };
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, shared);
+        runner.homes.network.set_link(true);
+        assert!(transmit.try_transmit(frame()).is_ok());
+        transmit.flush();
+        let memory = runner.homes.network.take().expect("the frame").memory;
+        air.refuse_access_point_commands(1);
+        let idle = async {
+            loop {
+                counted.idle(1).await;
+            }
+        };
+        let end = match select(Woken::new(runner.run(&shared, &counted)), idle).await {
+            Either::First(end) => end,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(matches!(end, ApEnd::Refused(_)));
+        air.hold_stop(true);
+        let finish = runner.finish_stop(&counted, |_| {});
+        let script = async {
+            counted.idle(1).await;
+            // The watch waits: the port frees the memory now.
+            air.hold_network_memory(memory);
+            air.hold_stop(false);
+            loop {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+        };
+        let watched = match select(Woken::new(finish), script).await {
+            Either::First(watched) => watched,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(
+            matches!(watched, Ok(super::StopWatch::Confirmed)),
+            "{watched:?}"
+        );
+        assert!(runner.take_kept().is_none(), "no owner stayed out");
+        transmit.reclaim();
+        runner.homes.network.set_link(true);
+        let mut free = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            free += 1;
+        }
+        assert_eq!(free, super::network::AP_TX_DEPTH, "every memory came home");
+    }));
+}
+
+/// The same memory, freed during the stop's watch, which the queue back
+/// refuses: the stop stays confirmed and the memory waits whole as the
+/// halt's owners.
+#[test]
+fn a_memory_the_queue_back_refuses_at_the_stop_s_confirmation_waits_whole() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, shared);
+        runner.homes.network.set_link(true);
+        let mut frame = EthernetFrame::empty();
+        frame
+            .set_parts(MsduParts {
+                destination: STATION,
+                source: ACCESS_POINT,
+                ether_type: 0x0800,
+                payload: &[0x45; 28],
+            })
+            .unwrap();
+        assert!(transmit.try_transmit(frame).is_ok());
+        transmit.flush();
+        let memory = runner.homes.network.take().expect("the frame").memory;
+        air.refuse_access_point_commands(1);
+        let idle = async {
+            loop {
+                counted.idle(1).await;
+            }
+        };
+        let end = match select(Woken::new(runner.run(&shared, &counted)), idle).await {
+            Either::First(end) => end,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(matches!(end, ApEnd::Refused(_)));
+        // The queue back is full: memories no network holds fill it.
+        for _ in 0..super::network::AP_TX_DEPTH {
+            let filler = Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]);
+            assert!(runner.homes.network.give_back(filler).is_ok());
+        }
+        air.hold_stop(true);
+        let finish = runner.finish_stop(&counted, |_| {});
+        let script = async {
+            counted.idle(1).await;
+            air.hold_network_memory(memory);
+            air.hold_stop(false);
+            loop {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+        };
+        let watched = match select(Woken::new(finish), script).await {
+            Either::First(watched) => watched,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(
+            matches!(watched, Ok(super::StopWatch::Confirmed)),
+            "{watched:?}"
+        );
+        assert!(
+            matches!(runner.take_kept(), Some(super::Kept::NetworkMemory(_))),
+            "the refused memory, whole"
+        );
+        assert!(runner.take_kept().is_none());
+    }));
+}

@@ -2388,6 +2388,11 @@ where
             match woke {
                 Woke::Stopped(Ok(())) => {
                     self.take_unconsumed();
+                    // The stop's last progress may have freed the network's
+                    // memory the port held: it goes home now, beside the
+                    // confirmed stop; a refusal waits as the halt's owners
+                    // ([`Self::take_kept`]).
+                    self.return_left_frames();
                     return Ok(());
                 }
                 // A device fault the stop's answer names ends the watch
