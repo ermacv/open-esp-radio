@@ -92,6 +92,8 @@ fn count(refused: &mut RxMsdusRefused, refusal: Option<Refusal>) {
 /// # Errors
 ///
 /// A lost slot of the network queue ([`stage`]).
+#[cold]
+#[inline(never)]
 fn copy_received<
     L,
     NS: NetworkStop,
@@ -267,6 +269,7 @@ where
     /// The turn's receive work: the frames in delivery order the network
     /// takes, the deferred management frame, then at most [`RX_BUDGET`]
     /// units of the ring and the agreements' due deadlines.
+    #[inline(never)]
     pub(super) fn rx<
         const TO: usize,
         const FROM: usize,
@@ -386,6 +389,7 @@ where
 
     /// Hand on the frames in delivery order the network takes, and the
     /// deferred management frames once their replies have a place.
+    #[inline(never)]
     fn pending<
         const TO: usize,
         const FROM: usize,
@@ -469,6 +473,7 @@ where
 
     /// Take one received unit: reorder it or hand it on, after the frames
     /// it released or found released in delivery order.
+    #[inline(never)]
     pub(super) fn received<
         const TO: usize,
         const FROM: usize,
@@ -528,6 +533,8 @@ where
     /// goes back to the ring, counted. A closed reception takes nothing:
     /// the frame goes back to the ring and the run ends on it
     /// ([`ActorViolation::LifecycleClosed`]).
+    #[cold]
+    #[inline(never)]
     fn hand_to_lifecycle<const TO: usize, const FROM: usize, const RETURNS: usize>(
         &mut self,
         frame: ActorRxBuffer<'id, D>,
@@ -648,22 +655,16 @@ where
         };
         match eapol {
             Some((payload, protection)) => {
-                // The frame goes to the lifecycle: its data MSDU is copied.
-                if let Some(plan) = first.take() {
-                    let refusal = copy_received(network, frame.bytes(), &plan, CopyReason::Format)
-                        .map_err(ActorFault::Contract)?;
-                    if counted {
-                        count(&mut refused, refusal);
-                        copied.shared = copied.shared.saturating_add(1);
-                    }
-                }
-                self.hand_to_lifecycle(
+                self.route_eapol(
                     frame,
+                    first.take(),
                     LaneFrame::Eapol {
                         payload,
                         protection,
                     },
+                    (&mut refused, &mut copied),
                     lifecycle,
+                    network,
                 )?;
             }
             None => match first {
@@ -673,29 +674,8 @@ where
                         Ok(lent) => {
                             queue_lent(network, lent, plan).map_err(ActorFault::Contract)?
                         }
-                        // The network holds all the port may lend: the
-                        // frame was admitted and reordered, its MSDU is
-                        // refused and its buffer goes back at once.
-                        Err(LendRefused {
-                            buffer,
-                            reason: LendRefusal::Capacity,
-                        }) => {
-                            self.recycle(buffer)?;
-                            Some(Refusal::Pressure)
-                        }
-                        // A backend that lends nothing now: a copy.
-                        Err(LendRefused {
-                            buffer,
-                            reason: LendRefusal::Unsupported | LendRefusal::Stopping,
-                        }) => {
-                            let refusal =
-                                copy_received(network, buffer.bytes(), &plan, CopyReason::Pressure)
-                                    .map_err(ActorFault::Contract)?;
-                            if counted {
-                                copied.kept = copied.kept.saturating_add(1);
-                            }
-                            self.recycle(buffer)?;
-                            refusal
+                        Err(refused_lend) => {
+                            self.lend_refused(refused_lend, &plan, &mut copied, network)?
                         }
                     };
                     if counted {
@@ -723,6 +703,77 @@ where
         }
         // The frame went where it goes; a lost slot ends the run named.
         lost.map_or(Ok(()), |violation| Err(ActorFault::Contract(violation)))
+    }
+
+    /// A frame of the link that carried EAPOL: it goes to the lifecycle, and
+    /// its data MSDU, if any, is copied to the network. Rare: out of the
+    /// ordinary path.
+    #[cold]
+    #[inline(never)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the route's state for one rare frame, borrowed"
+    )]
+    fn route_eapol<
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        frame: ActorRxBuffer<'id, D>,
+        plan: Option<MsduPlan>,
+        lane: LaneFrame<'id, D>,
+        (refused, copied): (&mut RxMsdusRefused, &mut RxMsdusCopied),
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> Result<(), Failed<'id, D>> {
+        if let Some(plan) = plan {
+            let refusal = copy_received(network, frame.bytes(), &plan, CopyReason::Format)
+                .map_err(ActorFault::Contract)?;
+            if <O as EventSink<ServiceEvent>>::ENABLED {
+                count(refused, refusal);
+                copied.shared = copied.shared.saturating_add(1);
+            }
+        }
+        self.hand_to_lifecycle(frame, lane, lifecycle)
+    }
+
+    /// A lend the port refused: for capacity the MSDU is refused and its
+    /// buffer goes back at once; a backend that lends nothing now gets a
+    /// copy. Rare: out of the ordinary path.
+    #[cold]
+    #[inline(never)]
+    fn lend_refused<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
+        &mut self,
+        refused: LendRefused<ActorRxBuffer<'id, D>>,
+        plan: &MsduPlan,
+        copied: &mut RxMsdusCopied,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> Result<Option<Refusal>, Failed<'id, D>> {
+        let LendRefused { buffer, reason } = refused;
+        match reason {
+            // The network holds all the port may lend: the frame was
+            // admitted and reordered, its MSDU is refused and its buffer
+            // goes back at once.
+            LendRefusal::Capacity => {
+                self.recycle(buffer)?;
+                Ok(Some(Refusal::Pressure))
+            }
+            // A backend that lends nothing now: a copy.
+            LendRefusal::Unsupported | LendRefusal::Stopping => {
+                let refusal = copy_received(network, buffer.bytes(), plan, CopyReason::Pressure)
+                    .map_err(ActorFault::Contract)?;
+                if <O as EventSink<ServiceEvent>>::ENABLED {
+                    copied.kept = copied.kept.saturating_add(1);
+                }
+                self.recycle(buffer)?;
+                Ok(refusal)
+            }
+        }
     }
 }
 

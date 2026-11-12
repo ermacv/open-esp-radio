@@ -138,18 +138,6 @@ impl<S: FrameStorage> LentFrame<S> {
         })
     }
 
-    /// The same frame in a wrapper of its storage. `wrap` keeps the bytes:
-    /// the payload range stays where it was.
-    pub fn map_storage<T: FrameStorage>(self, wrap: impl FnOnce(S) -> T) -> LentFrame<T> {
-        LentFrame {
-            storage: wrap(self.storage),
-            destination: self.destination,
-            source: self.source,
-            ether_type: self.ether_type,
-            payload: self.payload,
-        }
-    }
-
     pub fn into_parts(self) -> LentParts<S> {
         LentParts {
             storage: self.storage,

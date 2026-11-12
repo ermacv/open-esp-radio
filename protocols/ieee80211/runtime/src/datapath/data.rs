@@ -75,6 +75,7 @@ where
     }
 
     /// Hand the link's data state to the plane once the link carries data.
+    #[inline(never)]
     pub(super) fn connect_plane(&mut self) -> Result<(), Failed<'id, D>> {
         let Some(link) = self.link.as_mut().filter(|link| link.carries()) else {
             return Ok(());
@@ -97,6 +98,7 @@ where
     /// turn's instant, then publish when nothing is on the air. A TID that
     /// took one owes the lifecycle its traffic, at most once per
     /// [`TX_TRAFFIC_REFRESH`].
+    #[inline(never)]
     pub(super) fn intake<
         const TO: usize,
         const FROM: usize,
@@ -446,6 +448,7 @@ where
     /// the ended frames' way home while that way is clear; and once the
     /// stopped radio holds none of the network's memory, ask the network to
     /// stop. The network's last turn then takes back all its memory.
+    #[inline(never)]
     pub(super) fn return_network_memory<
         NS: NetworkStop,
         const TX_DEPTH: usize,

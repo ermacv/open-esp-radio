@@ -357,21 +357,7 @@ impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSu
 }
 /// The receive buffer a lent frame of [`Network`] keeps its bytes in. Dropping it
 /// returns the buffer to the radio.
-pub struct ReceivedStorage<N: Notifies = SameHart>(runtime::NetworkRx<LentRx<N>>);
-impl<N: Notifies> oer_protocols_network_port::FrameStorage for ReceivedStorage<N> {
-    fn bytes(&self) -> &[u8] {
-        self.0.bytes()
-    }
-    fn bytes_mut(&mut self) -> &mut [u8] {
-        self.0.bytes_mut()
-    }
-    fn advance(
-        &mut self,
-        by: usize,
-    ) -> Result<(), oer_protocols_network_port::StorageAdvanceRefused> {
-        self.0.advance(by)
-    }
-}
+pub type ReceivedStorage<N = SameHart> = runtime::NetworkRx<LentRx<N>>;
 impl<N: Notifies> Network<'_, N> {
     /// End the network's receive end of the station's queue for good, its
     /// receive having broken: the actor takes back what the queue holds,
@@ -395,23 +381,18 @@ impl<N: Notifies> NetDevice for Network<'_, N> {
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.inner.poll_receive_ready(cx)
     }
+    /// The station's own queue, its frames handed as they lie.
     fn receive(
         &mut self,
         limit: usize,
-        mut take: impl FnMut(
+        take: impl FnMut(
             oer_protocols_network_port::Incoming<
                 '_,
                 oer_protocols_network_port::LentFrame<ReceivedStorage<N>>,
             >,
         ),
     ) -> oer_protocols_network_port::ReceivedBatch {
-        use oer_protocols_network_port::Incoming;
-        self.inner.receive(limit, |incoming| {
-            take(match incoming {
-                Incoming::Lent(frame) => Incoming::Lent(frame.map_storage(ReceivedStorage)),
-                Incoming::Copied { frame, reason } => Incoming::Copied { frame, reason },
-            });
-        })
+        self.inner.receive(limit, take)
     }
 }
 /// Why the station did not start.
