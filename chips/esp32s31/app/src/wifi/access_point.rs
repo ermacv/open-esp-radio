@@ -41,14 +41,14 @@ pub type ApIpDevice =
 /// The access point's IP stack.
 pub type ApStack = embassy_net::Stack<'static, ApIpDevice>;
 
-static AP_STORAGE: StaticCell<AccessPointStorage> = StaticCell::new();
+static AP_STORAGE: StaticCell<AccessPointStorage<binding::Binding>> = StaticCell::new();
 static AP_IP: StaticCell<ApIpResources> = StaticCell::new();
 static AP_CONTROL: StaticCell<ip::Control<'static>> = StaticCell::new();
 
 /// How the access point's installation ended: its exit, or the
 /// installation that did not retire, whole
 /// ([`AccessPoint::installation_end`]).
-pub type ApInstallationEnd = ap::AccessPointEnd<binding::Binding>;
+pub type ApInstallationEnd = ap::AccessPointEndOwner<binding::Binding>;
 
 static AP_END: StaticCell<EndHome<ApInstallationEnd>> = StaticCell::new();
 

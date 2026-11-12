@@ -150,8 +150,12 @@ impl ApSettings {
     }
 }
 
-/// The storage of one access point, placed once by the image.
-pub struct AccessPointStorage {
+/// The storage of one access point, placed once by the image. Its active
+/// runner and completed end have separate permanent homes: an unfinished
+/// end can keep the active runner while the application owns that end.
+pub struct AccessPointStorage<W: Binding> {
+    completed: oer_portable_memory::StaticPlace<AccessPointEnd<W>>,
+    active: oer_portable_memory::StaticPlace<ApRunnerOf<W>>,
     peers: AccessPointPeerStorage,
     template: [u8; AP_BEACON_CAPACITY],
     network: ApNetworkStorage<TxMemory>,
@@ -159,9 +163,11 @@ pub struct AccessPointStorage {
     start: StartSlot,
 }
 
-impl AccessPointStorage {
+impl<W: Binding> AccessPointStorage<W> {
     pub const fn new() -> Self {
         Self {
+            completed: oer_portable_memory::StaticPlace::new(),
+            active: oer_portable_memory::StaticPlace::new(),
             peers: AccessPointPeerStorage::new(),
             template: [0; AP_BEACON_CAPACITY],
             network: ApNetworkStorage::new(),
@@ -208,7 +214,7 @@ impl StartSlot {
     }
 }
 
-impl Default for AccessPointStorage {
+impl<W: Binding> Default for AccessPointStorage<W> {
     fn default() -> Self {
         Self::new()
     }
@@ -318,6 +324,8 @@ pub type ApExit = ApExitOf<InitializationError>;
 
 /// The access point's task: it owns the radio.
 pub struct AccessPointRunner<W: Binding> {
+    completed: &'static mut oer_portable_memory::StaticPlace<AccessPointEnd<W>>,
+    active: &'static mut oer_portable_memory::StaticPlace<ApRunnerOf<W>>,
     boot: radio::Boot<W>,
     start: &'static StartSlot,
     network: ApNetworkEnd<'static, TxMemory>,
@@ -360,6 +368,11 @@ pub enum AccessPointEnd<W: Binding> {
         runner: ApInputs<W>,
     },
 }
+
+/// Ownership of an access point's end in its permanent home. Moving this
+/// handle moves no installation; dropping it destroys the end and every
+/// retained owner exactly once. The end can be inspected through `Deref`.
+pub type AccessPointEndOwner<W> = oer_portable_memory::Placed<'static, AccessPointEnd<W>>;
 
 /// What the access point's runner was handed that a refusal before its
 /// port's installation did not take, whole: its boot, or what a refused
@@ -416,7 +429,7 @@ impl<W: Binding> AccessPointEnd<W> {
 
 /// An access point's installation of `W` that did not retire.
 pub type UnfinishedAccessPointOf<W> = crate::access_point_end::UnfinishedAccessPoint<
-    ApRunnerOf<W>,
+    oer_portable_memory::Placed<'static, ApRunnerOf<W>>,
     oer_protocols_ieee80211_contracts_port::Unkept<
         'static,
         <Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Types,
@@ -437,7 +450,7 @@ pub type ApNetwork = ApNetDevice<'static>;
 pub fn access_point<W: Binding, S: NetworkTxSupply>(
     resources: Resources<W>,
     config: Config,
-    storage: &'static mut AccessPointStorage,
+    storage: &'static mut AccessPointStorage<W>,
     nonces: &'static mut crate::NonceSource,
 ) -> (
     AccessPointControl,
@@ -480,6 +493,8 @@ pub fn access_point<W: Binding, S: NetworkTxSupply>(
     let memory =
         NetworkTx::claim(pool, AP_BANK).unwrap_or_else(|_| W::fail(InitializationError::Tx));
     let AccessPointStorage {
+        completed,
+        active,
         peers,
         template,
         network,
@@ -500,6 +515,8 @@ pub fn access_point<W: Binding, S: NetworkTxSupply>(
         device,
         transmit,
         AccessPointRunner {
+            completed,
+            active,
             boot: radio::Boot {
                 cell,
                 wifi,
@@ -539,16 +556,20 @@ impl<W: Binding> AccessPointRunner<W> {
 
     /// Wait for the start, run the access point until its stop, then
     /// release the radio. A stop before the start ends it at once, with no
-    /// radio started.
-    pub async fn run(self) -> AccessPointEnd<W> {
+    /// radio started. The returned owner keeps the end in this access
+    /// point's storage, including an unfinished installation; it moves only
+    /// the handle to that storage.
+    pub async fn run(self) -> AccessPointEndOwner<W> {
         let slot = self.start;
         let end = self.serve().await;
         slot.ended.set(Some(end.exit()));
         end
     }
 
-    async fn serve(self) -> AccessPointEnd<W> {
+    async fn serve(self) -> AccessPointEndOwner<W> {
         let Self {
+            completed,
+            active,
             mut boot,
             start: slot,
             network,
@@ -557,10 +578,20 @@ impl<W: Binding> AccessPointRunner<W> {
             shared,
             mut nonces,
         } = self;
+        // The end owns large refused/unfinished installations. Construct it
+        // in its permanent home; only its destruction right crosses the
+        // serve/run/task/mailbox boundaries.
+        macro_rules! finish {
+            ($end:expr) => {
+                return oer_portable_memory::Placed::init(completed.uninit(), |place| {
+                    place.write($end)
+                })
+            };
+        }
         // A refusal before the port's installation returns every input.
         macro_rules! refuse {
             ($exit:expr, $installations:expr, $minted:expr, $boot:expr, $settings:expr, $peers:expr, $template:expr) => {
-                return AccessPointEnd::NotInstalled {
+                finish!(AccessPointEnd::NotInstalled {
                     exit: $exit,
                     inputs: radio::NotInstalled::<W> {
                         installations: $installations,
@@ -574,7 +605,7 @@ impl<W: Binding> AccessPointRunner<W> {
                         peers: $peers,
                         template: $template,
                     },
-                }
+                })
             };
         }
         let took_nothing =
@@ -748,7 +779,7 @@ impl<W: Binding> AccessPointRunner<W> {
                 let unavailable =
                     radio::port_refused::<W>(InitializationError::Backend, &mut *parts.device)
                         .await;
-                return AccessPointEnd::Refused {
+                finish!(AccessPointEnd::Refused {
                     exit: ApExit::Unavailable(unavailable),
                     inputs: radio::RefusedInstall {
                         parts,
@@ -764,7 +795,7 @@ impl<W: Binding> AccessPointRunner<W> {
                         peers: ApPeers::Service(service),
                         template: ApTemplate::Beacon(beacon),
                     },
-                };
+                });
             }
         };
         // The access point holds every ticket (`TX_TICKETS` is at most its
@@ -811,18 +842,20 @@ impl<W: Binding> AccessPointRunner<W> {
             packet_numbers: ccmp::TX_PACKET_NUMBER_STEP,
             group_generation: 1,
         };
-        let runner = ApRunner::new(
-            port,
-            commands,
-            ap_resources,
-            engine,
-            policy,
-            channel,
-            gtk,
-            network,
-            (),
-            nonces,
-        );
+        let runner = oer_portable_memory::Placed::init(active.uninit(), |place| {
+            place.write(ApRunner::new(
+                port,
+                commands,
+                ap_resources,
+                engine,
+                policy,
+                channel,
+                gtk,
+                network,
+                (),
+                nonces,
+            ))
+        });
         let mut runner = runner;
         let end = runner.run(shared, &EmbassyClock).await;
         let (ended, stop) = match end {
@@ -861,8 +894,8 @@ impl<W: Binding> AccessPointRunner<W> {
         )
         .await
         {
-            Retired::Completed(exit) => AccessPointEnd::Ended(exit),
-            Retired::Unfinished(unfinished) => AccessPointEnd::Unfinished(unfinished),
+            Retired::Completed(exit) => finish!(AccessPointEnd::Ended(exit)),
+            Retired::Unfinished(unfinished) => finish!(AccessPointEnd::Unfinished(unfinished)),
         }
     }
 }

@@ -97,19 +97,34 @@ type Exit = ApExitOf<()>;
 
 /// What a retire of the test left: its exit, its unfinished whole if one,
 /// the last publication and how many times the stop was watched.
-struct Left<'a, 'b> {
+struct Left<'a, 'b: 'a> {
     exit: Exit,
     unfinished: Option<
-        UnfinishedAccessPoint<TestRunner<'a, 'b>, Receipt<'a>, Receipt<'a>, Receipt<'a>, ()>,
+        UnfinishedAccessPoint<
+            oer_portable_memory::Placed<'a, TestRunner<'a, 'b>>,
+            Receipt<'a>,
+            Receipt<'a>,
+            Receipt<'a>,
+            (),
+        >,
     >,
     published: Option<Exit>,
     watched: u8,
 }
 
-fn retired_with<'a, 'b>(runner: TestRunner<'a, 'b>, ended: ApEnded, stop: Stop) -> Left<'a, 'b> {
+fn retired_with<'a, 'b: 'a>(
+    runner: TestRunner<'a, 'b>,
+    ended: ApEnded,
+    stop: Stop,
+) -> Left<'a, 'b> {
     let clock = VirtualClock::<2>::new();
     let published = Cell::new(None);
     let watched = runner.watched;
+    // Production keeps its runner at a permanent address. The backing is
+    // uninitialized after the placed owner's destructor; it holds no owners.
+    let place = std::boxed::Box::leak(std::boxed::Box::new(core::mem::MaybeUninit::uninit()));
+    let runner = oer_portable_memory::Placed::init(place, |place| place.write(runner));
+    let address = core::ptr::from_ref(&*runner);
     let retired = ready(retire(
         &published,
         runner,
@@ -121,7 +136,10 @@ fn retired_with<'a, 'b>(runner: TestRunner<'a, 'b>, ended: ApEnded, stop: Stop) 
     ));
     let (exit, unfinished) = match retired {
         Retired::Completed(exit) => (exit, None),
-        Retired::Unfinished(unfinished) => (unfinished.cause, Some(unfinished)),
+        Retired::Unfinished(unfinished) => {
+            assert_eq!(core::ptr::from_ref(&*unfinished.owner), address);
+            (unfinished.cause, Some(unfinished))
+        }
     };
     Left {
         exit,
@@ -132,7 +150,7 @@ fn retired_with<'a, 'b>(runner: TestRunner<'a, 'b>, ended: ApEnded, stop: Stop) 
 }
 
 /// Retire a runner over `port` that holds `unkept`, as the run ended.
-fn retired<'a, 'b>(
+fn retired<'a, 'b: 'a>(
     port: TestPort<'a>,
     unkept: Option<Receipt<'a>>,
     stop: Stop,

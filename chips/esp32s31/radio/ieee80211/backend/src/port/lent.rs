@@ -48,6 +48,16 @@ impl Default for SameHart {
     }
 }
 
+// Dropping refused preparations can merge several copies of the owned
+// waker's destructor into an untyped enum cleanup tail. Empty and destroy it
+// in this cold boundary, retaining the waker operation for the image proof.
+impl Drop for SameHart {
+    #[inline(never)]
+    fn drop(&mut self) {
+        drop(self.network.take());
+    }
+}
+
 impl LentNotifies for SameHart {
     fn register_returned(&self, cx: &mut Context<'_>) {
         self.network.register(cx.waker());
@@ -269,6 +279,28 @@ mod tests {
     use super::*;
     use core::task::Waker;
     use std::boxed::Box;
+
+    #[test]
+    fn dropping_an_unused_same_hart_notify_releases_its_waker_without_waking_it() {
+        use std::sync::Arc;
+        use std::task::Wake;
+        struct Count(AtomicUsize);
+        impl Wake for Count {
+            fn wake(self: Arc<Self>) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        let count = Arc::new(Count(AtomicUsize::new(0)));
+        let waker = Waker::from(count.clone());
+        let notify = SameHart::new();
+        notify.register_returned(&mut Context::from_waker(&waker));
+        assert_eq!(Arc::strong_count(&count), 3);
+        drop(notify);
+        assert_eq!(Arc::strong_count(&count), 2);
+        assert_eq!(count.0.load(Ordering::Relaxed), 0);
+        drop(waker);
+        assert_eq!(Arc::strong_count(&count), 1);
+    }
 
     /// A notify that counts its registrations and notifications.
     struct Counted {

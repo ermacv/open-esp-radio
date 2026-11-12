@@ -927,6 +927,16 @@ struct Starts {
 }
 
 impl Starts {
+    // An AP start refused by the executor drops its network endpoint and
+    // notifies the producer. Keep that cleanup separate from the datapath's:
+    // merging their Waker tails loses the operation's debug scope and the
+    // image can no longer prove its supported waker targets.
+    #[cfg(feature = "access-point")]
+    #[inline(never)]
+    fn spawn_access_point(library: &Spawner<SdkTasks>, start: wifi::ApStart) -> bool {
+        SdkTasks::access_point(library, start).is_ok()
+    }
+
     fn spawn(self, library: &Spawner<SdkTasks>) {
         let Self { watchdog, pending } = self;
         let started = SdkTasks::watchdog(library, watchdog).is_ok();
@@ -942,7 +952,7 @@ impl Starts {
         let started = started
             && pending
                 .access_point
-                .is_none_or(|start| SdkTasks::access_point(library, start).is_ok());
+                .is_none_or(|start| Self::spawn_access_point(library, start));
         if !started {
             fail(Error::AlreadyStarted.name());
         }
