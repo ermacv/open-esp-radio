@@ -21,6 +21,19 @@ It models one radio's air: rates and retries are fixed per peer, and it has no
 loss, aggregated air, collisions or other stations' traffic. Its scenarios check
 ownership and the service's progress, not claims about real air.
 
+`tests/mixed_service.rs` instead composes the real service, local producer,
+`DevicePort`, station `LocalTx` and its outgoing and returned slot queues, with
+lent receive frames. It fills the transmit pool, leaves prepared work waiting
+for room, then returns one buffer together with receive readiness, just after
+the readiness snapshot, or after a receive turn. The executor polls only after
+a wake. The cases check that one returned buffer suffices to publish, including
+with more received frames than one intake batch, and bound the receive turn
+that may precede it. The event tape also records producer refill followed by
+`NoRoom`: a turn with none of the four events counted by the load image's
+"empty" statistic. This composition models no RF time, hart cost or throughput.
+With the longer RX queue the same refill and refusal accompany a received
+frame, so that turn has a counted event.
+
 ## Station simulation
 
 `tests/station/` composes the station and the network as the `hil-wifi-network`
