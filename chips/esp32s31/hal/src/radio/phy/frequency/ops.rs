@@ -382,6 +382,31 @@ pub fn read_memory<P: PhyPlacement>(
     frequency.fe.read_frequency_memory_read_result().value()
 }
 
+/// The held mode-0 read used by the P-FREQ diagnostic sheet.
+///
+/// SOURCE: HW19_S31_FREQUENCY_SELECTION_20261027. This preserves that
+/// experiment's selection and read pulse; its empirical reference does not
+/// establish the returned word's decoding or a memory-bank geometry.
+pub fn read_memory_mode0<P: PhyPlacement>(
+    frequency: &mut FrequencyRegisters<P>,
+    address: FrequencyMemoryAddress,
+) -> u32 {
+    frequency.fe.modify_frequency_control(|w| {
+        w.set_memory_address_low(address.low())
+            .set_memory_address_high(address.high());
+    });
+    frequency.fe.modify_i2c_number_control(|w| {
+        w.set_memory_read_mode(Bits::truncate(0));
+    });
+    frequency.fe.modify_frequency_memory_read_control(|w| {
+        w.set_read_pulse(true);
+    });
+    frequency.fe.modify_frequency_memory_read_control(|w| {
+        w.set_read_pulse(false);
+    });
+    frequency.fe.read_frequency_memory_read_result().value()
+}
+
 /// Restore the low frequency-control channel index without pulsing a switch.
 pub fn set_channel_index<P: PhyPlacement>(frequency: &mut FrequencyRegisters<P>, index: u8) {
     frequency.fe.modify_frequency_control(|w| {

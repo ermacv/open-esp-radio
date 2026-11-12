@@ -147,6 +147,20 @@ pub fn read_memory(registers: &mut impl SharedPhyAccess, address: FrequencyMemor
     )
 }
 
+/// Held mode-0 frequency-memory read for the P-FREQ diagnostic sheet
+/// (HW19_S31_FREQUENCY_SELECTION_20261027). The empirical reference and
+/// high-address/reset ambiguity remain the diagnostic caller's contract.
+#[cfg(target_arch = "riscv32")]
+pub fn read_memory_mode0(
+    registers: &mut impl SharedPhyAccess,
+    address: FrequencyMemoryAddress,
+) -> u32 {
+    ops::read_memory_mode0(
+        &mut phy_blocks_mut(registers).phy_frequency_channel_oracle,
+        address,
+    )
+}
+
 /// Restore the frequency-control channel index without starting a switch.
 #[cfg(target_arch = "riscv32")]
 pub fn restore_channel_index(registers: &mut impl SharedPhyAccess, frequency_index: u8) {
