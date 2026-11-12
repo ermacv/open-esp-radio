@@ -428,32 +428,13 @@ where
         lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) -> Result<(), Failed<'id, D>> {
-        let facts = core::mem::take(&mut self.facts);
-        D::span(ActorSpan::Transmit, false);
-        let transmitted = self.transmit(facts, lifecycle, network);
-        D::span(ActorSpan::Transmit, true);
-        transmitted?;
-        // The lifecycle's messages go before the received units: a link
-        // handed over is in force for every unit this turn routes.
-        D::span(ActorSpan::Messages, false);
-        let served = self.messages(cx, lifecycle, network);
-        D::span(ActorSpan::Messages, true);
-        if served? == Messages::Left {
-            // The budget left messages queued, a link among them: the
-            // units wait for the turn that took them, which follows at once.
-            self.facts.rx |= facts.rx;
-            self.again = true;
-        } else {
-            D::span(ActorSpan::Receive, false);
-            let received = self.rx(facts.rx, lifecycle, network);
-            D::span(ActorSpan::Receive, true);
-            // The MSDUs staged before a failure are the network's: they are
-            // published before the failure ends the turn, never left in
-            // their slots unseen.
-            network.receive.flush();
-            received?;
-        }
+        let routed = self.route_units(cx, lifecycle, network);
+        // The turn's one publication of the MSDUs it staged, on every exit
+        // of the steps that route units: those staged before a failure are
+        // the network's too, published before the failure ends the turn,
+        // never left in their slots unseen.
         network.receive.flush();
+        routed?;
         D::span(ActorSpan::Intake, false);
         let taken = self.intake(lifecycle, network);
         D::span(ActorSpan::Intake, true);
@@ -469,6 +450,47 @@ where
         self.connect_plane()?;
         self.flush(lifecycle);
         self.lifecycle_open(lifecycle)
+    }
+
+    /// The turn's steps that route received units and stage their MSDUs for
+    /// the network: the transmit service (a receive cut it staged), the
+    /// lifecycle's messages (a command's cut), then the receive work. The
+    /// caller publishes what they staged once, whatever they return.
+    fn route_units<
+        const TO: usize,
+        const FROM: usize,
+        const RETURNS: usize,
+        NS: NetworkStop,
+        const TX_DEPTH: usize,
+        const RX_DEPTH: usize,
+        N: Notifies,
+    >(
+        &mut self,
+        cx: &mut Context<'_>,
+        lifecycle: &mut LifecycleEnds<'_, 'id, D, TO, FROM, RETURNS>,
+        network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> Result<(), Failed<'id, D>> {
+        let facts = core::mem::take(&mut self.facts);
+        D::span(ActorSpan::Transmit, false);
+        let transmitted = self.transmit(facts, lifecycle, network);
+        D::span(ActorSpan::Transmit, true);
+        transmitted?;
+        // The lifecycle's messages go before the received units: a link
+        // handed over is in force for every unit this turn routes.
+        D::span(ActorSpan::Messages, false);
+        let served = self.messages(cx, lifecycle, network);
+        D::span(ActorSpan::Messages, true);
+        if served? == Messages::Left {
+            // The budget left messages queued, a link among them: the
+            // units wait for the turn that took them, which follows at once.
+            self.facts.rx |= facts.rx;
+            self.again = true;
+            return Ok(());
+        }
+        D::span(ActorSpan::Receive, false);
+        let received = self.rx(facts.rx, lifecycle, network);
+        D::span(ActorSpan::Receive, true);
+        received
     }
 
     /// The run ends once the lifecycle's reception closed: nothing the
