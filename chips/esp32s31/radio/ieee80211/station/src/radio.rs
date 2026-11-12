@@ -1683,8 +1683,8 @@ impl<W: Binding> port::Device<TX> for Device<W> {
     fn hardware(&mut self) -> Result<&mut Self::Hardware, Fault> {
         <Inner<W> as port::Device<TX>>::hardware(&mut self.0)
     }
-    fn next_deadline(&self, now: Instant) -> Option<Instant> {
-        <Inner<W> as port::Device<TX>>::next_deadline(&self.0, now)
+    fn next_deadline(&self) -> Option<Instant> {
+        <Inner<W> as port::Device<TX>>::next_deadline(&self.0)
     }
     fn event_waiting(&self) -> bool {
         <Inner<W> as port::Device<TX>>::event_waiting(&self.0)

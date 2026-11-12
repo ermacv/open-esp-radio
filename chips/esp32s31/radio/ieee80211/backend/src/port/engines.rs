@@ -352,8 +352,6 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     now: Instant,
     /// The cached deadline, recomputed whenever a queue changes.
     deadline: Option<Instant>,
-    /// The receive ring's continuation.
-    rx_later: Option<Instant>,
     /// A group mutation held at its barrier since this instant.
     group_since: Option<Instant>,
     /// Whose group mutation holds the receive cut.
@@ -678,7 +676,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             expired: 0,
             now: Instant::from_micros(0),
             deadline: None,
-            rx_later: None,
             group_since: None,
             group_mutator: None,
             access_point_holding: None,
@@ -782,7 +779,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.expired = 0;
         self.now = Instant::from_micros(0);
         self.deadline = None;
-        self.rx_later = None;
         self.forget_held();
         self.reopen = false;
         self.stop_served = false;
@@ -1064,6 +1060,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.unkept.lose_right_for_test();
     }
 
+    /// Recompute the cached deadline at the port's last operation's
+    /// instant, as a call that takes no instant of its own does.
+    #[cfg(test)]
+    pub(crate) fn recompute_deadline_for_test(&mut self) {
+        self.recompute_deadline();
+    }
+
     /// Take every published attempt out of its place, as a core
     /// completing a queue no attempt was published on would find it.
     #[cfg(test)]
@@ -1149,8 +1152,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
         };
         add(core_views::deadline::<Id, D, B>(self.driver.core.view()));
-        add(self.device.next_deadline(self.now));
-        add(self.rx_later);
+        add(self.device.next_deadline());
+        // The receive ring's continuation is the device's, judged at its
+        // own fresh reading (`next_deadline`): a passed one never bounds
+        // the deadline ahead of a later one.
         match self.state {
             PortState::Starting { since }
             | PortState::Stopping { since }
@@ -2780,11 +2785,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         settle_lent(&self.shared.network, &self.rx_out, self.device)
             .map_err(|fault| self.record(fault))?;
-        // This batch serves the continuation the last one named: a passed
-        // one no longer bounds the deadline, which would otherwise ask for
-        // a transmit service at every turn.
-        if self.rx_later.is_some_and(|at| at <= now) {
-            self.rx_later = None;
+        // A cached deadline this batch reached may be the receive
+        // continuation it now serves, which no longer bounds the port: it
+        // would otherwise ask for a transmit service at every turn.
+        if self.deadline.is_some_and(|at| at <= now) {
             self.recompute_deadline();
         }
         let room = usize::from(room).min(RX_HELD.saturating_sub(self.rx_out.get()));
@@ -2801,16 +2805,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                     return Ok(RxBatch::new(ready, RxThen::More));
                 }
                 DevicePull::Again => {}
+                // The ring's service may have moved its own deadline too:
+                // the batch's end recomputes the port's, once per batch.
                 DevicePull::Empty => {
-                    if self.rx_later.take().is_some() {
-                        self.recompute_deadline();
-                    }
+                    self.recompute_deadline();
                     return Ok(RxBatch::new(0, RxThen::Empty));
                 }
                 DevicePull::Later(at) => {
-                    if self.rx_later.replace(at) != Some(at) {
-                        self.recompute_deadline();
-                    }
+                    self.recompute_deadline();
                     return Ok(RxBatch::new(0, RxThen::Later(at)));
                 }
             }
