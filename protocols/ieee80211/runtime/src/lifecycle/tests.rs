@@ -113,7 +113,10 @@ impl<'s> LifecyclePort<'s> for PairPort<'s> {
         match buffer {
             ModelAnyBuffer::Small(buffer) => Ok(ReturnedMpdu::Fresh(buffer)),
             ModelAnyBuffer::SmallSent(buffer) => Ok(ReturnedMpdu::Sent(buffer)),
-            buffer @ (ModelAnyBuffer::Large(_) | ModelAnyBuffer::LargeSent(_)) => Err(buffer),
+            buffer @ (ModelAnyBuffer::Large(_)
+            | ModelAnyBuffer::LargeSent(_)
+            | ModelAnyBuffer::Network(_)
+            | ModelAnyBuffer::NetworkSent(_)) => Err(buffer),
         }
     }
 }

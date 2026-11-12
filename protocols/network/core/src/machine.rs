@@ -9,10 +9,10 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_portable_wire::Writer;
 use oer_protocols_network_port::{
-    Candidate, Class, CopyReason, EthernetFrameView, Holding, LinkSnapshot, LinkState, Ready,
+    Class, CopyReason, EthernetFrameView, FrameMeta, Holding, LinkSnapshot, LinkState, Ready,
 };
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
-use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header, udp_field};
+use oer_protocols_network_wire::checksum::{Checksum, ipv4_pseudo_header};
 use oer_protocols_network_wire::dhcp;
 use oer_protocols_network_wire::ethernet::{self, EtherType, EthernetHeader};
 use oer_protocols_network_wire::icmp::{self, Echo, PROTOCOL_ICMP};
@@ -20,6 +20,7 @@ use oer_protocols_network_wire::ip::{
     Dscp, IPV4_HEADER_LEN, Ipv4Fields, Ipv4Header, Ipv4VersionIhl,
 };
 use oer_protocols_network_wire::transport::{PROTOCOL_UDP, Ports, UDP_HEADER_LEN, UdpHeader};
+use oer_protocols_network_wire::udp_frame::UdpFrameTemplate;
 
 use crate::block::{Block, CoreBrand, Group, Pool, Tag};
 use crate::dhcp::{Change, Client, Destination, DhcpDrop, DhcpState, Lease, Outgoing};
@@ -40,8 +41,6 @@ const TIME_TO_LIVE: u8 = 64;
 const HEADERS: usize = ethernet::HEADER_LEN + IPV4_HEADER_LEN + UDP_HEADER_LEN;
 /// An ARP frame.
 const ARP_FRAME: usize = ethernet::HEADER_LEN + arp::PACKET_LEN;
-/// Where the UDP header starts in a frame.
-const UDP_AT: usize = ethernet::HEADER_LEN + IPV4_HEADER_LEN;
 /// An echo reply's Ethernet and IPv4 headers.
 const ECHO_HEADERS: usize = ethernet::HEADER_LEN + IPV4_HEADER_LEN;
 /// What control work and a default socket carry.
@@ -85,9 +84,9 @@ enum Work {
     },
 }
 
-/// Work that is ready, before any frame of it exists: what a scheduler needs
-/// to choose it. Its grant sends to the station address the core found, so
-/// what a scheduler reads cannot be changed:
+/// Work that is ready, before any frame of it exists. Its grant sends to the
+/// station address the core found, so what its reader sees cannot be
+/// changed:
 ///
 /// ```compile_fail,E0616
 /// # use oer_protocols_network_core::Demand;
@@ -97,21 +96,15 @@ enum Work {
 /// ```
 #[derive(Debug, Eq, PartialEq)]
 pub struct Demand<B> {
-    /// What a scheduler may know of it, as the core found it: read only, for
-    /// its grant names the station address in it.
+    /// What is known of it, as the core found it: read only, for its grant
+    /// names the station address in it.
     ready: Ready,
     work: Work,
     brand: Tag<B>,
 }
 
-impl<B> Candidate for Demand<B> {
-    fn ready(&self) -> &Ready {
-        &self.ready
-    }
-}
-
 impl<B> Demand<B> {
-    /// What a scheduler may know of it.
+    /// What is known of it.
     pub const fn ready(&self) -> &Ready {
         &self.ready
     }
@@ -142,13 +135,13 @@ pub(crate) enum Frame<'a, T> {
     /// A stored datagram's: its data is copied into the slot after the
     /// headers and summed in the same pass, the UDP checksum last.
     Datagram {
-        headers: UdpHeaders,
+        headers: UdpHeaders<'a>,
         data: &'a [u8],
     },
     /// A declared work's: its producer fills the data in the slot, between
     /// the headers written before and the checksum written after.
     Produced {
-        headers: UdpHeaders,
+        headers: UdpHeaders<'a>,
         length: usize,
         work: WorkId,
         /// Its producer's tag, from the work's one record.
@@ -157,7 +150,7 @@ pub(crate) enum Frame<'a, T> {
     /// The DHCP client's message, written in the slot after its headers,
     /// the UDP checksum last.
     Dhcp {
-        headers: UdpHeaders,
+        headers: UdpHeaders<'a>,
         message: Outgoing,
     },
     /// An echo reply: the request's identity and data under a new header.
@@ -205,6 +198,24 @@ pub enum FillFailed {
 }
 
 impl<T: Copy> Frame<'_, T> {
+    /// What the port is told of the frame before it is written: its length,
+    /// and the DSCP its IP header carries, the same field the write puts
+    /// there.
+    pub(crate) fn meta(&self) -> FrameMeta {
+        let dscp = match self {
+            Self::Arp(_) => None,
+            Self::Datagram { headers, .. }
+            | Self::Produced { headers, .. }
+            | Self::Dhcp { headers, .. } => Some(headers.dscp),
+            // An echo reply's header is written best effort.
+            Self::Echo { .. } => Some(BEST_EFFORT),
+        };
+        FrameMeta {
+            length: self.length(),
+            dscp,
+        }
+    }
+
     pub(crate) fn length(&self) -> usize {
         match self {
             Self::Arp(frame) => frame.len(),
@@ -254,7 +265,8 @@ impl<T: Copy> Frame<'_, T> {
                 let sum = sum
                     .copied(data, rest)
                     .map_err(|_| FillFailed::SlotTooShort)?;
-                headers.close(head, sum)
+                UdpHeaders::close(head, sum);
+                Ok(())
             }
             Self::Produced {
                 headers,
@@ -279,7 +291,7 @@ impl<T: Copy> Frame<'_, T> {
                 let (sum, left) = payload
                     .finish()
                     .ok_or(FillFailed::Declined(Declined::Unwritable))?;
-                headers.close(head, sum)?;
+                UdpHeaders::close(head, sum);
                 room.hold(left.and_then(|run| {
                     Some(Held {
                         at: run.at.checked_add(HEADERS)?,
@@ -305,7 +317,11 @@ fn write_arp(slot: &mut [u8], frame: &[u8; ARP_FRAME]) -> Result<(), FillFailed>
 /// checksum last.
 #[cold]
 #[inline(never)]
-fn write_dhcp(slot: &mut [u8], headers: &UdpHeaders, message: &Outgoing) -> Result<(), FillFailed> {
+fn write_dhcp(
+    slot: &mut [u8],
+    headers: &UdpHeaders<'_>,
+    message: &Outgoing,
+) -> Result<(), FillFailed> {
     let (head, rest, sum) = headers.open(slot)?;
     let data = rest
         .get_mut(..message.length())
@@ -313,7 +329,8 @@ fn write_dhcp(slot: &mut [u8], headers: &UdpHeaders, message: &Outgoing) -> Resu
     message
         .write(&mut Writer::new(data))
         .map_err(|_| FillFailed::SlotTooShort)?;
-    headers.close(head, sum.with(data))
+    UdpHeaders::close(head, sum.with(data));
+    Ok(())
 }
 
 /// Write an echo reply into `slot`: the request's identity and data under
@@ -334,56 +351,143 @@ fn write_echo(
         .map_err(|_| FillFailed::SlotTooShort)
 }
 
-/// A UDP datagram's Ethernet, IPv4 and UDP headers, as their fields: each
-/// is written once, into the port's slot, when the frame is.
+/// A UDP datagram's headers: its flow's template, borrowed from what its
+/// socket prepared or made for this frame alone, the length of its data,
+/// which the frame's making checked fits, and its identification. The
+/// frame's write copies the template's octets into the port's slot once
+/// and writes the varying fields in place, the UDP checksum last.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct UdpHeaders {
-    ethernet: EthernetHeader,
-    ip: Ipv4Fields,
-    /// Its checksum zero: the frame's write sums it.
-    udp: UdpHeader,
+pub(crate) struct UdpHeaders<'a> {
+    template: Template<'a>,
+    length: u16,
+    identification: u16,
+    /// The DSCP its IPv4 header carries.
+    dscp: Dscp,
 }
 
-impl UdpHeaders {
-    /// Write the Ethernet and IPv4 headers at the front of `slot`: the
-    /// headers' region, whose UDP header [`Self::close`] writes last, the
-    /// data's region behind it, and the sum the UDP checksum starts from, of
-    /// its pseudo header and its header.
+#[derive(Clone, Copy, Debug)]
+enum Template<'a> {
+    Prepared(&'a UdpFrameTemplate),
+    Own(UdpFrameTemplate),
+}
+
+impl<'a> UdpHeaders<'a> {
+    /// The headers of these fields, for a datagram of `length` octets of
+    /// data: none when it does not fit their lengths.
+    fn new(
+        ethernet: &EthernetHeader,
+        ip: &Ipv4Fields,
+        ports: Ports,
+        length: usize,
+    ) -> Option<Self> {
+        Some(Self {
+            template: Template::Own(UdpFrameTemplate::new(ethernet, ip, ports)),
+            length: fits(length)?,
+            identification: ip.identification,
+            dscp: Dscp::from_field(ip.services.dscp()),
+        })
+    }
+
+    /// The headers of `prepared`'s flow for a datagram of `length` octets
+    /// of data, numbered `identification`.
+    fn prepared(prepared: &'a Prepared, length: usize, identification: u16) -> Option<Self> {
+        Some(Self {
+            template: Template::Prepared(&prepared.template),
+            length: fits(length)?,
+            identification,
+            dscp: prepared.dscp,
+        })
+    }
+
+    /// Write the headers at the front of `slot`: the headers' region, whose
+    /// UDP checksum [`Self::close`] writes last, the data's region behind
+    /// it, and the sum the UDP checksum starts from.
     fn open<'s>(
         &self,
         slot: &'s mut [u8],
-    ) -> Result<(&'s mut [u8], &'s mut [u8], Checksum), FillFailed> {
-        let short = |_| FillFailed::SlotTooShort;
+    ) -> Result<(&'s mut [u8; HEADERS], &'s mut [u8], Checksum), FillFailed> {
         let (head, rest) = slot
-            .split_at_mut_checked(HEADERS)
+            .split_first_chunk_mut::<HEADERS>()
             .ok_or(FillFailed::SlotTooShort)?;
-        let mut writer = Writer::new(head);
-        self.ethernet.write(&mut writer).map_err(short)?;
-        writer.write(&self.ip.to_bytes()).map_err(short)?;
-        let pseudo = ipv4_pseudo_header(
-            self.ip.source,
-            self.ip.destination,
-            PROTOCOL_UDP,
-            self.udp.length,
-        );
-        let sum = Checksum::new().with(&pseudo).with(&self.udp.to_bytes());
+        let template = match &self.template {
+            Template::Prepared(template) => template,
+            Template::Own(template) => template,
+        };
+        let sum = template
+            .write(head, usize::from(self.length), self.identification)
+            // The length was checked when the frame was made.
+            .map_err(|_| FillFailed::SlotTooShort)?;
         Ok((head, rest, sum))
     }
 
-    /// Write the UDP header into the headers' region `head`, with the
-    /// checksum `sum` finishes, once the data it covers is in the slot.
-    fn close(&self, head: &mut [u8], sum: Checksum) -> Result<(), FillFailed> {
-        let checksum = udp_field(sum.finish());
-        let field = head.get_mut(UDP_AT..).ok_or(FillFailed::SlotTooShort)?;
-        Writer::new(field)
-            .write(
-                &UdpHeader {
-                    checksum,
-                    ..self.udp
-                }
-                .to_bytes(),
-            )
-            .map_err(|_| FillFailed::SlotTooShort)
+    /// Write the UDP checksum `sum` finishes into the headers' region,
+    /// once the data it covers is in the slot.
+    fn close(head: &mut [u8; HEADERS], sum: Checksum) {
+        UdpFrameTemplate::close(head, sum);
+    }
+}
+
+/// `length` octets of data as the headers' field, when the UDP and IPv4
+/// lengths both fit.
+fn fits(length: usize) -> Option<u16> {
+    let length = u16::try_from(length).ok()?;
+    length.checked_add((IPV4_HEADER_LEN + UDP_HEADER_LEN) as u16)?;
+    Some(length)
+}
+
+/// What a socket's datagram to one remote shares with the next to it: its
+/// next hop, the look that found the neighbor's station address, and its
+/// headers' template. It holds while the interface's address version and
+/// that look hold and the remote is the same; the socket's port and marking
+/// stay for the socket's life, which made it. A datagram it serves skips
+/// the route, the neighbor table and the headers' assembly; one it does not
+/// serve takes them and prepares the next.
+#[derive(Clone, Copy, Debug)]
+struct Prepared {
+    remote: Remote,
+    version: u32,
+    hop: Option<[u8; 4]>,
+    /// The look and the station address it found; none for a broadcast.
+    found: Option<(Holds, [u8; 6])>,
+    template: UdpFrameTemplate,
+    dscp: Dscp,
+}
+
+impl Prepared {
+    fn new(
+        remote: Remote,
+        version: u32,
+        hop: Option<[u8; 4]>,
+        found: Option<(Holds, [u8; 6])>,
+        ethernet: &EthernetHeader,
+        ip: &Ipv4Fields,
+        ports: Ports,
+    ) -> Self {
+        Self {
+            remote,
+            version,
+            hop,
+            found,
+            template: UdpFrameTemplate::new(ethernet, ip, ports),
+            dscp: Dscp::from_field(ip.services.dscp()),
+        }
+    }
+
+    /// Whether this serves a datagram to `remote` through `hop` now.
+    fn serves<const N: usize>(
+        &self,
+        remote: Remote,
+        hop: Option<[u8; 4]>,
+        version: u32,
+        neighbors: &Neighbors<N>,
+        now: Instant,
+    ) -> bool {
+        self.remote == remote
+            && self.hop == hop
+            && self.version == version
+            && self
+                .found
+                .is_none_or(|(holds, _)| neighbors.holds_still(&holds, now))
     }
 }
 
@@ -695,6 +799,8 @@ struct Socket<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: us
     /// socket's creation, so a close always has a place.
     places: Places<'m, B, SIZE, CREDITS, T>,
     received: heapless::Deque<Datagram<'m, B, SIZE>, RECEIVED>,
+    /// What its last datagram prepared for the next to the same remote.
+    prepared: Option<Prepared>,
 }
 
 impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: Copy>
@@ -711,6 +817,7 @@ impl<'m, B, const SIZE: usize, const CREDITS: usize, const RECEIVED: usize, T: C
             group: Group::shared(),
             places: Places::new(),
             received: heapless::Deque::new(),
+            prepared: None,
         }
     }
 
@@ -763,6 +870,9 @@ pub struct Core<
     /// end at publication, a commit or a reject, moves it past its socket.
     cursor: usize,
     identification: u16,
+    /// How often a socket's datagrams were prepared.
+    #[cfg(test)]
+    prepares: usize,
     /// The last serial given: 2^64 of them outlast any device.
     serial: u64,
     /// Moves whenever a neighbor entry may have become free for a new send:
@@ -820,6 +930,8 @@ impl<
             sockets: [const { Socket::new() }; SOCKETS],
             cursor: 0,
             identification: 0,
+            #[cfg(test)]
+            prepares: 0,
             serial: brand.serial,
             neighbor_changes: 0,
             ipv4,
@@ -1048,6 +1160,8 @@ impl<
         socket.lends = matches!(mode, Mode::Lend);
         socket.dscp = dscp;
         socket.group = group;
+        // A new socket's port and marking: nothing an earlier one prepared.
+        socket.prepared = None;
         Ok(SocketId {
             index,
             serial,
@@ -1137,22 +1251,101 @@ impl<
         if datagram > usize::from(self.interface.mtu()) {
             return Err(SendRefusal::TooLong);
         }
+        let usable = self.usable(now);
         let open = self
-            .socket_mut(socket.index, socket.serial)
-            .filter(|open| open.open)
+            .sockets
+            .get(usize::from(socket.index))
+            .filter(|open| open.serial == socket.serial && open.open)
             .ok_or(SendRefusal::Stale)?;
         let number = open.places.vacant().ok_or(SendRefusal::NoPlace)?;
-        let ipv4 = self.usable(now).ok_or(SendRefusal::NoAddress)?;
-        let hop = if self.is_broadcast(remote.address) {
-            None
-        } else {
-            let hop = ipv4.next_hop(remote.address).ok_or(SendRefusal::NoRoute)?;
-            if self.resolve_for_data(now, hop) == Lookup::Full {
+        let ipv4 = usable.ok_or(SendRefusal::NoAddress)?;
+        // What the last datagram to this remote prepared holds: its route
+        // and its neighbor are this one's, and the neighbor is known, so a
+        // resolve takes nothing. Only the data's share of the table is
+        // asked again, the same as a resolve asks it, unless no DHCP client
+        // keeps a reserve or this socket's own work already needs it.
+        if let Some(prepared) = &open.prepared
+            && prepared.serves(remote, prepared.hop, self.version, &self.neighbors, now)
+        {
+            let hop = prepared.hop;
+            let reserved = self.dhcp.is_some()
+                && hop.is_some_and(|hop| !open.needs(hop) && !self.data_may_resolve(hop));
+            if reserved {
                 return Err(SendRefusal::NeighborsFull);
             }
-            Some(hop)
+            return Ok(Admitted { number, hop });
+        }
+        let (hop, known) = if self.is_broadcast(remote.address) {
+            (None, true)
+        } else {
+            let hop = ipv4.next_hop(remote.address).ok_or(SendRefusal::NoRoute)?;
+            match self.resolve_for_data(now, hop) {
+                Lookup::Full => return Err(SendRefusal::NeighborsFull),
+                Lookup::Known => (Some(hop), true),
+                Lookup::Asking => (Some(hop), false),
+            }
         };
+        if known {
+            self.prepare(now, socket, remote, hop, ipv4.address());
+        }
         Ok(Admitted { number, hop })
+    }
+
+    /// Prepare `socket`'s next datagrams to `remote` through `hop`, whose
+    /// neighbor is known, from `source`.
+    fn prepare(
+        &mut self,
+        now: Instant,
+        socket: &SocketId<B>,
+        remote: Remote,
+        hop: Option<[u8; 4]>,
+        source: [u8; 4],
+    ) {
+        let found = match hop {
+            Some(hop) => match self.neighbors.find(now, hop) {
+                Some(found) => Some((found.holds(), found.hardware)),
+                None => return,
+            },
+            None => None,
+        };
+        let (version, hardware) = (self.version, self.interface.hardware());
+        let Some(open) = self.socket_mut(socket.index, socket.serial) else {
+            return;
+        };
+        let Some(source_port) = open.port else {
+            return;
+        };
+        let ethernet = EthernetHeader {
+            destination: found.map_or(BROADCAST_HARDWARE, |(_, peer)| peer),
+            source: hardware,
+            ether_type: EtherType::IPV4,
+        };
+        let ip = Ipv4Fields {
+            services: open.dscp.field(),
+            total_length: 0,
+            identification: 0,
+            time_to_live: TIME_TO_LIVE,
+            protocol: PROTOCOL_UDP,
+            source,
+            destination: remote.address,
+        };
+        let ports = Ports {
+            source: source_port,
+            destination: remote.port,
+        };
+        open.prepared = Some(Prepared::new(
+            remote, version, hop, found, &ethernet, &ip, ports,
+        ));
+        #[cfg(test)]
+        {
+            self.prepares = self.prepares.wrapping_add(1);
+        }
+    }
+
+    /// How often a socket's datagrams were prepared.
+    #[cfg(test)]
+    pub(crate) const fn prepares(&self) -> usize {
+        self.prepares
     }
 
     /// Run what `run` makes in the place `admitted` found free.
@@ -1849,8 +2042,8 @@ impl<
     }
 
     /// Every piece of work ready now, with no frame built: control first,
-    /// then datagrams from the socket whose turn it is. A scheduler chooses
-    /// among these; a direct interface takes [`Self::poll_demand`]. `count`
+    /// then datagrams from the socket whose turn it is. Publishing takes the
+    /// first; a direct interface takes [`Self::poll_demand`]. `count`
     /// hears each running place the walk of the sockets' running chains
     /// visits ([`Count::walked`]), ready or not, on every pass a caller makes.
     pub fn demands<'s, C: Count + ?Sized>(
@@ -1976,16 +2169,25 @@ impl<
         number: u8,
         place: &Place<'m, B, SIZE, T>,
     ) -> Option<Demand<B>> {
-        let (hop, length) = match place.run() {
-            Run::Sending(sending) => (sending.hop, sending.block.octets().len()),
-            Run::Declared(declared) => (declared.hop, declared.length),
+        let (remote, hop, length) = match place.run() {
+            Run::Sending(sending) => (sending.remote, sending.hop, sending.block.octets().len()),
+            Run::Declared(declared) => (declared.remote, declared.hop, declared.length),
             Run::Free | Run::Finished(_) | Run::Ended { .. } => return None,
         };
-        let found = match hop {
-            Some(hop) => Some(self.neighbors.find(now, hop)?),
-            None => None,
+        let found = match (hop, &socket.prepared) {
+            (None, _) => None,
+            // What its socket prepared still holds: no look at the table.
+            (Some(_), Some(prepared))
+                if prepared.serves(remote, hop, self.version, &self.neighbors, now) =>
+            {
+                prepared.found
+            }
+            (Some(hop), _) => {
+                let found = self.neighbors.find(now, hop)?;
+                Some((found.holds(), found.hardware))
+            }
         };
-        let peer = found.map_or(BROADCAST_HARDWARE, |found| found.hardware);
+        let peer = found.map_or(BROADCAST_HARDWARE, |(_, peer)| peer);
         Some(Demand {
             ready: Ready {
                 class: Class::Data,
@@ -1998,7 +2200,7 @@ impl<
                 socket: u8::try_from(index).ok()?,
                 place: number,
                 serial: place.serial(),
-                found: found.map(|found| found.holds()),
+                found: found.map(|(holds, _)| holds),
             },
             brand: self.brand,
         })
@@ -2085,35 +2287,27 @@ impl<
             return None;
         }
         let message = client.message(now, serial)?;
-        let udp_length = u16::try_from(UDP_HEADER_LEN.saturating_add(message.length())).ok()?;
-        let udp = UdpHeader {
-            ports: Ports {
-                source: dhcp::CLIENT_PORT,
-                destination: dhcp::SERVER_PORT,
-            },
-            length: udp_length,
-            checksum: 0,
-        };
-        let headers = UdpHeaders {
-            ethernet: EthernetHeader {
+        let headers = UdpHeaders::new(
+            &EthernetHeader {
                 destination: peer,
                 source: self.interface.hardware(),
                 ether_type: EtherType::IPV4,
             },
-            ip: Ipv4Fields {
+            &Ipv4Fields {
                 services: BEST_EFFORT.field(),
-                total_length: u16::try_from(
-                    IPV4_HEADER_LEN.saturating_add(usize::from(udp_length)),
-                )
-                .ok()?,
+                total_length: 0,
                 identification: self.identification,
                 time_to_live: TIME_TO_LIVE,
                 protocol: PROTOCOL_UDP,
                 source: message.source,
                 destination: message.destination,
             },
-            udp,
-        };
+            Ports {
+                source: dhcp::CLIENT_PORT,
+                destination: dhcp::SERVER_PORT,
+            },
+            message.length(),
+        )?;
         Some(Frame::Dhcp { headers, message })
     }
 
@@ -2207,7 +2401,8 @@ impl<
         // No frame leaves from an address past its lease's end.
         let source = self.usable(now)?.address();
         let open = self.sockets.get(usize::from(socket))?;
-        let source_port = open.port?;
+        // A socket being closed has no port: its running work sends nothing.
+        open.port?;
         let entry = open.places.of(place, serial)?;
         let (remote, hop, data, length) = match entry.run() {
             Run::Sending(sending) => (
@@ -2220,38 +2415,18 @@ impl<
             Run::Free | Run::Finished(_) | Run::Ended { .. } => return None,
         };
         let tag = entry.tag().copied();
-        let next_hop = self.next_hop(now, hop, found.as_ref(), peer)?;
-        if next_hop != peer {
-            return None;
-        }
-        let udp_length = UDP_HEADER_LEN.saturating_add(length);
-        let wire_length = u16::try_from(udp_length).ok()?;
-        // The checksum is summed over the data in the slot: a block's as it
-        // is copied there, a producer's once it is written.
-        let udp = UdpHeader {
-            ports: Ports {
-                source: source_port,
-                destination: remote.port,
-            },
-            length: wire_length,
-            checksum: 0,
-        };
-        let headers = UdpHeaders {
-            ethernet: EthernetHeader {
-                destination: next_hop,
-                source: self.interface.hardware(),
-                ether_type: EtherType::IPV4,
-            },
-            ip: Ipv4Fields {
-                services: open.dscp.field(),
-                total_length: u16::try_from(IPV4_HEADER_LEN.saturating_add(udp_length)).ok()?,
-                identification: self.identification,
-                time_to_live: TIME_TO_LIVE,
-                protocol: PROTOCOL_UDP,
-                source,
-                destination: remote.address,
-            },
-            udp,
+        let headers = match &open.prepared {
+            // Prepared for this remote, and it holds: its headers.
+            Some(prepared) if prepared.serves(remote, hop, self.version, &self.neighbors, now) => {
+                let next_hop = prepared
+                    .found
+                    .map_or(BROADCAST_HARDWARE, |(_, hardware)| hardware);
+                if next_hop != peer {
+                    return None;
+                }
+                UdpHeaders::prepared(prepared, length, self.identification)?
+            }
+            _ => self.datagram_headers(now, open, (remote, hop), source, length, (peer, found))?,
         };
         Some(match data {
             Some(data) => Frame::Datagram { headers, data },
@@ -2263,6 +2438,50 @@ impl<
                 tag: tag?,
             },
         })
+    }
+
+    /// The headers of a datagram of `open`'s, of `length` octets of data to
+    /// `remote` through `hop`, from `source`, for a frame to `peer`: none
+    /// when the neighbor's station address is not `peer` now.
+    #[cold]
+    #[inline(never)]
+    fn datagram_headers(
+        &self,
+        now: Instant,
+        open: &Socket<'m, B, SIZE, CREDITS, RECEIVED, T>,
+        (remote, hop): (Remote, Option<[u8; 4]>),
+        source: [u8; 4],
+        length: usize,
+        (peer, found): ([u8; 6], Option<Holds>),
+    ) -> Option<UdpHeaders<'static>> {
+        let source_port = open.port?;
+        let next_hop = self.next_hop(now, hop, found.as_ref(), peer)?;
+        if next_hop != peer {
+            return None;
+        }
+        // The checksum is summed over the data in the slot: a block's as it
+        // is copied there, a producer's once it is written.
+        UdpHeaders::new(
+            &EthernetHeader {
+                destination: next_hop,
+                source: self.interface.hardware(),
+                ether_type: EtherType::IPV4,
+            },
+            &Ipv4Fields {
+                services: open.dscp.field(),
+                total_length: 0,
+                identification: self.identification,
+                time_to_live: TIME_TO_LIVE,
+                protocol: PROTOCOL_UDP,
+                source,
+                destination: remote.address,
+            },
+            Ports {
+                source: source_port,
+                destination: remote.port,
+            },
+            length,
+        )
     }
 
     /// `grant`'s frame was refused for good, by the port or by its own fill:

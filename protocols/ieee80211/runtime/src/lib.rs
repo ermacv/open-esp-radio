@@ -77,7 +77,6 @@ where
     }
 }
 pub mod datapath;
-pub mod egress;
 pub mod lifecycle;
 pub mod monitor;
 pub mod station;

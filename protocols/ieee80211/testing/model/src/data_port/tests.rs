@@ -318,7 +318,7 @@ impl<'s> Harness<'s> {
                 protection: Protection::None,
             }),
         };
-        let frame = ClassFrame::new(frame).ok().unwrap();
+        let frame = ClassFrame::<ModelSmall, _>::new(frame).ok().unwrap();
         let source = prepare_model(
             TxSource::Fresh {
                 buffer,
@@ -548,8 +548,9 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
                 }
                 .check()
                 .map_err(|_| cases::Violation::Fixture)?;
-                let source = prepare_model::<Station, ModelCaps, B<'_>, ModelSmall>(source)
-                    .map_err(|_| cases::Violation::Fixture)?;
+                let source =
+                    prepare_model::<Station, ModelCaps, B<'_>, ModelSmall, ModelSmall>(source)
+                        .map_err(|_| cases::Violation::Fixture)?;
                 self.port.admit(
                     Attempt {
                         context: (),
@@ -1643,6 +1644,169 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
     });
 }
 
+/// A network's memory goes through the model's single-MPDU path as a
+/// buffer of its own class: its MPDU, written from the memory's first
+/// octet, goes on the air from that memory; a retransmission of its `Sent`
+/// keeps the PN and every octet, and renewal hands the same memory back.
+#[test]
+fn a_network_memory_s_retransmission_keeps_its_numbers_and_octets_and_the_memory_comes_back() {
+    use oer_protocols_ieee80211_contracts_port::{AccessPointPort, NetworkFrames, TxNetworkPool};
+    type Network<'s> = NetworkFrames<Types<'s>>;
+    with_harness(|harness| {
+        harness.start();
+        let (start, _, _, [slot, _]) = harness.group.take().unwrap();
+        let association = ModelKeys::<B<'_>, Station>::begin_association(
+            start,
+            oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
+        );
+        let (install, _) = harness.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(PEER).unwrap(),
+            Ccmp128Key::new(&[7; 16]),
+        );
+        assert!(matches!(harness.command(install), CommandProgress::Done));
+        let Some(LowerMacTerminal::PairwiseKeyInstalled(
+            oer_protocols_ieee80211_contracts_port::InstalledPairwise::Station(key),
+        )) = harness.sink.terminals.pop()
+        else {
+            panic!("the installation's terminal");
+        };
+        // The first transmission goes unanswered: its Sent comes back.
+        harness.air.answer(AirAnswer::NoResponse);
+        let mut memory: crate::ModelNetworkMemory = Box::new([0; ModelLarge::CAPACITY]);
+        memory[32..40].copy_from_slice(&[0x5a; 8]);
+        let at = memory.as_ptr();
+        let buffer = harness.port.network_buffer(memory);
+        let ticket = harness.tickets.pop().unwrap();
+        let header = HeaderSpec::new(
+            FrameControl::new(0x4108).unwrap(),
+            0,
+            IndividualAddress::new(PEER).unwrap(),
+            STATION,
+            PEER,
+            0x0230,
+            None,
+            None,
+            None,
+        )
+        .and_then(AckHeader::new)
+        .unwrap();
+        macro_rules! plan {
+            ($rate:expr) => {
+                RetryPlan::new(RetryStage {
+                    rate: $rate,
+                    transmissions: NonZeroU8::MIN,
+                    protection: Protection::None,
+                })
+            };
+        }
+        let rate = harness
+            .port
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .unwrap();
+        let frame = ClassFrame::<Network<'_>, _>::new(TxFrame::Individual {
+            frame: SizedFrame::new(header, MpduLength::new(40).unwrap()).unwrap(),
+            plan: plan!(rate),
+        })
+        .ok()
+        .unwrap();
+        let source = <Types<'_> as TxBufferPool<'_, Network<'_>>>::prepare::<Station, ModelCaps>(
+            TxSource::Fresh {
+                buffer,
+                frame,
+                body: None,
+                protection: TxProtection::Ccmp(
+                    oer_protocols_ieee80211_contracts_port::NumberedKey {
+                        key: &key,
+                        packet_number: oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(5)
+                            .unwrap(),
+                    },
+                ),
+            }
+            .check()
+            .ok()
+            .unwrap(),
+        )
+        .ok()
+        .unwrap();
+        macro_rules! submit {
+            ($ticket:expr, $source:expr) => {{
+                let (ticket, source) = ($ticket, $source);
+                let attempt = harness.port.admit(
+                    Attempt {
+                        context: (),
+                        ticket,
+                        source,
+                        access_category: CATEGORY,
+                        protection: Protection::None,
+                        power: SupportedPower::new(TxPower::Calibrated).unwrap(),
+                        coex_operation: TxOperation::Data,
+                    }
+                    .admit(),
+                );
+                let now = harness.clock.now();
+                harness
+                    .port
+                    .submit(attempt, now, &mut harness.sink)
+                    .unwrap()
+                    .ok()
+                    .unwrap();
+                harness.service();
+                let Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(terminal))) =
+                    harness.sink.terminals.pop()
+                else {
+                    panic!("the MPDU's terminal");
+                };
+                let TerminalParts {
+                    ticket, payload, ..
+                } = terminal.into_parts(&mut harness.terminal_access);
+                let (ModelAnyBuffer::NetworkSent(sent), None) = payload.into_parts() else {
+                    panic!("a published network memory comes back as its own Sent");
+                };
+                (ticket, sent)
+            }};
+        }
+        let (ticket, sent) = submit!(ticket, source);
+        let rate = harness
+            .port
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .unwrap();
+        let source = <Types<'_> as TxBufferPool<'_, Network<'_>>>::prepare::<Station, ModelCaps>(
+            TxSource::Retransmission {
+                mpdu: sent,
+                plan: oer_protocols_ieee80211_contracts_port::RetransmissionPlan::Individual(
+                    plan!(rate),
+                ),
+            }
+            .check()
+            .ok()
+            .unwrap(),
+        )
+        .ok()
+        .unwrap();
+        let (ticket, sent) = submit!(ticket, source);
+        harness.tickets.push(ticket);
+        let air = harness.air.sent();
+        let [first, retried] = air.as_slice() else {
+            panic!("the MPDU went out twice");
+        };
+        assert_eq!(first.packet_number, Some(5));
+        assert_eq!(retried.packet_number, first.packet_number, "its PN kept");
+        // Every octet but the flags', which gain Retry, as the memory holds
+        // them.
+        assert_eq!(retried.plaintext[2..], first.plaintext[2..]);
+        assert_eq!(retried.plaintext[1], first.plaintext[1] | 0x08, "Retry");
+        assert_eq!(first.plaintext[22..24], 0x0230_u16.to_le_bytes(), "its SN");
+        assert_eq!(first.plaintext[32..40], [0x5a; 8], "the network's octets");
+        let (buffer, _) = <Types<'_> as TxBufferPool<'_, Network<'_>>>::renew(sent);
+        let memory = <Types<'_> as TxNetworkPool<'_>>::into_memory(buffer)
+            .ok()
+            .unwrap();
+        assert_eq!(memory.as_ptr(), at, "the same memory");
+    });
+}
+
 #[test]
 fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbers_anew() {
     with_harness(|harness| {
@@ -1694,7 +1858,7 @@ fn a_retransmission_keeps_its_packet_number_and_sets_retry_while_a_renewal_numbe
             .port
             .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
             .unwrap();
-        let source = prepare_model::<Station, ModelCaps, B<'_>, ModelSmall>(
+        let source = prepare_model::<Station, ModelCaps, B<'_>, ModelSmall, ModelSmall>(
             TxSource::Retransmission {
                 mpdu: sent,
                 plan: oer_protocols_ieee80211_contracts_port::RetransmissionPlan::Individual(

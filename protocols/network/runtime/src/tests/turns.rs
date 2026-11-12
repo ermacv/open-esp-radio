@@ -29,7 +29,6 @@ type FlowService<B> = Service<
     FLOW_DEPTH,
     RECEIVED,
     WirePort,
-    Direct,
 >;
 
 fn flow<B: 'static>() -> (
@@ -45,7 +44,7 @@ fn flow<B: 'static>() -> (
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let mut service = Service::new(owner, MemoryPolicy::KEEP, stopping);
     let socket = service
         .bind(
             5000,
@@ -158,6 +157,8 @@ fn turns(events: &[ServiceEvent]) -> Vec<Turn> {
                 turns.push(core::mem::take(&mut turn));
             }
             ServiceEvent::IntakeFull
+            | ServiceEvent::NoticesFull
+            | ServiceEvent::PacketTurn
             | ServiceEvent::Yielded
             | ServiceEvent::Waited { .. }
             | ServiceEvent::Returned { .. }
@@ -498,56 +499,11 @@ fn each_turn_tells_the_frames_it_took_in_and_the_notices_it_handed_on() {
     assert_eq!(notices.iter().sum::<usize>(), 3, "every notice, once");
 }
 
-/// An egress whose reservations are all out: it chooses nothing until a
-/// notice, which never comes here.
-struct Exhausted;
-
-impl Egress<u32, u32> for Exhausted {
-    type Reservation = ();
-    type Fault = core::convert::Infallible;
-    type Plan<C: Candidate> = ();
-
-    fn plan<'p, C: Candidate, I: Iterator<Item = C>>(
-        &mut self,
-        _ready: impl Fn() -> I,
-        plan: &'p mut Option<()>,
-    ) -> Result<&'p mut (), core::convert::Infallible> {
-        Ok(plan.insert(()))
-    }
-
-    fn next<C: Candidate>(
-        &mut self,
-        (): &mut (),
-    ) -> Result<oer_protocols_network_port::Next<C, ()>, core::convert::Infallible> {
-        Ok(oer_protocols_network_port::Next::Idle)
-    }
-
-    fn nothing_ready(&mut self) -> Result<(), core::convert::Infallible> {
-        Ok(())
-    }
-
-    fn accepted(&mut self, (): (), _ticket: u32) -> Result<(), core::convert::Infallible> {
-        Ok(())
-    }
-
-    fn refused(&mut self, (): ()) -> Result<(), core::convert::Infallible> {
-        Ok(())
-    }
-
-    fn unknown(&mut self, (): ()) -> Result<(), core::convert::Infallible> {
-        Ok(())
-    }
-
-    fn notice(&mut self, _notice: u32) -> Result<(), core::convert::Infallible> {
-        Ok(())
-    }
-}
-
-/// Work is ready and the egress chooses none: the service turns once and
-/// waits for an event, with no wake of its own and no turn more, however
-/// often it is polled.
+/// Work is ready and the port has no room for it: the service turns once
+/// and waits for the port's wake, with no wake of its own and no turn more,
+/// however often it is polled.
 #[test]
-fn ready_work_the_egress_does_not_choose_leaves_the_service_waiting() {
+fn ready_work_the_port_has_no_room_for_leaves_the_service_waiting() {
     brand!(Net);
     let memory = Box::leak(Box::new([[0; SIZE]; FLOW_BLOCKS]));
     let (pool, brand) = claim::<Net, SIZE, FLOW_BLOCKS>(memory).unwrap();
@@ -569,8 +525,8 @@ fn ready_work_the_egress_does_not_choose_leaves_the_service_waiting() {
         FLOW_DEPTH,
         RECEIVED,
         WirePort,
-        Exhausted,
-    > = Service::new(owner, Exhausted, MemoryPolicy::KEEP, stopping);
+    > = Service::new(owner, MemoryPolicy::KEEP, stopping);
+    wire.0.borrow_mut().full = true;
     let mut socket = service
         .bind(
             5000,
@@ -734,9 +690,8 @@ fn a_spent_publishing_budget_turns_again_unwoken() {
     );
 }
 
-/// More notices than a turn hands the policy: that turn publishes nothing
-/// and names its own next turn, which it takes after a yield, not after a
-/// wait.
+/// More notices than a turn takes: that turn names its own next turn,
+/// which it takes after a yield, not after a wait.
 #[test]
 fn notices_past_a_turn_s_budget_turn_again_after_a_yield() {
     brand!(Net);
@@ -751,12 +706,17 @@ fn notices_past_a_turn_s_budget_turn_again_after_a_yield() {
         pass(&mut run);
     }
     assert!(wire.0.borrow().ended.is_empty());
-    let deferred = seen
+    let noticed = seen
         .0
         .iter()
-        .position(|event| *event == ServiceEvent::Published(PublishEnd::Deferred))
+        .position(|event| *event == ServiceEvent::Noticed)
         .unwrap();
-    let after: Vec<_> = seen.0[deferred + 1..]
+    let left = noticed
+        + seen.0[noticed..]
+            .iter()
+            .position(|event| matches!(event, ServiceEvent::TurnEnded(_)))
+            .unwrap();
+    let after: Vec<_> = seen.0[left + 1..]
         .iter()
         .filter(|event| {
             matches!(
@@ -769,6 +729,6 @@ fn notices_past_a_turn_s_budget_turn_again_after_a_yield() {
     assert_eq!(
         after,
         [&ServiceEvent::Yielded, &ServiceEvent::TurnBegan],
-        "the deferred turn yields and turns again"
+        "the turn that left notices yields and turns again"
     );
 }

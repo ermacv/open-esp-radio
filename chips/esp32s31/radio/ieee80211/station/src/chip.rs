@@ -61,9 +61,9 @@ pub trait Binding: Sized + 'static {
     /// [`crate::AcrossHarts`] with the executor signals the two harts raise
     /// for the network's task and the datapath actor.
     type Notifies: crate::Notifies;
-    /// The network end's transmit memory over the pool buffers the port
-    /// does not hold, and the network stack's packets it takes.
-    type TxSupply: crate::NetworkTxSupply;
+    /// The network's transmit end over the pool buffers the port does not
+    /// hold.
+    type TxEnd: crate::NetworkTxEnd<Self::Notifies>;
     /// The minting authority of the port's installations, once.
     fn take_installations() -> Option<radio::Installations<Self>>;
     /// The image records why the station restarted; the chip runs on.
@@ -125,7 +125,10 @@ const TX_BLOCK_ACK: oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockA
             lifetime: Duration::from_micros(
                 oer_chips_family_radio_ieee80211_policy::lmac::AMPDU_MSDU_LIFETIME_MICROS as u64,
             ),
-            attempts: crate::air::AGGREGATE_MEMBER_ATTEMPTS,
+            // Aggregates on the air a missing member may miss before the
+            // data plane drops it.
+            // SOURCE(esp32s31): `lmac::LONG_RETRY_LIMIT` (`libpp[lmac.o]::lmacInit`).
+            attempts: oer_chips_family_radio_ieee80211_policy::lmac::LONG_RETRY_LIMIT,
         },
     };
 pub struct Lower(pub DoorbellAcknowledger<Esp32s31, 3>);
@@ -449,6 +452,9 @@ pub struct Storage<W: Binding> {
     /// the network the rest ([`crate::NetworkTx`]).
     pub(crate) pool:
         static_cell::StaticCell<oer_chips_esp32s31_radio_ieee80211_backend::port::TxPool<TX>>,
+    /// The network's own transmit end's buffers ([`crate::LocalEnd`]):
+    /// they stay here while the network's service moves as it is built.
+    pub(crate) tx_state: crate::supply::LocalTxState,
     pub(crate) driver: radio::DriverStorage<W>,
     pub(crate) actor: radio::ActorStorage<W>,
     pub(crate) service: service::ServiceStorage<W>,
@@ -472,6 +478,7 @@ where
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
             pool: static_cell::StaticCell::new(),
+            tx_state: crate::supply::LocalTxState::new(),
         }
     }
 }
@@ -485,6 +492,7 @@ impl<W: Binding<Notifies = crate::SameHart>> Storage<W> {
             actor: radio::ActorStorage::new(),
             service: service::ServiceStorage::new(),
             pool: static_cell::StaticCell::new(),
+            tx_state: crate::supply::LocalTxState::new(),
         }
     }
 }
@@ -557,13 +565,9 @@ pub(crate) struct ServiceRunner<W: Binding> {
 pub type StationExit = crate::station_end::StationExitOf<InitializationError>;
 /// The station's link and receive end.
 pub type StationNetwork<W> = Network<'static, <W as Binding>::Notifies>;
-/// The station's transmit end over `W`'s transmit memory and its packets.
-pub type StationTransmit<W> = crate::NetworkTransmit<
-    'static,
-    <W as Binding>::Notifies,
-    <<W as Binding>::TxSupply as crate::NetworkTxSupply>::Packet,
-    <W as Binding>::TxSupply,
->;
+/// The station's transmit end `W` takes.
+pub type StationTransmit<W> =
+    <<W as Binding>::TxEnd as crate::NetworkTxEnd<<W as Binding>::Notifies>>::End;
 #[allow(
     clippy::type_complexity,
     reason = "the five ends of the station's start"
@@ -611,12 +615,14 @@ pub fn station<W: Binding>(
         )
         .unwrap_or_else(|| W::fail(InitializationError::Storage));
     let pool: &'static _ = pool;
-    let supply = <W::TxSupply as crate::NetworkTxSupply>::new(
-        crate::NetworkTx::claim(pool).unwrap_or_else(|_| W::fail(InitializationError::Tx)),
-    );
+    let memory = crate::NetworkTx::claim(pool, crate::supply::PORT_BUFFERS)
+        .unwrap_or_else(|_| W::fail(InitializationError::Tx));
+    let tx_state = &mut storage.tx_state;
     let (mut control, network, network_transmit, stopper, connection) = storage
         .channels
-        .split(supply)
+        .split(|queues| {
+            <W::TxEnd as crate::NetworkTxEnd<W::Notifies>>::end(queues, memory, tx_state)
+        })
         .unwrap_or_else(|_| W::fail(InitializationError::Control));
     let crate::Connection {
         service: connection,

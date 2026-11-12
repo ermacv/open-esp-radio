@@ -37,7 +37,6 @@ type PacedService<B> = Service<
     PACED_DEPTH,
     RECEIVED,
     WirePort,
-    Direct,
 >;
 
 /// The blocks each reservation the service took asked for, and how each
@@ -85,7 +84,7 @@ fn paced<B: 'static>(bursts: &[usize]) -> (Paced, Vec<u8>, usize, Vec<TurnEnd>) 
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, wire.clone());
     let (stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service: PacedService<B> = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let mut service: PacedService<B> = Service::new(owner, MemoryPolicy::KEEP, stopping);
     let mut socket: PacedSocket<B> = service
         .bind(
             5000,

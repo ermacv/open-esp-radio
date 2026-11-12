@@ -1,9 +1,9 @@
 //! The station's composition on the model's data port: the types the
 //! S31 facade names for its port (`chips/esp32s31/radio/ieee80211/station`),
 //! here over `oer-protocols-ieee80211-testing-model`, and the network end's
-//! transmit memory, as the application's `FreeSlots`, `WifiTx` and
-//! `WifiBuffers` (`chips/esp32s31/app/src/wifi/network.rs`) hold it, without
-//! their statics, which parallel tests may not share.
+//! transmit memory as a pool of the station's own transmit end
+//! (`LocalTx`), as the application's (`chips/esp32s31/app/src/wifi/network.rs`)
+//! holds the S31's.
 
 use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
@@ -12,25 +12,20 @@ use std::task::{Context, Poll, Waker};
 
 use oer_portable_events::EventSink;
 use oer_protocols_ieee80211_contracts_port::ReturnedMpdu;
-use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET;
 use oer_protocols_ieee80211_core_roles_sta::events::StaEvent;
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckEvent;
 use oer_protocols_ieee80211_runtime::datapath::{ActorEvent, DatapathPort};
-use oer_protocols_ieee80211_runtime::egress::RadioNotice;
 use oer_protocols_ieee80211_runtime::lifecycle::{LifecyclePort, LifecycleTxBuffer};
 use oer_protocols_ieee80211_runtime::station::{
-    Completions, NetworkLink, NetworkStop, NetworkStopLost, ServiceEvent, StationKey, TxRefused,
-    TxSupply,
+    NetworkStop, NetworkStopLost, PoolRefused, ServiceEvent, TxPool,
 };
 use oer_protocols_ieee80211_testing_model::{
     MODEL_MAX_MPDU, ModelAck, ModelAnyBuffer, ModelBackend, ModelBlockAckEvidence, ModelCaps24,
     ModelLentRx, ModelNetworkMemory, ModelPort, ModelSmall, ModelTypes,
 };
 use oer_protocols_network_core::{NetEvent, NotLent};
-use oer_protocols_network_port::{EthernetFrame, EthernetFrameView, FrameLengthError, Unpublished};
-use oer_protocols_network_runtime::{PortRefusal, TxBuffers};
-use oer_protocols_network_wire::ethernet::EthernetHeader;
+use oer_protocols_network_port::TxStorage;
 use oer_protocols_radio_port::{LocalId, SlotIdentity};
 
 /// The model's contexts as the station takes them: its configuration
@@ -88,7 +83,10 @@ impl<'s> LifecyclePort<'s> for StationPort<'s> {
         match buffer {
             ModelAnyBuffer::Small(buffer) => Ok(ReturnedMpdu::Fresh(buffer)),
             ModelAnyBuffer::SmallSent(buffer) => Ok(ReturnedMpdu::Sent(buffer)),
-            buffer @ (ModelAnyBuffer::Large(_) | ModelAnyBuffer::LargeSent(_)) => Err(buffer),
+            buffer @ (ModelAnyBuffer::Large(_)
+            | ModelAnyBuffer::LargeSent(_)
+            | ModelAnyBuffer::Network(_)
+            | ModelAnyBuffer::NetworkSent(_)) => Err(buffer),
         }
     }
 }
@@ -112,6 +110,18 @@ pub struct Counts {
     pub rx_pressure: usize,
     /// A lending socket's datagrams the network dropped for want of credit.
     pub no_credit: usize,
+    /// The network service's turns, and those of them that took only the
+    /// frames.
+    pub turns: usize,
+    pub packet_turns: usize,
+    /// Received frames the network's turns took in, and the turns that took
+    /// their whole budget of them.
+    pub frames_taken: usize,
+    pub intake_full: usize,
+    /// Frames the network's port accepted.
+    pub accepted: usize,
+    /// Passes of the network's wait that took returns home with no turn.
+    pub returned_in_wait: usize,
 }
 
 impl Observed {
@@ -141,7 +151,19 @@ impl EventSink<NetEvent> for Observed {
     }
 }
 impl EventSink<oer_protocols_network_runtime::ServiceEvent> for Observed {
-    fn event(&mut self, _: oer_protocols_network_runtime::ServiceEvent) {}
+    fn event(&mut self, event: oer_protocols_network_runtime::ServiceEvent) {
+        use oer_protocols_network_runtime::ServiceEvent as Event;
+        let mut counts = self.0.borrow_mut();
+        match event {
+            Event::TurnBegan => counts.turns += 1,
+            Event::PacketTurn => counts.packet_turns += 1,
+            Event::FrameTaken => counts.frames_taken += 1,
+            Event::IntakeFull => counts.intake_full += 1,
+            Event::Accepted => counts.accepted += 1,
+            Event::Returned { .. } => counts.returned_in_wait += 1,
+            _ => {}
+        }
+    }
 }
 impl EventSink<StaEvent> for Observed {
     fn event(&mut self, event: StaEvent) {
@@ -231,44 +253,50 @@ impl NetworkStop for NetworkStopState {
     }
 }
 
-/// The network's transmit memory no frame holds: what the station gave back
-/// and what the port did not use, shared by the station's end
-/// ([`Supply`]) and the port's ([`Buffers`]), both on the network's task.
+/// The network's transmit memory as the model's station holds it: buffers
+/// of an MPDU each, and what the harness reads of them.
 pub struct FreeMemory {
-    free: RefCell<Vec<Memory>>,
-    /// What the station gave back, each with its frame's end, until the
-    /// port hands the end on.
-    ended: RefCell<Completions<Memory, Ticket, { super::NETWORK_BUFFERS }>>,
     total: usize,
     /// Each buffer's address, at its place: as the S31 names a frame by
     /// its buffer's place among the network's.
     places: Vec<usize>,
-    waker: Cell<Option<Waker>>,
-    /// Frames' ends the port handed on, with a known cost and without.
-    settled: Cell<(usize, usize)>,
+    /// The buffers the station holds: published, not yet given back.
+    out: Cell<usize>,
 }
 
 /// The name of a frame in transmit memory: its buffer's place, below the
 /// buffers' count, which no other frame has while the station holds this
 /// one and until its end is handed on.
-pub type Ticket = usize;
+pub type Ticket = u8;
 
-/// What the port tells the egress policy.
-pub type Notice = RadioNotice<Ticket, StationKey>;
+/// What the port tells of a frame's end: nothing, the MAC charged its air.
+pub type Notice = core::convert::Infallible;
 
 impl FreeMemory {
-    /// `total` buffers of an MPDU each.
-    pub fn new(total: usize) -> Rc<Self> {
-        let free: Vec<Memory> = (0..total).map(|_| Box::new([0; MODEL_MAX_MPDU])).collect();
-        let places = free.iter().map(|memory| memory.as_ptr().addr()).collect();
-        Rc::new(Self {
-            free: RefCell::new(free),
-            ended: RefCell::new(Completions::new()),
-            settled: Cell::new((0, 0)),
+    /// `total` buffers of an MPDU each, and the memory, each buffer at its
+    /// place.
+    pub fn new(
+        total: usize,
+    ) -> (
+        Rc<Self>,
+        heapless::Vec<ModelSlot, { super::NETWORK_BUFFERS }>,
+    ) {
+        let memory: Vec<Memory> = (0..total).map(|_| Box::new([0; MODEL_MAX_MPDU])).collect();
+        let places = memory.iter().map(|memory| memory.as_ptr().addr()).collect();
+        let free = Rc::new(Self {
             total,
             places,
-            waker: Cell::new(None),
-        })
+            out: Cell::new(0),
+        });
+        let mut slots = heapless::Vec::new();
+        for memory in memory {
+            let slot = ModelSlot {
+                place: free.ticket_of(&memory),
+                memory,
+            };
+            assert!(slots.push(slot).is_ok(), "the network holds every buffer");
+        }
+        (free, slots)
     }
 
     /// The place of `memory`, a buffer of these; past every place for any
@@ -278,160 +306,55 @@ impl FreeMemory {
         self.places
             .iter()
             .position(|place| *place == address)
-            .unwrap_or(usize::MAX)
+            .and_then(|place| u8::try_from(place).ok())
+            .unwrap_or(u8::MAX)
     }
 
     /// The memory no frame holds: free, or given back with an end the port
     /// has not handed on.
     pub fn free(&self) -> usize {
-        self.free.borrow().len() + self.ended.borrow().len()
+        self.total - self.out.get()
     }
 
     pub const fn total(&self) -> usize {
         self.total
     }
-
-    /// Frames' ends handed on to the egress policy: with an estimated cost,
-    /// and with none known.
-    pub fn settled(&self) -> (usize, usize) {
-        self.settled.get()
-    }
-
-    fn take(&self) -> Option<Memory> {
-        self.free.borrow_mut().pop()
-    }
-
-    fn give(&self, memory: Memory) {
-        self.free.borrow_mut().push(memory);
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
-    }
 }
 
-/// A frame written in transmit memory, its Ethernet header where the data
-/// machine reads it.
-pub struct WrittenFrame {
+/// One buffer the network holds: its octets from where the data machine
+/// reads a frame's Ethernet header.
+pub struct ModelSlot {
     memory: Memory,
-    length: usize,
+    place: Ticket,
 }
 
-impl EthernetFrame for WrittenFrame {
-    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        let end = MSDU_ETHERNET_OFFSET
-            .checked_add(self.length)
-            .ok_or(FrameLengthError::OutsideStorage)?;
-        let bytes = self
-            .memory
-            .get(MSDU_ETHERNET_OFFSET..end)
-            .ok_or(FrameLengthError::OutsideStorage)?;
-        let (header, payload) =
-            EthernetHeader::parse(bytes).map_err(|_| FrameLengthError::TooShort)?;
-        Ok(EthernetFrameView {
-            destination: header.destination,
-            source: header.source,
-            ether_type: header.ether_type.value(),
-            payload,
-        })
+impl TxStorage for ModelSlot {
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        self.memory
+            .get_mut(MSDU_ETHERNET_OFFSET..)
+            .unwrap_or_default()
     }
 }
 
-/// The station's end of the memory: a frame's own memory goes to the
-/// station, and what it gives back is free again.
-pub struct Supply(pub Rc<FreeMemory>);
+/// The station's pool: a frame goes to the station in its own buffer, and
+/// what the station gives back is the network's again.
+pub struct ModelPool(pub Rc<FreeMemory>);
 
-impl TxSupply<WrittenFrame> for Supply {
+impl TxPool for ModelPool {
+    type Slot = ModelSlot;
     type Memory = Memory;
-    fn available(&self) -> bool {
-        !self.0.free.borrow().is_empty()
+    fn place(slot: &ModelSlot) -> u8 {
+        slot.place
     }
-    fn write(&mut self, frame: WrittenFrame) -> Result<Memory, TxRefused<WrittenFrame>> {
-        Ok(frame.memory)
+    fn publish(&mut self, slot: ModelSlot, _: usize) -> Result<Memory, PoolRefused<ModelSlot>> {
+        self.0.out.set(self.0.out.get() + 1);
+        Ok(slot.memory)
     }
-    fn give(&mut self, memory: Memory, end: TxEnd) {
-        let ticket = self.0.ticket_of(&memory);
-        // One end a buffer, and the queue holds every buffer.
-        if let Err(memory) = self.0.ended.borrow_mut().returned(memory, ticket, end) {
-            self.0.give(memory);
+    fn slot(&mut self, memory: Memory) -> ModelSlot {
+        self.0.out.set(self.0.out.get() - 1);
+        ModelSlot {
+            place: self.0.ticket_of(&memory),
+            memory,
         }
-        if let Some(waker) = self.0.waker.take() {
-            waker.wake();
-        }
-    }
-}
-
-/// The port's end of the memory, where the network core writes its frames,
-/// and the link the station publishes, whose epoch keys its air.
-pub struct Buffers<'c> {
-    pub free: Rc<FreeMemory>,
-    pub link: &'c NetworkLink,
-}
-
-impl TxBuffers for Buffers<'_> {
-    type Frame = WrittenFrame;
-    type Ticket = Ticket;
-    type Notice = Notice;
-    fn ticket(&self, frame: &WrittenFrame) -> Ticket {
-        self.free.ticket_of(&frame.memory)
-    }
-    fn take_notice(&mut self) -> Option<Notice> {
-        let (notice, memory) = self
-            .free
-            .ended
-            .borrow_mut()
-            .take_notice(self.link.snapshot())?;
-        if let Some(memory) = memory {
-            self.free.give(memory);
-        }
-        if let RadioNotice::Ended(exchange) = notice {
-            let (known, unknown) = self.free.settled.get();
-            self.free.settled.set(match exchange.charged {
-                Some(_) => (known + 1, unknown),
-                None => (known, unknown + 1),
-            });
-        }
-        Some(notice)
-    }
-    fn notice_waiting(&self) -> bool {
-        self.free.ended.borrow().waiting(self.link.snapshot())
-    }
-    fn available(&self) -> bool {
-        !self.free.free.borrow().is_empty()
-    }
-    fn poll_free(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.free.waker.set(Some(cx.waker().clone()));
-        if self.available() {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
-    }
-    fn write<E>(
-        &mut self,
-        length: usize,
-        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
-    ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
-        let mut memory = self
-            .free
-            .take()
-            .ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
-        let written = match MSDU_ETHERNET_OFFSET
-            .checked_add(length)
-            .and_then(|end| memory.get_mut(MSDU_ETHERNET_OFFSET..end))
-        {
-            Some(bytes) => fill(&mut oer_protocols_network_port::Slot::new(bytes, None))
-                .map_err(Unpublished::Fill),
-            None => Err(Unpublished::Port(PortRefusal::BadFrame)),
-        };
-        match written {
-            Ok(()) => Ok(WrittenFrame { memory, length }),
-            Err(unpublished) => {
-                self.free.give(memory);
-                Err(unpublished)
-            }
-        }
-    }
-    fn restore(&mut self, frame: WrittenFrame) {
-        self.free.give(frame.memory);
     }
 }

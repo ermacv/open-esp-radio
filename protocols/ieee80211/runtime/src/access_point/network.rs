@@ -1,53 +1,85 @@
 //! The access point's network end: the MSDUs its authorized peers send the
-//! network stack and the stack's frames for the BSS, each one copied.
-//!
-//! The runner copies a received MSDU into the receive queue and the stack's
-//! sending path copies its frame into the transmit queue, so neither end
-//! holds the other's memory: a frame the queue has no room for is refused
-//! at once with its owner, and a stop leaves nothing lent.
+//! network stack, copied, and the stack's frames for the BSS, through the
+//! same transmit boundary as a station's: the stack's sending path hands
+//! the network's transmit memory its frame is in ([`TxSupply`]), with its
+//! length and the priority its marking requests, to the runner's queue
+//! ([`Outgoing`]); the runner queues it per peer and TID, writes the
+//! frame's MPDU in place in that same memory and sends it from there, and
+//! gives the memory back ([`TxEnded`]) once the MPDU's terminal came, free
+//! again. A frame no memory or no room takes is refused at once with its
+//! owner, and a stop leaves nothing lent.
 
 use core::cell::Cell;
 use core::future::Future;
-use core::marker::PhantomData;
 use core::task::{Context, Poll};
 
-use oer_portable_memory::{WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
+use oer_portable_memory::{
+    SlotReceiver, SlotSender, WakingSlotQueue, WakingSpscQueue, WakingSpscReceiver,
+    WakingSpscSender,
+};
 use oer_portable_sync::PriorityWaker;
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::data::MsduParts;
 use oer_protocols_network_port::{
     EthernetFrameView, FrameLengthError, FrameStorage, LentFrame, LinkSnapshot, LinkState,
-    NetDevice, NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused,
+    NetDevice, ReceivedFrame, StorageAdvanceRefused,
 };
+
+use crate::station::{DeviceTransmit, LinkView, Outgoing, SameHart, TxEnded, TxSupply};
 
 /// The received MSDUs the queue holds for the network.
 pub const AP_RX_DEPTH: usize = 4;
 
-/// The network's MSDUs the queue holds for the BSS.
-pub const AP_TX_DEPTH: usize = 4;
+/// The depth of the queues to and from the runner, and the network's
+/// transmit memories the access point holds at most: a composition gives
+/// the network no more transmit memory than this, so the queue back always
+/// has room for every memory the runner returns.
+pub const AP_TX_DEPTH: usize = 64;
 
-/// The two queues and the link of one access point's network end, placed
-/// by the composition.
-pub struct ApNetworkStorage {
+/// The two queues and the link of one access point's network end, and the
+/// queues between the stack and the runner, placed by the composition. `M`
+/// is the network's transmit memory.
+pub struct ApNetworkStorage<M> {
     receive: WakingSpscQueue<EthernetFrame, AP_RX_DEPTH>,
-    transmit: WakingSpscQueue<EthernetFrame, AP_TX_DEPTH>,
+    transmit: WakingSlotQueue<Option<Outgoing<M>>, AP_TX_DEPTH>,
+    returned: WakingSlotQueue<Option<TxEnded<M>>, AP_TX_DEPTH>,
     link: ApLink,
 }
 
-impl ApNetworkStorage {
+impl<M> ApNetworkStorage<M> {
     pub const fn new() -> Self {
         Self {
             receive: WakingSpscQueue::new(),
-            transmit: WakingSpscQueue::new(),
+            transmit: WakingSlotQueue::new(),
+            returned: WakingSlotQueue::new(),
             link: ApLink::new(),
         }
     }
 
-    /// Split the storage into the network's device, its transmit half and
-    /// the runner's end.
-    pub fn split<F>(&mut self) -> (ApNetDevice<'_>, ApNetTransmit<'_, F>, ApNetworkEnd<'_>) {
+    /// Split the storage into the network's device, its transmit half over
+    /// the network's transmit memory, which takes the stack's frames `F`,
+    /// and the runner's end. The memory is the bounded storage `memories`,
+    /// at most `N` of them, which `supply` builds the network's transmit
+    /// memory over: the runner's queue back holds `N`, which this proves at
+    /// compile time, so every memory the runner gives back finds room.
+    pub fn split<F, S: TxSupply<F, Memory = M>, T, const N: usize>(
+        &mut self,
+        memories: heapless::Vec<T, N>,
+        supply: impl FnOnce(heapless::Vec<T, N>) -> S,
+    ) -> (
+        ApNetDevice<'_>,
+        ApNetTransmit<'_, F, S>,
+        ApNetworkEnd<'_, M>,
+    ) {
+        const {
+            if N > AP_TX_DEPTH {
+                panic!("the runner's queue back holds every network memory");
+            }
+        }
+        let supply = supply(memories);
         let (receive_sender, receive_receiver) = self.receive.split();
-        let (transmit_sender, transmit_receiver) = self.transmit.split();
+        let (transmit_sender, transmit_receiver) = self.transmit.split(|| None);
+        let (returned_sender, returned_receiver) = self.returned.split(|| None);
         let link = &self.link;
         (
             ApNetDevice {
@@ -56,21 +88,18 @@ impl ApNetworkStorage {
                 observed: LinkSnapshot::DOWN,
                 marked: 0,
             },
-            ApNetTransmit {
-                transmit: transmit_sender,
-                link,
-                frame: PhantomData,
-            },
+            DeviceTransmit::with_link(transmit_sender, returned_receiver, supply, link),
             ApNetworkEnd {
                 receive: receive_sender,
                 transmit: transmit_receiver,
+                returned: returned_sender,
                 link,
             },
         )
     }
 }
 
-impl Default for ApNetworkStorage {
+impl<M> Default for ApNetworkStorage<M> {
     fn default() -> Self {
         Self::new()
     }
@@ -81,6 +110,12 @@ impl Default for ApNetworkStorage {
 pub struct ApLink {
     snapshot: Cell<LinkSnapshot>,
     waker: PriorityWaker,
+}
+
+impl LinkView for ApLink {
+    fn snapshot(&self) -> LinkSnapshot {
+        self.snapshot.get()
+    }
 }
 
 impl ApLink {
@@ -105,15 +140,17 @@ impl ApLink {
     }
 }
 
-/// The runner's end: it hands the network received MSDUs and takes the
-/// network's frames.
-pub struct ApNetworkEnd<'a> {
+/// The runner's end: it hands the network received MSDUs, takes the
+/// network's frames in its memory `M` and gives the memory back once its
+/// frame ended.
+pub struct ApNetworkEnd<'a, M> {
     receive: WakingSpscSender<'a, EthernetFrame, AP_RX_DEPTH>,
-    pub(crate) transmit: WakingSpscReceiver<'a, EthernetFrame, AP_TX_DEPTH>,
+    pub(crate) transmit: SlotReceiver<'a, Option<Outgoing<M>>, AP_TX_DEPTH>,
+    returned: SlotSender<'a, Option<TxEnded<M>>, AP_TX_DEPTH>,
     link: &'a ApLink,
 }
 
-impl ApNetworkEnd<'_> {
+impl<M> ApNetworkEnd<'_, M> {
     /// Hand one received MSDU to the network: whether the queue took it.
     pub fn deliver(&self, msdu: MsduParts<'_>) -> bool {
         match EthernetFrame::from_parts(msdu) {
@@ -129,13 +166,32 @@ impl ApNetworkEnd<'_> {
     }
 
     /// The next frame of the network, if one waits.
-    pub fn take(&self) -> Option<EthernetFrame> {
-        self.transmit.try_receive()
+    pub fn take(&mut self) -> Option<Outgoing<M>> {
+        self.transmit.try_receive_with(Option::take).ok().flatten()
     }
 
     /// Whether a frame of the network waits.
     pub fn waiting(&self) -> bool {
         !self.transmit.is_empty()
+    }
+
+    /// Give `memory` back to the network: its frame ended, sent or not.
+    /// The queue back holds every network memory ([`ApNetworkStorage::split`]),
+    /// so only a broken queue refuses it.
+    ///
+    /// # Errors
+    ///
+    /// The queue refused it: the memory comes back whole.
+    pub fn give_back(&mut self, memory: M) -> Result<(), M> {
+        let mut ended = Some(TxEnded { memory });
+        let _sent = self.returned.try_send_with(|slot| {
+            *slot = ended.take();
+            Ok::<_, core::convert::Infallible>(())
+        });
+        match ended {
+            None => Ok(()),
+            Some(ended) => Err(ended.memory),
+        }
     }
 }
 
@@ -237,63 +293,56 @@ impl NetDevice for ApNetDevice<'_> {
 }
 
 /// The network stack's sending path into the BSS, taking the stack's
-/// frames `F`.
-pub struct ApNetTransmit<'a, F> {
-    transmit: WakingSpscSender<'a, EthernetFrame, AP_TX_DEPTH>,
-    link: &'a ApLink,
-    frame: PhantomData<fn(F)>,
-}
+/// frames `F` into the network's transmit memory `S`: the same transmit end
+/// as a station's.
+pub type ApNetTransmit<'a, F, S> = DeviceTransmit<'a, F, S, AP_TX_DEPTH, SameHart, ApLink>;
 
-impl<F: oer_protocols_network_port::EthernetFrame> NetTransmit for ApNetTransmit<'_, F> {
-    type Frame = F;
-    /// Nothing comes back: a sent frame is copied into the access point's
-    /// queue, whose room [`Self::has_room`] reads directly.
-    fn reclaim(&mut self) {}
-    fn has_room(&mut self) -> bool {
-        self.transmit.free_capacity() != 0
-    }
-    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        let mut permit = core::pin::pin!(self.transmit.ready());
-        match permit.as_mut().poll(cx) {
-            Poll::Ready(_) => Poll::Ready(()),
-            Poll::Pending => Poll::Pending,
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "tests assert on fixed fixtures"
+)]
+mod tests {
+    extern crate std;
+
+    use super::*;
+    use crate::station::TxRefused;
+    use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
+    use oer_protocols_network_port::{TransmitError, TransmitRefused};
+
+    /// A supply that copies nothing and holds the memories it was built on.
+    struct Held(heapless::Vec<u8, AP_TX_DEPTH>);
+    impl TxSupply<EthernetFrame> for Held {
+        type Memory = u8;
+        fn available(&self) -> bool {
+            false
         }
-    }
-    fn try_transmit(&mut self, mut frame: F) -> Result<(), TransmitRefused<F>> {
-        if self.link.snapshot.get().state != LinkState::Up {
-            return Err(TransmitRefused {
-                frame,
-                reason: TransmitError::LinkDown,
-            });
-        }
-        let copy = match frame.view() {
-            Ok(view) => EthernetFrame::from_parts(MsduParts {
-                destination: view.destination,
-                source: view.source,
-                ether_type: view.ether_type,
-                payload: view.payload,
-            })
-            .map_err(|_| FrameLengthError::TooLong),
-            Err(error) => Err(error),
-        };
-        let copy = match copy {
-            Ok(copy) => copy,
-            Err(error) => {
-                return Err(TransmitRefused {
-                    frame,
-                    reason: TransmitError::InvalidLength(error),
-                });
-            }
-        };
-        match self.transmit.try_send(copy) {
-            Ok(()) => Ok(()),
-            Err(_) => Err(TransmitRefused {
+        fn write(&mut self, frame: EthernetFrame) -> Result<u8, TxRefused<EthernetFrame>> {
+            Err(TxRefused::Kept(TransmitRefused {
                 frame,
                 reason: TransmitError::QueueFull,
-            }),
+            }))
+        }
+        fn give(&mut self, memory: u8) {
+            let _held = self.0.push(memory);
         }
     }
-    fn flush(&mut self) {
-        self.transmit.flush();
+
+    /// The queue back holds every memory of the storage the network was
+    /// built over; one past it, which no real network has, comes back whole
+    /// to its giver, never kept out of reach.
+    #[test]
+    fn a_memory_the_queue_back_refuses_comes_back_whole() {
+        let storage = std::boxed::Box::leak(std::boxed::Box::new(ApNetworkStorage::<u8>::new()));
+        let memories: heapless::Vec<u8, AP_TX_DEPTH> = (0..AP_TX_DEPTH)
+            .map(|memory| u8::try_from(memory).unwrap())
+            .collect();
+        let (_device, _transmit, mut end) =
+            storage.split::<EthernetFrame, _, _, AP_TX_DEPTH>(memories, Held);
+        for memory in 0..AP_TX_DEPTH {
+            assert_eq!(end.give_back(u8::try_from(memory).unwrap()), Ok(()));
+        }
+        assert_eq!(end.give_back(200), Err(200), "the same memory, whole");
     }
 }

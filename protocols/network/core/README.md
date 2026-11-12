@@ -22,7 +22,10 @@ the fill's own error, never as a port refusal, and ends a datagram
 `Outcome::Rejected`, or a producer's declined work `Outcome::Declined`. A port whose answer contradicts that record stops all
 publishing until the core retires: `Ok` after a failed or missing fill ends the
 work `Outcome::Unknown`, not repeated, whatever the fill's error, and a refusal of
-its own after a failed fill ends the work by the fill's cause. Every end at
+its own after a failed fill ends the work by the fill's cause. A port fault
+after a whole fill (`FramePort::is_fault`, such as a buffer its memory refused)
+ends the work `Outcome::Rejected`, since the frame did not go, not repeated,
+and stops publishing the same way (`Unsent::PortFault`, `Broken::Fault`). Every end at
 publication, a frame taken or refused for good, passes the turn to the next
 socket.
 
@@ -93,7 +96,7 @@ neighbors a work protects, `queued` and eviction walk the running chain,
 oldest acceptance first. That is the order `demands` enumerates a socket's
 work in, subject to readiness and policy: it is no send order. A datagram
 whose neighbor is not yet known is not ready, so a later one that is ready
-goes before it, and the egress policy chooses among what is ready. `next_end(&ends)` tells a socket's ends, oldest first, the close's
+goes before it, and publishing takes what is ready. `next_end(&ends)` tells a socket's ends, oldest first, the close's
 among them, as a `WorkId`, which is a place and its generation. It is no right
 to the result: that waits in its place for whoever holds the `CommandId`
 (`CommandId::work` is the same value), and `take_result` checks the
@@ -110,7 +113,7 @@ the UDP checksum, summed over that data in the slot, goes last. A frame the port
 took with its data written ends its declared work `Accepted` in that call:
 `Transmitted::ended` gives the work and its tag, the place is free, and no end
 of it is told later; the frame's own life after the port (its ticket, its air
-reservation and settlement) is the egress's. A producer that declines
+and its return) is the port's. A producer that declines
 (`Declined`) ends the work `Outcome::Declined`, which also passes the turn to
 the next socket, and `withdraw_declared` ends every work whose tag the producer
 no longer keeps so before any port saw it. A declared work is never queued

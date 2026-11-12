@@ -43,6 +43,8 @@ mod access_point;
 pub use access_point::*;
 #[cfg(not(feature = "network"))]
 mod ip_service;
+#[cfg(any(not(feature = "network"), feature = "access-point"))]
+mod tx_memory;
 #[cfg(not(feature = "network"))]
 pub use ip_service::*;
 #[cfg(feature = "network")]
@@ -210,14 +212,14 @@ fn failure(error: wifi::InitializationError) -> ! {
 }
 
 /// The station's transmit end, which the network's sending path owns.
-type Transmit = wifi::NetworkTransmit<'static, Notifies, TxPacket, WifiTx>;
+type Transmit = wifi::StationTransmit<binding::Binding>;
 
 #[cfg(not(feature = "group"))]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,restarted:restarted}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx:TxEnd,fail:failure,restarted:restarted}}
 // The station's network end runs on hart 1, with the group's IP
 // service.
 #[cfg(feature = "group")]
-wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,restarted:restarted,across_harts:{network:NetworkNotify=&NETWORK,actor:ActorNotify=&DATAPATH}}}
+wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx:TxEnd,fail:failure,restarted:restarted,across_harts:{network:NetworkNotify=&NETWORK,actor:ActorNotify=&DATAPATH}}}
 
 /// Where the station's network end runs: on the station's hart, or on hart
 /// 1 through the peers' signals.

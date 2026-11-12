@@ -45,6 +45,40 @@ use oer_portable_memory::PinnedDmaTxRadioLease;
 /// transmit pool placed in the DMA window, held by the radio.
 pub type TxBacking<const B: usize> = PlacedTxLease<PinnedDmaTxRadioLease<'static, B, 0, 0>>;
 
+/// The right that returns a bank buffer's memory to its place.
+pub type BankHome<const B: usize> = oer_portable_memory::ReturnToken<'static, TxBacking<B>>;
+
+/// Where a transmit lease's memory goes home once the radio is done with
+/// it: the bank place whose return right it carries, or the network, which
+/// its terminal reaches through the port's owner.
+pub enum TxHome<const B: usize> {
+    Bank(BankHome<B>),
+    Network,
+}
+
+/// The kind of a lease's home, read without moving it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TxHomeKind {
+    Bank,
+    Network,
+}
+
+impl<const B: usize> TxHome<B> {
+    pub const fn kind(&self) -> TxHomeKind {
+        match self {
+            Self::Bank(_) => TxHomeKind::Bank,
+            Self::Network => TxHomeKind::Network,
+        }
+    }
+}
+
+/// One transmit buffer's memory and the right that takes it home, as one
+/// owner: a descriptor takes it whole and gives it back whole.
+pub struct TxLease<const B: usize> {
+    pub memory: TxBacking<B>,
+    pub home: TxHome<B>,
+}
+
 use oer_protocols_ieee80211_contracts_port::TxStatus;
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 
@@ -3022,6 +3056,9 @@ fn slot(dma: PinnedTxDmaStorage<TxBacking<512>>) -> TxSlot<512> {
 )]
 pub struct TxSlot<const BUFFER_SIZE: usize> {
     dma: PinnedTxDmaStorage<TxBacking<BUFFER_SIZE>>,
+    /// The home of the lease whose memory `dma` holds: attached and
+    /// detached with that memory only.
+    home: Option<TxHome<BUFFER_SIZE>>,
     generation_cursor: u32,
     work: crate::mac::tx_work::MacTxWork,
     active: TxCookie,
@@ -3106,6 +3143,7 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     pub fn from_dma(dma: PinnedTxDmaStorage<TxBacking<BUFFER_SIZE>>) -> Self {
         Self {
             dma,
+            home: None,
             generation_cursor: 0,
             work: crate::mac::tx_work::MacTxWork::new(),
             active: TxCookie(0),
@@ -3130,7 +3168,10 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
         let mut slot = Self::new_model_descriptor()?;
         let backing = test_support::model_backing().ok_or(TxDmaStorageError::Backing)?;
         Pin::new(&mut slot)
-            .attach(backing)
+            .attach(TxLease {
+                memory: backing,
+                home: TxHome::Network,
+            })
             .map_err(|_| TxDmaStorageError::Backing)?;
         Ok(slot)
     }
@@ -3152,14 +3193,110 @@ impl<const BUFFER_SIZE: usize> TxSlot<BUFFER_SIZE> {
     /// and holds none; the buffer comes back unchanged otherwise.
     pub fn attach(
         self: Pin<&mut Self>,
-        backing: TxBacking<BUFFER_SIZE>,
-    ) -> Result<(), TxBacking<BUFFER_SIZE>> {
-        self.get_mut().dma.attach(backing)
+        lease: TxLease<BUFFER_SIZE>,
+    ) -> Result<(), TxLease<BUFFER_SIZE>> {
+        let slot = self.get_mut();
+        let TxLease { memory, home } = lease;
+        match slot.dma.attach(memory) {
+            Ok(()) => {
+                slot.home = Some(home);
+                Ok(())
+            }
+            Err(memory) => Err(TxLease { memory, home }),
+        }
     }
 
-    /// Take the attached buffer back while the slot is free.
-    pub fn detach(self: Pin<&mut Self>) -> Option<TxBacking<BUFFER_SIZE>> {
-        self.get_mut().dma.detach()
+    /// Take the attached lease back, whole, while the slot is free.
+    pub fn detach(self: Pin<&mut Self>) -> Option<TxLease<BUFFER_SIZE>> {
+        let slot = self.get_mut();
+        // A home is attached with its memory and only with it; a slot that
+        // keeps its memory keeps its home.
+        let home = slot.home.take()?;
+        match slot.dma.detach() {
+            Some(memory) => Some(TxLease { memory, home }),
+            None => {
+                slot.home = Some(home);
+                None
+            }
+        }
+    }
+
+    /// The kind of the attached lease's home, while one is attached.
+    pub fn home_kind(&self) -> Option<TxHomeKind> {
+        self.home.as_ref().map(TxHome::kind)
+    }
+
+    /// Attach a bank buffer's memory with its return right, as one lease;
+    /// refused, both come back.
+    #[allow(
+        clippy::type_complexity,
+        reason = "a refusal returns each owner by its own type"
+    )]
+    pub fn attach_bank(
+        self: Pin<&mut Self>,
+        memory: TxBacking<BUFFER_SIZE>,
+        home: BankHome<BUFFER_SIZE>,
+    ) -> Result<(), (TxBacking<BUFFER_SIZE>, BankHome<BUFFER_SIZE>)> {
+        let slot = self.get_mut();
+        match slot.dma.attach(memory) {
+            Ok(()) => {
+                slot.home = Some(TxHome::Bank(home));
+                Ok(())
+            }
+            Err(memory) => Err((memory, home)),
+        }
+    }
+
+    /// Attach a network's memory, its home the network; refused, it comes
+    /// back.
+    pub fn attach_network(
+        self: Pin<&mut Self>,
+        memory: TxBacking<BUFFER_SIZE>,
+    ) -> Result<(), TxBacking<BUFFER_SIZE>> {
+        let slot = self.get_mut();
+        slot.dma.attach(memory)?;
+        slot.home = Some(TxHome::Network);
+        Ok(())
+    }
+
+    /// Take back a bank lease, its memory and return right, while the slot
+    /// is free; `None`, and nothing moved, for no lease or a network's.
+    pub fn detach_bank(
+        self: Pin<&mut Self>,
+    ) -> Option<(TxBacking<BUFFER_SIZE>, BankHome<BUFFER_SIZE>)> {
+        let slot = self.get_mut();
+        match slot.home.take() {
+            Some(TxHome::Bank(home)) => match slot.dma.detach() {
+                Some(memory) => Some((memory, home)),
+                None => {
+                    slot.home = Some(TxHome::Bank(home));
+                    None
+                }
+            },
+            other => {
+                slot.home = other;
+                None
+            }
+        }
+    }
+
+    /// Take back a network lease's memory while the slot is free; `None`,
+    /// and nothing moved, for no lease or a bank's.
+    pub fn detach_network(self: Pin<&mut Self>) -> Option<TxBacking<BUFFER_SIZE>> {
+        let slot = self.get_mut();
+        match slot.home.take() {
+            Some(TxHome::Network) => match slot.dma.detach() {
+                Some(memory) => Some(memory),
+                None => {
+                    slot.home = Some(TxHome::Network);
+                    None
+                }
+            },
+            other => {
+                slot.home = other;
+                None
+            }
+        }
     }
 
     /// Whether a buffer is attached.

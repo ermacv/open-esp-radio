@@ -374,7 +374,10 @@ pub enum Fault {
     GroupKeyIdRange,
     /// The core refused a VIF configuration.
     ConfigurationRefused,
-    /// A queue completed with no MPDU published on it.
+    /// A queue completed with no MPDU published on it. The lease its
+    /// descriptor held goes home by its own home: a bank's to its place at
+    /// once, a network's through
+    /// [`AccessPointPort::take_network_memory`](oer_protocols_ieee80211_contracts_port::AccessPointPort::take_network_memory).
     CompletionWithoutPending {
         /// The hardware queue.
         queue: u8,
@@ -384,7 +387,9 @@ pub enum Fault {
         /// The hardware queue.
         queue: u8,
     },
-    /// A completion returned memory its buffer had not published.
+    /// A buffer refused its lease back from its queue's descriptor: the
+    /// lease stays whole on the descriptor and the attempt beside it, until
+    /// the cleanup after a confirmed stop gives the lease back to it.
     ReturnRefused {
         /// The hardware queue.
         queue: u8,
@@ -560,7 +565,11 @@ impl Fault {
     pub(crate) const fn leaves_owners_whole(self) -> bool {
         matches!(
             self,
-            Self::Unpublished(_) | Self::ReceiveLost | Self::GroupReplacement(_)
+            Self::Unpublished(_)
+                | Self::ReceiveLost
+                | Self::GroupReplacement(_)
+                | Self::ReturnRefused { .. }
+                | Self::CompletionWithoutPending { .. }
         )
     }
 }

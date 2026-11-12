@@ -643,7 +643,9 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
                 ServiceEvent::Yielded => profile.yielded(),
                 ServiceEvent::Waited { ready } => profile.waited(&PROFILE, ready),
                 ServiceEvent::BudgetSpent
+                | ServiceEvent::PacketTurn
                 | ServiceEvent::IntakeFull
+                | ServiceEvent::NoticesFull
                 | ServiceEvent::Published(_)
                 | ServiceEvent::Returned { .. }
                 | ServiceEvent::Local(_) => {}
@@ -652,6 +654,7 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
         let tally = &mut self.0;
         match event {
             ServiceEvent::TurnBegan
+            | ServiceEvent::PacketTurn
             | ServiceEvent::FrameTaken
             | ServiceEvent::Noticed
             | ServiceEvent::Returned { .. } => {}
@@ -666,12 +669,12 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
             ),
             ServiceEvent::BudgetSpent => tally.budget_spent(),
             ServiceEvent::IntakeFull => tally.intake_full(),
+            ServiceEvent::NoticesFull => tally.notices_full(),
             ServiceEvent::Accepted => tally.accepted(),
             ServiceEvent::Published(end) => tally.published(match end {
                 PublishEnd::Chose => Publish::Chose,
                 PublishEnd::Refused => Publish::Refused,
                 PublishEnd::Budget => Publish::Budget,
-                PublishEnd::Deferred => Publish::Deferred,
                 PublishEnd::Fault => Publish::Fault,
             }),
             ServiceEvent::TurnEnded(end) => {

@@ -323,23 +323,78 @@ fn the_network_reaches_only_an_authorized_peer_and_the_group() {
     let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
     let mut engine = engine(&mut storage, &mut beacon);
     associate(&mut engine);
-    let mut output = [0; 512];
     assert_eq!(
         engine
-            .encapsulate(PEER, AP, 0x0800, &[0x45], &mut output)
+            .plan_msdu(PEER, AP, 0x0800, WmmUserPriority::UP0)
             .unwrap(),
         None,
         "the peer is not authorized"
     );
     let group = engine
-        .encapsulate([0xff; 6], AP, 0x0806, &[1, 2], &mut output)
+        .plan_msdu([0xff; 6], AP, 0x0806, WmmUserPriority::UP6)
         .unwrap()
         .unwrap();
-    assert_eq!(group.kind, ApFrameKind::Group);
+    assert_eq!(group.kind(), ApFrameKind::Group);
+    assert_eq!(
+        group.tid(),
+        WmmUserPriority::UP0,
+        "a group frame is best effort"
+    );
+    // A non-QoS header: the prefix is two octets shorter than the longest.
+    assert_eq!(group.prefix_len(), 24 + CCMP_HEADER_LEN + 8);
+    let mut region = [0xee; 128];
+    region[42..44].copy_from_slice(&[1, 2]);
+    let written = engine.write_in_place(group, &mut region, 42, 2).unwrap();
+    assert!(
+        written.moved,
+        "the payload moved down to the shorter prefix"
+    );
+    assert_eq!(written.frame.kind, ApFrameKind::Group);
+    assert_eq!(written.frame.len, 24 + CCMP_HEADER_LEN + 8 + 2);
     // Protected, From-DS, to the group, with room for the CCMP header.
-    assert_eq!(output[1], 0x42);
-    assert_eq!(output[4..10], [0xff; 6]);
-    assert_eq!(group.len, 24 + CCMP_HEADER_LEN + 8 + 2);
+    assert_eq!(region[1], 0x42);
+    assert_eq!(region[4..10], [0xff; 6]);
+    assert_eq!(region[24..32], [0; CCMP_HEADER_LEN]);
+    assert_eq!(region[32..40], [0xaa, 0xaa, 3, 0, 0, 0, 0x08, 0x06]);
+    assert_eq!(region[40..42], [1, 2]);
+}
+
+/// A region that does not hold the MPDU refuses it before its sequence
+/// number is drawn: the next frame takes the number the refused one would
+/// have.
+#[test]
+fn an_in_place_write_that_does_not_fit_draws_no_sequence_number() {
+    let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
+    let mut engine = engine(&mut storage, &mut beacon);
+    let group = engine
+        .plan_msdu([0xff; 6], AP, 0x0800, WmmUserPriority::UP0)
+        .unwrap()
+        .unwrap();
+    let mut region = [0; 64];
+    assert_eq!(
+        engine.write_in_place(group, &mut region, 42, 40),
+        Err(ApEngineError::Output),
+        "the payload lies past the region"
+    );
+    assert_eq!(
+        engine.write_in_place(group, &mut region, 30, 4),
+        Err(ApEngineError::Output),
+        "the prefix is longer than the payload's offset"
+    );
+    assert!(region.iter().all(|octet| *octet == 0), "nothing written");
+    let first = engine.write_in_place(group, &mut region, 40, 4).unwrap();
+    assert!(
+        !first.moved,
+        "a prefix of the payload's offset moves nothing"
+    );
+    let control = |region: &[u8]| u16::from_le_bytes([region[22], region[23]]);
+    let sequence = control(&region);
+    let _second = engine.write_in_place(group, &mut region, 40, 4).unwrap();
+    assert_eq!(
+        control(&region),
+        sequence.wrapping_add(16),
+        "the next number"
+    );
 }
 
 #[test]
@@ -570,4 +625,24 @@ mod handshake {
             ApReceived::Msdu(_)
         ));
     }
+}
+
+/// A group frame's queue is the group's, best effort; a destination that is
+/// no authorized peer has no queue: its MSDU does not go.
+#[test]
+fn a_frame_s_queue_is_its_authorized_peer_s_or_the_group_s() {
+    let (mut storage, mut beacon) = (AccessPointPeerStorage::new(), [0; AP_BEACON_CAPACITY]);
+    let mut engine = engine(&mut storage, &mut beacon);
+    assert_eq!(
+        engine.queue_of([0xff; 6], WmmUserPriority::UP6),
+        Some((None, WmmUserPriority::UP0)),
+        "the group goes as best effort"
+    );
+    assert_eq!(engine.queue_of(PEER, WmmUserPriority::UP6), None, "no peer");
+    associate(&mut engine);
+    assert_eq!(
+        engine.queue_of(PEER, WmmUserPriority::UP6),
+        None,
+        "associated, not authorized"
+    );
 }

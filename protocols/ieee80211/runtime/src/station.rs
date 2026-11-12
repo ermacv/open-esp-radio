@@ -33,8 +33,8 @@
 //!
 //! [`EthernetFrame`]: oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame
 
-mod air;
-pub use air::{Completions, FrameCost, StationAir, StationKey};
+mod local_tx;
+pub use local_tx::{LocalTx, LocalTxState, PoolRefused, TxPool};
 mod commands;
 pub mod contract;
 mod events;
@@ -54,8 +54,8 @@ pub(crate) use commands::CommandCredits;
 pub use commands::{CommandRefused, CommandTerminal, Request};
 pub use control::{
     Control, ControlCommand, ControlCreateError, ControlCreateRefused, ControlError,
-    ControlRefused, Device, DeviceTransmit, Events, Operation, OperationEnd, RunnerControl, State,
-    Status, StatusReader, TxRefused, TxSupply, UnreadOperation,
+    ControlRefused, Device, DeviceTransmit, Events, LinkView, Operation, OperationEnd,
+    RunnerControl, State, Status, StatusReader, TxRefused, TxSupply, UnreadOperation,
 };
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
 
@@ -143,17 +143,12 @@ impl<K, F: FnMut(ServiceOutput<K>)> ServiceOutputSink<K> for F {
     }
 }
 
-/// One MSDU's end, as the station gives it back: the network's memory, what
-/// its transmissions cost by the backend's model (the part of each attempt
-/// that carried it), and the full rate of its last transmission with an
-/// established rate ([`TxEnd`]): no cost and no rate for an MSDU known never
-/// to have reached the air.
-///
-/// [`TxEnd`]: oer_protocols_ieee80211_contracts_port::TxEnd
+/// The memory of one MSDU whose frame ended, on the air or before it, back
+/// for the network. Its air was charged once, to its PPDU's queue, on the
+/// MAC.
 #[derive(Debug)]
 pub struct TxEnded<M> {
     pub memory: M,
-    pub end: oer_protocols_ieee80211_contracts_port::TxEnd,
 }
 
 /// One MSDU the network stack hands the station: the network's memory its

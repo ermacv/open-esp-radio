@@ -35,12 +35,24 @@
 //! [`ApEnd::Unsupported`] with every owner in the runner; a composition
 //! checks [`serves_beacons`] before it starts the radio at all.
 //!
+//! # Network data
+//!
+//! A network MSDU goes from the network's own memory, the port's
+//! [`NetworkFrames`] buffer ([`TxNetworkPool`]): its queue is chosen from the
+//! raw memory, and at its transmission every check that can refuse it runs
+//! first (its destination still authorized, its key with a packet number
+//! left, its rate and power); only then are its sequence number (as the MPDU
+//! is written in place in front of the payload) and its packet number drawn.
+//! A refusal returns the memory to the network unwritten, and the MPDU's
+//! terminal returns it once it ended; a QoS peer's payload never moves, a
+//! shorter header's moves two octets once ([`ApStatus::payload_moves`]).
+//!
 //! # Waiting
 //!
 //! A turn that moved something (an owner, a unit, a terminal or a command
 //! taken) yields to the executor once and turns again. An idle turn yields
 //! and lets its sources decide: the port's facts, a deadline, a frame of
-//! the network while a ticket and a buffer are free, or a stop not yet
+//! the network while a ticket is free, or a stop not yet
 //! accepted. After [`IDLE_REPEATS`] idle turns in a row the runner has
 //! settled: deadlines it found due no longer wake it, and the very facts
 //! it just served, when the port still reports them as it registers the
@@ -93,24 +105,43 @@ use oer_protocols_ieee80211_contracts_port::{
     RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopCause,
     StopObservations, StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower,
     SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory,
-    TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxOperation, TxOutcome, TxPower, TxProtection,
-    TxSource, Unconsumed, UnconsumedRefused,
+    TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxNetworkPool, TxOperation, TxOutcome, TxPower,
+    TxProtection, TxSource, Unconsumed, UnconsumedRefused,
 };
+use oer_protocols_ieee80211_contracts_port::{NetworkFrames, NetworkTxBuffer};
 use oer_protocols_ieee80211_core_roles_ap::{
-    ApEapolTransmit, ApEapolTxContext, ApGroupKeyInstallation, ApGroupTransmitKey,
+    AP_MAX_CLIENTS, ApAssociationIdentity, ApEapolTransmit, ApEapolTxContext,
+    ApGroupKeyInstallation, ApGroupTransmitKey,
     beacon::{ApBeaconTxContext, ApBeaconTxOutcome},
     engine::{
         AP_EAPOL_CAPACITY, ApAfter, ApDue, ApEapol, ApEngine, ApEngineError, ApFrame, ApFrameKind,
         ApPeerDisconnectKind, ApReceived, ApSppScope as SppScope, ApTeardown, port_frame,
     },
 };
-use oer_protocols_ieee80211_core_roles_sta::data::WmmAccessCategory;
+use oer_protocols_ieee80211_core_roles_sta::data::{
+    MAX_ETHERNET_PAYLOAD_LEN, MSDU_ETHERNET_OFFSET, MSDU_PAYLOAD_OFFSET, WmmAccessCategory,
+};
 use oer_protocols_ieee80211_core_upper_mac::{
     ccmp::{CcmpPacketNumberStep, InstalledCcmpTxKey, PendingCcmpTxKey},
     receive::Integrity,
 };
 
-use network::ApNetworkEnd;
+use crate::datapath::queues::{QueueId, TxQueues};
+use network::{AP_TX_DEPTH, ApNetworkEnd};
+use oer_protocols_ieee80211_core_roles_sta::data::plane::OutboundMsdu;
+
+/// The length of an Ethernet header in front of an MSDU's payload.
+const ETHERNET_HEADER_LEN: usize = MSDU_PAYLOAD_OFFSET - MSDU_ETHERNET_OFFSET;
+
+const _: () = {
+    // The network places a payload where the longest data MPDU prefix ends,
+    // and carries the longest MSDU the contract names.
+    if MSDU_PAYLOAD_OFFSET + MAX_ETHERNET_PAYLOAD_LEN
+        != oer_protocols_ieee80211_contracts_port::NETWORK_MPDU_LEN
+    {
+        panic!("the network's frame region is the contract's longest MPDU");
+    }
+};
 
 /// The tickets the runner holds at most.
 pub const AP_TICKETS: usize = 8;
@@ -126,6 +157,11 @@ const RECEIVE_BUDGET: usize = 16;
 
 /// The network frames one turn carries at most.
 const TRANSMIT_BUDGET: usize = 8;
+
+/// The peers the transmit queues name: each client's slot, and the group.
+const AP_QUEUE_PEERS: usize = AP_MAX_CLIENTS + 1;
+/// The group's peer among the transmit queues.
+const GROUP_PEER: u8 = AP_MAX_CLIENTS as u8;
 
 /// The received units the runner holds at once: one at a time.
 const RECEIVE_ROOM: u8 = 1;
@@ -161,6 +197,12 @@ type Buffer<'id, P, C> = <Ty<'id, P> as TxBufferPool<'id, C>>::Buffer;
 type Sent<'id, P, C> = <Ty<'id, P> as TxBufferPool<'id, C>>::Sent;
 /// The named fault of the port `P`.
 pub type PortFault<'id, P> = <P as DataPort<'id>>::Fault;
+/// The network's transmit memory of the port `P`.
+pub type NetworkMemory<'id, P> = <Ty<'id, P> as PortTypes<'id>>::DataMemory;
+/// A network's memory lent as a buffer of the port `P`.
+type NetBuffer<'id, P> = NetworkTxBuffer<'id, Ty<'id, P>>;
+/// A published MPDU in a network's memory of the port `P`.
+type NetSent<'id, P> = <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::Sent;
 /// An access-point command of the port `P`.
 type Command<'id, P> = AccessPointCommand<'id, Ty<'id, P>, Caps<'id, P>>;
 /// The access point's configure permission on the port `P`.
@@ -448,12 +490,23 @@ where
     AnyBuffer(<Ty<'id, P> as PortTypes<'id>>::AnyTxBuffer),
     /// A buffer without a place, or whose memory the port still holds.
     Buffer(Buffer<'id, P, C>),
+    /// A network's buffer whose memory the port still holds.
+    Network(NetBuffer<'id, P>),
+    /// A network's memory the network's queue back refused
+    /// ([`ApContract::NetworkReturn`]).
+    NetworkMemory(NetworkMemory<'id, P>),
+    /// An earlier association's memory the queue back refused as the place
+    /// passed on, and the new association's frame that was being placed.
+    NetworkMemories([NetworkMemory<'id, P>; 2]),
     /// A refused submission whose ticket found no place, with the owner its
     /// source returned.
     Submission(Ticket<'id, P>, Source<'id, P, C>),
     /// A refused fresh submission's source that came back a retransmission;
     /// its ticket is home.
     Sent(<Ty<'id, P> as TxBufferPool<'id, C>>::Sent),
+    /// A refused fresh submission from a network's memory that came back a
+    /// retransmission; its ticket is home.
+    NetworkSent(NetSent<'id, P>),
     /// A pairwise removal's slot without a place, with its association.
     PairwiseRemoved(
         <Keys<'id, P> as KeyTypes<'id>>::PairwiseSlot,
@@ -504,6 +557,11 @@ where
     Fresh(Buffer<'id, P, C>),
     /// The port's retransmission, which a fresh source never becomes.
     Sent(<Ty<'id, P> as TxBufferPool<'id, C>>::Sent),
+    /// The network's memory it was given.
+    Network(NetBuffer<'id, P>),
+    /// The port's retransmission of a network's memory, which a fresh
+    /// source never becomes.
+    NetworkSent(NetSent<'id, P>),
 }
 
 /// A terminal of the access point whose owners' homes
@@ -551,6 +609,14 @@ pub enum ApContract {
     /// A receive cut handed over more units in one call than the runner
     /// reads after it.
     CutUnits,
+    /// A network MSDU whose every check passed was refused after its
+    /// sequence number was drawn: its own header did not read back, its
+    /// key gave no number, or the port's check refused what the runner's
+    /// geometry admits.
+    NetworkAdmission,
+    /// The network's queue back refused a memory, which it holds room for
+    /// by construction: the queue broke.
+    NetworkReturn,
 }
 
 /// The access point's state, as the application reads it.
@@ -571,6 +637,10 @@ pub struct ApStatus {
     pub refused: u32,
     /// Received MSDUs the network queue had no room for.
     pub rx_dropped: u32,
+    /// Network MSDUs whose payload moved down in its memory to a shorter
+    /// header than a QoS one (a group frame, a non-QoS peer's): a QoS
+    /// peer's frame goes where the network wrote it.
+    pub payload_moves: u32,
 }
 
 /// What the application and the runner share: the stop request and the
@@ -595,6 +665,7 @@ impl ApShared {
                 beacons_expired: 0,
                 refused: 0,
                 rx_dropped: 0,
+                payload_moves: 0,
             }),
             status_waker: oer_portable_sync::PriorityWaker::new(),
         }
@@ -661,8 +732,10 @@ enum Purpose {
     Eapol(ApEapolTxContext),
     /// A step of a peer's teardown.
     Teardown(ApTeardown, ApPeerDisconnectKind),
-    /// A data MSDU.
-    Data,
+    /// A data MSDU of this queue, of this association (none for the
+    /// group's): its attempt is charged only while the association still
+    /// owns the queue.
+    Data(QueueId, Option<ApAssociationIdentity>),
     /// The beacon.
     Beacon(ApBeaconTxContext),
 }
@@ -750,7 +823,7 @@ where
     engine: ApEngine<'s, S>,
     policy: ApPolicy,
     channel: SupportedChannel<Caps<'id, P>>,
-    network: ApNetworkEnd<'n>,
+    network: ApNetworkEnd<'n, NetworkMemory<'id, P>>,
     context: <Ty<'id, P> as PortTypes<'id>>::Context,
     nonces: X,
     tickets: heapless::Vec<Ticket<'id, P>, AP_TICKETS>,
@@ -760,6 +833,12 @@ where
         <Ty<'id, P> as PortTypes<'id>>::TicketPath,
     >,
     buffers: heapless::Vec<Buffer<'id, P, C>, AP_BUFFERS>,
+    /// The network's frames by peer and TID, each in its memory, until it
+    /// goes.
+    queues: TxQueues<NetworkMemory<'id, P>, AP_TX_DEPTH, AP_QUEUE_PEERS>,
+    /// The association each client place's queues belong to: a frame goes,
+    /// and an attempt is charged, only under its own one.
+    owners: [Option<ApAssociationIdentity>; AP_MAX_CLIENTS],
     purposes: [Option<Purpose>; 32],
     configure: Option<Configure<'id, P>>,
     /// The access point's association, home while no pairwise removal
@@ -914,6 +993,23 @@ where
     }
 }
 
+/// The owner a refused network source returns: the network's buffer it
+/// was given, or the port's retransmission, which a fresh source never
+/// becomes.
+fn returned_network<'id, P, C, F, O, K, R>(
+    source: TxSource<NetBuffer<'id, P>, NetSent<'id, P>, F, O, K, R>,
+) -> Source<'id, P, C>
+where
+    P: AccessPointPort<'id>,
+    C: TxBufferClass,
+    Ty<'id, P>: TxBufferPool<'id, C>,
+{
+    match source {
+        TxSource::Fresh { buffer, .. } => Source::Network(buffer),
+        TxSource::Retransmission { mpdu, .. } => Source::NetworkSent(mpdu),
+    }
+}
+
 /// The owners an operation stopped on, with the break they show.
 type Stray<'id, P, C> = (ApContract, Kept<'id, P, C>);
 
@@ -1001,11 +1097,39 @@ where
         self.phase = Phase::TearingDown;
         self.status.running = false;
         self.network.set_link(false);
+        self.return_network_frames()?;
         while let Some(teardown) = self.engine.stopping_peer() {
             self.teardown(teardown)?;
         }
         self.advance_stop();
         Ok(())
+    }
+
+    /// Hand the network back every frame it gave and none went: those in
+    /// the queues and those still in its transport. Nothing carries them
+    /// once the access point stops serving.
+    ///
+    /// A refusal of the queue back, which holds every network memory, stops
+    /// it there: the refused memory comes back in the error, and the rest
+    /// stay where they are, in the queues and the transport.
+    fn return_network_frames(&mut self) -> Result<(), Stray<'id, P, C>> {
+        while let Some(msdu) = self.queues.pop_any() {
+            self.give_memory(msdu.memory)?;
+        }
+        self.queues.unblock();
+        while let Some(outgoing) = self.network.take() {
+            self.give_memory(outgoing.memory)?;
+        }
+        Ok(())
+    }
+
+    /// Give `memory` back to the network. Its queue back holds every network
+    /// memory, so a refusal is a broken queue: the memory comes back whole in
+    /// the named error.
+    fn give_memory(&mut self, memory: NetworkMemory<'id, P>) -> Result<(), Stray<'id, P, C>> {
+        self.network
+            .give_back(memory)
+            .map_err(|memory| (ApContract::NetworkReturn, Kept::NetworkMemory(memory)))
     }
 
     /// Queue a teardown of `peer`.
@@ -1324,7 +1448,8 @@ where
 
     /// Whether a single MPDU's owners have their homes: its ticket names a
     /// purpose the runner gave it, a ticket's place is free, and its buffer
-    /// comes back of the runner's class with a buffer's place free.
+    /// comes back of the runner's class with a buffer's place free, or in a
+    /// network's memory, whose queue back always has room.
     fn admits_completed(
         &self,
         completed: &oer_protocols_ieee80211_contracts_port::SingleCompleted<'id, Ty<'id, P>>,
@@ -1340,9 +1465,13 @@ where
         if self.tickets.is_full() {
             return Err(ApContract::UnknownTicket(index));
         }
-        if <Ty<'id, P> as TxBufferPool<'id, C>>::completed_class(completed).is_none()
-            || self.buffers.is_full()
-        {
+        let own = <Ty<'id, P> as TxBufferPool<'id, C>>::completed_class(completed).is_some();
+        let network =
+            <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::completed_class(
+                completed,
+            )
+            .is_some();
+        if !(network || own && !self.buffers.is_full()) {
             return Err(ApContract::BufferClass);
         }
         Ok(())
@@ -1462,6 +1591,19 @@ where
             }
             return Ok(());
         }
+        // One key a peer: a key it still had is superseded and comes off, so
+        // the key a frame is checked against is the key it is numbered by.
+        if let Some(at) = self.keys.iter().position(|(owner, _)| *owner == peer) {
+            // Room for its removal first: refused, the new key comes back
+            // whole and the old one stays installed.
+            if self.removals.is_full() {
+                return Err((ApContract::ForeignKey, Kept::Installed((peer, installed))));
+            }
+            let (_, superseded) = self.keys.swap_remove(at);
+            if let Err(key) = self.removals.push_back(superseded.into_key()) {
+                return Err((ApContract::ForeignKey, Kept::PairwiseKey(key)));
+            }
+        }
         if let Err(installed) = self.keys.push((peer, installed)) {
             // Excluded by `admit`: a key's place was free.
             return Err((ApContract::ForeignKey, Kept::Installed(installed)));
@@ -1498,6 +1640,36 @@ where
         }
     }
 
+    /// A terminal's buffer home: a port buffer to the runner's, fresh or
+    /// renewed; a network's memory back to the network, its MPDU ended, sent
+    /// or not, carrying no MSDU of the runner's.
+    fn home_returned(
+        &mut self,
+        buffer: <Ty<'id, P> as PortTypes<'id>>::AnyTxBuffer,
+    ) -> Result<(), Stray<'id, P, C>> {
+        let buffer = match <Ty<'id, P> as TxBufferPool<'id, C>>::class(buffer) {
+            Ok(buffer) => return self.home_buffer(buffer),
+            Err(buffer) => buffer,
+        };
+        let buffer = match <Ty<'id, P> as TxBufferPool<'id, C>>::sent(buffer) {
+            Ok(sent) => {
+                return self.home_buffer(<Ty<'id, P> as TxBufferPool<'id, C>>::renew(sent).0);
+            }
+            Err(buffer) => buffer,
+        };
+        let buffer =
+            match <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::class(buffer) {
+                Ok(buffer) => return self.give_network(buffer),
+                Err(buffer) => buffer,
+            };
+        match <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::sent(buffer) {
+            Ok(sent) => self.give_network(
+                <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::renew(sent).0,
+            ),
+            Err(other) => Err((ApContract::BufferClass, Kept::AnyBuffer(other))),
+        }
+    }
+
     /// A single MPDU's terminal: its ticket and buffer home, then what its
     /// purpose asks.
     fn completed(
@@ -1508,6 +1680,7 @@ where
         let parts = completed.into_parts(&mut self.access);
         let index = parts.ticket.index();
         let outcome = parts.outcome;
+        let cost = parts.cost;
         let (buffer, _) = parts.payload.into_parts();
         // Each home below was found free by `admit`, and the buffer of the
         // runner's class.
@@ -1517,15 +1690,7 @@ where
                 Kept::Completion(ticket, buffer),
             ));
         }
-        match <Ty<'id, P> as TxBufferPool<'id, C>>::class(buffer) {
-            Ok(buffer) => self.home_buffer(buffer)?,
-            Err(buffer) => match <Ty<'id, P> as TxBufferPool<'id, C>>::sent(buffer) {
-                Ok(sent) => {
-                    self.home_buffer(<Ty<'id, P> as TxBufferPool<'id, C>>::renew(sent).0)?;
-                }
-                Err(other) => return Err((ApContract::BufferClass, Kept::AnyBuffer(other))),
-            },
-        }
+        self.home_returned(buffer)?;
         let delivered = matches!(outcome, TxOutcome::Ended(SingleEnd::Delivered { .. }));
         let Some(purpose) = self
             .purposes
@@ -1544,7 +1709,14 @@ where
                     self.refuse();
                 }
             }
-            Purpose::Response(_) | Purpose::Data => {}
+            Purpose::Response(_) => {}
+            // One charge for the attempt, what its publications cost by the
+            // backend's model; an unknown cost stays unknown, never nothing.
+            Purpose::Data(queue, association) => {
+                if self.owns(queue, association) {
+                    self.queues.charge(queue, cost);
+                }
+            }
             Purpose::Eapol(context) => {
                 // A context the handshake no longer names returns as
                 // superseded; a refusal counts, and the handshake's own
@@ -1611,6 +1783,27 @@ where
             .map_err(|buffer| (ApContract::BufferClass, Kept::Buffer(buffer)))
     }
 
+    /// Give a network's buffer back to the network, its memory whole. One
+    /// whose memory the port still holds stops its operation.
+    fn give_network(&mut self, buffer: NetBuffer<'id, P>) -> Result<(), Stray<'id, P, C>> {
+        match <Ty<'id, P> as TxNetworkPool<'id>>::into_memory(buffer) {
+            Ok(memory) => self.give_memory(memory),
+            Err(buffer) => Err((ApContract::BufferClass, Kept::Network(buffer))),
+        }
+    }
+
+    /// The owner a refused submission's source returned goes home: a port
+    /// buffer to the buffers, a network's memory to the network. A
+    /// retransmission, which a fresh source never becomes, stops the step.
+    fn source_home(&mut self, source: Source<'id, P, C>) -> Result<(), Stray<'id, P, C>> {
+        match source {
+            Source::Fresh(buffer) => self.give_buffer(buffer),
+            Source::Network(buffer) => self.give_network(buffer),
+            Source::Sent(sent) => Err((ApContract::BufferClass, Kept::Sent(sent))),
+            Source::NetworkSent(sent) => Err((ApContract::BufferClass, Kept::NetworkSent(sent))),
+        }
+    }
+
     /// The peer's teardown frames went: its key comes off and the engine
     /// forgets it.
     fn finish_teardown(&mut self, peer: [u8; 6]) -> Result<(), Stray<'id, P, C>> {
@@ -1633,7 +1826,80 @@ where
         }
         self.installs.retain(|waiting| *waiting != peer);
         self.held_message3.retain(|held| held.peer != peer);
+        // Its frames go with it: none goes under a later association.
+        for place in 0..AP_MAX_CLIENTS {
+            let gone = self
+                .owners
+                .get(place)
+                .copied()
+                .flatten()
+                .is_some_and(|owner| owner.address() == peer);
+            if gone {
+                self.release_place(place)
+                    .map_err(|memory| (ApContract::NetworkReturn, Kept::NetworkMemory(memory)))?;
+            }
+        }
         Ok(())
+    }
+
+    /// Whether `association` still owns `queue`: the group's queue has
+    /// none, a client place's its current one.
+    fn owns(&self, queue: QueueId, association: Option<ApAssociationIdentity>) -> bool {
+        if queue.peer() == GROUP_PEER {
+            return association.is_none();
+        }
+        association.is_some()
+            && self
+                .owners
+                .get(usize::from(queue.peer()))
+                .copied()
+                .flatten()
+                == association
+    }
+
+    /// Hand the network back what client place `place`'s ended association
+    /// left in its queues, and start the place's accounts anew.
+    ///
+    /// A refusal of the queue back stops it there: the refused memory comes
+    /// back, and the rest stay the place's.
+    fn release_place(&mut self, place: usize) -> Result<(), NetworkMemory<'id, P>> {
+        let Some(peer) = u8::try_from(place).ok() else {
+            return Ok(());
+        };
+        while let Some(msdu) = self.queues.pop_peer(peer) {
+            self.network.give_back(msdu.memory)?;
+        }
+        self.queues.reset_peer(peer);
+        if let Some(owner) = self.owners.get_mut(place) {
+            *owner = None;
+        }
+        Ok(())
+    }
+
+    /// The queue place of `association`, its queues taken over from an
+    /// earlier association of the place, whose frames go back.
+    ///
+    /// # Errors
+    ///
+    /// The queue back refused an earlier association's memory: it comes
+    /// back, and the place stays the earlier association's.
+    fn place_of(
+        &mut self,
+        association: ApAssociationIdentity,
+    ) -> Result<Option<u8>, NetworkMemory<'id, P>> {
+        let Some(place) = association.association_id().checked_sub(1).map(usize::from) else {
+            return Ok(None);
+        };
+        let Some(owner) = self.owners.get(place).copied() else {
+            return Ok(None);
+        };
+        if owner != Some(association) {
+            self.release_place(place)?;
+            if let Some(slot) = self.owners.get_mut(place) {
+                *slot = Some(association);
+            }
+        }
+        Ok(u8::try_from(place).ok())
     }
 
     /// A frame of `purpose` did not go: what its terminal would have done
@@ -1654,7 +1920,7 @@ where
             Purpose::Beacon(context) => {
                 let _release: Option<_> = context.complete(ApBeaconTxOutcome::Unsent);
             }
-            Purpose::Response(_) | Purpose::Data => {}
+            Purpose::Response(_) | Purpose::Data(..) => {}
         }
         Ok(())
     }
@@ -1687,7 +1953,7 @@ where
         policy: ApPolicy,
         channel: SupportedChannel<Caps<'id, P>>,
         group_key: [u8; 16],
-        network: ApNetworkEnd<'n>,
+        network: ApNetworkEnd<'n, NetworkMemory<'id, P>>,
         context: <Ty<'id, P> as PortTypes<'id>>::Context,
         nonces: X,
     ) -> Self {
@@ -1722,6 +1988,8 @@ where
                 tickets,
                 access,
                 buffers,
+                queues: TxQueues::new(),
+                owners: [None; AP_MAX_CLIENTS],
                 purposes: [const { None }; 32],
                 configure: Some(configure),
                 association: Some(association),
@@ -1842,9 +2110,7 @@ where
                 .flatten()
                 .filter(|at| !settled || *at > now)
                 .min();
-            let sends = self.homes.phase == Phase::Running
-                && !self.homes.tickets.is_empty()
-                && !self.homes.buffers.is_empty();
+            let sends = self.homes.phase == Phase::Running && !self.homes.tickets.is_empty();
             let stopping = self.homes.stop;
             let port = &mut self.port;
             let network = &mut self.homes.network;
@@ -1872,7 +2138,7 @@ where
                 }
             };
             // The network's frames wake the runner only while it can send
-            // one; a ticket or buffer comes back with a fact.
+            // one; a ticket comes back with a fact.
             let frames = poll_fn(|cx| {
                 if !sends {
                     return Poll::Pending;
@@ -1971,6 +2237,9 @@ where
         self.homes.phase = Phase::StoppingRadio;
         self.homes.status.running = false;
         self.homes.network.set_link(false);
+        // Nothing carries the network's frames once the stop finishes: those
+        // a halt left behind its owners go back now.
+        self.return_left_frames();
         let watched = self
             .watch_stop(clock, |observed| -> ControlFlow<Infallible> {
                 unconfirmed(observed);
@@ -2119,6 +2388,11 @@ where
             match woke {
                 Woke::Stopped(Ok(())) => {
                     self.take_unconsumed();
+                    // The stop's last progress may have freed the network's
+                    // memory the port held: it goes home now, beside the
+                    // confirmed stop; a refusal waits as the halt's owners
+                    // ([`Self::take_kept`]).
+                    self.return_left_frames();
                     return Ok(());
                 }
                 // A device fault the stop's answer names ends the watch
@@ -2170,7 +2444,18 @@ where
     ) -> ApEnd<PortFault<'id, P>> {
         self.homes.status.running = false;
         self.homes.network.set_link(false);
+        let end = self.halt_end(halt);
+        // Nothing carries the network's frames now: they go back, unless a
+        // halt's owners already wait to be taken, which a refused return's
+        // memory could not sit beside; then they stay queued until those
+        // owners are taken or the stop finishes.
+        self.return_left_frames();
         shared.publish(self.homes.status);
+        end
+    }
+
+    /// What `halt` ends the run with, its owners in the runner's homes.
+    fn halt_end(&mut self, halt: Halt<'id, P, C, PortFault<'id, P>>) -> ApEnd<PortFault<'id, P>> {
         match halt {
             Halt::Faulted(fault) => {
                 self.homes.faulted = true;
@@ -2218,12 +2503,39 @@ where
 
     /// The owners of an operation that stopped on one without a home of
     /// the runner's, whole: a step's first, then a terminal's; each once.
+    ///
+    /// Once a halt's owners are taken, the network's frames that halt left
+    /// behind them go back now ([`Self::return_left_frames`]); any other
+    /// call, a running access point's included, leaves every frame where
+    /// it is.
     pub fn take_kept(&mut self) -> Option<Kept<'id, P, C>> {
-        self.homes
-            .stopped_on
-            .take()
-            .or_else(|| self.homes.kept.take())
-            .map(|(_, kept)| kept)
+        if let Some((_, halted)) = self.homes.stopped_on.take() {
+            self.return_left_frames();
+            return Some(halted);
+        }
+        self.homes.kept.take().map(|(_, kept)| kept)
+    }
+
+    /// Give the network back the frames still queued or in its transport,
+    /// unless a halt's owners wait to be taken: a refusal's memory then
+    /// becomes those owners, and the rest stay queued for the next call.
+    fn return_left_frames(&mut self) {
+        if self.homes.stopped_on.is_none()
+            && let Err(kept) = self.return_network_memories()
+        {
+            self.homes.stopped_on = Some(kept);
+        }
+    }
+
+    /// Give the network every memory of its own the runner or the port
+    /// holds: the frames still queued or in its transport, and a memory the
+    /// port holds with no attempt to carry it home
+    /// ([`AccessPointPort::take_network_memory`]).
+    fn return_network_memories(&mut self) -> Result<(), Stray<'id, P, C>> {
+        while let Some(memory) = self.port.take_network_memory() {
+            self.homes.give_memory(memory)?;
+        }
+        self.homes.return_network_frames()
     }
 
     /// The unit whose recycle the port refused, with the count that
@@ -2555,42 +2867,313 @@ where
         Ok(())
     }
 
-    /// Carry the network's frames into the BSS while tickets and buffers
-    /// last.
+    /// Carry the network's frames into the BSS while tickets last. The
+    /// network's queue is the transport: its frames go into their peers'
+    /// TIDs' queues at once, each in its own memory, and each transmission
+    /// starts from the queue the MAC chooses: its MPDU is written in place
+    /// in the network's memory with that TID's priority and number and sent
+    /// from there, no copy made.
     fn transmit_network(&mut self, now: Instant) -> Result<(), Halt<'id, P, C, PortFault<'id, P>>> {
+        let homes = &mut self.homes;
+        while homes.queues.has_room() {
+            let Some(mut outgoing) = homes.network.take() else {
+                break;
+            };
+            let queue = <Ty<'id, P> as TxNetworkPool<'id>>::frame_region(&mut outgoing.memory)
+                .and_then(|region| {
+                    region
+                        .get(MSDU_ETHERNET_OFFSET..)?
+                        .first_chunk::<6>()
+                        .copied()
+                })
+                .and_then(|destination| homes.engine.queue_of(destination, outgoing.priority));
+            let Some((association, tid)) = queue else {
+                // No authorized peer of that destination: it does not go.
+                homes.give_memory(outgoing.memory)?;
+                continue;
+            };
+            let place = match association {
+                Some(association) => match homes.place_of(association) {
+                    Ok(place) => place,
+                    // Both owners come back: the earlier association's
+                    // memory the queue refused, and this frame.
+                    Err(refused) => {
+                        return Err(Halt::Kept(
+                            ApContract::NetworkReturn,
+                            Kept::NetworkMemories([refused, outgoing.memory]),
+                        ));
+                    }
+                },
+                None => Some(GROUP_PEER),
+            };
+            let msdu = OutboundMsdu {
+                memory: outgoing.memory,
+                length: usize::from(outgoing.length),
+                priority: tid,
+            };
+            match place.and_then(|place| QueueId::new(place, tid)) {
+                Some(queue) => {
+                    if let Err(msdu) = homes.queues.push(queue, msdu) {
+                        homes.give_memory(msdu.memory)?;
+                    }
+                }
+                None => homes.give_memory(msdu.memory)?,
+            }
+        }
         for _ in 0..TRANSMIT_BUDGET {
             let homes = &mut self.homes;
-            if homes.tickets.is_empty() || homes.buffers.is_empty() || !homes.network.waiting() {
+            if homes.tickets.is_empty() {
                 break;
             }
-            let Some(frame) = homes.network.take() else {
+            let Some(queue) = homes.queues.select(None) else {
                 break;
             };
-            let Some(mut buffer) = homes.buffers.pop() else {
-                break;
-            };
-            let parts = frame.parts();
-            let written = match buffer.bytes_mut() {
-                Ok(bytes) => homes.engine.encapsulate(
-                    parts.destination,
-                    parts.source,
-                    parts.ether_type,
-                    parts.payload,
-                    bytes,
-                ),
-                // The port still holds its memory: the step stops on it.
-                Err(_) => return Err(Halt::Kept(ApContract::BufferClass, Kept::Buffer(buffer))),
-            };
-            match written {
-                Ok(Some(written)) => {
-                    self.submit(buffer, written, Purpose::Data, TxOperation::Data, None, now)?;
+            // A client queue's frames go only under the association they
+            // came for: one that ended leaves them to the network.
+            let association = if queue.peer() == GROUP_PEER {
+                None
+            } else {
+                let owner = homes
+                    .owners
+                    .get(usize::from(queue.peer()))
+                    .copied()
+                    .flatten();
+                match owner.filter(|owner| homes.engine.association_is_current(*owner)) {
+                    Some(owner) => Some(owner),
+                    None => {
+                        if let Err(memory) = homes.release_place(usize::from(queue.peer())) {
+                            return Err(Halt::Kept(
+                                ApContract::NetworkReturn,
+                                Kept::NetworkMemory(memory),
+                            ));
+                        }
+                        continue;
+                    }
                 }
-                // No authorized peer of that destination, or a frame the
-                // BSS cannot carry: it does not go.
-                Ok(None) | Err(_) => homes.give_buffer(buffer)?,
+            };
+            let Some(msdu) = homes.queues.pop(queue) else {
+                break;
+            };
+            let Some(ticket) = homes.tickets.pop() else {
+                // Excluded by the check above: the frame waits in its queue.
+                if let Err(msdu) = homes.queues.push_front(queue, msdu) {
+                    homes.give_memory(msdu.memory)?;
+                }
+                break;
+            };
+            let index = ticket.index();
+            let buffer = self.port.network_buffer(msdu.memory);
+            match self.admit_network(ticket, buffer, msdu.length, queue.tid()) {
+                Ok(admitted) => {
+                    self.hand_over(index, admitted, Purpose::Data(queue, association), now)?
+                }
+                // No authorized peer of that destination, no key or rate, or
+                // a frame the BSS cannot carry: it does not go, its memory
+                // back to the network, nothing of it numbered.
+                Err((ticket, source)) => {
+                    let homes = &mut self.homes;
+                    if let Err(ticket) = homes.tickets.push(ticket) {
+                        // Its place was emptied by the pop above.
+                        return Err(Halt::Kept(
+                            ApContract::UnknownTicket(index),
+                            Kept::Submission(ticket, source),
+                        ));
+                    }
+                    homes.source_home(source)?;
+                }
             }
         }
         Ok(())
+    }
+
+    /// Seal the network's MSDU `buffer` holds, `length` octets of Ethernet
+    /// frame, as the port's admitted data attempt of `tid`, its MPDU
+    /// written in place. Everything that can refuse it is checked first:
+    /// its frame, its authorized destination, its key and a packet number
+    /// left, its rate and power; only then are its sequence number and its
+    /// packet number drawn, in that order. A refusal returns the ticket and
+    /// the buffer, whole; one after the sequence number was drawn, which the
+    /// checks exclude, also records [`ApContract::NetworkAdmission`].
+    #[allow(
+        clippy::type_complexity,
+        reason = "the refusal returns each owner by its own type"
+    )]
+    fn admit_network(
+        &mut self,
+        ticket: Ticket<'id, P>,
+        mut buffer: NetBuffer<'id, P>,
+        length: usize,
+        tid: oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority,
+    ) -> Result<<P as DataPort<'id>>::Admitted, (Ticket<'id, P>, Source<'id, P, C>)> {
+        const {
+            // The port's network memory holds the longest MPDU written in
+            // place: the payload stays where the network wrote it.
+            if oer_protocols_ieee80211_contracts_port::NETWORK_MPDU_LEN
+                > <NetworkFrames<Ty<'id, P>> as TxBufferClass>::CAPACITY
+            {
+                panic!("the port's network memory holds the longest MPDU written in place");
+            }
+        }
+        let homes = &mut self.homes;
+        let policy = homes.policy;
+        let plan = buffer.bytes_mut().ok().and_then(|bytes| {
+            let payload = length
+                .checked_sub(ETHERNET_HEADER_LEN)
+                .filter(|payload| *payload <= MAX_ETHERNET_PAYLOAD_LEN)?;
+            let ethernet = bytes.get(MSDU_ETHERNET_OFFSET..MSDU_PAYLOAD_OFFSET)?;
+            let (destination, rest) = ethernet.split_first_chunk::<6>()?;
+            let (source, rest) = rest.split_first_chunk::<6>()?;
+            let ether_type = u16::from_be_bytes(*rest.first_chunk::<2>()?);
+            let plan = homes
+                .engine
+                .plan_msdu(*destination, *source, ether_type, tid)
+                .ok()??;
+            Some((plan, payload))
+        });
+        let Some((plan, payload)) = plan else {
+            return Err((ticket, Source::Network(buffer)));
+        };
+        // The key that numbers it, with a packet number left, and its rate:
+        // the pairwise key found once, the same one checked and drawn from.
+        let pairwise = match plan.kind() {
+            ApFrameKind::Pairwise { peer, .. } => {
+                homes.keys.iter().position(|(owner, _)| *owner == peer)
+            }
+            _ => None,
+        };
+        let (keyed, rate, transmissions) = match plan.kind() {
+            ApFrameKind::Pairwise { rate, .. } => (
+                pairwise
+                    .and_then(|at| homes.keys.get(at))
+                    .is_some_and(|(_, key)| key.can_number()),
+                rate,
+                policy.data_transmissions,
+            ),
+            ApFrameKind::Group => (
+                homes
+                    .group
+                    .as_ref()
+                    .is_some_and(InstalledCcmpTxKey::can_number),
+                policy.management_rate,
+                NonZeroU8::MIN,
+            ),
+            ApFrameKind::Management { .. } | ApFrameKind::Beacon => {
+                (false, policy.management_rate, NonZeroU8::MIN)
+            }
+        };
+        let (true, Some(rate), Some(power)) = (
+            keyed,
+            self.port.rate(rate),
+            SupportedPower::new(TxPower::Calibrated),
+        ) else {
+            return Err((ticket, Source::Network(buffer)));
+        };
+        let category = match plan.kind() {
+            ApFrameKind::Group => WmmAccessCategory::Voice,
+            _ => WmmAccessCategory::BestEffort,
+        };
+        // Every check passed: the sequence number is drawn as the MPDU is
+        // written in place, then the packet number.
+        let written = match buffer.bytes_mut() {
+            Ok(bytes) => homes
+                .engine
+                .write_in_place(plan, bytes, MSDU_PAYLOAD_OFFSET, payload)
+                .ok()
+                .and_then(|written| {
+                    let frame = port_frame::<Caps<'id, P>, NetworkFrames<Ty<'id, P>>>(
+                        bytes,
+                        written.frame,
+                        RetryPlan::new(RetryStage {
+                            rate,
+                            transmissions,
+                            protection: Protection::None,
+                        }),
+                    )?;
+                    Some((frame, written.moved))
+                }),
+            Err(_) => None,
+        };
+        let Some((frame, moved)) = written else {
+            // The region was checked by the plan: a write that does not read
+            // back is the runner's own fault, after its number was drawn.
+            homes.broken.get_or_insert(ApContract::NetworkAdmission);
+            return Err((ticket, Source::Network(buffer)));
+        };
+        if moved {
+            homes.status.payload_moves = homes.status.payload_moves.saturating_add(1);
+        }
+        let protection = match plan.kind() {
+            ApFrameKind::Pairwise { .. } => pairwise
+                .and_then(|at| homes.keys.get(at))
+                .and_then(|(_, key)| key.number())
+                .map(|numbered| {
+                    TxProtection::Ccmp(NumberedKey {
+                        key: AttemptKey::Pairwise(numbered.key),
+                        packet_number: numbered.packet_number,
+                    })
+                }),
+            ApFrameKind::Group => homes
+                .group
+                .as_ref()
+                .and_then(InstalledCcmpTxKey::number)
+                .map(|numbered| {
+                    TxProtection::Ccmp(NumberedKey {
+                        key: AttemptKey::Group(&numbered.key.key),
+                        packet_number: numbered.packet_number,
+                    })
+                }),
+            ApFrameKind::Management { .. } | ApFrameKind::Beacon => None,
+        };
+        let Some(protection) = protection else {
+            // Excluded by the same key's check above, in the same turn.
+            homes.broken.get_or_insert(ApContract::NetworkAdmission);
+            return Err((ticket, Source::Network(buffer)));
+        };
+        let source = TxSource::Fresh {
+            buffer,
+            frame,
+            body: None,
+            protection,
+        };
+        // The geometry the port checks is the runner's, admitted at compile
+        // time: a refusal from here on is a contract break, after both
+        // numbers were drawn.
+        let checked = match source.check() {
+            Ok(checked) => checked,
+            Err(refusal) => {
+                homes.broken.get_or_insert(ApContract::NetworkAdmission);
+                return Err((
+                    ticket,
+                    returned_network::<P, C, _, _, _, _>(refusal.operation),
+                ));
+            }
+        };
+        let prepared = match <Ty<'id, P> as TxBufferPool<'id, NetworkFrames<Ty<'id, P>>>>::prepare::<
+            AccessPoint,
+            Caps<'id, P>,
+        >(checked)
+        {
+            Ok(prepared) => prepared,
+            Err(refusal) => {
+                homes.broken.get_or_insert(ApContract::NetworkAdmission);
+                return Err((
+                    ticket,
+                    returned_network::<P, C, _, _, _, _>(refusal.operation),
+                ));
+            }
+        };
+        Ok(self.port.admit_access_point(
+            Attempt {
+                context: homes.context.clone(),
+                ticket,
+                source: prepared,
+                access_category: category,
+                protection: Protection::None,
+                power,
+                coex_operation: TxOperation::Data,
+            }
+            .admit(),
+        ))
     }
 
     /// Send the queued teardown frames while tickets and buffers last.
@@ -2742,18 +3325,26 @@ where
                         Kept::Submission(ticket, source),
                     ));
                 }
-                match source {
-                    Source::Fresh(buffer) => homes.give_buffer(buffer)?,
-                    // A fresh source comes back fresh: another owner is the
-                    // port's break, and the step stops on it.
-                    Source::Sent(sent) => {
-                        return Err(Halt::Kept(ApContract::BufferClass, Kept::Sent(sent)));
-                    }
-                }
+                // A fresh source comes back fresh: another owner is the
+                // port's break, and the step stops on it.
+                homes.source_home(source)?;
                 homes.unsent(purpose, now)?;
                 return Ok(());
             }
         };
+        self.hand_over(index, admitted, purpose, now)
+    }
+
+    /// Queue the admitted attempt of ticket `index` for `purpose` on the
+    /// port. A submission the port refuses ends withdrawn, its terminal
+    /// bringing the owners home during the call.
+    fn hand_over(
+        &mut self,
+        index: u8,
+        admitted: <P as DataPort<'id>>::Admitted,
+        purpose: Purpose,
+        now: Instant,
+    ) -> Result<(), Halt<'id, P, C, PortFault<'id, P>>> {
         match self.homes.purposes.get_mut(usize::from(index)) {
             Some(place) => *place = Some(purpose),
             None => {
@@ -2847,27 +3438,11 @@ where
             return Err((ticket, Source::Fresh(buffer)));
         };
         let protection = match frame.kind {
-            ApFrameKind::Pairwise { peer, .. } => {
-                let numbered = homes
-                    .keys
-                    .iter()
-                    .find(|(owner, _)| *owner == peer)
-                    .and_then(|(_, key)| key.number());
-                match numbered {
-                    Some(numbered) => TxProtection::Ccmp(NumberedKey {
-                        key: AttemptKey::Pairwise(numbered.key),
-                        packet_number: numbered.packet_number,
-                    }),
-                    None => return Err((ticket, Source::Fresh(buffer))),
-                }
+            // A data MSDU goes from the network's memory alone
+            // ([`Self::admit_network`]), numbered after its checks.
+            ApFrameKind::Pairwise { .. } | ApFrameKind::Group => {
+                return Err((ticket, Source::Fresh(buffer)));
             }
-            ApFrameKind::Group => match homes.group.as_ref().and_then(InstalledCcmpTxKey::number) {
-                Some(numbered) => TxProtection::Ccmp(NumberedKey {
-                    key: AttemptKey::Group(&numbered.key.key),
-                    packet_number: numbered.packet_number,
-                }),
-                None => return Err((ticket, Source::Fresh(buffer))),
-            },
             ApFrameKind::Management { .. } | ApFrameKind::Beacon => TxProtection::Open,
         };
         // What the attempt needs beside its MPDU is taken first: a refusal

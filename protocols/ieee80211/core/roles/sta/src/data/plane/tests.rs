@@ -133,10 +133,8 @@ struct World<'p, 'id> {
     arena: ModelArena<ModelCaps>,
     plane: DataPlane,
     returned: Vec<ModelNetworkMemory>,
-    /// The cost each returned memory came back with, in the same order.
+    /// The cost of each attempt that settled, in order.
     costs: Vec<TxEstimate>,
-    /// And the rate it last went on the air at.
-    air_rates: Vec<Option<PhyRate>>,
     micros: u64,
 }
 
@@ -160,7 +158,6 @@ impl<'p, 'id: 'p> World<'p, 'id> {
             plane,
             returned: Vec::new(),
             costs: Vec::new(),
-            air_rates: Vec::new(),
             micros: 1,
         }
     }
@@ -247,21 +244,19 @@ impl<'p, 'id: 'p> World<'p, 'id> {
 
     fn settle_ended(&mut self, done: Done<'p, 'id>) {
         let now = self.now();
-        let (returned, costs, rates) = (&mut self.returned, &mut self.costs, &mut self.air_rates);
-        self.plane
+        let returned = &mut self.returned;
+        let settled = self
+            .plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory, end: TxEnd| {
-                    returned.push(memory);
-                    costs.push(end.cost);
-                    rates.push(end.rate);
-                },
+                |memory| returned.push(memory),
                 &mut (),
             )
             .ok()
             .unwrap();
+        self.costs.push(settled.cost);
     }
 
     fn block_ack(&mut self, acked: FrameMask) {
@@ -273,43 +268,40 @@ impl<'p, 'id: 'p> World<'p, 'id> {
     fn settle(&mut self) -> Settled<ModelBlockAckEvidence, ModelAirDenied> {
         let now = self.now();
         let done = self.arena.service((), now).unwrap().unwrap();
-        let (returned, costs, rates) = (&mut self.returned, &mut self.costs, &mut self.air_rates);
-        self.plane
+        let returned = &mut self.returned;
+        let settled = self
+            .plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory, end: TxEnd| {
-                    returned.push(memory);
-                    costs.push(end.cost);
-                    rates.push(end.rate);
-                },
+                |memory| returned.push(memory),
                 &mut (),
             )
             .ok()
-            .unwrap()
+            .unwrap();
+        self.costs.push(settled.cost);
+        settled
     }
 
     /// The holes of the aggregate that ended, as its settlement reports them.
     fn settled_holes(&mut self) -> Option<u32> {
         let now = self.now();
         let done = self.arena.service((), now).unwrap().unwrap();
-        let (returned, costs, rates) = (&mut self.returned, &mut self.costs, &mut self.air_rates);
+        let returned = &mut self.returned;
         let mut holes = Holes(Some(None));
-        self.plane
+        let settled = self
+            .plane
             .completed(
                 &mut self.arena,
                 done,
                 now,
-                |memory, end: TxEnd| {
-                    returned.push(memory);
-                    costs.push(end.cost);
-                    rates.push(end.rate);
-                },
+                |memory| returned.push(memory),
                 &mut holes,
             )
             .ok()
             .unwrap();
+        self.costs.push(settled.cost);
         holes.0.flatten()
     }
 
@@ -361,9 +353,9 @@ cases! {
     a_whole_block_ack_puts_the_standby_on_the_air_before_the_settlement => ahead_whole,
     a_partial_block_ack_leaves_the_order_to_the_settlement => ahead_partial,
     nothing_goes_ahead_of_a_settlement_without_frames_in_the_other_arena => ahead_empty,
-    an_aggregate_s_cost_is_split_once_among_its_frames_and_retries_add_theirs => cost_split,
-    a_single_mpdu_s_cost_is_its_first_frame_s_and_the_rest_leave_with_none => cost_single,
-    an_unknown_attempt_leaves_its_frames_unknown_for_good => cost_unknown,
+    each_attempt_is_charged_once_whole_for_its_tid => cost_split,
+    a_single_mpdu_s_attempt_is_charged_and_a_withdrawn_frame_charges_nothing => cost_single,
+    an_attempt_outside_the_model_is_charged_unknown => cost_unknown,
 }
 
 const fn micros(micros: u32) -> TxEstimate {
@@ -380,32 +372,19 @@ fn cost_split<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.publish();
     // Frames 0 and 2 are acknowledged; 1 goes again alone in the arena.
     world.block_ack(mask(&[0, 2]));
-    world.settle();
+    let settled = world.settle();
     assert_eq!(world.returned_sequences(), [0, 2]);
-    // 100 among three: the first takes the remainder.
-    assert_eq!(world.costs, [micros(34), micros(33)]);
-    let aggregate = Some(world.rates.aggregate.rate().get());
-    assert_eq!(
-        world.air_rates,
-        [aggregate, aggregate],
-        "the aggregate's rate"
-    );
-    world.costs.clear();
-    world.air_rates.clear();
+    // The whole attempt, once, for its TID.
+    assert_eq!((settled.tid, settled.cost), (BE, micros(100)));
     world.arena.set_cost(micros(70));
     world.taken(3, BE);
     let (retry, _) = world.publish();
     assert_eq!(retry.frames, 1);
     world.arena.answer(ModelArenaAnswer::Ack);
-    world.settle();
+    let settled = world.settle();
     assert_eq!(world.returned_sequences(), [1]);
-    // Its part of the first attempt, then the whole of the second.
-    assert_eq!(world.costs, [micros(33 + 70)]);
-    assert_eq!(
-        world.air_rates,
-        [Some(world.rates.single.get())],
-        "the rate of its last attempt on the air"
-    );
+    assert_eq!(settled.cost, micros(70), "the retry's own attempt");
+    assert_eq!(world.costs, [micros(100), micros(70)]);
 }
 
 fn cost_single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
@@ -417,29 +396,16 @@ fn cost_single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.settle();
     assert_eq!(world.returned_sequences(), [0]);
     assert_eq!(world.costs, [micros(250)]);
-    assert_eq!(world.air_rates, [Some(world.rates.single.get())]);
     world.costs.clear();
-    world.air_rates.clear();
-    // Withdrawn frames that never went leave with no cost.
+    // Withdrawn frames that never went leave with no attempt to charge.
     world.taken(1, BE);
     let returned = &mut world.returned;
-    let costs = &mut world.costs;
-    let rates = &mut world.air_rates;
     world
         .plane
-        .withdraw_unpublished(
-            &mut world.arena,
-            |memory, end: TxEnd| {
-                returned.push(memory);
-                costs.push(end.cost);
-                rates.push(end.rate);
-            },
-            &mut (),
-        )
+        .withdraw_unpublished(&mut world.arena, |memory| returned.push(memory), &mut ())
         .unwrap();
     assert_eq!(world.returned_sequences(), [1]);
-    assert_eq!(world.costs, [TxEstimate::NONE]);
-    assert_eq!(world.air_rates, [None], "and no rate");
+    assert!(world.costs.is_empty());
 }
 
 fn cost_unknown<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
@@ -452,15 +418,14 @@ fn cost_unknown<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.publish();
     world.block_ack(mask(&[0]));
     world.settle();
+    // An attempt outside the model is charged unknown, never nothing.
     assert_eq!(world.costs, [TxEstimate::Unknown]);
-    world.costs.clear();
-    // The retry is estimated, but its frame's first attempt was not.
     world.arena.set_cost(micros(10));
     world.publish();
     world.arena.answer(ModelArenaAnswer::Ack);
     world.settle();
     assert_eq!(world.returned_sequences(), [0, 1]);
-    assert_eq!(world.costs, [TxEstimate::Unknown]);
+    assert_eq!(world.costs, [TxEstimate::Unknown, micros(10)]);
 }
 
 fn standby_room<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
@@ -485,7 +450,7 @@ fn standby_room<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         world.taken(tag, BE);
     }
     assert_eq!(world.plane.standby_room(capacity), Some(0));
-    assert!(matches!(world.take(10, BE), Intake::Wait(_)));
+    assert!(matches!(world.take(10, BE), Intake::Wait(_, _)));
     // The arena's own capacity bounds a wider TID bound.
     assert_eq!(world.plane.standby_room(4), Some(0));
     world.block_ack(all(2));
@@ -717,7 +682,7 @@ fn past_window<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.taken(0, BE);
     world.taken(1, BE);
     world.publish();
-    let Intake::Wait(waiting) = world.take(2, BE) else {
+    let Intake::Wait(waiting, _) = world.take(2, BE) else {
         panic!("sequence number 2 lies past the window [0, 2)");
     };
     assert_eq!(waiting, msdu(2, BE));
@@ -734,7 +699,7 @@ fn other_tid<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.agree(BE, 64);
     world.agree(VIDEO, 64);
     world.taken(0, BE);
-    let Intake::Wait(waiting) = world.take(1, VIDEO) else {
+    let Intake::Wait(waiting, _) = world.take(1, VIDEO) else {
         panic!("the standby belongs to TID 0");
     };
     world.taken(2, BE);
@@ -774,7 +739,7 @@ fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert!(
         world
             .plane
-            .stop(&mut world.arena, |memory, _| returned.push(memory), &mut ())
+            .stop(&mut world.arena, |memory| returned.push(memory), &mut ())
             .unwrap()
             .is_some()
     );
@@ -800,7 +765,7 @@ fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let returned = &mut world.returned;
     let link = world
         .plane
-        .stop(&mut world.arena, |memory, _| returned.push(memory), &mut ())
+        .stop(&mut world.arena, |memory| returned.push(memory), &mut ())
         .unwrap()
         .unwrap();
     assert_eq!(world.returned_sequences(), [0, 1, 2]);
@@ -820,7 +785,7 @@ fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
 fn single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let mut world = World::new(rates, link(LinkProtection::Open));
     world.taken(0, BE);
-    assert!(matches!(world.take(1, BE), Intake::Wait(_)));
+    assert!(matches!(world.take(1, BE), Intake::Wait(_, _)));
     let (plan, _) = world.publish();
     assert_eq!((plan.kind, plan.frames), (PpduKind::Single, 1));
     world.arena.answer(ModelArenaAnswer::Ack);
@@ -939,7 +904,7 @@ fn shared_spaces<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     // MSDUs: the next MPDU follows it, and the standby keeps only
     // consecutive numbers.
     assert_eq!(world.sequences[0].take().get(), 1);
-    assert!(matches!(world.take(1, BE), Intake::Wait(_)));
+    assert!(matches!(world.take(1, BE), Intake::Wait(_, _)));
     let (plan, frames) = world.publish();
     assert_eq!(plan.frames, 1);
     assert_eq!(sequence(&frames[0]), 0);
@@ -980,7 +945,7 @@ fn withdraw_unpublished<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let returned = &mut world.returned;
     world
         .plane
-        .withdraw_unpublished(&mut world.arena, |memory, _| returned.push(memory), &mut ())
+        .withdraw_unpublished(&mut world.arena, |memory| returned.push(memory), &mut ())
         .unwrap();
     // The standby's frame goes back; the A-MPDU on the air settles later.
     assert_eq!(world.returned_sequences(), [2]);
@@ -1198,82 +1163,4 @@ fn without_a_threshold_or_at_an_ht_rate_nothing_is_protected() {
             }
         }
     }
-}
-
-cases! {
-    reviewer_an_unsent_arena_member_has_no_transmitted_rate => reviewer_unsent_rate,
-    reviewer_an_unretried_member_keeps_its_own_aggregate_rate => reviewer_unretried_rate,
-}
-
-fn reviewer_withdraw<'p, 'id: 'p>(world: &mut World<'p, 'id>) {
-    let (returned, costs, rates) = (&mut world.returned, &mut world.costs, &mut world.air_rates);
-    world
-        .plane
-        .withdraw_unpublished(
-            &mut world.arena,
-            |memory, end| {
-                returned.push(memory);
-                costs.push(end.cost);
-                rates.push(end.rate);
-            },
-            &mut (),
-        )
-        .unwrap();
-}
-
-fn reviewer_unsent_rate<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
-    world.agree(BE, 64);
-    for tag in 0..3 {
-        world.taken(tag, BE);
-    }
-    world.plane.agreement(BE, None);
-    let (plan, frames) = world.publish();
-    assert_eq!(plan.kind, PpduKind::Single);
-    assert_eq!(frames.len(), 1);
-    world.arena.answer(ModelArenaAnswer::Ack);
-    world.settle();
-    assert_eq!(world.returned_sequences(), [0]);
-    assert_eq!(world.air_rates, [Some(rates.single.get())]);
-    world.costs.clear();
-    world.air_rates.clear();
-    reviewer_withdraw(&mut world);
-    assert_eq!(world.returned_sequences(), [1, 2]);
-    assert_eq!(world.costs, [TxEstimate::NONE, TxEstimate::NONE]);
-    assert_eq!(
-        world.air_rates,
-        [None, None],
-        "neither remaining member reached the air"
-    );
-}
-
-fn reviewer_unretried_rate<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
-    world.agree(BE, 64);
-    for tag in 0..3 {
-        world.taken(tag, BE);
-    }
-    assert!(matches!(world.publish().0.kind, PpduKind::Aggregate { .. }));
-    world.block_ack(mask(&[0]));
-    world.settle();
-    assert_eq!(world.returned_sequences(), [0]);
-    world.costs.clear();
-    world.air_rates.clear();
-    world.plane.agreement(BE, None);
-    let (plan, frames) = world.publish();
-    assert_eq!(plan.kind, PpduKind::Single);
-    assert_eq!(sequence(&frames[0]), 1);
-    world.arena.answer(ModelArenaAnswer::Ack);
-    world.settle();
-    assert_eq!(world.returned_sequences(), [1]);
-    assert_eq!(world.air_rates, [Some(rates.single.get())]);
-    world.costs.clear();
-    world.air_rates.clear();
-    reviewer_withdraw(&mut world);
-    assert_eq!(world.returned_sequences(), [2]);
-    assert_eq!(
-        world.air_rates,
-        [Some(rates.aggregate.rate().get())],
-        "the remaining member did not go in the single retry"
-    );
 }

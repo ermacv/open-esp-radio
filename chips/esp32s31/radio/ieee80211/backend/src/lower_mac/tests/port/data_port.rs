@@ -602,6 +602,9 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
                 self.tickets.push(parts.ticket);
                 false
             }
+            AnyBuffer::Network(_) | AnyBuffer::NetworkSent(_) => {
+                panic!("the station's cases send from the port's buffers")
+            }
         };
         Some(cases::StationSent { end, retry })
     }

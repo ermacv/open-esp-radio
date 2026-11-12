@@ -66,9 +66,9 @@ pub fn window(turns: &NetworkTurns) -> Value {
             "chose": turns.publish_chose,
             "refused": turns.publish_refused,
             "budget": turns.publish_budget,
-            "deferred": turns.publish_deferred,
             "fault": turns.publish_fault,
         },
+        "notices_full": turns.notices_full,
         "out_at_turn_end": {
             "blocks": turns.blocks_out,
             "credits": turns.credits_out,
@@ -127,7 +127,7 @@ pub fn summary(turns: &NetworkTurns) -> String {
          reserved blocks {} ({} per reserve; {sizes}); \
          budget spent in {} turns ({} sockets, share {}); intake full {}; \
          accepted {} ({} per turn; {bins}); publish chose {} refused {} budget {} \
-         deferred {} fault {}; out at end: blocks {} credits {}; yields {} \
+         fault {}; notices full {}; out at end: blocks {} credits {}; yields {} \
          ({} with possible work), waits pending {} ready {}; producer offered {} \
          refused {} held {} declined {} withdrawn {} unknown {}, waits for offers {} \
          changes {}, wakes {}; core drops {drops}; loans at end {loans}",
@@ -148,8 +148,8 @@ pub fn summary(turns: &NetworkTurns) -> String {
         turns.publish_chose,
         turns.publish_refused,
         turns.publish_budget,
-        turns.publish_deferred,
         turns.publish_fault,
+        turns.notices_full,
         turns.blocks_out,
         turns.credits_out,
         turns.yields,
@@ -221,7 +221,7 @@ mod tests {
              reserved blocks 50 (12.50 per reserve; 1:1 2:0 3-4:0 5-8:0 9-16:3); \
              budget spent in 7 turns (7 sockets, share 0.88); intake full 0; \
              accepted 16 (2.00 per turn; 0:4 1:0 2:0 3:0 4:4 5-8:0 9+:0); publish chose 8 \
-             refused 0 budget 0 deferred 0 fault 0; out at end: blocks 0 credits 0; \
+             refused 0 budget 0 fault 0; notices full 0; out at end: blocks 0 credits 0; \
              yields 8 (7 with possible work), waits pending 0 ready 0; producer offered 6 \
              refused 0 held 1 declined 0 withdrawn 0 unknown 0, waits for offers 0 \
              changes 2, wakes 3; core drops no_credit:5 pressure_copy:1; \

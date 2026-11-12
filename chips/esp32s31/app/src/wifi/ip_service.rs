@@ -2,75 +2,19 @@
 //! as the stack's packets, its pools and its task. The `network` feature puts
 //! the new stack in this place.
 
+use super::tx_memory::{TX_SLOTS, WifiTx};
 use super::*;
 use oer_portable_embassy_net::{
     NetworkInterfaceId,
-    ethernet::{LentSlots, ParkedTx, TxSlots, TxWriteRefused},
+    ethernet::LentSlots,
     ip::{self, Configuration, Resources, Service},
 };
-use oer_protocols_ieee80211_runtime::station::{TxRefused, TxSupply};
 
 pub use embassy_net;
 
-/// The IP stack's packet owner a transmission hands the station.
-pub(super) type TxPacket = oer_portable_embassy_net::OwnedNetworkTxFrame;
-
-/// The packet slots over the station's transmit buffers, but the spare the
-/// network keeps for copies: the IP stack's general allocator.
-static TX_SLOTS: TxSlots<wifi::TxSlot, { wifi::NETWORK_BUFFERS - 1 }> = TxSlots::new();
-
-/// The network end's transmit memory: the station's transmit buffers parked
-/// in [`TX_SLOTS`], where the IP stack writes its packets, and the spare
-/// that a packet from elsewhere is copied into. A packet goes to the
-/// station in the buffer it was written in.
-pub struct WifiTx {
-    publisher: wifi::TxPublisher,
-    parked: ParkedTx<wifi::TxSlot, { wifi::NETWORK_BUFFERS - 1 }>,
-}
-
-impl wifi::NetworkTxSupply for WifiTx {
-    type Packet = TxPacket;
-    fn new(tx: wifi::NetworkTx) -> Self {
-        let (publisher, slots) = tx.into_parts();
-        let mut parked = ParkedTx::new(&TX_SLOTS);
-        for slot in slots {
-            parked.give(slot);
-        }
-        Self { publisher, parked }
-    }
-}
-
-impl TxSupply<TxPacket> for WifiTx {
-    type Memory = wifi::TxMemory;
-    fn available(&self) -> bool {
-        self.parked.available()
-    }
-    fn write(&mut self, frame: TxPacket) -> Result<wifi::TxMemory, TxRefused<TxPacket>> {
-        let written = match self.parked.write(frame) {
-            Ok(written) => written,
-            Err(TxWriteRefused::Kept(refused)) => return Err(TxRefused::Kept(refused)),
-            Err(TxWriteRefused::Lost) => return Err(TxRefused::Lost),
-        };
-        self.publisher
-            .publish(written.storage, written.start, written.len)
-            .map_err(|refused| {
-                // A packet stays inside its buffer: a frame past it ends
-                // here, and the buffer is free again.
-                if let wifi::TxPublishRefused::Range(slot) = refused {
-                    self.parked.give(slot);
-                }
-                TxRefused::Lost
-            })
-    }
-    /// xarxa's egress keeps no airtime account: the end is not read.
-    fn give(
-        &mut self,
-        memory: wifi::TxMemory,
-        _end: oer_protocols_ieee80211_contracts_port::TxEnd,
-    ) {
-        self.parked.give(self.publisher.slot(memory));
-    }
-}
+/// The station's transmit end the IP service takes: it parks or copies
+/// each packet into a transmit buffer ([`WifiTx`]).
+pub(super) type TxEnd = wifi::SupplyEnd<WifiTx>;
 
 /// The default packet pool of the IP service: receive slots, each holding
 /// one 1514-byte Ethernet frame. The stack's general packets are the

@@ -74,12 +74,16 @@ pub(super) fn installation_parts<B: ModelComposition>(
     air.stream.set(ModelStream::Running);
     air.receive_agreements.take().clear();
     air.associations.set(InterfaceAssociations::default());
+    let network = alloc::sync::Arc::<ModelNetwork>::default();
+    air.rx_network.set(Some(network.clone()));
     let held = ModelHeld {
         air: air.clone(),
-        events: Bounded::new(MODEL_EVENTS, "event"),
+        // Every received unit the caller may hold can queue as an event,
+        // up to the most an air's limits allow.
+        events: Bounded::new(MODEL_TERMINALS + MODEL_RX_HELD_MAX, "event"),
         quarantined: Bounded::new(1, "answer shape rejection"),
         rx_out: Cell::new(0),
-        network: Default::default(),
+        network,
         gate_issuer,
         draining: Cell::new(false),
         arenas: core::cell::RefCell::new(arena::StationArenas::new()),
@@ -93,9 +97,9 @@ pub(super) fn installation_parts<B: ModelComposition>(
             small: small
                 .into_iter()
                 .map(|slot| ModelBuffer {
-                    slot,
+                    slot: Some(slot),
                     loan: None,
-                    memory: ModelMemory::Small(Box::new([0; ModelSmall::CAPACITY])),
+                    memory: Box::new([0; ModelSmall::CAPACITY]),
                     admitted_at: None,
                     admitted: None,
                 })
@@ -103,9 +107,9 @@ pub(super) fn installation_parts<B: ModelComposition>(
             large: large
                 .into_iter()
                 .map(|slot| ModelBuffer {
-                    slot,
+                    slot: Some(slot),
                     loan: None,
-                    memory: ModelMemory::Large(Box::new([0; ModelLarge::CAPACITY])),
+                    memory: Box::new([0; ModelLarge::CAPACITY]),
                     admitted_at: None,
                     admitted: None,
                 })

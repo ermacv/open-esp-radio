@@ -319,3 +319,158 @@ fn a_consumer_waiting_for_several_is_told_once_they_are_filled() {
     assert_eq!(fill(&mut sender, 9), Ok(()));
     assert_eq!(told(&consumer), 3, "zero counts as one");
 }
+
+/// Counts each end's notifications.
+#[derive(Default)]
+struct Told(core::sync::atomic::AtomicUsize);
+
+impl QueueNotify for Told {
+    fn register(&self, _: &mut core::task::Context<'_>) {}
+    fn notify(&self) {
+        self.0.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl Told {
+    fn count(&self) -> usize {
+        self.0.load(core::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+fn stage(
+    sender: &mut SlotSender<'_, u8, 4, &Told, &Told>,
+    value: u8,
+) -> Result<(), SlotSendError<()>> {
+    sender.try_stage_with(|slot| {
+        *slot = value;
+        Ok(())
+    })
+}
+
+/// A staged burst is unseen until its flush, which publishes it whole and
+/// wakes a waiting consumer once; around the ring's end, the order holds,
+/// and a burst of reads frees its slots for the producer at its commit.
+#[test]
+fn a_staged_burst_is_seen_whole_at_its_flush_around_the_ring() {
+    use core::pin::pin;
+    use core::task::{Context, Poll, Waker};
+    let (consumer, producer) = (Told::default(), Told::default());
+    let mut queue = WakingSlotQueue::<u8, 4, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split(|| 0);
+    let mut cx = Context::from_waker(Waker::noop());
+    for round in 0_u8..7 {
+        assert_eq!(pin!(receiver.ready()).poll(&mut cx), Poll::Pending);
+        let told = consumer.count();
+        for n in 0..3 {
+            assert_eq!(stage(&mut sender, round * 10 + n), Ok(()));
+        }
+        assert_eq!(sender.staged(), 3);
+        assert!(receiver.is_empty(), "unseen before the flush");
+        assert_eq!(consumer.count(), told, "and nothing told");
+        sender.flush();
+        assert_eq!(consumer.count(), told + 1, "the flush tells once");
+        assert_eq!(receiver.len(), 3);
+        for n in 0..3 {
+            assert_eq!(
+                receiver.try_receive_held_with(|slot| *slot),
+                Ok(round * 10 + n)
+            );
+        }
+        assert_eq!(
+            receiver.try_receive_held_with(|slot| *slot),
+            Err(SlotReceiveError::Empty)
+        );
+        // Read but not committed: the slots are not the producer's yet.
+        assert_eq!(sender.free_capacity(), 1);
+        receiver.commit();
+        assert_eq!(sender.free_capacity(), 4);
+    }
+}
+
+/// A short burst stops at the free slots; a refused fill keeps its slot
+/// free for the next; nothing published is lost.
+#[test]
+fn a_short_burst_stops_at_its_room_and_a_refusal_keeps_the_slot() {
+    let (consumer, producer) = (Told::default(), Told::default());
+    let mut queue = WakingSlotQueue::<u8, 4, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split(|| 0);
+    assert_eq!(
+        sender.try_stage_with(|_| Err::<(), _>(7)),
+        Err(SlotSendError::Refused(7))
+    );
+    assert_eq!(sender.free_capacity(), 4, "the refused slot stays free");
+    for n in 0..4 {
+        assert_eq!(stage(&mut sender, n), Ok(()));
+    }
+    assert_eq!(stage(&mut sender, 9), Err(SlotSendError::Full));
+    sender.flush();
+    for n in 0..4 {
+        assert_eq!(receiver.try_receive_with(|slot| *slot), Ok(n));
+    }
+}
+
+/// A producer that waits publishes its staged burst first, and a consumer
+/// that waits frees its read slots first: no burst crosses an await.
+#[test]
+fn waiting_ends_a_burst_first() {
+    use core::pin::pin;
+    use core::task::{Context, Poll, Waker};
+    let (consumer, producer) = (Told::default(), Told::default());
+    let mut queue = WakingSlotQueue::<u8, 4, _, _>::across_harts(&consumer, &producer);
+    let (mut sender, mut receiver) = queue.split(|| 0);
+    let mut cx = Context::from_waker(Waker::noop());
+    for n in 0..4 {
+        assert_eq!(stage(&mut sender, n), Ok(()));
+    }
+    assert_eq!(pin!(sender.ready()).poll(&mut cx), Poll::Pending);
+    assert_eq!(receiver.len(), 4, "the wait published the burst");
+    assert_eq!(receiver.try_receive_held_with(|slot| *slot), Ok(0));
+    assert_eq!(pin!(receiver.ready()).poll(&mut cx), Poll::Ready(()));
+    assert_eq!(sender.free_capacity(), 1, "the wait freed the read slot");
+}
+
+/// A producer staging bursts and a consumer reading bursts on two threads:
+/// every value arrives once, in order, and no slot is lost.
+#[test]
+fn bursts_across_threads_move_every_value_once_in_order() {
+    let queue = std::boxed::Box::leak(std::boxed::Box::new(WakingSlotQueue::<u32, 8>::new()));
+    let (mut sender, mut receiver) = queue.split(|| 0);
+    const VALUES: u32 = 20_000;
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            let mut next = 0_u32;
+            while next < VALUES {
+                let mut burst = 0;
+                while burst < 5 && next < VALUES {
+                    let sent = sender.try_stage_with(|slot| {
+                        *slot = next;
+                        Ok::<_, ()>(())
+                    });
+                    if sent.is_err() {
+                        break;
+                    }
+                    next += 1;
+                    burst += 1;
+                }
+                sender.flush();
+                std::thread::yield_now();
+            }
+        });
+        scope.spawn(move || {
+            let mut expect = 0_u32;
+            while expect < VALUES {
+                while let Ok(value) = receiver.try_receive_held_with(|slot| *slot) {
+                    assert_eq!(value, expect, "in order, once");
+                    expect += 1;
+                }
+                receiver.commit();
+                std::thread::yield_now();
+            }
+        });
+    });
+    assert_eq!(
+        queue.split(|| 0).0.free_capacity(),
+        8,
+        "every slot is free again"
+    );
+}

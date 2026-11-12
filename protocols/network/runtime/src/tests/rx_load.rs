@@ -3,8 +3,7 @@
 //! say what the turns did: frames and notices taken, empty or not, the
 //! port's registrations, turns, yields and waits.
 //!
-//! Its conditions: 64 octets of UDP payload a datagram, the `Direct` egress
-//! policy, a lending socket of credit 2 (the tests' `CREDITS`), bursts of
+//! Its conditions: 64 octets of UDP payload a datagram, a lending socket of credit 2 (the tests' `CREDITS`), bursts of
 //! that credit, and every buffer returned as soon as it is taken. A host
 //! case to weigh the service's receive turns on, not a device's load.
 
@@ -22,7 +21,7 @@ use super::{
     BLOCKS, CREDITS, DEPTH, LOCAL, OUR_IP, RECEIVED, SIZE, WireHeld, WirePort, run_tasks, settle,
     udp_frame,
 };
-use crate::{Direct, LendingLanes, MemoryPolicy, Received, Service, ServiceEvent, StopLane};
+use crate::{LendingLanes, MemoryPolicy, Received, Service, ServiceEvent, StopLane};
 
 const PORT: u16 = 6000;
 const CREDIT: usize = CREDITS;
@@ -83,8 +82,7 @@ fn a_receive_load_lends_every_frame_and_counts_its_turns() {
         DEPTH,
         RECEIVED,
         WirePort,
-        Direct,
-    > = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    > = Service::new(owner, MemoryPolicy::KEEP, stopping);
     let group = service.group(CREDIT).unwrap();
     let lanes: &'static mut LendingLanes<
         'static,

@@ -13,20 +13,20 @@
 //! under the old key are withdrawn from the arenas that have not published
 //! them.
 
+use super::queues::QueueId;
 use super::turn::Failed;
 use super::*;
-use oer_protocols_ieee80211_contracts_port::TxEnd;
 use oer_protocols_ieee80211_contracts_port::arena::{ArenaFormat, PublishError, TxArena};
 use oer_protocols_ieee80211_contracts_port::{PortArena, PortCompleted};
 use oer_protocols_ieee80211_core_roles_sta::data::plane::{
-    AggregateRate, Intake, PpduKind, SettleError,
+    AggregateRate, Intake, PpduKind, SettleError, Waits,
 };
 
-/// Keep `memory`, whose MSDU ended so (`end`), for the network; the bound
-/// holds every memory the plane can hold, so a refusal keeps it quarantined
-/// rather than dropping it.
-fn free<M>(freed: &mut heapless::Deque<TxEnded<M>, HELD>, memory: M, end: TxEnd) {
-    if let Err(ended) = freed.push_back(TxEnded { memory, end }) {
+/// Keep `memory`, whose MSDU ended, for the network; the bound holds every
+/// memory the plane and the queues can hold, so a refusal keeps it
+/// quarantined rather than dropping it.
+fn free<M>(freed: &mut heapless::Deque<TxEnded<M>, HELD>, memory: M) {
+    if let Err(ended) = freed.push_back(TxEnded { memory }) {
         let _quarantined = core::mem::ManuallyDrop::new(ended);
     }
 }
@@ -41,9 +41,9 @@ where
     O: ActorEvents,
 {
     /// Whether the actor takes the network's next MSDU: the link carries
-    /// data and no MSDU waits.
+    /// data and the queues have room.
     pub(super) fn accepts(&self) -> bool {
-        self.carries() && self.data.deferred.is_none()
+        self.carries() && self.data.queues.has_room()
     }
 
     /// How many queued MSDUs wake the actor (of the network's `depth`): one
@@ -127,7 +127,7 @@ where
                 data:
                     DataTx {
                         plane,
-                        deferred,
+                        queues,
                         freed,
                     },
                 owed,
@@ -140,40 +140,67 @@ where
             if !plane.is_connected() {
                 return Ok(());
             }
+            // The network's queue is the transport: take what it published
+            // into the TIDs' queues, so none of them waits behind another.
+            while queues.has_room() {
+                let Ok(Some(Outgoing {
+                    memory,
+                    length,
+                    priority,
+                })) = network.transmit.try_receive_held_with(Option::take)
+                else {
+                    break;
+                };
+                let msdu = OutboundMsdu {
+                    memory,
+                    length: usize::from(length),
+                    priority,
+                };
+                let tid = plane.tid(priority).unwrap_or(priority);
+                if let Err(msdu) = queues.push(QueueId::of_tid(tid), msdu) {
+                    // The room was checked: a full pool keeps it quarantined.
+                    let _quarantined = core::mem::ManuallyDrop::new(msdu);
+                }
+            }
             let mut arena = port.arena();
             while taken < TX_DEPTH {
-                let msdu = match deferred.take() {
-                    Some(msdu) => msdu,
-                    None => match network.transmit.try_receive_with(Option::take) {
-                        Ok(Some(Outgoing {
-                            memory,
-                            length,
-                            priority,
-                        })) => OutboundMsdu {
-                            memory,
-                            length: usize::from(length),
-                            priority,
-                        },
-                        _ => break,
+                // The standby's TID goes on while its frames follow; else
+                // the next arena starts from the queue the MAC chooses. The
+                // held TID's data waits for the request that names its next
+                // number.
+                let hold = sequence_hold.map(QueueId::of_tid);
+                let queue = match plane.standby_tid().map(QueueId::of_tid) {
+                    Some(queue) if queues.ready(queue) && Some(queue) != hold => queue,
+                    Some(_) => break,
+                    None => match queues.select(hold) {
+                        Some(queue) => queue,
+                        None => break,
                     },
                 };
-                // The held TID's data waits, in the network's order, for the
-                // request that names its next number.
-                if sequence_hold.is_some() && plane.tid(msdu.priority) == *sequence_hold {
-                    *deferred = Some(msdu);
+                let Some(msdu) = queues.pop(queue) else {
                     break;
-                }
+                };
                 taken = taken.saturating_add(1);
                 match plane.intake(&mut arena, msdu, link.numbers_mut(), now) {
                     Intake::Taken(tid) => *tid.select_mut(&mut tids) = true,
-                    Intake::Wait(msdu) => {
-                        *deferred = Some(msdu);
-                        break;
+                    Intake::Wait(msdu, waits) => {
+                        let queue =
+                            QueueId::of_tid(plane.tid(msdu.priority).unwrap_or(msdu.priority));
+                        if let Err(msdu) = queues.push_front(queue, msdu) {
+                            // The place it left takes it back.
+                            let _quarantined = core::mem::ManuallyDrop::new(msdu);
+                        }
+                        match waits {
+                            // Only this TID waits for its window: another
+                            // may start the arena.
+                            Waits::Window => queues.block(queue),
+                            Waits::Arena | Waits::Standby => break,
+                        }
                     }
                     Intake::Refused { memory, reason } => {
                         owed.refused(reason.into());
                         // Refused before any arena: it never went.
-                        free(freed, memory, TxEnd::NONE);
+                        free(freed, memory);
                     }
                 }
                 // The air waits for a completion, not for the next frame.
@@ -194,9 +221,12 @@ where
                 }
             }
         }
-        // The budget ran out while the network still has MSDUs the standby
-        // may take.
-        if (yielded || taken >= TX_DEPTH) && self.accepts() && !network.transmit.is_empty() {
+        // The burst's slots go back to the network at once.
+        network.transmit.commit();
+        // The budget ran out while a queue is still ready for the standby,
+        // or the network has MSDUs the queues may take.
+        let more = self.data.queues.has_ready() || !network.transmit.is_empty();
+        if (yielded || taken >= TX_DEPTH) && self.carries() && more {
             self.again = true;
         }
         self.publish()
@@ -287,7 +317,12 @@ where
             port,
             rates,
             events,
-            data: DataTx { plane, freed, .. },
+            data:
+                DataTx {
+                    plane,
+                    queues,
+                    freed,
+                },
             owed,
             now,
             retained,
@@ -299,13 +334,7 @@ where
         };
         let settled = {
             let mut arena = port.arena();
-            plane.completed(
-                &mut arena,
-                done,
-                *now,
-                |memory, end| free(freed, memory, end),
-                events,
-            )
+            plane.completed(&mut arena, done, *now, |memory| free(freed, memory), events)
         };
         let settled = match settled {
             Ok(settled) => settled,
@@ -315,6 +344,9 @@ where
             }
             Err(SettleError::Fault(fault)) => return Err(ActorFault::Port(fault)),
         };
+        // One charge for the attempt; its end may move the windows.
+        queues.charge(QueueId::of_tid(settled.tid), settled.cost);
+        queues.unblock();
         if let Some(lesson) = settled.lesson {
             lesson.teach(*now, rates, D::arena_ack);
         }
@@ -366,26 +398,26 @@ where
             data:
                 DataTx {
                     plane,
-                    deferred,
+                    queues,
                     freed,
                 },
             ..
         } = self;
-        if let Some(msdu) = deferred.take() {
+        // What waited in the queues never went.
+        queues.drain(|msdu| {
             report(events, || {
                 oer_protocols_ieee80211_core_roles_sta::events::StaEvent::DataLost(
                     oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
                 )
             });
-            // It waited for the standby: it never went.
-            free(freed, msdu.memory, TxEnd::NONE);
-        }
+            free(freed, msdu.memory);
+        });
         let Some(plane) = plane.as_mut() else {
             return Ok(());
         };
         let mut arena = port.arena();
         plane
-            .stop(&mut arena, |memory, end| free(freed, memory, end), events)
+            .stop(&mut arena, |memory| free(freed, memory), events)
             .map(drop)
             .map_err(ActorFault::Port)
     }
@@ -404,7 +436,7 @@ where
         };
         let mut arena = port.arena();
         plane
-            .withdraw_unpublished(&mut arena, |memory, end| free(freed, memory, end), events)
+            .withdraw_unpublished(&mut arena, |memory| free(freed, memory), events)
             .map_err(ActorFault::Port)
     }
 
@@ -430,9 +462,14 @@ where
             return;
         }
         while self.data.freed.is_empty() && network.returned.free_capacity() != 0 {
-            let Ok(Some(Outgoing { memory, .. })) = network.transmit.try_receive_with(Option::take)
-            else {
-                break;
+            // What the queues took first, then what the network's queue
+            // still holds.
+            let memory = match self.data.queues.pop_any() {
+                Some(msdu) => msdu.memory,
+                None => match network.transmit.try_receive_with(Option::take) {
+                    Ok(Some(Outgoing { memory, .. })) => memory,
+                    _ => break,
+                },
             };
             report(&mut self.events, || {
                 oer_protocols_ieee80211_core_roles_sta::events::StaEvent::DataLost(
@@ -441,7 +478,7 @@ where
             });
             // The deque is empty, so it holds this one memory. The station
             // never took it: it never went.
-            free(&mut self.data.freed, memory, TxEnd::NONE);
+            free(&mut self.data.freed, memory);
             self.return_freed(network);
         }
         self.queued = network.transmit.len();
@@ -457,11 +494,11 @@ where
     }
 
     /// Give the network the memory of ended frames while its queue has
-    /// room, as one burst: a network waiting for its first return is told
-    /// once, after the burst's last ([`SlotSender::try_send_held_with`]),
+    /// room, as one burst: the burst is published at once at its end
+    /// ([`SlotSender::try_stage_with`]), which tells a waiting network once,
     /// so its turn finds all of them, a whole Block Ack's when the queue
-    /// holds it. The burst's end tells a network that armed meanwhile; one
-    /// that armed before any fill rechecks the queue at its arming.
+    /// holds it. One that armed before the publication rechecks the queue
+    /// at its arming.
     pub(super) fn return_freed<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -484,7 +521,7 @@ where
                 break;
             };
             let mut memory = Some(memory);
-            let _sent = network.returned.try_send_held_with(|slot| {
+            let _sent = network.returned.try_stage_with(|slot| {
                 *slot = memory.take();
                 Ok::<_, core::convert::Infallible>(())
             });

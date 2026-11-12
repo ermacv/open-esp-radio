@@ -1064,6 +1064,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.unkept.lose_right_for_test();
     }
 
+    /// Take every published attempt out of its place, as a core
+    /// completing a queue no attempt was published on would find it.
+    #[cfg(test)]
+    pub(crate) fn forget_published_for_test(&mut self) {
+        for place in &mut self.driver.running {
+            drop(place.take());
+        }
+    }
+
     /// Mark the radio's stop confirmed, as a stop whose core disable left
     /// completions with the driver ends.
     #[cfg(test)]
@@ -1177,7 +1186,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             for pending in self.driver.queues.iter().flat_map(|queue| queue.iter()) {
                 let payload = pending.operation.payload();
                 if let (Some(admitted), Some(table)) = (
-                    payload.buffer.admission,
+                    payload.buffer.admission(),
                     self.settings.edca.get(driver::vif(payload.role)),
                 ) {
                     add(Some(admitted.saturating_add(
@@ -2436,9 +2445,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         if let Some((reason, cause)) = refusal {
             // The attempt ends at once, withdrawn and never published: its
             // terminal returns every owner.
-            let completed = attempt
-                .operation
-                .complete(oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(cause));
+            let completed = attempt.operation.complete(
+                oer_protocols_ieee80211_contracts_port::TxOutcome::Withdrawn(cause),
+                // Never published: nothing reached the air.
+                oer_protocols_ieee80211_contracts_port::TxEstimate::NONE,
+            );
             let completed = match attempt.execution.beacon {
                 Some((permission, _)) => brand::OwnedTxCompleted::Beacon {
                     completed,
@@ -2456,10 +2467,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         self.now = now;
         // Admission happens on this call: the MSDU ages from here.
-        let buffer = &mut attempt.operation.execute().mpdu.buffer;
-        if buffer.admission.is_none() {
-            buffer.admission = Some(now);
-        }
+        attempt.operation.execute().mpdu.buffer.admit(now);
         let index = queue(attempt.access_category);
         let attempt_role = attempt.operation.payload().role;
         let tries_left = attempt
@@ -2479,6 +2487,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             tries_left,
             published: false,
             air: None,
+            try_work: None,
+            cost: TxEstimate::NONE,
             beacon: attempt.execution.beacon,
         };
         // A queue holds every ticket's attempt (`QUEUE_DEPTH`), and this
@@ -2603,6 +2613,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         if let Err(fault) = driver.collect(&mut env, &mut none, true) {
             return Err(CleanupRefused::Faulted(self.record(fault)));
         }
+        // An attempt a refused return left beside its lease takes it back,
+        // now that the stop released every descriptor; refused again, both
+        // stay for the owner's next call.
+        driver
+            .rejoin_stranded(&mut env)
+            .map_err(CleanupRefused::Faulted)?;
         // The cleanup's result is the owner's, never the port's recorded
         // fault: a later call goes on from where it stands, writing nothing
         // it wrote before.

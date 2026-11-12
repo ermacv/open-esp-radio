@@ -8,8 +8,12 @@ pub use edca::{EdcaDraw, EdcaRecord, EdcaTable};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Publication {
     pub ticket: u8,
-    pub buffer: u8,
+    /// The pool place of a port buffer; `None` for a network's memory.
+    pub buffer: Option<u8>,
 }
+/// The buffer word of a publication from a network's memory: past every
+/// pool place.
+const NETWORK_BUFFER: u32 = 0x100;
 impl Event for Publication {
     const KIND: Kind = Kind::new(Domain::Ieee80211, 100);
     const CHANNEL: Channel = const {
@@ -19,12 +23,18 @@ impl Event for Publication {
         }
     };
     fn encode(&self) -> [u32; 2] {
-        [u32::from(self.ticket), u32::from(self.buffer)]
+        [
+            u32::from(self.ticket),
+            self.buffer.map_or(NETWORK_BUFFER, u32::from),
+        ]
     }
     fn decode([ticket, buffer]: [u32; 2]) -> Option<Self> {
         Some(Self {
             ticket: u8::try_from(ticket).ok()?,
-            buffer: u8::try_from(buffer).ok()?,
+            buffer: match buffer {
+                NETWORK_BUFFER => None,
+                place => Some(u8::try_from(place).ok()?),
+            },
         })
     }
 }

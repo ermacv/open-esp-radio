@@ -65,6 +65,7 @@
 
 mod data;
 mod messages;
+pub(crate) mod queues;
 mod rx;
 mod station_tx;
 mod turn;
@@ -157,9 +158,16 @@ pub const CUT_UNITS: usize = RX_BUDGET as usize;
 /// without a lifecycle wake per PPDU.
 pub const TX_TRAFFIC_REFRESH: Duration = Duration::from_millis(100);
 
-/// The network memory the data plane holds at most: both arenas' frames
-/// and the one MSDU that waits for the standby.
+/// The network memory the actor keeps at most, in its queues, its arenas
+/// and its returns: both arenas' frames and the one MSDU that waits for the
+/// standby. A composition gives the actor no more network buffers than
+/// this ([`NETWORK_MEMORY_HELD`]), so every memory it holds has a place to
+/// come home through.
 const HELD: usize = 2 * oer_protocols_ieee80211_contracts_port::arena::ARENA_FRAMES as usize + 1;
+
+/// The most network buffers a composition may give the actor: what its
+/// queues and returns hold.
+pub const NETWORK_MEMORY_HELD: usize = HELD;
 
 /// The composition's mapping from its data port to the actor's types. It
 /// is a mapping rather than a port supertrait, so an image names it for a
@@ -466,10 +474,10 @@ struct Stage<'id, D: DatapathPort<'id>> {
 }
 
 /// The data transmission's state: the plane over the port's arenas, the
-/// MSDU that waits for the standby and the network's freed memory.
+/// TIDs' queues of the network's MSDUs and the network's freed memory.
 struct DataTx<M> {
     plane: Option<DataPlane>,
-    deferred: Option<OutboundMsdu<M>>,
+    queues: queues::TxQueues<M, HELD, 1>,
     freed: heapless::Deque<TxEnded<M>, HELD>,
 }
 
@@ -597,7 +605,7 @@ where
             sequence_hold: None,
             data: DataTx {
                 plane: None,
-                deferred: None,
+                queues: queues::TxQueues::new(),
                 freed: heapless::Deque::new(),
             },
             radio: Radio::Stopped,
@@ -667,7 +675,7 @@ where
                 data => |place: &mut core::mem::MaybeUninit<DataTx<D::TxMemory>>| {
                     oer_portable_memory::init_in_place!(place, DataTx {
                         plane: None,
-                        deferred: None,
+                        queues: queues::TxQueues::new(),
                         freed: heapless::Deque::new(),
                     })
                 },

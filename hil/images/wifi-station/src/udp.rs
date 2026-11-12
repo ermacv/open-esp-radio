@@ -391,7 +391,7 @@ impl Produce for LoadProducer {
 
 /// The network the load server opens its runs on.
 pub(crate) struct Network {
-    network: wifi::Network<LoadProducer, wifi::Queued, Receive>,
+    network: wifi::Network<LoadProducer, Receive>,
     /// The channel socket, which receives and echoes.
     socket: RefCell<Socket>,
     source: &'static Source,
@@ -411,7 +411,7 @@ pub(crate) struct Network {
 impl Network {
     /// The network, its channel socket, and the source its producer reads.
     pub(crate) fn new(
-        network: wifi::Network<LoadProducer, wifi::Queued, Receive>,
+        network: wifi::Network<LoadProducer, Receive>,
         socket: Socket,
         source: &'static Source,
     ) -> Self {
@@ -444,9 +444,7 @@ pub(crate) fn address(net: &Network) -> Result<Option<Ipv4>, WatchRefused> {
 /// The network's publications, which the station services' waits read
 /// (`crate::waits`).
 #[cfg(target_arch = "riscv32")]
-pub(crate) const fn published(
-    net: &Network,
-) -> &wifi::Network<LoadProducer, wifi::Queued, Receive> {
+pub(crate) const fn published(net: &Network) -> &wifi::Network<LoadProducer, Receive> {
     &net.network
 }
 
@@ -491,7 +489,7 @@ const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::N
     publish_chose: 0,
     publish_refused: 0,
     publish_budget: 0,
-    publish_deferred: 0,
+    notices_full: 0,
     publish_fault: 0,
     blocks_out: 0,
     credits_out: 0,
@@ -557,14 +555,8 @@ const DIAGNOSTICS_NONE: oer::observe::diagnostics::NetworkDiagnostics = {
         settled: false,
         counts: Counts {
             turns: 0,
-            collections: 0,
             walked: 0,
             told: 0,
-            continued: 0,
-            stopped_spent: 0,
-            stopped_changed: 0,
-            stopped_grant: 0,
-            stopped_account: 0,
             return_batches: 0,
             blocks_returned: 0,
             credits_restored: 0,
@@ -611,14 +603,8 @@ pub(crate) fn diagnostics_window(net: &Network) -> oer_hil_services_load::Diagno
     match net.turns(|turns| Some(turns.diagnostics_window)) {
         Some(Ok(counts)) => DiagnosticsCollected::Report(NetworkDiagnostics {
             turns: counts.turns,
-            collections: counts.collections,
             walked: counts.walked,
             told: counts.told,
-            continued: counts.continued,
-            stopped_spent: counts.stopped_spent,
-            stopped_changed: counts.stopped_changed,
-            stopped_grant: counts.stopped_grant,
-            stopped_account: counts.stopped_account,
             return_batches: counts.return_batches,
             blocks_returned: counts.blocks_returned,
             credits_restored: counts.credits_restored,
@@ -811,7 +797,7 @@ fn network_turns(source: &Source) -> oer_hil_services_load::NetworkTurns {
         publish_chose: turns.publish_chose,
         publish_refused: turns.publish_refused,
         publish_budget: turns.publish_budget,
-        publish_deferred: turns.publish_deferred,
+        notices_full: turns.notices_full,
         publish_fault: turns.publish_fault,
         blocks_out: turns.blocks_out,
         credits_out: turns.credits_out,

@@ -759,7 +759,7 @@ fn full_network() -> NetworkTurns {
         publish_chose: all,
         publish_refused: all,
         publish_budget: all,
-        publish_deferred: all,
+        notices_full: all,
         publish_fault: all,
         blocks_out: all,
         credits_out: all,
@@ -891,14 +891,8 @@ fn the_diagnostics_requests_and_answers_round_trip_and_fit_one_response() {
     );
     let full = NetworkDiagnostics {
         turns: u32::MAX,
-        collections: u32::MAX,
         walked: u32::MAX,
         told: u32::MAX,
-        continued: u32::MAX,
-        stopped_spent: u32::MAX,
-        stopped_changed: u32::MAX,
-        stopped_grant: u32::MAX,
-        stopped_account: u32::MAX,
         return_batches: u32::MAX,
         blocks_returned: u32::MAX,
         credits_restored: u32::MAX,

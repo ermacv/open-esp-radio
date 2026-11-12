@@ -33,14 +33,8 @@ pub const STAGES: usize = 7;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Counts {
     pub turns: u32,
-    pub collections: u32,
     pub walked: u32,
     pub told: u32,
-    pub continued: u32,
-    pub stopped_spent: u32,
-    pub stopped_changed: u32,
-    pub stopped_grant: u32,
-    pub stopped_account: u32,
     pub return_batches: u32,
     pub blocks_returned: u32,
     pub credits_restored: u32,
@@ -54,20 +48,14 @@ pub struct Counts {
 }
 
 /// The words of [`Counts`] but the stages', in field order.
-const COUNTS: usize = 16;
+const COUNTS: usize = 10;
 
 impl Counts {
     const fn words(&self) -> [u32; COUNTS] {
         [
             self.turns,
-            self.collections,
             self.walked,
             self.told,
-            self.continued,
-            self.stopped_spent,
-            self.stopped_changed,
-            self.stopped_grant,
-            self.stopped_account,
             self.return_batches,
             self.blocks_returned,
             self.credits_restored,
@@ -81,14 +69,8 @@ impl Counts {
     const fn from_words(words: [u32; COUNTS], stage_ticks: [u64; STAGES]) -> Self {
         let [
             turns,
-            collections,
             walked,
             told,
-            continued,
-            stopped_spent,
-            stopped_changed,
-            stopped_grant,
-            stopped_account,
             return_batches,
             blocks_returned,
             credits_restored,
@@ -99,14 +81,8 @@ impl Counts {
         ] = words;
         Self {
             turns,
-            collections,
             walked,
             told,
-            continued,
-            stopped_spent,
-            stopped_changed,
-            stopped_grant,
-            stopped_account,
             return_batches,
             blocks_returned,
             credits_restored,

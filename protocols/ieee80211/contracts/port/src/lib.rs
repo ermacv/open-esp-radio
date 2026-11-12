@@ -182,17 +182,19 @@ pub use rx::{
 };
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
-    Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody, TxEnd,
+    Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody,
     TxEstimate, TxOutcome, TxPower, TxResponse, TxStatus, WithdrawCause,
 };
 pub use types::{
     AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt, AttemptKey,
     BufferMemoryUnavailable, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed,
     GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
+    NETWORK_MPDU_LEN, NETWORK_MSDU_PAYLOAD, NetworkCapacity, NetworkFrames, NetworkTxBuffer,
     PoolMpdu, PoolPreparation, PoolSource, PortBlockAckSlot, PortSingleOutcome, PortTypes,
     PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
     RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
-    TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxCompleted, TxProtection, TxSource,
+    TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxCompleted, TxNetworkPool,
+    TxProtection, TxSource,
 };
 
 #[cfg(test)]

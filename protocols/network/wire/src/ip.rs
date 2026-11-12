@@ -40,6 +40,15 @@ pub struct Ipv4Fields {
 impl Ipv4Fields {
     /// The header's octets, with its checksum.
     pub fn to_bytes(&self) -> [u8; IPV4_HEADER_LEN] {
+        let checksum = crate::checksum::Checksum::new()
+            .with(&self.with_checksum(0))
+            .finish();
+        self.with_checksum(checksum)
+    }
+
+    /// The header's octets, with `checksum` in its field.
+    pub(crate) fn with_checksum(&self, checksum: u16) -> [u8; IPV4_HEADER_LEN] {
+        let [checksum_high, checksum_low] = checksum.to_be_bytes();
         // Version 4, five words.
         let [version_ihl] = Ipv4VersionIhl::from_bytes([0x45]).to_bytes();
         let [services] = self.services.to_bytes();
@@ -50,35 +59,28 @@ impl Ipv4Fields {
             .to_bytes();
         let [source0, source1, source2, source3] = self.source;
         let [destination0, destination1, destination2, destination3] = self.destination;
-        let header = |checksum_high, checksum_low| {
-            [
-                version_ihl,
-                services,
-                length_high,
-                length_low,
-                identification_high,
-                identification_low,
-                flags_high,
-                flags_low,
-                self.time_to_live,
-                self.protocol,
-                checksum_high,
-                checksum_low,
-                source0,
-                source1,
-                source2,
-                source3,
-                destination0,
-                destination1,
-                destination2,
-                destination3,
-            ]
-        };
-        let [checksum_high, checksum_low] = crate::checksum::Checksum::new()
-            .with(&header(0, 0))
-            .finish()
-            .to_be_bytes();
-        header(checksum_high, checksum_low)
+        [
+            version_ihl,
+            services,
+            length_high,
+            length_low,
+            identification_high,
+            identification_low,
+            flags_high,
+            flags_low,
+            self.time_to_live,
+            self.protocol,
+            checksum_high,
+            checksum_low,
+            source0,
+            source1,
+            source2,
+            source3,
+            destination0,
+            destination1,
+            destination2,
+            destination3,
+        ]
     }
 }
 

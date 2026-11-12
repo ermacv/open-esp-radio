@@ -818,6 +818,80 @@ fn a_new_address_at_renewal_ends_old_work_and_new_work_goes_from_it() {
     });
 }
 
+/// A datagram that went from the old address prepared its socket's next:
+/// the new address takes the next datagram through the whole path, from
+/// the new address.
+#[test]
+fn a_new_address_takes_the_next_datagram_past_what_the_old_one_prepared() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let socket = stack.open(7, best_effort()).unwrap();
+        let request = arp_frame(Operation::Request, (PEER, PEER_IP), OFFERED);
+        stack.input(secs(869), &request, &mut ());
+        let block = filled(stack.pool(), b"old");
+        let command = stack.send(secs(870), &socket, peer(), block).unwrap();
+        let frames = turn(stack, secs(870), &mut Dropped::default());
+        let datagram = frames
+            .iter()
+            .find(|frame| frame.len() > 42)
+            .expect("it went");
+        assert_eq!(&datagram[26..30], &OFFERED);
+        assert_eq!(finished(stack.take_result(command)), Outcome::Accepted);
+        let xid = assert_extension(&one(stack, secs(875)), true);
+        let moved = [192, 0, 2, 77];
+        let mut ack = Reply::new(MessageType::Ack, xid);
+        ack.yiaddr = moved;
+        ack.to = moved;
+        give(stack, secs(876), &ack.frame());
+        let block = filled(stack.pool(), b"new");
+        stack.send(secs(876), &socket, peer(), block).unwrap();
+        let request = arp_frame(Operation::Request, (PEER, PEER_IP), moved);
+        stack.input(secs(876), &request, &mut ());
+        let frames = turn(stack, secs(876), &mut Dropped::default());
+        let datagram = frames
+            .iter()
+            .find(|frame| frame.len() > 42)
+            .expect("it went");
+        assert_eq!(&datagram[26..30], &moved);
+    });
+}
+
+/// A broadcast has no neighbor to hold on: the address version alone ends
+/// what it prepared, and the next broadcast goes from the new address.
+#[test]
+fn a_new_address_takes_the_next_broadcast_past_what_the_old_one_prepared() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let socket = stack.open(7, best_effort()).unwrap();
+        let everyone = Remote {
+            address: [255, 255, 255, 255],
+            port: 9,
+        };
+        let block = filled(stack.pool(), b"old");
+        stack.send(secs(870), &socket, everyone, block).unwrap();
+        let frames = turn(stack, secs(870), &mut Dropped::default());
+        let datagram = frames
+            .iter()
+            .find(|frame| frame.len() > 42)
+            .expect("it went");
+        assert_eq!(&datagram[26..30], &OFFERED);
+        let xid = assert_extension(&one(stack, secs(875)), true);
+        let moved = [192, 0, 2, 77];
+        let mut ack = Reply::new(MessageType::Ack, xid);
+        ack.yiaddr = moved;
+        ack.to = moved;
+        give(stack, secs(876), &ack.frame());
+        let block = filled(stack.pool(), b"new");
+        stack.send(secs(876), &socket, everyone, block).unwrap();
+        let frames = turn(stack, secs(876), &mut Dropped::default());
+        let datagram = frames
+            .iter()
+            .find(|frame| frame.len() > 42)
+            .expect("it went");
+        assert_eq!(&datagram[26..30], &moved);
+    });
+}
+
 #[test]
 fn a_link_lost_and_back_mid_lease_runs_init_reboot_and_keeps_the_address() {
     leasing!(|stack| {
@@ -1430,6 +1504,88 @@ fn a_cached_neighbor_data_does_not_hold_takes_the_reserve_like_any_other() {
         assert_eq!(second.err(), Some(SendRefusal::NeighborsFull));
         // The entry data holds stays its own, expired too.
         assert!(stack.declare(secs(100), &socket, peer(), 16, 5).is_ok());
+    });
+}
+
+/// What a socket prepared for a neighbor no work of its own needs any
+/// more takes no reserve: with the data's share of the table held by
+/// another's work, the next datagram is refused as any other would be.
+#[test]
+fn a_prepared_neighbor_no_work_needs_takes_the_reserve_like_any_other() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let now = secs(10);
+        let other = Remote {
+            address: [192, 0, 2, 3],
+            port: 7,
+        };
+        for (hardware, ip) in [(PEER, PEER_IP), (MOVED, other.address)] {
+            stack.input(
+                now,
+                &arp_frame(Operation::Reply, (hardware, ip), OFFERED),
+                &mut (),
+            );
+        }
+        let first = stack.open_local(6000, best_effort()).unwrap();
+        let _work = stack.declare(now, &first, peer(), 16, 3).unwrap();
+        // The producer takes its offer back: nothing of the socket's runs.
+        assert_eq!(stack.withdraw_declared(&first, |_| false), 1);
+        let second = stack.open_local(6001, best_effort()).unwrap();
+        let _held = stack.declare(now, &second, other, 16, 4).unwrap();
+        assert_eq!(
+            stack.declare(now, &first, peer(), 16, 5).err(),
+            Some(SendRefusal::NeighborsFull)
+        );
+    });
+}
+
+/// With a DHCP client keeping its reserve, what a socket prepared stays
+/// its own while it holds: bursts of declarations, and declarations each
+/// sent before the next, prepare once.
+#[test]
+fn a_prepared_remote_is_prepared_once_under_the_dhcp_reserve() {
+    leasing!(|stack| {
+        bound(stack, at(0));
+        let now = secs(10);
+        stack.input(
+            now,
+            &arp_frame(Operation::Reply, (PEER, PEER_IP), OFFERED),
+            &mut (),
+        );
+        let socket = stack.open_local(6000, best_effort()).unwrap();
+        let before = stack.prepares();
+        let mut tag = 0;
+        // Four bursts of declarations, as many as the socket's places, each
+        // burst sent whole.
+        for _ in 0..4 {
+            for _ in 0..2 {
+                tag += 1;
+                stack.declare(now, &socket, peer(), 16, tag).unwrap();
+            }
+            while let Some(demand) = stack.poll_demand(now) {
+                let _sent = stack.transmit(
+                    now,
+                    demand.grant(),
+                    |_, _, data| data.repeat(0, 16).map_err(|_| crate::Declined::Unwritable),
+                    &(),
+                );
+            }
+        }
+        assert_eq!(stack.prepares() - before, 1, "bursts");
+        // Four declarations, each sent before the next: nothing of the
+        // socket's runs at the next one.
+        for _ in 0..4 {
+            tag += 1;
+            stack.declare(now, &socket, peer(), 16, tag).unwrap();
+            let demand = stack.poll_demand(now).unwrap();
+            let _sent = stack.transmit(
+                now,
+                demand.grant(),
+                |_, _, data| data.repeat(0, 16).map_err(|_| crate::Declined::Unwritable),
+                &(),
+            );
+        }
+        assert_eq!(stack.prepares() - before, 1, "one at a time");
     });
 }
 

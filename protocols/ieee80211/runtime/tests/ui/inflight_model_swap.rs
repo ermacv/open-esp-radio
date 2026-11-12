@@ -1,5 +1,7 @@
 #![no_std]
-use oer_protocols_ieee80211_contracts_port::{Completed, InFlight, PortTypes, TerminalAccess};
+use oer_protocols_ieee80211_contracts_port::{
+    Completed, InFlight, PortTypes, TerminalAccess, TxEstimate,
+};
 use oer_protocols_ieee80211_testing_model::{ModelMpdu, ModelSingleOutcome, ModelTypes};
 use oer_protocols_radio_port::Slot;
 type Kind<'id> = <ModelTypes<Composition> as PortTypes<'id>>::TicketKind;
@@ -16,15 +18,15 @@ pub fn swap<'id, C>(
     #[cfg(ui_reject)]
     {
         // Even the consumer permission cannot re-admit raw mixed components.
-        let a = a.complete(out).into_parts(_access);
-        let b = b.complete(out).into_parts(_access);
+        let a = a.complete(out, TxEstimate::NONE).into_parts(_access);
+        let b = b.complete(out, TxEstimate::NONE).into_parts(_access);
         (
-            InFlight::admit(a.context, b.ticket, b.payload).complete(out), // ui-error: E0624
-            InFlight::admit(b.context, a.ticket, a.payload).complete(out), // ui-error: E0624
+            InFlight::admit(a.context, b.ticket, b.payload).complete(out, TxEstimate::NONE), // ui-error: E0624
+            InFlight::admit(b.context, a.ticket, a.payload).complete(out, TxEstimate::NONE), // ui-error: E0624
         )
     }
     #[cfg(not(ui_reject))]
-    (a.complete(out), b.complete(out))
+    (a.complete(out, TxEstimate::NONE), b.complete(out, TxEstimate::NONE))
 }
 
 pub enum UiSlot {}

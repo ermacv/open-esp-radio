@@ -724,10 +724,32 @@ pub type AccessPointCommandAnswer<'id, P> = crate::PortAnswer<
 /// The access-point role of a shared port: its entry points beside the
 /// station's, over the same physical owner, queues and sink.
 pub trait AccessPointPort<'id>:
-    DataPort<'id, Types: AccessPointTypes<'id>, Caps: AccessPointCapabilities>
+    DataPort<
+        'id,
+        Types: AccessPointTypes<'id> + crate::TxNetworkPool<'id>,
+        Caps: AccessPointCapabilities,
+    >
 {
     /// The access point's own address, its BSSID.
     fn access_point_address(&self) -> IndividualAddress;
+
+    /// The network's transmit `memory`, holding one MSDU's Ethernet frame,
+    /// as a fresh buffer of this installation's single-MPDU path
+    /// ([`TxNetworkPool`](crate::TxNetworkPool)): the access point writes
+    /// the MPDU in it in place and submits it as any buffer; its terminal
+    /// returns the same memory.
+    fn network_buffer(
+        &self,
+        memory: <Self::Types as crate::PortTypes<'id>>::DataMemory,
+    ) -> crate::NetworkTxBuffer<'id, Self::Types>;
+
+    /// The network's transmit memory the port holds with no attempt to
+    /// carry it home: a completion came for no attempt, and the hardware
+    /// no longer holds the memory. Its home is the network: the caller
+    /// gives it back there. Each memory leaves once; `None` while the port
+    /// holds none.
+    fn take_network_memory(&mut self)
+    -> Option<<Self::Types as crate::PortTypes<'id>>::DataMemory>;
 
     /// Accept a sealed access-point attempt, dropping its borrow of the
     /// port; [`DataPort::submit`] queues it as the access point's.

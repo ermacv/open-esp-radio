@@ -1,7 +1,7 @@
 error[E0624]: associated function `admit` is private
-  --> tests/ui/inflight_model_swap.rs:22:23
+  --> tests/ui/inflight_model_swap.rs:24:23
    |
-22 |             InFlight::admit(a.context, b.ticket, b.payload).complete(out), // ui-error: E0624
+24 |             InFlight::admit(a.context, b.ticket, b.payload).complete(out, TxEstimate::NONE), // ui-error: E0624
    |                       ^^^^^ private associated function
    |
   ::: $WORKSPACE/protocols/ieee80211/contracts/port/src/in_flight.rs
@@ -10,9 +10,9 @@ error[E0624]: associated function `admit` is private
    |     -------------------------------------------------------------------- private associated function defined here
 
 error[E0624]: associated function `admit` is private
-  --> tests/ui/inflight_model_swap.rs:23:23
+  --> tests/ui/inflight_model_swap.rs:25:23
    |
-23 |             InFlight::admit(b.context, a.ticket, a.payload).complete(out), // ui-error: E0624
+25 |             InFlight::admit(b.context, a.ticket, a.payload).complete(out, TxEstimate::NONE), // ui-error: E0624
    |                       ^^^^^ private associated function
    |
   ::: $WORKSPACE/protocols/ieee80211/contracts/port/src/in_flight.rs

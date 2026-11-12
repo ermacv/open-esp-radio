@@ -29,6 +29,12 @@ pub(super) struct Pending<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O
     pub published: bool,
     /// What it has put on the air.
     pub air: Option<Air>,
+    /// The descriptor's work before the publication now on the air: what
+    /// that publication adds is its cost.
+    pub try_work: Option<crate::mac::tx_work::MacTxWork>,
+    /// What the plan's publications cost so far, by the backend's model
+    /// ([`TxEstimate`]): its terminal carries it.
+    pub cost: TxEstimate,
     /// A beacon's permission, which its terminal returns, and the instant
     /// it must be published by.
     pub beacon: Option<(BeaconPermission<'static, Part<Id, 10>>, Instant)>,
@@ -46,7 +52,7 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Pending<'_
     }
     /// When the port admitted its MPDU.
     fn admission(&self) -> Option<Instant> {
-        self.operation.payload().buffer.admission
+        self.operation.payload().buffer.admission()
     }
     /// One more transmission went out at `rate`. A plan bounds them, and the
     /// bound fits the count.
@@ -208,6 +214,46 @@ const _: () = {
 };
 
 /// A step a test refuses, which the installation's counts exclude.
+/// What one publication of a single MPDU cost by the backend's model, as
+/// its completion `end` tells it: the work it added to its descriptor's
+/// record (`before` to `after`) and its response, as an arena's publication
+/// is costed. A completion of no publication costs nothing; one that did not
+/// reach the air (a collision, a withdrawal, an expiry) nothing; one whose
+/// air the model does not describe (a hardware timeout, a refused key, a
+/// protection exchange left unanswered) is unknown, never nothing.
+fn attempt_cost(
+    before: Option<crate::mac::tx_work::MacTxWork>,
+    after: crate::mac::tx_work::MacTxWork,
+    rate: PhyRate,
+    end: &PublicationEnd,
+) -> TxEstimate {
+    use crate::lower_mac::arena::cost::{Response, publication_cost};
+    use crate::ordinary_tx::OrdinaryTxFailure as Failure;
+    let Some(before) = before else {
+        return TxEstimate::NONE;
+    };
+    let response = match end {
+        PublicationEnd::Expired { .. }
+        | PublicationEnd::Withdrawn
+        | PublicationEnd::Collision
+        | PublicationEnd::Undelivered(Failure::Collision) => return TxEstimate::NONE,
+        PublicationEnd::TimedOut
+        | PublicationEnd::Undelivered(
+            Failure::TimedOut | Failure::KeyRefused | Failure::CtsTimeout,
+        ) => return TxEstimate::Unknown,
+        PublicationEnd::Delivered { response, .. } => match response {
+            PublicationResponse::Unsolicited => Response::None,
+            PublicationResponse::Ack => Response::Ack,
+            PublicationResponse::BlockAck(_) => Response::BlockAck,
+        },
+        PublicationEnd::Undelivered(Failure::AckTimeout) => Response::Ack,
+    };
+    let Ok(rate) = crate::mac::tx::TxPhyRate::try_from(rate) else {
+        return TxEstimate::Unknown;
+    };
+    publication_cost(Some(before), Some(after), rate, response)
+}
+
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TestRefusal {
@@ -217,6 +263,17 @@ pub(crate) enum TestRefusal {
     Return,
     /// The core's next submission.
     Submit,
+}
+
+/// What is known of an attempt that waits beside the lease its buffer
+/// refused back.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Left {
+    /// Its publication ended so, at this rate.
+    Ended { end: PublicationEnd, rate: PhyRate },
+    /// It was never published: the core refused it, or its publication
+    /// unwound before the air.
+    Unpublished,
 }
 
 /// The queue places at home, each with its queue's ordinary descriptor.
@@ -354,6 +411,10 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     pub(super) free: QueueHomes<'id, Id, B>,
     pub(super) queues: [heapless::Deque<Pending<'id, Id, D, B, O>, QUEUE_DEPTH>; 4],
     pub(super) running: [Option<Pending<'id, Id, D, B, O>>; 4],
+    /// What is known of each attempt that waits in `running` beside the
+    /// lease its buffer refused back ([`Self::strand`]): the cleanup after
+    /// the confirmed stop ends it with this, never with a guess.
+    stranded: [Option<Left>; 4],
     /// Completions the core gave a call that halted before it brought them
     /// home, newest first: the next collection takes them first, and no
     /// sink takes the core's completions while any wait here.
@@ -435,6 +496,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             free: QueueHomes::empty(),
             queues: [const { heapless::Deque::new() }; 4],
             running: [const { None }; 4],
+            stranded: [None; 4],
             uncollected: heapless::Vec::new(),
             arena: None,
             retained_group: None,
@@ -494,6 +556,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         for owner in &mut self.running {
             drop(owner.take());
         }
+        self.stranded = [None; 4];
         let descriptors = self.take_descriptors();
         // The installation ends: its tickets and queue places end with it.
         self.tickets = crate::lower_mac::TicketBank::empty();
@@ -528,7 +591,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             env.count_expired(msdus.count_ones());
         }
         let place = pending.operation.ticket().index();
-        let completed = pending.operation.complete(outcome);
+        let completed = pending.operation.complete(outcome, pending.cost);
         let completed = match pending.beacon {
             Some((permission, _)) => brand::OwnedTxCompleted::Beacon {
                 completed,
@@ -777,35 +840,67 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // The ticket returns to its own place.
         self.tickets.put(ticket);
         let Some(mut pending) = self.running.get_mut(index).and_then(Option::take) else {
-            // No attempt to take the memory: it stays attached to its
-            // descriptor, which goes home with its queue place and keeps it
-            // out of every pool.
+            // No attempt to carry the lease home: the completion released the
+            // hardware's hold, so it goes home by its own home. A bank lease
+            // returns to its place now; a network's stays on its descriptor,
+            // which goes home with its queue place, until the port's owner
+            // takes it for the network ([`Self::take_orphan_network`]).
+            if let Some((memory, home)) = slot.as_mut().detach_bank() {
+                home.return_value(memory);
+            }
             self.free.put_paired(free, slot);
             env.vacate(vacancy);
             return Err(*first.get_or_insert(Fault::CompletionWithoutPending { queue: at }));
         };
-        // The buffer leaves the queue's descriptor and rejoins the right
-        // its publication kept.
-        let returned = match slot.as_mut().detach() {
-            None => Err(Fault::DescriptorMissing { queue: at }),
-            Some(memory) => match self.rejoin(&mut pending, memory) {
-                Ok(()) => Ok(()),
-                Err(memory) => {
-                    // The buffer refused it: the memory goes back to the
-                    // descriptor it just left, which is free.
-                    let _attached = slot.as_mut().attach(memory).is_ok();
-                    Err(Fault::ReturnRefused { queue: at })
-                }
-            },
+        // The lease leaves the queue's descriptor whole, back to its buffer.
+        // Refused, it stays on the descriptor, which goes home with its
+        // place and gives it back at the stop.
+        let returned = match self.rejoin(&mut pending, slot.as_mut()) {
+            Ok(()) => Ok(()),
+            Err(TakeBackRefused::Missing) => Err(Fault::DescriptorMissing { queue: at }),
+            Err(TakeBackRefused::Refused) => Err(Fault::ReturnRefused { queue: at }),
         };
+        // What the publication added to the descriptor's record, read
+        // before the descriptor goes home.
+        let work = slot.as_ref().work();
         // The queue place and its descriptor go home together.
         self.free.put_paired(free, slot);
-        if let Err(fault) = returned {
-            // Its memory is not back: the attempt stays published.
-            self.keep_running(category, pending);
-            env.vacate(vacancy);
-            return Err(*first.get_or_insert(fault));
+        pending.cost = pending
+            .cost
+            .add(attempt_cost(pending.try_work.take(), work, rate, &end));
+        match returned {
+            Ok(()) => {}
+            Err(fault @ Fault::ReturnRefused { .. }) => {
+                // The lease stays whole on the descriptor, which went home:
+                // the attempt waits beside it with what its end says.
+                self.keep_stranded(category, pending, Left::Ended { end, rate });
+                env.vacate(vacancy);
+                return Err(*first.get_or_insert(fault));
+            }
+            Err(fault) => {
+                // Its memory is not back: the attempt stays published.
+                self.keep_running(category, pending);
+                env.vacate(vacancy);
+                return Err(*first.get_or_insert(fault));
+            }
         }
+        self.conclude(env, vacancy, pending, end, rate, stopping)
+    }
+    /// End an attempt whose lease is back with its buffer by its known
+    /// publication `end`: its terminal, or its next try.
+    fn conclude<E: DriverEnv<'id, Id, D, B, O>>(
+        &mut self,
+        env: &mut E,
+        vacancy: E::Vacancy,
+        mut pending: Pending<'id, Id, D, B, O>,
+        end: PublicationEnd,
+        rate: PhyRate,
+        stopping: bool,
+    ) -> Result<(), Fault> {
+        let category = pending.category;
+        let index = queue(category);
+        let at = index as u8;
+        let mut first = None;
         use crate::ordinary_tx::OrdinaryTxFailure as Failure;
         // The decision stays with the MPDU, which outlives this attempt:
         // its returned `Sent` may be sent again under a plan of its own.
@@ -887,22 +982,57 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             None => Err(pending),
         }
     }
-    /// The memory a completion handed back rejoins its buffer; refused, it
-    /// comes back.
+    /// The lease a completion left on `slot` rejoins its buffer, whole;
+    /// refused, it stays on the descriptor.
     fn rejoin(
         &mut self,
         pending: &mut Pending<'id, Id, D, B, O>,
-        memory: crate::mac::tx::TxBacking<B>,
-    ) -> Result<(), crate::mac::tx::TxBacking<B>> {
+        slot: Pin<&mut TxSlot<B>>,
+    ) -> Result<(), TakeBackRefused> {
         #[cfg(test)]
         if self
             .refuse_for_test
             .take_if(|refusal| *refusal == TestRefusal::Return)
             .is_some()
         {
-            return Err(memory);
+            return Err(TakeBackRefused::Refused);
         }
-        pending.operation.execute().mpdu.buffer.dma.complete(memory)
+        pending.operation.execute().mpdu.buffer.take_back(slot)
+    }
+    /// A network's memory a home descriptor holds with no attempt beside it
+    /// ([`Fault::CompletionWithoutPending`]), whole, once: its home is the
+    /// network, through the port's owner. A descriptor the hardware holds,
+    /// or one an attempt waits beside, gives nothing.
+    pub(super) fn take_orphan_network(&mut self) -> Option<crate::mac::tx::TxBacking<B>> {
+        for index in 0..TX_DESCRIPTORS {
+            let alone = self.running.get(index).is_some_and(Option::is_none)
+                && self.stranded.get(index).is_some_and(Option::is_none);
+            if !alone {
+                continue;
+            }
+            let Some(Some(slot)) = self.free.descriptors.get_mut(index) else {
+                continue;
+            };
+            if slot.state() == crate::mac::tx::TxDmaState::Free
+                && let Some(memory) = slot.as_mut().detach_network()
+            {
+                return Some(memory);
+            }
+        }
+        None
+    }
+    /// Keep an attempt beside the lease its buffer refused back, in its
+    /// queue's published place, with what is known of it.
+    fn keep_stranded(
+        &mut self,
+        category: WmmAccessCategory,
+        pending: Pending<'id, Id, D, B, O>,
+        left: Left,
+    ) {
+        if let Some(place) = self.stranded.get_mut(queue(category)) {
+            *place = Some(left);
+        }
+        self.keep_running(category, pending);
     }
     /// Keep an attempt a completion could not end in its queue's published
     /// place, which the completion just emptied.
@@ -1190,9 +1320,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             ));
         }
         let mpdu = pending.operation.execute().mpdu;
-        // The hardware takes the memory through the queue's descriptor; the
-        // buffer keeps its return right.
-        let Some(lease) = mpdu.buffer.dma.publish() else {
+        // The hardware takes the memory through the queue's descriptor, with
+        // the right that takes it home, as one lease. Refused, the buffer
+        // keeps both.
+        if let Err(refusal) = mpdu.buffer.attach_to(slot.as_mut()) {
+            let step = match refusal {
+                AttachRefused::NotFree => PublishStep::Buffer,
+                AttachRefused::Descriptor => PublishStep::Attach,
+            };
             return Err(self.unadmit(
                 hardware,
                 env,
@@ -1200,21 +1335,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 index,
                 (pending, admission),
                 Some((queue, Some(slot))),
-                refused(PublishStep::Buffer),
-            ));
-        };
-        if let Err(lease) = slot.as_mut().attach(lease) {
-            // The lease goes back to the buffer it left, which is published:
-            // its return cannot refuse.
-            let _returned = mpdu.buffer.dma.complete(lease).is_ok();
-            return Err(self.unadmit(
-                hardware,
-                env,
-                vacancy,
-                index,
-                (pending, admission),
-                Some((queue, Some(slot))),
-                refused(PublishStep::Attach),
+                refused(step),
             ));
         }
         if slot.state() != crate::mac::tx::TxDmaState::Free {
@@ -1280,6 +1401,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 PublishStep::Values,
             );
         }
+        // What this publication adds to the descriptor's record is its cost.
+        pending.try_work = Some(memory.slot().work());
         let values = MpduValues::checked(
             memory,
             core_mac::MpduParameters {
@@ -1467,12 +1590,23 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         (queue, mut slot): (FreeQueue<'id, CorePath<Id>>, Pin<&'static mut TxSlot<B>>),
         fault: Fault,
     ) -> Fault {
-        if let Some(memory) = slot.as_mut().detach()
-            && let Err(memory) = pending.operation.execute().mpdu.buffer.dma.complete(memory)
+        // The lease goes back to its buffer, whole. Refused, the attempt
+        // stays beside it ([`Self::strand`]).
+        if let Err(TakeBackRefused::Refused) = pending
+            .operation
+            .execute()
+            .mpdu
+            .buffer
+            .take_back(slot.as_mut())
         {
-            // The buffer is published, so this return does not refuse;
-            // refused, the memory goes back to the free descriptor.
-            let _attached = slot.as_mut().attach(memory).is_ok();
+            return self.strand(
+                hardware,
+                env,
+                vacancy,
+                index,
+                (pending, admission),
+                (queue, slot),
+            );
         }
         self.unadmit(
             hardware,
@@ -1483,6 +1617,127 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             Some((queue, Some(slot))),
             fault,
         )
+    }
+    /// An attempt whose buffer refused its lease back: the lease stays
+    /// whole on its queue's descriptor, which goes home with its place and
+    /// keeps it from every pool, and the attempt waits beside it in its
+    /// queue's published place, which no attempt of this queue holds while
+    /// its queue place was taken. The ticket goes back. Both stay there
+    /// until the cleanup after a confirmed stop ([`Self::rejoin_stranded`]).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the attempt's owners, its environment and the call's right are distinct values"
+    )]
+    fn strand<E: DriverEnv<'id, Id, D, B, O>>(
+        &mut self,
+        hardware: &mut D::Hardware,
+        env: &mut E,
+        vacancy: E::Vacancy,
+        index: usize,
+        (pending, admission): (
+            Pending<'id, Id, D, B, O>,
+            TxAdmission<'id, CorePath<Id>, TX_TICKETS>,
+        ),
+        (queue, slot): (FreeQueue<'id, CorePath<Id>>, Pin<&'static mut TxSlot<B>>),
+    ) -> Fault {
+        self.free.put_paired(queue, slot);
+        self.returned_ticket(hardware, admission);
+        self.keep_stranded(pending.category, pending, Left::Unpublished);
+        env.vacate(vacancy);
+        Fault::ReturnRefused { queue: index as u8 }
+    }
+    /// After a confirmed stop, which released every descriptor's DMA: each
+    /// attempt a refused return left beside its lease ([`Self::strand`])
+    /// takes the lease back from its queue's descriptor, once per call, and
+    /// ends with what is known of it ([`Left`]): a completed attempt by its
+    /// publication's end, as a completion during a stop ends it (a delivery
+    /// stays delivered), one never published withdrawn as unpublishable.
+    /// The attempts queued behind it, never sent, end withdrawn. Each
+    /// leaves under the call's right; without it the rest wait for the next
+    /// call.
+    ///
+    /// # Errors
+    ///
+    /// The buffer refused its lease again: the attempt and the lease stay
+    /// where they were, for the owner's next call.
+    pub(super) fn rejoin_stranded<E: DriverEnv<'id, Id, D, B, O>>(
+        &mut self,
+        env: &mut E,
+    ) -> Result<(), Fault> {
+        for index in 0..TX_DESCRIPTORS {
+            let stranded = self.stranded.get(index).is_some_and(Option::is_some)
+                && self.running.get(index).is_some_and(Option::is_some)
+                && self.free.is_home_at(index)
+                && self.free.descriptors.get(index).is_some_and(|slot| {
+                    slot.as_ref().is_some_and(|slot| {
+                        slot.state() == crate::mac::tx::TxDmaState::Free
+                            && slot.home_kind().is_some()
+                    })
+                });
+            if stranded {
+                let Some(vacancy) = env.vacancy() else {
+                    return Ok(());
+                };
+                let (Some(mut pending), Some(mut slot)) = (
+                    self.running.get_mut(index).and_then(Option::take),
+                    self.free.descriptors.get_mut(index).and_then(Option::take),
+                ) else {
+                    // Both were checked present above.
+                    env.vacate(vacancy);
+                    return Ok(());
+                };
+                let rejoined = self.rejoin(&mut pending, slot.as_mut());
+                if let Some(place) = self.free.descriptors.get_mut(index) {
+                    *place = Some(slot);
+                }
+                if rejoined.is_err() {
+                    self.keep_running(pending.category, pending);
+                    env.vacate(vacancy);
+                    return Err(Fault::ReturnRefused { queue: index as u8 });
+                }
+                // The attempt ends with what was known of it: a completed
+                // one by its end, one never published withdrawn.
+                match self.stranded.get_mut(index).and_then(Option::take) {
+                    Some(Left::Ended { end, rate }) => {
+                        self.conclude(env, vacancy, pending, end, rate, true)?;
+                    }
+                    Some(Left::Unpublished) | None => self.finish(
+                        env,
+                        vacancy,
+                        pending,
+                        TxOutcome::Withdrawn(WithdrawCause::Unpublishable),
+                    ),
+                }
+            }
+            if self.running.get(index).is_some_and(Option::is_some) {
+                continue;
+            }
+            // The queue behind it, which the stop's withdrawal passed by.
+            while self
+                .queues
+                .get(index)
+                .is_some_and(|queue| !queue.is_empty())
+            {
+                let Some(vacancy) = env.vacancy() else {
+                    return Ok(());
+                };
+                let Some(queued) = self
+                    .queues
+                    .get_mut(index)
+                    .and_then(heapless::Deque::pop_front)
+                else {
+                    env.vacate(vacancy);
+                    break;
+                };
+                self.finish(
+                    env,
+                    vacancy,
+                    queued,
+                    TxOutcome::Withdrawn(WithdrawCause::Disabled),
+                );
+            }
+        }
+        Ok(())
     }
     /// Put `pending` back at the head of its queue: nothing of it was
     /// published, and a stop withdraws it there.
@@ -1546,24 +1801,37 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             queue: index as u8,
             step,
         };
-        let Some(memory) = slot.as_mut().detach() else {
-            // The memory stays attached to its descriptor: every owner goes
-            // back to its place with the fault.
-            return Err(self.unadmit(
-                hardware,
-                env,
-                vacancy,
-                index,
-                (pending, admission),
-                Some((queue, Some(slot))),
-                terminal,
-            ));
-        };
+        // The lease goes back to its buffer, whole. Refused, the attempt
+        // stays beside it ([`Self::strand`]).
+        match pending
+            .operation
+            .execute()
+            .mpdu
+            .buffer
+            .take_back(slot.as_mut())
         {
-            let buffer = &mut pending.operation.execute().mpdu.buffer;
-            // The buffer is published, so its memory's return cannot
-            // refuse.
-            let _returned = buffer.dma.complete(memory).is_ok();
+            Ok(()) => {}
+            Err(TakeBackRefused::Refused) => {
+                return Err(self.strand(
+                    hardware,
+                    env,
+                    vacancy,
+                    index,
+                    (pending, admission),
+                    (queue, slot),
+                ));
+            }
+            Err(TakeBackRefused::Missing) => {
+                return Err(self.unadmit(
+                    hardware,
+                    env,
+                    vacancy,
+                    index,
+                    (pending, admission),
+                    Some((queue, Some(slot))),
+                    terminal,
+                ));
+            }
         }
         self.free.put_paired(queue, slot);
         self.returned_ticket(hardware, admission);
@@ -2266,7 +2534,6 @@ fn owner_free_refusal<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Ob
         .execute()
         .mpdu
         .buffer
-        .dma
         .memory_mut()
         .is_none()
     {

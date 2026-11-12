@@ -48,9 +48,10 @@ impl FramePort for Port {
     type Ticket = ();
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<(), E>> {
+        let length = meta.length;
         let mut wire = self.0.borrow_mut();
         if !wire.open {
             return Err(Unpublished::Port(()));

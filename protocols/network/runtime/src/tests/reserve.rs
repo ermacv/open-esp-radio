@@ -3,8 +3,6 @@
 //! own expected count of where every block is, and checks it against what
 //! the sockets and the pool's holder see.
 
-use core::convert::Infallible;
-
 use oer_portable_events::EventSink;
 use oer_protocols_network_core::NetEvent;
 
@@ -14,37 +12,11 @@ use crate::{RequestKind, ServiceEvent};
 /// The pool of these tests.
 const POOL: usize = 8;
 
-type Svc<B> = Service<
-    'static,
-    'static,
-    B,
-    SIZE,
-    3,
-    CREDITS,
-    RECEIVED,
-    2,
-    POOL,
-    DEPTH,
-    RECEIVED,
-    WirePort,
-    Direct,
->;
+type Svc<B> =
+    Service<'static, 'static, B, SIZE, 3, CREDITS, RECEIVED, 2, POOL, DEPTH, RECEIVED, WirePort>;
 type Sock<B> = TestSocket<B>;
 type Held<B> = Vec<Block<'static, B, SIZE>>;
-type Ended3<B> = Ended<
-    'static,
-    'static,
-    B,
-    SIZE,
-    3,
-    CREDITS,
-    POOL,
-    DEPTH,
-    RECEIVED,
-    WirePort,
-    Direct,
-    Infallible,
->;
+type Ended3<B> = Ended<'static, 'static, B, SIZE, 3, CREDITS, POOL, DEPTH, RECEIVED, WirePort>;
 
 /// The blocks each reservation the service took asked for, in order.
 #[derive(Default)]
@@ -79,7 +51,7 @@ fn three<B: 'static>(limits: [usize; 2]) -> Three<B> {
     let interface = Interface::new(LOCAL, OUR_IP, 24, None, 1500).unwrap();
     let owner = NetworkOwner::new(brand, interface, pool, WirePort::default());
     let (_stop, stopping) = Box::leak(Box::new(StopLane::new())).split();
-    let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+    let mut service = Service::new(owner, MemoryPolicy::KEEP, stopping);
     let dscp = Dscp::default();
     let holder = service
         .bind(5000, dscp, Group::shared(), storage::<B>())

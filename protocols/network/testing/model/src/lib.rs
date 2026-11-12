@@ -9,20 +9,26 @@ use std::rc::Rc;
 use std::task::{Context, Waker};
 
 use oer_portable_time::Instant;
-use oer_protocols_ieee80211_core_upper_mac::airtime::AirtimeCandidate;
-use oer_protocols_ieee80211_runtime::egress::{Exchange, PeerAir, RadioNotice};
-use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Ready, Unpublished};
+use oer_protocols_network_port::{EthernetFrameView, FramePort, FrameSource, Unpublished};
 use oer_protocols_network_wire::arp::{self, Arp, Operation};
 use oer_protocols_network_wire::ethernet::{EtherType, EthernetHeader};
 use oer_protocols_network_wire::ip::Ipv4Header;
 use oer_protocols_network_wire::transport::UdpHeader;
 
 const BROADCAST: [u8; 6] = [0xff; 6];
-/// The account of frames to everyone.
-const BROADCAST_KEY: PeerKey = (u8::MAX, 0);
 
 /// An association: a peer's number and its generation.
 pub type PeerKey = (u8, u16);
+
+/// What the medium tells the port's user of a frame: its end, with what it
+/// cost on the air (`None` when unknown), its loss, or a peer's association
+/// that ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Notice {
+    Ended { ticket: Ticket, cost: Option<u32> },
+    Lost(Ticket),
+    Left(PeerKey),
+}
 
 /// Names a frame by its buffer's place at the port, below the port's depth,
 /// as the station's buffers do: no other frame has it until the frame's
@@ -108,10 +114,10 @@ struct State {
     refused: u64,
     received: VecDeque<Vec<u8>>,
     /// Ends that landed, until a batch of them is told at once.
-    landing: Vec<RadioNotice<Ticket, PeerKey>>,
+    landing: Vec<Notice>,
     /// Ends told together: one, or a Block Ack's.
     batch: usize,
-    notices: VecDeque<RadioNotice<Ticket, PeerKey>>,
+    notices: VecDeque<Notice>,
     /// Notices taken.
     taken: u64,
     waker: Option<Waker>,
@@ -177,19 +183,6 @@ impl State {
         let spec = self.spec(peer);
         Self::attempt(&spec, spec.micros_per_octet, length)
             .saturating_mul(spec.retries.saturating_add(1))
-    }
-
-    /// What the radio believes it will cost.
-    fn estimate(&self, peer: Option<usize>, length: usize) -> u32 {
-        let spec = self.spec(peer);
-        Self::attempt(&spec, spec.estimated_per_octet, length)
-    }
-
-    /// The most it can cost.
-    fn ceiling(&self, peer: Option<usize>, length: usize) -> u32 {
-        let spec = self.spec(peer);
-        let rate = spec.micros_per_octet.max(spec.estimated_per_octet);
-        Self::attempt(&spec, rate, length).saturating_mul(spec.retry_limit.saturating_add(1))
     }
 
     /// Answer an ARP request for a peer's address, as that peer.
@@ -279,11 +272,10 @@ impl State {
             self.flows.entry(port).or_default().add(flight.cost);
         }
         // The medium models no PHY rate.
-        self.landing.push(RadioNotice::Ended(Exchange {
+        self.landing.push(Notice::Ended {
             ticket: flight.ticket,
-            charged,
-            rate: None,
-        }));
+            cost: charged.map(NonZeroU32::get),
+        });
     }
 
     /// Tell the landed ends once a batch of them landed or the air is idle:
@@ -388,6 +380,11 @@ impl Medium {
         state.wake();
     }
 
+    /// Frames at the port whose end was not taken yet.
+    pub fn unsettled(&self) -> usize {
+        self.0.borrow().held.iter().filter(|held| **held).count()
+    }
+
     /// A peer's association ends and the next begins: its frames on the air
     /// still settle on the old one.
     pub fn leave(&self, peer: usize) {
@@ -397,7 +394,7 @@ impl Medium {
             let key = (number, peer.generation);
             peer.generation = peer.generation.wrapping_add(1);
             state.version = state.version.wrapping_add(1);
-            state.notices.push_back(RadioNotice::Left(key));
+            state.notices.push_back(Notice::Left(key));
         }
         state.wake();
     }
@@ -447,9 +444,10 @@ impl FramePort for Medium {
 
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<Ticket, Unpublished<NoRoom, E>> {
+        let length = meta.length;
         let mut state = self.0.borrow_mut();
         if state.refusals > 0 {
             state.refusals = state.refusals.saturating_sub(1);
@@ -468,7 +466,7 @@ impl FramePort for Medium {
 }
 
 impl FrameSource for Medium {
-    type Notice = RadioNotice<Ticket, PeerKey>;
+    type Notice = Notice;
     /// The medium lends no buffer: each frame is its copy.
     type Held = oer_protocols_network_port::NeverHeld;
 
@@ -502,7 +500,7 @@ impl FrameSource for Medium {
         let notice = state.notices.pop_front()?;
         state.taken = state.taken.saturating_add(1);
         // The end frees its frame's buffer.
-        if let RadioNotice::Ended(Exchange { ticket, .. }) | RadioNotice::Lost(ticket) = notice
+        if let Notice::Ended { ticket, .. } | Notice::Lost(ticket) = notice
             && let Some(held) = state.held.get_mut(ticket)
         {
             *held = false;
@@ -523,45 +521,6 @@ impl FrameSource for Medium {
         state.waker = Some(cx.waker().clone());
         let changed = core::mem::take(&mut state.changed);
         changed || !state.received.is_empty() || !state.notices.is_empty()
-    }
-}
-
-impl PeerAir for Medium {
-    type Key = PeerKey;
-    /// Moves whenever a peer falls asleep, wakes or leaves: what a candidate
-    /// reads besides the frame.
-    type View = u64;
-
-    fn view(&self) -> u64 {
-        self.0.borrow().version
-    }
-
-    fn candidate(&self, _view: &Self::View, ready: &Ready) -> Option<AirtimeCandidate<PeerKey>> {
-        let state = self.0.borrow();
-        let (key, peer) = if ready.peer == BROADCAST {
-            (BROADCAST_KEY, None)
-        } else {
-            let number = state.peer_of(ready.peer)?;
-            let peer = state.peers.get(number)?;
-            if peer.asleep {
-                return None;
-            }
-            ((u8::try_from(number).ok()?, peer.generation), Some(number))
-        };
-        Some(AirtimeCandidate {
-            key,
-            minimum_micros: NonZeroU32::new(state.estimate(peer, ready.length))?,
-        })
-    }
-
-    fn ceiling(&self, ready: &Ready) -> NonZeroU32 {
-        let state = self.0.borrow();
-        let ceiling = state.ceiling(state.peer_of(ready.peer), ready.length);
-        NonZeroU32::new(ceiling).unwrap_or(NonZeroU32::MIN)
-    }
-
-    /// The medium's estimates do not depend on a rate, and it reports none.
-    fn reported(&mut self, _key: PeerKey, _rate: oer_protocols_ieee80211_runtime::egress::PhyRate) {
     }
 }
 

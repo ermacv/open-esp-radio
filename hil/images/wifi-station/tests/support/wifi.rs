@@ -9,9 +9,7 @@ use oer_portable_memory::WakingSpscSender;
 use oer_protocols_network_core::{Group, Interface, NetworkOwner, claim};
 use oer_protocols_network_port::{EthernetFrame, EthernetFrameView};
 use oer_protocols_network_port::{FramePort, FrameSource};
-use oer_protocols_network_runtime::{
-    Direct, LendingLanes, MemoryPolicy, Producer, Service, StopLane,
-};
+use oer_protocols_network_runtime::{LendingLanes, MemoryPolicy, Producer, Service, StopLane};
 use oer_protocols_network_wire::ip::Dscp;
 
 pub use oer_portable_memory::{AtomicWaker, ClaimCell};
@@ -84,17 +82,14 @@ pub struct Ports {
     pub sending: u16,
 }
 
-/// The chip's queued egress, by type, as the image names it.
-pub enum Queued {}
-
 /// A network the test built: its address is the test's to set.
-pub struct Network<P, M, R> {
+pub struct Network<P, R> {
     pub end: &'static LocalEnd,
     pub configuration: std::rc::Rc<core::cell::Cell<Option<Configuration>>>,
-    pub producer: PhantomData<(P, M, R)>,
+    pub producer: PhantomData<(P, R)>,
 }
 
-impl<P, M, R> Network<P, M, R> {
+impl<P, R> Network<P, R> {
     pub const fn end(&self) -> &'static LocalEnd {
         self.end
     }
@@ -132,7 +127,6 @@ pub(crate) type Served<P> = Service<
     32,
     32,
     P,
-    Direct,
     Producer<'static, Brand, crate::udp::LoadProducer, 32>,
 >;
 
@@ -167,7 +161,6 @@ pub(crate) fn network<P: FramePort + FrameSource<Held = HostHeld>>(
     let source: &'static crate::udp::Source = Box::leak(Box::new(crate::udp::Source::new()));
     let mut service = Service::with_producer(
         owner,
-        Direct,
         MemoryPolicy::KEEP,
         stopping,
         crate::udp::LoadProducer::new(source),

@@ -683,7 +683,7 @@ state = "read"
 
 [[wait.evidence]]
 site = "chips/esp32s31/app/src/wifi.rs"
-anchor = "wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx_supply:WifiTx,fail:failure,restarted:restarted,across_harts:"
+anchor = "wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx:TxEnd,fail:failure,restarted:restarted,across_harts:"
 
 [[wait.evidence]]
 site = "protocols/ieee80211/runtime/src/datapath/turn.rs"

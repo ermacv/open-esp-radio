@@ -88,7 +88,12 @@ fn a_terminal_without_a_home_of_the_runners_is_refused_whole_and_stays_with_the_
         );
         assert_eq!(runner.homes.tickets.len(), tickets);
         // Once the ticket has its purpose, the homes take it whole, once.
-        runner.homes.purposes[usize::from(index)] = Some(Purpose::Data);
+        runner.homes.purposes[usize::from(index)] = Some(Purpose::Data(
+            crate::datapath::queues::QueueId::of_tid(
+                oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority::UP0,
+            ),
+            None,
+        ));
         assert_eq!(
             runner.port.take_unconsumed(&mut runner.homes),
             Ok(Unconsumed::None)
@@ -144,7 +149,12 @@ fn owners_an_operation_stopped_on_hold_every_later_terminal_in_the_port_and_leav
         let Ok(admitted) = runner.admit(ticket, buffer, frame, TxOperation::Data, None) else {
             panic!("the frame is admitted");
         };
-        runner.homes.purposes[usize::from(index)] = Some(Purpose::Data);
+        runner.homes.purposes[usize::from(index)] = Some(Purpose::Data(
+            crate::datapath::queues::QueueId::of_tid(
+                oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority::UP0,
+            ),
+            None,
+        ));
         assert!(
             runner
                 .port
@@ -316,5 +326,72 @@ fn a_stop_watch_returns_while_an_item_is_unkept_and_goes_on_once_it_is_taken() {
             Either::Second(()) => panic!("the port confirms the stop once the item is out"),
         }
         drop(item);
+    }));
+}
+
+/// A data attempt's completion, through the runner's own terminal
+/// handling, charges its queue only while its association owns it: one
+/// that completes after its place passed to a later association charges
+/// nothing, and the owner's own completion charges what it cost (the
+/// model declares it unknown: the dearest known, never nothing).
+#[test]
+fn a_late_data_completion_charges_only_the_association_that_owns_its_queue() {
+    use crate::datapath::queues::QueueId;
+    use oer_protocols_ieee80211_core_roles_ap::ApAssociationIdentity;
+    use oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, _shared);
+        let now = || oer_portable_time::Clock::now(&*counted.clock);
+        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        assert!(started.is_ok(), "the radio starts");
+        let old = ApAssociationIdentity::new(STATION, 1, 7).unwrap();
+        let new = ApAssociationIdentity::new(STATION, 1, 8).unwrap();
+        let Ok(Some(place)) = runner.homes.place_of(old) else {
+            panic!("the place is the old association's");
+        };
+        let queue = QueueId::new(place, WmmUserPriority::UP0).unwrap();
+        // Two attempts out, the first the old association's, the second the
+        // new one's; the place passes to the new one before either ends.
+        for association in [old, new] {
+            let ticket = runner.homes.tickets.pop().unwrap();
+            let index = ticket.index();
+            let mut buffer = runner.homes.buffers.pop().unwrap();
+            let len = deauthentication(buffer.bytes_mut().unwrap());
+            let frame = ApFrame {
+                len,
+                kind: ApFrameKind::Management { peer: STATION },
+            };
+            let Ok(admitted) = runner.admit(ticket, buffer, frame, TxOperation::Data, None) else {
+                panic!("the frame is admitted");
+            };
+            runner.homes.purposes[usize::from(index)] =
+                Some(Purpose::Data(queue, Some(association)));
+            assert!(
+                runner
+                    .port
+                    .submit(admitted, now(), &mut runner.homes)
+                    .is_ok()
+            );
+        }
+        assert!(matches!(runner.homes.place_of(new), Ok(Some(taken)) if taken == place));
+        assert_eq!(runner.homes.queues.air(queue), 0);
+        for _ in 0..64 {
+            counted.clock.advance(Duration::from_millis(1)).unwrap();
+            air.clock_advanced();
+            let served = runner
+                .port
+                .service_tx(TxFacts::DUE, false, now(), &mut runner.homes);
+            assert!(served.is_ok());
+        }
+        assert!(
+            runner.homes.purposes.iter().all(Option::is_none),
+            "both completions came home"
+        );
+        assert_eq!(
+            runner.homes.queues.air(queue),
+            1,
+            "the new association's attempt alone, unknown: one microsecond"
+        );
     }));
 }

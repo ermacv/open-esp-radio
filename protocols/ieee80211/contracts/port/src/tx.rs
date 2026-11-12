@@ -164,29 +164,6 @@ pub enum IndeterminateCause {
     KeyRefused,
 }
 
-/// How a frame's transmissions ended for its owner: what they cost by the
-/// backend's model, and the full rate (mode, MCS, streams, width, guard
-/// interval and LTF) of its last transmission with an established rate.
-/// `rate: None` says no rate is established, not that nothing was sent: an
-/// [`AttemptEnd::Aborted`](crate::AttemptEnd::Aborted) publication may
-/// have reached the air, with no rate sample and an unknown cost.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TxEnd {
-    /// What the frame's transmissions cost.
-    pub cost: TxEstimate,
-    /// The full rate of its last transmission with an established rate;
-    /// `None` when none has one.
-    pub rate: Option<crate::PhyRate>,
-}
-
-impl TxEnd {
-    /// A frame known never to have gone on the air: no cost and no rate.
-    pub const NONE: Self = Self {
-        cost: TxEstimate::NONE,
-        rate: None,
-    };
-}
-
 /// What transmissions cost by a backend's declared model, in microseconds:
 /// for every publication that reached the air, its modelled PPDU duration,
 /// one SIFS and its solicited response (an ACK or a BlockAck) at the
@@ -226,29 +203,6 @@ impl TxEstimate {
             }
             _ => Self::Unknown,
         }
-    }
-
-    /// The parts of `self` among `parts` works, each counted once: the first
-    /// part, which takes the remainder, then the part of every other. With
-    /// no parts nothing is split.
-    #[must_use]
-    pub const fn split(self, parts: u8) -> Option<(Self, Self)> {
-        let Self::Estimated { micros } = self else {
-            return match parts {
-                0 => None,
-                _ => Some((Self::Unknown, Self::Unknown)),
-            };
-        };
-        let Some(each) = micros.checked_div(parts as u32) else {
-            return None;
-        };
-        let remainder = micros.wrapping_sub(each.wrapping_mul(parts as u32));
-        Some((
-            Self::Estimated {
-                micros: each.wrapping_add(remainder),
-            },
-            Self::Estimated { micros: each },
-        ))
     }
 }
 

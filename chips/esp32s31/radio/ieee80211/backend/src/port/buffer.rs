@@ -1,6 +1,7 @@
 use super::keys::RawKeyIdentity;
 use super::*;
 use crate::mac::tx::TxBacking;
+use crate::mac::tx::TxSlot;
 use oer_portable_memory::StableDmaBacking as _;
 
 pub struct BufferClass<const B: usize>;
@@ -26,9 +27,9 @@ enum Dma<const B: usize> {
         memory: TxBacking<B>,
         home: ReturnRight<B>,
     },
-    /// The hardware owns the memory; its return right waits for the
-    /// completion that hands it back. Dropped here, the memory stays out.
-    Published { home: ReturnRight<B> },
+    /// The memory and its return right are one lease on a descriptor until
+    /// the descriptor gives it back ([`MpduBuffer::take_back`]).
+    Published,
     /// Neither: the place holds no memory, or its pair moved on.
     Released,
 }
@@ -50,33 +51,33 @@ impl<const B: usize> ReturnableBuffer<B> {
             _ => None,
         }
     }
-    /// Hand the memory to the hardware, keeping its home; `None`, and no
-    /// change, unless the CPU owns it.
-    pub(super) fn publish(&mut self) -> Option<TxBacking<B>> {
-        match core::mem::replace(&mut self.0, Dma::Released) {
-            Dma::Free { memory, home } => {
-                self.0 = Dma::Published { home };
-                Some(memory)
-            }
+    /// Attach the memory and its return right to `slot` as one lease;
+    /// refused, both stay here.
+    pub(super) fn attach_to(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), AttachRefused> {
+        match core::mem::replace(&mut self.0, Dma::Published) {
+            Dma::Free { memory, home } => match slot.attach_bank(memory, home) {
+                Ok(()) => Ok(()),
+                Err((memory, home)) => {
+                    self.0 = Dma::Free { memory, home };
+                    Err(AttachRefused::Descriptor)
+                }
+            },
             other => {
                 self.0 = other;
-                None
+                Err(AttachRefused::NotFree)
             }
         }
     }
-    /// The completion handed `memory` back: it rejoins its home. Refused,
-    /// with the memory and no change, unless the hardware owned it.
-    pub(super) fn complete(&mut self, memory: TxBacking<B>) -> Result<(), TxBacking<B>> {
-        match core::mem::replace(&mut self.0, Dma::Released) {
-            Dma::Published { home } => {
-                self.0 = Dma::Free { memory, home };
-                Ok(())
-            }
-            other => {
-                self.0 = other;
-                Err(memory)
-            }
+    /// Take the published lease back from `slot`, whole; refused, whatever
+    /// the descriptor holds stays there.
+    pub(super) fn take_back(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), TakeBackRefused> {
+        let refused = take_back_refusal(&slot);
+        if !matches!(self.0, Dma::Published) {
+            return Err(refused);
         }
+        let (memory, home) = slot.detach_bank().ok_or(refused)?;
+        self.0 = Dma::Free { memory, home };
+        Ok(())
     }
 }
 impl<const B: usize> Drop for ReturnableBuffer<B> {
@@ -109,8 +110,193 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMe
     }
 }
 
+/// A network's memory is a pool buffer as a port buffer is: its frame
+/// region starts behind the metadata word, on a word, and holds what a
+/// port buffer's does ([`BufferClass`]).
+const _: () = {
+    if !crate::ordinary_tx::TX_METADATA_SIZE.is_multiple_of(4) {
+        panic!("the MPDU starts on a word behind the metadata");
+    }
+};
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> NetworkCapacity
+    for Types<Id, D, B, O>
+{
+    const NETWORK_CAPACITY: usize = BufferClass::<B>::CAPACITY;
+}
+
+/// A network's memory as one single MPDU's buffer ([`TxNetworkPool`]): the
+/// pool buffer the network wrote one MSDU in, lent under the installation.
+/// It has no bank place: its terminal returns the memory itself. Dropped
+/// free (its owner abandoned it), the memory goes back to the pool, not to
+/// the network: the next composition's claim of the network's places finds
+/// it there.
+pub struct NetworkBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub(super) dma: NetworkDma<B>,
+    pub(super) admission: Option<Instant>,
+    pub(super) loan: Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>,
+}
+
+/// A network buffer's memory: the CPU's, or a lease on a descriptor from its
+/// publication until the descriptor gives it back.
+pub(super) enum NetworkDma<const B: usize> {
+    Free(TxBacking<B>),
+    Published,
+}
+impl<const B: usize> NetworkDma<B> {
+    fn memory_mut(&mut self) -> Option<&mut [u8]> {
+        match self {
+            Self::Free(memory) => Some(memory.stable_dma_region().into_mut_slice()),
+            Self::Published => None,
+        }
+    }
+    fn attach_to(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), AttachRefused> {
+        match core::mem::replace(self, Self::Published) {
+            Self::Free(memory) => slot.attach_network(memory).map_err(|memory| {
+                *self = Self::Free(memory);
+                AttachRefused::Descriptor
+            }),
+            Self::Published => Err(AttachRefused::NotFree),
+        }
+    }
+    fn take_back(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), TakeBackRefused> {
+        let refused = take_back_refusal(&slot);
+        if !matches!(self, Self::Published) {
+            return Err(refused);
+        }
+        *self = Self::Free(slot.detach_network().ok_or(refused)?);
+        Ok(())
+    }
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxBufferMemory
+    for NetworkBuffer<'_, Id, D, B, O>
+{
+    fn renew_msdu(&mut self) -> Result<(), BufferMemoryUnavailable> {
+        self.dma.memory_mut().ok_or(BufferMemoryUnavailable)?;
+        self.admission = None;
+        Ok(())
+    }
+    /// The frame region from the MPDU's first octet, behind the metadata.
+    fn bytes_mut(&mut self) -> Result<&mut [u8], BufferMemoryUnavailable> {
+        self.dma
+            .memory_mut()
+            .ok_or(BufferMemoryUnavailable)?
+            .get_mut(crate::ordinary_tx::TX_METADATA_SIZE..)
+            .and_then(|bytes| bytes.get_mut(..BufferClass::<B>::CAPACITY))
+            .ok_or(BufferMemoryUnavailable)
+    }
+}
+
+/// Why [`MpduBuffer::attach_to`] attached nothing; the buffer keeps its
+/// memory.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum AttachRefused {
+    /// The CPU does not own the memory.
+    NotFree,
+    /// The descriptor took no lease.
+    Descriptor,
+}
+
+/// The refusal of a take-back from `slot`: it holds no lease, or one the
+/// buffer does not take.
+fn take_back_refusal<const B: usize>(slot: &Pin<&mut TxSlot<B>>) -> TakeBackRefused {
+    if slot.home_kind().is_some() {
+        TakeBackRefused::Refused
+    } else {
+        TakeBackRefused::Missing
+    }
+}
+
+/// Why [`MpduBuffer::take_back`] took nothing; whatever lease the
+/// descriptor holds stays there.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum TakeBackRefused {
+    /// The descriptor holds no lease.
+    Missing,
+    /// The buffer does not take the lease it holds.
+    Refused,
+}
+
+/// The memory an MPDU is in: a port buffer of its bank, or a network's.
+pub enum MpduBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    Bank(Buffer<'id, Id, D, B, O>),
+    Network(NetworkBuffer<'id, Id, D, B, O>),
+}
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    MpduBuffer<'id, Id, D, B, O>
+{
+    /// When the port admitted the MPDU, once it did.
+    pub(super) fn admission(&self) -> Option<Instant> {
+        match self {
+            Self::Bank(buffer) => buffer.admission,
+            Self::Network(buffer) => buffer.admission,
+        }
+    }
+    /// The MSDU ages from `now`, its first admission.
+    pub(super) fn admit(&mut self, now: Instant) {
+        let admission = match self {
+            Self::Bank(buffer) => &mut buffer.admission,
+            Self::Network(buffer) => &mut buffer.admission,
+        };
+        admission.get_or_insert(now);
+    }
+    /// The CPU's whole memory, from its metadata prefix, while it owns it.
+    pub(super) fn memory_mut(&mut self) -> Option<&mut [u8]> {
+        match self {
+            Self::Bank(buffer) => buffer.dma.memory_mut(),
+            Self::Network(buffer) => buffer.dma.memory_mut(),
+        }
+    }
+    /// Attach the memory, with its home, to `slot` as one lease. Refused, the
+    /// buffer keeps its memory and nothing moved: the CPU does not own it,
+    /// or the descriptor took no lease.
+    pub(super) fn attach_to(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), AttachRefused> {
+        match self {
+            Self::Bank(buffer) => buffer.dma.attach_to(slot),
+            Self::Network(buffer) => buffer.dma.attach_to(slot),
+        }
+    }
+    /// Take this buffer's lease back from `slot`, whole: its memory and, for
+    /// a bank buffer, its return right. Refused, the lease stays on the
+    /// descriptor and nothing moves: the buffer was not published, or the
+    /// descriptor holds no lease of its kind.
+    pub(super) fn take_back(&mut self, slot: Pin<&mut TxSlot<B>>) -> Result<(), TakeBackRefused> {
+        match self {
+            Self::Bank(buffer) => buffer.dma.take_back(slot),
+            Self::Network(buffer) => buffer.dma.take_back(slot),
+        }
+    }
+    /// The bank place of a port buffer; `None` for a network's memory.
+    #[cfg(all(oer_trace, oer_debug_control))]
+    pub(super) fn index(&self) -> Option<u8> {
+        match self {
+            Self::Bank(buffer) => Some(buffer.index()),
+            Self::Network(_) => None,
+        }
+    }
+}
+
 pub struct Sent<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    pub(super) mpdu: Mpdu<'id, Id, D, B, O>,
+    pub(super) mpdu: MpduOf<Buffer<'id, Id, D, B, O>, D::Body>,
+}
+/// A published MPDU in a network's memory.
+pub struct NetworkSent<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
+    pub(super) mpdu: MpduOf<NetworkBuffer<'id, Id, D, B, O>, D::Body>,
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> NetworkSent<'_, Id, D, B, O> {
+    pub fn packet_number(&self) -> Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber> {
+        self.mpdu.pn
+    }
+    /// The encoded MPDU extent as its last publication left it in memory.
+    #[cfg(test)]
+    pub(crate) fn published(&mut self) -> &[u8] {
+        let len = self.mpdu.layout.mpdu_len();
+        let bytes = self
+            .mpdu
+            .buffer
+            .bytes_mut()
+            .expect("a returned Sent owns its memory");
+        &bytes[..len]
+    }
 }
 impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Sent<'_, Id, D, B, O> {
     pub fn index(&self) -> u8 {
@@ -137,12 +323,21 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Sent<'_, I
 pub enum AnyBuffer<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
     Fresh(Buffer<'id, Id, D, B, O>),
     Sent(Sent<'id, Id, D, B, O>),
+    /// A network's memory, never published.
+    Network(NetworkBuffer<'id, Id, D, B, O>),
+    /// A published MPDU in a network's memory.
+    NetworkSent(NetworkSent<'id, Id, D, B, O>),
 }
 
-pub struct Mpdu<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    pub(super) buffer: Buffer<'id, Id, D, B, O>,
+/// One admitted MPDU in its memory.
+pub type Mpdu<'id, Id, D, const B: usize, O> =
+    MpduOf<MpduBuffer<'id, Id, D, B, O>, <D as Device<B>>::Body>;
+
+/// An MPDU in the memory `M`, with its external body `Body`.
+pub struct MpduOf<M, Body> {
+    pub(super) buffer: M,
     pub(super) layout: MpduLayout,
-    pub(super) body: Option<D::Body>,
+    pub(super) body: Option<Body>,
     pub(super) key: Option<RawKeyIdentity>,
     pub(super) pn: Option<oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber>,
     pub(super) role: VifRole,
@@ -151,6 +346,21 @@ pub struct Mpdu<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observat
     /// [`sets_retry_bit`](crate::ordinary_tx::sets_retry_bit), for the rest
     /// of the MPDU's life, across every `Sent` and retransmission.
     pub(super) retry: bool,
+}
+impl<M, Body> MpduOf<M, Body> {
+    /// The same MPDU in the memory `buffer` makes of its own.
+    pub(super) fn with_buffer<N>(self, buffer: impl FnOnce(M) -> N) -> MpduOf<N, Body> {
+        MpduOf {
+            buffer: buffer(self.buffer),
+            layout: self.layout,
+            body: self.body,
+            key: self.key,
+            pn: self.pn,
+            role: self.role,
+            published: self.published,
+            retry: self.retry,
+        }
+    }
 }
 /// A view cannot move, replace or renew the admitted MPDU.
 pub struct MpduExecution<'a, 'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
@@ -173,10 +383,39 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> TxMpd
     type Buffer = AnyBuffer<'id, Id, D, B, O>;
     type Body = D::Body;
     fn into_parts(self) -> (Self::Buffer, Option<Self::Body>) {
-        if self.published {
-            (AnyBuffer::Sent(Sent { mpdu: self }), None)
-        } else {
-            (AnyBuffer::Fresh(self.buffer), self.body)
+        match (self.published, self.buffer) {
+            (true, MpduBuffer::Bank(buffer)) => (
+                AnyBuffer::Sent(Sent {
+                    mpdu: MpduOf {
+                        buffer,
+                        layout: self.layout,
+                        body: self.body,
+                        key: self.key,
+                        pn: self.pn,
+                        role: self.role,
+                        published: true,
+                        retry: self.retry,
+                    },
+                }),
+                None,
+            ),
+            (true, MpduBuffer::Network(buffer)) => (
+                AnyBuffer::NetworkSent(NetworkSent {
+                    mpdu: MpduOf {
+                        buffer,
+                        layout: self.layout,
+                        body: self.body,
+                        key: self.key,
+                        pn: self.pn,
+                        role: self.role,
+                        published: true,
+                        retry: self.retry,
+                    },
+                }),
+                None,
+            ),
+            (false, MpduBuffer::Bank(buffer)) => (AnyBuffer::Fresh(buffer), self.body),
+            (false, MpduBuffer::Network(buffer)) => (AnyBuffer::Network(buffer), self.body),
         }
     }
 }
@@ -255,6 +494,207 @@ fn stages<K>(frame: &TxFrame<'_, K>) -> RetryPlan<PhyRate> {
     }
 }
 
+/// The memory of a buffer class as preparation takes it: its loan, and the
+/// MPDU memory it becomes.
+pub(super) trait ClassMemory<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>:
+    Sized
+{
+    fn loan(&self) -> Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>>;
+    fn into_mpdu(self) -> MpduBuffer<'id, Id, D, B, O>;
+}
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    ClassMemory<'id, Id, D, B, O> for Buffer<'id, Id, D, B, O>
+{
+    fn loan(&self) -> Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>> {
+        self.loan
+    }
+    fn into_mpdu(self) -> MpduBuffer<'id, Id, D, B, O> {
+        MpduBuffer::Bank(self)
+    }
+}
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    ClassMemory<'id, Id, D, B, O> for NetworkBuffer<'id, Id, D, B, O>
+{
+    fn loan(&self) -> Option<BodyLoan<'id, Id, Esp32s31Backend<Id, D, B, O>>> {
+        self.loan
+    }
+    fn into_mpdu(self) -> MpduBuffer<'id, Id, D, B, O> {
+        MpduBuffer::Network(self)
+    }
+}
+
+/// A class's published MPDU as a retransmission's preparation takes it.
+pub(super) trait ClassSent<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>:
+    Sized
+{
+    type Memory: ClassMemory<'id, Id, D, B, O>;
+    fn mpdu(&self) -> &MpduOf<Self::Memory, D::Body>;
+    fn into_mpdu(self) -> MpduOf<Self::Memory, D::Body>;
+}
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    ClassSent<'id, Id, D, B, O> for Sent<'id, Id, D, B, O>
+{
+    type Memory = Buffer<'id, Id, D, B, O>;
+    fn mpdu(&self) -> &MpduOf<Self::Memory, D::Body> {
+        &self.mpdu
+    }
+    fn into_mpdu(self) -> MpduOf<Self::Memory, D::Body> {
+        self.mpdu
+    }
+}
+impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    ClassSent<'id, Id, D, B, O> for NetworkSent<'id, Id, D, B, O>
+{
+    type Memory = NetworkBuffer<'id, Id, D, B, O>;
+    fn mpdu(&self) -> &MpduOf<Self::Memory, D::Body> {
+        &self.mpdu
+    }
+    fn into_mpdu(self) -> MpduOf<Self::Memory, D::Body> {
+        self.mpdu
+    }
+}
+
+/// A checked source of a class whose fresh memory is `M` and whose
+/// published MPDU is `S`.
+type ClassSource<'k, 'p, 'id, Id, D, const B: usize, O, M, S, C, K, R> = CheckedTxSource<
+    M,
+    S,
+    ClassFrame<'p, C, K>,
+    <D as Device<B>>::Body,
+    <R as RoleKeys<'id, Types<Id, D, B, O>>>::TxKey<'k>,
+    RetransmissionPlan<'p, K>,
+>;
+/// What a class's preparation returns.
+type ClassPrepared<'k, 'p, 'id, Id, D, const B: usize, O, M, S, C, K, R> = Result<
+    Prepared<'k, 'p, 'id, Id, D, B, O, R, K>,
+    PreparationRefused<
+        TxSource<
+            M,
+            S,
+            ClassFrame<'p, C, K>,
+            <D as Device<B>>::Body,
+            <R as RoleKeys<'id, Types<Id, D, B, O>>>::TxKey<'k>,
+            RetransmissionPlan<'p, K>,
+        >,
+    >,
+>;
+
+/// Prepare a source of any class: fresh memory records the installed key's
+/// identity and the caller's PN; a retransmission keeps its own and only
+/// checks that its key and response kind still hold.
+#[allow(
+    clippy::type_complexity,
+    clippy::result_large_err,
+    reason = "a refusal returns the class's whole source by value"
+)]
+fn prepare_class<
+    'k,
+    'p,
+    'id: 'k,
+    Id: SlotIdentity + 'id,
+    D: Device<B>,
+    const B: usize,
+    O: Observations,
+    M: ClassMemory<'id, Id, D, B, O>,
+    S: ClassSent<'id, Id, D, B, O, Memory = M>,
+    C: TxBufferClass,
+    K: Ieee80211Capabilities,
+    R: RoleKeys<'id, Types<Id, D, B, O>>,
+>(
+    source: ClassSource<'k, 'p, 'id, Id, D, B, O, M, S, C, K, R>,
+) -> ClassPrepared<'k, 'p, 'id, Id, D, B, O, M, S, C, K, R> {
+    let (mpdu, plan, loan) = match source {
+        CheckedTxSource::Fresh(fresh) => {
+            let (
+                FreshSource {
+                    buffer,
+                    frame,
+                    body,
+                    protection,
+                },
+                layout,
+            ) = fresh.into_parts();
+            // Only a buffer lent under the installation's brand enters
+            // its preparation.
+            let Some(loan) = buffer.loan() else {
+                return Err(PreparationRefused {
+                    reason: PreparationError::MissingBodyLoan,
+                    operation: TxSource::Fresh {
+                        buffer,
+                        frame,
+                        body,
+                        protection,
+                    },
+                });
+            };
+            let (key, pn) = match protection {
+                TxProtection::Open => (None, None),
+                TxProtection::Ccmp(numbered) => (
+                    Some(R::tx_identity(&numbered.key).owned),
+                    Some(numbered.packet_number),
+                ),
+            };
+            let plan = stages(frame.frame());
+            (
+                MpduOf {
+                    buffer: buffer.into_mpdu(),
+                    layout,
+                    body,
+                    key,
+                    pn,
+                    role: R::ROLE,
+                    published: false,
+                    retry: false,
+                },
+                plan,
+                loan,
+            )
+        }
+        CheckedTxSource::Retransmission { mpdu, plan } => {
+            let Some(loan) = mpdu.mpdu().buffer.loan() else {
+                return Err(PreparationRefused {
+                    reason: PreparationError::MissingBodyLoan,
+                    operation: TxSource::Retransmission { mpdu, plan },
+                });
+            };
+            if mpdu.mpdu().key.as_ref().is_some_and(|key| !key.active()) {
+                return Err(PreparationRefused {
+                    reason: PreparationError::RetransmissionKey,
+                    operation: TxSource::Retransmission { mpdu, plan },
+                });
+            }
+            let same_role = mpdu.mpdu().role == R::ROLE;
+            let stages = match (mpdu.mpdu().layout.kind(), &plan) {
+                (MpduKind::Individual, RetransmissionPlan::Individual(plan)) if same_role => {
+                    Some(plan.map(|rate| rate.get()))
+                }
+                (MpduKind::IndividualNoAck, RetransmissionPlan::IndividualNoAck(rate))
+                    if same_role =>
+                {
+                    Some(one(rate.rate().get()))
+                }
+                (MpduKind::Group, RetransmissionPlan::Group(rate)) if same_role => {
+                    Some(one(rate.get()))
+                }
+                _ => None,
+            };
+            let Some(stages) = stages else {
+                return Err(PreparationRefused {
+                    reason: PreparationError::RetransmissionKind,
+                    operation: TxSource::Retransmission { mpdu, plan },
+                });
+            };
+            (mpdu.into_mpdu().with_buffer(M::into_mpdu), stages, loan)
+        }
+    };
+    Ok(Prepared {
+        mpdu,
+        plan,
+        loan,
+        proof: PhantomData,
+    })
+}
+
 impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     TxBufferPool<'id, BufferClass<B>> for Types<Id, D, B, O>
 {
@@ -266,99 +706,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     where
         'id: 'k,
     {
-        let (mpdu, plan, loan) = match source {
-            CheckedTxSource::Fresh(fresh) => {
-                let (
-                    FreshSource {
-                        buffer,
-                        frame,
-                        body,
-                        protection,
-                    },
-                    layout,
-                ) = fresh.into_parts();
-                // Only a buffer lent under the installation's brand enters
-                // its preparation.
-                let Some(loan) = buffer.loan else {
-                    return Err(PreparationRefused {
-                        reason: PreparationError::MissingBodyLoan,
-                        operation: TxSource::Fresh {
-                            buffer,
-                            frame,
-                            body,
-                            protection,
-                        },
-                    });
-                };
-                let (key, pn) = match protection {
-                    TxProtection::Open => (None, None),
-                    TxProtection::Ccmp(numbered) => (
-                        Some(R::tx_identity(&numbered.key).owned),
-                        Some(numbered.packet_number),
-                    ),
-                };
-                let plan = stages(frame.frame());
-                (
-                    Mpdu {
-                        buffer,
-                        layout,
-                        body,
-                        key,
-                        pn,
-                        role: R::ROLE,
-                        published: false,
-                        retry: false,
-                    },
-                    plan,
-                    loan,
-                )
-            }
-            CheckedTxSource::Retransmission { mpdu, plan } => {
-                let Some(loan) = mpdu.mpdu.buffer.loan else {
-                    return Err(PreparationRefused {
-                        reason: PreparationError::MissingBodyLoan,
-                        operation: TxSource::Retransmission { mpdu, plan },
-                    });
-                };
-                if mpdu.mpdu.key.as_ref().is_some_and(|key| !key.active()) {
-                    return Err(PreparationRefused {
-                        reason: PreparationError::RetransmissionKey,
-                        operation: TxSource::Retransmission { mpdu, plan },
-                    });
-                }
-                let stages = match (mpdu.mpdu.layout.kind(), &plan) {
-                    (MpduKind::Individual, RetransmissionPlan::Individual(plan))
-                        if mpdu.mpdu.role == R::ROLE =>
-                    {
-                        Some(plan.map(|rate| rate.get()))
-                    }
-                    (MpduKind::IndividualNoAck, RetransmissionPlan::IndividualNoAck(rate))
-                        if mpdu.mpdu.role == R::ROLE =>
-                    {
-                        Some(one(rate.rate().get()))
-                    }
-                    (MpduKind::Group, RetransmissionPlan::Group(rate))
-                        if mpdu.mpdu.role == R::ROLE =>
-                    {
-                        Some(one(rate.get()))
-                    }
-                    _ => None,
-                };
-                let Some(stages) = stages else {
-                    return Err(PreparationRefused {
-                        reason: PreparationError::RetransmissionKind,
-                        operation: TxSource::Retransmission { mpdu, plan },
-                    });
-                };
-                (mpdu.mpdu, stages, loan)
-            }
-        };
-        Ok(Prepared {
-            mpdu,
-            plan,
-            loan,
-            proof: PhantomData,
-        })
+        prepare_class(source)
     }
     fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Id, D, B, O> {
         AnyBuffer::Fresh(buffer)
@@ -387,13 +735,92 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         (buffer.mpdu.buffer, buffer.mpdu.body)
     }
     fn class_of(mpdu: &Mpdu<'id, Id, D, B, O>) -> Option<TxBufferForm> {
-        // The installation's one class: its MPDU comes back as its
-        // `into_parts` returns it.
-        Some(if mpdu.published {
-            TxBufferForm::Sent
-        } else {
-            TxBufferForm::Fresh
-        })
+        // The bank's class: its MPDU comes back as its `into_parts` returns
+        // it; a network's memory is another class's.
+        match mpdu.buffer {
+            MpduBuffer::Bank(_) => Some(if mpdu.published {
+                TxBufferForm::Sent
+            } else {
+                TxBufferForm::Fresh
+            }),
+            MpduBuffer::Network(_) => None,
+        }
+    }
+}
+
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
+    TxBufferPool<'id, NetworkFrames<Types<Id, D, B, O>>> for Types<Id, D, B, O>
+{
+    type Buffer = NetworkBuffer<'id, Id, D, B, O>;
+    type Sent = NetworkSent<'id, Id, D, B, O>;
+    fn prepare<'k, 'p, R: RoleKeys<'id, Self>, K: Ieee80211Capabilities>(
+        source: CheckedPoolSource<'k, 'p, 'id, Self, NetworkFrames<Self>, K, R>,
+    ) -> PoolPreparation<'k, 'p, 'id, Self, NetworkFrames<Self>, K, R>
+    where
+        'id: 'k,
+    {
+        prepare_class(source)
+    }
+    fn erase(buffer: Self::Buffer) -> AnyBuffer<'id, Id, D, B, O> {
+        AnyBuffer::Network(buffer)
+    }
+    fn erase_sent(buffer: Self::Sent) -> AnyBuffer<'id, Id, D, B, O> {
+        AnyBuffer::NetworkSent(buffer)
+    }
+    fn class(
+        buffer: AnyBuffer<'id, Id, D, B, O>,
+    ) -> Result<Self::Buffer, AnyBuffer<'id, Id, D, B, O>> {
+        match buffer {
+            AnyBuffer::Network(buffer) => Ok(buffer),
+            other => Err(other),
+        }
+    }
+    fn sent(
+        buffer: AnyBuffer<'id, Id, D, B, O>,
+    ) -> Result<Self::Sent, AnyBuffer<'id, Id, D, B, O>> {
+        match buffer {
+            AnyBuffer::NetworkSent(buffer) => Ok(buffer),
+            other => Err(other),
+        }
+    }
+    fn renew(buffer: Self::Sent) -> (Self::Buffer, Option<D::Body>) {
+        // The MPDU and its PN end here; `renew_msdu` releases its admission.
+        (buffer.mpdu.buffer, buffer.mpdu.body)
+    }
+    fn class_of(mpdu: &Mpdu<'id, Id, D, B, O>) -> Option<TxBufferForm> {
+        match mpdu.buffer {
+            MpduBuffer::Network(_) => Some(if mpdu.published {
+                TxBufferForm::Sent
+            } else {
+                TxBufferForm::Fresh
+            }),
+            MpduBuffer::Bank(_) => None,
+        }
+    }
+}
+
+impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations> TxNetworkPool<'id>
+    for Types<Id, D, B, O>
+{
+    /// Behind the metadata word, as the buffer's own region.
+    fn frame_region(memory: &mut TxBacking<B>) -> Option<&mut [u8]> {
+        memory
+            .stable_dma_region()
+            .into_mut_slice()
+            .get_mut(crate::ordinary_tx::TX_METADATA_SIZE..)
+            .and_then(|bytes| bytes.get_mut(..BufferClass::<B>::CAPACITY))
+    }
+    fn into_memory(
+        buffer: NetworkBuffer<'id, Id, D, B, O>,
+    ) -> Result<TxBacking<B>, NetworkBuffer<'id, Id, D, B, O>> {
+        match buffer.dma {
+            NetworkDma::Free(memory) => Ok(memory),
+            NetworkDma::Published => Err(NetworkBuffer {
+                dma: NetworkDma::Published,
+                admission: buffer.admission,
+                loan: buffer.loan,
+            }),
+        }
     }
 }
 
@@ -458,44 +885,98 @@ mod tests {
         assert!(bank.take(0).is_some(), "the memory is back in its place");
     }
 
-    #[test]
-    fn a_published_buffer_keeps_its_right_and_its_place_stays_out_when_dropped() {
-        let bank = bank();
-        let mut buffer = ReturnableBuffer::taken(bank.take(0));
-        let memory = buffer.publish().expect("the CPU owned it");
-        assert!(buffer.memory_mut().is_none(), "the hardware owns it now");
-        assert!(buffer.publish().is_none(), "published once");
-        drop(buffer);
-        // The hardware never handed it back: nothing reuses the place.
-        assert!(bank.take(0).is_none());
-        drop(memory);
+    /// A model descriptor without a lease.
+    fn descriptor() -> core::pin::Pin<Box<TxSlot<512>>> {
+        Box::pin(TxSlot::new_model_descriptor().expect("model descriptor"))
     }
 
     #[test]
-    fn a_completion_rejoins_the_right_and_a_wrong_transition_changes_nothing() {
+    fn a_published_buffer_s_lease_stays_whole_on_its_descriptor_when_dropped() {
         let bank = bank();
+        let mut slot = descriptor();
         let mut buffer = ReturnableBuffer::taken(bank.take(0));
-        let memory = buffer.publish().expect("the CPU owned it");
-        let memory = match buffer.complete(memory) {
-            Ok(()) => buffer.publish().expect("free again"),
-            Err(_) => panic!("the hardware owned it"),
-        };
-        assert!(buffer.complete(memory).is_ok());
-        // A second completion is refused with its memory, unchanged.
-        let other = bank_memory();
-        assert!(buffer.complete(other).is_err());
-        assert!(buffer.memory_mut().is_some());
+        assert_eq!(buffer.attach_to(slot.as_mut()), Ok(()));
+        assert!(buffer.memory_mut().is_none(), "the descriptor holds it now");
+        assert_eq!(buffer.attach_to(slot.as_mut()), Err(AttachRefused::NotFree));
         drop(buffer);
-        assert!(bank.take(0).is_some());
+        // The descriptor holds the memory with its return right: the place
+        // stays out until the lease goes home.
+        assert!(bank.take(0).is_none());
+        let (memory, home) = slot.as_mut().detach_bank().expect("the lease, whole");
+        home.return_value(memory);
+        assert!(bank.take(0).is_some(), "home exactly once");
+    }
+
+    #[test]
+    fn a_lease_comes_back_whole_and_a_wrong_transition_moves_nothing() {
+        let bank = bank();
+        let mut slot = descriptor();
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        // Nothing published: nothing taken, the descriptor stays empty.
+        assert_eq!(
+            buffer.take_back(slot.as_mut()),
+            Err(TakeBackRefused::Missing)
+        );
+        assert_eq!(buffer.attach_to(slot.as_mut()), Ok(()));
+        assert_eq!(buffer.take_back(slot.as_mut()), Ok(()));
+        assert!(buffer.memory_mut().is_some(), "the CPU's again");
+        // A second take-back finds no lease.
+        assert_eq!(
+            buffer.take_back(slot.as_mut()),
+            Err(TakeBackRefused::Missing)
+        );
+        drop(buffer);
+        assert!(bank.take(0).is_some(), "the drop returned it home");
+    }
+
+    #[test]
+    fn a_lease_of_another_home_never_joins_a_buffer() {
+        let bank = bank();
+        let mut slot = descriptor();
+        let mut network = NetworkDma::Free(bank_memory());
+        assert_eq!(network.attach_to(slot.as_mut()), Ok(()));
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        // A bank buffer, published elsewhere, does not take a network lease.
+        let mut other = descriptor();
+        assert_eq!(buffer.attach_to(other.as_mut()), Ok(()));
+        assert_eq!(
+            buffer.take_back(slot.as_mut()),
+            Err(TakeBackRefused::Refused)
+        );
+        assert_eq!(slot.home_kind(), Some(crate::mac::tx::TxHomeKind::Network));
+        // Nor a network buffer a bank lease.
+        assert_eq!(
+            network.take_back(other.as_mut()),
+            Err(TakeBackRefused::Refused)
+        );
+        // Each takes its own.
+        assert_eq!(network.take_back(slot.as_mut()), Ok(()));
+        assert_eq!(buffer.take_back(other.as_mut()), Ok(()));
+    }
+
+    #[test]
+    fn a_descriptor_holding_a_lease_refuses_another_and_both_stay() {
+        let bank = bank();
+        let mut slot = descriptor();
+        let mut network = NetworkDma::Free(bank_memory());
+        assert_eq!(network.attach_to(slot.as_mut()), Ok(()));
+        let mut buffer = ReturnableBuffer::taken(bank.take(0));
+        assert_eq!(
+            buffer.attach_to(slot.as_mut()),
+            Err(AttachRefused::Descriptor)
+        );
+        assert!(buffer.memory_mut().is_some(), "the buffer kept its memory");
+        assert_eq!(slot.home_kind(), Some(crate::mac::tx::TxHomeKind::Network));
     }
 
     #[test]
     fn a_place_without_returned_memory_holds_nothing_to_return() {
         let bank = bank();
         let _held = bank.take(0);
+        let mut slot = descriptor();
         let mut buffer = ReturnableBuffer::taken(bank.take(0));
         assert!(buffer.memory_mut().is_none());
-        assert!(buffer.publish().is_none());
+        assert_eq!(buffer.attach_to(slot.as_mut()), Err(AttachRefused::NotFree));
     }
 
     /// Free memory of another model pool.

@@ -5,8 +5,10 @@
 //! endpoints in their own wake and telemetry policy without reopening unsafe
 //! slot access.
 
+mod batched;
 mod indexed;
 mod local;
+pub use batched::{BatchedSpscReceiver, BatchedSpscSender};
 pub use indexed::{
     AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, UniqueQueueIndex,
 };
@@ -195,6 +197,18 @@ impl<T, const DEPTH: usize, C: SpscCursor> AffineSpscQueue<T, DEPTH, C> {
     )]
     fn slot(&self, cursor: usize) -> &UnsafeCell<MaybeUninit<T>> {
         &self.values[cursor % DEPTH]
+    }
+
+    /// The cursor `count` cells past `cursor`, `count` at most `DEPTH`. A
+    /// cursor stays below `DEPTH * 2`, which fits `usize`
+    /// ([`Self::check_capacity`]): neither step can overflow.
+    const fn advance_by(cursor: usize, count: usize) -> usize {
+        let room = DEPTH * 2 - cursor;
+        if count >= room {
+            count - room
+        } else {
+            cursor + count
+        }
     }
 
     const fn advance(cursor: usize) -> usize {

@@ -68,6 +68,34 @@ impl EthernetFrame {
         })
     }
 
+    /// A frame of no payload, to be written in place
+    /// ([`Self::set_parts`]).
+    pub const fn empty() -> Self {
+        Self {
+            header: MsduHeader {
+                destination: [0; 6],
+                source: [0; 6],
+                ether_type: 0,
+            },
+            payload: heapless::Vec::new(),
+        }
+    }
+
+    /// Hold `parts` in place of what the frame held: one copy of the
+    /// payload into the frame's own storage.
+    ///
+    /// # Errors
+    /// [`FrameTooLong`]: the frame is left empty, nothing clipped.
+    pub fn set_parts(&mut self, parts: MsduParts<'_>) -> Result<(), FrameTooLong> {
+        self.payload.clear();
+        self.header = parts.header();
+        self.payload
+            .extend_from_slice(parts.payload)
+            .map_err(|_| FrameTooLong {
+                payload_length: parts.payload.len(),
+            })
+    }
+
     /// Borrow the header fields and payload for the MAC or adapter.
     pub fn parts(&self) -> MsduParts<'_> {
         let MsduHeader {

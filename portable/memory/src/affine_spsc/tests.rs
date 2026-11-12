@@ -289,3 +289,108 @@ fn cached_placement_transfers_received_owners_and_drops_only_the_queued_owner() 
     assert_eq!(dropped[0].load(Ordering::SeqCst), 1);
     assert_eq!(dropped[1].load(Ordering::SeqCst), 1);
 }
+
+/// A batch publishes once, in order, around the ring's end; a short batch
+/// stops at the vacant cells and hands the value back; a batched consumer
+/// frees its cells only at its release.
+#[test]
+fn batches_publish_and_release_once_in_order_around_the_ring() {
+    let mut queue = AffineSpscQueue::<u8, 4>::new();
+    let (sender, receiver) = queue.split();
+    let (mut sender, mut receiver) = (sender.batched(), receiver.batched());
+    for round in 0_u8..10 {
+        for n in 0..3 {
+            assert_eq!(sender.stage(round * 10 + n), Ok(()));
+        }
+        assert_eq!(sender.staged(), 3);
+        assert!(receiver.is_empty(), "nothing is seen before publication");
+        sender.publish();
+        assert_eq!(receiver.len(), 3);
+        for n in 0..3 {
+            assert_eq!(receiver.take(), Some(round * 10 + n));
+        }
+        assert_eq!(receiver.take(), None);
+        assert_eq!(sender.len(), 3, "taken cells stay held");
+        receiver.release();
+        assert_eq!(sender.len(), 0);
+    }
+    for n in 0..4 {
+        assert_eq!(sender.stage(n), Ok(()));
+    }
+    assert_eq!(sender.stage(9), Err(9), "a short batch");
+    sender.publish();
+    assert_eq!(receiver.take(), Some(0));
+}
+
+/// A batched end and an ordinary one work together: the ordinary end sees
+/// a batch only at its boundary.
+#[test]
+fn a_batched_end_meets_an_ordinary_one_at_its_boundaries() {
+    let mut queue = AffineSpscQueue::<u8, 4>::new();
+    let (sender, receiver) = queue.split();
+    let mut sender = sender.batched();
+    assert_eq!(sender.stage(1), Ok(()));
+    assert_eq!(
+        receiver.try_receive(),
+        Err(AffineSpscTryReceiveError::Empty)
+    );
+    sender.publish();
+    assert_eq!(receiver.try_receive(), Ok(1));
+}
+
+/// Endpoints that end in a batch leave no owner and no stale value: what
+/// was staged is unpublished, and what was taken and not released is
+/// received again by the next consumer, once.
+#[test]
+fn a_batch_ended_unfinished_leaves_the_queue_whole() {
+    let mut queue = AffineSpscQueue::<u8, 4>::new();
+    {
+        let (sender, receiver) = queue.split();
+        assert!(sender.try_send(1).is_ok());
+        let (mut sender, mut receiver) = (sender.batched(), receiver.batched());
+        assert_eq!(receiver.take(), Some(1));
+        assert_eq!(sender.stage(2), Ok(()));
+    }
+    let (sender, receiver) = queue.split();
+    assert_eq!(receiver.try_receive(), Ok(1), "the unreleased value, again");
+    assert!(
+        receiver.try_receive().is_err(),
+        "the unpublished one never was"
+    );
+    assert_eq!(sender.free_capacity(), 4);
+}
+
+/// A batched producer and a batched consumer on two threads: every value
+/// arrives once and in order.
+#[test]
+fn batches_across_threads_deliver_every_value_once_in_order() {
+    let queue = std::boxed::Box::leak(std::boxed::Box::new(AffineSpscQueue::<u32, 8>::new()));
+    let (sender, receiver) = queue.split();
+    let (mut sender, mut receiver) = (sender.batched(), receiver.batched());
+    const VALUES: u32 = 20_000;
+    std::thread::scope(|scope| {
+        scope.spawn(move || {
+            let mut next = 0_u32;
+            while next < VALUES {
+                let mut batch = 0;
+                while batch < 5 && next < VALUES && sender.stage(next).is_ok() {
+                    next += 1;
+                    batch += 1;
+                }
+                sender.publish();
+                std::thread::yield_now();
+            }
+        });
+        scope.spawn(move || {
+            let mut expect = 0_u32;
+            while expect < VALUES {
+                while let Some(value) = receiver.take() {
+                    assert_eq!(value, expect, "in order, once");
+                    expect += 1;
+                }
+                receiver.release();
+                std::thread::yield_now();
+            }
+        });
+    });
+}

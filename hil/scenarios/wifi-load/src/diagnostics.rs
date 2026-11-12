@@ -2,9 +2,8 @@
 //! (`protocols/network/runtime/README.md`, "Diagnostics"): with
 //! `OER_WIFI_LOAD_DIAGNOSTICS=on` each level switches them on before its
 //! run and off after its collection, and records what they counted: the
-//! collections and the places their readiness walks visited, the ends told,
-//! the transmit plans' continuations and stops by reason, the returns and
-//! the credits they restored, the loans out at each refusal for credit, the
+//! places the readiness walks visited, the ends told, the returns and the
+//! credits they restored, the loans out at each refusal for credit, the
 //! frames built, and the network hart's cycles by stage. Off (the default),
 //! the image's diagnostics stay off and nothing is recorded.
 
@@ -85,14 +84,8 @@ pub fn window(collected: &DiagnosticsCollected) -> Value {
     };
     let NetworkDiagnostics {
         turns,
-        collections,
         walked,
         told,
-        continued,
-        stopped_spent,
-        stopped_changed,
-        stopped_grant,
-        stopped_account,
         return_batches,
         blocks_returned,
         credits_restored,
@@ -111,19 +104,10 @@ pub fn window(collected: &DiagnosticsCollected) -> Value {
     json!({
         "whole": true,
         "turns": turns,
-        "collections": collections,
         "walked": walked,
-        "walked_per_collection": ratio(walked, collections),
+        "walked_per_frame": ratio(walked, materialised),
         "told": told,
         "materialised": materialised,
-        "continued": continued,
-        "collections_per_frame": ratio(collections, materialised),
-        "stopped": {
-            "spent": stopped_spent,
-            "changed": stopped_changed,
-            "grant": stopped_grant,
-            "account": stopped_account,
-        },
         "returns": {
             "batches": return_batches,
             "blocks": blocks_returned,
@@ -162,17 +146,11 @@ pub fn summary(collected: &DiagnosticsCollected) -> String {
         .collect::<Vec<_>>()
         .join(" ");
     format!(
-        "turns {} collections {} walked {} frames {} continued {} stops s/c/g/a {}/{}/{}/{} \
+        "turns {} walked {} frames {} \
          told {} returns {} credits {} no_credit {} (loans {} unreturned {}) {shares}",
         d.turns,
-        d.collections,
         d.walked,
         d.materialised,
-        d.continued,
-        d.stopped_spent,
-        d.stopped_changed,
-        d.stopped_grant,
-        d.stopped_account,
         d.told,
         d.return_batches,
         d.credits_restored,
@@ -334,10 +312,8 @@ mod tests {
     fn a_window_records_its_counts_and_ratios() {
         let diagnostics = NetworkDiagnostics {
             turns: 10,
-            collections: 4,
             walked: 40,
             materialised: 16,
-            continued: 12,
             no_credit: 2,
             no_credit_loans: 8,
             stage_cycles: [10, 0, 20, 0, 70, 0, 5],
@@ -345,8 +321,7 @@ mod tests {
         };
         let value = window(&DiagnosticsCollected::Report(diagnostics));
         assert_eq!(value["whole"], true);
-        assert_eq!(value["walked_per_collection"], 10.0);
-        assert_eq!(value["collections_per_frame"], 0.25);
+        assert_eq!(value["walked_per_frame"], 2.5);
         assert_eq!(value["no_credit"]["loans_per_refusal"], 4.0);
         assert_eq!(value["stage_cycles"]["waiting"], 5);
         assert_eq!(value["cycles_per_turn"], 10.0);

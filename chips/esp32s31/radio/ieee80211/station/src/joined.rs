@@ -13,9 +13,8 @@
 //! took before that round wakes no one.
 //!
 //! What stands in for the product here: the lifecycle (no scan, join or
-//! keys: an open link handed over) and [`Buffers`], which mirrors the
-//! application's `FreeSlots`, `WifiTx` and `WifiBuffers` without their
-//! statics, which a parallel test may not share.
+//! keys: an open link handed over). The network's transmit end is the
+//! application's own: the station's [`crate::supply::LocalEnd`].
 //!
 //! The numbers a case reports are observations, not limits.
 #![allow(
@@ -96,7 +95,7 @@ use oer_protocols_ieee80211_runtime::{
         NetworkEnds, PARCELS, Parcel, Returned, StopOutcome, ToActor, from_actor_depth,
         returns_depth,
     },
-    station::{self as runtime, RxBlockAckStorage, ServiceEvent, TxRefused, TxSupply},
+    station::{self as runtime, RxBlockAckStorage, ServiceEvent},
 };
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, IndividualAddress, OwnAddress},
@@ -106,18 +105,17 @@ use oer_protocols_ieee80211_wire::{
 };
 use oer_protocols_network_core::{Datagram, Group, Interface, NetworkOwner, Outcome, Remote};
 use oer_protocols_network_port::{
-    EthernetFrame, EthernetFrameView, FrameLengthError, FramePort, FrameSource, Holding, Keep,
-    LinkSnapshot, LinkState, NetTransmit, Taken, TransmitError, TransmitRefused, TxStorage,
-    Unpublished,
+    EthernetFrameView, FramePort, FrameSource, Holding, Keep, LinkSnapshot, LinkState,
+    OwnedTransmit, PortRefusal, Taken, Unpublished,
 };
 use oer_protocols_network_runtime::{
-    DevicePort, Direct, EndCause, Ended, MemoryPolicy, Observer, PortRefusal, Sent, Service,
-    Socket, SocketLanes, StopLane, TxBuffers,
+    DevicePort, EndCause, Ended, MemoryPolicy, Observer, Sent, Service, Socket, SocketLanes,
+    StopLane,
 };
 use oer_protocols_network_wire::{
     arp::{self, Arp, Operation},
     checksum::{Checksum, ipv4_pseudo_header, udp_field},
-    ethernet::{EtherType, EthernetHeader},
+    ethernet::EtherType,
     ip::{DsField, Dscp, Ipv4Fields, Ipv4Header},
     transport::{PROTOCOL_UDP, Ports, UdpHeader},
 };
@@ -126,11 +124,8 @@ use oer_protocols_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 
 use crate::{
     ActorConnection, Channels, Connection, FRAME_CAPACITY, Network, NetworkStopState,
-    NetworkStopper, NetworkTransmit, Notifies, RestartState, ServiceConnection, StartState,
-    StopState, TX_DEPTH,
-    supply::{
-        NETWORK_BUFFERS, NetworkTx, PORT_BUFFERS, TxMemory, TxPublishRefused, TxPublisher, TxSlot,
-    },
+    NetworkStopper, Notifies, RestartState, ServiceConnection, StartState, StopState, TX_DEPTH,
+    supply::{NETWORK_BUFFERS, NetworkTx, PORT_BUFFERS, TxMemory},
 };
 
 mod access_point;
@@ -367,163 +362,39 @@ const TO: usize = 24;
 const RETURNS: usize = returns_depth(port::TERMINAL_CAPACITY);
 const FROM: usize = from_actor_depth(RETURNS);
 
-/// The buffers no frame holds, as the application's `FreeSlots`.
-#[derive(Default)]
-struct Free {
-    slots: RefCell<Vec<TxSlot>>,
-    /// What the station gave back, free once the port handed its end on.
-    ended: RefCell<std::collections::VecDeque<TxSlot>>,
-    waker: Cell<Option<Waker>>,
-}
+/// The network's transmit end, held beside the port so that a test can
+/// still take what the station gives back after the network ended.
+#[derive(Clone)]
+struct Transmit(Rc<RefCell<crate::supply::LocalTransmit<'static, Joined>>>);
 
-impl Free {
-    fn give(&self, slot: TxSlot) {
-        self.slots.borrow_mut().push(slot);
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
+impl OwnedTransmit for Transmit {
+    type Ticket = u8;
+    type Notice = core::convert::Infallible;
+    fn publish<E>(
+        &mut self,
+        meta: oer_protocols_network_port::FrameMeta,
+        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
+    ) -> Result<u8, Unpublished<PortRefusal, E>> {
+        self.0.borrow_mut().publish(meta, fill)
     }
-}
-
-/// A frame written in a transmit buffer, as the application's `WrittenFrame`.
-struct WrittenFrame {
-    slot: TxSlot,
-    length: usize,
-}
-
-impl EthernetFrame for WrittenFrame {
-    fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
-        let bytes = self
-            .slot
-            .bytes_mut()
-            .get(..self.length)
-            .ok_or(FrameLengthError::OutsideStorage)?;
-        let (header, payload) =
-            EthernetHeader::parse(bytes).map_err(|_| FrameLengthError::TooShort)?;
-        Ok(EthernetFrameView {
-            destination: header.destination,
-            source: header.source,
-            ether_type: header.ether_type.value(),
-            payload,
-        })
-    }
-}
-
-/// The station's end of the buffers, as the application's `WifiTx`.
-struct Supply {
-    publisher: TxPublisher,
-    free: Rc<Free>,
-}
-
-impl TxSupply<WrittenFrame> for Supply {
-    type Memory = TxMemory;
-    fn available(&self) -> bool {
-        !self.free.slots.borrow().is_empty()
-    }
-    fn write(&mut self, frame: WrittenFrame) -> Result<TxMemory, TxRefused<WrittenFrame>> {
-        let WrittenFrame { slot, length } = frame;
-        self.publisher
-            .publish(slot, 0, length)
-            .map_err(|refused| match refused {
-                TxPublishRefused::Range(slot) => TxRefused::Kept(TransmitRefused {
-                    frame: WrittenFrame { slot, length },
-                    reason: TransmitError::InvalidLength(FrameLengthError::TooLong),
-                }),
-                TxPublishRefused::Lost => TxRefused::Lost,
-            })
-    }
-    fn give(&mut self, memory: TxMemory, _end: oer_protocols_ieee80211_contracts_port::TxEnd) {
-        self.free
-            .ended
-            .borrow_mut()
-            .push_back(self.publisher.slot(memory));
-        if let Some(waker) = self.free.waker.take() {
-            waker.wake();
-        }
-    }
-}
-
-/// The port's end of the buffers, as the application's `WifiBuffers`.
-struct Buffers(Rc<Free>);
-
-impl TxBuffers for Buffers {
-    type Frame = WrittenFrame;
-    type Ticket = ();
-    type Notice = ();
-    fn ticket(&self, _: &WrittenFrame) {}
-    fn take_notice(&mut self) -> Option<()> {
-        let slot = self.0.ended.borrow_mut().pop_front()?;
-        self.0.give(slot);
-        Some(())
+    fn take_notice(&mut self) -> Option<Self::Notice> {
+        self.0.borrow_mut().take_notice()
     }
     fn notice_waiting(&self) -> bool {
-        !self.0.ended.borrow().is_empty()
-    }
-    fn available(&self) -> bool {
-        !self.0.slots.borrow().is_empty()
-    }
-    fn poll_free(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.0.waker.set(Some(cx.waker().clone()));
-        if self.available() {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
-    }
-    fn write<E>(
-        &mut self,
-        length: usize,
-        fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
-    ) -> Result<WrittenFrame, Unpublished<PortRefusal, E>> {
-        let mut slot = self
-            .0
-            .slots
-            .borrow_mut()
-            .pop()
-            .ok_or(Unpublished::Port(PortRefusal::NoRoom))?;
-        let written = match slot.bytes_mut().get_mut(..length) {
-            Some(bytes) => fill(&mut oer_protocols_network_port::Slot::new(bytes, None))
-                .map_err(Unpublished::Fill),
-            None => Err(Unpublished::Port(PortRefusal::BadFrame)),
-        };
-        match written {
-            Ok(()) => Ok(WrittenFrame { slot, length }),
-            Err(unpublished) => {
-                self.0.give(slot);
-                Err(unpublished)
-            }
-        }
-    }
-    fn restore(&mut self, frame: WrittenFrame) {
-        self.0.give(frame.slot);
-    }
-}
-
-/// The station's transmit end, held beside the port so that a test can still
-/// take what the station gives back after the network ended.
-#[derive(Clone)]
-struct Transmit(Rc<RefCell<NetworkTransmit<'static, Joined, WrittenFrame, Supply>>>);
-
-impl NetTransmit for Transmit {
-    type Frame = WrittenFrame;
-    fn reclaim(&mut self) {
-        self.0.borrow_mut().reclaim();
-    }
-    fn has_room(&mut self) -> bool {
-        self.0.borrow_mut().has_room()
+        self.0.borrow().notice_waiting()
     }
     fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         self.0.borrow_mut().poll_room(cx)
     }
-    fn try_transmit(&mut self, frame: WrittenFrame) -> Result<(), TransmitRefused<WrittenFrame>> {
-        self.0.borrow_mut().try_transmit(frame)
-    }
     fn flush(&mut self) {
         self.0.borrow_mut().flush();
     }
+    fn reclaim(&mut self) {
+        self.0.borrow_mut().reclaim();
+    }
 }
 
-type Inner = DevicePort<Network<'static, Joined>, Transmit, Buffers>;
+type Inner = DevicePort<Network<'static, Joined>, Transmit>;
 
 /// The bytes the network moved at its port: a test's count, not the product's.
 #[derive(Clone, Copy, Debug, Default)]
@@ -546,13 +417,14 @@ impl FramePort for Counted {
     type Ticket = ();
     fn publish<E>(
         &mut self,
-        length: usize,
+        meta: oer_protocols_network_port::FrameMeta,
         fill: impl FnOnce(&mut oer_protocols_network_port::Slot<'_>) -> Result<(), E>,
     ) -> Result<(), Unpublished<PortRefusal, E>> {
+        let length = meta.length;
         self.inner
             .as_mut()
             .ok_or(Unpublished::Port(PortRefusal::LinkDown))?
-            .publish(length, fill)?;
+            .publish(meta, fill)?;
         let mut moved = self.moved.get();
         moved.tx_frames += 1;
         moved.tx_bytes += u32::try_from(length).unwrap();
@@ -588,7 +460,11 @@ impl FrameSource for Counted {
         })
     }
     fn take_notice(&mut self) -> Option<()> {
-        self.inner.as_mut().and_then(FrameSource::take_notice)
+        // The direct egress settles nothing: an end only frees its buffer.
+        self.inner
+            .as_mut()
+            .and_then(FrameSource::take_notice)
+            .map(|_| ())
     }
     fn link(&self) -> LinkSnapshot {
         self.inner
@@ -613,24 +489,11 @@ type NetService<T> = Service<
     DEPTH,
     LANE,
     Counted,
-    Direct,
 >;
 type NetSocket<T> = Socket<'static, 'static, T, BLOCK, DEPTH, LANE, CREDITS>;
 type NetDatagram<T> = Datagram<'static, T, BLOCK>;
-type NetEnded<T> = Ended<
-    'static,
-    'static,
-    T,
-    BLOCK,
-    SOCKETS,
-    CREDITS,
-    BLOCKS,
-    DEPTH,
-    LANE,
-    Counted,
-    Direct,
-    core::convert::Infallible,
->;
+type NetEnded<T> =
+    Ended<'static, 'static, T, BLOCK, SOCKETS, CREDITS, BLOCKS, DEPTH, LANE, Counted>;
 
 /// A task's "poll me", counting its wakes.
 #[derive(Default)]
@@ -748,7 +611,6 @@ struct Bench<'b, 's, T: 'static> {
     link: oer_portable_memory::ClosingSpscSender<'b, ActorLink<'s, P<'s>>, 1>,
     socket: Option<NetSocket<T>>,
     runner: runtime::RunnerControl<'static, runtime::SameHart>,
-    free: Rc<Free>,
     transmit: Transmit,
     moved: Rc<Cell<Moved>>,
     ends: Rc<RefCell<Ends<T>>>,
@@ -985,11 +847,9 @@ fn joined_with<T: 'static>(
         drop(buffers);
 
         // The station's channels, as the facade's `station` splits them.
-        let free = Rc::new(Free::default());
-        let network_tx = NetworkTx::claim(pool).ok().expect("network buffers");
-        let (publisher, slots) = network_tx.into_parts();
-        free.slots.borrow_mut().extend(slots);
-        assert_eq!(free.slots.borrow().len(), NETWORK_BUFFERS);
+        let network_tx = NetworkTx::claim(pool, crate::supply::PORT_BUFFERS)
+            .ok()
+            .expect("network buffers");
         let channels: &'static mut Channels<Joined, TxMemory> = leak(Channels {
             network_stop: NetworkStopState::with(PriorityWaker::new(), PriorityWaker::new()),
             start: StartState::new(),
@@ -1003,9 +863,12 @@ fn joined_with<T: 'static>(
             state: runtime::State::new(),
         });
         let (control, network, transmit, stopper, connection) = channels
-            .split(Supply {
-                publisher,
-                free: free.clone(),
+            .split(|queues| {
+                <crate::supply::LocalEnd as crate::supply::NetworkTxEnd<Joined>>::end(
+                    queues,
+                    network_tx,
+                    leak(crate::supply::LocalTxState::new()),
+                )
             })
             .ok()
             .expect("the channels split");
@@ -1084,17 +947,14 @@ fn joined_with<T: 'static>(
         let interface = Interface::new(STATION, STATION_IP, 24, None, MTU).unwrap();
         let moved = Rc::new(Cell::new(Moved::default()));
         let transmit = Transmit(Rc::new(RefCell::new(transmit)));
+        assert_eq!(transmit.0.borrow().buffers(), NETWORK_BUFFERS);
         let port_end = Counted {
-            inner: Some(DevicePort::new(
-                network,
-                transmit.clone(),
-                Buffers(free.clone()),
-            )),
+            inner: Some(DevicePort::new(network, transmit.clone())),
             moved: moved.clone(),
         };
         let owner = NetworkOwner::new(brand, interface, blocks, port_end);
         let (stop, stopping) = leak(StopLane::new()).split();
-        let mut service = Service::new(owner, Direct, MemoryPolicy::KEEP, stopping);
+        let mut service = Service::new(owner, MemoryPolicy::KEEP, stopping);
         let socket = service
             .bind(
                 STATION_PORT,
@@ -1156,7 +1016,6 @@ fn joined_with<T: 'static>(
             link,
             socket: Some(socket),
             runner,
-            free,
             transmit,
             moved,
             ends,
@@ -1227,7 +1086,7 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
             self.service.polls,
             self.stopped.is_some(),
             self.ends.borrow().cause,
-            self.free.slots.borrow().len(),
+            self.transmit.0.borrow().buffers(),
         );
     }
 
@@ -1350,16 +1209,10 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
         assert!(self.link.try_send(link).is_ok(), "the mailbox is empty");
         self.send(ToActor::Connect);
         self.send(ToActor::Release);
-        // The test's association admits DSSS 1 Mb/s.
-        self.runner.publish_link_for_test(
-            LinkSnapshot {
-                state: LinkState::Up,
-                epoch: 1,
-            },
-            Some(oer_protocols_ieee80211_wire::phy::PhyRate::Legacy(
-                oer_protocols_ieee80211_wire::phy::LegacyRate::Dsss1M,
-            )),
-        );
+        self.runner.publish_link_for_test(LinkSnapshot {
+            state: LinkState::Up,
+            epoch: 1,
+        });
         self.settle();
     }
 
@@ -1424,8 +1277,9 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
 
     /// The buffers home: what the station gave back and the network took.
     fn buffers_home(&mut self) -> usize {
-        self.transmit.0.borrow_mut().reclaim();
-        self.free.slots.borrow().len() + self.free.ended.borrow().len()
+        let mut transmit = self.transmit.0.borrow_mut();
+        transmit.reclaim();
+        transmit.buffers()
     }
 
     /// The work so far.

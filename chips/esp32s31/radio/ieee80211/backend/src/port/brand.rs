@@ -35,6 +35,60 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> Buffer<'st
     }
 }
 impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    NetworkBuffer<'p, Id, D, B, O>
+{
+    pub(super) fn into_owned(
+        self,
+        _: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> NetworkBuffer<'static, Id, D, B, O> {
+        NetworkBuffer {
+            dma: self.dma,
+            admission: self.admission,
+            loan: None,
+        }
+    }
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    NetworkBuffer<'static, Id, D, B, O>
+{
+    pub(super) fn lend<'p>(
+        self,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> NetworkBuffer<'p, Id, D, B, O> {
+        NetworkBuffer {
+            dma: self.dma,
+            admission: self.admission,
+            loan: Some(*loan),
+        }
+    }
+}
+impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    MpduBuffer<'p, Id, D, B, O>
+{
+    pub(super) fn into_owned(
+        self,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> MpduBuffer<'static, Id, D, B, O> {
+        match self {
+            Self::Bank(buffer) => MpduBuffer::Bank(buffer.into_owned(loan)),
+            Self::Network(buffer) => MpduBuffer::Network(buffer.into_owned(loan)),
+        }
+    }
+}
+impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
+    MpduBuffer<'static, Id, D, B, O>
+{
+    pub(super) fn lend<'p>(
+        self,
+        loan: &BodyLoan<'p, Id, Esp32s31Backend<Id, D, B, O>>,
+    ) -> MpduBuffer<'p, Id, D, B, O> {
+        match self {
+            Self::Bank(buffer) => MpduBuffer::Bank(buffer.lend(loan)),
+            Self::Network(buffer) => MpduBuffer::Network(buffer.lend(loan)),
+        }
+    }
+}
+impl<'p, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     BodyPayload<'p, Id, Esp32s31Backend<Id, D, B, O>> for Mpdu<'p, Id, D, B, O>
 {
     type Owned = Mpdu<'static, Id, D, B, O>;

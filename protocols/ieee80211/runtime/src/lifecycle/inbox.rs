@@ -569,6 +569,8 @@ where
                     ticket,
                     payload,
                     outcome,
+                    // The station's own frames are charged to no queue.
+                    cost: _,
                 } = terminal.into_parts(&mut self.inner.terminal_access);
                 let (buffer, body) = payload.into_parts();
                 if let Some(body) = body {

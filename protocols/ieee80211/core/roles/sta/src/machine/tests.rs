@@ -3139,7 +3139,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             // The MPDU went into the memory; withdrawn, it shows its header.
             let mut written = None;
             plane
-                .withdraw_unpublished(arena, |memory, _| written = Some(memory), &mut ())
+                .withdraw_unpublished(arena, |memory| written = Some(memory), &mut ())
                 .unwrap();
             tid_and_sequence(&written.expect("the arena held the MPDU")[..])
         }

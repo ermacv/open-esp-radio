@@ -18,8 +18,8 @@ use oer_protocols_ieee80211_core_roles_ap::{
 };
 use oer_protocols_ieee80211_core_security_rsn::frames::RsnGtk;
 use oer_protocols_ieee80211_testing_model::{
-    ModelAccessPointTsf, ModelCaps24, ModelContext, ModelInstall, ModelLarge, ModelPort,
-    ModelRxMeta,
+    ModelAccessPointTsf, ModelCaps24, ModelContext, ModelInstall, ModelLarge, ModelNetworkMemory,
+    ModelPort, ModelRxMeta,
 };
 use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
 use oer_protocols_ieee80211_wire::{
@@ -136,10 +136,24 @@ fn sent_controls(air: &oer_protocols_ieee80211_testing_model::ModelAir) -> Vec<u
         .collect()
 }
 
+/// The access point's data frames on the air.
+fn sent_data(air: &oer_protocols_ieee80211_testing_model::ModelAir) -> Vec<u8> {
+    sent_controls(air)
+        .into_iter()
+        .filter(|control| control & 0x0c == 0x08)
+        .collect()
+}
+
 /// Build a runner over the model's port of `$claim` on `$clock`: binds
 /// `$runner`, its `$air`, its network `$device` and the shared `$shared`.
 macro_rules! fixture {
     ($claim:ident, $clock:expr => $runner:ident, $air:ident, $device:ident, $shared:ident) => {
+        fixture!($claim, $clock => $runner, $air, $device, _transmit, $shared);
+    };
+    ($claim:ident, $clock:expr => $runner:ident, $air:ident, $device:ident, $transmit:ident, $shared:ident) => {
+        fixture!($claim, $clock => $runner, $air, $device, $transmit, _supply, $shared);
+    };
+    ($claim:ident, $clock:expr => $runner:ident, $air:ident, $device:ident, $transmit:ident, $supply:ident, $shared:ident) => {
         let mut installations = Installations::claim($claim);
         let (install, $air) = Port::install(
             &mut installations,
@@ -214,7 +228,12 @@ macro_rules! fixture {
             GroupKeyId::new(GROUP_KEY_ID).unwrap(),
         );
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
-        let ($device, _transmit, end) = network.split::<Infallible>();
+        let $supply = ModelTx::empty();
+        let ($device, mut $transmit, end) = network
+            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, _, _>(
+                ModelTx::memories(),
+                |memories| $supply.filled(memories),
+            );
         let mut $runner = ApRunner::new(
             port,
             commands,
@@ -229,6 +248,84 @@ macro_rules! fixture {
         );
         let $shared = ApShared::new();
     };
+}
+
+/// The network's transmit memory over the model: [`AP_TX_DEPTH`] memories,
+/// each frame copied into a free one where the access point reads its
+/// Ethernet header, as the stack's packets are written into theirs.
+#[derive(Clone)]
+struct ModelTx(Rc<core::cell::RefCell<Vec<ModelNetworkMemory>>>);
+
+impl ModelTx {
+    fn empty() -> Self {
+        Self(Rc::new(core::cell::RefCell::new(Vec::new())))
+    }
+
+    /// The network's memories, as many as the runner's queue back holds.
+    fn memories() -> heapless::Vec<ModelNetworkMemory, { super::network::AP_TX_DEPTH }> {
+        (0..super::network::AP_TX_DEPTH)
+            .map(|_| Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]))
+            .collect()
+    }
+
+    /// This supply over `memories`, a handle the test keeps beside it.
+    fn filled(
+        &self,
+        memories: heapless::Vec<ModelNetworkMemory, { super::network::AP_TX_DEPTH }>,
+    ) -> Self {
+        self.0.borrow_mut().extend(memories);
+        self.clone()
+    }
+}
+
+impl<F: oer_protocols_network_port::EthernetFrame> crate::station::TxSupply<F> for ModelTx {
+    type Memory = ModelNetworkMemory;
+    fn available(&self) -> bool {
+        !self.0.borrow().is_empty()
+    }
+    fn write(&mut self, mut frame: F) -> Result<ModelNetworkMemory, crate::station::TxRefused<F>> {
+        use oer_protocols_ieee80211_core_roles_sta::data::{
+            MSDU_ETHERNET_OFFSET, MSDU_PAYLOAD_OFFSET,
+        };
+        let Some(mut memory) = self.0.borrow_mut().pop() else {
+            return Err(crate::station::TxRefused::Kept(
+                oer_protocols_network_port::TransmitRefused {
+                    frame,
+                    reason: oer_protocols_network_port::TransmitError::QueueFull,
+                },
+            ));
+        };
+        let view = frame.view().unwrap();
+        memory[MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&view.destination);
+        memory[MSDU_ETHERNET_OFFSET + 6..][..6].copy_from_slice(&view.source);
+        memory[MSDU_ETHERNET_OFFSET + 12..][..2].copy_from_slice(&view.ether_type.to_be_bytes());
+        memory[MSDU_PAYLOAD_OFFSET..][..view.payload.len()].copy_from_slice(view.payload);
+        Ok(memory)
+    }
+    fn give(&mut self, memory: ModelNetworkMemory) {
+        self.0.borrow_mut().push(memory);
+    }
+}
+
+impl ModelTx {
+    /// The memories free for the network.
+    fn free(&self) -> usize {
+        self.0.borrow().len()
+    }
+
+    /// Where the memory the next frame goes into lies.
+    fn next(&self) -> *const u8 {
+        self.0.borrow().last().unwrap().as_ptr()
+    }
+
+    /// A copy of the free memory at `at`, if it is back.
+    fn memory(&self, at: *const u8) -> Option<Vec<u8>> {
+        self.0
+            .borrow()
+            .iter()
+            .find(|memory| memory.as_ptr() == at)
+            .map(|memory| memory.to_vec())
+    }
 }
 
 fn pmk() -> oer_protocols_ieee80211_core_security_rsn::Pmk {
@@ -1049,8 +1146,489 @@ mod handshake;
 mod ends;
 
 mod homes;
+mod network_memory;
 
 #[test]
 fn a_port_with_the_callers_timestamp_rule_serves_beacons() {
     assert_eq!(serves_beacons::<ModelCaps24>(), Ok(()));
+}
+
+/// Frames the network gave and none carried come home when the access point
+/// stops: the transport's places free again, every frame once.
+#[test]
+fn a_stop_returns_the_network_frames_it_never_carried() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, _shared);
+        let frame = || {
+            let mut frame = EthernetFrame::empty();
+            frame
+                .set_parts(MsduParts {
+                    destination: [0x02, 0, 0, 0, 0, 0x09],
+                    source: ACCESS_POINT,
+                    ether_type: 0x0800,
+                    payload: &[0x45; 28],
+                })
+                .unwrap();
+            frame
+        };
+        runner.homes.network.set_link(true);
+        let mut sent = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            sent += 1;
+        }
+        assert_eq!(sent, super::network::AP_TX_DEPTH, "every place taken");
+        // The burst is the access point's once published.
+        transmit.flush();
+        assert!(runner.homes.begin_stop().is_ok());
+        // Up again, as a later run would be: every place is free.
+        runner.homes.network.set_link(true);
+        // The network takes its returns as its turn does.
+        transmit.reclaim();
+        let mut again = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            again += 1;
+        }
+        let why = transmit
+            .try_transmit(frame())
+            .err()
+            .map(|refused| refused.reason);
+        assert_eq!(
+            again,
+            super::network::AP_TX_DEPTH,
+            "every frame came home: {why:?}"
+        );
+    }));
+}
+
+/// A client place's queues belong to one association. A later one of the
+/// same address in the same place (its epoch advanced) takes the place
+/// over: the earlier one's frames go back to the network, none of them on
+/// the air, and its late completions charge nothing to the new owner. A
+/// frame of an association no longer current goes back before it is
+/// written.
+#[test]
+fn a_client_place_s_queues_belong_to_one_association() {
+    use crate::datapath::queues::QueueId;
+    use oer_protocols_ieee80211_core_roles_ap::ApAssociationIdentity;
+    use oer_protocols_ieee80211_core_roles_sta::data::plane::OutboundMsdu;
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts, WmmUserPriority};
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, _shared);
+        let frame = || {
+            let mut frame = EthernetFrame::empty();
+            frame
+                .set_parts(MsduParts {
+                    destination: STATION,
+                    source: ACCESS_POINT,
+                    ether_type: 0x0800,
+                    payload: &[0x45; 28],
+                })
+                .unwrap();
+            frame
+        };
+        // The network's frames, taken from its transport as a turn would.
+        runner.homes.network.set_link(true);
+        let mut send = |count: usize| {
+            for _ in 0..count {
+                assert!(transmit.try_transmit(frame()).is_ok());
+            }
+            transmit.flush();
+        };
+        send(2);
+        let old = ApAssociationIdentity::new(STATION, 1, 7).unwrap();
+        let new = ApAssociationIdentity::new(STATION, 1, 8).unwrap();
+        let Ok(Some(place)) = runner.homes.place_of(old) else {
+            panic!("the place is the old association's");
+        };
+        let queue = QueueId::new(place, WmmUserPriority::UP0).unwrap();
+        while let Some(outgoing) = runner.homes.network.take() {
+            let msdu = OutboundMsdu {
+                memory: outgoing.memory,
+                length: usize::from(outgoing.length),
+                priority: WmmUserPriority::UP0,
+            };
+            assert!(runner.homes.queues.push(queue, msdu).is_ok());
+        }
+        assert!(runner.homes.owns(queue, Some(old)));
+        // The same address reassociates in the same place.
+        assert!(matches!(runner.homes.place_of(new), Ok(Some(taken)) if taken == place));
+        assert!(runner.homes.queues.is_empty(), "the old frames went back");
+        assert!(
+            !runner.homes.owns(queue, Some(old)),
+            "a late completion charges nothing"
+        );
+        assert!(runner.homes.owns(queue, Some(new)));
+        transmit.reclaim();
+        let mut free = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            free += 1;
+        }
+        assert_eq!(
+            free,
+            super::network::AP_TX_DEPTH,
+            "each old frame came home once"
+        );
+        transmit.flush();
+        // Queued under `new`, which the engine never authorized: before any
+        // frame is written, the place's frames go back.
+        while let Some(outgoing) = runner.homes.network.take() {
+            let msdu = OutboundMsdu {
+                memory: outgoing.memory,
+                length: usize::from(outgoing.length),
+                priority: WmmUserPriority::UP0,
+            };
+            assert!(runner.homes.queues.push(queue, msdu).is_ok());
+        }
+        let now = oer_portable_time::Clock::now(&*counted.clock);
+        assert!(runner.transmit_network(now).is_ok());
+        assert!(runner.homes.queues.is_empty());
+        assert!(!runner.homes.owns(queue, Some(new)), "the place is free");
+        assert!(sent_data(&air).is_empty(), "nothing went on the air");
+        transmit.reclaim();
+        let mut again = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            again += 1;
+        }
+        assert_eq!(again, super::network::AP_TX_DEPTH, "every frame came home");
+    }));
+}
+
+/// `count` network frames, taken from the transport and queued at `queue`,
+/// as a turn would queue them.
+macro_rules! queue_frames {
+    ($runner:ident, $transmit:ident, $queue:expr, $count:expr) => {{
+        use oer_protocols_ieee80211_core_roles_sta::data::plane::OutboundMsdu;
+        use oer_protocols_ieee80211_core_roles_sta::data::{
+            EthernetFrame, MsduParts, WmmUserPriority,
+        };
+        use oer_protocols_network_port::NetTransmit;
+        for _ in 0..$count {
+            let mut frame = EthernetFrame::empty();
+            frame
+                .set_parts(MsduParts {
+                    destination: STATION,
+                    source: ACCESS_POINT,
+                    ether_type: 0x0800,
+                    payload: &[0x45; 28],
+                })
+                .unwrap();
+            assert!($transmit.try_transmit(frame).is_ok());
+        }
+        $transmit.flush();
+        while let Some(outgoing) = $runner.homes.network.take() {
+            let msdu = OutboundMsdu {
+                memory: outgoing.memory,
+                length: usize::from(outgoing.length),
+                priority: WmmUserPriority::UP0,
+            };
+            assert!($runner.homes.queues.push($queue, msdu).is_ok());
+        }
+    }};
+}
+
+/// A place passing to a later association whose earlier frame the queue
+/// back refuses: the refused memory comes back, the place stays the earlier
+/// association's with the rest of its frames, nothing lost.
+#[test]
+fn a_refused_return_at_a_takeover_keeps_every_owner() {
+    use crate::datapath::queues::QueueId;
+    use oer_protocols_ieee80211_core_roles_ap::ApAssociationIdentity;
+    use oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, _shared);
+        runner.homes.network.set_link(true);
+        let old = ApAssociationIdentity::new(STATION, 1, 7).unwrap();
+        let new = ApAssociationIdentity::new(STATION, 1, 8).unwrap();
+        let Ok(Some(place)) = runner.homes.place_of(old) else {
+            panic!("the place is the old association's");
+        };
+        let queue = QueueId::new(place, WmmUserPriority::UP0).unwrap();
+        queue_frames!(runner, transmit, queue, 2);
+        // The queue back is full: memories no network holds fill it.
+        for _ in 0..super::network::AP_TX_DEPTH {
+            let memory = Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]);
+            assert!(runner.homes.network.give_back(memory).is_ok());
+        }
+        let Err(refused) = runner.homes.place_of(new) else {
+            panic!("the queue back refuses the old frame");
+        };
+        drop(refused);
+        assert!(
+            runner.homes.owns(queue, Some(old)),
+            "the place stays the old one's"
+        );
+        assert!(
+            !runner.homes.queues.is_empty(),
+            "its other frame stays queued"
+        );
+    }));
+}
+
+/// Frames a halt left behind owners already waiting are returned once
+/// those owners are taken: nothing stays inside the runner.
+#[test]
+fn frames_a_halt_left_go_back_once_its_owners_are_taken() {
+    use crate::datapath::queues::QueueId;
+    use oer_protocols_ieee80211_core_roles_ap::ApAssociationIdentity;
+    use oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority;
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, shared);
+        runner.homes.network.set_link(true);
+        let old = ApAssociationIdentity::new(STATION, 1, 7).unwrap();
+        let Ok(Some(place)) = runner.homes.place_of(old) else {
+            panic!("the place is the association's");
+        };
+        let queue = QueueId::new(place, WmmUserPriority::UP0).unwrap();
+        queue_frames!(runner, transmit, queue, 3);
+        // A halt's owners already wait: the frames stay queued at the halt.
+        let waiting = Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]);
+        runner.homes.stopped_on = Some((
+            super::ApContract::NetworkReturn,
+            super::Kept::NetworkMemory(waiting),
+        ));
+        let _end = runner.halted(
+            super::Halt::Contract(super::ApContract::CommandRefused),
+            &shared,
+        );
+        assert!(
+            !runner.homes.queues.is_empty(),
+            "kept back behind the owners"
+        );
+        assert!(matches!(
+            runner.take_kept(),
+            Some(super::Kept::NetworkMemory(_))
+        ));
+        assert!(
+            runner.homes.queues.is_empty(),
+            "returned once the owners left"
+        );
+        transmit.reclaim();
+        let mut free = 0;
+        let frame = || {
+            let mut frame = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame::empty();
+            frame
+                .set_parts(oer_protocols_ieee80211_core_roles_sta::data::MsduParts {
+                    destination: STATION,
+                    source: ACCESS_POINT,
+                    ether_type: 0x0800,
+                    payload: &[0x45; 28],
+                })
+                .unwrap();
+            frame
+        };
+        runner.homes.network.set_link(true);
+        while transmit.try_transmit(frame()).is_ok() {
+            free += 1;
+        }
+        assert_eq!(free, super::network::AP_TX_DEPTH, "every memory came home");
+    }));
+}
+
+/// A running access point with no halt's owners: taking the kept owners
+/// finds none and leaves the network's frame waiting to be sent.
+#[test]
+fn taking_no_kept_owner_leaves_a_running_access_point_s_frames() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, _shared);
+        runner.homes.network.set_link(true);
+        let mut frame = EthernetFrame::empty();
+        frame
+            .set_parts(MsduParts {
+                destination: STATION,
+                source: ACCESS_POINT,
+                ether_type: 0x0800,
+                payload: &[0x45; 28],
+            })
+            .unwrap();
+        assert!(transmit.try_transmit(frame).is_ok());
+        transmit.flush();
+        assert!(runner.homes.network.waiting());
+        assert!(runner.take_kept().is_none());
+        assert!(runner.homes.network.waiting(), "the frame stays to be sent");
+    }));
+}
+
+/// A network memory the port holds with no attempt to carry it home goes
+/// back to the network when the run halts: every memory is the network's
+/// again.
+#[test]
+fn a_memory_the_port_holds_without_an_attempt_goes_home_at_a_halt() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    let frame = || {
+        let mut frame = EthernetFrame::empty();
+        frame
+            .set_parts(MsduParts {
+                destination: STATION,
+                source: ACCESS_POINT,
+                ether_type: 0x0800,
+                payload: &[0x45; 28],
+            })
+            .unwrap();
+        frame
+    };
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, shared);
+        runner.homes.network.set_link(true);
+        assert!(transmit.try_transmit(frame()).is_ok());
+        transmit.flush();
+        let outgoing = runner.homes.network.take().expect("the frame");
+        // The port holds it now, as a completion for no attempt leaves it.
+        air.hold_network_memory(outgoing.memory);
+        let _end = runner.halted(
+            super::Halt::Contract(super::ApContract::CommandRefused),
+            &shared,
+        );
+        assert!(runner.take_kept().is_none(), "no owner stayed out");
+        transmit.reclaim();
+        runner.homes.network.set_link(true);
+        let mut free = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            free += 1;
+        }
+        assert_eq!(free, super::network::AP_TX_DEPTH, "every memory came home");
+    }));
+}
+
+/// The port frees a network memory while the stop's watch waits: once the
+/// stop confirms, it is the network's again with every other one.
+#[test]
+fn a_memory_the_port_frees_during_the_stop_s_watch_goes_home_at_its_confirmation() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    let frame = || {
+        let mut frame = EthernetFrame::empty();
+        frame
+            .set_parts(MsduParts {
+                destination: STATION,
+                source: ACCESS_POINT,
+                ether_type: 0x0800,
+                payload: &[0x45; 28],
+            })
+            .unwrap();
+        frame
+    };
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, shared);
+        runner.homes.network.set_link(true);
+        assert!(transmit.try_transmit(frame()).is_ok());
+        transmit.flush();
+        let memory = runner.homes.network.take().expect("the frame").memory;
+        air.refuse_access_point_commands(1);
+        let idle = async {
+            loop {
+                counted.idle(1).await;
+            }
+        };
+        let end = match select(Woken::new(runner.run(&shared, &counted)), idle).await {
+            Either::First(end) => end,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(matches!(end, ApEnd::Refused(_)));
+        air.hold_stop(true);
+        let finish = runner.finish_stop(&counted, |_| {});
+        let script = async {
+            counted.idle(1).await;
+            // The watch waits: the port frees the memory now.
+            air.hold_network_memory(memory);
+            air.hold_stop(false);
+            loop {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+        };
+        let watched = match select(Woken::new(finish), script).await {
+            Either::First(watched) => watched,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(
+            matches!(watched, Ok(super::StopWatch::Confirmed)),
+            "{watched:?}"
+        );
+        assert!(runner.take_kept().is_none(), "no owner stayed out");
+        transmit.reclaim();
+        runner.homes.network.set_link(true);
+        let mut free = 0;
+        while transmit.try_transmit(frame()).is_ok() {
+            free += 1;
+        }
+        assert_eq!(free, super::network::AP_TX_DEPTH, "every memory came home");
+    }));
+}
+
+/// The same memory, freed during the stop's watch, which the queue back
+/// refuses: the stop stays confirmed and the memory waits whole as the
+/// halt's owners.
+#[test]
+fn a_memory_the_queue_back_refuses_at_the_stop_s_confirmation_waits_whole() {
+    use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+    use oer_protocols_network_port::NetTransmit;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, shared);
+        runner.homes.network.set_link(true);
+        let mut frame = EthernetFrame::empty();
+        frame
+            .set_parts(MsduParts {
+                destination: STATION,
+                source: ACCESS_POINT,
+                ether_type: 0x0800,
+                payload: &[0x45; 28],
+            })
+            .unwrap();
+        assert!(transmit.try_transmit(frame).is_ok());
+        transmit.flush();
+        let memory = runner.homes.network.take().expect("the frame").memory;
+        air.refuse_access_point_commands(1);
+        let idle = async {
+            loop {
+                counted.idle(1).await;
+            }
+        };
+        let end = match select(Woken::new(runner.run(&shared, &counted)), idle).await {
+            Either::First(end) => end,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(matches!(end, ApEnd::Refused(_)));
+        // The queue back is full: memories no network holds fill it.
+        for _ in 0..super::network::AP_TX_DEPTH {
+            let filler = Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]);
+            assert!(runner.homes.network.give_back(filler).is_ok());
+        }
+        air.hold_stop(true);
+        let finish = runner.finish_stop(&counted, |_| {});
+        let script = async {
+            counted.idle(1).await;
+            air.hold_network_memory(memory);
+            air.hold_stop(false);
+            loop {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+        };
+        let watched = match select(Woken::new(finish), script).await {
+            Either::First(watched) => watched,
+            Either::Second(()) => unreachable!(),
+        };
+        assert!(
+            matches!(watched, Ok(super::StopWatch::Confirmed)),
+            "{watched:?}"
+        );
+        assert!(
+            matches!(runner.take_kept(), Some(super::Kept::NetworkMemory(_))),
+            "the refused memory, whole"
+        );
+        assert!(runner.take_kept().is_none());
+    }));
 }

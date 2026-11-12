@@ -1,7 +1,8 @@
 //! The network's transmit memory: the pool buffers the port does not hold.
 //! The network stack writes each frame into one where the station's data
-//! machine reads it, and the station writes the MPDU header in front of the
-//! payload, in place; the radio publishes that same buffer.
+//! machine, or the access point's runner, reads it, and the MAC writes the
+//! MPDU header in front of the payload, in place; the radio publishes that
+//! same buffer, which comes back to the network once its frame ended.
 /// A pool buffer's octets.
 const TX: usize = crate::FRAME_CAPACITY;
 use oer_chips_esp32s31_radio_ieee80211_backend::{
@@ -13,7 +14,7 @@ use oer_portable_memory::{FrameLen, PinnedDmaTxNetworkLease};
 use oer_protocols_ieee80211_core_roles_sta::data::{
     MAX_ETHERNET_PAYLOAD_LEN, MSDU_ETHERNET_OFFSET, MSDU_PAYLOAD_OFFSET,
 };
-use oer_protocols_ieee80211_runtime::station::TxSupply;
+use oer_protocols_ieee80211_runtime::station::{self as runtime, TxSupply};
 use oer_protocols_network_port::{EthernetFrame, TxStorage};
 
 /// The pool buffers the port holds itself, at the station's management
@@ -21,6 +22,12 @@ use oer_protocols_network_port::{EthernetFrame, TxStorage};
 pub(crate) const PORT_BUFFERS: u8 = 4;
 /// The pool buffers the network holds.
 pub const NETWORK_BUFFERS: usize = TX_BUFFERS - PORT_BUFFERS as usize;
+const _: () = {
+    // Every network buffer the actor holds at a stop has its place home.
+    if NETWORK_BUFFERS > oer_protocols_ieee80211_runtime::datapath::NETWORK_MEMORY_HELD {
+        panic!("the actor's queues and returns hold every network buffer");
+    }
+};
 /// Where a frame starts in a pool buffer: behind the radio's metadata,
 /// where the data machine reads its Ethernet header.
 const ETHERNET_AT: usize = TX_METADATA_SIZE + MSDU_ETHERNET_OFFSET;
@@ -140,15 +147,21 @@ pub struct NetworkTx {
 }
 
 impl NetworkTx {
-    /// Every pool buffer the port does not hold, for the network to write.
+    /// Every pool buffer from the place `port` on, the ones a port's bank
+    /// of `port` buffers does not hold, for the network to write: the
+    /// station's from [`PORT_BUFFERS`], an access point's from its bank's
+    /// size, which is at least that.
     ///
     /// # Errors
     ///
     /// A buffer the pool does not give to a writer: the buffers taken so
     /// far are released.
-    pub(crate) fn claim(pool: &'static TxPool<TX>) -> Result<Self, oer_portable_memory::PoolError> {
+    pub(crate) fn claim(
+        pool: &'static TxPool<TX>,
+        port: u8,
+    ) -> Result<Self, oer_portable_memory::PoolError> {
         let mut slots = heapless::Vec::new();
-        for index in PORT_BUFFERS..=u8::MAX {
+        for index in port..=u8::MAX {
             if usize::from(index) >= TX_BUFFERS {
                 break;
             }
@@ -165,10 +178,47 @@ impl NetworkTx {
         })
     }
 
+    /// The publisher and every buffer, in the storage that holds them.
+    pub(crate) fn into_owned(self) -> (TxPublisher, heapless::Vec<TxSlot, NETWORK_BUFFERS>) {
+        (self.publisher, self.slots)
+    }
+
+    /// The memory again, from the parts [`Self::into_owned`] gave.
+    pub(crate) fn from_owned(
+        publisher: TxPublisher,
+        slots: heapless::Vec<TxSlot, NETWORK_BUFFERS>,
+    ) -> Self {
+        Self { publisher, slots }
+    }
+
     /// The publisher and the buffers, last built first.
     pub fn into_parts(self) -> (TxPublisher, impl Iterator<Item = TxSlot>) {
         let mut slots = self.slots;
         (self.publisher, core::iter::from_fn(move || slots.pop()))
+    }
+}
+
+/// The pool as the network's own transmit end holds it
+/// ([`runtime::LocalTx`]): a frame is published from the buffer it was
+/// written in, from that buffer's start.
+impl runtime::TxPool for TxPublisher {
+    type Slot = TxSlot;
+    type Memory = TxMemory;
+    fn place(slot: &TxSlot) -> u8 {
+        slot.place()
+    }
+    fn publish(
+        &mut self,
+        slot: TxSlot,
+        length: usize,
+    ) -> Result<TxMemory, runtime::PoolRefused<TxSlot>> {
+        TxPublisher::publish(*self, slot, 0, length).map_err(|refused| match refused {
+            TxPublishRefused::Range(slot) => runtime::PoolRefused::Range(slot),
+            TxPublishRefused::Lost => runtime::PoolRefused::Lost,
+        })
+    }
+    fn slot(&mut self, memory: TxMemory) -> TxSlot {
+        TxPublisher::slot(*self, memory)
     }
 }
 
@@ -178,6 +228,71 @@ pub trait NetworkTxSupply: TxSupply<Self::Packet, Memory = TxMemory> + 'static {
     /// The network stack's packet its transmissions hand the station.
     type Packet: EthernetFrame + 'static;
     fn new(tx: NetworkTx) -> Self;
+}
+
+/// The network's transmit end a composition takes, built at the station's
+/// start over the network's transmit queues and [`NetworkTx`].
+pub trait NetworkTxEnd<N: crate::Notifies>: 'static {
+    /// The transmit end the station's start hands the network.
+    type End;
+    /// The end over `queues` and `memory`; an end that holds the network's
+    /// buffers keeps them in `state`, the station's place for them.
+    fn end(
+        queues: crate::TxQueues<'static, N, TxMemory>,
+        memory: NetworkTx,
+        state: &'static mut LocalTxState,
+    ) -> Self::End;
+}
+
+/// The place the network's own transmit end keeps its buffers in.
+pub type LocalTxState = runtime::LocalTxState<TxSlot, NETWORK_BUFFERS>;
+
+/// The network's transmit end over the memory `S`, which takes the network
+/// stack's packets and puts each in a buffer.
+pub struct SupplyEnd<S>(core::marker::PhantomData<S>);
+
+impl<N: crate::Notifies, S: NetworkTxSupply> NetworkTxEnd<N> for SupplyEnd<S> {
+    type End = crate::NetworkTransmit<'static, N, S::Packet, S>;
+    /// The memory `S` holds the buffers: the place stays unused.
+    fn end(
+        queues: crate::TxQueues<'static, N, TxMemory>,
+        memory: NetworkTx,
+        _state: &'static mut LocalTxState,
+    ) -> Self::End {
+        crate::NetworkTransmit::over(queues, S::new(memory))
+    }
+}
+
+/// The network's transmit end that owns the network's buffers: the network
+/// stack writes each frame in the buffer it goes to the station in.
+pub struct LocalEnd;
+
+/// The transmit end [`LocalEnd`] builds.
+pub type LocalTransmit<'a, N> = runtime::LocalTx<
+    'a,
+    TxPublisher,
+    NETWORK_BUFFERS,
+    { crate::TX_DEPTH },
+    <N as crate::Notifies>::Channels,
+>;
+
+impl<N: crate::Notifies> NetworkTxEnd<N> for LocalEnd {
+    type End = LocalTransmit<'static, N>;
+    fn end(
+        queues: crate::TxQueues<'static, N, TxMemory>,
+        memory: NetworkTx,
+        state: &'static mut LocalTxState,
+    ) -> Self::End {
+        let (publisher, slots) = memory.into_owned();
+        runtime::LocalTx::new(
+            queues.transmit,
+            queues.returned,
+            publisher,
+            state,
+            slots,
+            queues.state.network_link(),
+        )
+    }
 }
 
 #[cfg(test)]

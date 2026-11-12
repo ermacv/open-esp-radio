@@ -293,6 +293,10 @@ struct Inputs {
     tx_window: Option<u16>,
     /// What the network offers the station.
     tx_pace: Pace,
+    /// The MSDUs the network fills in a burst before it publishes them: one
+    /// publishes each MSDU as it is filled, more stage each in its slot and
+    /// publish the burst once, its last filled.
+    tx_burst: usize,
     /// The access point's window; `None` sends nothing.
     rx_window: Option<PeerWindow>,
     /// What the access point offers.
@@ -320,6 +324,7 @@ impl Inputs {
             seed: 1,
             tx_window: None,
             tx_pace: Pace::Unlimited,
+            tx_burst: 1,
             rx_window: None,
             rx_offered: Offered::Saturated,
             rx_pace: Pace::Unlimited,
@@ -431,6 +436,7 @@ struct Bench<'b, 's, const HELD: u8> {
     pool: Vec<ModelNetworkMemory>,
     transmits: bool,
     tx_turn: Turnstile,
+    tx_burst: usize,
     rx_turn: Turnstile,
     sent: u64,
     taken: u64,
@@ -516,14 +522,19 @@ impl<'s, const HELD: u8> Bench<'_, 's, HELD> {
                 length: u16::try_from(14 + IP_PACKET).unwrap(),
                 priority: WmmUserPriority::new(TID).unwrap(),
             });
-            assert!(
-                self.transmit
-                    .try_send_with(|slot| {
-                        *slot = outgoing.take();
-                        Ok::<_, Infallible>(())
-                    })
-                    .is_ok()
-            );
+            let filled = |slot: &mut Option<_>| {
+                *slot = outgoing.take();
+                Ok::<_, Infallible>(())
+            };
+            if self.tx_burst <= 1 {
+                assert!(self.transmit.try_send_with(filled).is_ok());
+            } else {
+                assert!(self.transmit.try_stage_with(filled).is_ok());
+                // A full queue ends the burst too: nothing more fits.
+                if self.transmit.staged() >= self.tx_burst || self.transmit.free_capacity() == 0 {
+                    self.transmit.flush();
+                }
+            }
             moved = true;
         }
         while !self.receive.is_empty() && self.rx_turn.pass(nanos) {
@@ -773,6 +784,7 @@ fn run<const HELD: u8>(inputs: Inputs) -> Outcome {
             pool: Vec::new(),
             transmits: false,
             tx_turn: Turnstile::new(inputs.tx_pace),
+            tx_burst: inputs.tx_burst,
             rx_turn: Turnstile::new(inputs.rx_pace),
             sent: 0,
             taken: 0,
@@ -1058,6 +1070,38 @@ fn a_busy_channel_lowers_both_ceilings_and_leaves_the_aggregates_alone() {
         near(tx.tx_mbps(), transmit(64).tx_mbps() * 0.6, 0.05),
         "{tx:?}"
     );
+}
+
+/// A network that fills its MSDUs at a steady pace and publishes them in
+/// bursts, each burst's first ones hidden from the station until its last
+/// is filled, loses no aggregate size against one that publishes each MSDU
+/// as it is filled: what an aggregate that ends meanwhile cannot take goes
+/// into the next, and a burst can only group more. Below the air's
+/// capacity the size follows the pace alone
+/// (`a_network_that_feeds_slowly_sends_smaller_aggregates`).
+#[test]
+fn a_network_that_publishes_in_bursts_keeps_its_aggregates() {
+    for frames in [8, 11, 12, 20] {
+        let alone = run::<16>(Inputs {
+            tx_pace: Pace::PerMillisecond(frames),
+            ..Inputs::transmitting(64)
+        });
+        for burst in [4, 8, 16] {
+            let bursts = run::<16>(Inputs {
+                tx_pace: Pace::PerMillisecond(frames),
+                tx_burst: burst,
+                ..Inputs::transmitting(64)
+            });
+            assert!(
+                bursts.tx_aggregate() >= alone.tx_aggregate() - 0.5,
+                "{frames}/ms, bursts of {burst}: {bursts:?} against {alone:?}"
+            );
+            assert!(
+                near(bursts.tx_mbps(), alone.tx_mbps(), 0.02),
+                "{frames}/ms, bursts of {burst}: {bursts:?} against {alone:?}"
+            );
+        }
+    }
 }
 
 #[test]

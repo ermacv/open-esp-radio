@@ -129,7 +129,7 @@ fn access_point_frame<'s>(
             protection: Protection::None,
         }),
     };
-    let frame = ClassFrame::new(frame).ok().unwrap();
+    let frame = ClassFrame::<ModelSmall, _>::new(frame).ok().unwrap();
     let source = prepare_model(
         TxSource::Fresh {
             buffer,
@@ -192,7 +192,7 @@ fn beacon<'s>(
         frame: SizedFrame::new(header, MpduLength::new(40).unwrap()).unwrap(),
         rate,
     };
-    let frame = ClassFrame::new(frame).ok().unwrap();
+    let frame = ClassFrame::<ModelSmall, _>::new(frame).ok().unwrap();
     let source = prepare_model(
         TxSource::Fresh {
             buffer,
@@ -307,7 +307,7 @@ fn station_frame_on<'s>(harness: &mut Harness<'s>, category: WmmAccessCategory) 
             protection: Protection::None,
         }),
     };
-    let frame = ClassFrame::new(frame).ok().unwrap();
+    let frame = ClassFrame::<ModelSmall, _>::new(frame).ok().unwrap();
     let source = prepare_model(
         TxSource::Fresh {
             buffer,

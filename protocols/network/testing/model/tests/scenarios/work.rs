@@ -1,5 +1,5 @@
 //! The transmit hot path's work per frame, as the image that loads the air
-//! composes it: the real service, core and airtime egress with a local
+//! composes it: the real service and core with a local
 //! producer of load datagrams, unpaced, to one peer, whose frames the medium
 //! settles a Block Ack of 32 at a time. The service's diagnostics and the
 //! producer count the work; each case bounds it per frame.
@@ -11,7 +11,6 @@
 use super::*;
 
 use oer_protocols_network_core::{Declined, Payload, SendRefusal};
-use oer_protocols_network_port::PlanStop;
 use oer_protocols_network_runtime::TurnEnd;
 use oer_protocols_network_runtime::{
     Diagnosis, Diagnostics, Interest, LocalEnd, Next, Offer, Produce, Work,
@@ -30,9 +29,6 @@ const LOAD_LANE: usize = 32;
 const AGGREGATE: usize = 32;
 /// Frames the port holds: the image's network buffers.
 const AT_THE_PORT: usize = 63;
-/// Accounts and reservations of the egress.
-const ACCOUNTS: usize = 4;
-const RESERVATIONS: usize = 63;
 /// The UDP payload of a load datagram, which fills one frame.
 const DATAGRAM: usize = 1472;
 /// The load header's length (`hil/services/load`), and its filler.
@@ -42,7 +38,6 @@ const LOAD_PORT: u16 = 5001;
 /// How long the load runs.
 const RUN: u64 = SECOND / 10;
 
-type LoadEgress = AirtimeEgress<'static, Medium, Ticket, ACCOUNTS, RESERVATIONS>;
 type LoadOwner = NetworkOwner<
     'static,
     LoadNet,
@@ -202,9 +197,8 @@ impl Account {
     fn report(&self) {
         let d = &self.diagnosis;
         println!(
-            "frames {} carried {} turns {} | per frame: turns {:.3} waits {:.3} ready {:.3} yields {:.3} collections {:.3} \
-             walked {:.3} continued {:.3} told {:.3} materialised {:.3} | stops spent {} \
-             changed {} grant {} account {} | producer per frame: offers {:.3} fills {:.3} \
+            "frames {} carried {} turns {} | per frame: turns {:.3} waits {:.3} ready {:.3} yields {:.3} \
+             walked {:.3} told {:.3} materialised {:.3} | producer per frame: offers {:.3} fills {:.3} \
              currents {:.3} generations {:.3} registers {:.3} ended {:.3} refused {}",
             self.moved.accepted,
             self.carried,
@@ -213,15 +207,9 @@ impl Account {
             self.per_frame(self.moved.waits),
             self.per_frame(self.moved.ready_waits),
             self.per_frame(self.moved.yields),
-            self.per_frame(u64::from(d.collections)),
             self.per_frame(u64::from(d.walked)),
-            self.per_frame(u64::from(d.continued)),
             self.per_frame(u64::from(d.told)),
             self.per_frame(u64::from(d.materialised)),
-            d.stopped_spent,
-            d.stopped_changed,
-            d.stopped_grant,
-            d.stopped_account,
             self.per_frame(self.asked.offers),
             self.per_frame(self.asked.fills),
             self.per_frame(self.asked.currents),
@@ -244,10 +232,6 @@ fn load(micros_per_frame: u32) -> Account {
     let memory = Box::leak(Box::new([[0; LOAD_SIZE]; LOAD_BLOCKS]));
     let (pool, brand) = claim::<LoadNet, LOAD_SIZE, LOAD_BLOCKS>(memory).unwrap();
     let owner: LoadOwner = NetworkOwner::new(brand, interface(), pool, medium.clone());
-    let storage = Box::leak(Box::new(AirtimeStorage::new(
-        NonZeroU32::new(QUANTUM).unwrap(),
-    )));
-    let egress: LoadEgress = AirtimeEgress::new(storage, medium.clone());
     let (stop, stopping): (Stopper, _) = Box::leak(Box::new(StopLane::new())).split();
     let asked = Rc::new(RefCell::new(Asked::default()));
     let producer = Load {
@@ -273,10 +257,9 @@ fn load(micros_per_frame: u32) -> Account {
         LOAD_DEPTH,
         LOAD_LANE,
         Medium,
-        LoadEgress,
         _,
         Counted,
-    > = Service::with_producer(owner, egress, MemoryPolicy::KEEP, stopping, producer, end)
+    > = Service::with_producer(owner, MemoryPolicy::KEEP, stopping, producer, end)
         .with_diagnostics(counted.clone());
     service.bind_local(LOAD_PORT, Dscp::default()).unwrap();
     let moved = Rc::new(RefCell::new(Moved::default()));
@@ -311,7 +294,7 @@ fn load(micros_per_frame: u32) -> Account {
 const FREE_AIR: u32 = 1;
 
 #[test]
-fn an_unpaced_load_takes_each_frame_once_through_a_plan_of_several() {
+fn an_unpaced_load_takes_each_frame_once_and_walks_one_place_for_it() {
     let account = load(FREE_AIR);
     let frames = account.moved.accepted;
     assert!(frames > 50_000, "{account:?}");
@@ -322,15 +305,7 @@ fn an_unpaced_load_takes_each_frame_once_through_a_plan_of_several() {
     assert_eq!(account.asked.fills + 1, frames, "{account:?}");
     // Each offer is taken: an unpaced producer is never refused.
     assert_eq!(account.asked.refused, 0, "{account:?}");
-    // A collection's plan sends a turn's budget, not one frame: at most one
-    // collection a turn, and fewer collections than a fifth of the frames.
-    assert!(
-        u64::from(d.collections) <= account.moved.turns,
-        "{account:?}"
-    );
-    assert!(u64::from(d.collections) * 5 <= frames, "{account:?}");
-    // No plan of one account stops before its turns are spent.
-    assert_eq!(d.stopped(PlanStop::Changed), 0, "{account:?}");
-    assert_eq!(d.stopped(PlanStop::Grant), 0, "{account:?}");
-    assert_eq!(d.stopped(PlanStop::Account), 0, "{account:?}");
+    // The ready work is found where the core's cursor stands: about one
+    // place walked a frame, never a walk of every place.
+    assert!(u64::from(d.walked) <= 2 * frames, "{account:?}");
 }

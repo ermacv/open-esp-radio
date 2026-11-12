@@ -52,6 +52,7 @@ struct Returned<'id, Id: radio::SlotIdentity + 'id> {
     buffer: AnyBuffer<'id, Id, TestDevice, 512, Draws>,
     body: Option<Payload>,
     outcome: Outcome,
+    cost: oer_protocols_ieee80211_contracts_port::TxEstimate,
 }
 
 /// One terminal of the port, in the order the sink took it.
@@ -303,6 +304,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                         buffer,
                         body,
                         outcome: parts.outcome,
+                        cost: parts.cost,
                     }))
                 }
                 LowerMacTerminal::GateClosed(gate) => Event::GateClosed(gate),
@@ -537,6 +539,298 @@ fn a_retransmission_after_a_hardware_timeout_carries_the_retry_bit() {
             panic!("a retransmission returns Sent");
         };
         assert!(published_retry(&mut sent));
+    });
+}
+
+/// A single MPDU's terminal carries what its publications cost by the
+/// backend's model, as an arena's does: a delivered one its PPDU, SIFS and
+/// Ack, never nothing; one whose air the hardware timed out unknown, never
+/// an invented value.
+#[test]
+fn a_single_mpdu_s_terminal_carries_its_cost_and_an_unknown_one_stays_unknown() {
+    use oer_protocols_ieee80211_contracts_port::TxEstimate;
+    with_access(|fixture, access| {
+        fixture.start();
+        fixture.submit_mpdu(Spec::open(97));
+        let delivered = single(fixture.until(access, 1));
+        assert!(delivered.outcome.is_delivered(), "{:?}", delivered.outcome);
+        let TxEstimate::Estimated { micros } = delivered.cost else {
+            panic!(
+                "a delivered MPDU's cost is the model's: {:?}",
+                delivered.cost
+            );
+        };
+        assert!(micros > 0, "it reached the air");
+    });
+    with_access(|fixture, access| {
+        fixture.observed.borrow_mut().timeout_edge = true;
+        fixture.start();
+        fixture.submit_mpdu(Spec::open(98));
+        fixture.turns(2);
+        fixture.advance(crate::ordinary_tx::TX_ABORT_SETTLE);
+        fixture.turns(1);
+        let timed_out = single(fixture.events(access));
+        assert!(matches!(timed_out.outcome, TxOutcome::Indeterminate(_)));
+        assert_eq!(timed_out.cost, TxEstimate::Unknown);
+    });
+}
+
+/// A network's memory goes through the single-MPDU path as a port buffer
+/// does: the MPDU written in it is published from that memory, its CCMP
+/// header written in place from the caller's PN, and its terminal returns
+/// the same memory, `Sent`, with what its publication cost. A
+/// retransmission keeps its sequence number, PN and octets; renewed, the
+/// memory leaves the installation whole for the network.
+#[test]
+fn a_network_memory_goes_as_one_single_mpdu_and_comes_back_whole_with_its_cost() {
+    use oer_portable_memory::StableDmaBacking as _;
+    use oer_protocols_ieee80211_contracts_port::TxEstimate;
+    type Network<Id> = NetworkFrames<Family<Id>>;
+    with_access(|fixture, access| {
+        fixture.start();
+        fixture.configure_station();
+        let (_association, key) = fixture.pairwise(3);
+        let mut memory =
+            crate::mac::tx::test_support::model_backing::<512>().expect("model memory");
+        let at = memory.stable_dma_region().into_mut_slice().as_ptr();
+        // The network's octets behind the MAC and CCMP headers.
+        let region =
+            <Family<radio::LocalId<'static>> as TxNetworkPool<'_>>::frame_region(&mut memory)
+                .expect("region");
+        region[32..64].copy_from_slice(&[0x5a; 32]);
+        let buffer = fixture.port.network_buffer(memory);
+        let ticket = fixture.tickets.pop().expect("ticket");
+        let rate = fixture
+            .port
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .expect("rate");
+        let header = HeaderSpec::new(
+            FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
+            0,
+            IndividualAddress::new(BSSID).expect("receiver"),
+            STATION,
+            BSSID,
+            SEQUENCE,
+            None,
+            None,
+            None,
+        )
+        .expect("header");
+        let frame = ClassFrame::<Network<_>, _>::new(TxFrame::Individual {
+            frame: SizedFrame::new(
+                AckHeader::new(header).expect("ACK"),
+                MpduLength::new(64).expect("length"),
+            )
+            .expect("frame"),
+            plan: RetryPlan::new(RetryStage {
+                rate,
+                transmissions: core::num::NonZeroU8::MIN,
+                protection: Protection::None,
+            }),
+        })
+        .ok()
+        .expect("class");
+        let packet_number =
+            oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(9).expect("PN");
+        let source = TxSource::Fresh {
+            buffer,
+            frame,
+            body: None,
+            protection: TxProtection::Ccmp(NumberedKey {
+                key: &key,
+                packet_number,
+            }),
+        }
+        .check()
+        .ok()
+        .expect("layout");
+        let source = <Family<_> as TxBufferPool<'_, Network<_>>>::prepare::<Station, Caps>(source)
+            .ok()
+            .expect("prepared");
+        submit!(fixture, ticket, source, WmmAccessCategory::BestEffort, 99);
+        for _ in 0..16 {
+            if !fixture.outbox.terminals.is_empty() {
+                break;
+            }
+            fixture.turns(1);
+        }
+        // Read by borrow, the terminal names the network's class alone.
+        let Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(completed))) =
+            fixture.outbox.terminals.first()
+        else {
+            panic!("the MPDU's terminal");
+        };
+        assert_eq!(
+            <Family<_> as TxBufferPool<'_, Network<_>>>::completed_class(completed),
+            Some(TxBufferForm::Sent)
+        );
+        assert_eq!(
+            <Family<_> as TxBufferPool<'_, BufferClass<512>>>::completed_class(completed),
+            None,
+            "no port buffer of the bank"
+        );
+        let returned = single(fixture.events(access));
+        assert_eq!(returned.context, 99);
+        assert!(returned.outcome.is_delivered(), "{:?}", returned.outcome);
+        let TxEstimate::Estimated { micros } = returned.cost else {
+            panic!("the publication's cost: {:?}", returned.cost);
+        };
+        assert!(micros > 0, "it reached the air");
+        let AnyBuffer::NetworkSent(mut sent) = returned.buffer else {
+            panic!("a published network memory returns as its own Sent");
+        };
+        assert_eq!(sent.packet_number(), Some(packet_number));
+        let first = sent.published().to_vec();
+        assert_eq!(
+            DecodedHeader::decode(&first)
+                .expect("the published header")
+                .sequence_control(),
+            SEQUENCE
+        );
+        assert_eq!(first[32..64], [0x5a; 32], "the network's octets, in place");
+        let ccmp: [u8; 8] = first[24..32].try_into().expect("a CCMP header");
+        assert_eq!(
+            oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::from_header_bytes(ccmp),
+            packet_number,
+            "the CCMP header written in place from the caller's PN"
+        );
+        // The same MPDU again, under a new plan: its numbers and octets stay.
+        let rate = fixture
+            .port
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .expect("rate");
+        let source = TxSource::Retransmission {
+            mpdu: sent,
+            plan: RetransmissionPlan::Individual(RetryPlan::new(RetryStage {
+                rate,
+                transmissions: core::num::NonZeroU8::MIN,
+                protection: Protection::None,
+            })),
+        }
+        .check()
+        .ok()
+        .expect("layout");
+        let source = <Family<_> as TxBufferPool<'_, Network<_>>>::prepare::<Station, Caps>(source)
+            .ok()
+            .expect("the key is still installed");
+        submit!(
+            fixture,
+            returned.ticket,
+            source,
+            WmmAccessCategory::BestEffort,
+            100
+        );
+        let retried = single(fixture.until(access, 1));
+        assert!(retried.outcome.is_delivered(), "{:?}", retried.outcome);
+        let AnyBuffer::NetworkSent(mut sent) = retried.buffer else {
+            panic!("a retransmission returns Sent");
+        };
+        assert_eq!(sent.packet_number(), Some(packet_number), "its PN kept");
+        let again = sent.published().to_vec();
+        let decoded = DecodedHeader::decode(&again).expect("the published header");
+        assert_eq!(
+            decoded.sequence_control(),
+            SEQUENCE,
+            "its sequence number kept"
+        );
+        assert_eq!(
+            again[24..64],
+            first[24..64],
+            "its CCMP header and octets kept"
+        );
+        // Renewed, the memory leaves the installation for the network.
+        let (buffer, _) = <Family<_> as TxBufferPool<'_, Network<_>>>::renew(sent);
+        let Ok(mut memory) = <Family<_> as TxNetworkPool<'_>>::into_memory(buffer) else {
+            panic!("the hardware handed the memory back");
+        };
+        assert_eq!(
+            memory.stable_dma_region().into_mut_slice().as_ptr(),
+            at,
+            "the same memory"
+        );
+    });
+}
+
+/// A completion on a queue whose network-memory attempt is gone: the
+/// memory stays whole on its descriptor until the port's owner takes it
+/// for the network, once, and nothing else gives it out.
+#[test]
+fn a_network_lease_without_its_attempt_goes_to_the_port_s_owner_once() {
+    use oer_portable_memory::StableDmaBacking as _;
+    type Network<Id> = NetworkFrames<Family<Id>>;
+    with_access(|fixture, _access| {
+        fixture.start();
+        fixture.hold_air(true);
+        let mut memory =
+            crate::mac::tx::test_support::model_backing::<512>().expect("model memory");
+        let at = memory.stable_dma_region().into_mut_slice().as_ptr();
+        let buffer = fixture.port.network_buffer(memory);
+        let ticket = fixture.tickets.pop().expect("ticket");
+        let rate = fixture
+            .port
+            .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+            .expect("rate");
+        let header = HeaderSpec::new(
+            FrameControl::new(oer_protocols_ieee80211_wire::frame::DATA_TO_DS).expect("control"),
+            0,
+            IndividualAddress::new(BSSID).expect("receiver"),
+            STATION,
+            BSSID,
+            SEQUENCE,
+            None,
+            None,
+            None,
+        )
+        .expect("header");
+        let frame = ClassFrame::<Network<_>, _>::new(TxFrame::Individual {
+            frame: SizedFrame::new(
+                AckHeader::new(header).expect("ACK"),
+                MpduLength::new(64).expect("length"),
+            )
+            .expect("frame"),
+            plan: RetryPlan::new(RetryStage {
+                rate,
+                transmissions: core::num::NonZeroU8::MIN,
+                protection: Protection::None,
+            }),
+        })
+        .ok()
+        .expect("class");
+        let source = TxSource::Fresh {
+            buffer,
+            frame,
+            body: None,
+            protection: TxProtection::Open,
+        }
+        .check()
+        .ok()
+        .expect("layout");
+        let source = <Family<_> as TxBufferPool<'_, Network<_>>>::prepare::<Station, Caps>(source)
+            .ok()
+            .expect("prepared");
+        submit!(fixture, ticket, source, WmmAccessCategory::BestEffort, 99);
+        assert!(
+            fixture.port.take_network_memory().is_none(),
+            "the hardware holds it"
+        );
+        fixture.port.forget_published_for_test();
+        fixture.hold_air(false);
+        for _ in 0..4 {
+            let _ = serve_once(fixture);
+        }
+        assert!(matches!(
+            fixture.port.fault(),
+            Some(crate::port::Fault::CompletionWithoutPending { .. })
+        ));
+        let Some(mut memory) = fixture.port.take_network_memory() else {
+            panic!("the network's memory, for the port's owner");
+        };
+        assert_eq!(
+            memory.stable_dma_region().into_mut_slice().as_ptr(),
+            at,
+            "the same memory, whole"
+        );
+        assert!(fixture.port.take_network_memory().is_none(), "once");
     });
 }
 

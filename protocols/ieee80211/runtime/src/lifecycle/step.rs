@@ -261,16 +261,6 @@ where
                 }
             },
             Follow::Notice(notice) => {
-                if let StaNotice::Connected { .. } = notice {
-                    // The network's least grants start at the slowest rate
-                    // this association's plans can end at.
-                    let floor = self.station.peer().map(|peer| {
-                        oer_protocols_ieee80211_contracts_port::PhyRate::Legacy(
-                            peer.associated.legacy_rates.slowest(),
-                        )
-                    });
-                    io.control.state.floor(floor);
-                }
                 if let StaNotice::Connected { .. } = notice
                     && self.inner.link.lent
                     && let Some(epoch) = self.inner.link.epoch

@@ -761,6 +761,17 @@ The original endpoint remains exclusively borrowed. A local producer loan can
 be copied within its one context, supports only synchronous publication and
 has no reservation; both local endpoints are neither Send nor Sync. The
 underlying Release/Acquire transfer still moves each complete owner once.
+Its sole endpoints convert into batched endpoints for `Copy` values. Each
+keeps its own cursor and its batch as plain local indices. It reads the
+other end's cursor once with Acquire for the prefix it may use, then reads
+it again only after that prefix is used up. It stores its own cursor once
+with Release at the batch's boundary. The Acquire look proves each staged
+cell vacant and each taken cell initialized for this endpoint alone, as the
+single-value permit does. The ordinary endpoints keep their own operations
+unchanged. A batched endpoint that ends inside a batch leaves no owner
+behind. Staged values were never published. Taken values that were not
+released are received again by the next consumer. `SlotSender::ready` and
+`SlotReceiver::ready_at_least` end their bursts before they wait.
 Its sealed cursor layouts retain the default cache-line-separated counters
 for existing queues and permit compact atomic counters for the same-core
 P1/P2 handoff. Layout selection changes no endpoint or publication authority.

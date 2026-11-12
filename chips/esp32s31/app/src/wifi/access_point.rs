@@ -8,14 +8,12 @@
 //! executor runs, the library's access-point task serves the BSS and the
 //! stack together; every exit keeps its typed cause and resets nothing.
 
+use super::tx_memory::{TX_SLOTS, TxPacket, WifiTx};
 use super::*;
 use oer_chips_esp32s31_radio_ieee80211_station::access_point::{
     self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage,
 };
-use oer_portable_embassy_net::{
-    NetworkInterfaceId, OwnedNetworkTxFrame,
-    ip::{self, GeneralPool},
-};
+use oer_portable_embassy_net::{NetworkInterfaceId, ip};
 use oer_protocols_ieee80211_runtime::access_point::network::{ApNetDevice, ApNetTransmit};
 
 pub use ap::{ApExit, ApSettings, ApSettingsError, StartRefused};
@@ -25,12 +23,10 @@ pub use oer_protocols_ieee80211_runtime::access_point::ApUnsupported;
 /// The access point's receive packets: each one 1514-byte Ethernet frame.
 pub const AP_RX: usize = 4;
 
-/// The packets the access point's stack makes: the stack writes each one,
-/// the access point copies it into its BSS, and its memory is free again.
-const AP_PACKETS: usize = 4;
-
-/// The stack's sending path into the access point's BSS.
-type ApTransmit = ApNetTransmit<'static, OwnedNetworkTxFrame>;
+/// The stack's sending path into the access point's BSS: the stack writes
+/// each packet into a transmit buffer past the access point's bank, and the
+/// access point sends that buffer ([`WifiTx`]).
+type ApTransmit = ApNetTransmit<'static, TxPacket, WifiTx>;
 
 /// The access point's stack's executor context: the application's.
 type ApContext = ThreadContext<0>;
@@ -47,7 +43,6 @@ pub type ApStack = embassy_net::Stack<'static, ApIpDevice>;
 
 static AP_STORAGE: StaticCell<AccessPointStorage> = StaticCell::new();
 static AP_IP: StaticCell<ApIpResources> = StaticCell::new();
-static AP_GENERAL: StaticCell<GeneralPool<AP_PACKETS>> = StaticCell::new();
 static AP_CONTROL: StaticCell<ip::Control<'static>> = StaticCell::new();
 
 /// How the access point's installation ended: its exit, or the
@@ -100,17 +95,12 @@ impl AccessPoint {
             .map(|place| place.write(const { AccessPointStorage::new() }))
             .ok_or(Error::Storage)?;
         let (control, device, transmit, runner) =
-            wifi::access_point::access_point::<binding::Binding, OwnedNetworkTxFrame>(
+            wifi::access_point::access_point::<binding::Binding, WifiTx>(
                 started.resources,
                 config.chip,
                 storage,
                 started.nonces,
             );
-        let general = AP_GENERAL
-            .try_uninit()
-            .map(|place| place.write(const { GeneralPool::new() }))
-            .ok_or(Error::Storage)?
-            .allocator();
         let resources = AP_IP
             .try_uninit()
             .map(|place| place.write(const { ApIpResources::new() }))
@@ -120,7 +110,7 @@ impl AccessPoint {
                 device,
                 transmit,
                 None,
-                general,
+                TX_SLOTS.allocator(),
                 NetworkInterfaceId::new(1),
                 mac,
                 seed,
