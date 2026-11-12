@@ -322,12 +322,12 @@ impl Device<512> for TestDevice {
         self.hardware.key_entries_stuck = self.observed.borrow().key_entries_stuck;
         Ok(&mut self.hardware)
     }
-    fn next_deadline(&self) -> Option<Instant> {
+    fn next_deadline(&self, now: Instant) -> Option<Instant> {
         // As the device's: a due continuation is the body's to take.
         self.observed
             .borrow()
             .rx_continuation
-            .filter(|at| self.timer.now() < *at)
+            .filter(|at| now < *at)
     }
     fn event_waiting(&self) -> bool {
         false

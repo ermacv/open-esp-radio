@@ -761,8 +761,17 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         meta: T::Meta,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
-        let action = frame.header().is_some_and(|header| {
-            !header.control().is_data() && header.control().subtype() == ACTION_SUBTYPE
+        // The header once for the frame: its fields decide the deferral,
+        // the agreement and the order.
+        let fields = frame.header().map(|header| HeaderFields {
+            control: header.control(),
+            sequence_control: header.sequence_control(),
+            qos: header.qos(),
+            receiver: header.receiver(),
+            transmitter: header.transmitter(),
+        });
+        let action = fields.is_some_and(|fields| {
+            !fields.control.is_data() && fields.control.subtype() == ACTION_SUBTYPE
         });
         if action && !self.can_receive_management() {
             return match self.defer(frame, meta) {
@@ -779,7 +788,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
         });
         match local {
-            Some(local) => self.ingest(now, local, frame, meta, events),
+            Some(local) => self.ingest(now, local, fields, frame, meta, events),
             None => RxDisposition::Deliver((frame, meta)),
         }
     }
@@ -788,6 +797,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         &mut self,
         now: Instant,
         local: [u8; 6],
+        fields: Option<HeaderFields>,
         frame: T::Frame,
         meta: T::Meta,
         events: &mut impl EventSink<RxBlockAckEvent>,
@@ -804,19 +814,19 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
             return RxDisposition::Recycle(frame);
         }
-        let key = frame.header().and_then(|header| {
+        let key = fields.and_then(|header| {
             let (_, bssid) = self.header.association?;
-            let control = header.control();
+            let control = header.control;
             let fragment =
-                SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment();
+                SequenceControl::from_bytes(header.sequence_control.to_le_bytes()).fragment();
             // QoS Data subtypes 8 to 11 from the DS (IEEE Std 802.11-2020,
             // 9.2.4.1.3, Table 9-1).
             if !control.is_data()
                 || control.ds() != 2
                 || control.more_fragments()
                 || fragment != 0
-                || header.transmitter() != bssid.get()
-                || header.receiver() != local
+                || header.transmitter != bssid.get()
+                || header.receiver != local
                 || !matches!(control.subtype(), 8..=11)
                 || (control.protected()
                     && !matches!(
@@ -829,7 +839,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             {
                 return None;
             }
-            let tid = QosControl::from_bytes(header.qos()?.to_le_bytes())
+            let tid = QosControl::from_bytes(header.qos?.to_le_bytes())
                 .tid()
                 .get();
             let index = self.banks.iter().position(|bank| {
@@ -839,7 +849,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             })?;
             Some((
                 index,
-                SequenceNumber::from_sequence_control(header.sequence_control()),
+                SequenceNumber::from_sequence_control(header.sequence_control),
             ))
         });
         let Some((bank_index, sequence)) = key else {
@@ -929,6 +939,16 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         }
         Some((request.tid, request.starting_sequence))
     }
+}
+
+/// The header fields a received frame's handling reads, decoded once.
+#[derive(Clone, Copy)]
+struct HeaderFields {
+    control: oer_protocols_ieee80211_wire::frame::FrameControl,
+    sequence_control: u16,
+    qos: Option<u16>,
+    receiver: [u8; 6],
+    transmitter: [u8; 6],
 }
 
 #[cfg(test)]

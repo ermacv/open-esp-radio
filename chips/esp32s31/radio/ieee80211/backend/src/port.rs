@@ -252,10 +252,12 @@ pub trait Device<const B: usize>: Sized + 'static {
     /// The device's registers, while no actor transaction or retirement
     /// holds them; otherwise `Fault::HardwareUnavailable`.
     fn hardware(&mut self) -> Result<&mut Self::Hardware, Fault>;
-    /// The device's next deadline for the port's turn. A due receive
-    /// continuation is not one: the port's receive pull takes it
-    /// ([`Self::pull_unit`]).
-    fn next_deadline(&self) -> Option<Instant>;
+    /// The device's next deadline for the port's operation at `now`, its
+    /// own instant. A continuation due at `now` is not one: the port's
+    /// receive pull takes it ([`Self::pull_batch`]). An earlier `now` keeps
+    /// a continuation that has passed since, which only makes the deadline
+    /// earlier: a service sooner, never a wait past it.
+    fn next_deadline(&self, now: Instant) -> Option<Instant>;
     /// Whether a transmit or other event waits for the next poll.
     fn event_waiting(&self) -> bool;
     fn take_power_profile(&mut self) -> Option<Self::Power>;

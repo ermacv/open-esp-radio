@@ -537,10 +537,10 @@ where
             .map(|active| &mut active.registers)
             .ok_or(Fault::HardwareUnavailable)
     }
-    fn next_deadline(&self) -> Option<Instant> {
+    fn next_deadline(&self, now: Instant) -> Option<Instant> {
         // A due continuation is the port's receive pull's to take: a passed
         // deadline would ask for a transmit service at every turn.
-        let continuation = self.continuation.filter(|at| self.timer.now() < *at);
+        let continuation = self.continuation.filter(|at| now < *at);
         [
             self.session
                 .as_ref()

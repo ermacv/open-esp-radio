@@ -69,9 +69,9 @@ pub(crate) fn observe_terminal<'id, W: Binding, Id: SlotIdentity + 'id>(
 /// came in an A-MPDU, as `meta` tells.
 #[cfg(oer_trace)]
 fn observe_received_data<W: Binding>(bytes: &[u8], meta: &RxMeta, local: [u8; 6]) {
-    if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
-        .is_some_and(|header| header.control().is_data() && header.receiver() == local)
-    {
+    // The receiver address is the header's first address
+    // (IEEE Std 802.11-2020, 9.3.2.1).
+    if bytes.get(4..10).is_some_and(|receiver| receiver == local) {
         let observer = W::DriverObserver::default();
         oer_portable_trace::observe!(
             observer,
@@ -89,34 +89,47 @@ fn observe_received_data<W: Binding>(bytes: &[u8], meta: &RxMeta, local: [u8; 6]
 }
 /// Report a unit the port gave: a data MPDU addressed to the station
 /// ([`observe_received_data`]), and the target's successful open
-/// authentication and its beacons.
+/// authentication and its beacons. The frame control field decides which
+/// of them a frame can be, so a data frame is read no further than its
+/// receiver.
 #[cfg(oer_trace)]
 pub(crate) fn observe_received<W: Binding>(bytes: &[u8], meta: &RxMeta) {
-    if let Some((local, _)) = TARGET.get() {
-        observe_received_data::<W>(bytes, meta, local);
-    }
-    if let Some((local, Some(target))) = TARGET.get() {
-        if oer_protocols_ieee80211_wire::station::parse_open_authentication_response(
-            bytes, local, target,
-        )
-        .is_some_and(|r| r.status_code == 0)
-        {
-            let observer = W::DriverObserver::default();
-            oer_portable_trace::observe!(observer, crate::observation::StationAuthenticated);
+    use oer_protocols_ieee80211_wire::frame::{FrameControlFields, FrameType, ManagementSubtype};
+    let Some(&control) = bytes.first_chunk::<2>() else {
+        return;
+    };
+    let control = FrameControlFields::from_bytes(control);
+    let Some((local, target)) = TARGET.get() else {
+        return;
+    };
+    match control.kind() {
+        FrameType::Data => observe_received_data::<W>(bytes, meta, local),
+        FrameType::Management => {
+            let Some(target) = target else {
+                return;
+            };
+            if oer_protocols_ieee80211_wire::station::parse_open_authentication_response(
+                bytes, local, target,
+            )
+            .is_some_and(|r| r.status_code == 0)
+            {
+                let observer = W::DriverObserver::default();
+                oer_portable_trace::observe!(observer, crate::observation::StationAuthenticated);
+            }
+            if control.management_subtype() == ManagementSubtype::Beacon
+                && oer_protocols_ieee80211_wire::scan::parse_management(bytes)
+                    .is_some_and(|r| r.bssid.get() == target)
+            {
+                let observer = W::DriverObserver::default();
+                oer_portable_trace::observe!(
+                    observer,
+                    crate::observation::StationBeacon {
+                        at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
+                    }
+                );
+            }
         }
-        if oer_protocols_ieee80211_wire::frame::DecodedHeader::decode(bytes)
-            .is_some_and(|h| h.control().subtype() == 8)
-            && oer_protocols_ieee80211_wire::scan::parse_management(bytes)
-                .is_some_and(|r| r.bssid.get() == target)
-        {
-            let observer = W::DriverObserver::default();
-            oer_portable_trace::observe!(
-                observer,
-                crate::observation::StationBeacon {
-                    at_millis: (EmbassyClock.now().as_micros() / 1000) as u32
-                }
-            );
-        }
+        _ => {}
     }
 }
 pub struct Rates<W: Binding>(

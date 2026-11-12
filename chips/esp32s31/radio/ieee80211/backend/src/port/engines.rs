@@ -1149,7 +1149,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
         };
         add(core_views::deadline::<Id, D, B>(self.driver.core.view()));
-        add(self.device.next_deadline());
+        add(self.device.next_deadline(self.now));
         add(self.rx_later);
         match self.state {
             PortState::Starting { since }
