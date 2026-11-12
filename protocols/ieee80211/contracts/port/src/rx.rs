@@ -1,7 +1,7 @@
 //! Receive metadata of one MPDU.
 
 use crate::Ieee80211Stamp;
-use oer_protocols_ieee80211_wire::frame::DecodedHeader;
+use oer_protocols_ieee80211_wire::frame::{DecodedHeader, HeaderFields};
 use oer_protocols_ieee80211_wire::{channel::Channel, phy::PhyRate};
 
 /// Provenance of one receive value.
@@ -80,6 +80,11 @@ pub trait RxBuffer {
     /// may decode it once when it takes the frame and give it again here,
     /// for its own bytes only: no reader decodes the variable layout again.
     fn header(&self) -> Option<DecodedHeader<'_>>;
+
+    /// The fields of [`Self::header`] a receiver's decisions read, `None`
+    /// alike, without building the whole header: a buffer that decoded it
+    /// once gives them from that decoding.
+    fn fields(&self) -> Option<HeaderFields>;
 }
 
 /// A received buffer moved out of the port's receive capacity to a network

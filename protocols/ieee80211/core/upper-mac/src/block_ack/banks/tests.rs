@@ -66,6 +66,11 @@ impl RxBuffer for Frame {
     fn header(&self) -> Option<DecodedHeader<'_>> {
         DecodedHeader::decode(&self.0)
     }
+
+    fn fields(&self) -> Option<oer_protocols_ieee80211_wire::frame::HeaderFields> {
+        self.header()
+            .map(|header| oer_protocols_ieee80211_wire::frame::HeaderFields::of(&header))
+    }
 }
 
 struct Types;
@@ -874,4 +879,46 @@ fn a_repeat_a_refusal_and_a_request_without_a_reply_place_each_record_their_outc
     );
     assert_eq!(records.last(), Some(&(3, 0, AddbaOutcome::Unanswered)));
     assert_eq!(records.len(), 4 + PENDING - 2 + 1);
+}
+
+/// The in-order MPDU of an agreement goes out at once by its header's
+/// fields alone, the window moving past it; an MPDU out of order, or one
+/// behind frames waiting in delivery order, changes nothing and takes the
+/// full receive, which then holds or releases it as without the try.
+#[test]
+fn an_immediate_take_moves_only_an_in_order_window_and_otherwise_changes_nothing() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
+        .unwrap();
+    let fields = |frame: &Frame| frame.fields().expect("a data header");
+    // The window starts at the agreement's first MPDU: in order.
+    let first = qos_data(0, 100);
+    assert!(view.take_immediate(now(2), LOCAL, fields(&first), &meta(), 30, &mut ()));
+    // 102 is out of order: no change, then the full receive holds it.
+    let later = qos_data(0, 102);
+    assert!(!view.take_immediate(now(3), LOCAL, fields(&later), &meta(), 30, &mut ()));
+    assert!(matches!(
+        view.receive(now(3), Some(LOCAL), later, meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    // 101 is the window's start, but 102 waits behind it: the try changes
+    // nothing, and the full receive releases both, in order.
+    let next = qos_data(0, 101);
+    assert!(!view.take_immediate(now(4), LOCAL, fields(&next), &meta(), 30, &mut ()));
+    assert!(matches!(
+        view.receive(now(4), Some(LOCAL), next, meta(), &mut ()),
+        RxDisposition::Retained
+    ));
+    // While they wait in delivery order, even the in-order 103 is no
+    // immediate take.
+    let after = qos_data(0, 103);
+    assert!(!view.take_immediate(now(5), LOCAL, fields(&after), &meta(), 30, &mut ()));
+    let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
+        .map(|(frame, _)| frame.0)
+        .collect();
+    assert_eq!(order, [qos_data(0, 101).0, qos_data(0, 102).0]);
+    // Delivery order empty again: 103 goes out at once.
+    assert!(view.take_immediate(now(6), LOCAL, fields(&after), &meta(), 30, &mut ()));
 }

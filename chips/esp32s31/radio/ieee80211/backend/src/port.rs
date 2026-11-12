@@ -792,6 +792,10 @@ impl<Id: SlotIdentity, R: ReceiveUnit> RxBuffer for ReceiveBuffer<'_, Id, R> {
     fn header(&self) -> Option<DecodedHeader<'_>> {
         self.header.as_ref()?.of(self.unit.bytes())
     }
+
+    fn fields(&self) -> Option<oer_protocols_ieee80211_wire::frame::HeaderFields> {
+        self.header.as_ref()?.fields(self.unit.bytes())
+    }
 }
 
 /// The evidence of a response. A successful completion carries its sample;

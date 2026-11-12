@@ -1413,6 +1413,10 @@ impl<Id: SlotIdentity> RxBuffer for ModelRxBuffer<'_, Id> {
     fn header(&self) -> Option<oer_protocols_ieee80211_wire::frame::DecodedHeader<'_>> {
         self.owner.header.as_ref()?.of(&self.owner.bytes)
     }
+
+    fn fields(&self) -> Option<oer_protocols_ieee80211_wire::frame::HeaderFields> {
+        self.owner.header.as_ref()?.fields(&self.owner.bytes)
+    }
 }
 impl<Id: SlotIdentity> core::fmt::Debug for ModelRxBuffer<'_, Id> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

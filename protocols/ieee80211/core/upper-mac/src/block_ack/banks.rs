@@ -9,6 +9,7 @@
 //! free to close a reorder hole.
 
 use oer_portable_events::{EventSink, report};
+use oer_protocols_ieee80211_wire::frame::HeaderFields;
 
 use super::{
     AddbaResponse, AddbaStatus, RxAddbaRequest, RxBlockAckNegotiation, RxBlockAckSession,
@@ -761,15 +762,9 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         meta: T::Meta,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
-        // The header once for the frame: its fields decide the deferral,
-        // the agreement and the order.
-        let fields = frame.header().map(|header| HeaderFields {
-            control: header.control(),
-            sequence_control: header.sequence_control(),
-            qos: header.qos(),
-            receiver: header.receiver(),
-            transmitter: header.transmitter(),
-        });
+        // The header's fields once for the frame, from the buffer's own
+        // decoding: they decide the deferral, the agreement and the order.
+        let fields = frame.fields();
         let action = fields.is_some_and(|fields| {
             !fields.control.is_data() && fields.control.subtype() == ACTION_SUBTYPE
         });
@@ -814,44 +809,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
             return RxDisposition::Recycle(frame);
         }
-        let key = fields.and_then(|header| {
-            let (_, bssid) = self.header.association?;
-            let control = header.control;
-            let fragment =
-                SequenceControl::from_bytes(header.sequence_control.to_le_bytes()).fragment();
-            // QoS Data subtypes 8 to 11 from the DS (IEEE Std 802.11-2020,
-            // 9.2.4.1.3, Table 9-1).
-            if !control.is_data()
-                || control.ds() != 2
-                || control.more_fragments()
-                || fragment != 0
-                || header.transmitter != bssid.get()
-                || header.receiver != local
-                || !matches!(control.subtype(), 8..=11)
-                || (control.protected()
-                    && !matches!(
-                        meta.common().crypto,
-                        RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)
-                            | RxEvidence::ProtocolValidated(
-                                RxCryptoStatus::DecryptedAndIntegrityVerified
-                            )
-                    ))
-            {
-                return None;
-            }
-            let tid = QosControl::from_bytes(header.qos?.to_le_bytes())
-                .tid()
-                .get();
-            let index = self.banks.iter().position(|bank| {
-                bank.active
-                    .as_ref()
-                    .is_some_and(|active| active.tid() == tid)
-            })?;
-            Some((
-                index,
-                SequenceNumber::from_sequence_control(header.sequence_control),
-            ))
-        });
+        let key = fields.and_then(|header| self.agreement_key(local, header, &meta));
         let Some((bank_index, sequence)) = key else {
             return RxDisposition::Deliver((frame, meta));
         };
@@ -931,6 +889,121 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         }
     }
 
+    /// The agreement a data MPDU of the link belongs to, by its `header`
+    /// and the integrity its `meta` names, with its sequence number: `None`
+    /// for a frame no agreement takes, which goes out as it is.
+    fn agreement_key(
+        &self,
+        local: [u8; 6],
+        header: HeaderFields,
+        meta: &T::Meta,
+    ) -> Option<(usize, SequenceNumber)> {
+        let (_, bssid) = self.header.association?;
+        let control = header.control;
+        let fragment =
+            SequenceControl::from_bytes(header.sequence_control.to_le_bytes()).fragment();
+        // QoS Data subtypes 8 to 11 from the DS (IEEE Std 802.11-2020,
+        // 9.2.4.1.3, Table 9-1).
+        if !control.is_data()
+            || control.ds() != 2
+            || control.more_fragments()
+            || fragment != 0
+            || header.transmitter != bssid.get()
+            || header.receiver != local
+            || !matches!(control.subtype(), 8..=11)
+            || (control.protected()
+                && !matches!(
+                    meta.common().crypto,
+                    RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)
+                        | RxEvidence::ProtocolValidated(
+                            RxCryptoStatus::DecryptedAndIntegrityVerified
+                        )
+                ))
+        {
+            return None;
+        }
+        let tid = QosControl::from_bytes(header.qos?.to_le_bytes())
+            .tid()
+            .get();
+        let index = self.banks.iter().position(|bank| {
+            bank.active
+                .as_ref()
+                .is_some_and(|active| active.tid() == tid)
+        })?;
+        Some((
+            index,
+            SequenceNumber::from_sequence_control(header.sequence_control),
+        ))
+    }
+
+    /// Take one received data MPDU of `bytes` octets at once, by its
+    /// header's `fields`, without taking the frame: no agreement takes it,
+    /// or it is its agreement's in-order MPDU and nothing waits in delivery
+    /// order. `true`: it goes out now, and its agreement's window moved
+    /// past it. `false`: nothing changed, and the frame takes
+    /// [`Self::receive`]. A frame other than data, before a link, always
+    /// takes [`Self::receive`].
+    pub fn take_immediate(
+        &mut self,
+        now: Instant,
+        local: [u8; 6],
+        fields: HeaderFields,
+        meta: &T::Meta,
+        bytes: usize,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) -> bool {
+        if !fields.control.is_data() || self.header.ready_len != 0 {
+            return false;
+        }
+        let contained = |events: &mut _| {
+            report(events, || {
+                let common = meta.common();
+                RxBlockAckEvent::Contained {
+                    ampdu: common.ampdu,
+                    s_mpdu: common.s_mpdu,
+                    bytes: u32::try_from(bytes).ok(),
+                }
+            });
+        };
+        let Some((bank_index, sequence)) = self.agreement_key(local, fields, meta) else {
+            contained(events);
+            return true;
+        };
+        // The immediate path still names a free slot, which the window's
+        // check reads: without one the frame takes the full receive.
+        let Some(slot) = self
+            .frames
+            .iter()
+            .position(Option::is_none)
+            .and_then(|slot| u8::try_from(slot).ok())
+        else {
+            return false;
+        };
+        let Some(active) = self
+            .banks
+            .get_mut(bank_index)
+            .and_then(|bank| bank.active.as_mut())
+        else {
+            return false;
+        };
+        if !matches!(
+            active.try_ingest_immediate(now, RxReorderMpdu { sequence, slot }),
+            Ok(true)
+        ) {
+            return false;
+        }
+        let tid = active.tid();
+        contained(events);
+        report(events, || RxBlockAckEvent::Reordered {
+            tid,
+            cause: ReorderCause::Receive,
+            held: 0,
+            released: 1,
+            missing: 0,
+        });
+        true
+    }
+
     fn bar(&self, bytes: &[u8], local: [u8; 6]) -> Option<(u8, SequenceNumber)> {
         let (_, bssid) = self.header.association?;
         let request = parse_compressed_block_ack_request(bytes)?;
@@ -939,16 +1012,6 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         }
         Some((request.tid, request.starting_sequence))
     }
-}
-
-/// The header fields a received frame's handling reads, decoded once.
-#[derive(Clone, Copy)]
-struct HeaderFields {
-    control: oer_protocols_ieee80211_wire::frame::FrameControl,
-    sequence_control: u16,
-    qos: Option<u16>,
-    receiver: [u8; 6],
-    transmitter: [u8; 6],
 }
 
 #[cfg(test)]

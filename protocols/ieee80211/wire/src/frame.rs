@@ -436,25 +436,7 @@ impl CheckedHeader {
     /// The decoded header of `frame`, when it is the frame this was checked
     /// against.
     pub fn of<'a>(&self, frame: &'a [u8]) -> Option<DecodedHeader<'a>> {
-        if frame.as_ptr().addr() != self.at || frame.len() != usize::from(self.length) {
-            return None;
-        }
-        // What decided the layout must still be in the bytes: a rewrite of
-        // the frame in place is another frame.
-        let field = |at: usize| -> Option<u16> {
-            Some(u16::from_le_bytes(*frame.get(at..)?.first_chunk::<2>()?))
-        };
-        let qos_at = if self.control.is_four_address() {
-            30
-        } else {
-            24
-        };
-        if field(0)? != self.control.get()
-            || field(22)? != self.sequence_control
-            || (self.has_qos && field(qos_at)? != self.qos)
-        {
-            return None;
-        }
+        self.is_of(frame)?;
         let address =
             |at: usize| -> Option<[u8; 6]> { frame.get(at..)?.first_chunk::<6>().copied() };
         let address4 = if self.control.is_four_address() {
@@ -496,6 +478,77 @@ impl CheckedHeader {
     /// The decoded `qos` field.
     pub const fn qos(&self) -> Option<u16> {
         if self.has_qos { Some(self.qos) } else { None }
+    }
+
+    /// The fields of `frame`'s header a receiver's decisions read, when it
+    /// is the frame this was checked against, as [`Self::of`] decides: the
+    /// decoded control, sequence and QoS fields, and the two addresses at
+    /// their fixed places (IEEE Std 802.11-2020, 9.3.2.1), without
+    /// decoding the header again.
+    pub fn fields(&self, frame: &[u8]) -> Option<HeaderFields> {
+        self.is_of(frame)?;
+        let address =
+            |at: usize| -> Option<[u8; 6]> { frame.get(at..)?.first_chunk::<6>().copied() };
+        Some(HeaderFields {
+            control: self.control,
+            sequence_control: self.sequence_control,
+            qos: self.qos(),
+            receiver: address(4)?,
+            transmitter: address(10)?,
+        })
+    }
+
+    /// `Some` when `frame` is the frame this was checked against: the same
+    /// place and length, and the fields that decided its layout still in
+    /// its bytes (a rewrite of the frame in place is another frame).
+    fn is_of(&self, frame: &[u8]) -> Option<()> {
+        if frame.as_ptr().addr() != self.at || frame.len() != usize::from(self.length) {
+            return None;
+        }
+        let field = |at: usize| -> Option<u16> {
+            Some(u16::from_le_bytes(*frame.get(at..)?.first_chunk::<2>()?))
+        };
+        let qos_at = if self.control.is_four_address() {
+            30
+        } else {
+            24
+        };
+        if field(0)? != self.control.get()
+            || field(22)? != self.sequence_control
+            || (self.has_qos && field(qos_at)? != self.qos)
+        {
+            return None;
+        }
+        Some(())
+    }
+}
+
+/// The fields of a received frame's header its receiver's decisions read:
+/// its kind, sequence, QoS field and the two addresses that place it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HeaderFields {
+    /// The frame control field.
+    pub control: FrameControl,
+    /// The sequence control field.
+    pub sequence_control: u16,
+    /// The QoS control field, for a QoS frame.
+    pub qos: Option<u16>,
+    /// The receiver address.
+    pub receiver: [u8; 6],
+    /// The transmitter address.
+    pub transmitter: [u8; 6],
+}
+
+impl HeaderFields {
+    /// The fields of a decoded header.
+    pub const fn of(header: &DecodedHeader<'_>) -> Self {
+        Self {
+            control: header.control,
+            sequence_control: header.sequence_control,
+            qos: header.qos,
+            receiver: header.receiver,
+            transmitter: header.transmitter,
+        }
     }
 }
 

@@ -302,7 +302,13 @@ where
                         report(&mut self.events, || {
                             ServiceEvent::RxFrameDropped(RxDrop::Draining)
                         });
+                    } else if self.immediate(&frame, &meta, network) {
+                        // The ordinary data MPDU the agreements let out at
+                        // once: routed in its position, never moved through
+                        // the agreements.
+                        self.route(frame, meta, lifecycle, network)?;
                     } else {
+                        // Anything else: its own handler, in its position.
                         self.received(frame, meta, lifecycle, network)?;
                     }
                     if self.receive.has_ready() && self.holds_back(network) {
@@ -398,6 +404,42 @@ where
             self.route(frame, meta, lifecycle, network)?;
         }
         Ok(())
+    }
+
+    /// Whether `frame` is an ordinary data MPDU of the link that goes out at
+    /// once: nothing waits in delivery order, the network takes it, and its
+    /// agreement, if any, takes it in order ([`RxBlockAckView::take_immediate`],
+    /// which then moved the window past it). The frame stays the caller's;
+    /// `false` changed nothing. The link's own checks (association, key,
+    /// replay, delivery) stay its, at the frame's route.
+    fn immediate<NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies>(
+        &mut self,
+        frame: &ActorRxBuffer<'id, D>,
+        meta: &ActorRxMeta<'id, D>,
+        network: &NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
+    ) -> bool {
+        let Some(local) = self
+            .link
+            .as_ref()
+            .filter(|link| link.carries())
+            .map(|link| link.rx().address().get())
+        else {
+            return false;
+        };
+        if self.receive.has_ready() || self.holds_back(network) {
+            return false;
+        }
+        let Some(fields) = frame.fields() else {
+            return false;
+        };
+        self.receive.take_immediate(
+            self.now,
+            local,
+            fields,
+            meta,
+            frame.bytes().len(),
+            &mut self.events,
+        )
     }
 
     /// Take one received unit: reorder it or hand it on, after the frames
