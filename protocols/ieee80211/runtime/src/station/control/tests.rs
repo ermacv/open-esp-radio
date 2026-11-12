@@ -120,13 +120,13 @@ fn neutral_tx_refusal_returns_the_original_owner_and_consumes_no_queue_credit() 
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
     let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
-    let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
+    let mut rx = oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, mut receiver) = tx.split(|| None);
     let (mut returned, back) = back.split(|| None);
-    let (_, receive) = rx.split();
+    let (_, receive) = rx.split(|| None);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
     let supply = Supply::with(2);
@@ -245,13 +245,13 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
     let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
-    let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
+    let mut rx = oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (mut control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, _) = tx.split(|| None);
     let (_, back) = back.split(|| None);
-    let (received, receive) = rx.split();
+    let (mut received, receive) = rx.split(|| None);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (copy, copied) = copies.split();
     let mut device: Device<'_, _, 1> = Device::new(receive, copied, &state);
@@ -306,9 +306,12 @@ fn network_link_wakes_on_events_and_keeps_the_cores_epoch() {
     assert!(copy.try_send(frame).is_ok());
     assert!(
         received
-            .try_send(Received::Copied(CopiedMark::new(
-                oer_protocols_network_port::CopyReason::Format
-            )))
+            .try_send_with(|slot| {
+                *slot = Some(Received::Copied(CopiedMark::new(
+                    oer_protocols_network_port::CopyReason::Format,
+                )));
+                Ok::<_, core::convert::Infallible>(())
+            })
             .is_ok()
     );
     assert!(device.poll_receive_ready(&mut cx).is_ready());
@@ -355,13 +358,13 @@ fn a_network_frame_requests_the_priority_of_its_marking() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
     let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
-    let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
+    let mut rx = oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, mut receiver) = tx.split(|| None);
     let (_, back) = back.split(|| None);
-    let (_, receive) = rx.split();
+    let (_, receive) = rx.split(|| None);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
     let _device: Device<'_, ModelLentRx, 1> = Device::new(receive, copied, &state);
@@ -723,7 +726,7 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     let mut back =
         WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1, Side, Side>::across_harts(network, station);
     let mut rx =
-        WakingSpscQueue::<Received<ModelLentRx>, 1, Side, Side>::across_harts(network, station);
+        oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, 1, Side, Side>::across_harts(network, station);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH, Side, Side>::across_harts(
         network, station,
     );
@@ -737,7 +740,7 @@ fn a_network_end_across_harts_waits_on_its_side_and_tells_the_station_s() {
     );
     let (sender, mut transmitted) = tx.split(|| None);
     let (mut returned, back) = back.split(|| None);
-    let (_, receive) = rx.split();
+    let (_, receive) = rx.split(|| None);
     let (_, copied) = copies.split();
     let mut device: Device<'_, ModelLentRx, 1, Two> = Device::new(receive, copied, &state);
     let mut transmit: DeviceTransmit<'_, Frame, Supply, 1, Two> =
@@ -895,13 +898,13 @@ fn a_frame_lost_with_its_memory_is_accepted_and_reaches_no_station() {
     let mut commands = WakingSpscQueue::<ServiceCommand<()>, 1>::new();
     let mut tx = WakingSlotQueue::<Option<Outgoing<Vec<u8>>>, 1>::new();
     let mut back = WakingSlotQueue::<Option<TxEnded<Vec<u8>>>, 1>::new();
-    let mut rx = WakingSpscQueue::<Received<ModelLentRx>, 1>::new();
+    let mut rx = oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, 1>::new();
     let state = State::new();
     let (sender, _) = commands.split();
     let (_control, _runner) = Control::new(sender, &state).unwrap();
     let (sender, mut receiver) = tx.split(|| None);
     let (_, back) = back.split(|| None);
-    let (_, receive) = rx.split();
+    let (_, receive) = rx.split(|| None);
     let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
     let (_, copied) = copies.split();
     let _device: Device<'_, ModelLentRx, 1> = Device::new(receive, copied, &state);

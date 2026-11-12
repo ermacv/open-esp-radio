@@ -401,6 +401,10 @@ pub enum ActorViolation {
     PairwiseCustody,
     /// The receive reordering lost its delivery order.
     ReorderOverflow,
+    /// The network's receive queue took an MSDU in a slot and lost the
+    /// slot's index, which its free index excludes: the MSDU stays in its
+    /// slot, unpublished.
+    NetworkQueueLost,
 }
 
 /// How the actor's run ended.
@@ -475,8 +479,9 @@ pub struct NetworkEnds<
     pub transmit: SlotReceiver<'c, Option<Outgoing<M>>, TX_DEPTH, N::Station, N::Network>,
     /// The network's memory, back once its MSDU ended, with its cost.
     pub returned: SlotSender<'c, Option<TxEnded<M>>, TX_DEPTH, N::Network, N::Station>,
-    /// The MSDUs received for the network stack.
-    pub receive: WakingSpscSender<'c, Received<L>, RX_DEPTH, N::Network, N::Station>,
+    /// The MSDUs received for the network stack, each in a slot of its
+    /// own: a turn stages them and publishes them at once ([`SlotSender::flush`]).
+    pub receive: SlotSender<'c, Option<Received<L>>, RX_DEPTH, N::Network, N::Station>,
     /// The copies `receive`'s marks stand for.
     pub receive_copied:
         WakingSpscSender<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,

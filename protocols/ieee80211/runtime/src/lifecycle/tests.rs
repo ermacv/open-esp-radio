@@ -417,7 +417,8 @@ struct World<'b> {
     security: StaSecurity,
     stack: RefCell<SlotSender<'b, Option<Outgoing<Memory>>, TX_DEPTH>>,
     returned: RefCell<SlotReceiver<'b, Option<crate::station::TxEnded<Memory>>, TX_DEPTH>>,
-    delivered: RefCell<WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>>,
+    delivered:
+        RefCell<oer_portable_memory::SlotReceiver<'b, Option<Received<ModelLentRx>>, RX_DEPTH>>,
     copies: RefCell<WakingSpscReceiver<'b, EthernetFrame, RX_COPIED_DEPTH>>,
     /// The lifecycle task's waker.
     lifecycle: Arc<Flag>,
@@ -719,7 +720,13 @@ impl<'b> World<'b> {
             bytes
         };
         let mut frames = Vec::new();
-        while let Some(received) = self.delivered.borrow().try_receive() {
+        while let Some(received) = self
+            .delivered
+            .borrow_mut()
+            .try_receive_with(Option::take)
+            .ok()
+            .flatten()
+        {
             frames.push(match received {
                 Received::Lent(frame) => {
                     self.lent.set(self.lent.get() + 1);
@@ -1022,7 +1029,8 @@ fn pair_with<const G: usize>(
         let mut transmit_queue = WakingSlotQueue::<Option<Outgoing<Memory>>, TX_DEPTH>::new();
         let mut returned_queue =
             WakingSlotQueue::<Option<crate::station::TxEnded<Memory>>, TX_DEPTH>::new();
-        let mut receive_queue = WakingSpscQueue::<Received<ModelLentRx>, RX_DEPTH>::new();
+        let mut receive_queue =
+            oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, RX_DEPTH>::new();
         let mut copies_queue = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
         let mut command_queue =
             WakingSpscQueue::<crate::station::ServiceCommand<ModelCaps24>, COMMANDS>::new();
@@ -1035,7 +1043,7 @@ fn pair_with<const G: usize>(
         let (link_return_end, link_return) = link_return_queue.split();
         let (stack, transmit_end) = transmit_queue.split(|| None);
         let (returned_end, returned) = returned_queue.split(|| None);
-        let (receive_end, delivered) = receive_queue.split();
+        let (receive_end, delivered) = receive_queue.split(|| None);
         let (copies_end, copies) = copies_queue.split();
         let (application, commands) = command_queue.split();
         let state = State::new();

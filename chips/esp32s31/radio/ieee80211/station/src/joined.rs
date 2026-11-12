@@ -858,7 +858,7 @@ fn joined_with<T: 'static>(
             commands: WakingSpscQueue::new(),
             tx: WakingSlotQueue::new(),
             returned: WakingSlotQueue::new(),
-            rx: WakingSpscQueue::new(),
+            rx: WakingSlotQueue::new(),
             rx_copied: WakingSpscQueue::new(),
             state: runtime::State::new(),
         });

@@ -133,7 +133,15 @@ fn a_network_returning_a_loan_every_9_ms_does_not_extend_the_bound() {
                 assert_eq!(world.air.pending_rx(), 12 - MODEL_RX_EVENTS);
                 // The network takes and drops one frame, returning its loan.
                 let returns_one = |world: &World<'_>| {
-                    assert!(world.delivered.borrow().try_receive().is_some());
+                    assert!(
+                        world
+                            .delivered
+                            .borrow_mut()
+                            .try_receive_with(Option::take)
+                            .ok()
+                            .flatten()
+                            .is_some()
+                    );
                 };
                 world.advance_by(Duration::from_millis(9));
                 returns_one(world);
@@ -198,7 +206,15 @@ fn a_deferred_continuation_after_a_return_does_not_restart_the_bound() {
                     oer_portable_time::Clock::now(&*world.clock)
                         .saturating_add(Duration::from_micros(500)),
                 );
-                assert!(world.delivered.borrow().try_receive().is_some());
+                assert!(
+                    world
+                        .delivered
+                        .borrow_mut()
+                        .try_receive_with(Option::take)
+                        .ok()
+                        .flatten()
+                        .is_some()
+                );
                 world.settle().await;
                 assert_eq!(actions(world), before, "still within the bound");
                 world.advance_by(Duration::from_micros(500));

@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::vec::Vec;
 
 use oer_chips_family_radio_ieee80211_policy::rate_selection::EspressifRateSelection;
-use oer_portable_memory::{ClosingSpscQueue, WakingSlotQueue, WakingSpscQueue, WakingSpscReceiver};
+use oer_portable_memory::{ClosingSpscQueue, WakingSlotQueue, WakingSpscQueue};
 use oer_portable_time::Clock;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{
@@ -197,7 +197,7 @@ struct Bench<'b, 's> {
     link_return: ClosingSpscReceiver<'b, LinkReturn, 1>,
     transmit: SlotSender<'b, Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>,
     returned: SlotReceiver<'b, Option<TxEnded<ModelNetworkMemory>>, TX_DEPTH>,
-    receive: WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>,
+    receive: oer_portable_memory::SlotReceiver<'b, Option<Received<ModelLentRx>>, RX_DEPTH>,
     tickets: Vec<ActorTicket<'s, P<'s>>>,
     small: Vec<ActorStationBuffer<'s, P<'s>>>,
     commands: ModelCommands<'s, LocalId<'s>, ModelCaps24, Contexts>,
@@ -488,7 +488,8 @@ fn bench_then(
             WakingSlotQueue::<Option<Outgoing<ModelNetworkMemory>>, TX_DEPTH>::new();
         let mut returned_queue =
             WakingSlotQueue::<Option<TxEnded<ModelNetworkMemory>>, TX_DEPTH>::new();
-        let mut receive_queue = WakingSpscQueue::<Received<ModelLentRx>, RX_DEPTH>::new();
+        let mut receive_queue =
+            oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, RX_DEPTH>::new();
         let mut copies_queue = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
         let (to_actor, to_actor_end) = to_queue.split();
         let (_parcels, parcels_end) = parcel_queue.split();
@@ -499,7 +500,7 @@ fn bench_then(
         let (link_return_end, link_return) = link_return_queue.split();
         let (transmit, transmit_end) = transmit_queue.split(|| None);
         let (returned_end, returned) = returned_queue.split(|| None);
-        let (receive_end, receive) = receive_queue.split();
+        let (receive_end, receive) = receive_queue.split(|| None);
         let (copies_end, _copies) = copies_queue.split();
         let mut lifecycle = LifecycleEnds {
             to_actor: to_actor_end,
@@ -708,7 +709,7 @@ fn received_data_reaches_the_network_without_the_lifecycle() {
         bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
         bench.settle();
         assert!(matches!(
-            bench.receive.try_receive(),
+            bench.receive.try_receive_with(Option::take).ok().flatten(),
             Some(Received::Lent(_))
         ));
         assert!(bench.next().is_none(), "no lifecycle message");
@@ -728,7 +729,12 @@ fn a_frame_whose_header_does_not_decode_goes_to_the_station_whole() {
         bench.air.receive(short, meta());
         bench.settle();
         assert!(
-            bench.receive.try_receive().is_none(),
+            bench
+                .receive
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_none(),
             "nothing for the network"
         );
         let Some(FromActor::Received { frame, .. }) = bench.next() else {
@@ -784,13 +790,26 @@ fn a_frame_held_for_reorder_is_delivered_by_the_link_at_its_release() {
         rx_agreement(bench, epoch);
         bench.air.receive(&qos_data_from_ap(101, &[1; 4]), meta());
         bench.settle();
-        assert!(bench.receive.try_receive().is_none(), "101 waits for 100");
+        assert!(
+            bench
+                .receive
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_none(),
+            "101 waits for 100"
+        );
         bench.send(ToActor::Hold);
         bench.settle();
         bench.air.receive(&qos_data_from_ap(100, &[2; 4]), meta());
         bench.settle();
         assert!(
-            bench.receive.try_receive().is_none(),
+            bench
+                .receive
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_none(),
             "a link that carries nothing delivers no released frame"
         );
         assert!(
@@ -803,10 +822,18 @@ fn a_frame_held_for_reorder_is_delivered_by_the_link_at_its_release() {
         bench.advance(200_000);
         bench.settle();
         assert!(matches!(
-            bench.receive.try_receive(),
+            bench.receive.try_receive_with(Option::take).ok().flatten(),
             Some(Received::Lent(_))
         ));
-        assert!(bench.receive.try_receive().is_none(), "once");
+        assert!(
+            bench
+                .receive
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_none(),
+            "once"
+        );
     });
 }
 
@@ -824,14 +851,27 @@ fn a_frame_expires_from_reorder_while_the_link_is_still_held() {
         rx_agreement(bench, epoch);
         bench.air.receive(&qos_data_from_ap(101, &[1; 4]), meta());
         bench.settle();
-        assert!(bench.receive.try_receive().is_none(), "101 waits for 100");
+        assert!(
+            bench
+                .receive
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_none(),
+            "101 waits for 100"
+        );
 
         bench.send(ToActor::Hold);
         // The window lets 101 go while delivery is forbidden.
         bench.advance(200_000);
         bench.settle();
         assert!(
-            bench.receive.try_receive().is_none(),
+            bench
+                .receive
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_none(),
             "101 does not inherit its arrival's permission"
         );
         while let Some(message) = bench.next() {
@@ -845,7 +885,12 @@ fn a_frame_expires_from_reorder_while_the_link_is_still_held() {
         bench.advance(200_000);
         bench.settle();
         assert!(
-            bench.receive.try_receive().is_none(),
+            bench
+                .receive
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_none(),
             "101 ended under the hold and is not delivered again"
         );
         assert!(
@@ -880,7 +925,7 @@ fn a_turn_s_received_data_wakes_a_waiting_network() {
         bench.settle();
         assert_eq!(woken.0.load(Ordering::Relaxed), 1);
         assert!(matches!(
-            bench.receive.try_receive(),
+            bench.receive.try_receive_with(Option::take).ok().flatten(),
             Some(Received::Lent(_))
         ));
     });
@@ -901,7 +946,7 @@ fn a_unit_landing_behind_the_queued_handover_is_routed_under_the_link() {
         bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
         bench.settle();
         assert!(matches!(
-            bench.receive.try_receive(),
+            bench.receive.try_receive_with(Option::take).ok().flatten(),
             Some(Received::Lent(_))
         ));
         assert!(bench.next().is_none(), "nothing went to the lifecycle");
@@ -935,7 +980,7 @@ fn the_networks_lend_limit_holds_frames_until_its_bound_then_the_ring_is_walked(
         };
         bench.send(ToActor::Recycle(frame));
         let mut queued = Vec::new();
-        while let Some(frame) = bench.receive.try_receive() {
+        while let Some(frame) = bench.receive.try_receive_with(Option::take).ok().flatten() {
             queued.push(frame);
         }
         assert_eq!(
@@ -961,7 +1006,7 @@ fn the_networks_lend_limit_holds_frames_until_its_bound_then_the_ring_is_walked(
         }
         bench.settle();
         let mut again = 0;
-        while let Some(frame) = bench.receive.try_receive() {
+        while let Some(frame) = bench.receive.try_receive_with(Option::take).ok().flatten() {
             assert!(matches!(frame, Received::Lent(_)));
             again += 1;
         }
@@ -1418,7 +1463,7 @@ fn a_retiring_stop_waits_for_the_network_and_not_for_its_lent_units() {
         bench.connect(link(true, None));
         bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
         bench.settle();
-        let held = bench.receive.try_receive();
+        let held = bench.receive.try_receive_with(Option::take).ok().flatten();
         assert!(matches!(held, Some(Received::Lent(_))));
         retire(bench, 50);
         bench.advance(1);
@@ -1496,7 +1541,7 @@ fn a_lost_network_participant_holding_a_lent_unit_ends_the_stop_and_counts_it() 
         bench.connect(link(true, None));
         bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
         bench.settle();
-        let held = bench.receive.try_receive();
+        let held = bench.receive.try_receive_with(Option::take).ok().flatten();
         assert!(matches!(held, Some(Received::Lent(_))));
         while bench.next().is_some() {}
         retire(bench, 50);
@@ -1958,7 +2003,10 @@ fn ring_work_beyond_one_pull_reposts_the_actor() {
         bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
         bench.settle();
         assert!(
-            matches!(bench.receive.try_receive(), Some(Received::Lent(_))),
+            matches!(
+                bench.receive.try_receive_with(Option::take).ok().flatten(),
+                Some(Received::Lent(_))
+            ),
             "the next turn pulled the ring on"
         );
     });
@@ -1979,7 +2027,14 @@ fn a_passed_port_deadline_hides_no_later_receive_continuation() {
         bench.air.defer_receive(at);
         bench.air.receive(&data_from_ap(1, &[9, 9, 9, 9]), meta());
         bench.settle();
-        assert!(bench.receive.try_receive().is_none());
+        assert!(
+            bench
+                .receive
+                .try_receive_with(Option::take)
+                .ok()
+                .flatten()
+                .is_none()
+        );
         assert_eq!(
             bench.clock.inner.next_deadline(),
             Some(at),
@@ -1995,7 +2050,7 @@ fn a_passed_port_deadline_hides_no_later_receive_continuation() {
         assert!(bench.wakes() > wakes, "the alarm woke the actor");
         bench.settle();
         assert!(matches!(
-            bench.receive.try_receive(),
+            bench.receive.try_receive_with(Option::take).ok().flatten(),
             Some(Received::Lent(_))
         ));
     });
@@ -2015,7 +2070,9 @@ fn a_unit_that_lands_during_a_turn_takes_a_repost() {
             .receive_during_pull(&data_from_ap(2, &[2, 2, 2, 2]), meta());
         bench.settle();
         let mut lent = 0;
-        while let Some(Received::Lent(_)) = bench.receive.try_receive() {
+        while let Some(Received::Lent(_)) =
+            bench.receive.try_receive_with(Option::take).ok().flatten()
+        {
             lent += 1;
         }
         assert_eq!(lent, 2, "the repost pulled the landed unit");

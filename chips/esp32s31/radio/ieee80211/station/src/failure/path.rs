@@ -517,6 +517,7 @@ fn actor_violation(
         V::LinkReturn => "LinkReturn",
         V::PairwiseCustody => "PairwiseCustody",
         V::ReorderOverflow => "ReorderOverflow",
+        V::NetworkQueueLost => "NetworkQueueLost",
     }
 }
 

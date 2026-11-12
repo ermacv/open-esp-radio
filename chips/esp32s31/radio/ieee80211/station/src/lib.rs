@@ -606,7 +606,7 @@ pub struct Channels<N: Notifies, M> {
         Net<N>,
         Station<N>,
     >,
-    rx: WakingSpscQueue<Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
+    rx: oer_portable_memory::WakingSlotQueue<Option<Frame<N>>, RX_DEPTH, Net<N>, Station<N>>,
     rx_copied: WakingSpscQueue<EthernetCopy, { runtime::RX_COPIED_DEPTH }, Net<N>, Station<N>>,
     state: runtime::State<Ch<N>>,
 }
@@ -624,7 +624,7 @@ impl<M> Channels<SameHart, M> {
             commands: WakingSpscQueue::new(),
             tx: oer_portable_memory::WakingSlotQueue::new(),
             returned: oer_portable_memory::WakingSlotQueue::new(),
-            rx: WakingSpscQueue::new(),
+            rx: oer_portable_memory::WakingSlotQueue::new(),
             rx_copied: WakingSpscQueue::new(),
             state: runtime::State::new(),
         }
@@ -648,7 +648,7 @@ where
             commands: WakingSpscQueue::new(),
             tx: oer_portable_memory::WakingSlotQueue::across_harts(station, network),
             returned: oer_portable_memory::WakingSlotQueue::across_harts(network, station),
-            rx: WakingSpscQueue::across_harts(network, station),
+            rx: oer_portable_memory::WakingSlotQueue::across_harts(network, station),
             rx_copied: WakingSpscQueue::across_harts(network, station),
             state: runtime::State::across_harts(network),
         }
@@ -675,7 +675,7 @@ impl<N: Notifies, M> Channels<N, M> {
         let (send, commands) = self.commands.split();
         let (tx, station_transmit) = self.tx.split(|| None);
         let (returned, back) = self.returned.split(|| None);
-        let (receive, rx) = self.rx.split();
+        let (receive, rx) = self.rx.split(|| None);
         let (receive_copied, rx_copied) = self.rx_copied.split();
         let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
         let network = runtime::Device::new(rx, rx_copied, &self.state);
@@ -753,7 +753,7 @@ struct ActorConnection<'a, N: Notifies, M> {
         Net<N>,
         Station<N>,
     >,
-    receive: oer_portable_memory::WakingSpscSender<'a, Frame<N>, RX_DEPTH, Net<N>, Station<N>>,
+    receive: oer_portable_memory::SlotSender<'a, Option<Frame<N>>, RX_DEPTH, Net<N>, Station<N>>,
     receive_copied: oer_portable_memory::WakingSpscSender<
         'a,
         EthernetCopy,

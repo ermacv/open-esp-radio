@@ -87,6 +87,10 @@ fn count(refused: &mut RxMsdusRefused, refusal: Option<Refusal>) {
 
 /// Copy one received MSDU of `frame` to the network queue; a refusal
 /// returns its reason.
+///
+/// # Errors
+///
+/// A lost slot of the network queue ([`stage`]).
 fn copy_received<
     L,
     NS: NetworkStop,
@@ -95,31 +99,37 @@ fn copy_received<
     N: Notifies,
     M,
 >(
-    network: &NetworkEnds<'_, M, L, NS, TX_DEPTH, RX_DEPTH, N>,
+    network: &mut NetworkEnds<'_, M, L, NS, TX_DEPTH, RX_DEPTH, N>,
     frame: &[u8],
     plan: &MsduPlan,
     reason: CopyReason,
-) -> Option<Refusal> {
+) -> Result<Option<Refusal>, ActorViolation> {
     // The mark follows its copy: room for both, or neither is sent.
     if network.receive.free_capacity() == 0 || network.receive_copied.free_capacity() == 0 {
-        return Some(Refusal::QueueFull);
+        return Ok(Some(Refusal::QueueFull));
     }
     match EthernetFrame::copy_planned(frame, plan) {
-        Ok(frame) => (network.receive_copied.try_send(frame).is_err()
-            || network
-                .receive
-                .try_send_held(Received::Copied(CopiedMark::new(reason)))
-                .is_err())
-        .then_some(Refusal::QueueFull),
+        Ok(frame) => {
+            if network.receive_copied.try_send(frame).is_err() {
+                return Ok(Some(Refusal::QueueFull));
+            }
+            Ok(stage(network, Received::Copied(CopiedMark::new(reason)))?
+                .is_err()
+                .then_some(Refusal::QueueFull))
+        }
         // The link located the payload in this frame.
         Err(PlannedCopyError::TooLong(_) | PlannedCopyError::OutsideFrame) => {
-            Some(Refusal::TooLong)
+            Ok(Some(Refusal::TooLong))
         }
     }
 }
 
 /// Hand one lent MSDU to the network queue; a refusal drops the lent
 /// buffer, which returns it to the port, and returns its reason.
+///
+/// # Errors
+///
+/// A lost slot of the network queue ([`stage`]).
 fn queue_lent<
     L: LentRxBuffer,
     NS: NetworkStop,
@@ -128,10 +138,10 @@ fn queue_lent<
     N: Notifies,
     M,
 >(
-    network: &NetworkEnds<'_, M, L, NS, TX_DEPTH, RX_DEPTH, N>,
+    network: &mut NetworkEnds<'_, M, L, NS, TX_DEPTH, RX_DEPTH, N>,
     lent: L,
     plan: MsduPlan,
-) -> Option<Refusal> {
+) -> Result<Option<Refusal>, ActorViolation> {
     let MsduPlan {
         destination,
         source,
@@ -139,16 +149,38 @@ fn queue_lent<
         payload,
     } = plan;
     if payload.len() > MAX_ETHERNET_PAYLOAD_LEN {
-        return Some(Refusal::TooLong);
+        return Ok(Some(Refusal::TooLong));
     }
     match LentFrame::new(NetworkRx(lent), destination, source, ether_type, payload) {
-        Ok(frame) => network
-            .receive
-            .try_send_held(Received::Lent(frame))
+        Ok(frame) => Ok(stage(network, Received::Lent(frame))?
             .is_err()
-            .then_some(Refusal::QueueFull),
+            .then_some(Refusal::QueueFull)),
         // The payload lies in the MPDU, which starts the lent storage.
-        Err(_storage) => Some(Refusal::TooLong),
+        Err(_storage) => Ok(Some(Refusal::TooLong)),
+    }
+}
+
+/// Stage one received MSDU in its own slot of the network queue, published
+/// with the turn's others at its flush. A full queue gives the MSDU back;
+/// a dropped lent buffer returns to the port.
+///
+/// # Errors
+///
+/// The queue took the MSDU into a slot and lost its index
+/// ([`ActorViolation::NetworkQueueLost`]).
+fn stage<L, NS: NetworkStop, const TX_DEPTH: usize, const RX_DEPTH: usize, N: Notifies, M>(
+    network: &mut NetworkEnds<'_, M, L, NS, TX_DEPTH, RX_DEPTH, N>,
+    received: Received<L>,
+) -> Result<Result<(), Received<L>>, ActorViolation> {
+    let mut received = Some(received);
+    let staged = network.receive.try_stage_with(|slot| {
+        *slot = received.take();
+        Ok::<_, core::convert::Infallible>(())
+    });
+    match (staged, received) {
+        (Ok(()), None) => Ok(Ok(())),
+        (_, Some(received)) => Ok(Err(received)),
+        (Err(_), None) => Err(ActorViolation::NetworkQueueLost),
     }
 }
 
@@ -496,6 +528,9 @@ where
         let mut eapol: Option<(core::ops::Range<u16>, EapolProtection)> = None;
         let mut eapols = 0_u8;
         let takes = network.network.takes_frames();
+        // A lost slot of the network queue, which ends the turn after the
+        // frame's other MSDUs.
+        let mut lost: Option<ActorViolation> = None;
         let routed = {
             let bytes = frame.bytes();
             let deliver = |delivery: MsduDelivery<'_>| {
@@ -509,11 +544,16 @@ where
                     first = Some(delivery.plan());
                 } else {
                     several = true;
-                    let earlier = first
-                        .take()
-                        .map(|plan| copy_received(network, bytes, &plan, CopyReason::Format));
-                    let refusal =
-                        copy_received(network, bytes, &delivery.plan(), CopyReason::Format);
+                    let mut copy = |plan: &MsduPlan| {
+                        copy_received(network, bytes, plan, CopyReason::Format).unwrap_or_else(
+                            |violation| {
+                                lost = Some(violation);
+                                Some(Refusal::QueueFull)
+                            },
+                        )
+                    };
+                    let earlier = first.take().map(|plan| copy(&plan));
+                    let refusal = copy(&delivery.plan());
                     if counted {
                         for refusal in earlier.into_iter().chain([refusal]) {
                             count(&mut refused, refusal);
@@ -543,7 +583,8 @@ where
             Some((payload, protection)) => {
                 // The frame goes to the lifecycle: its data MSDU is copied.
                 if let Some(plan) = first.take() {
-                    let refusal = copy_received(network, frame.bytes(), &plan, CopyReason::Format);
+                    let refusal = copy_received(network, frame.bytes(), &plan, CopyReason::Format)
+                        .map_err(ActorFault::Contract)?;
                     if counted {
                         count(&mut refused, refusal);
                         copied.shared = copied.shared.saturating_add(1);
@@ -562,7 +603,9 @@ where
                 None => self.recycle(frame)?,
                 Some(plan) => {
                     let refusal = match self.port.lend(frame) {
-                        Ok(lent) => queue_lent(network, lent, plan),
+                        Ok(lent) => {
+                            queue_lent(network, lent, plan).map_err(ActorFault::Contract)?
+                        }
                         // The network holds all the port may lend: the
                         // frame was admitted and reordered, its MSDU is
                         // refused and its buffer goes back at once.
@@ -579,7 +622,8 @@ where
                             reason: LendRefusal::Unsupported | LendRefusal::Stopping,
                         }) => {
                             let refusal =
-                                copy_received(network, buffer.bytes(), &plan, CopyReason::Pressure);
+                                copy_received(network, buffer.bytes(), &plan, CopyReason::Pressure)
+                                    .map_err(ActorFault::Contract)?;
                             if counted {
                                 copied.kept = copied.kept.saturating_add(1);
                             }
@@ -610,13 +654,61 @@ where
             // point sends no more.
             report(&mut self.events, || ActorEvent::LaneFull);
         }
-        Ok(())
+        // The frame went where it goes; a lost slot ends the run named.
+        lost.map_or(Ok(()), |violation| Err(ActorFault::Contract(violation)))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The MSDUs a turn stages stay unseen by the network until the turn's
+    /// one publication, which gives them all, in order.
+    #[test]
+    fn staged_msdus_are_published_together_at_the_flush() {
+        use crate::station::NoNetwork;
+        use crate::station::{Outgoing, TxEnded};
+        use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
+        use oer_protocols_ieee80211_testing_model::ModelLentRx;
+        const DEPTH: usize = 4;
+        let mut transmit = WakingSlotQueue::<Option<Outgoing<()>>, DEPTH>::new();
+        let mut returned = WakingSlotQueue::<Option<TxEnded<()>>, DEPTH>::new();
+        let mut receive = WakingSlotQueue::<Option<Received<ModelLentRx>>, DEPTH>::new();
+        let mut copies = WakingSpscQueue::<EthernetFrame, RX_COPIED_DEPTH>::new();
+        let (_transmit, transmit_end) = transmit.split(|| None);
+        let (returned_end, _returned) = returned.split(|| None);
+        let (receive_end, mut network_receive) = receive.split(|| None);
+        let (copies_end, _copies) = copies.split();
+        let stop = NoNetwork;
+        let mut network = NetworkEnds::<_, _, _, DEPTH, DEPTH> {
+            transmit: transmit_end,
+            returned: returned_end,
+            receive: receive_end,
+            receive_copied: copies_end,
+            network: &stop,
+        };
+        let reasons = [CopyReason::Format, CopyReason::Pressure, CopyReason::Format];
+        for reason in reasons {
+            assert!(matches!(
+                stage(&mut network, Received::Copied(CopiedMark::new(reason))),
+                Ok(Ok(()))
+            ));
+        }
+        assert!(
+            network_receive.is_empty(),
+            "nothing published before the flush"
+        );
+        network.receive.flush();
+        for reason in reasons {
+            let Ok(Some(Received::Copied(mark))) = network_receive.try_receive_with(Option::take)
+            else {
+                panic!("the staged mark, in order");
+            };
+            assert_eq!(CopiedMark::reason(&mark), reason);
+        }
+        assert!(network_receive.is_empty());
+    }
 
     #[test]
     fn msdu_refusals_of_one_frame_aggregate_by_reason_whatever_their_order() {

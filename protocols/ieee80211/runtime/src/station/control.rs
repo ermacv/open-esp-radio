@@ -608,7 +608,7 @@ pub enum TxRefused<P> {
 /// receive half. `L` is the port's lent receive buffer
 /// ([`DatapathPort::LentRx`](crate::datapath::DatapathPort::LentRx)).
 pub struct Device<'c, L, const RX: usize, N: Notifies = SameHart> {
-    receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
+    receive: SlotReceiver<'c, Option<Received<L>>, RX, N::Network, N::Station>,
     copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
     link: &'c super::NetworkLink<N::NetworkWaker>,
     /// The link last observed.
@@ -618,7 +618,7 @@ impl<'c, L, const RX: usize, N: Notifies> Device<'c, L, RX, N> {
     /// The network end over the station's receive channels and `state`'s
     /// link.
     pub fn new(
-        receive: WakingSpscReceiver<'c, Received<L>, RX, N::Network, N::Station>,
+        receive: SlotReceiver<'c, Option<Received<L>>, RX, N::Network, N::Station>,
         copied: WakingSpscReceiver<'c, EthernetFrame, RX_COPIED_DEPTH, N::Network, N::Station>,
         state: &'c State<N>,
     ) -> Self {
@@ -654,8 +654,12 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         core::pin::pin!(self.receive.ready()).poll(cx)
     }
+    /// The oldest frame, its slot freed for the actor at once. A slot the
+    /// queue lost, which its indices exclude, reads as no frame, as the
+    /// transmit return queue's does: the receive contract has no fault to
+    /// carry it.
     fn try_receive(&mut self) -> Option<Self::RxFrame> {
-        self.receive.try_receive()
+        self.receive.try_receive_with(Option::take).ok().flatten()
     }
     fn read_copied<R>(
         &mut self,

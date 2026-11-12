@@ -426,7 +426,7 @@ struct Bench<'b, 's, const HELD: u8> {
         Option<oer_protocols_ieee80211_runtime::station::TxEnded<ModelNetworkMemory>>,
         TX_DEPTH,
     >,
-    receive: WakingSpscReceiver<'b, Received<ModelLentRx>, RX_DEPTH>,
+    receive: oer_portable_memory::SlotReceiver<'b, Option<Received<ModelLentRx>>, RX_DEPTH>,
     copies: WakingSpscReceiver<
         'b,
         oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame,
@@ -538,7 +538,7 @@ impl<'s, const HELD: u8> Bench<'_, 's, HELD> {
             moved = true;
         }
         while !self.receive.is_empty() && self.rx_turn.pass(nanos) {
-            let frame = self.receive.try_receive();
+            let frame = self.receive.try_receive_with(Option::take).ok().flatten();
             if matches!(frame, Some(Received::Copied(_))) {
                 drop(self.copies.try_receive());
             }
@@ -731,7 +731,8 @@ fn run<const HELD: u8>(inputs: Inputs) -> Outcome {
             Option<oer_protocols_ieee80211_runtime::station::TxEnded<ModelNetworkMemory>>,
             TX_DEPTH,
         >::new();
-        let mut receive_queue = WakingSpscQueue::<Received<ModelLentRx>, RX_DEPTH>::new();
+        let mut receive_queue =
+            oer_portable_memory::WakingSlotQueue::<Option<Received<ModelLentRx>>, RX_DEPTH>::new();
         let mut copies_queue = WakingSpscQueue::<
             oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame,
             RX_COPIED_DEPTH,
@@ -745,7 +746,7 @@ fn run<const HELD: u8>(inputs: Inputs) -> Outcome {
         let (link_return_end, _link_return) = link_return_queue.split();
         let (transmit, transmit_end) = transmit_queue.split(|| None);
         let (returned_end, returned) = returned_queue.split(|| None);
-        let (receive_end, receive) = receive_queue.split();
+        let (receive_end, receive) = receive_queue.split(|| None);
         let (copies_end, copies) = copies_queue.split();
         let mut lifecycle = LifecycleEnds {
             to_actor: to_actor_end,
