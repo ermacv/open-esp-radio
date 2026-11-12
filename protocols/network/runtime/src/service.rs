@@ -59,6 +59,9 @@ impl AfterUnsent {
 /// What a turn did.
 #[derive(Clone, Copy, Debug)]
 struct Turned {
+    /// A lending socket was given frames. Its consumer needs a complete
+    /// executor round before the next intake, not just a self-wake.
+    lent: bool,
     /// It left work no wake names: a budget spent, notices untold, a block
     /// evicted, a producer's hold or budget freed, a refused publication of
     /// the address.
@@ -917,15 +920,27 @@ impl<
                     Broken::Fault => EndCause::PortFault,
                     Broken::Receive(fault) => EndCause::ReceiveFault(fault),
                 });
-            } else if turned.again {
-                // The turn left work no wake will name: the next turn
-                // takes it, once the executor had its turn.
+                continue;
+            }
+            let yielded = turned.again || turned.lent;
+            if yielded {
                 report(events, || ServiceEvent::Yielded);
                 yield_now().await;
-            } else {
+                if turned.lent {
+                    // The executor snapshots its ready set, then polls the
+                    // network before the application. A consumer newly woken
+                    // by this batch was absent from that snapshot: the next
+                    // round polls us first again. Pass through that round so
+                    // it can run before another batch spends its credit.
+                    // This never waits for a slow consumer to return a loan.
+                    report(events, || ServiceEvent::Yielded);
+                    yield_now().await;
+                }
+            }
+            if !turned.again {
                 let woke = self.wait(clock, events).await;
                 received_only = woke.received_only;
-                if woke.at_once {
+                if woke.at_once && !yielded {
                     // The wait was over at its first poll, by work or by a
                     // time already due: no turn follows another within the
                     // same poll, and a source that says it is ready for good
@@ -972,7 +987,8 @@ impl<
         }
         tally.stage(Stage::Returns, &mut self.diagnostics);
         // A broken queue the owner records, which ends the run.
-        let intake_full = self.intake(now, events, &mut tally).batch.end == BatchEnd::Limit;
+        let intake = self.intake(now, events, &mut tally);
+        let intake_full = intake.batch.end == BatchEnd::Limit;
         packets |= intake_full;
         tally.stage(Stage::Receive, &mut self.diagnostics);
         let mut told_all = false;
@@ -1013,6 +1029,7 @@ impl<
         tally.stage(Stage::Settle, &mut self.diagnostics);
         tally.end(&mut self.diagnostics);
         Turned {
+            lent: intake.lent != 0,
             again: again || packets,
             packets: packets && !again,
         }
@@ -1046,6 +1063,7 @@ impl<
         // copy to deliver, an address to publish): a full turn follows at
         // once. Anything else is named by a wake, which the wait reads.
         Turned {
+            lent: intake.lent != 0,
             again: intake.read() != 0,
             packets: false,
         }

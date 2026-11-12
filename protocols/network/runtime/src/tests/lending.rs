@@ -549,7 +549,17 @@ fn a_run_cancelled_after_a_return_keeps_what_it_took() {
         };
         let mark = tape.len();
         drop(held);
-        assert!(run.as_mut().poll(cx).is_pending());
+        // The lending batch first gives the consumer its executor round.
+        // Cancel only after the following wait has collected this return.
+        for _ in 0..3 {
+            assert!(run.as_mut().poll(cx).is_pending());
+            if tape
+                .since(mark)
+                .contains(&ServiceEvent::Returned { work: false })
+            {
+                break;
+            }
+        }
         assert!(
             tape.since(mark)
                 .contains(&ServiceEvent::Returned { work: false })
@@ -564,6 +574,37 @@ fn a_run_cancelled_after_a_return_keeps_what_it_took() {
 }
 
 mod diagnostics;
+
+#[test]
+fn cancellation_during_the_consumers_round_keeps_published_returns() {
+    fn check<Net: 'static>(extra_poll: bool) {
+        let (mut service, _copying, mut lending, wire, _stop) = lending::<Net>(4, 1);
+        let clock: VirtualClock = VirtualClock::new();
+        let tape = Tape::default();
+        let mut events = tape.clone();
+        let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
+        {
+            let mut run = core::pin::pin!(service.run(&clock, &mut events));
+            assert!(run.as_mut().poll(cx).is_pending());
+            arrive(&wire, LENDING, b"held");
+            assert!(run.as_mut().poll(cx).is_pending());
+            if extra_poll {
+                assert!(run.as_mut().poll(cx).is_pending());
+            }
+            drop(lending.try_receive().expect("the batch lent its frame"));
+            // Cancel at either new yield, before the service collects.
+        }
+        let mut ended = service.retire();
+        assert!(ended.retired.pool.loans().released());
+        assert_eq!(lent_out(&wire), 0);
+        drop(lending);
+        ended.collect();
+    }
+    struct First;
+    struct Second;
+    check::<First>(false);
+    check::<Second>(true);
+}
 
 /// A lent datagram alone wakes the service for a receive turn: the datagram
 /// goes to its socket's lane in the batch, and the turn publishes nothing

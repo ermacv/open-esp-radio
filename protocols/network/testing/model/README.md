@@ -34,6 +34,14 @@ that may precede it. The event tape also records producer refill followed by
 With the longer RX queue the same refill and refusal accompany a received
 frame, so that turn has a counted event.
 
+`mixed_service/credit.rs` uses the image's 12 RX credits and 8-frame intake
+budget. Its two tasks follow the S31 executor's ready snapshot and network
+before application order. It compares per-frame and batched publication with
+identical arrivals and consumer opportunities, and records socket-queued and
+application-held owners, physical returns, published loan returns and credit
+restoration separately. A draining consumer, a four-frame hold, a full-credit
+hold and a TX return exercise progress without changing credit or batch sizes.
+
 ## Station simulation
 
 `tests/station/` composes the station and the network as the `hil-wifi-network`

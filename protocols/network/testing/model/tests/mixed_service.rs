@@ -13,7 +13,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 use std::task::{Context, Poll, Wake, Waker};
@@ -83,22 +83,31 @@ impl TxPool for Pool {
     }
 }
 
-struct Bytes(Vec<u8>);
+struct Bytes {
+    bytes: Vec<u8>,
+    id: usize,
+    returned: Arc<Mutex<Vec<usize>>>,
+}
+impl Drop for Bytes {
+    fn drop(&mut self) {
+        self.returned.lock().unwrap().push(self.id);
+    }
+}
 impl FrameStorage for Bytes {
     fn bytes(&self) -> &[u8] {
-        &self.0
+        &self.bytes
     }
     fn bytes_mut(&mut self) -> &mut [u8] {
-        &mut self.0
+        &mut self.bytes
     }
     fn advance(&mut self, by: usize) -> Result<(), StorageAdvanceRefused> {
-        if by > self.0.len() {
+        if by > self.bytes.len() {
             return Err(StorageAdvanceRefused {
                 by,
-                length: self.0.len(),
+                length: self.bytes.len(),
             });
         }
-        self.0.drain(..by);
+        self.bytes.drain(..by);
         Ok(())
     }
 }
@@ -106,11 +115,21 @@ impl FrameStorage for Bytes {
 struct Rx {
     frames: VecDeque<LentFrame<Bytes>>,
     waker: Option<Waker>,
+    next: usize,
+    read: usize,
+    lent: Vec<usize>,
+    published: usize,
+    held: bool,
+    returned: Arc<Mutex<Vec<usize>>>,
 }
 #[derive(Clone, Default)]
 struct Device(Rc<RefCell<Rx>>);
 impl Device {
     fn receive_one(&self) {
+        self.stage_one();
+        self.flush();
+    }
+    fn stage_one(&self) {
         let mut bytes = Ipv4Fields {
             services: DsField::from_bytes([0]),
             total_length: 20 + 8 + 1,
@@ -133,14 +152,41 @@ impl Device {
             }
             .to_bytes(),
         );
-        bytes.push(42);
+        let (id, returned) = {
+            let mut rx = self.0.borrow_mut();
+            let id = rx.next;
+            rx.next += 1;
+            (id, rx.returned.clone())
+        };
+        bytes.push(id as u8);
         let length = bytes.len();
-        let frame = LentFrame::new(Bytes(bytes), LOCAL, PEER, 0x0800, 0..length)
-            .ok()
-            .unwrap();
+        let frame = LentFrame::new(
+            Bytes {
+                bytes,
+                id,
+                returned,
+            },
+            LOCAL,
+            PEER,
+            0x0800,
+            0..length,
+        )
+        .ok()
+        .unwrap();
         let mut rx = self.0.borrow_mut();
         rx.frames.push_back(frame);
-        if let Some(waker) = rx.waker.take() {
+        rx.held = true;
+    }
+    fn expose(&self) {
+        let mut rx = self.0.borrow_mut();
+        rx.published = rx.frames.len();
+    }
+    fn flush(&self) {
+        let mut rx = self.0.borrow_mut();
+        let changed = rx.held;
+        rx.held = false;
+        rx.published = rx.frames.len();
+        if changed && let Some(waker) = rx.waker.take() {
             waker.wake();
         }
     }
@@ -154,12 +200,12 @@ impl NetDevice for Device {
         Poll::Pending
     }
     fn receive_queue_len(&self) -> usize {
-        self.0.borrow().frames.len()
+        self.0.borrow().published
     }
     fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         let mut rx = self.0.borrow_mut();
         rx.waker = Some(cx.waker().clone());
-        if rx.frames.is_empty() {
+        if rx.published == 0 {
             Poll::Pending
         } else {
             Poll::Ready(())
@@ -172,13 +218,31 @@ impl NetDevice for Device {
     ) -> ReceivedBatch {
         let mut taken = 0;
         while taken < limit {
+            if self.0.borrow().published == 0 {
+                return ReceivedBatch {
+                    taken,
+                    end: BatchEnd::Drained,
+                };
+            }
             let Some(frame) = self.0.borrow_mut().frames.pop_front() else {
                 return ReceivedBatch {
                     taken,
                     end: BatchEnd::Drained,
                 };
             };
-            take(Incoming::Lent(&mut Some(frame)));
+            let id = {
+                let mut rx = self.0.borrow_mut();
+                rx.published -= 1;
+                let id = rx.read;
+                rx.read += 1;
+                id
+            };
+            let mut owner = Some(frame);
+            take(Incoming::Lent(&mut owner));
+            if owner.is_none() {
+                self.0.borrow_mut().lent.push(id);
+            }
+            drop(owner);
             taken += 1;
         }
         ReceivedBatch {
@@ -237,7 +301,7 @@ impl Produce for Source {
 
 type Tx = LocalTx<'static, Pool, SLOTS, DEPTH, SameHart>;
 type Port = DevicePort<Device, Tx>;
-type Net<B> = Service<
+type Net<B, D = ()> = Service<
     'static,
     'static,
     B,
@@ -251,6 +315,7 @@ type Net<B> = Service<
     LANE,
     Port,
     Producer<'static, B, Source, CREDIT>,
+    D,
 >;
 type Socket<B> = oer_protocols_network_runtime::LendingSocket<
     'static,
@@ -262,14 +327,19 @@ type Socket<B> = oer_protocols_network_runtime::LendingSocket<
     CREDIT,
     LentFrame<Bytes>,
 >;
-struct Bench<B: 'static> {
-    service: Net<B>,
+struct Bench<B: 'static, D = ()> {
+    service: Net<B, D>,
     socket: Socket<B>,
     device: Device,
     outgoing: SlotReceiver<'static, Option<Outgoing<Buffer>>, DEPTH>,
     returned: SlotSender<'static, Option<TxEnded<Buffer>>, DEPTH>,
 }
 fn bench<B: 'static>() -> Bench<B> {
+    bench_credited::<B, RX_CREDIT, _>(())
+}
+fn bench_credited<B: 'static, const RX: usize, D: oer_protocols_network_runtime::Diagnostics>(
+    diagnostics: D,
+) -> Bench<B, D> {
     let state = Box::leak(Box::new(State::new()));
     let commands = Box::leak(Box::new(WakingSpscQueue::<ServiceCommand<()>, 1>::new()));
     let (command, _requests) = commands.split();
@@ -296,7 +366,7 @@ fn bench<B: 'static>() -> Bench<B> {
     );
     let device = Device::default();
     let (mut pool, brand) = claim::<B, SIZE, 4>(Box::leak(Box::new([[0; SIZE]; 4]))).unwrap();
-    pool.loans().pool(RX_CREDIT + 2, 2).unwrap();
+    pool.loans().pool(RX + 2, 2).unwrap();
     let owner = NetworkOwner::new(
         brand,
         Interface::new(LOCAL, ADDRESS, 24, None, 1500).unwrap(),
@@ -310,11 +380,12 @@ fn bench<B: 'static>() -> Bench<B> {
         stopping,
         Source { next: 0 },
         Box::leak(Box::new(LocalEnd::new())),
-    );
+    )
+    .with_diagnostics(diagnostics);
     service.bind_local(PORT + 1, Dscp::default()).unwrap();
-    let group = service.group(RX_CREDIT).unwrap();
+    let group = service.group(RX).unwrap();
     let socket = service
-        .bind_lending::<RX_CREDIT>(
+        .bind_lending::<RX>(
             PORT,
             Dscp::default(),
             group,
@@ -493,6 +564,9 @@ fn progress<B: 'static>(moment: Moment, received: usize) {
     }
     step(&mut run, &count, &waker);
     if matches!(moment, Moment::AfterRxTurn) {
+        // Finish the consumer's scheduling opportunity, then return TX
+        // memory after the network has actually registered its wait.
+        settle(&mut run, &count, &waker);
         assert_eq!(
             count.0.load(Ordering::SeqCst),
             0,
@@ -600,3 +674,6 @@ fn tx_return_is_served_before_the_receive_queue_drains() {
     struct Brand;
     progress::<Brand>(Moment::AfterReadiness, 17);
 }
+
+#[path = "mixed_service/credit.rs"]
+mod credit;
