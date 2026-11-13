@@ -628,13 +628,16 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
             Interest, LocalEvent, PublishEnd, RequestKind, ServiceEvent,
         };
         #[cfg(oer_trace)]
+        let ended_at =
+            matches!(event, ServiceEvent::TurnEnded(_)).then(oer_portable_riscv::cycle64);
+        #[cfg(oer_trace)]
         {
             let profile = &mut self.1;
             match event {
                 // The turn's cycles run from its first event to its end.
                 ServiceEvent::TurnBegan => profile.began(&PROFILE, oer_portable_riscv::cycle64()),
                 ServiceEvent::TurnEnded(_) => {
-                    profile.ended(&PROFILE, oer_portable_riscv::cycle64());
+                    profile.ended(&PROFILE, ended_at.unwrap_or(0));
                 }
                 ServiceEvent::FrameTaken => profile.frame(),
                 ServiceEvent::Accepted => profile.accepted(),
@@ -696,6 +699,10 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
                     LocalEvent::Waits(Interest::Changes) => Local::WaitsChanges,
                 },
             ),
+        }
+        #[cfg(oer_trace)]
+        if let Some(ended_at) = ended_at {
+            PROFILE.end_observed(oer_portable_riscv::cycle64().wrapping_sub(ended_at));
         }
     }
 }

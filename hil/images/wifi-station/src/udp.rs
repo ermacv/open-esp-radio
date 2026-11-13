@@ -628,6 +628,7 @@ pub(crate) fn diagnostics_window(net: &Network) -> oer_hil_services_load::Diagno
 const PROFILE_NONE: oer::observe::profile::TurnProfile = {
     use oer::observe::profile::*;
     TurnProfile {
+        end_observer_cycles: 0,
         moments: [0; MOMENTS],
         empty: [0; 3],
         idle: [0; 2],
@@ -694,6 +695,7 @@ pub(crate) fn profile_page(net: &Network, page: u8) -> oer_hil_services_load::Pr
     };
     match page {
         0 => ProfileCollected::Moments(TurnMoments {
+            end_observer_cycles: profile.end_observer_cycles,
             available: cfg!(oer_trace),
             moments: profile.moments,
             empty: profile.empty,

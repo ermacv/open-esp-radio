@@ -42,6 +42,7 @@ pub(crate) fn echo(header: Header) -> Header {
 /// the time the server watches from (its stall request).
 #[derive(Debug, Default)]
 pub(crate) struct SocketStamps {
+    first_us: Cell<Option<u64>>,
     last_us: Cell<Option<u64>>,
     since_us: Cell<Option<u64>>,
     after_us: Cell<Option<u64>>,
@@ -50,6 +51,9 @@ pub(crate) struct SocketStamps {
 impl SocketStamps {
     /// The socket delivered a load datagram at `now_us`.
     pub(crate) fn datagram(&self, now_us: u64) {
+        if self.first_us.get().is_none() {
+            self.first_us.set(Some(now_us));
+        }
         self.last_us.set(Some(now_us));
         if self.after_us.get().is_none() && self.since_us.get().is_some_and(|since| now_us >= since)
         {
@@ -60,6 +64,10 @@ impl SocketStamps {
     /// The latest load datagram's time.
     pub(crate) fn last(&self) -> Option<u64> {
         self.last_us.get()
+    }
+
+    pub(crate) fn first(&self) -> Option<u64> {
+        self.first_us.get()
     }
 
     /// Watch for the first datagram at or after `since_us`.

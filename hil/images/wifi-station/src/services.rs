@@ -53,6 +53,7 @@ mod tests {
             run: u32::MAX,
             port: u16::MAX,
             delay_ms: u32::MAX,
+            synchronised: false,
             duration_ms: u32::MAX,
             drain_ms: u32::MAX,
             transmit: Some(oer_hil_services_load::Transmit {

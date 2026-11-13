@@ -1,11 +1,11 @@
 //! Which requests the load server answers by itself, idle or running.
 
 use oer_hil_services_load::{
-    Collect, CollectAddba, CollectCounters, CollectDiagnostics, CollectHart1, CollectLink,
-    CollectMac, CollectNetwork, CollectParts, CollectPositions, CollectProfile, CollectSamples,
-    CollectStall, CollectStallMac, CollectTracking, Diagnose, LoadError, MAX_DELAY_MS,
-    MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US, Request, Start,
-    Started, header,
+    Begin, Begun, Collect, CollectAddba, CollectCounters, CollectDiagnostics, CollectHart1,
+    CollectLink, CollectMac, CollectNetwork, CollectParts, CollectPositions, CollectProfile,
+    CollectSamples, CollectStall, CollectStallMac, CollectTracking, Diagnose, LoadError,
+    MAX_DELAY_MS, MAX_DRAIN_MS, MAX_DURATION_MS, MAX_SAMPLE_PERIOD_US, MIN_SAMPLE_PERIOD_US,
+    Request, Start, Started, header,
 };
 
 /// The largest UDP payload the image sends or receives: one 1514-byte
@@ -31,6 +31,8 @@ pub(crate) enum Action {
     Cpu,
     /// Start this run, once the station has its address.
     Start(Start),
+    /// Release this running run's host barrier.
+    Begin { receive: bool },
     /// Answer with what the run kept.
     Kept(Kept),
     /// Switch the network core's diagnostics as asked, in any phase.
@@ -74,6 +76,7 @@ pub(crate) enum Kept {
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum Answer {
     Started(Started),
+    Begun(Begun),
     /// `Running` of the collected kind: the collected run has not ended.
     Running(Kept),
     /// `Refused(UnknownRun)` of the collected kind.
@@ -92,6 +95,16 @@ pub(crate) fn action(phase: Phase, request: Request) -> Action {
             Err(error) => refuse_start(error),
         },
         (Phase::Running { .. }, Request::Start(_)) => refuse_start(LoadError::Busy),
+        (
+            Phase::Running { run },
+            Request::Begin(Begin {
+                run: asked,
+                receive,
+            }),
+        ) if run == asked => Action::Begin { receive },
+        (_, Request::Begin(_)) => {
+            Action::Answer(Answer::Begun(Begun::Refused(LoadError::UnknownRun)))
+        }
         (phase, Request::Collect(Collect { run })) => collect(phase, run, Kept::Report),
         (phase, Request::CollectParts(CollectParts { run, from })) => {
             collect(phase, run, Kept::Parts { from })
@@ -177,6 +190,7 @@ mod tests {
             run: 7,
             port: 5001,
             delay_ms: 500,
+            synchronised: false,
             duration_ms: 10_000,
             drain_ms: 1_000,
             transmit,
@@ -200,6 +214,36 @@ mod tests {
     }
 
     #[test]
+    fn a_host_release_belongs_only_to_the_running_run() {
+        assert_eq!(
+            action(
+                RUNNING,
+                Request::Begin(Begin {
+                    run: 7,
+                    receive: true
+                })
+            ),
+            Action::Begin { receive: true }
+        );
+        for phase in [
+            IDLE,
+            Phase::Idle { kept: Some(7) },
+            Phase::Running { run: 8 },
+        ] {
+            assert_eq!(
+                action(
+                    phase,
+                    Request::Begin(Begin {
+                        run: 7,
+                        receive: true
+                    })
+                ),
+                Action::Answer(Answer::Begun(Begun::Refused(LoadError::UnknownRun)))
+            );
+        }
+    }
+
+    #[test]
     fn an_idle_server_starts_a_valid_run_and_refuses_invalid_parameters() {
         assert_eq!(
             action(IDLE, Request::Start(start(None))),
@@ -207,6 +251,7 @@ mod tests {
         );
         let longest = Start {
             delay_ms: MAX_DELAY_MS,
+            synchronised: false,
             duration_ms: MAX_DURATION_MS,
             drain_ms: MAX_DRAIN_MS,
             ..start(None)
@@ -244,6 +289,7 @@ mod tests {
             })),
             Start {
                 delay_ms: MAX_DELAY_MS + 1,
+                synchronised: false,
                 ..start(None)
             },
             Start {

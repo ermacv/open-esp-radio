@@ -143,6 +143,10 @@ pub struct Sent {
     /// Sends the host's socket refused.
     pub failed: u64,
     pub elapsed: Duration,
+    /// Successful handoffs to the host UDP socket, on the host endpoint's
+    /// monotonic clock. These are not DMA or device-clock timestamps.
+    pub first_us: Option<u64>,
+    pub last_us: Option<u64>,
 }
 
 /// How fast a sender offers its load, one direction.
@@ -237,6 +241,8 @@ fn send_one(
         echo_reply: false,
     };
     if header.write(buffer).is_some() && host.transmit(buffer, peer).is_ok() {
+        sent.first_us.get_or_insert(header.sent_us);
+        sent.last_us = Some(header.sent_us);
         sent.datagrams += 1;
         sent.bytes += buffer.len() as u64;
     } else {
@@ -260,6 +266,55 @@ pub fn send(
     burst: u16,
     duration: Duration,
 ) -> Sent {
+    sending(
+        host,
+        peer,
+        run,
+        payload,
+        rate,
+        burst,
+        duration,
+        &AtomicBool::new(false),
+    )
+}
+
+/// A continuous flow covering warm-up, the device window and drain. The
+/// controller stops it only after collecting the finished device report;
+/// `limit` also bounds a controller failure. No second host window is used.
+#[allow(clippy::too_many_arguments)]
+pub fn send_until(
+    host: &impl Host,
+    peer: SocketAddrV4,
+    run: u32,
+    payload: usize,
+    rate: Rate,
+    burst: u16,
+    limit: Duration,
+    stop: &AtomicBool,
+) -> Sent {
+    sending(host, peer, run, payload, rate, burst, limit, stop)
+}
+
+/// Stop scoped workers even when a HIL request returns an error. Drop runs
+/// before the thread scope joins, so errors do not wait out the safety limit.
+pub struct StopOnDrop<'a>(pub &'a AtomicBool);
+impl Drop for StopOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn sending(
+    host: &impl Host,
+    peer: SocketAddrV4,
+    run: u32,
+    payload: usize,
+    rate: Rate,
+    burst: u16,
+    duration: Duration,
+    stop: &AtomicBool,
+) -> Sent {
     // The filler stays in place; each datagram rewrites only its header.
     let mut buffer = vec![header::FILLER; payload.max(header::LENGTH)];
     let started = host.now();
@@ -268,16 +323,16 @@ pub fn send(
     let mut sequence = 0_u64;
     match rate {
         Rate::Unpaced => {
-            while elapsed() < duration {
+            while !stop.load(Ordering::Relaxed) && elapsed() < duration {
                 send_one(host, peer, run, &mut buffer, &mut sequence, &mut sent);
             }
         }
         Rate::Paced(bps) => {
             let interval = Duration::from_secs_f64(payload as f64 * 8.0 / f64::from(bps.get()));
-            while elapsed() < duration {
+            while !stop.load(Ordering::Relaxed) && elapsed() < duration {
                 // Every datagram due by now goes in this batch.
                 let due = due(elapsed(), interval, burst);
-                while sequence < due && elapsed() < duration {
+                while sequence < due && !stop.load(Ordering::Relaxed) && elapsed() < duration {
                     send_one(host, peer, run, &mut buffer, &mut sequence, &mut sent);
                 }
                 host.pause(BATCH.min(interval));
@@ -388,6 +443,47 @@ mod tests {
 
     fn run(host: &Scripted, rate: Rate, burst: u16) -> Sent {
         send(host, PEER, 7, 1472, rate, burst, WINDOW)
+    }
+
+    #[test]
+    fn a_continuous_flow_ends_at_the_controller_stop_and_keeps_real_send_stamps() {
+        struct Flow<'a> {
+            host: Scripted,
+            stop: &'a AtomicBool,
+        }
+        impl Host for Flow<'_> {
+            fn now(&self) -> Duration {
+                self.host.now()
+            }
+            fn pause(&self, by: Duration) {
+                self.host.pause(by);
+            }
+            fn transmit(&self, data: &[u8], peer: SocketAddrV4) -> std::io::Result<()> {
+                let result = self.host.transmit(data, peer);
+                if *self.host.calls.borrow() == 4 {
+                    self.stop.store(true, Ordering::Relaxed);
+                }
+                result
+            }
+        }
+        for rate in [Rate::Unpaced, Rate::paced(1_000_000).unwrap()] {
+            let stop = AtomicBool::new(false);
+            let flow = Flow {
+                host: Scripted::new(Duration::from_micros(100), |call| call == 0),
+                stop: &stop,
+            };
+            let sent = send_until(&flow, PEER, 7, 1472, rate, 8, WINDOW, &stop);
+            assert_eq!((sent.datagrams, sent.failed), (3, 1));
+            let stamps = flow.host.stamps.borrow();
+            assert_eq!(sent.first_us, Some(stamps[1].as_micros() as u64));
+            assert_eq!(sent.last_us, Some(stamps[3].as_micros() as u64));
+            assert!(sent.elapsed < WINDOW);
+        }
+        let stop = AtomicBool::new(false);
+        {
+            let _on_error = StopOnDrop(&stop);
+        }
+        assert!(stop.load(Ordering::Relaxed));
     }
 
     #[test]

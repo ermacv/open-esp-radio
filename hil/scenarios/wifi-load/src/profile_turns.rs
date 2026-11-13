@@ -117,6 +117,10 @@ pub fn window(profile: &Profile) -> Value {
     json!({
         "available": moments.available,
         "moments": sums,
+        "body_cycles": moment(moments, 0, 5),
+        "end_observer_cycles": moments.end_observer_cycles,
+        "body_plus_end_observer_cycles": moment(moments, 0, 5).saturating_add(moments.end_observer_cycles),
+        "scope": "body plus TurnEnded reduction; dispatcher/waits remain in task polls and hart active cycles",
         "empty": {
             "turns": moments.empty[0],
             "cycles": moments.empty[1],

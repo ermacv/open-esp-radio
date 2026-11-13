@@ -1,5 +1,20 @@
 use super::*;
 
+#[test]
+fn observation_after_the_end_stamp_is_separate_from_body_cycles() {
+    let counter = ProfileCounter::new();
+    let mut tally = ProfileTally::new();
+    turn(&mut tally, &counter, 100, 1000, [8, 0, 0, 0], None);
+    let start = counter.read();
+    counter.end_observed(300);
+    turn(&mut tally, &counter, 1500, 2000, [8, 0, 0, 0], None);
+    counter.end_observed(400);
+    let window = TurnProfile::window(&start, &counter.read());
+    assert_eq!(window.moment(0, 5), 2000);
+    assert_eq!(window.end_observer_cycles, 700);
+    assert_eq!(TurnProfile::from_words(&window.words()), window);
+}
+
 /// One turn from cycle `at` lasting `cycles`, with its items, and the pass
 /// after it.
 fn turn(

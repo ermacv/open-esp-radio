@@ -33,12 +33,33 @@ that total, half each way for `rx-tx`. `OER_WIFI_LOAD_WIDTH=he20` asks the route
 profile and the station's join for HE20 (experimental, off otherwise); the
 path case prints the PHY the station associated in, and each level's `rx`
 and `tx` counts name the HE-SU MPDUs (`HE`). Each level is one run of the image's load service: a 5 s
-(`OER_WIFI_LOAD_SECONDS` replaces it, 1 to 60) measuring window after 300 ms, then 500 ms of drain, after which the image
-ends the run by itself. Throughput and CPU are over the window (the image's
+(`OER_WIFI_LOAD_SECONDS` replaces it, 1 to 60) measuring window after a
+start barrier and 300 ms of warm-up, then 500 ms of drain. Start first opens
+the device socket. The host starts a continuous incoming flow for RX/mixed;
+Begin releases the window only after delivery of this run's first load
+datagram (not an Echo or foreign run). TX needs only its already running
+host receiver. Begin answers after device preparation actually opens the
+window; the controller makes no separate guess at its beginning. The host
+flow continues until the device reports the completed window and drain.
+An abandoned barrier expires after 10 s and its empty report cannot qualify
+a measurement. The image ends the run by itself.
+
+`start_boundary` records Start/Begin call and response times and first/last
+successful UDP sends on the host endpoint's monotonic clock, plus the
+device's armed, trigger, window and first/last delivery times. The two clocks
+are distinct; their absolute timestamps must not be subtracted. The first
+device stamp is socket delivery, not DMA completion. This protocol requires
+the common controller/image change in both future A/B images; old saved
+images are not wire-compatible. Host totals and their loss include warm-up
+and drain (and the report polling tail); driver/UDP window differences are
+used to assess delivery inside the measured window.
+
+Throughput and CPU are over the window (the image's
 clock); per level it records offered, sent and received throughput, lost
 (sent less received), loss below the highest sequence, reordered, duplicate
 and untracked datagrams (an exact tally, shared by both ends), the sender's
-refused and missed sends, RTT of 20 probes per second within the window
+refused and missed sends, RTT of 20 probes per second from Begin's answer
+through collection of the finished window
 (replies read through the drain) echoed by the image (min, median,
 p95, max, replies; `OER_WIFI_LOAD_PROBES=off` sends no probes), each hart's busy share (1 − idle/window: the boot hart's
 radio and station, hart 1's network and load) with each executor's work
@@ -120,7 +141,13 @@ Each level's `turn_profile` records each network turn's active cycles on
 hart 1 against the work it did, and prints one line (`turn profile
 <level>:`); only a trace image counts it (`available` false otherwise).
 A turn's cycles run from its beginning to its end on hart 1's cycle
-counter, interrupts and the trace's own counting included; nothing is kept
+counter, interrupts and the trace's own item counting included. The final
+TurnEnded reduction/accounting is outside that body stamp and is now kept
+separately in `end_observer_cycles`; `body_plus_end_observer_cycles` sums
+these two disjoint intervals. This still excludes dispatcher, wait and
+other observer work: use whole IP task polls and hart active cycles for
+the full resource cost. Gaps already contain the epilogue and must not be
+added to it again. Nothing is kept
 per turn. `moments` holds the sums over the window's turns of every
 product of two of the variables `one`, `frames` (received frames the turn
 took in), `accepted` (frames its port accepted), `notices` (transmit

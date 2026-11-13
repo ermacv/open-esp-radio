@@ -94,6 +94,10 @@ pub struct TurnProfile {
     /// frame, and the frames accepted in them: publications in the turn
     /// that settled.
     pub settling: [u64; 3],
+    /// TurnEnded observation after the body's final cycle stamp. This is
+    /// outside `moments`/`empty`; it includes profile reduction and turn
+    /// accounting, but not the final publication of this scalar itself.
+    pub end_observer_cycles: u64,
 }
 
 /// The 64-bit words of a [`TurnProfile`], in its fields' order.
@@ -107,7 +111,8 @@ pub const WORDS: usize = MOMENTS
     + 3 * NOTICE_CELLS
     + NOTICE_BINS
     + FRAME_BINS
-    + 3;
+    + 3
+    + 1;
 
 /// The first word of each field of a [`TurnProfile`].
 mod word {
@@ -123,7 +128,8 @@ mod word {
     pub const NOTICES: usize = NOTICE_ONLY + 3 * NOTICE_CELLS;
     pub const FRAMES: usize = NOTICES + NOTICE_BINS;
     pub const SETTLING: usize = FRAMES + FRAME_BINS;
-    pub const END: usize = SETTLING + 3;
+    pub const END_OBSERVER: usize = SETTLING + 3;
+    pub const END: usize = END_OBSERVER + 1;
 }
 
 const _: () = {
@@ -161,6 +167,7 @@ impl TurnProfile {
             notices_by_turn: core::array::from_fn(|bin| at(word::NOTICES.saturating_add(bin))),
             frames_by_turn: core::array::from_fn(|bin| at(word::FRAMES.saturating_add(bin))),
             settling: core::array::from_fn(|index| at(word::SETTLING.saturating_add(index))),
+            end_observer_cycles: at(word::END_OBSERVER),
         }
     }
 
@@ -180,7 +187,8 @@ impl TurnProfile {
             .chain(self.notice_only.iter().flatten())
             .chain(&self.notices_by_turn)
             .chain(&self.frames_by_turn)
-            .chain(&self.settling);
+            .chain(&self.settling)
+            .chain(core::iter::once(&self.end_observer_cycles));
         for (place, value) in at.by_ref().zip(fields) {
             *place = *value;
         }
@@ -241,6 +249,10 @@ pub struct ProfileCounter {
 }
 
 impl ProfileCounter {
+    /// One writer, the network observer, after its TurnEnded reduction.
+    pub fn end_observed(&self, cycles: u64) {
+        self.add(word::END_OBSERVER, cycles);
+    }
     pub const fn new() -> Self {
         Self {
             halves: [const { AtomicU32::new(0) }; 2 * WORDS],
