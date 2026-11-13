@@ -59,6 +59,8 @@ pub const MAX_PAGE_SAMPLES: usize = 27;
 oer_protocols_hil_protocol::messages! {
     endpoint Start = "load/start" => Started;
     topic Started = "load/started";
+    endpoint Begin = "load/begin" => Begun;
+    topic Begun = "load/begun";
     endpoint Collect = "load/collect" => Collected;
     topic Collected = "load/collected";
     endpoint GetCpu = "load/cpu" => Load;
@@ -105,7 +107,8 @@ pub const MAX_SAMPLE_PERIOD_US: u32 = 10_000;
 
 /// Start a run. The image binds `port` on its IPv4 address and receives
 /// from the answer on. The run has one measuring window: it opens
-/// `delay_ms` after [`Start`] and lasts `duration_ms`; the image sends
+/// `delay_ms` after [`Start`] (or [`Begin`] when `synchronised`) and lasts
+/// `duration_ms`; the image sends
 /// `transmit` within it and reads its CPU at its two ends. It receives and
 /// echoes until `drain_ms` after the window, then closes its socket and
 /// keeps the finished [`Report`]: a run ends by itself, and [`Collect`]
@@ -116,6 +119,11 @@ pub struct Start {
     pub run: u32,
     pub port: u16,
     pub delay_ms: u32,
+    /// Open the socket now, but wait for the host's explicit [`Begin`].
+    /// The host can establish an incoming flow before releasing the window.
+    /// A run no Begin released within [`MAX_DELAY_MS`] of its Start ends
+    /// without a window, refused with [`LoadError::NotReleased`].
+    pub synchronised: bool,
     pub duration_ms: u32,
     pub drain_ms: u32,
     pub transmit: Option<Transmit>,
@@ -159,6 +167,27 @@ pub enum Started {
     Refused(LoadError),
 }
 
+/// Release a synchronised run after the host receiver/sender is ready.
+/// With `receive`, release only after delivery of this run's first load
+/// datagram (neither a foreign datagram nor an Echo is sufficient).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct Begin {
+    pub run: u32,
+    pub receive: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum Begun {
+    /// Device monotonic microseconds. Repeating Begin returns the same time.
+    Ready {
+        at_us: u64,
+        first_received_us: Option<u64>,
+        window_start_us: u64,
+    },
+    WaitingForLoad,
+    Refused(LoadError),
+}
+
 /// The report of run `run`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Collect {
@@ -182,6 +211,11 @@ pub enum Collected {
 /// microseconds.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Report {
+    /// The socket was opened and the run armed; device monotonic microseconds.
+    pub armed_us: u64,
+    /// The window's release: the explicit Begin, or the arming of a timed
+    /// run.
+    pub triggered_us: u64,
     /// The measuring window as the image kept it.
     pub window_start_us: u64,
     pub window_end_us: u64,
@@ -1846,12 +1880,18 @@ pub enum LoadError {
     NoSampler,
     /// The run was not sampled: its [`Start`] had no [`Profile`].
     NotSampled,
+    /// A synchronised run's window was not released within
+    /// [`MAX_DELAY_MS`] of its [`Start`]: no [`Begin`] came, or the run's
+    /// incoming flow never delivered a load datagram. The run ended without
+    /// a window.
+    NotReleased,
 }
 
 oer_protocols_hil_agent::service! {
     /// The load service's requests.
     pub enum Request (sessions = false, handler = Handler) {
         Start(Start) => start,
+        Begin(Begin) => begin,
         Collect(Collect) => collect,
         GetCpu(GetCpu) => cpu,
         CollectParts(CollectParts) => parts,

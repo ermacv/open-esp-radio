@@ -4,6 +4,30 @@ use super::header::{Header, LENGTH};
 use super::*;
 
 #[test]
+fn start_barrier_messages_round_trip_with_device_boundaries() {
+    let begin = Begin {
+        run: u32::MAX,
+        receive: true,
+    };
+    let ready = Begun::Ready {
+        at_us: u64::MAX - 1,
+        first_received_us: Some(u64::MAX - 2),
+        window_start_us: u64::MAX,
+    };
+    let mut buffer = [0; 128];
+    let wire = postcard::to_slice(&begin, &mut buffer).unwrap();
+    assert_eq!(postcard::from_bytes::<Begin>(wire).unwrap(), begin);
+    for reply in [
+        ready,
+        Begun::WaitingForLoad,
+        Begun::Refused(LoadError::UnknownRun),
+    ] {
+        let wire = postcard::to_slice(&reply, &mut buffer).unwrap();
+        assert_eq!(postcard::from_bytes::<Begun>(wire).unwrap(), reply);
+    }
+}
+
+#[test]
 fn a_header_reads_back_what_was_written_and_refuses_other_payloads() {
     let header = Header {
         run: 0x0102_0304,
@@ -88,6 +112,8 @@ fn the_largest_reports_fit_one_response() {
     let mut buffer = [0; 1024];
     assert!(postcard::to_slice(&load, &mut buffer).unwrap().len() <= 256);
     let report = Collected::Report(Report {
+        armed_us: u64::MAX,
+        triggered_us: u64::MAX,
         window_start_us: u64::MAX,
         window_end_us: u64::MAX,
         cpu_start: load.clone(),
@@ -606,9 +632,9 @@ fn a_transmit_window_takes_wrapping_differences() {
 }
 
 #[test]
-fn the_service_names_eighteen_endpoints_and_their_answers_by_distinct_keys() {
+fn the_service_names_nineteen_endpoints_and_their_answers_by_distinct_keys() {
     let keys = <Request as oer_protocols_hil_agent::base::Service>::KEYS;
-    assert_eq!(keys.len(), 36);
+    assert_eq!(keys.len(), 38);
     let distinct: std::collections::BTreeSet<_> = keys.iter().collect();
     assert_eq!(distinct.len(), keys.len());
 }
