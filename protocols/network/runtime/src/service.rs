@@ -67,12 +67,16 @@ struct Turned {
     /// a flow left out after a declining fill. The next turn may take only
     /// the frames ([`Turn::Packets`]).
     packets: bool,
+    /// This turn actually published RX to a registered consumer. Ordinary
+    /// TX must not scan socket offers merely to decide its continuation.
+    offered: bool,
 }
 
 /// Continuations left by the shared frame stage, before control's epilogue.
 struct FrameWork {
     packets: bool,
     other: bool,
+    offered: bool,
 }
 
 impl FrameWork {
@@ -82,6 +86,7 @@ impl FrameWork {
         Turned {
             again: other || packets,
             packets: packets && !other,
+            offered: self.offered,
         }
     }
 }
@@ -936,7 +941,7 @@ impl<
                 });
                 continue;
             }
-            let offered = self.receive_offer_pending();
+            let offered = turned.offered;
             let yielded = turned.again || offered;
             if yielded {
                 report(events, || ServiceEvent::Yielded);
@@ -1042,7 +1047,7 @@ impl<
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
         tally: &mut Tally<D>,
     ) -> FrameWork {
-        self.intake(now, events, tally);
+        let intake = self.intake(now, events, tally);
         tally.stage(Stage::Receive, &mut self.diagnostics);
         let mut told_all = false;
         for _ in 0..TURN_NOTICES {
@@ -1070,6 +1075,7 @@ impl<
         FrameWork {
             packets,
             other: !told_all,
+            offered: intake.lent != 0 && self.receive_offer_pending(),
         }
     }
 
@@ -1104,6 +1110,7 @@ impl<
         Turned {
             again: read,
             packets: false,
+            offered: intake.lent != 0 && self.receive_offer_pending(),
         }
     }
 
