@@ -37,7 +37,10 @@ struct Returning<'a, H: BatchReturn> {
 }
 
 impl<H: BatchReturn> Returning<'_, H> {
-    fn give(&mut self, lent: Lent<'_, H>) {
+    fn give(&mut self, cell: &mut Option<Lent<'_, H>>) {
+        let Some(lent) = cell.as_ref() else {
+            return;
+        };
         // The callback can replace its cell with a retained owner from
         // another socket. That owner's physical return and credit stay
         // together on its individual Drop, outside this socket's batch.
@@ -46,18 +49,30 @@ impl<H: BatchReturn> Returning<'_, H> {
             .0
             .is_some_and(|returns| core::ptr::eq(returns, self.credits.returns))
         {
-            drop(lent);
+            return_substituted(cell);
             return;
         }
-        let Lent {
+        let Some(Lent {
             frame, mut _back, ..
-        } = lent;
+        }) = cell.take()
+        else {
+            return;
+        };
         frame.return_in(&mut self.frames);
         // Only this socket's owners join its credit batch. A retained
         // owner keeps its Back and returns individually.
         _back.0 = None;
         self.credits.count = self.credits.count.saturating_add(1);
     }
+}
+
+// Keep the exceptional owner's extraction behind a borrowed-cell boundary:
+// merging it with the ordinary field-wise return makes LLVM materialize
+// intermediate frame owners even for this socket's own frames.
+#[cold]
+#[inline(never)]
+fn return_substituted<H>(cell: &mut Option<Lent<'_, H>>) {
+    drop(cell.take());
 }
 
 impl<
@@ -122,9 +137,7 @@ impl<
                 }
                 handed = handed.saturating_add(1);
                 let more = each(cell);
-                if let Some(lent) = cell.take() {
-                    returning.give(lent);
-                }
+                returning.give(cell);
                 more
             });
         if handed != 0 {
