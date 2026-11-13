@@ -198,6 +198,32 @@ pub(crate) trait Retiring {
     fn take_unaccepted(&mut self) -> Option<Self::Unaccepted>;
 }
 
+// A placed installation keeps every port/runner owner at its final address
+// through run, retirement and an unfinished end. Only its destruction right
+// moves; the retire algorithm and its owner accounting are the same.
+impl<R: Retiring> Retiring for oer_portable_memory::Placed<'_, R> {
+    type Port = R::Port;
+    type Unkept = R::Unkept;
+    type Unaccepted = R::Unaccepted;
+
+    fn finish_stop(
+        &mut self,
+        unconfirmed: impl FnMut(StopUnconfirmed),
+    ) -> impl Future<Output = Result<StopWatch<crate::failure::BackendFault>, ReceiveAccounting>>
+    {
+        (**self).finish_stop(unconfirmed)
+    }
+    fn port_mut(&mut self) -> &mut Self::Port {
+        (**self).port_mut()
+    }
+    fn take_unkept(&mut self) -> Option<Self::Unkept> {
+        (**self).take_unkept()
+    }
+    fn take_unaccepted(&mut self) -> Option<Self::Unaccepted> {
+        (**self).take_unaccepted()
+    }
+}
+
 /// The items a port call of the run could not keep, which the retire holds
 /// while it goes on with the stop: its home's places, filled in order.
 pub type UnkeptItems<I> = [Option<I>; UNKEPT_ITEMS];

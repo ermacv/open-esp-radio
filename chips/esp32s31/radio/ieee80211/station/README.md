@@ -245,7 +245,16 @@ frees the place for the next installation, and any other end moves it
 whole to its own home (`Placed::move_to`), so the place is never reused
 while the half is in it. The news carries causes, never owners.
 
-The access point's runner returns `AccessPointEnd::Ended(ApExit)` after a
+The access point's `AccessPointStorage<W>` has separate one-shot places for
+its active runner and its end. `AccessPointRunner::run` returns an
+`AccessPointEndOwner<W>` (`Placed<AccessPointEnd<W>>`): the task, its result
+selection and the application's end queue move only this destruction right.
+An unfinished end keeps the active runner's placed owner, so its port and
+hardware owners retain their addresses through retirement and handoff. A
+completed retire drops that owner once. The end's variants remain available
+by reference through the handle; the storage cannot be claimed again.
+
+The access point's end contains `AccessPointEnd::Ended(ApExit)` after a
 completed retire (or a run that never installed), or
 `AccessPointEnd::Unfinished`. An item a port call could not keep goes, before
 each watch of the stop and after each watch that returned with one
