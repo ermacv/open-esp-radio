@@ -352,8 +352,6 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     now: Instant,
     /// The cached deadline, recomputed whenever a queue changes.
     deadline: Option<Instant>,
-    /// The receive ring's continuation.
-    rx_later: Option<Instant>,
     /// A group mutation held at its barrier since this instant.
     group_since: Option<Instant>,
     /// Whose group mutation holds the receive cut.
@@ -678,7 +676,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             expired: 0,
             now: Instant::from_micros(0),
             deadline: None,
-            rx_later: None,
             group_since: None,
             group_mutator: None,
             access_point_holding: None,
@@ -782,7 +779,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.expired = 0;
         self.now = Instant::from_micros(0);
         self.deadline = None;
-        self.rx_later = None;
         self.forget_held();
         self.reopen = false;
         self.stop_served = false;
@@ -1149,8 +1145,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
         };
         add(core_views::deadline::<Id, D, B>(self.driver.core.view()));
+        // The receive ring's continuation is the device's, judged at its
+        // own fresh reading: a passed one never bounds the deadline ahead
+        // of a later one.
         add(self.device.next_deadline());
-        add(self.rx_later);
         match self.state {
             PortState::Starting { since }
             | PortState::Stopping { since }
@@ -2780,11 +2778,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         settle_lent(&self.shared.network, &self.rx_out, self.device)
             .map_err(|fault| self.record(fault))?;
-        // This pull serves the continuation the last one named: a passed
-        // one no longer bounds the deadline, which would otherwise ask for
-        // a transmit service at every turn.
-        if self.rx_later.is_some_and(|at| at <= now) {
-            self.rx_later = None;
+        // A cached deadline this pull reached may be the continuation it
+        // now serves, which no longer bounds the port: it would otherwise
+        // ask for a transmit service at every turn.
+        if self.deadline.is_some_and(|at| at <= now) {
             self.recompute_deadline();
         }
         for _ in 0..RECEIVE_STEPS {
@@ -2808,12 +2805,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 }
                 DevicePull::Again => {}
                 DevicePull::Empty => {
-                    self.rx_later = None;
                     self.recompute_deadline();
                     return Ok(RxPull::Empty);
                 }
                 DevicePull::Later(at) => {
-                    self.rx_later = Some(at);
                     self.recompute_deadline();
                     return Ok(RxPull::Later(at));
                 }

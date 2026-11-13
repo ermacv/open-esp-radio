@@ -28,16 +28,17 @@ use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
-    Addba, AddbaCollected, Collected, Counters, CountersCollected, Diagnosed, DiagnosticsCollected,
-    Hart1Collected, Hart1Window, Link, LinkCollected, Load, LoadError, Mac, MacCollected,
-    NetworkCollected, PartsCollected, Positions, PositionsCollected, ProfileCollected, Report,
-    Request, SamplesCollected, Sent, Stall, StallCollected, StallMac, StallMacCollected, Start,
-    Started, Tracking, TrackingCollected, Transmit,
+    Addba, AddbaCollected, Begun, Collected, Counters, CountersCollected, Diagnosed,
+    DiagnosticsCollected, Hart1Collected, Hart1Window, Link, LinkCollected, Load, LoadError, Mac,
+    MacCollected, NetworkCollected, PartsCollected, Positions, PositionsCollected,
+    ProfileCollected, Report, Request, SamplesCollected, Sent, Stall, StallCollected, StallMac,
+    StallMacCollected, Start, Started, Tracking, TrackingCollected, Transmit,
 };
 use oer_protocols_hil_protocol::RequestIdentity;
 use static_cell::ConstStaticCell;
 
 use super::action::{Action, Answer as Decided, Kept, Phase, action};
+use super::barrier::{Barrier, Release, until_opened};
 use super::pace::{GRANULARITY_US, Next, Schedule, UNPACED_BATCH};
 use super::receive::{Datagram, Receiving as Tallying, SocketStamps, classify, echo};
 use super::relay::{self, Client};
@@ -69,6 +70,7 @@ pub(crate) type Requests = GroupEnd<(RequestIdentity, Request), Answer, 1>;
 /// An answer of the load server, which the worker publishes.
 pub(crate) enum Answer {
     Started(Started),
+    Begun(Begun),
     Collected(Collected),
     Parts(PartsCollected),
     Counters(CountersCollected),
@@ -96,6 +98,7 @@ impl Answer {
         use oer_hil_agent::answer;
         match self {
             Self::Started(started) => answer(identity, &started),
+            Self::Begun(begun) => answer(identity, &begun),
             Self::Collected(collected) => answer(identity, &collected),
             Self::Parts(parts) => answer(identity, &parts),
             Self::Counters(counters) => answer(identity, &counters),
@@ -128,7 +131,8 @@ pub(crate) async fn serve(
     mut hart1: observe::Hart1,
     tally: RunTally,
 ) -> Infallible {
-    let mut kept: Option<(u32, Ended)> = None;
+    // A run the barrier never released keeps its refusal.
+    let mut kept: Option<(u32, Result<Ended, LoadError>)> = None;
     loop {
         let (identity, request) = requests.receive().await;
         let phase = Phase::Idle {
@@ -161,12 +165,14 @@ pub(crate) async fn serve(
                 }
             }
             Action::Answer(decided) => decided_answer(decided),
+            Action::Begin { .. } => Answer::Begun(Begun::Refused(LoadError::UnknownRun)),
             Action::Cpu => Answer::Cpu(cpu_load().await),
             Action::Diagnose(diagnose) => Answer::Diagnosed(udp::diagnose(diagnose)),
             Action::Kept(kind) => match &kept {
-                Some((_, ended)) => {
+                Some((_, Ok(ended))) => {
                     kept_answer(ended, kind, identity, net, &mut hart0, &mut hart1).await
                 }
+                Some((_, Err(error))) => refused(kind, *error),
                 None => decided_answer(Decided::UnknownRun(kind)),
             },
         };
@@ -243,9 +249,9 @@ async fn sampled(start: &Start, hart0: &mut Client) -> Result<(), LoadError> {
 
 /// What the server answers by itself.
 fn decided_answer(decided: Decided) -> Answer {
-    let unknown = LoadError::UnknownRun;
     match decided {
         Decided::Started(started) => Answer::Started(started),
+        Decided::Begun(begun) => Answer::Begun(begun),
         Decided::Running(Kept::Report) => Answer::Collected(Collected::Running),
         Decided::Running(Kept::Parts { .. }) => Answer::Parts(PartsCollected::Running),
         Decided::Running(Kept::Counters) => Answer::Counters(CountersCollected::Running),
@@ -261,41 +267,35 @@ fn decided_answer(decided: Decided) -> Answer {
         Decided::Running(Kept::Addba) => Answer::Addba(AddbaCollected::Running),
         Decided::Running(Kept::Profile { .. }) => Answer::Profile(ProfileCollected::Running),
         Decided::Running(Kept::Samples { .. }) => Answer::Samples(SamplesCollected::Running),
-        Decided::UnknownRun(Kept::Report) => Answer::Collected(Collected::Refused(unknown)),
-        Decided::UnknownRun(Kept::Parts { .. }) => Answer::Parts(PartsCollected::Refused(unknown)),
-        Decided::UnknownRun(Kept::Counters) => {
-            Answer::Counters(CountersCollected::Refused(unknown))
-        }
-        Decided::UnknownRun(Kept::Link) => Answer::Link(LinkCollected::Refused(unknown)),
-        Decided::UnknownRun(Kept::Mac) => Answer::Mac(MacCollected::Refused(unknown)),
-        Decided::UnknownRun(Kept::Positions) => {
-            Answer::Positions(PositionsCollected::Refused(unknown))
-        }
-        Decided::UnknownRun(Kept::Hart1) => Answer::Hart1(Hart1Collected::Refused(unknown)),
-        Decided::UnknownRun(Kept::Tracking) => {
-            Answer::Tracking(TrackingCollected::Refused(unknown))
-        }
-        Decided::UnknownRun(Kept::Stall) => Answer::Stall(StallCollected::Refused(unknown)),
-        Decided::UnknownRun(Kept::StallMac) => {
-            Answer::StallMac(StallMacCollected::Refused(unknown))
-        }
-        Decided::UnknownRun(Kept::Network) => Answer::Network(NetworkCollected::Refused(unknown)),
-        Decided::UnknownRun(Kept::Diagnostics) => {
-            Answer::Diagnostics(DiagnosticsCollected::Refused(unknown))
-        }
-        Decided::UnknownRun(Kept::Addba) => Answer::Addba(AddbaCollected::Refused(unknown)),
-        Decided::UnknownRun(Kept::Profile { .. }) => {
-            Answer::Profile(ProfileCollected::Refused(unknown))
-        }
-        Decided::UnknownRun(Kept::Samples { .. }) => {
-            Answer::Samples(SamplesCollected::Refused(unknown))
-        }
+        Decided::UnknownRun(kind) => refused(kind, LoadError::UnknownRun),
+    }
+}
+
+/// `kind`'s refusal for `error`.
+fn refused(kind: Kept, error: LoadError) -> Answer {
+    match kind {
+        Kept::Report => Answer::Collected(Collected::Refused(error)),
+        Kept::Parts { .. } => Answer::Parts(PartsCollected::Refused(error)),
+        Kept::Counters => Answer::Counters(CountersCollected::Refused(error)),
+        Kept::Link => Answer::Link(LinkCollected::Refused(error)),
+        Kept::Mac => Answer::Mac(MacCollected::Refused(error)),
+        Kept::Positions => Answer::Positions(PositionsCollected::Refused(error)),
+        Kept::Hart1 => Answer::Hart1(Hart1Collected::Refused(error)),
+        Kept::Tracking => Answer::Tracking(TrackingCollected::Refused(error)),
+        Kept::Stall => Answer::Stall(StallCollected::Refused(error)),
+        Kept::StallMac => Answer::StallMac(StallMacCollected::Refused(error)),
+        Kept::Network => Answer::Network(NetworkCollected::Refused(error)),
+        Kept::Diagnostics => Answer::Diagnostics(DiagnosticsCollected::Refused(error)),
+        Kept::Addba => Answer::Addba(AddbaCollected::Refused(error)),
+        Kept::Profile { .. } => Answer::Profile(ProfileCollected::Refused(error)),
+        Kept::Samples { .. } => Answer::Samples(SamplesCollected::Refused(error)),
     }
 }
 
 /// The measuring window's ends as the image kept them, and the run's socket
 /// boundary.
 struct Window {
+    barrier: Barrier,
     start_us: Cell<Option<u64>>,
     end_us: Cell<Option<u64>>,
     socket: SocketStamps,
@@ -312,6 +312,7 @@ impl Window {
 
 /// What the window's two ends read.
 struct Ends {
+    triggered_us: u64,
     start_us: u64,
     end_us: u64,
     cpu_start: Load,
@@ -352,7 +353,8 @@ struct Ended {
 }
 
 /// Run `start` on `socket` beside the requests until its drain ended, with
-/// `tally` cleared for it; what it keeps. A stop of the station closes the
+/// `tally` cleared for it; what it keeps, or [`LoadError::NotReleased`] for
+/// a synchronised run its barrier never released. A stop of the station closes the
 /// socket: the run then receives and sends nothing more and ends at its
 /// time.
 async fn run(
@@ -363,9 +365,10 @@ async fn run(
     net: &Network,
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
-) -> Ended {
+) -> Result<Ended, LoadError> {
     tally.clear();
     let window = Window {
+        barrier: Barrier::new(now_us(), start.synchronised),
         start_us: Cell::new(None),
         end_us: Cell::new(None),
         socket: SocketStamps::default(),
@@ -393,11 +396,48 @@ async fn run(
         ));
         let mut activity = select(receiver.as_mut(), measuring.as_mut());
         loop {
+            let mut completed = None;
             let running = Phase::Running { run: start.run };
             match select(requests.receive(), &mut activity).await {
                 Either::First((_identity, request)) => {
                     let answer = match action(running, request) {
                         Action::Answer(decided) => decided_answer(decided),
+                        Action::Begin { receive } => {
+                            let begun =
+                                match window
+                                    .barrier
+                                    .begin(now_us(), receive, window.socket.first())
+                                {
+                                    Release::WaitingForLoad => Begun::WaitingForLoad,
+                                    Release::Refused(error) => Begun::Refused(error),
+                                    Release::Ready {
+                                        at_us,
+                                        first_received_us,
+                                    } => {
+                                        // Keep receiving and preparing while the host
+                                        // awaits Begin. Answer only once the window
+                                        // actually opened: a host sleep from this
+                                        // answer cannot query Collect inside it.
+                                        completed = until_opened(&mut activity, &window.start_us)
+                                            .await
+                                            .map(|ended| match ended {
+                                                Either::First(never) => match never {},
+                                                Either::Second(ends) => ends,
+                                            });
+                                        match window.start_us.get() {
+                                            Some(window_start_us) => Begun::Ready {
+                                                at_us,
+                                                first_received_us,
+                                                window_start_us,
+                                            },
+                                            // The measurement ended before
+                                            // its window opened.
+                                            None => Begun::Refused(LoadError::NotReleased),
+                                        }
+                                    }
+                                };
+                            Answer::Begun(begun)
+                        }
                         Action::Cpu => Answer::Cpu(cpu_load().await),
                         // A running server starts nothing and keeps no report.
                         Action::Start(_) => Answer::Started(Started::Refused(LoadError::Busy)),
@@ -405,6 +445,9 @@ async fn run(
                         Action::Diagnose(diagnose) => Answer::Diagnosed(udp::diagnose(diagnose)),
                     };
                     requests.send(answer).await;
+                    if let Some(ends) = completed {
+                        break ends;
+                    }
                 }
                 Either::Second(Either::First(never)) => match never {},
                 Either::Second(Either::Second(ends)) => break ends,
@@ -412,7 +455,10 @@ async fn run(
         }
     };
     drop(socket);
+    let ends = ends?;
     let report = Report {
+        armed_us: window.barrier.armed_us,
+        triggered_us: ends.triggered_us,
         window_start_us: ends.start_us,
         window_end_us: ends.end_us,
         cpu_start: ends.cpu_start,
@@ -420,7 +466,7 @@ async fn run(
         received: receiving.received(tally),
         sent,
     };
-    Ended {
+    Ok(Ended {
         report,
         parts: ends.parts,
         counters: ends.counters,
@@ -433,7 +479,7 @@ async fn run(
         stall_mac: ends.stall_mac,
         addba: ends.addba,
         sampled: ends.sampled,
-    }
+    })
 }
 
 /// Count every datagram on the port and echo those that ask for it, at once.
@@ -482,17 +528,24 @@ async fn measure(
     net: &Network,
     hart0: &mut Client,
     hart1: &mut observe::Hart1,
-) -> Ends {
+) -> Result<Ends, LoadError> {
     oer_portable_trace::tune::set(start.tune);
-    let planned_start = now_us().saturating_add(millis(start.delay_ms));
-    let planned_end = planned_start.saturating_add(millis(start.duration_ms));
-    wait_until(planned_start).await;
+    // The request loop polls this sibling again after a Begin. A release
+    // that never came ends the run at its bound, without a window.
+    let triggered_us = window
+        .barrier
+        .released(wait_until(window.barrier.deadline()))
+        .await?;
+    wait_until(triggered_us.saturating_add(millis(start.delay_ms))).await;
     let cpu_start = cpu_load().await;
     let (parts_start, tracking_start) = readings(true).await;
     let counters_start = snapshot(hart0, true, net).await;
     udp::open_turns(net);
     let hart1_start = report::hart_count(hart1.counters());
     let start_us = now_us();
+    // Preparation can await the other hart. Preserve the requested window
+    // duration from its actual opening, rather than shortening its tail.
+    let planned_end = start_us.saturating_add(millis(start.duration_ms));
     window.start_us.set(Some(start_us));
     let sampling = match start.profile {
         Some(profile) => Some(relay::start_sampler(hart0, profile.period_us).await),
@@ -549,7 +602,8 @@ async fn measure(
         socket_after_us: window.socket.first_after(),
         snapshot,
     };
-    Ends {
+    Ok(Ends {
+        triggered_us,
         start_us,
         end_us,
         cpu_start,
@@ -568,7 +622,7 @@ async fn measure(
         stall_mac,
         addba: counters_end.addba,
         sampled: [sampled, sampled1],
-    }
+    })
 }
 
 /// One end's counters: the boot hart's and the library's, read there, and

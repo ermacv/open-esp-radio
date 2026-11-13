@@ -247,3 +247,131 @@ fn two_parsed_reads_make_the_client_s_window() {
         Some(Change::Valid(delta)) if delta.change == 3
     ));
 }
+
+/// The phy's `aqm` text of the T3 run's first read (`evidence/001-t3`):
+/// exactly the kernel's 199 characters, its `fq_quantum 300` cut to `30`.
+const RADIO_CUT: &str = "access name value\nR fq_flows_cnt 4096\nR fq_backlog 0\n\
+                         R fq_overlimit 1963106\nR fq_overmemory 1963106\n\
+                         R fq_collisions 18\nR fq_memory_usage 0\n\
+                         RW fq_memory_limit 4194304\nRW fq_limit 8192\nRW fq_quantum 30";
+
+/// The radio's queues of one read whose radio file is `radio`, as the
+/// router's script prints it: the file, then the newline it appends.
+fn radio_read(radio: &str) -> RadioQueues {
+    let file = format!("{radio}\n");
+    read(&answer("1.00", Some("0.500s"), 10, "1.00", "", &file))
+        .radio_queues
+        .unwrap()
+}
+
+/// Every complete row's value, by name.
+fn values(queues: &RadioQueues) -> Vec<(&str, u64)> {
+    queues
+        .values
+        .iter()
+        .filter_map(|(name, entry)| Some((name.as_str(), entry.value?.value)))
+        .collect()
+}
+
+const COMPLETE: [(&str, u64); 8] = [
+    ("fq_backlog", 0),
+    ("fq_collisions", 18),
+    ("fq_flows_cnt", 4096),
+    ("fq_limit", 8192),
+    ("fq_memory_limit", 4194304),
+    ("fq_memory_usage", 0),
+    ("fq_overlimit", 1963106),
+    ("fq_overmemory", 1963106),
+];
+
+#[test]
+fn a_radio_file_cut_at_the_kernels_buffer_keeps_every_complete_value_and_names_the_cut_one() {
+    assert_eq!(RADIO_CUT.len(), RADIO_TEXT_MAX);
+    let queues = radio_read(RADIO_CUT);
+    assert_eq!(values(&queues), COMPLETE);
+    assert_eq!(queues.cut_names, ["fq_quantum"]);
+    assert!(queues.missing_names.is_empty());
+    // `30` parses, yet it is a cut `300`: no value of it.
+    assert!(!queues.values.contains_key("fq_quantum"));
+    assert_eq!(queues.raw.lines.last().unwrap(), "RW fq_quantum 30");
+}
+
+#[test]
+fn a_radio_file_cut_inside_a_name_still_gives_its_complete_values() {
+    // Larger counters: the same file ends inside the last row's name.
+    let text = RADIO_CUT
+        .replace("fq_overlimit 1963106", "fq_overlimit 196310600")
+        .replace("fq_overmemory 1963106", "fq_overmemory 1963106000")
+        .replace("fq_collisions 18", "fq_collisions 18000");
+    let text = &text[..RADIO_TEXT_MAX];
+    assert!(text.ends_with("RW fq_qu"));
+    let queues = radio_read(text);
+    let mut expected = COMPLETE;
+    expected[1].1 = 18_000;
+    expected[6].1 = 196_310_600;
+    expected[7].1 = 1_963_106_000;
+    assert_eq!(values(&queues), expected);
+    assert_eq!(queues.cut_names, ["fq_quantum"]);
+    assert!(queues.missing_names.is_empty());
+}
+
+#[test]
+fn a_radio_row_that_does_not_match_its_header_before_the_last_is_refused() {
+    let text = RADIO_CUT
+        .replace("R fq_collisions 18", "R fq_colli 18 x")
+        .replace("fq_memory_usage 0", "fq_memory_usage 0000");
+    assert_eq!(text.len(), RADIO_TEXT_MAX);
+    let file = format!("{text}\n");
+    assert!(parse_link(&answer("1.00", Some("0.500s"), 10, "1.00", "", &file)).is_err());
+}
+
+#[test]
+fn a_shorter_whole_radio_file_reports_nothing_cut() {
+    let queues = radio_read(RADIO.trim_end());
+    assert!(queues.cut_names.is_empty() && queues.missing_names.is_empty());
+    assert_eq!(
+        queues.values["fq_quantum"].value.map(|value| value.value),
+        Some(300)
+    );
+}
+
+#[test]
+fn a_station_file_cut_at_the_kernels_buffer_keeps_its_whole_rows() {
+    // Seventeen TID rows at full width, the last of them cut by the buffer.
+    let row = |tid: u8| {
+        format!(
+            "{tid} 2 4294967295 4294967295 4294967295 4294967295 4294967295 \
+             4294967295 4294967295 4294967295 4294967295 0xf(STOP AMPDU NO-AMSDU DIRTY)"
+        )
+    };
+    let whole = (0..17).map(row).collect::<Vec<_>>().join("\n");
+    let text = format!("{HEADER}\n{whole}");
+    let text = &text[..STATION_TEXT_MAX];
+    let link = read(&answer(
+        "1.00",
+        Some("0.500s"),
+        10,
+        "1.00",
+        &format!("{text}\n"),
+        "",
+    ));
+    let queues = link.station_queues.unwrap();
+    let cut = queues.cut_row.unwrap();
+    assert!(
+        row(16).starts_with(&cut) && cut != row(16),
+        "the last row, cut"
+    );
+    assert_eq!(queues.tids.len(), 16, "every whole row");
+    assert_eq!(queues.tids[15].tx_packets.unwrap().value, 4_294_967_295);
+    // A whole file of the same rows but the last is not cut.
+    let shorter = (0..16).map(row).collect::<Vec<_>>().join("\n");
+    let link = read(&answer(
+        "1.00",
+        Some("0.500s"),
+        10,
+        "1.00",
+        &format!("{HEADER}\n{shorter}\n"),
+        "",
+    ));
+    assert!(link.station_queues.unwrap().cut_row.is_none());
+}

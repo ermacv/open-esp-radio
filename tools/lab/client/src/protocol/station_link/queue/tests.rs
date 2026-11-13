@@ -80,6 +80,7 @@ fn read(
         raw: raw(queues_ms),
         unknown_columns: Vec::new(),
         missing_columns: Vec::new(),
+        cut_row: None,
         tids: vec![tid(0, tid0, queues_ms), tid(7, tid7, queues_ms)],
     });
     let radio_queues = radio.map(|overrides| RadioQueues {
@@ -87,6 +88,7 @@ fn read(
         unknown_columns: Vec::new(),
         unknown_names: Vec::new(),
         missing_names: Vec::new(),
+        cut_names: Vec::new(),
         values: RADIO
             .iter()
             .map(|(name, counts, value)| {

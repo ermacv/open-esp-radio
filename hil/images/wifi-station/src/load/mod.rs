@@ -10,6 +10,7 @@
 //! sampler.
 
 pub(crate) mod action;
+pub(crate) mod barrier;
 pub(crate) mod pace;
 pub(crate) mod receive;
 #[cfg(target_arch = "riscv32")]
