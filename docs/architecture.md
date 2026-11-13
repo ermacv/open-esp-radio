@@ -16,6 +16,13 @@ the end go deeper.
   later: ACL first, one Bluetooth driver with LE and BR/EDR phases, a generic
   HCI layer with LE as one sub-dispatcher, one air reservation for all of
   Bluetooth.
+- **Configuration.** An image chooses at build time what it holds and where
+  it runs: no Wi-Fi role, the station, the access point or both, and the
+  network on the radio's hart or on another. A part not chosen costs the
+  image nothing. Chips of the family with one core are consumers of the
+  one-hart placement. The network's interface contract is to carry several
+  interfaces (Wi-Fi station, Wi-Fi access point, both at once, Ethernet,
+  IEEE 802.15.4); today it carries one.
 - **Vendor parity is not a goal.** Clean architecture with hard boundaries,
   sans-IO protocols tested on the host and hardware offloads come first.
   Vendor code is evidence of hardware behaviour, not a design to copy; a
