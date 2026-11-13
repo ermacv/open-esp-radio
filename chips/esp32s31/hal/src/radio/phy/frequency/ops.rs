@@ -252,6 +252,11 @@ impl BasebandMode {
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
 const RF_MEMORY_READ_MODE: Bits<2> = Bits::truncate(2);
 
+/// The read mode the P-FREQ diagnostic sheet held for its reads.
+///
+/// SOURCE: HW19_S31_FREQUENCY_SELECTION_20261027.
+const DIAGNOSTIC_MEMORY_READ_MODE: Bits<2> = Bits::truncate(0);
+
 /// Select the recovered two-bit baseband mode.
 pub fn set_baseband_mode<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
@@ -396,7 +401,7 @@ pub fn read_memory_mode0<P: PhyPlacement>(
             .set_memory_address_high(address.high());
     });
     frequency.fe.modify_i2c_number_control(|w| {
-        w.set_memory_read_mode(Bits::truncate(0));
+        w.set_memory_read_mode(DIAGNOSTIC_MEMORY_READ_MODE);
     });
     frequency.fe.modify_frequency_memory_read_control(|w| {
         w.set_read_pulse(true);
