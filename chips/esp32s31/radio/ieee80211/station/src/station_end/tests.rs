@@ -1234,3 +1234,62 @@ fn the_lifecycle_half_goes_out_before_the_datapath_end_it_lets_come() {
     };
     assert_eq!(half.late_end(), LateRead::Ended(LateEnd::Abandoned));
 }
+
+/// A start refusal of the test's own, with its path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Refusal;
+
+impl oer_portable_diagnostics::DiagnosticPath for Refusal {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
+        path.name("Refusal");
+    }
+}
+
+/// Each end of the station is its own stop error, its value unchanged, and
+/// its path names that end and then its cause.
+#[test]
+fn each_exit_of_the_station_is_its_own_stop_error_with_its_value() {
+    use oer_portable_diagnostics::DiagPath;
+    let failure = LifecycleFailure::Reinstall(ReinstallCause::Epochs);
+    let unavailable = Unavailable {
+        cause: Refusal,
+        cleanup: Err(ReleaseCause::Deadline),
+    };
+    let cases: [(Result<StationExitOf<Refusal>, crate::RunnerLost>, _); 6] = [
+        (Ok(StationExitOf::Stopped), Ok(())),
+        (
+            Ok(StationExitOf::StoppedNetworkLost),
+            Err(StopErrorOf::NetworkLost),
+        ),
+        (
+            Ok(StationExitOf::Failed(failure)),
+            Err(StopErrorOf::Failed(failure)),
+        ),
+        (
+            Ok(StationExitOf::ReleaseFailed(ReleaseCause::Held)),
+            Err(StopErrorOf::ReleaseFailed(ReleaseCause::Held)),
+        ),
+        (
+            Ok(StationExitOf::Unavailable(unavailable)),
+            Err(StopErrorOf::Unavailable(unavailable)),
+        ),
+        (Err(crate::RunnerLost), Err(StopErrorOf::RunnerLost)),
+    ];
+    let paths: [&[&str]; 5] = [
+        &["NetworkLost"],
+        &["Failed", "Reinstall", "Epochs"],
+        &["ReleaseFailed", "Held"],
+        &["Unavailable", "Refusal", "Cleanup", "Deadline"],
+        &["RunnerLost"],
+    ];
+    let mut errors = 0;
+    for (exit, expected) in cases {
+        let result = stop_result(exit);
+        assert_eq!(result, expected);
+        if let Err(error) = result {
+            assert_eq!(DiagPath::of(&error).names(), paths[errors]);
+            errors += 1;
+        }
+    }
+    assert_eq!(errors, paths.len());
+}

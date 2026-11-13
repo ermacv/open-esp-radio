@@ -159,9 +159,11 @@ association; a connect that ended without a link leaves the station idle
 for the application's next connect, with the same or another profile.
 `linked()` names the access point and channel while the link is up.
 `stop()` leaves the network and stops the station for good: the future ends
-once the radio retired, with `StopError::Failed` when the station ended by
-a failure instead, `StopError::ReleaseFailed` with its typed cause when it
-stopped but its radio's release failed (nothing resets), and a later
+once the radio retired, with `StopError::Failed` and the station's typed
+failure when it ended by one instead (`Unavailable` when it never started,
+`RunnerLost` when its runner ended without an exit), `StopError::ReleaseFailed`
+with its typed cause when it stopped but its radio's release failed (nothing
+resets), and a later
 connect answers `ConnectError::Stopped`. A
 start the radio refused resets nothing: the first connect answers
 `ConnectError::NotStarted` with the refusal's typed cause and how its

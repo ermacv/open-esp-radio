@@ -148,6 +148,19 @@ pub fn restart_cause_text(restarts: &wifi::Restarts, out: &mut [u8]) -> usize {
     oer_chips_esp32s31_platform_runtime::diagnostic_text::write(b"wifi-restarted", &path, out)
 }
 
+/// How the station ended (`ended`, as [`Station::ended`] reads it) as its
+/// line reads, written to `out`: `wifi-stop` and the stop error's variant
+/// path, or `wifi-stopped` after a stop that ended with it stopped; the
+/// bytes written.
+#[cfg(feature = "station")]
+pub fn end_text(ended: &Result<(), StopError>, out: &mut [u8]) -> usize {
+    let (prefix, path): (&[u8], _) = match ended {
+        Ok(()) => (b"wifi-stopped", oer_portable_diagnostics::DiagPath::new()),
+        Err(error) => (b"wifi-stop", oer_portable_diagnostics::DiagPath::of(error)),
+    };
+    oer_chips_esp32s31_platform_runtime::diagnostic_text::write(prefix, &path, out)
+}
+
 /// The station restarted after `failure`, which stayed inside the radio: the
 /// console keeps its cause and the chip runs on.
 fn restarted(failure: &wifi::failure::LifecycleFailure) {

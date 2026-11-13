@@ -281,21 +281,10 @@ pub struct Station {
     drain: oer_portable_time::Duration,
 }
 
-/// Why a stop did not end with the station stopped.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StopError {
-    /// The station ended by a failure, typed with the control; nothing
-    /// resets, and an installation that did not retire comes back whole
-    /// ([`Station::installation_half`]).
-    Failed,
-    /// The station stopped, and its radio's release did not complete, for
-    /// this cause. A leave the release posted is never posted again.
-    ReleaseFailed(wifi::failure::ReleaseCause),
-    /// The station stopped and every owner came back, but the network's
-    /// stop participant was lost: its stop was never confirmed. The radio's
-    /// stop was; nothing resets.
-    NetworkLost,
-}
+/// Why a stop did not end with the station stopped: each end of the
+/// station its own variant with the value its exit held. An installation
+/// that did not retire comes back whole ([`Station::installation_half`]).
+pub use wifi::StopError;
 
 impl Station {
     /// Start the station on `wifi`: the radio executor, the actor, the MAC
@@ -406,21 +395,19 @@ impl Station {
     /// with its stop. A second stop ends with the first one's result.
     ///
     /// # Errors
-    /// [`StopError::Failed`]: the station ended by a failure instead.
-    /// [`StopError::ReleaseFailed`]: the station stopped and its radio's
-    /// release failed, nothing reset.
+    /// [`StopError::Failed`]: the station ended by that failure instead;
+    /// [`StopError::Unavailable`]: it never started;
+    /// [`StopError::RunnerLost`]: its runner ended without an exit;
+    /// [`StopError::ReleaseFailed`]: it stopped and its radio's release
+    /// failed, nothing reset; [`StopError::NetworkLost`]: the network's stop
+    /// was never confirmed.
     pub async fn stop(&mut self) -> Result<(), StopError> {
         let deadline = {
             use oer_portable_time::Clock as _;
             EmbassyClock.now().saturating_add(self.drain)
         };
         self.control.stop(deadline);
-        match self.control.wait_stopped().await {
-            Ok(wifi::StationExit::Stopped) => Ok(()),
-            Ok(wifi::StationExit::ReleaseFailed(cause)) => Err(StopError::ReleaseFailed(cause)),
-            Ok(wifi::StationExit::StoppedNetworkLost) => Err(StopError::NetworkLost),
-            Ok(_) | Err(wifi::RunnerLost) => Err(StopError::Failed),
-        }
+        wifi::stop_result(self.control.wait_stopped().await)
     }
 
     /// The next half of how the station's installation ended, as it
@@ -448,6 +435,13 @@ impl Station {
                 in_transit,
             },
         })
+    }
+
+    /// How the station ended, once it did, read without waiting: `None`
+    /// while it runs, `Some(Ok(()))` after a stop that ended with it
+    /// stopped, otherwise its end as [`Self::stop`] would answer it.
+    pub fn ended(&self) -> Option<Result<(), StopError>> {
+        self.control.exit().map(wifi::stop_result)
     }
 
     /// The link's state and epoch now.

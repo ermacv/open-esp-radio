@@ -532,3 +532,67 @@ fn lifecycle_violation(
         V::RetuneWithoutRequest => "RetuneWithoutRequest",
     }
 }
+
+impl DiagnosticPath for ReleaseCause {
+    fn push_path(&self, path: &mut DiagPath) {
+        match self {
+            Self::StopUnconfirmed => path.name("StopUnconfirmed"),
+            Self::Held => path.name("Held"),
+            Self::FrontierHeld => path.name("FrontierHeld"),
+            Self::StillActive(error) => {
+                path.name("StillActive");
+                match error {
+                    MaintenanceError::MacActive { state } => {
+                        path.name("MacActive");
+                        path.word(u32::from(*state));
+                    }
+                    MaintenanceError::RxWalkerEnabled => path.name("RxWalkerEnabled"),
+                }
+            }
+            Self::LeaveUnanswered(observations) => {
+                path.name("LeaveUnanswered");
+                for word in observations {
+                    path.word(*word);
+                }
+            }
+            // The poison's origin and cause are a subtree of their own.
+            Self::DomainPoisoned(_) => {
+                path.name("DomainPoisoned");
+                path.truncated();
+            }
+            Self::Deadline => path.name("Deadline"),
+            Self::Cleanup(cause) => {
+                path.name("Cleanup");
+                match cause {
+                    CleanupCause::NotStopped => path.name("NotStopped"),
+                    CleanupCause::Faulted(fault) => {
+                        path.name("Faulted");
+                        fault.push_path(path);
+                    }
+                    CleanupCause::Unavailable(fault) => {
+                        path.name("Unavailable");
+                        fault.push_path(path);
+                    }
+                    CleanupCause::Held(fault) => {
+                        path.name("Held");
+                        fault.push_path(path);
+                    }
+                    CleanupCause::Unkept => path.name("Unkept"),
+                }
+            }
+            Self::Unkept => path.name("Unkept"),
+        }
+    }
+}
+
+/// A refused start: its cause, then how its owners ended when that was not
+/// clean.
+impl<C: DiagnosticPath> DiagnosticPath for Unavailable<C> {
+    fn push_path(&self, path: &mut DiagPath) {
+        self.cause.push_path(path);
+        if let Err(cleanup) = &self.cleanup {
+            path.name("Cleanup");
+            cleanup.push_path(path);
+        }
+    }
+}

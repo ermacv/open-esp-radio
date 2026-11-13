@@ -231,7 +231,10 @@ which the image hands to the station's `Profile`. Images select the interrupt en
 spawn the two returned tasks.
 Automatic reconnect and graceful station shutdown belong to the product
 runtime. The facade configures reconnect with its own policy values; disabled
-is the default, which the HIL station image keeps: it joins once per boot.
+is the facade's default. The application entry's `wifi::Config::new` gives a
+reconnect every second (`wifi::RECONNECT`), which the HIL station image
+keeps: it takes one join per boot, and the policy brings the station back
+after a lost association or a restart.
 Each `Control::connect` carries its network's profile (SSID and security);
 only an idle station takes it, and it stays for later connections, so the
 policy never connects first and reconnects with the kept profile. The
