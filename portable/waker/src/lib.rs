@@ -31,6 +31,7 @@
 mod cell;
 
 use core::fmt;
+use core::mem::ManuallyDrop;
 use core::sync::atomic::Ordering::{AcqRel, Acquire, Release};
 use core::task::Waker;
 
@@ -50,9 +51,14 @@ const WAKING: usize = 0b10;
 /// Producers publish their input before [`wake`](Self::wake); the consumer
 /// registers before it checks that input. A waker's clone and drop run with
 /// the cell held, so they must not call into it.
+///
+/// The cell's one destructor ([`Drop`]) drops the waker it holds: the field
+/// has no drop glue of its own, so no type that holds a cell inlines a
+/// waker's drop, and every drop of a cell's waker in an image is that one
+/// function.
 pub struct AtomicWaker {
     state: AtomicUsize,
-    waker: UnsafeCell<Option<Waker>>,
+    waker: UnsafeCell<ManuallyDrop<Option<Waker>>>,
 }
 
 #[allow(unsafe_code, reason = "the waker is reached only under the state word")]
@@ -66,7 +72,7 @@ impl AtomicWaker {
     pub const fn new() -> Self {
         Self {
             state: AtomicUsize::new(WAITING),
-            waker: UnsafeCell::new(None),
+            waker: UnsafeCell::new(ManuallyDrop::new(None)),
         }
     }
 
@@ -75,7 +81,7 @@ impl AtomicWaker {
     pub fn new() -> Self {
         Self {
             state: AtomicUsize::new(WAITING),
-            waker: UnsafeCell::new(None),
+            waker: UnsafeCell::new(ManuallyDrop::new(None)),
         }
     }
 
@@ -149,7 +155,7 @@ impl AtomicWaker {
     unsafe fn store(&self, waker: &Waker) {
         self.waker.with_mut(|stored| {
             // SAFETY: the caller holds the cell, by this function's contract.
-            let stored = unsafe { &mut *stored };
+            let stored: &mut Option<Waker> = unsafe { &mut *stored };
             match stored {
                 Some(old) if old.will_wake(waker) => {}
                 _ => *stored = Some(waker.clone()),
@@ -165,8 +171,22 @@ impl AtomicWaker {
     unsafe fn take_stored(&self) -> Option<Waker> {
         self.waker.with_mut(|stored| {
             // SAFETY: the caller holds the cell, by this function's contract.
-            unsafe { &mut *stored }.take()
+            let stored: &mut Option<Waker> = unsafe { &mut *stored };
+            stored.take()
         })
+    }
+}
+
+impl Drop for AtomicWaker {
+    /// Drop the waker the cell holds, if any: the one place a cell's waker
+    /// is dropped when the cell goes.
+    #[inline(never)]
+    #[allow(unsafe_code, reason = "the destructor holds the cell exclusively")]
+    fn drop(&mut self) {
+        // SAFETY: `&mut self` excludes every registration and wake, so this
+        // context holds the cell; the field is never read after this.
+        let waker = unsafe { self.take_stored() };
+        drop(waker);
     }
 }
 

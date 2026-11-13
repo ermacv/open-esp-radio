@@ -48,16 +48,6 @@ impl Default for SameHart {
     }
 }
 
-// Dropping refused preparations can merge several copies of the owned
-// waker's destructor into an untyped enum cleanup tail. Empty and destroy it
-// in this cold boundary, retaining the waker operation for the image proof.
-impl Drop for SameHart {
-    #[inline(never)]
-    fn drop(&mut self) {
-        drop(self.network.take());
-    }
-}
-
 impl LentNotifies for SameHart {
     fn register_returned(&self, cx: &mut Context<'_>) {
         self.network.register(cx.waker());
