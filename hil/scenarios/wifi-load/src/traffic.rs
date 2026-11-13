@@ -39,6 +39,9 @@ pub struct Received {
     /// When the first and the last distinct load datagram arrived.
     pub first: Option<Instant>,
     pub last: Option<Instant>,
+    /// The same arrivals in endpoint microseconds, for saved start boundaries.
+    pub first_us: Option<u64>,
+    pub last_us: Option<u64>,
     pub echoes: Echoes,
     /// Datagrams of other runs or without a header.
     pub foreign: u64,
@@ -65,8 +68,12 @@ impl Endpoint {
         let started = Instant::now();
         let reader = {
             let (socket, stop, received) = (socket.clone(), stop.clone(), received.clone());
-            std::thread::spawn(move || {
+            let (ready, listening) = std::sync::mpsc::sync_channel(0);
+            let reader = std::thread::spawn(move || {
                 let mut buffer = vec![0; 2048];
+                // Endpoint::open returns only after the receiver thread has
+                // started with its socket and buffer ready, before Start.
+                let _ = ready.send(());
                 while !stop.load(Ordering::Relaxed) {
                     let Ok((length, _)) = socket.recv_from(&mut buffer) else {
                         continue;
@@ -88,12 +95,19 @@ impl Endpoint {
                             if matches!(arrival, Arrival::New | Arrival::Late) {
                                 received.first.get_or_insert(at);
                                 received.last = Some(at);
+                                let now = micros(started, at);
+                                received.first_us.get_or_insert(now);
+                                received.last_us = Some(now);
                             }
                         }
                         _ => received.foreign += 1,
                     }
                 }
-            })
+            });
+            listening
+                .recv()
+                .map_err(|_| std::io::Error::other("host load receiver did not start"))?;
+            reader
         };
         Ok(Self {
             socket,

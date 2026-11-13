@@ -1701,6 +1701,8 @@ fn measured_level(
             "host_begin_answer_us": begin_answer_us,
             "host_first_send_us": sent.first_us,
             "host_last_send_us": sent.last_us,
+            "host_first_receive_us": received.first_us,
+            "host_last_receive_us": received.last_us,
             "device_begin": begun,
             "device_armed_us": ended.report.armed_us,
             "device_triggered_us": ended.report.triggered_us,
@@ -1708,6 +1710,8 @@ fn measured_level(
             "device_window_end_us": ended.report.window_end_us,
             "device_first_delivery_us": ended.report.received.first_us,
             "device_last_delivery_us": ended.report.received.last_us,
+            "device_first_send_us": ended.report.sent.first_us,
+            "device_last_send_us": ended.report.sent.last_us,
             "rx_loss_scope": "entire host flow including warm-up and drain; window delivery uses device counters",
         }));
         if let Some(echoes) = &echoes {
