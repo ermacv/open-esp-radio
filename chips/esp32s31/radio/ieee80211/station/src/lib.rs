@@ -271,6 +271,10 @@ pub const STOP_FLOOR: oer_portable_time::Duration =
 #[cfg(not(target_arch = "riscv32"))]
 pub enum Unlent {}
 #[cfg(not(target_arch = "riscv32"))]
+impl oer_portable_memory::BatchReturn for Unlent {
+    type Batch = ();
+}
+#[cfg(not(target_arch = "riscv32"))]
 impl oer_protocols_ieee80211_contracts_port::LentRxBuffer for Unlent {
     fn storage(&self) -> &[u8] {
         match *self {}

@@ -41,6 +41,13 @@ identical arrivals and consumer opportunities, and records socket-queued and
 application-held owners, physical returns, published loan returns and credit
 restoration separately. A draining consumer, a four-frame hold, a full-credit
 hold and a TX return exercise progress without changing credit or batch sizes.
+Those original scenarios remain regressions of the explicit servicing
+contract. Additional cases use synchronous application prefixes and batched
+credit publication, including individually retained owners and the reverse
+task order. A consumer which cancels after publication or stays busy after a
+prefix cannot block RX or TX; genuine held/queued credit still bounds its
+delivery. The model continues to separate physical return, published credit
+and the service's collection, and checks all owners at retirement.
 
 ## Station simulation
 

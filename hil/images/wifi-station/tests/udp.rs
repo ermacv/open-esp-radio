@@ -19,9 +19,8 @@ mod udp;
 
 #[path = "support/bench.rs"]
 mod bench;
-
-use core::future::Future;
-use core::task::{Context, Waker};
+#[path = "support/receive.rs"]
+mod receive;
 
 use bench::*;
 use oer_portable_time_virtual::VirtualClock;
@@ -40,9 +39,8 @@ fn ending_a_load_run_returns_every_block_its_adapters_held() {
     turn(&mut service, &clock);
     {
         let (mut receiving, _sending) = run.split();
-        let ready = core::pin::pin!(receiving.ready());
-        let waker = Waker::noop();
-        assert!(ready.poll(&mut Context::from_waker(waker)).is_ready());
+        let datagram = receive::copied(&mut receiving);
+        let _packet = receiving.copied(datagram);
     }
     {
         let (_receiving, mut sending) = run.split();

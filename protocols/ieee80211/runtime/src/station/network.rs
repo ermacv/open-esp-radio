@@ -19,6 +19,14 @@ use oer_protocols_network_port::{CopyReason, FrameStorage, LentFrame};
 /// allocation.
 pub struct NetworkRx<L>(pub(crate) L);
 
+impl<L: oer_portable_memory::BatchReturn> oer_portable_memory::BatchReturn for NetworkRx<L> {
+    type Batch = L::Batch;
+
+    fn return_in(self, batch: &mut Self::Batch) {
+        self.0.return_in(batch);
+    }
+}
+
 impl<L: LentRxBuffer> FrameStorage for NetworkRx<L> {
     fn bytes(&self) -> &[u8] {
         self.0.storage()

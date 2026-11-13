@@ -59,9 +59,6 @@ impl AfterUnsent {
 /// What a turn did.
 #[derive(Clone, Copy, Debug)]
 struct Turned {
-    /// A lending socket was given frames. Its consumer needs a complete
-    /// executor round before the next intake, not just a self-wake.
-    lent: bool,
     /// It left work no wake names: a budget spent, notices untold, a block
     /// evicted, a producer's hold or budget freed, a refused publication of
     /// the address.
@@ -70,6 +67,23 @@ struct Turned {
     /// a flow left out after a declining fill. The next turn may take only
     /// the frames ([`Turn::Packets`]).
     packets: bool,
+}
+
+/// Continuations left by the shared frame stage, before control's epilogue.
+struct FrameWork {
+    packets: bool,
+    other: bool,
+}
+
+impl FrameWork {
+    fn turned(self, control: bool, producer: bool) -> Turned {
+        let packets = self.packets || producer;
+        let other = self.other || control;
+        Turned {
+            again: other || packets,
+            packets: packets && !other,
+        }
+    }
 }
 
 /// Which steps a turn takes.
@@ -908,10 +922,10 @@ impl<
                 Turn::Full
             };
             received_only = false;
-            let turned = if kind == Turn::Receive {
-                self.receive_turn(now, events)
-            } else {
-                self.turn(now, kind, events)
+            let turned = match kind {
+                Turn::Receive => self.receive_turn(now, events),
+                Turn::Packets => self.packet_turn(now, events),
+                Turn::Full => self.full_turn(now, events),
             };
             only_frames = turned.packets;
             if let Some(broken) = self.owner.broken() {
@@ -922,20 +936,10 @@ impl<
                 });
                 continue;
             }
-            let yielded = turned.again || turned.lent;
+            let yielded = turned.again;
             if yielded {
                 report(events, || ServiceEvent::Yielded);
                 yield_now().await;
-                if turned.lent {
-                    // The executor snapshots its ready set, then polls the
-                    // network before the application. A consumer newly woken
-                    // by this batch was absent from that snapshot: the next
-                    // round polls us first again. Pass through that round so
-                    // it can run before another batch spends its credit.
-                    // This never waits for a slow consumer to return a loan.
-                    report(events, || ServiceEvent::Yielded);
-                    yield_now().await;
-                }
             }
             if !turned.again {
                 let woke = self.wait(clock, events).await;
@@ -952,44 +956,76 @@ impl<
         }
     }
 
-    /// One bounded pass over everything: whether it left work for the next turn that no wake names. Every exit goes
-    /// through its one epilogue, which hands every known result to its
-    /// client, so at an await each open work truly was not published.
-    fn turn(
+    /// The ordinary shared RX/TX path. Control is a separate entry, so its
+    /// commands, timers, eviction and configuration are not part of this
+    /// loop's machine-code body or a branch at every frame stage.
+    fn packet_turn(
         &mut self,
         now: Instant,
-        kind: Turn,
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
     ) -> Turned {
-        // What only frames leave, and what more than frames leaves.
-        let mut packets = false;
-        let mut again = false;
         let mut tally = Tally::turn(&mut self.diagnostics);
         report(events, || ServiceEvent::TurnBegan);
-        if kind == Turn::Packets {
-            report(events, || ServiceEvent::PacketTurn);
-        }
+        report(events, || ServiceEvent::PacketTurn);
         self.local.turn_begins();
-        // A link that changed ends what was prepared for the old one: every
-        // turn sees it before a frame moves.
         self.owner.observe_link(now);
-        if kind == Turn::Full {
-            self.owner.tick(now, events);
-            for index in 0..SOCKETS {
-                self.commands(now, index, events);
-            }
+        tally.stage(Stage::Intake, &mut self.diagnostics);
+        self.take_returns(&mut tally);
+        tally.stage(Stage::Returns, &mut self.diagnostics);
+        let frames = self.frames(now, events, &mut tally);
+        self.deliver(events, &tally);
+        let turned = frames.turned(false, self.local.again(&self.owner));
+        self.turn_ended(events);
+        tally.stage(Stage::Settle, &mut self.diagnostics);
+        tally.end(&mut self.diagnostics);
+        turned
+    }
+
+    /// Bounded control work, with the original order: tick/commands before
+    /// returns and frames; eviction before results; configuration after
+    /// results. Keeping this cold entry out of the packet body also keeps
+    /// its large command and retirement cases out of ordinary TX.
+    #[cold]
+    #[inline(never)]
+    fn full_turn(
+        &mut self,
+        now: Instant,
+        events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
+    ) -> Turned {
+        let mut tally = Tally::turn(&mut self.diagnostics);
+        report(events, || ServiceEvent::TurnBegan);
+        self.local.turn_begins();
+        self.owner.observe_link(now);
+        self.owner.tick(now, events);
+        for index in 0..SOCKETS {
+            self.commands(now, index, events);
         }
         tally.stage(Stage::Intake, &mut self.diagnostics);
-        // Lent memory coming back is the frames' own: every turn takes it.
         self.take_returns(&mut tally);
-        if kind == Turn::Full {
-            self.give_blocks();
-        }
+        self.give_blocks();
         tally.stage(Stage::Returns, &mut self.diagnostics);
-        // A broken queue the owner records, which ends the run.
-        let intake = self.intake(now, events, &mut tally);
-        let intake_full = intake.batch.end == BatchEnd::Limit;
-        packets |= intake_full;
+        let frames = self.frames(now, events, &mut tally);
+        let mut control = !self.owner.port_broken() && self.relieve(now);
+        self.deliver(events, &tally);
+        let producer = self.local.again(&self.owner);
+        control |= self.publish_configuration();
+        self.turn_ended(events);
+        tally.stage(Stage::Settle, &mut self.diagnostics);
+        tally.end(&mut self.diagnostics);
+        frames.turned(control, producer)
+    }
+
+    /// Shared bounded frame work. It neither runs control nor waits for a
+    /// consumer: an explicit outstanding servicing promise gates intake
+    /// only, while notices, the producer and TX continue in the same order.
+    fn frames(
+        &mut self,
+        now: Instant,
+        events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
+        tally: &mut Tally<D>,
+    ) -> FrameWork {
+        let intake = self.intake(now, events, tally);
+        let intake_full = intake.batch.end == BatchEnd::Limit && !self.servicing();
         tally.stage(Stage::Receive, &mut self.diagnostics);
         let mut told_all = false;
         for _ in 0..TURN_NOTICES {
@@ -1004,34 +1040,16 @@ impl<
         tally.stage(Stage::Notices, &mut self.diagnostics);
         // Notices the budget left are the next turn's.
         seen(events, || (!told_all).then_some(ServiceEvent::NoticesFull));
-        again |= !told_all;
         self.local
             .offers(now, &mut self.owner, events, tally.steps());
-        let end = self.publish(now, events, &mut tally);
+        let end = self.publish(now, events, tally);
         // More may be ready past the budget; a declining fill kept the
         // producer's flow out of the rest of this turn only.
-        packets |= end == PublishEnd::Budget || self.local.filtered().is_some();
+        let packets = intake_full || end == PublishEnd::Budget || self.local.filtered().is_some();
         tally.stage(Stage::Publish, &mut self.diagnostics);
-        // Eviction ends commands too, so it comes before the delivery: the
-        // epilogue's delivery is the turn's last step that can learn a result.
-        if kind == Turn::Full && !self.owner.port_broken() {
-            // An evicted block is granted by the next turn.
-            again |= self.relieve(now);
-        }
-        self.deliver(events, &tally);
-        // What the delivery freed may release the producer's hold or budget,
-        // which no wake of its own names: more frames.
-        packets |= self.local.again(&self.owner);
-        if kind == Turn::Full {
-            again |= self.publish_configuration();
-        }
-        self.turn_ended(events);
-        tally.stage(Stage::Settle, &mut self.diagnostics);
-        tally.end(&mut self.diagnostics);
-        Turned {
-            lent: intake.lent != 0,
-            again: again || packets,
-            packets: packets && !again,
+        FrameWork {
+            packets,
+            other: !told_all,
         }
     }
 
@@ -1063,7 +1081,6 @@ impl<
         // copy to deliver, an address to publish): a full turn follows at
         // once. Anything else is named by a wake, which the wait reads.
         Turned {
-            lent: intake.lent != 0,
             again: intake.read() != 0,
             packets: false,
         }
@@ -1107,6 +1124,17 @@ impl<
             .fold(0_u32, |sum, lent| sum.saturating_add(lent.unreturned()))
     }
 
+    /// A consumer registered before this publication and has not yet
+    /// serviced it (or cancelled that wait). This gates RX alone: TX,
+    /// commands, deadlines, stop and memory returns keep their own progress.
+    fn servicing(&self) -> bool {
+        self.bound
+            .iter()
+            .flatten()
+            .filter_map(|bound| bound.lent.as_ref())
+            .any(LentEnd::servicing)
+    }
+
     /// Take one batch of the port's ready frames: each through the core in
     /// its position, a lent datagram on to its socket's lane by the place the
     /// core's lookup named, and the queue's places freed once. How the batch
@@ -1117,6 +1145,16 @@ impl<
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
         tally: &mut Tally<D>,
     ) -> oer_protocols_network_core::Intake {
+        if self.servicing() {
+            return oer_protocols_network_core::Intake {
+                batch: oer_protocols_network_port::ReceivedBatch {
+                    taken: 0,
+                    end: BatchEnd::Drained,
+                },
+                lent: 0,
+                unlent: 0,
+            };
+        }
         let (bound, lenders) = (&mut self.bound, &self.lenders);
         let intake = self.owner.take_frames(
             now,
@@ -1129,9 +1167,9 @@ impl<
         // before anything waits.
         for lent in self
             .bound
-            .iter()
+            .iter_mut()
             .flatten()
-            .filter_map(|bound| bound.lent.as_ref())
+            .filter_map(|bound| bound.lent.as_mut())
         {
             lent.flush();
         }
@@ -1488,9 +1526,11 @@ impl<
             ready |= port.other;
             ready |= local.register(cx, events);
             let mut returned = false;
+            let mut servicing = false;
             for bound in bound.iter_mut().flatten() {
                 ready |= bound.poll_lanes(cx);
                 returned |= bound.poll_returns(cx);
+                servicing |= bound.lent.as_ref().is_some_and(LentEnd::servicing);
             }
             for late in adopted.iter_mut().flatten() {
                 returned |= late.poll(cx);
@@ -1506,11 +1546,12 @@ impl<
                 report(events, || ServiceEvent::Returned { work: taken.work });
                 ready |= taken.work;
             }
+            let received = port.received && !servicing;
             report(events, || ServiceEvent::Waited {
-                ready: ready || port.received,
+                ready: ready || received,
             });
-            received_only.set(port.received && !ready);
-            if ready || port.received {
+            received_only.set(received && !ready);
+            if ready || received {
                 Poll::Ready(())
             } else {
                 Poll::Pending

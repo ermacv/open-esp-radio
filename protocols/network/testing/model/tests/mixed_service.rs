@@ -88,6 +88,9 @@ struct Bytes {
     id: usize,
     returned: Arc<Mutex<Vec<usize>>>,
 }
+impl oer_portable_memory::BatchReturn for Bytes {
+    type Batch = ();
+}
 impl Drop for Bytes {
     fn drop(&mut self) {
         self.returned.lock().unwrap().push(self.id);

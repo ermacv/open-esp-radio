@@ -55,8 +55,8 @@ pub use service::{
     BindRefused, EndCause, Ended, MemoryPolicy, Service, StopLane, serve_late_loans,
 };
 pub use socket::{
-    LateSocket, LendingLanes, LendingSocket, Lent, Observer, RESERVE_AHEAD, Received, Refusal,
-    Refused, Sent, Socket, SocketClosed, SocketLanes,
+    LateSocket, LendingLanes, LendingSocket, Lent, Observer, RESERVE_AHEAD, Received,
+    ReceivedPrefix, Refusal, Refused, Sent, Socket, SocketClosed, SocketLanes,
 };
 pub use watch::{ConfigurationWatch, WatchRefused, Watched};
 

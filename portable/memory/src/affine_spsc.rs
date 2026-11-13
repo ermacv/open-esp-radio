@@ -8,6 +8,7 @@
 mod batched;
 mod indexed;
 mod local;
+mod prefix;
 pub use batched::{BatchedSpscReceiver, BatchedSpscSender};
 pub use indexed::{
     AffineIndexedSpscQueue, AffineIndexedSpscReceiver, AffineIndexedSpscSender, UniqueQueueIndex,

@@ -17,6 +17,7 @@ struct Record {
     device: Option<Device>,
     diagnosis: Diagnosis,
     trace: Vec<String>,
+    prefixes: Vec<usize>,
 }
 
 #[derive(Clone, Default)]
@@ -83,6 +84,7 @@ struct Round {
     ready: Arc<AtomicUsize>,
     wakers: [Waker; 2],
     count: Counted,
+    reverse: bool,
 }
 impl Round {
     fn new(count: Counted) -> Self {
@@ -97,12 +99,13 @@ impl Round {
             ready,
             wakers,
             count,
+            reverse: false,
         }
     }
     fn poll(&mut self, net: &mut Pin<Box<impl Future>>, app: &mut Pin<Box<impl Future>>) {
         let snapshot = self.ready.load(Ordering::Acquire);
         self.count.0.borrow_mut().round += 1;
-        for index in 0..2 {
+        for index in if self.reverse { [1, 0] } else { [0, 1] } {
             let bit = 1 << index;
             if snapshot & bit == 0 || self.ready.fetch_and(!bit, Ordering::AcqRel) & bit == 0 {
                 continue;
@@ -180,6 +183,38 @@ async fn consume<B>(
     }
 }
 
+async fn consume_prefix<B>(
+    socket: &mut Socket<B>,
+    count: Counted,
+    keep: usize,
+    held: Rc<RefCell<Vec<Packet<B>>>>,
+) {
+    loop {
+        let mut published = Vec::new();
+        let prefix = socket
+            .receive_prefix(8, |cell| {
+                let id = usize::from(cell.as_mut().unwrap().data().unwrap()[0]);
+                count.0.borrow_mut().delivered.push(id);
+                if held.borrow().len() < keep {
+                    held.borrow_mut().push(Received::Lent(cell.take().unwrap()));
+                } else {
+                    // Publication is after the whole synchronous prefix, when
+                    // its physical batch and real credit counter both committed.
+                    published.push(id);
+                }
+                true
+            })
+            .await
+            .unwrap();
+        let oer_protocols_network_runtime::ReceivedPrefix::Lent(taken @ 1..=8) = prefix else {
+            panic!("the model supplied a nonempty lending prefix");
+        };
+        let mut record = count.0.borrow_mut();
+        record.prefixes.push(taken);
+        record.published.extend(published);
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 enum Arrivals {
     Backlog,
@@ -188,6 +223,16 @@ enum Arrivals {
 }
 
 fn bursts<B: 'static>(keep: usize, mixed: bool, arrivals: Arrivals) {
+    prefixes::<B>(keep, mixed, arrivals, false, false);
+}
+
+fn prefixes<B: 'static>(
+    keep: usize,
+    mixed: bool,
+    arrivals: Arrivals,
+    batched: bool,
+    reverse: bool,
+) {
     let counted = Counted::default();
     let Bench {
         mut service,
@@ -197,12 +242,19 @@ fn bursts<B: 'static>(keep: usize, mixed: bool, arrivals: Arrivals) {
         mut returned,
     } = bench_credited::<B, 12, _>(counted.clone());
     counted.0.borrow_mut().device = Some(device.clone());
-    let held = Rc::new(RefCell::new(Vec::new()));
-    let mut app = Box::pin(consume(&mut socket, counted.clone(), keep, held.clone()));
+    let held = Rc::new(RefCell::new(Vec::<Packet<B>>::new()));
+    let mut app = Box::pin(async {
+        if batched {
+            consume_prefix(&mut socket, counted.clone(), keep, held.clone()).await;
+        } else {
+            consume(&mut socket, counted.clone(), keep, held.clone()).await;
+        }
+    });
     let clock: VirtualClock = VirtualClock::new();
     let mut sink = counted.clone();
     let mut net = Box::pin(service.run(&clock, &mut sink));
     let mut executor = Round::new(counted.clone());
+    executor.reverse = reverse;
     executor.settle(&mut net, &mut app);
     let mut flights = Vec::new();
     while let Ok(Some(frame)) = outgoing.try_receive_with(Option::take) {
@@ -250,6 +302,13 @@ fn bursts<B: 'static>(keep: usize, mixed: bool, arrivals: Arrivals) {
     }
     executor.settle(&mut net, &mut app);
     let record = counted.0.borrow();
+    if batched && matches!(arrivals, Arrivals::Backlog) && keep != 12 {
+        assert_eq!(
+            record.prefixes,
+            [8, 8, 8],
+            "the application processes complete available prefixes"
+        );
+    }
     println!(
         "keep={keep}, mixed={mixed}, arrivals={arrivals:?}:\n{}",
         record.trace.join("\n")
@@ -335,4 +394,142 @@ fn per_frame_publication_fits_twelve_credits_with_the_same_consumer_schedule() {
 fn batch_publication_fits_twelve_credits_with_the_same_consumer_schedule() {
     struct Brand;
     bursts::<Brand>(0, false, Arrivals::Batches);
+}
+
+#[test]
+fn a_prefix_consumer_restores_credit_between_backlogged_batches() {
+    struct Brand;
+    prefixes::<Brand>(0, false, Arrivals::Backlog, true, false);
+}
+#[test]
+fn prefix_returns_keep_tx_progress_before_rx_drains() {
+    struct Brand;
+    prefixes::<Brand>(0, true, Arrivals::Backlog, true, false);
+}
+#[test]
+fn a_prefix_can_retain_four_individual_owners() {
+    struct Brand;
+    prefixes::<Brand>(4, false, Arrivals::Backlog, true, false);
+}
+#[test]
+fn a_prefix_which_retains_twelve_really_exhausts_credit() {
+    struct Brand;
+    prefixes::<Brand>(12, false, Arrivals::Backlog, true, false);
+}
+#[test]
+fn per_frame_arrivals_with_prefix_consumption_preserve_delivery() {
+    struct Brand;
+    prefixes::<Brand>(0, false, Arrivals::PerFrame, true, false);
+}
+#[test]
+fn published_arrival_batches_with_prefix_consumption_preserve_delivery() {
+    struct Brand;
+    prefixes::<Brand>(0, false, Arrivals::Batches, true, false);
+}
+#[test]
+fn consumer_first_rounds_need_no_network_order_assumption() {
+    struct Brand;
+    prefixes::<Brand>(0, true, Arrivals::Backlog, true, true);
+}
+#[test]
+fn retained_owners_with_consumer_first_rounds_keep_the_same_accounting() {
+    struct Brand;
+    prefixes::<Brand>(4, false, Arrivals::Batches, true, true);
+}
+
+fn unavailable_consumer<B: 'static>(cancel_wait: bool) {
+    let counted = Counted::default();
+    let Bench {
+        mut service,
+        mut socket,
+        device,
+        mut outgoing,
+        mut returned,
+    } = bench_credited::<B, 12, _>(counted.clone());
+    counted.0.borrow_mut().device = Some(device.clone());
+    let held = Rc::new(RefCell::new(Vec::<Packet<B>>::new()));
+    let mut app = Box::pin(async {
+        let mut published = Vec::new();
+        let _prefix = socket
+            .receive_prefix(8, |cell| {
+                let id = usize::from(cell.as_mut().unwrap().data().unwrap()[0]);
+                counted.0.borrow_mut().delivered.push(id);
+                if held.borrow().is_empty() {
+                    held.borrow_mut().push(Received::Lent(cell.take().unwrap()));
+                } else {
+                    published.push(id);
+                }
+                true
+            })
+            .await
+            .unwrap();
+        counted.0.borrow_mut().published.extend(published);
+        // Busy elsewhere, with one retained frame. This makes no receive
+        // promise and must not make the service wait for that frame.
+        core::future::pending::<()>().await;
+    });
+    let clock: VirtualClock = VirtualClock::new();
+    let mut sink = counted.clone();
+    let mut net = Box::pin(service.run(&clock, &mut sink));
+    let mut executor = Round::new(counted.clone());
+    executor.settle(&mut net, &mut app);
+    let mut flights = Vec::new();
+    while let Ok(Some(frame)) = outgoing.try_receive_with(Option::take) {
+        flights.push(frame.memory);
+    }
+    let before = counted.0.borrow().accepted;
+    for _ in 0..24 {
+        device.receive_one();
+    }
+    executor.poll(&mut net, &mut app);
+    return_one(&mut returned, &mut flights);
+    if cancel_wait {
+        // Cancel after publication, before the ready consumer's first poll.
+        // Releasing the promise consumes and returns no queued owner.
+        drop(app);
+        executor.settle(&mut net, &mut Box::pin(core::future::pending::<()>()));
+    } else {
+        executor.settle(&mut net, &mut app);
+        drop(app);
+    }
+    let record = counted.0.borrow();
+    assert!(
+        device.0.borrow().frames.is_empty(),
+        "RX did not wait for the unavailable consumer"
+    );
+    assert_eq!(
+        record.accepted - before,
+        1,
+        "TX continued while the consumer was unavailable"
+    );
+    assert_eq!(record.delivered.len(), if cancel_wait { 0 } else { 8 });
+    assert_eq!(record.published.len(), if cancel_wait { 0 } else { 7 });
+    assert_eq!(record.diagnosis.no_credit, if cancel_wait { 12 } else { 5 });
+    drop(record);
+    drop(net);
+    while let Ok(Some(frame)) = outgoing.try_receive_with(Option::take) {
+        flights.push(frame.memory);
+    }
+    while !flights.is_empty() {
+        return_one(&mut returned, &mut flights);
+    }
+    let mut ended = service.retire();
+    ended.retired.port.give_back().unwrap();
+    drop(socket);
+    held.borrow_mut().clear();
+    ended.collect();
+    assert!(ended.retired.pool.loans().released());
+    assert_eq!(device.0.borrow().returned.lock().unwrap().len(), 24);
+}
+
+#[test]
+fn cancelling_a_ready_consumer_leaves_rx_and_tx_live() {
+    struct Brand;
+    unavailable_consumer::<Brand>(true);
+}
+
+#[test]
+fn a_consumer_busy_with_a_retained_frame_does_not_block_rx_or_tx() {
+    struct Brand;
+    unavailable_consumer::<Brand>(false);
 }

@@ -576,6 +576,36 @@ fn a_run_cancelled_after_a_return_keeps_what_it_took() {
 mod diagnostics;
 
 #[test]
+fn a_stop_does_not_wait_for_an_offered_consumer_prefix() {
+    struct Net;
+    let (mut service, _copying, mut lending, wire, stop) = lending::<Net>(4, 1);
+    let clock: VirtualClock = VirtualClock::new();
+    let mut sink = Drops::default();
+    let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
+    {
+        let mut run = core::pin::pin!(service.run(&clock, &mut sink));
+        assert!(run.as_mut().poll(cx).is_pending());
+        let mut consumer = Box::pin(lending.receive_prefix(8, |_| true));
+        assert!(consumer.as_mut().poll(cx).is_pending());
+        arrive(&wire, LENDING, b"offered");
+        assert!(run.as_mut().poll(cx).is_pending());
+        stop.try_send(()).unwrap();
+        assert_eq!(
+            run.as_mut().poll(cx),
+            core::task::Poll::Ready(crate::EndCause::Stopped)
+        );
+        // No consumer poll after publication, and no returned frame was
+        // required to complete the stop.
+        assert_eq!(lent_out(&wire), 1);
+    }
+    let mut ended = service.retire();
+    drop(lending);
+    ended.collect();
+    assert!(ended.retired.pool.loans().released());
+    assert_eq!(lent_out(&wire), 0);
+}
+
+#[test]
 fn cancellation_during_the_consumers_round_keeps_published_returns() {
     fn check<Net: 'static>(extra_poll: bool) {
         let (mut service, _copying, mut lending, wire, _stop) = lending::<Net>(4, 1);
@@ -592,7 +622,7 @@ fn cancellation_during_the_consumers_round_keeps_published_returns() {
                 assert!(run.as_mut().poll(cx).is_pending());
             }
             drop(lending.try_receive().expect("the batch lent its frame"));
-            // Cancel at either new yield, before the service collects.
+            // Cancel at either scheduling opportunity, before collection.
         }
         let mut ended = service.retire();
         assert!(ended.retired.pool.loans().released());

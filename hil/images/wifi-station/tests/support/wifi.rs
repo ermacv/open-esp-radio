@@ -31,6 +31,10 @@ impl Drop for HostHeld {
     }
 }
 
+impl oer_portable_memory::BatchReturn for HostHeld {
+    type Batch = ();
+}
+
 impl EthernetFrame for HostHeld {
     fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
         if self.broken && self.shown {
@@ -81,6 +85,8 @@ pub type NetworkBlock = oer_protocols_network_core::Block<'static, Brand, 1472>;
 pub type Received = oer_protocols_network_core::Datagram<'static, Brand, 1472>;
 pub type Delivered =
     oer_protocols_network_runtime::Received<'static, 'static, Brand, 1472, HostHeld>;
+pub type Lent = oer_protocols_network_runtime::Lent<'static, HostHeld>;
+pub type ReceivedPrefix = oer_protocols_network_runtime::ReceivedPrefix<'static, Brand, 1472>;
 
 /// The chip's receive mode that lends, by type, as the image names it. The
 /// host's ports lend no buffer, so its sockets meet copies only.

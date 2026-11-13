@@ -41,6 +41,9 @@ pub(crate) const PORT: u16 = 5001;
 /// runs out within one batch however fast the run reads.
 pub(crate) const CREDIT: usize = 12;
 
+/// One available application prefix, bounded like the service's intake.
+const RECEIVE_PREFIX: usize = 8;
+
 /// How the channel socket receives.
 pub(crate) type Receive = wifi::Lending<CREDIT>;
 
@@ -852,7 +855,6 @@ impl Run<'_> {
                 socket: receiving,
                 delivered: self.delivered,
                 parked: self.parked,
-                next: None,
                 returning: None,
                 closed: false,
             },
@@ -869,8 +871,6 @@ pub(crate) struct Receiving<'a> {
     socket: &'a mut Socket,
     delivered: &'a Cell<u32>,
     parked: &'a Parked,
-    /// A datagram [`Self::ready`] found.
-    next: Option<Delivered>,
     /// A block that found the socket's lane full.
     returning: Option<NetworkBlock>,
     closed: bool,
@@ -878,10 +878,6 @@ pub(crate) struct Receiving<'a> {
 
 impl Drop for Receiving<'_> {
     fn drop(&mut self) {
-        // A lent datagram goes back to the station as it drops.
-        if let Some(Delivered::Copied(datagram)) = self.next.take() {
-            home(self.socket, self.parked, datagram.block);
-        }
         if let Some(block) = self.returning.take() {
             home(self.socket, self.parked, block);
         }
@@ -889,12 +885,56 @@ impl Drop for Receiving<'_> {
 }
 
 impl<'a> Receiving<'a> {
-    /// Wait for a datagram. A closed socket receives nothing more. A
-    /// cancelled wait loses nothing: the socket's ends keep what they hold.
-    pub(crate) async fn ready(&mut self) {
+    /// Process one available lending prefix synchronously, returning its
+    /// unretained buffers and credits together. A copied datagram keeps its
+    /// existing cold Packet path. No batch guard crosses an await.
+    pub(crate) async fn prefix(
+        &mut self,
+        mut each: impl FnMut(&mut Option<wifi::Lent>) -> bool,
+    ) -> Option<wifi::Received> {
         if self.closed {
             core::future::pending::<()>().await;
         }
+        if self.returning.is_some() {
+            self.return_room().await;
+            if self.closed {
+                return None;
+            }
+        }
+        match self.socket.receive_prefix(RECEIVE_PREFIX, &mut each).await {
+            Ok(wifi::ReceivedPrefix::Lent(count)) => {
+                self.delivered
+                    .set(self.delivered.get().wrapping_add(count as u32));
+                None
+            }
+            Ok(wifi::ReceivedPrefix::Copied(datagram)) => {
+                self.delivered.set(self.delivered.get().wrapping_add(1));
+                Some(datagram)
+            }
+            Err(_) => {
+                self.closed = true;
+                None
+            }
+        }
+    }
+
+    /// A frame explicitly retained by the prefix callback, for Echo's
+    /// separate asynchronous path. Its ordinary Drop remains its return.
+    pub(crate) fn retained(&mut self, lent: wifi::Lent) -> Packet<'_, 'a> {
+        Packet {
+            receiving: self,
+            datagram: Some(Delivered::Lent(lent)),
+        }
+    }
+
+    pub(crate) fn copied(&mut self, datagram: wifi::Received) -> Packet<'_, 'a> {
+        Packet {
+            receiving: self,
+            datagram: Some(Delivered::Copied(datagram)),
+        }
+    }
+
+    async fn return_room(&mut self) {
         if self.returning.is_some() {
             if self.socket.socket().room().await.is_err() {
                 self.closed = true;
@@ -902,13 +942,9 @@ impl<'a> Receiving<'a> {
             }
             self.release();
         }
-        match self.socket.receive().await {
-            Ok(datagram) => self.next = Some(datagram),
-            Err(_) => self.closed = true,
-        }
     }
 
-    /// Give the block back, or keep it for [`Self::ready`].
+    /// Give the block back, or keep it for the next prefix's room wait.
     fn release(&mut self) {
         if let Some(block) = self.returning.take()
             && let Err(Refused { reason, block }) = self.socket.socket().release(block)
@@ -917,23 +953,6 @@ impl<'a> Receiving<'a> {
             self.closed = reason == Refusal::Closed;
             self.returning = Some(block);
         }
-    }
-
-    /// The next datagram here. One block at a time waits for the lane, so a
-    /// waiting one holds the rest back until [`Self::ready`] gave it.
-    pub(crate) fn take(&mut self) -> Option<Packet<'_, 'a>> {
-        if self.returning.is_some() {
-            self.release();
-        }
-        if self.returning.is_some() {
-            return None;
-        }
-        let datagram = self.next.take().or_else(|| self.socket.try_receive())?;
-        self.delivered.set(self.delivered.get().wrapping_add(1));
-        Some(Packet {
-            receiving: self,
-            datagram: Some(datagram),
-        })
     }
 }
 

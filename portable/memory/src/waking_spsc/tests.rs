@@ -10,6 +10,54 @@ use std::task::{Wake, Waker};
 
 struct Wakes(AtomicUsize);
 
+#[test]
+fn a_prefix_publishes_its_freed_cells_and_wakes_the_waiting_producer_once() {
+    let mut queue = WakingSpscQueue::<usize, 4>::new();
+    let (mut sender, mut receiver) = queue.split();
+    for value in 0..4 {
+        sender.try_send(value).unwrap();
+    }
+    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+    let waker = Waker::from(wakes.clone());
+    let mut cx = Context::from_waker(&waker);
+    assert!(sender.poll_room(&mut cx).is_pending());
+    assert_eq!(
+        receiver.consume_prefix(4, |_| {
+            assert_eq!(wakes.0.load(Ordering::Relaxed), 0);
+            true
+        }),
+        4
+    );
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
+    assert_eq!(sender.free_capacity(), 4);
+    assert!(sender.poll_room(&mut cx).is_ready());
+}
+
+#[test]
+fn an_unwound_prefix_wakes_for_its_completed_cells_without_consuming_the_panicking_cell() {
+    let mut queue = WakingSpscQueue::<usize, 3>::new();
+    let (mut sender, mut receiver) = queue.split();
+    for value in 0..3 {
+        sender.try_send(value).unwrap();
+    }
+    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+    let waker = Waker::from(wakes.clone());
+    let mut cx = Context::from_waker(&waker);
+    assert!(sender.poll_room(&mut cx).is_pending());
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            receiver.consume_prefix(3, |value| {
+                assert_ne!(*value, 1);
+                true
+            });
+        }))
+        .is_err()
+    );
+    assert_eq!(wakes.0.load(Ordering::Relaxed), 1);
+    assert_eq!(receiver.try_receive(), Some(1));
+    assert_eq!(receiver.try_receive(), Some(2));
+}
+
 impl Wake for Wakes {
     fn wake(self: Arc<Self>) {
         self.0.fetch_add(1, Ordering::Relaxed);

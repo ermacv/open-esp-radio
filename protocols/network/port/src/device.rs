@@ -155,6 +155,14 @@ impl<S: FrameStorage> EthernetFrame for LentFrame<S> {
     }
 }
 
+impl<S: oer_portable_memory::BatchReturn> oer_portable_memory::BatchReturn for LentFrame<S> {
+    type Batch = S::Batch;
+
+    fn return_in(self, batch: &mut Self::Batch) {
+        self.storage.return_in(batch);
+    }
+}
+
 /// One received frame as a receive batch hands it over: in a buffer its
 /// reader may keep, or in the device's own copy, shown for the call only.
 #[derive(Debug)]

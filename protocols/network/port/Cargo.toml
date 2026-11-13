@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Network integration value types shared by open ESP radio adapters"
 
 [dependencies]
+oer-portable-memory = { path = "../../../portable/memory" }
 oer-protocols-network-wire = { path = "../wire" }
 
 [lints]

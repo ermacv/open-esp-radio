@@ -445,27 +445,66 @@ async fn receive(
     window: &Window,
 ) -> Infallible {
     loop {
-        socket.ready().await;
-        while let Some(mut packet) = socket.take() {
-            let now = now_us();
-            // An unreadable lent buffer is counted as such, and goes back to
-            // the station as its packet drops.
-            let (kind, length) = match packet.payload() {
-                Ok(payload) => (classify(payload, run), payload.len()),
-                Err(_broken) => {
-                    counts.unreadable();
-                    continue;
+        let mut retained = None;
+        let copied = socket
+            .prefix(|cell| {
+                let Some(lent) = cell.as_mut() else {
+                    return true;
+                };
+                let now = now_us();
+                let (kind, length) = match lent.data() {
+                    Ok(payload) => (classify(payload, run), payload.len()),
+                    Err(_broken) => {
+                        counts.unreadable();
+                        return true;
+                    }
+                };
+                match kind {
+                    Datagram::Echo(header) => {
+                        retained = cell.take().map(|lent| (lent, header));
+                        return false;
+                    }
+                    Datagram::Load(header) => {
+                        window.socket.datagram(now);
+                        counts.load(tally, header.sequence, length, now, window.contains(now));
+                    }
+                    Datagram::Foreign => counts.foreign(),
                 }
-            };
-            match kind {
-                Datagram::Echo(header) => counts.echo(packet.echo(echo(header)).await),
-                Datagram::Load(header) => {
-                    window.socket.datagram(now);
-                    counts.load(tally, header.sequence, length, now, window.contains(now));
-                }
-                Datagram::Foreign => counts.foreign(),
-            }
+                true
+            })
+            .await;
+        if let Some(datagram) = copied {
+            receive_copied(socket.copied(datagram), run, tally, counts, window).await;
+        } else if let Some((lent, header)) = retained {
+            counts.echo(socket.retained(lent).echo(echo(header)).await);
         }
+    }
+}
+
+/// Copies and Echo keep their owner and ordering outside the ordinary
+/// lending prefix. The latter stops at Echo before any later frame is read.
+async fn receive_copied(
+    mut packet: crate::udp::Packet<'_, '_>,
+    run: u32,
+    tally: &mut Tally<TALLY_WORDS>,
+    counts: &mut Tallying,
+    window: &Window,
+) {
+    let now = now_us();
+    let (kind, length) = match packet.payload() {
+        Ok(payload) => (classify(payload, run), payload.len()),
+        Err(_) => {
+            counts.unreadable();
+            return;
+        }
+    };
+    match kind {
+        Datagram::Echo(header) => counts.echo(packet.echo(echo(header)).await),
+        Datagram::Load(header) => {
+            window.socket.datagram(now);
+            counts.load(tally, header.sequence, length, now, window.contains(now));
+        }
+        Datagram::Foreign => counts.foreign(),
     }
 }
 

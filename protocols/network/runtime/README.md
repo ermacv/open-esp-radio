@@ -166,7 +166,7 @@ at most one batch.
 ## Returns and waiting
 
 Returns are what others publish back to the service: lent buffers back with
-their port (each `Lent`'s drop counts one), blocks in the return lane, and what
+their port (an individual `Lent`'s drop, or a completed application prefix), blocks in the return lane, and what
 adopted sockets give back. Servicing them is a short owner operation: take what
 was published as one batch and give it to the pool and the loans' account, so a
 credit frees before the next frame needs it. It runs no command, reads no frame,
@@ -192,6 +192,7 @@ and ordinary work is known apart from returns:
 | port (`FrameSource::register`) | its return value: a frame not yet taken (`PortReady::received`), or a notice not yet taken, a link changed since the last registration, room for the frame it last refused (`PortReady::other`) |
 | producer (`Produce::register`) | with offers wanted, its return value (data `offer` has not handed out); always, a generation the service has not checked yet, or a hold no longer current, which the service reads itself |
 | returns | taken at once, as above: ready only if a block came home for a socket that waits for one |
+| consumer servicing | a previously registered consumer finishes its synchronous prefix or cancels its wait; RX readiness is deferred until that opportunity ends, independently of retained loans |
 | time | the deadline (the core's, memory pressure's, the producer's) has come |
 
 A registration returns readiness; it does not wake the caller for it. A pass
@@ -201,6 +202,27 @@ is over at its first poll, by a ready source or by a time already due, yields
 before the next turn, so one poll holds at most one turn after a wait. A source
 that says it is ready for good therefore costs a turn a poll, and it cannot
 hold the executor.
+
+RX continuation has an explicit socket contract, not an executor-round
+count. A lending receive advertises readiness only after registering all its
+sources, then checks them again. When the service publishes to such a waiter,
+it records a servicing offer before notifying it. Further RX intake is
+deferred until the consumer services that prefix or cancels its wait. The
+prefix consumer publishes unretained physical returns and socket credits
+before releasing that offer; the service collects the credit before the next
+intake. An individual `receive` instead hands an owner to its caller and
+releases its offer; that owner stays out until its own Drop. TX notices,
+producer work, commands, deadlines, link changes and stop remain serviceable
+while RX is deferred. No service path counts S31 rounds or performs a pair of
+self-yields for a consumer.
+
+A busy consumer advertises nothing. Retaining one frame, keeping every
+credit, processing Echo asynchronously, or doing unrelated work makes no
+promise of another receive opportunity. The service does not wait for those
+owners: it continues RX, with the existing exhausted-credit policy. A pending
+receive's cancellation releases its offer without returning a synthetic loan.
+The contract needs the executor to poll a woken task, but no task order or
+ready-snapshot implementation.
 
 ## Lending sockets
 
@@ -228,6 +250,24 @@ each late return, through `Ended::collect` or the next service's `adopt`.
 The account outlives the core with its pool, so a loan of an earlier
 installation counts against the next one's credits until it returns, and
 nothing expires.
+
+`LendingSocket::receive_prefix(limit, each)` processes an available prefix
+synchronously. Its callback borrows each lent frame's final socket cell. It
+may take an individual owner to retain it; every owner left in place returns
+with the prefix. Returning `false` stops after that frame, preserving the
+following order for a separate Echo/control path. No batch guard crosses an
+await. The current prefix is snapshotted once and never follows concurrent
+publications. Its queue cells are freed together; physical lend accounting
+and notification are committed through `BatchReturn`, then socket credit and
+RX continuation are published together. Individual retained owners keep the
+ordinary memory-before-credit Drop contract, including after retirement.
+
+The copy lane retains its alternating fairness. While it holds a datagram,
+at most one loan precedes `ReceivedPrefix::Copied`, which transfers the copied
+block to its caller for sending or releasing. Copies and Echo need no branch
+inside the ordinary callback beyond choosing that separate path. The service
+also has distinct receive, packet and full-control entries, with the original
+tick/command/return/frame/eviction/result/configuration order.
 
 ## Local producer
 

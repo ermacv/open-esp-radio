@@ -108,6 +108,9 @@ struct WireHeld {
     frame: Vec<u8>,
     out: Rc<std::cell::Cell<usize>>,
 }
+impl oer_portable_memory::BatchReturn for WireHeld {
+    type Batch = ();
+}
 
 impl Drop for WireHeld {
     fn drop(&mut self) {

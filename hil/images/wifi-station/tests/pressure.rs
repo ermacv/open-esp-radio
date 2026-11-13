@@ -32,6 +32,8 @@ pub mod wifi;
 #[path = "../../../services/load/src/header.rs"]
 pub mod header;
 
+#[path = "support/receive.rs"]
+mod receive;
 #[path = "../src/udp.rs"]
 mod udp;
 
@@ -159,7 +161,7 @@ fn datagram() -> Vec<u8> {
 }
 
 #[test]
-fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
+fn repeated_prefix_readers_keep_all_unreturned_blocks() {
     let port = Port::default();
     let wifi::Built {
         mut service, net, ..
@@ -177,16 +179,9 @@ fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
     }
     {
         let (mut receiving, _sending) = run.split();
-        {
-            let mut ready = core::pin::pin!(receiving.ready());
-            assert!(
-                ready
-                    .as_mut()
-                    .poll(&mut Context::from_waker(Waker::noop()))
-                    .is_ready()
-            );
-        }
-        // Restore the lane's last place while Receiving keeps next.
+        let mut first = Some(receive::copied(&mut receiving));
+        // Restore the lane's last place while the caller holds the prefix's
+        // copied owner. No intermediate value lives in Receiving.
         turn(&mut service, &clock);
         let reply = header::Header {
             run: 0,
@@ -196,7 +191,10 @@ fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
             echo_reply: true,
         };
         for _ in 0..32 {
-            let packet = receiving.take().expect("32 received datagrams");
+            let datagram = first
+                .take()
+                .unwrap_or_else(|| receive::copied(&mut receiving));
+            let packet = receiving.copied(datagram);
             // A copied datagram's block carries its echo at once.
             let mut echo = core::pin::pin!(packet.echo(reply));
             assert!(matches!(
@@ -205,7 +203,8 @@ fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
             ));
         }
         // The request lane has 32 sends; the 33rd block cannot be returned.
-        drop(receiving.take().expect("one ahead of the 32-place lane"));
+        let datagram = receive::copied(&mut receiving);
+        drop(receiving.copied(datagram));
     }
     drop(run);
     // One service turn opens four request places and delivers seven more
@@ -216,7 +215,8 @@ fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
     {
         let (mut receiving, _sending) = run.split();
         for _ in 0..4 {
-            drop(receiving.take().expect("queued receive"));
+            let datagram = receive::copied(&mut receiving);
+            drop(receiving.copied(datagram));
         }
     }
     drop(run);
@@ -227,13 +227,8 @@ fn repeated_cancelled_readers_keep_all_unreturned_blocks() {
         let mut run = udp::open(&net, &start).unwrap();
         {
             let (mut receiving, _sending) = run.split();
-            let mut ready = core::pin::pin!(receiving.ready());
-            assert!(
-                ready
-                    .as_mut()
-                    .poll(&mut Context::from_waker(Waker::noop()))
-                    .is_ready()
-            );
+            let datagram = receive::copied(&mut receiving);
+            let _packet = receiving.copied(datagram);
         }
     }
     // Resume: split returns what is parked into the now-drained request

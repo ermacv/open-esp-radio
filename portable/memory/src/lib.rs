@@ -44,6 +44,7 @@ pub extern crate core as __core;
 use core::marker::PhantomData;
 
 mod affine_spsc;
+mod batch_return;
 mod claim_cell;
 mod context_cell;
 mod dma_address;
@@ -81,6 +82,7 @@ pub use affine_spsc::{
     AffineSpscTrySendError, BatchedSpscReceiver, BatchedSpscSender, CachedSpscCursor,
     CompactSpscCursor, LocalSpscReceiver, LocalSpscSender, SpscCursor, UniqueQueueIndex,
 };
+pub use batch_return::BatchReturn;
 pub use claim_cell::{Claim, ClaimCell, Held, KEYS};
 pub use context_cell::{ContextCell, ContextProof};
 pub use dma_address::{DmaLayout, DmaRef, DmaWindow, DmaWindowAddress};

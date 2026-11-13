@@ -45,23 +45,29 @@ fn an_unreadable_lent_buffer_is_a_typed_error_and_goes_back_to_the_port() {
     turn(&mut service, &clock);
     {
         let (mut receiving, _sending) = run.split();
+        let mut error = None;
         {
-            let ready = core::pin::pin!(receiving.ready());
-            assert!(
-                ready
-                    .poll(&mut Context::from_waker(Waker::noop()))
-                    .is_ready()
-            );
+            let mut prefix = core::pin::pin!(receiving.prefix(|cell| {
+                error = cell.as_mut().unwrap().data().err();
+                true
+            }));
+            assert!(matches!(
+                prefix
+                    .as_mut()
+                    .poll(&mut Context::from_waker(Waker::noop())),
+                core::task::Poll::Ready(None)
+            ));
         }
-        let mut packet = receiving.take().expect("the lent datagram");
         assert_eq!(
-            packet.payload().err(),
+            error,
             Some(wifi::FrameLengthError::OutsideStorage),
             "the broken buffer is an error, not an empty payload"
         );
-        assert_eq!(port.0.borrow().back.get(), 0, "the packet holds it");
-        drop(packet);
-        assert_eq!(port.0.borrow().back.get(), 1, "its drop returns it");
+        assert_eq!(
+            port.0.borrow().back.get(),
+            1,
+            "the prefix returns its unreadable owner"
+        );
     }
     drop(run);
     turn(&mut service, &clock);

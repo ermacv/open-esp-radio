@@ -48,7 +48,7 @@ pub use engines::{
 };
 mod keys;
 mod lent;
-pub use lent::{LentNotifies, LentReceive, NetworkPeers, SameHart};
+pub use lent::{LentNotifies, LentReceive, NetworkPeers, ReceiveReturns, SameHart};
 mod installation;
 pub use installation::{
     BlockAckSlots, Esp32s31Backend, InstallationPools, Resources, StationTokens,

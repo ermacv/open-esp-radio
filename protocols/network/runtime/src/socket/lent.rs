@@ -9,11 +9,15 @@
 //! stop ends the service with loans still out, and they count until they
 //! return.
 
-use core::ops::Range;
-use core::sync::atomic::{AtomicU32, Ordering};
-use core::task::Context;
+mod prefix;
+pub use prefix::ReceivedPrefix;
 
-use embassy_futures::select::select4;
+use core::future::{Future, poll_fn};
+use core::ops::Range;
+use core::pin::pin;
+use core::sync::atomic::{AtomicU32, Ordering};
+use core::task::{Context, Poll};
+
 use oer_portable_memory::{AtomicWaker, WakingSpscQueue, WakingSpscReceiver, WakingSpscSender};
 use oer_protocols_network_core::{Datagram, GROUPS, LentDatagram, Loan, Loans, Remote, Unlent};
 use oer_protocols_network_port::{EthernetFrame, FrameLengthError};
@@ -25,6 +29,7 @@ use super::{Socket, SocketClosed, SocketLanes, lanes};
 pub(crate) struct Returns {
     back: AtomicU32,
     waker: AtomicWaker,
+    servicing: AtomicU32,
 }
 
 impl Returns {
@@ -32,6 +37,7 @@ impl Returns {
         Self {
             back: AtomicU32::new(0),
             waker: AtomicWaker::new(),
+            servicing: AtomicU32::new(0),
         }
     }
 
@@ -41,10 +47,48 @@ impl Returns {
     /// several paths (each `or_else` of [`LendingSocket::take`]) can
     /// otherwise merge their inlined wakes into one block without that scope.
     #[inline(never)]
-    fn give(&self) {
+    fn give(&self, count: u32) {
         // At most a socket's credit is out, far below the word's range.
-        self.back.fetch_add(1, Ordering::AcqRel);
+        self.back.fetch_add(count, Ordering::AcqRel);
         self.waker.wake();
+    }
+
+    const READY: u32 = 1;
+    const OFFERED: u32 = 2;
+
+    /// Only a consumer which registered its wait promises a servicing
+    /// opportunity. A busy consumer (possibly retaining buffers) promises
+    /// nothing, and cannot hold the service's intake back.
+    fn advertise(&self) {
+        self.servicing.fetch_or(Self::READY, Ordering::AcqRel);
+    }
+
+    fn active(&self) {
+        self.servicing.fetch_and(!Self::READY, Ordering::AcqRel);
+    }
+
+    fn offer(&self) {
+        let _offered = self
+            .servicing
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |state| {
+                (state & Self::READY != 0).then_some(state | Self::OFFERED)
+            });
+    }
+
+    fn servicing(&self) -> bool {
+        self.servicing.load(Ordering::Acquire) & Self::OFFERED != 0
+    }
+
+    /// The synchronous prefix ended (or its wait was cancelled). Payload
+    /// returns precede this credit publication and continuation wake.
+    fn finished(&self, count: u32) {
+        if count != 0 {
+            self.back.fetch_add(count, Ordering::AcqRel);
+        }
+        let offered = self.servicing.swap(0, Ordering::AcqRel) & Self::OFFERED != 0;
+        if count != 0 || offered {
+            self.waker.wake();
+        }
     }
 
     fn take(&self) -> u32 {
@@ -64,11 +108,24 @@ impl Returns {
 }
 
 /// Counts its buffer back when dropped.
-struct Back<'a>(&'a Returns);
+struct Back<'a>(Option<&'a Returns>);
 
 impl Drop for Back<'_> {
     fn drop(&mut self) {
-        self.0.give();
+        if let Some(returns) = self.0.take() {
+            returns.give(1);
+        }
+    }
+}
+
+/// No ownership is taken by a pending receive. Ending or cancelling that
+/// wait releases its explicit servicing promise, independently of loans.
+struct Waiting<'a>(Option<&'a Returns>);
+impl Drop for Waiting<'_> {
+    fn drop(&mut self) {
+        if let Some(returns) = self.0.take() {
+            returns.finished(0);
+        }
     }
 }
 
@@ -133,7 +190,7 @@ pub struct LendingLanes<
     H,
 > {
     pub(crate) lanes: SocketLanes<'a, 'm, B, SIZE, DEPTH, RECEIVED, CREDITS>,
-    pub(crate) lent: WakingSpscQueue<Lent<'a, H>, RECEIVED>,
+    pub(crate) lent: WakingSpscQueue<Option<Lent<'a, H>>, RECEIVED>,
     pub(crate) returns: Returns,
 }
 
@@ -161,9 +218,10 @@ impl<B, const SIZE: usize, const DEPTH: usize, const RECEIVED: usize, const CRED
 /// The service's end of a lending socket's loans: the lane, and the loans of
 /// what it lent, at most its credit, which the lane holds.
 pub(crate) struct LentEnd<'a, B, H, const RECEIVED: usize> {
-    lent: WakingSpscSender<'a, Lent<'a, H>, RECEIVED>,
+    lent: WakingSpscSender<'a, Option<Lent<'a, H>>, RECEIVED>,
     returns: &'a Returns,
     loans: [Option<Loan<B>>; RECEIVED],
+    staged: bool,
 }
 
 impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
@@ -194,14 +252,15 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
         let sent = self.lent.try_send_held_with(|| {
             let frame = frame.take()?;
             *place = loan.take();
-            Some(Lent {
+            Some(Some(Lent {
                 frame,
                 data,
                 remote,
-                _back: Back(self.returns),
-            })
+                _back: Back(Some(self.returns)),
+            }))
         });
         if sent {
+            self.staged = true;
             Ok(())
         } else {
             Err(Unlent::LaneFull(loan))
@@ -209,8 +268,15 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
     }
 
     /// End a batch of lends: the socket hears its datagrams once.
-    pub(crate) fn flush(&self) {
+    pub(crate) fn flush(&mut self) {
+        if core::mem::take(&mut self.staged) {
+            self.returns.offer();
+        }
         self.lent.flush();
+    }
+
+    pub(crate) fn servicing(&self) -> bool {
+        self.returns.servicing()
     }
 
     /// Give back to `account` the loans whose buffers came back; whether any.
@@ -306,12 +372,14 @@ pub(crate) fn lending_lanes<
             socket,
             lent: receiver,
             copy_next: false,
+            returns,
         },
         end,
         LentEnd {
             lent: sender,
             returns,
             loans: [const { None }; RECEIVED],
+            staged: false,
         },
     )
 }
@@ -333,7 +401,8 @@ pub struct LendingSocket<
     H,
 > {
     socket: Socket<'a, 'm, B, SIZE, DEPTH, RECEIVED, CREDITS>,
-    lent: WakingSpscReceiver<'a, Lent<'a, H>, RECEIVED>,
+    lent: WakingSpscReceiver<'a, Option<Lent<'a, H>>, RECEIVED>,
+    returns: &'a Returns,
     /// The copies' lane goes first at the next receive: the last one took a
     /// loan.
     copy_next: bool,
@@ -365,12 +434,28 @@ impl<
         &mut self.socket
     }
 
+    #[inline(never)]
+    fn receive_control(&mut self) {
+        self.socket.take_answers();
+    }
+
+    fn receive_control_pending(&self) -> bool {
+        self.socket.credits.stopped.load(Ordering::Acquire)
+            || self
+                .socket
+                .inbound
+                .as_ref()
+                .is_some_and(|inbound| !inbound.answers.is_empty())
+    }
+
     /// The next received datagram, lent or copied.
     ///
     /// # Errors
     /// [`SocketClosed`], once all that arrived was read.
     pub async fn receive(&mut self) -> Result<Received<'a, 'm, B, SIZE, H>, SocketClosed> {
+        let _waiting = Waiting(Some(self.returns));
         loop {
+            self.returns.active();
             // In this order: nothing follows a close in the lanes.
             self.socket.take_answers();
             if let Some(received) = self.take() {
@@ -379,17 +464,34 @@ impl<
             if self.socket.closed {
                 return Err(SocketClosed);
             }
-            let Some(inbound) = &mut self.socket.inbound else {
-                return Err(SocketClosed);
-            };
-            let _any = select4(
-                self.lent.ready(),
-                inbound.datagrams.ready(),
-                inbound.answers.ready(),
-                self.socket.credits.stopped(),
-            )
-            .await;
+            self.waiting().await?;
         }
+    }
+
+    async fn waiting(&mut self) -> Result<(), SocketClosed> {
+        poll_fn(|cx| {
+            let Some(inbound) = &self.socket.inbound else {
+                return Poll::Ready(Err(SocketClosed));
+            };
+            let mut ready = self.lent.poll_ready(cx).is_ready();
+            ready |= inbound.datagrams.poll_ready(cx).is_ready();
+            ready |= inbound.answers.poll_ready(cx).is_ready();
+            ready |= pin!(self.socket.credits.stopped()).poll(cx).is_ready();
+            // Every source is registered before advertising. Recheck after
+            // it: an offer before the advertisement is seen in the queues;
+            // an offer after it sees the promise and wakes these registrations.
+            self.returns.advertise();
+            ready |= !self.lent.is_empty()
+                || !inbound.datagrams.is_empty()
+                || !inbound.answers.is_empty()
+                || self.socket.credits.stopped.load(Ordering::Acquire);
+            if ready {
+                Poll::Ready(Ok(()))
+            } else {
+                Poll::Pending
+            }
+        })
+        .await
     }
 
     /// [`Self::receive`] without waiting: the next datagram if one is here.
@@ -411,7 +513,7 @@ impl<
                 .and_then(|lane| lane.try_receive())
                 .map(Received::Copied)
         };
-        let loaned = || lent.try_receive().map(Received::Lent);
+        let loaned = || lent.try_receive().flatten().map(Received::Lent);
         let received = if self.copy_next {
             copied().or_else(loaned)
         } else {
@@ -444,6 +546,10 @@ mod tests {
 
     /// A lent buffer of the test's own: its octets are its payload.
     struct Frame(Vec<u8>);
+
+    impl oer_portable_memory::BatchReturn for Frame {
+        type Batch = ();
+    }
 
     impl EthernetFrame for Frame {
         fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
@@ -478,6 +584,304 @@ mod tests {
             lent,
             pool,
         }
+    }
+
+    fn loan_prefix<B: 'static>(ends: &mut Ends<B>, count: usize) {
+        for id in 0..count {
+            let loan = ends.pool.loans().lend(0).unwrap();
+            let datagram = LentDatagram {
+                flow: 0,
+                remote: PEER,
+                data: 0..1,
+                loan,
+            };
+            assert!(
+                ends.lent
+                    .lend(datagram, &mut Some(Frame(std::vec![id as u8])))
+                    .is_ok()
+            );
+        }
+        ends.lent.flush();
+    }
+
+    #[test]
+    fn a_prefix_publishes_returned_credit_once_and_keeps_a_retained_owner_out() {
+        use core::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use std::task::{Wake, Waker};
+        struct Wakes(AtomicUsize);
+        impl Wake for Wakes {
+            fn wake(self: Arc<Self>) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        struct Brand;
+        let mut ends = ends::<Brand>();
+        loan_prefix(&mut ends, 8);
+        let returns = ends.lent.returns;
+        let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+        let waker = Waker::from(wakes.clone());
+        assert!(!ends.lent.poll(&core::task::Context::from_waker(&waker)));
+        let mut retained = None;
+        let prefix = ends
+            .socket
+            .try_receive_prefix(8, |cell| {
+                assert_eq!(returns.published(), 0, "no partial credit publication");
+                if cell.as_mut().unwrap().data().unwrap()[0] == 3 {
+                    retained = cell.take();
+                }
+                true
+            })
+            .unwrap();
+        assert!(matches!(prefix, super::ReceivedPrefix::Lent(8)));
+        assert_eq!(returns.published(), 7);
+        assert_eq!(wakes.0.load(Ordering::SeqCst), 1);
+        ends.lent.collect(ends.pool.loans());
+        assert_eq!(ends.pool.loans().outstanding(), 1);
+        drop(retained);
+        ends.lent.collect(ends.pool.loans());
+        assert!(ends.pool.loans().released());
+    }
+
+    #[test]
+    fn physical_batch_accounting_precedes_credit_and_continuation_publication() {
+        use core::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use std::task::{Wake, Waker};
+        struct CheckedFrame(Vec<u8>, Arc<AtomicUsize>);
+        impl EthernetFrame for CheckedFrame {
+            fn view(&mut self) -> Result<EthernetFrameView<'_>, FrameLengthError> {
+                Ok(EthernetFrameView {
+                    destination: [2; 6],
+                    source: [4; 6],
+                    ether_type: 0x0800,
+                    payload: &self.0,
+                })
+            }
+        }
+        #[derive(Default)]
+        struct PhysicalBatch {
+            returned: Option<Arc<AtomicUsize>>,
+            count: usize,
+        }
+        impl Drop for PhysicalBatch {
+            fn drop(&mut self) {
+                if let Some(returned) = &self.returned {
+                    returned.fetch_add(self.count, Ordering::Release);
+                }
+            }
+        }
+        impl oer_portable_memory::BatchReturn for CheckedFrame {
+            type Batch = PhysicalBatch;
+            fn return_in(self, batch: &mut PhysicalBatch) {
+                let Self(bytes, returned) = self;
+                drop(bytes);
+                batch.returned = Some(returned);
+                batch.count += 1;
+            }
+        }
+        struct Observe {
+            physical: Arc<AtomicUsize>,
+            returns: &'static super::Returns,
+        }
+        impl Wake for Observe {
+            fn wake(self: Arc<Self>) {
+                assert_eq!(self.physical.load(Ordering::Acquire), 8);
+                assert_eq!(self.returns.published(), 8);
+                assert!(!self.returns.servicing());
+            }
+        }
+        struct Brand;
+        let memory = Box::leak(Box::new([[0; SIZE]; 1]));
+        let (mut pool, _) = claim::<Brand, SIZE, 1>(memory).unwrap();
+        pool.loans().pool(LANE, 0).unwrap();
+        pool.loans().grant(0, LANE).unwrap();
+        let storage = Box::leak(Box::new(LendingLanes::<
+            Brand,
+            SIZE,
+            4,
+            LANE,
+            2,
+            CheckedFrame,
+        >::new()));
+        let (mut socket, _end, mut lent) = lending_lanes(storage);
+        let physical = Arc::new(AtomicUsize::new(0));
+        lent.returns.advertise();
+        for id in 0..8 {
+            let loan = pool.loans().lend(0).unwrap();
+            let frame = CheckedFrame(std::vec![id], physical.clone());
+            let sent = lent.lend(
+                LentDatagram {
+                    flow: 0,
+                    remote: PEER,
+                    data: 0..1,
+                    loan,
+                },
+                &mut Some(frame),
+            );
+            assert!(sent.is_ok());
+        }
+        lent.flush();
+        assert!(lent.servicing());
+        let waker = Waker::from(Arc::new(Observe {
+            physical: physical.clone(),
+            returns: lent.returns,
+        }));
+        assert!(!lent.poll(&core::task::Context::from_waker(&waker)));
+        let prefix = socket
+            .try_receive_prefix(8, |_| {
+                assert_eq!(physical.load(Ordering::Acquire), 0);
+                assert_eq!(lent.returns.published(), 0);
+                true
+            })
+            .unwrap();
+        assert!(matches!(prefix, super::ReceivedPrefix::Lent(8)));
+        lent.collect(pool.loans());
+        assert!(pool.loans().released());
+    }
+
+    #[test]
+    fn cancelling_an_advertised_prefix_wait_releases_servicing_without_returning_owners() {
+        use core::future::Future;
+        struct Brand;
+        let mut ends = ends::<Brand>();
+        let mut next = Box::pin(ends.socket.receive_prefix(8, |_| true));
+        let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
+        assert!(next.as_mut().poll(cx).is_pending());
+        for id in 0..8 {
+            let loan = ends.pool.loans().lend(0).unwrap();
+            assert!(
+                ends.lent
+                    .lend(
+                        LentDatagram {
+                            flow: 0,
+                            remote: PEER,
+                            data: 0..1,
+                            loan
+                        },
+                        &mut Some(Frame(std::vec![id]))
+                    )
+                    .is_ok()
+            );
+        }
+        ends.lent.flush();
+        assert!(ends.lent.servicing());
+        assert_eq!(ends.lent.unreturned(), 0);
+        drop(next);
+        assert!(!ends.lent.servicing());
+        assert_eq!(ends.pool.loans().outstanding(), 8);
+        assert_eq!(
+            ends.lent.unreturned(),
+            0,
+            "cancellation returns no synthetic credit"
+        );
+        let _prefix = ends.socket.try_receive_prefix(8, |_| true).unwrap();
+        ends.lent.collect(ends.pool.loans());
+        assert!(ends.pool.loans().released());
+    }
+
+    #[test]
+    fn taking_an_owner_then_unwinding_keeps_it_out_and_the_remaining_prefix_valid() {
+        struct Brand;
+        let mut ends = ends::<Brand>();
+        loan_prefix(&mut ends, 8);
+        let mut kept = None;
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _prefix = ends.socket.try_receive_prefix(8, |cell| {
+                    kept = cell.take();
+                    panic!("after retaining the first owner");
+                });
+            }))
+            .is_err()
+        );
+        let mut seen = Vec::new();
+        let prefix = ends
+            .socket
+            .try_receive_prefix(8, |cell| {
+                seen.push(cell.as_mut().unwrap().data().unwrap()[0]);
+                true
+            })
+            .unwrap();
+        assert!(matches!(prefix, super::ReceivedPrefix::Lent(7)));
+        assert_eq!(seen, [1, 2, 3, 4, 5, 6, 7]);
+        ends.lent.collect(ends.pool.loans());
+        assert_eq!(ends.pool.loans().outstanding(), 1);
+        drop(kept);
+        ends.lent.collect(ends.pool.loans());
+        assert!(ends.pool.loans().released());
+    }
+
+    #[test]
+    fn a_prefix_stops_at_a_retained_frame_and_preserves_the_following_order() {
+        struct Brand;
+        let mut ends = ends::<Brand>();
+        loan_prefix(&mut ends, 8);
+        let mut kept = None;
+        let mut seen = Vec::new();
+        let _prefix = ends
+            .socket
+            .try_receive_prefix(8, |cell| {
+                let id = cell.as_mut().unwrap().data().unwrap()[0];
+                seen.push(id);
+                if id == 2 {
+                    kept = cell.take();
+                    false
+                } else {
+                    true
+                }
+            })
+            .unwrap();
+        assert_eq!(seen, [0, 1, 2]);
+        let _prefix = ends
+            .socket
+            .try_receive_prefix(8, |cell| {
+                seen.push(cell.as_mut().unwrap().data().unwrap()[0]);
+                true
+            })
+            .unwrap();
+        assert_eq!(seen, [0, 1, 2, 3, 4, 5, 6, 7]);
+        drop(kept);
+        ends.lent.collect(ends.pool.loans());
+        assert!(ends.pool.loans().released());
+    }
+
+    #[test]
+    fn a_copied_datagram_waits_behind_at_most_one_loan_prefix() {
+        struct Brand;
+        let mut ends = ends::<Brand>();
+        copy_then_loans(&mut ends);
+        ends.lent.flush();
+        let mut seen = Vec::new();
+        let prefix = ends
+            .socket
+            .try_receive_prefix(8, |cell| {
+                seen.push(cell.as_mut().unwrap().data().unwrap()[0]);
+                true
+            })
+            .unwrap();
+        assert!(matches!(prefix, super::ReceivedPrefix::Lent(1)));
+        let prefix = ends
+            .socket
+            .try_receive_prefix(8, |_| panic!("the copy's turn"))
+            .unwrap();
+        let super::ReceivedPrefix::Copied(datagram) = prefix else {
+            panic!("copy");
+        };
+        assert_eq!(datagram.block.octets(), b"copy");
+        ends.pool.give(datagram.block);
+        while ends
+            .socket
+            .try_receive_prefix(8, |cell| {
+                seen.push(cell.as_mut().unwrap().data().unwrap()[0]);
+                true
+            })
+            .is_some()
+        {}
+        assert_eq!(seen, (0..LANE as u8).collect::<Vec<_>>());
+        ends.lent.collect(ends.pool.loans());
+        assert!(ends.pool.loans().released());
+        assert_eq!(ends.pool.outstanding(), 0);
     }
 
     /// A format copy arrives first, then `LANE` loans.

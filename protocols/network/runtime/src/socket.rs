@@ -11,7 +11,7 @@ use oer_portable_memory::{AtomicWaker, WakingSpscQueue, WakingSpscReceiver, Waki
 use oer_protocols_network_core::{Block, Datagram, Eviction, Outcome, Pool, Remote, SendRefusal};
 
 pub(crate) use lent::{LateLoans, LentEnd, lending_lanes};
-pub use lent::{LendingLanes, LendingSocket, Lent, Received};
+pub use lent::{LendingLanes, LendingSocket, Lent, Received, ReceivedPrefix};
 
 /// The answers a socket can be owed at once: what it asked ahead, a close and
 /// a stop.

@@ -314,6 +314,23 @@ pub struct WakingSpscReceiver<'a, T, const DEPTH: usize, C = AtomicWaker, P = At
     producer_waits: &'a AtomicBool,
 }
 
+struct PrefixFreed<'a, P: QueueNotify> {
+    producer: &'a P,
+    producer_waits: &'a AtomicBool,
+    freed: bool,
+}
+
+impl<P: QueueNotify> Drop for PrefixFreed<'_, P> {
+    fn drop(&mut self) {
+        if self.freed {
+            fence(Ordering::SeqCst);
+            if self.producer_waits.swap(false, Ordering::SeqCst) {
+                self.producer.notify();
+            }
+        }
+    }
+}
+
 impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'_, T, DEPTH, C, P> {
     /// Current queued owners, observed without consuming one or changing wakes.
     pub fn len(&self) -> usize {
@@ -334,6 +351,33 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'
             self.producer.notify();
         }
         Some(value)
+    }
+
+    /// Consume the prefix published now, in place, freeing its cells and
+    /// telling a waiting producer once. See [`AffineSpscReceiver::consume_prefix`]
+    /// for ownership, early exit and unwind behavior.
+    pub fn consume_prefix(&mut self, limit: usize, mut each: impl FnMut(&mut T) -> bool) -> usize {
+        let mut freed = PrefixFreed {
+            producer: self.producer,
+            producer_waits: self.producer_waits,
+            freed: false,
+        };
+        self.receiver.consume_prefix(limit, |value| {
+            let more = each(value);
+            freed.freed = true;
+            more
+        })
+    }
+
+    /// Register the sole consumer before checking its queue. As with
+    /// [`Self::ready`], only one task uses this endpoint's registration.
+    pub fn poll_ready(&self, cx: &mut Context<'_>) -> Poll<()> {
+        self.consumer.register(cx);
+        if self.receiver.is_empty() {
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
     }
 
     /// Wait for a value without consuming it. The exclusive borrow lasts for
@@ -362,15 +406,7 @@ impl<T, const DEPTH: usize, C: QueueNotify, P: QueueNotify> WakingSpscReceiver<'
     pub async fn ready(&mut self) {
         // Register before testing the queue: a publication before registration
         // is found by the load; a later one wakes this registration.
-        poll_fn(|cx| {
-            self.consumer.register(cx);
-            if self.receiver.is_empty() {
-                Poll::Pending
-            } else {
-                Poll::Ready(())
-            }
-        })
-        .await;
+        poll_fn(|cx| self.poll_ready(cx)).await;
     }
 }
 

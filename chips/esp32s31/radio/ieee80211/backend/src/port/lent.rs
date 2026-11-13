@@ -209,16 +209,82 @@ pub struct LentReceive<R: 'static, P: LentNotifies = SameHart> {
 /// Lowers the network's count and tells the waiting task when its lent
 /// unit was dropped.
 struct ReturnOnDrop<P: LentNotifies> {
-    credit: &'static NetworkCredit<P>,
+    credit: Option<&'static NetworkCredit<P>>,
 }
 
 impl<P: LentNotifies> Drop for ReturnOnDrop<P> {
     fn drop(&mut self) {
-        self.credit.held.fetch_sub(1, Ordering::SeqCst);
+        if let Some(credit) = self.credit.take() {
+            credit.give_back(1);
+        }
+    }
+}
+
+impl<P: LentNotifies> NetworkCredit<P> {
+    fn give_back(&self, count: usize) {
+        self.held.fetch_sub(count, Ordering::SeqCst);
         // The port takes the flag at its next facts.
-        self.credit.returned.store(true, Ordering::Release);
-        if !self.credit.quiet.load(Ordering::SeqCst) {
-            self.credit.notifies.returned();
+        self.returned.store(true, Ordering::Release);
+        if !self.quiet.load(Ordering::SeqCst) {
+            self.notifies.returned();
+        }
+    }
+}
+
+/// Returns of a synchronous receive prefix. Every unit's memory is already
+/// back before its count is added; the physical lend count and notification
+/// are published once when this batch ends. A retained unit keeps its own
+/// individual return right and is not counted here.
+pub struct ReceiveReturns<P: LentNotifies> {
+    credit: Option<&'static NetworkCredit<P>>,
+    count: usize,
+}
+
+impl<P: LentNotifies> Default for ReceiveReturns<P> {
+    fn default() -> Self {
+        Self {
+            credit: None,
+            count: 0,
+        }
+    }
+}
+
+impl<P: LentNotifies> ReceiveReturns<P> {
+    fn flush(&mut self) {
+        if let Some(credit) = self.credit.take() {
+            credit.give_back(core::mem::take(&mut self.count));
+        }
+    }
+
+    fn give(&mut self, credit: &'static NetworkCredit<P>) {
+        if self
+            .credit
+            .is_some_and(|previous| !core::ptr::eq(previous, credit))
+        {
+            self.flush();
+        }
+        self.credit = Some(credit);
+        self.count = self.count.saturating_add(1);
+    }
+}
+
+impl<P: LentNotifies> Drop for ReceiveReturns<P> {
+    fn drop(&mut self) {
+        self.flush();
+    }
+}
+
+impl<R: 'static, P: LentNotifies> oer_portable_memory::BatchReturn for LentReceive<R, P> {
+    type Batch = ReceiveReturns<P>;
+
+    fn return_in(self, batch: &mut Self::Batch) {
+        let Self {
+            unit,
+            mut _returned,
+        } = self;
+        drop(unit);
+        if let Some(credit) = _returned.credit.take() {
+            batch.give(credit);
         }
     }
 }
@@ -269,7 +335,9 @@ impl<Id: SlotIdentity, R: ReceiveUnit + Send> ReceiveBuffer<'_, Id, R> {
         credit.transferred.fetch_add(1, Ordering::AcqRel);
         Ok(LentReceive {
             unit: self.into_unit(),
-            _returned: ReturnOnDrop { credit },
+            _returned: ReturnOnDrop {
+                credit: Some(credit),
+            },
         })
     }
 }
@@ -279,6 +347,83 @@ mod tests {
     use super::*;
     use core::task::Waker;
     use std::boxed::Box;
+
+    #[test]
+    fn a_receive_prefix_returns_memory_before_publishing_one_count_and_notice() {
+        use oer_portable_memory::BatchReturn;
+        struct Unit(&'static AtomicUsize);
+        impl Drop for Unit {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        let physical = leaked(AtomicUsize::new(0));
+        let notices = leaked(Counted::new());
+        let credit = leaked(NetworkCredit::with(NetworkPeers { returned: notices }));
+        credit.held.store(8, Ordering::Release);
+        let mut batch = ReceiveReturns::default();
+        let mut kept = None;
+        for id in 0..8 {
+            let owner = LentReceive {
+                unit: Unit(physical),
+                _returned: ReturnOnDrop {
+                    credit: Some(credit),
+                },
+            };
+            if id == 3 {
+                kept = Some(owner);
+            } else {
+                owner.return_in(&mut batch);
+            }
+        }
+        assert_eq!(physical.load(Ordering::Acquire), 7);
+        assert_eq!(
+            credit.held(),
+            8,
+            "count stays conservative until the prefix commits"
+        );
+        assert_eq!(notices.counts().1, 0);
+        drop(batch);
+        assert_eq!(credit.held(), 1);
+        assert_eq!(notices.counts().1, 1);
+        drop(kept);
+        assert_eq!(physical.load(Ordering::Acquire), 8);
+        assert_eq!(credit.held(), 0);
+        assert_eq!(
+            notices.counts().1,
+            2,
+            "the retained owner returns individually"
+        );
+    }
+
+    #[test]
+    fn one_return_batch_preserves_distinct_physical_accounts() {
+        use oer_portable_memory::BatchReturn;
+        let first = leaked(NetworkCredit::with(NetworkPeers {
+            returned: leaked(Counted::new()),
+        }));
+        let second = leaked(NetworkCredit::with(NetworkPeers {
+            returned: leaked(Counted::new()),
+        }));
+        first.held.store(1, Ordering::Release);
+        second.held.store(1, Ordering::Release);
+        let mut batch = ReceiveReturns::default();
+        for credit in [first, second] {
+            LentReceive {
+                unit: (),
+                _returned: ReturnOnDrop {
+                    credit: Some(credit),
+                },
+            }
+            .return_in(&mut batch);
+        }
+        assert_eq!(first.held(), 0);
+        assert_eq!(second.held(), 1);
+        drop(batch);
+        assert_eq!(second.held(), 0);
+        assert_eq!(first.notifies.returned.counts().1, 1);
+        assert_eq!(second.notifies.returned.counts().1, 1);
+    }
 
     #[test]
     fn dropping_an_unused_same_hart_notify_releases_its_waker_without_waking_it() {
@@ -339,7 +484,9 @@ mod tests {
     /// One unit's return, as the network's drop of its lent unit makes it.
     fn return_one<P: LentNotifies>(credit: &'static NetworkCredit<P>) {
         credit.held.fetch_add(1, Ordering::AcqRel);
-        drop(ReturnOnDrop { credit });
+        drop(ReturnOnDrop {
+            credit: Some(credit),
+        });
     }
 
     #[test]
@@ -381,7 +528,9 @@ mod tests {
         assert!(!credit.poll_returns(&mut cx, true));
         credit.held.store(2, Ordering::SeqCst);
         assert!(credit.poll_room(&mut cx, 2).is_pending());
-        drop(ReturnOnDrop { credit });
+        drop(ReturnOnDrop {
+            credit: Some(credit),
+        });
         assert_eq!(returned.counts().1, 1, "the waiting task hears it");
         assert!(credit.poll_room(&mut cx, 2).is_ready());
     }
@@ -394,7 +543,9 @@ mod tests {
         assert!(!credit.poll_returns(&mut cx, true));
         credit.held.store(1, Ordering::SeqCst);
         assert!(credit.poll_returned(&mut cx).is_pending());
-        drop(ReturnOnDrop { credit });
+        drop(ReturnOnDrop {
+            credit: Some(credit),
+        });
         assert_eq!(returned.counts().1, 1);
         assert!(credit.poll_returned(&mut cx).is_ready());
     }
@@ -406,7 +557,9 @@ mod tests {
         // reinstall and not yet rearmed.
         credit.held.fetch_add(2, Ordering::AcqRel);
         credit.transferred.fetch_add(2, Ordering::AcqRel);
-        drop(ReturnOnDrop { credit });
+        drop(ReturnOnDrop {
+            credit: Some(credit),
+        });
         credit.reset();
         // The network still holds one: the new installation counts it
         // against its limit, and owes the ring the earlier return.
@@ -418,7 +571,9 @@ mod tests {
         );
         assert!(credit.take_returned(), "the earlier return is rearmed now");
         // The late return reaches the new installation's ring.
-        drop(ReturnOnDrop { credit });
+        drop(ReturnOnDrop {
+            credit: Some(credit),
+        });
         assert_eq!(credit.held(), 0);
         assert!(credit.take_returned());
     }

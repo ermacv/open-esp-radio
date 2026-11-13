@@ -108,6 +108,8 @@ pub type LendingSocket = oer_protocols_network_runtime::LendingSocket<
 >;
 /// A datagram in the station's receive buffer, lent to the application.
 pub type Lent = oer_protocols_network_runtime::Lent<'static, LentBuffer>;
+/// A synchronous application prefix, or a copied datagram's owner.
+pub type ReceivedPrefix = oer_protocols_network_runtime::ReceivedPrefix<'static, Brand, BLOCK>;
 /// What a lending socket receives: lent, or copied by the frame's form.
 pub type Delivered =
     oer_protocols_network_runtime::Received<'static, 'static, Brand, BLOCK, LentBuffer>;
