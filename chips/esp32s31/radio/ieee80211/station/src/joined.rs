@@ -747,6 +747,10 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
 enum Setup {
     /// Started, configured and connected.
     Connected,
+    /// Connected, and the lifecycle holds its installation's transmit
+    /// buffers for the whole case, as the station core's retired half
+    /// does until the facade's reinstall answers (`station.rs`).
+    ConnectedHoldingBuffers,
     /// The lifecycle reads none of its returns: before the start, commands
     /// the stopped port refuses fill the return queue; then the radio
     /// starts and the station's configuration is asked, whose terminal the
@@ -849,14 +853,15 @@ fn joined_with<T: 'static>(
             resources,
         } = installation;
         let (block_acks, tokens) = resources.into_station();
-        // This lifecycle sends no frame of its own: its buffers go home.
+        // This lifecycle sends no frame of its own: its buffers go home,
+        // unless the case holds them as the retired station does.
         let port::StationTokens {
             tickets,
             buffers,
             station_commands,
             ..
         } = tokens;
-        drop(buffers);
+        let buffers = (setup == Setup::ConnectedHoldingBuffers).then_some(buffers);
 
         // The station's channels, as the facade's `station` splits them.
         let network_tx = NetworkTx::claim(pool, crate::supply::PORT_BUFFERS)
@@ -1017,7 +1022,7 @@ fn joined_with<T: 'static>(
             match cleaned
                 .result
                 .ok()
-                .and_then(|()| actor.port_mut().release())
+                .and_then(|()| actor.port_mut().release().ok())
             {
                 Some(device) => {
                     ends.released = Some(true);
@@ -1081,14 +1086,14 @@ fn joined_with<T: 'static>(
                 filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).unwrap(),
             },
         }));
-        if setup == Setup::Connected {
+        if matches!(setup, Setup::Connected | Setup::ConnectedHoldingBuffers) {
             bench.until("the station is configured", |bench| bench.configured == 1);
             bench.connect();
         } else {
             bench.settle();
         }
         test(&mut bench);
-        let _held = (control, tickets);
+        let _held = (control, tickets, buffers);
     }));
 }
 
@@ -2043,5 +2048,44 @@ fn a_restart_after_traffic_reinstalls_the_stopped_port() {
         let ends = bench.ends.borrow();
         assert_eq!(ends.actor, Some(ActorEndSeen::Reinstall));
         assert_eq!(ends.reinstalled, Some(Ok(())), "the next installation");
+    });
+}
+
+/// A restart in the real composition: the lifecycle's half keeps its
+/// installation's transmit buffers until the reinstall answers, as the
+/// facade's `station.rs` keeps the retired station whole. The reinstall
+/// finds them out of the port's bank.
+#[test]
+fn a_restart_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_reinstall() {
+    struct Network;
+    joined_with::<Network>(0, Setup::ConnectedHoldingBuffers, |bench| {
+        one_datagram_out(bench);
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
+        bench.send(ToActor::Reinstall);
+        bench.until("the actor ends", |bench| {
+            bench.ends.borrow().reinstalled.is_some()
+        });
+        let ends = bench.ends.borrow();
+        let Some(Err(Reinstalled::Refused(port::ReinstallRefused::NotRetired(outstanding)))) =
+            ends.reinstalled
+        else {
+            panic!("refused as not retired: {:?}", ends.reinstalled);
+        };
+        std::println!("what the installation still holds: {outstanding:?}");
+        assert_eq!(
+            outstanding.classes(),
+            oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT,
+            "only the transmit buffers the lifecycle holds: {outstanding:?}"
+        );
+        assert_eq!(
+            outstanding.transmit_out,
+            usize::from(crate::supply::PORT_BUFFERS)
+        );
     });
 }

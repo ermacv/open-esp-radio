@@ -283,3 +283,52 @@ fn an_unconfirmed_stop_keeps_the_device_fault_it_met_in_its_path() {
     assert_eq!(path.names().get(2..), Some(fault.names()));
     assert_eq!(path.words().get(1), Some(&2), "the observations follow");
 }
+
+/// What a stopped port holds in the cases: the installation's transmit
+/// buffers out of its bank, as a retired station keeps them.
+pub(crate) fn held() -> super::Outstanding {
+    use oer_protocols_ieee80211_contracts_port::{ArenaState, Outstanding, RunPhase};
+    Outstanding {
+        phase: RunPhase::Stopped,
+        fault: None,
+        received: 0,
+        lent: 0,
+        removals: 0,
+        retained_groups: 0,
+        unconsumed: 0,
+        transmit_out: 4,
+        queued: [0; super::TX_QUEUES],
+        running: 0,
+        arenas: ArenaState::Returnable,
+    }
+}
+
+/// A reinstall refused as not retired names each class still out in its
+/// path's words, the counts beside them, and the fault's names after.
+#[test]
+fn a_refused_reinstall_s_path_names_every_class_still_out() {
+    use oer_portable_diagnostics::DiagPath;
+    use oer_protocols_ieee80211_contracts_port::outstanding::class;
+    let failure = LifecycleFailure::Reinstall(ReinstallCause::NotRetired(held()));
+    let path = DiagPath::of(&failure);
+    assert_eq!(path.names(), ["Reinstall", "NotRetired"]);
+    assert_eq!(path.words(), [class::TRANSMIT_OUT, 4 << 16, 0, 0]);
+    let more = super::Outstanding {
+        received: 2,
+        queued: [0, 1, 0, 3],
+        removals: 1,
+        fault: Some(BackendFault::ReceiveLost),
+        ..held()
+    };
+    let path = DiagPath::of(&ReleaseCause::Held(more));
+    assert_eq!(path.names(), ["Held", "ReceiveLost"]);
+    assert_eq!(
+        path.words(),
+        [
+            class::FAULT | class::RECEIVED | class::REMOVALS | class::TRANSMIT_OUT | class::QUEUED,
+            2 | 4 << 16,
+            1 << 8 | 3 << 24,
+            1 << 8,
+        ]
+    );
+}

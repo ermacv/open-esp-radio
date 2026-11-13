@@ -59,7 +59,10 @@ impl<'a> Stopped for TestPort<'a> {
         }
     }
     fn take_stopped(&mut self) -> Result<Radio, Unreleased> {
-        core::mem::replace(&mut self.stopped, Err(Unreleased::Held))
+        core::mem::replace(
+            &mut self.stopped,
+            Err(Unreleased::Held(crate::failure::tests::held())),
+        )
     }
 }
 
@@ -184,7 +187,11 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
             ReleaseCause::StopUnconfirmed,
         ),
         // A confirmed stop whose port still holds owners.
-        (Ok(()), Err(Unreleased::Held), ReleaseCause::Held),
+        (
+            Ok(()),
+            Err(Unreleased::Held(crate::failure::tests::held())),
+            ReleaseCause::Held(crate::failure::tests::held()),
+        ),
         // A confirmed stop whose device has not paused its frontier.
         (
             Ok(()),
@@ -337,7 +344,7 @@ fn a_faulted_actor_returns_every_owner_beside_its_cause() {
 #[test]
 fn news_out_of_order_names_the_mailbox() {
     let news: TestNews = News::Released {
-        result: Err(ReleaseCause::Held),
+        result: Err(ReleaseCause::Held(crate::failure::tests::held())),
         network_lost: false,
     };
     assert_eq!(
@@ -439,9 +446,15 @@ fn only_a_completed_release_retires_the_lifecycle_half() {
         (StationExitOf::StoppedNetworkLost, LifecycleHalf::Retired)
     );
     assert_eq!(
-        settled(released(Err(ReleaseCause::Held), false), None),
+        settled(
+            released(
+                Err(ReleaseCause::Held(crate::failure::tests::held())),
+                false
+            ),
+            None
+        ),
         (
-            StationExitOf::ReleaseFailed(ReleaseCause::Held),
+            StationExitOf::ReleaseFailed(ReleaseCause::Held(crate::failure::tests::held())),
             LifecycleHalf::Unfinished
         )
     );
@@ -465,7 +478,13 @@ fn only_a_completed_release_retires_the_lifecycle_half() {
         (StationExitOf::Failed(refused), LifecycleHalf::Retired)
     );
     assert_eq!(
-        settled(released(Err(ReleaseCause::Held), false), Some(refused)),
+        settled(
+            released(
+                Err(ReleaseCause::Held(crate::failure::tests::held())),
+                false
+            ),
+            Some(refused)
+        ),
         (StationExitOf::Failed(refused), LifecycleHalf::Unfinished)
     );
 }
@@ -487,12 +506,12 @@ fn a_settled_release_keeps_the_end_its_news_told() {
     use oer_protocols_ieee80211_contracts_port::StartRefused;
     let held = || {
         Some(TestNews::Released {
-            result: Err(ReleaseCause::Held),
+            result: Err(ReleaseCause::Held(crate::failure::tests::held())),
             network_lost: false,
         })
     };
     let told = Some(LateEnd::Ended(StationExitOf::ReleaseFailed(
-        ReleaseCause::Held,
+        ReleaseCause::Held(crate::failure::tests::held()),
     )));
     assert_eq!(release_settled(held(), None).2, told);
     let refused = LifecycleFailure::StartRefused(StartRefused::Deadline);
@@ -1266,8 +1285,12 @@ fn each_exit_of_the_station_is_its_own_stop_error_with_its_value() {
             Err(StopErrorOf::Failed(failure)),
         ),
         (
-            Ok(StationExitOf::ReleaseFailed(ReleaseCause::Held)),
-            Err(StopErrorOf::ReleaseFailed(ReleaseCause::Held)),
+            Ok(StationExitOf::ReleaseFailed(ReleaseCause::Held(
+                crate::failure::tests::held(),
+            ))),
+            Err(StopErrorOf::ReleaseFailed(ReleaseCause::Held(
+                crate::failure::tests::held(),
+            ))),
         ),
         (
             Ok(StationExitOf::Unavailable(unavailable)),

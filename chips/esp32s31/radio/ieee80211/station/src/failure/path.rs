@@ -461,7 +461,7 @@ impl DiagnosticPath for LifecycleFailure {
             Self::Reinstall(cause) => {
                 path.name("Reinstall");
                 path.name(match cause {
-                    ReinstallCause::NotRetired => "NotRetired",
+                    ReinstallCause::NotRetired(_) => "NotRetired",
                     ReinstallCause::SameEpoch => "SameEpoch",
                     ReinstallCause::ChannelUnset => "ChannelUnset",
                     ReinstallCause::Receipt => "Receipt",
@@ -471,6 +471,9 @@ impl DiagnosticPath for LifecycleFailure {
                 });
                 if let ReinstallCause::Cleanup(cause) = cause {
                     cleanup_path(*cause, path);
+                }
+                if let ReinstallCause::NotRetired(outstanding) = cause {
+                    outstanding_path(outstanding, path);
                 }
             }
             Self::Mailbox => path.name("Mailbox"),
@@ -537,7 +540,10 @@ impl DiagnosticPath for ReleaseCause {
     fn push_path(&self, path: &mut DiagPath) {
         match self {
             Self::StopUnconfirmed => path.name("StopUnconfirmed"),
-            Self::Held => path.name("Held"),
+            Self::Held(outstanding) => {
+                path.name("Held");
+                outstanding_path(outstanding, path);
+            }
             Self::FrontierHeld => path.name("FrontierHeld"),
             Self::StillActive(error) => {
                 path.name("StillActive");
@@ -594,5 +600,51 @@ impl<C: DiagnosticPath> DiagnosticPath for Unavailable<C> {
             path.name("Cleanup");
             cleanup.push_path(path);
         }
+    }
+}
+
+/// What an installation still holds, in a path's four words, then its
+/// fault's names: the classes that are out (one bit each,
+/// `outstanding::class`) with the run's phase and the arenas' state; the
+/// received, lent, transmit-out and unconsumed counts; the queued counts,
+/// one byte per queue; the running, removal and retained-group counts. A
+/// count above 255 reads 255: every count is bounded by a pool of the
+/// installation (its receive units, its transmit buffers and tickets), and
+/// the class bit says the class is out whatever its count reads.
+fn outstanding_path(outstanding: &Outstanding, path: &mut DiagPath) {
+    use oer_protocols_ieee80211_contracts_port::{ArenaState, RunPhase};
+    let byte = |count: usize| u32::from(u8::try_from(count).unwrap_or(u8::MAX));
+    let phase = match outstanding.phase {
+        RunPhase::Stopped => 0,
+        RunPhase::Starting => 1,
+        RunPhase::Running => 2,
+        RunPhase::Recovering => 3,
+        RunPhase::Stopping => 4,
+        RunPhase::RollingBack => 5,
+    };
+    let arenas = match outstanding.arenas {
+        ArenaState::Returnable => 0,
+        ArenaState::Held => 1,
+        ArenaState::Absent => 2,
+    };
+    path.word(outstanding.classes() | phase << 16 | arenas << 24);
+    path.word(
+        byte(outstanding.received)
+            | byte(outstanding.lent) << 8
+            | byte(outstanding.transmit_out) << 16
+            | byte(outstanding.unconsumed) << 24,
+    );
+    let mut queued = 0;
+    for (index, count) in outstanding.queued.iter().enumerate().take(4) {
+        queued |= byte(*count) << (8 * index);
+    }
+    path.word(queued);
+    path.word(
+        byte(outstanding.running)
+            | byte(outstanding.removals) << 8
+            | byte(outstanding.retained_groups) << 16,
+    );
+    if let Some(fault) = &outstanding.fault {
+        fault.push_path(path);
     }
 }

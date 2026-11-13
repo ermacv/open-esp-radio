@@ -99,8 +99,9 @@ pub(crate) trait Stopped {
 pub(crate) enum Unreleased {
     /// Its radio's stop is not confirmed.
     StopUnconfirmed,
-    /// Its radio's stop is confirmed and the port still holds owners.
-    Held,
+    /// Its radio's stop is confirmed and the port still holds owners: what
+    /// it holds.
+    Held(crate::failure::Outstanding),
     /// Its radio's stop is confirmed and the port released its
     /// installations, but its device has not paused its radio frontier.
     FrontierHeld,
@@ -110,7 +111,7 @@ impl From<Unreleased> for crate::failure::ReleaseCause {
     fn from(unreleased: Unreleased) -> Self {
         match unreleased {
             Unreleased::StopUnconfirmed => Self::StopUnconfirmed,
-            Unreleased::Held => Self::Held,
+            Unreleased::Held(outstanding) => Self::Held(outstanding),
             Unreleased::FrontierHeld => Self::FrontierHeld,
         }
     }
@@ -127,13 +128,13 @@ impl From<Unreleased> for crate::failure::ReleaseCause {
 /// [`Unreleased`]: the first step that gave up nothing; nothing was taken.
 pub(crate) fn stopped_radio<D, R>(
     stop_confirmed: bool,
-    release: impl FnOnce() -> Option<D>,
+    release: impl FnOnce() -> Result<D, crate::failure::Outstanding>,
     frontier: impl FnOnce(D) -> Option<R>,
 ) -> Result<R, Unreleased> {
     if !stop_confirmed {
         return Err(Unreleased::StopUnconfirmed);
     }
-    let device = release().ok_or(Unreleased::Held)?;
+    let device = release().map_err(Unreleased::Held)?;
     frontier(device).ok_or(Unreleased::FrontierHeld)
 }
 
@@ -306,7 +307,11 @@ mod tests {
             let released = &released;
             move || {
                 released.set(released.get() + 1);
-                gives.then_some(7u8)
+                if gives {
+                    Ok(7u8)
+                } else {
+                    Err(crate::failure::tests::held())
+                }
             }
         };
         assert_eq!(
@@ -318,7 +323,7 @@ mod tests {
             stopped_radio(true, release(false), |_| -> Option<()> {
                 panic!("no frontier before the port's release")
             }),
-            Err(Unreleased::Held)
+            Err(Unreleased::Held(crate::failure::tests::held()))
         );
         assert_eq!(
             stopped_radio(true, release(true), |_| None::<()>),

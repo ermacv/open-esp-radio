@@ -174,7 +174,11 @@ fn retired<'a, 'b: 'a>(
 #[test]
 fn a_refused_release_returns_its_receipt_from_the_retire_to_the_runner_caller() {
     let refusals = [
-        (Ok(()), Err(Unreleased::Held), ReleaseCause::Held),
+        (
+            Ok(()),
+            Err(Unreleased::Held(crate::failure::tests::held())),
+            ReleaseCause::Held(crate::failure::tests::held()),
+        ),
         (
             Ok(()),
             Ok(Radio(Leaves::Ended(ReleaseCause::LeaveUnanswered([
@@ -238,7 +242,7 @@ fn an_unconfirmed_stop_is_published_then_watched_before_the_release() {
     let port = TestPort {
         cleanup: Ok(()),
         receipt: Some(Receipt(&ends)),
-        stopped: Err(Unreleased::Held),
+        stopped: Err(Unreleased::Held(crate::failure::tests::held())),
     };
     let observed = StopUnconfirmed {
         cause: oer_protocols_ieee80211_contracts_port::StopCause::Deadline,
@@ -266,7 +270,7 @@ fn an_unconfirmed_stop_is_published_then_watched_before_the_release() {
         left.exit,
         ApExitOf::ReleaseRefused {
             ended: ApEnded::Stopped,
-            cause: ReleaseCause::Held
+            cause: ReleaseCause::Held(crate::failure::tests::held())
         }
     );
     assert!(

@@ -455,6 +455,13 @@ pub enum GroupReplacement {
     },
 }
 
+/// What an installation of the S31 port still holds
+/// ([`Esp32s31Port::outstanding`]): its fault, and one count per transmit
+/// queue.
+pub type PortOutstanding =
+    oer_protocols_ieee80211_contracts_port::Outstanding<Fault, { driver::TX_QUEUES }>;
+pub use driver::TX_QUEUES;
+
 /// The one-shot fault of a diagnostic image.
 #[cfg(oer_fault_injection)]
 pub mod debug {

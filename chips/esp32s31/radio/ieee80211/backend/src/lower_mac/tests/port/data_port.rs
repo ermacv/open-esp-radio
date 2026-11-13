@@ -7,7 +7,7 @@ use crate::port::{PortDriver, PortInstallation};
 use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaFormat, ArenaPublication, TxArena,
 };
-use oer_protocols_ieee80211_contracts_port::{Unconsumed, UnconsumedRefused};
+use oer_protocols_ieee80211_contracts_port::{Unconsumed, UnconsumedRefused, outstanding};
 use oer_protocols_ieee80211_testing_conformance::data_port::{
     self as cases, Case, DataPortHarness,
 };
@@ -658,6 +658,15 @@ fn every_data_port_case_passes_on_the_s31_port() {
 }
 
 /// Run `test` on a fresh fixture, with the installation authority beside it.
+/// The classes a reinstall refused as not retired names; any other answer
+/// fails the case.
+pub(super) fn not_retired(refused: Option<crate::port::ReinstallRefused>) -> u32 {
+    match refused {
+        Some(crate::port::ReinstallRefused::NotRetired(outstanding)) => outstanding.classes(),
+        other => panic!("refused as not retired: {other:?}"),
+    }
+}
+
 fn with_installations<R>(
     test: impl for<'id> FnOnce(
         Fixture<'id, radio::LocalId<'id>>,
@@ -1312,8 +1321,9 @@ fn a_running_port_refuses_its_reinstall_and_keeps_running() {
     with_installations(|mut fixture, installations| {
         fixture.start();
         assert_eq!(
-            fixture.port.reinstall(installations, 18).err(),
-            Some(crate::port::ReinstallRefused::NotRetired)
+            not_retired(fixture.port.reinstall(installations, 18).err()),
+            outstanding::class::PHASE | outstanding::class::TRANSMIT_OUT,
+            "the radio runs, and the fixture holds its buffers"
         );
         fixture.stop();
     });
@@ -1418,7 +1428,7 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
         let _ = fixture.turn();
         assert!(fixture.outbox.terminals.is_empty());
         assert!(fixture.port.stop_confirmed());
-        assert!(fixture.port.release().is_none());
+        assert!(fixture.port.release().is_err());
         // Refused again, it stays; then it leaves once, with its outcome.
         fixture.outbox.refuse = 1;
         assert_eq!(
@@ -1444,10 +1454,7 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(
-            port.release().is_some(),
-            "nothing is kept: the port retires"
-        );
+        assert!(port.release().is_ok(), "nothing is kept: the port retires");
     });
 }
 
@@ -1456,7 +1463,7 @@ fn only_a_stopped_port_releases_its_device() {
     with_installations(|mut fixture, _| {
         fixture.start();
         assert!(!fixture.port.stop_confirmed(), "a running port");
-        assert!(fixture.port.release().is_none());
+        assert!(fixture.port.release().is_err());
         fixture.stop();
         assert!(fixture.port.stop_confirmed());
         let Fixture {
@@ -1464,6 +1471,6 @@ fn only_a_stopped_port_releases_its_device() {
         } = fixture;
         // The fixture's transmit buffers go home before the retire checks.
         drop(buffers);
-        assert!(port.release().is_some());
+        assert!(port.release().is_ok());
     });
 }

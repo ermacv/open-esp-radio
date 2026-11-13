@@ -929,7 +929,11 @@ pub(crate) fn take_stopped<W: Binding>(
     let confirmed = port.stop_confirmed();
     let (stopped, cell) = crate::release::stopped_radio(
         confirmed,
-        || port.release(),
+        || {
+            port.release().map_err(|outstanding| {
+                outstanding.map_fault(crate::failure::convert::backend_fault)
+            })
+        },
         |device| device.0.take_stopped(),
     )?;
     Ok(StoppedRadio { stopped, cell })

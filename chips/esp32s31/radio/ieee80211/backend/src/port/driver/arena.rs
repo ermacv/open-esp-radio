@@ -61,9 +61,19 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// Whether the arenas give their chains and tickets back at retirement:
     /// both idle and empty, holding no key right, never faulted.
     pub(in crate::port) fn arenas_returnable(&self) -> bool {
-        self.arena
-            .as_ref()
-            .is_some_and(DataArenas::<Id, B>::returnable)
+        self.arena_state() == oer_protocols_ieee80211_contracts_port::ArenaState::Returnable
+    }
+
+    /// The aggregate arenas as a retirement reads them.
+    pub(in crate::port) fn arena_state(
+        &self,
+    ) -> oer_protocols_ieee80211_contracts_port::ArenaState {
+        use oer_protocols_ieee80211_contracts_port::ArenaState;
+        match &self.arena {
+            None => ArenaState::Absent,
+            Some(arena) if arena.returnable() => ArenaState::Returnable,
+            Some(_) => ArenaState::Held,
+        }
     }
 
     /// Whether the station's pending pairwise key removal waits for an
