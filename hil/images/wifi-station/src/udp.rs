@@ -23,9 +23,9 @@ use core::task::{Context, Poll};
 use embassy_futures::select::{Either, select};
 use heapless::Vec;
 use oer::wifi::{
-    self, AtomicWaker, ClaimCell, Declined, Delivered, FrameLengthError, Interest, Ipv4,
-    LendingSocket as Socket, LocalEnd, NetworkBlock, NetworkInstant, Next, Offer, Outcome, Payload,
-    Produce, Refusal, Refused, Remote, SendRefusal, WatchRefused, Work,
+    self, AtomicWaker, ClaimCell, Declined, FrameLengthError, Interest, Ipv4, LocalEnd,
+    NetworkInstant, Next, Offer, Outcome, Payload, Produce, Refusal, Refused, Remote, SendRefusal,
+    WatchRefused, Work,
 };
 use oer_hil_services_load::header::{self, Header};
 use oer_hil_services_load::{LoadError, Start};
@@ -43,6 +43,16 @@ pub(crate) const CREDIT: usize = 12;
 
 /// How the channel socket receives.
 pub(crate) type Receive = wifi::Lending<CREDIT>;
+
+/// The type that names this image's network's blocks.
+pub(crate) enum Brand {}
+
+/// The channel socket.
+type Socket = wifi::LendingSocket<Brand>;
+/// What the channel socket receives: lent, or copied by the frame's form.
+type Delivered = wifi::Delivered<Brand>;
+/// A block of the network.
+type NetworkBlock = wifi::NetworkBlock<Brand>;
 
 /// The ports of the network's sockets.
 pub(crate) const PORTS: wifi::Ports = wifi::Ports {
@@ -391,7 +401,7 @@ impl Produce for LoadProducer {
 
 /// The network the load server opens its runs on.
 pub(crate) struct Network {
-    network: wifi::Network<LoadProducer, Receive>,
+    network: wifi::Network<Brand, LoadProducer, Receive>,
     /// The channel socket, which receives and echoes.
     socket: RefCell<Socket>,
     source: &'static Source,
@@ -411,7 +421,7 @@ pub(crate) struct Network {
 impl Network {
     /// The network, its channel socket, and the source its producer reads.
     pub(crate) fn new(
-        network: wifi::Network<LoadProducer, Receive>,
+        network: wifi::Network<Brand, LoadProducer, Receive>,
         socket: Socket,
         source: &'static Source,
     ) -> Self {
@@ -444,7 +454,7 @@ pub(crate) fn address(net: &Network) -> Result<Option<Ipv4>, WatchRefused> {
 /// The network's publications, which the station services' waits read
 /// (`crate::waits`).
 #[cfg(target_arch = "riscv32")]
-pub(crate) const fn published(net: &Network) -> &wifi::Network<LoadProducer, Receive> {
+pub(crate) const fn published(net: &Network) -> &wifi::Network<Brand, LoadProducer, Receive> {
     &net.network
 }
 

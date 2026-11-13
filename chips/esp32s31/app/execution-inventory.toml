@@ -455,7 +455,7 @@ name = 'NETWORK_SIGNAL'
 site = 'chips/esp32s31/app/src/wifi.rs'
 anchor = 'static NETWORK_SIGNAL: IrqSignal'
 raised_by = 'hart 0 tasks'
-waited_by = 'hart 1 IP service'
+waited_by = 'hart 1 network task'
 raisers = 'FromPeerHart'
 cfg = 'all(feature = "wifi", feature = "group")'
 check = ['raiser-direction']
@@ -469,6 +469,17 @@ raised_by = 'hart 1 tasks, own executor task'
 waited_by = 'hart 0 datapath actor'
 raisers = 'FromPeerHart, FromOwnTask'
 cfg = 'all(feature = "wifi", feature = "group")'
+check = ['raiser-direction']
+gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
+
+[[signal]]
+name = 'ACCESS_POINT_SIGNAL'
+site = 'chips/esp32s31/app/src/wifi/access_point.rs'
+anchor = 'static ACCESS_POINT_SIGNAL: IrqSignal'
+raised_by = 'hart 1 tasks, own executor task'
+waited_by = 'hart 0 access point runner'
+raisers = 'FromPeerHart, FromOwnTask'
+cfg = 'all(feature = "access-point", feature = "group")'
 check = ['raiser-direction']
 gap = ['checked one signal at a time; no list of edges', 'a declared raiser shows the structure, not that the wake or progress happens']
 
@@ -527,6 +538,15 @@ site = 'chips/esp32s31/app/src/wifi.rs'
 anchor = 'static DATAPATH: oer_chips_family_platform_interrupt_table::signal::PeerNotify'
 signal = 'ACTOR_SIGNAL'
 cfg = 'all(feature = "wifi", feature = "group")'
+check = ['raiser-direction']
+gap = ['no deadline: unlike `PeerClient`, a notify carries no obligation']
+
+[[peer-notify]]
+name = 'ACCESS_POINT_RUNNER'
+site = 'chips/esp32s31/app/src/wifi/access_point.rs'
+anchor = 'static ACCESS_POINT_RUNNER: oer_chips_family_platform_interrupt_table::signal::PeerNotify'
+signal = 'ACCESS_POINT_SIGNAL'
+cfg = 'all(feature = "access-point", feature = "group")'
 check = ['raiser-direction']
 gap = ['no deadline: unlike `PeerClient`, a notify carries no obligation']
 

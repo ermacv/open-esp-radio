@@ -1,6 +1,9 @@
-//! The network core over the station, in place of the IP service: the
-//! station's transmit buffers as the port's memory, a channel socket, a local
-//! producer, and the task on the group's executor.
+//! The network core over a Wi-Fi role's network end: the role's transmit
+//! buffers as the port's memory, a channel socket, a local producer, and the
+//! task on the group's executor. A network is an instance over one role's
+//! port: the image lends its storage ([`NetworkStorage`]) and names its
+//! brand, a type of its own, so an image with both roles gives each its own
+//! network.
 //!
 //! The network sends the first ready work: the station's MAC chooses which
 //! of its queues goes on the air and charges each attempt, so the network
@@ -14,13 +17,14 @@
 //! with the EAPOL), dropping what it copied by pressure. Paths never
 //! switch under pressure.
 //!
-//! [`Network::start`] takes the station's device in the group's boot, the
-//! storage the image lends for its service ([`NetworkStorage`]), its producer
-//! and the two ports: the service's type holds the image's producer, so no
-//! static of the library can. The service starts at once: its DHCP client
-//! leases the interface's address, RFC 2131, from the first link up, with a
-//! seed the station drew at boot, and [`Network::configuration`] tells the
-//! group what it holds. The producer is called in the network task's own
+//! [`Network::start`] takes a role's device in the group's boot, how its
+//! interface is addressed ([`Addressing`]), the storage the image lends for
+//! its service ([`NetworkStorage`]), its producer and the two ports: the
+//! service's type holds the image's brand and producer, so no static of the
+//! library can. The service starts at once: a leased interface's DHCP client
+//! leases the address, RFC 2131, from the first link up, with a seed the
+//! role drew at boot; a given one holds its address from the start; and
+//! [`Network::configuration`] tells the group what it holds. The producer is called in the network task's own
 //! turns, on the group's hart ([`Produce`]): it fills each datagram's data in
 //! the station's transmit buffer itself. A stop ends the sockets, ends each
 //! of the producer's open works `Retired` and sets its end flag, and gives
@@ -44,7 +48,6 @@ use oer_protocols_network_runtime::{
 use oer_protocols_network_wire::ethernet::HEADER_LEN;
 use oer_protocols_network_wire::ip::{Dscp, IPV4_HEADER_LEN};
 use oer_protocols_network_wire::transport::UDP_HEADER_LEN;
-use static_cell::ConstStaticCell;
 
 pub use oer_portable_memory::{AtomicWaker, ClaimCell};
 /// The network's time, which a producer is called with.
@@ -56,7 +59,7 @@ pub use oer_protocols_network_core::{
 /// Why a lent buffer no longer holds what the station showed.
 pub use oer_protocols_network_port::FrameLengthError;
 pub use oer_protocols_network_runtime::{
-    Interest, LocalEnd, Next, Observer, Offer, Produce, RESERVE_AHEAD, Refusal, Refused,
+    Interest, LocalEnd, Next, Observer, Offer, Produce, RESERVE_AHEAD, Refusal, Refused, Sent,
     SocketClosed, WatchRefused, Work,
 };
 
@@ -78,22 +81,19 @@ const LANE: usize = 32;
 const DEPTH: usize = 32;
 const NEIGHBORS: usize = 4;
 
-/// The type that names this network's blocks.
-pub struct Brand;
+/// A socket of the network branded `B`.
+pub type Socket<B> =
+    oer_protocols_network_runtime::Socket<'static, 'static, B, BLOCK, DEPTH, LANE, CREDITS>;
 
-/// A socket of the network.
-pub type Socket =
-    oer_protocols_network_runtime::Socket<'static, 'static, Brand, BLOCK, DEPTH, LANE, CREDITS>;
-
-/// A datagram of the network.
-pub type Received = Datagram<'static, Brand, BLOCK>;
+/// A datagram of the network branded `B`.
+pub type Received<B> = Datagram<'static, B, BLOCK>;
 /// A received frame's buffer the station lends the network.
 pub type LentBuffer = oer_protocols_network_port::LentFrame<wifi::ReceivedStorage<Notifies>>;
 /// A lending channel socket ([`Lending`]).
-pub type LendingSocket = oer_protocols_network_runtime::LendingSocket<
+pub type LendingSocket<B> = oer_protocols_network_runtime::LendingSocket<
     'static,
     'static,
-    Brand,
+    B,
     BLOCK,
     DEPTH,
     LANE,
@@ -103,12 +103,13 @@ pub type LendingSocket = oer_protocols_network_runtime::LendingSocket<
 /// A datagram in the station's receive buffer, lent to the application.
 pub type Lent = oer_protocols_network_runtime::Lent<'static, LentBuffer>;
 /// What a lending socket receives: lent, or copied by the frame's form.
-pub type Delivered =
-    oer_protocols_network_runtime::Received<'static, 'static, Brand, BLOCK, LentBuffer>;
-/// A block of the network.
-pub type NetworkBlock = Block<'static, Brand, BLOCK>;
+pub type Delivered<B> =
+    oer_protocols_network_runtime::Received<'static, 'static, B, BLOCK, LentBuffer>;
+/// A block of the network branded `B`.
+pub type NetworkBlock<B> = Block<'static, B, BLOCK>;
 
-/// The port of the service over the station.
+/// The port of the service over a role's network end: the station's and the
+/// access point's are one type.
 type Port = DevicePort<wifi::Network<'static, Notifies>, Transmit>;
 
 /// Names a frame in the station's transmit buffers: its buffer's place
@@ -117,10 +118,10 @@ type Port = DevicePort<wifi::Network<'static, Notifies>, Transmit>;
 /// gives the buffer back.
 pub type TxTicket = u8;
 
-type NetService<P> = Service<
+type NetService<B, P> = Service<
     'static,
     'static,
-    Brand,
+    B,
     BLOCK,
     SOCKETS,
     CREDITS,
@@ -130,7 +131,7 @@ type NetService<P> = Service<
     DEPTH,
     LANE,
     Port,
-    Producer<'static, Brand, P, CREDITS>,
+    Producer<'static, B, P, CREDITS>,
     Diagnosis,
 >;
 
@@ -210,11 +211,11 @@ const _: () = {
         panic!("the diagnostics' stages are the service's");
     }
 };
-type Lanes = SocketLanes<'static, 'static, Brand, BLOCK, DEPTH, LANE, CREDITS>;
-type LendingLanes = oer_protocols_network_runtime::LendingLanes<
+type Lanes<B> = SocketLanes<'static, 'static, B, BLOCK, DEPTH, LANE, CREDITS>;
+type LendingLanes<B> = oer_protocols_network_runtime::LendingLanes<
     'static,
     'static,
-    Brand,
+    B,
     BLOCK,
     DEPTH,
     LANE,
@@ -226,20 +227,21 @@ mod receive {
     use super::{NetService, OpenRefused, Produce, ReceiveMode};
 
     /// Only this module's modes select how the channel socket receives.
-    pub trait Sealed {
+    pub trait Sealed<B: 'static> {
         /// Open the channel socket on `port`.
         fn bind<P: Produce + 'static>(
-            service: &mut NetService<P>,
+            service: &mut NetService<B, P>,
             port: u16,
-            lanes: &'static mut <Self as ReceiveMode>::Lanes,
-        ) -> Result<<Self as ReceiveMode>::Socket, OpenRefused>
+            lanes: &'static mut <Self as ReceiveMode<B>>::Lanes,
+        ) -> Result<<Self as ReceiveMode<B>>::Socket, OpenRefused>
         where
-            Self: ReceiveMode;
+            Self: ReceiveMode<B>;
     }
 }
 
-/// How the channel socket receives, by type: [`Copying`] or [`Lending`].
-pub trait ReceiveMode: receive::Sealed + 'static {
+/// How the channel socket of a network branded `B` receives, by type:
+/// [`Copying`] or [`Lending`].
+pub trait ReceiveMode<B: 'static>: receive::Sealed<B> + 'static {
     /// The channel socket.
     type Socket: 'static;
     /// Its lanes, in the image's storage.
@@ -252,26 +254,27 @@ pub trait ReceiveMode: receive::Sealed + 'static {
 /// Each datagram is copied into a block of the network's memory.
 pub enum Copying {}
 
-/// Each datagram stays in the station's receive buffer, lent to the
+/// Each datagram stays in the role's receive buffer, lent to the
 /// application, and at most `CREDIT` at once: one more is dropped until a
 /// lent one is dropped. The station's lend count holds [`wifi::LENT_RX`]
 /// buffers; `CREDIT` of them are the socket's, and the rest stay for frames
-/// on their way to the network. A copy the station made for the frame's form
-/// comes in a block; one it made by pressure is dropped.
+/// on their way to the network. A copy the role made for the frame's form
+/// comes in a block (an access point's every MSDU is one); one it made by
+/// pressure is dropped.
 pub enum Lending<const CREDIT: usize> {}
 
-impl ReceiveMode for Copying {
-    type Socket = Socket;
-    type Lanes = Lanes;
-    const LANES: Lanes = SocketLanes::new();
+impl<B: 'static> ReceiveMode<B> for Copying {
+    type Socket = Socket<B>;
+    type Lanes = Lanes<B>;
+    const LANES: Lanes<B> = SocketLanes::new();
 }
 
-impl receive::Sealed for Copying {
+impl<B: 'static> receive::Sealed<B> for Copying {
     fn bind<P: Produce + 'static>(
-        service: &mut NetService<P>,
+        service: &mut NetService<B, P>,
         port: u16,
-        lanes: &'static mut <Self as ReceiveMode>::Lanes,
-    ) -> Result<<Self as ReceiveMode>::Socket, OpenRefused> {
+        lanes: &'static mut <Self as ReceiveMode<B>>::Lanes,
+    ) -> Result<<Self as ReceiveMode<B>>::Socket, OpenRefused> {
         service
             .bind(port, Dscp::default(), Group::shared(), lanes)
             .map_err(|refused| refused.reason)
@@ -287,18 +290,18 @@ impl<const CREDIT: usize> Lending<CREDIT> {
     };
 }
 
-impl<const CREDIT: usize> ReceiveMode for Lending<CREDIT> {
-    type Socket = LendingSocket;
-    type Lanes = LendingLanes;
-    const LANES: LendingLanes = LendingLanes::new();
+impl<B: 'static, const CREDIT: usize> ReceiveMode<B> for Lending<CREDIT> {
+    type Socket = LendingSocket<B>;
+    type Lanes = LendingLanes<B>;
+    const LANES: LendingLanes<B> = LendingLanes::new();
 }
 
-impl<const CREDIT: usize> receive::Sealed for Lending<CREDIT> {
+impl<B: 'static, const CREDIT: usize> receive::Sealed<B> for Lending<CREDIT> {
     fn bind<P: Produce + 'static>(
-        service: &mut NetService<P>,
+        service: &mut NetService<B, P>,
         port: u16,
-        lanes: &'static mut <Self as ReceiveMode>::Lanes,
-    ) -> Result<<Self as ReceiveMode>::Socket, OpenRefused> {
+        lanes: &'static mut <Self as ReceiveMode<B>>::Lanes,
+    ) -> Result<<Self as ReceiveMode<B>>::Socket, OpenRefused> {
         service
             .lend_from(wifi::LENT_RX, Self::RESERVE)
             .map_err(OpenRefused::Loans)?;
@@ -308,14 +311,18 @@ impl<const CREDIT: usize> receive::Sealed for Lending<CREDIT> {
     }
 }
 /// The service, where it stays while it runs.
-type Placed<P> = &'static mut Option<NetService<P>>;
+type Placed<B, P> = &'static mut Option<NetService<B, P>>;
 
-/// What an image lends a network whose producer is `P`, in a static of its
-/// own: where the service stays, the producer's end flag, which the service
-/// sets at its end ([`LocalEnd`]), and the watch of the interface's
-/// address.
-pub struct NetworkStorage<P: Produce + 'static, R: ReceiveMode> {
-    service: Option<NetService<P>>,
+/// What an image lends a network branded `B` whose producer is `P`, in a
+/// static of its own: the network's memory and its stop's lane, where the
+/// service stays, the producer's end flag, which the service sets at its
+/// end ([`LocalEnd`]), the watch of the interface's address and the channel
+/// socket's lanes. Nothing of a network is the library's: a second instance
+/// is a second storage of another brand.
+pub struct NetworkStorage<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> {
+    memory: Memory,
+    stop: StopLane,
+    service: Option<NetService<B, P>>,
     end: LocalEnd,
     /// Where the service publishes the interface's address.
     watch: ConfigurationWatch,
@@ -323,10 +330,15 @@ pub struct NetworkStorage<P: Produce + 'static, R: ReceiveMode> {
     lanes: R::Lanes,
 }
 
-impl<P: Produce + 'static, R: ReceiveMode> NetworkStorage<P, R> {
+impl<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> NetworkStorage<B, P, R> {
     #[must_use]
     pub const fn new() -> Self {
         Self {
+            memory: Memory {
+                before: [0; BLOCK_WORD_OFFSET],
+                blocks: [[0; BLOCK]; BLOCKS],
+            },
+            stop: StopLane::new(),
             service: None,
             end: LocalEnd::new(),
             watch: ConfigurationWatch::new(),
@@ -335,7 +347,7 @@ impl<P: Produce + 'static, R: ReceiveMode> NetworkStorage<P, R> {
     }
 }
 
-impl<P: Produce + 'static, R: ReceiveMode> Default for NetworkStorage<P, R> {
+impl<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> Default for NetworkStorage<B, P, R> {
     fn default() -> Self {
         Self::new()
     }
@@ -359,13 +371,6 @@ struct Memory {
     blocks: [[u8; BLOCK]; BLOCKS],
 }
 
-/// The blocks: far larger than a value the image may move.
-static MEMORY: ConstStaticCell<Memory> = ConstStaticCell::new(Memory {
-    before: [0; BLOCK_WORD_OFFSET],
-    blocks: [[0; BLOCK]; BLOCKS],
-});
-static STOP: ConstStaticCell<StopLane> = ConstStaticCell::new(StopLane::new());
-
 /// The station's transmit end the network takes: it owns the network's
 /// transmit buffers, and the network stack writes each frame in the buffer
 /// it goes to the station in.
@@ -378,6 +383,20 @@ pub struct Ports {
     pub receiving: u16,
     /// The producer's send-only socket's.
     pub sending: u16,
+}
+
+/// How a network's interface takes its IPv4 address.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Addressing {
+    /// Leased by the core's DHCP client from the first link up, RFC 2131,
+    /// with the seed the role drew at boot: a station's.
+    Dhcp,
+    /// Given: the interface holds it from the start, an access point's.
+    Given {
+        address: [u8; 4],
+        prefix: u8,
+        gateway: Option<[u8; 4]>,
+    },
 }
 
 /// Why [`Network::start`] gave no network.
@@ -401,59 +420,73 @@ impl From<NetworkError> for Error {
     }
 }
 
-/// The group's end of the network whose producer is `P`, its channel
-/// socket receiving as `R` says.
-pub struct Network<P: Produce + 'static, R: ReceiveMode> {
+/// The group's end of the network branded `B` whose producer is `P`, its
+/// channel socket receiving as `R` says.
+pub struct Network<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> {
     end: &'static LocalEnd,
     watch: &'static ConfigurationWatch,
-    producer: core::marker::PhantomData<(P, R)>,
+    producer: core::marker::PhantomData<(B, P, R)>,
 }
 
-/// What the network's task runs: not an API.
+/// What a network's task runs: not an API.
 #[doc(hidden)]
-pub struct NetworkStart<P: Produce + 'static> {
-    service: Placed<P>,
+pub struct NetworkStart<B: 'static, P: Produce + 'static> {
+    service: Placed<B, P>,
     stop: WakingSpscSender<'static, (), 1>,
     stopper: wifi::NetworkStopper<'static, Notifies>,
 }
 
-impl<P: Produce + 'static> crate::NetTask for NetworkStart<P> {
+impl<B: 'static, P: Produce + 'static> crate::NetTask for NetworkStart<B, P> {
     fn serve(self) -> impl core::future::Future<Output = ()> {
         serve_network(self)
     }
 }
 
-impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
-    /// Take `device` for the network and `storage` for its service, open the
-    /// channel socket on `ports.receiving` and `producer`'s send-only socket
-    /// on `ports.sending`: the service runs from the group's start, leases
-    /// its address by DHCP and calls `producer` in its turns. A datagram for
-    /// `ports.sending` is dropped; receiving and echoing stay on the channel
-    /// socket, which receives as `R` says and comes back here.
+impl<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> Network<B, P, R> {
+    /// Take a role's `device` for the network, addressed as `addressing`
+    /// says, and `storage` for its service; open the channel socket on
+    /// `ports.receiving` and `producer`'s send-only socket on
+    /// `ports.sending`: the service runs from the group's start beside the
+    /// group's other networks and calls `producer` in its turns. A datagram
+    /// for `ports.sending` is dropped; receiving and echoing stay on the
+    /// channel socket, which receives as `R` says and comes back here.
     ///
     /// # Errors
-    /// [`Error::AlreadyStarted`] for a second start; [`Error::Network`] when
-    /// the service refuses its interface, its sockets or its watch.
-    pub fn start(
+    /// [`Error::AlreadyStarted`] for a device a network took already;
+    /// [`Error::Network`] when the service refuses its interface, its
+    /// memory, its sockets or its watch.
+    #[allow(
+        clippy::type_complexity,
+        reason = "the network, its socket and the group"
+    )]
+    pub fn start<N: crate::NetTask>(
         mut device: Device,
-        boot: GroupBoot,
-        storage: &'static mut NetworkStorage<P, R>,
+        addressing: Addressing,
+        boot: GroupBoot<N>,
+        storage: &'static mut NetworkStorage<B, P, R>,
         producer: P,
         ports: Ports,
-    ) -> Result<(Self, R::Socket, GroupBoot<NetworkStart<P>>), Error> {
+    ) -> Result<(Self, R::Socket, GroupBoot<(N, NetworkStart<B, P>)>), Error> {
         let (network, transmit, stopper) = device.network.take().ok_or(Error::AlreadyStarted)?;
-        let interface =
-            Interface::dhcp(device.address, MTU, device.seed).map_err(NetworkError::Interface)?;
-        let stop = STOP.try_take().ok_or(NetworkError::Storage)?;
-        let memory = MEMORY.try_take().ok_or(NetworkError::Storage)?;
-        let (pool, brand) = claim::<Brand, BLOCK, BLOCKS>(&mut memory.blocks)
-            .map_err(|_: ClaimRefused<'_, BLOCK, BLOCKS>| NetworkError::Storage)?;
+        let interface = match addressing {
+            Addressing::Dhcp => Interface::dhcp(device.address, MTU, device.seed),
+            Addressing::Given {
+                address,
+                prefix,
+                gateway,
+            } => Interface::new(device.address, address, prefix, gateway, MTU),
+        }
+        .map_err(NetworkError::Interface)?;
         let NetworkStorage {
+            memory,
+            stop,
             service,
             end,
             watch,
             lanes,
         } = storage;
+        let (pool, brand) = claim::<B, BLOCK, BLOCKS>(&mut memory.blocks)
+            .map_err(|_: ClaimRefused<'_, BLOCK, BLOCKS>| NetworkError::Storage)?;
         let (end, watch): (&'static LocalEnd, &'static ConfigurationWatch) = (end, watch);
         let (stop, stopping) = stop.split();
         let port = DevicePort::new(network, transmit);
@@ -465,7 +498,7 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
         running
             .bind_local(ports.sending, Dscp::default())
             .map_err(NetworkError::Local)?;
-        let socket = <R as receive::Sealed>::bind::<P>(running, ports.receiving, lanes)
+        let socket = <R as receive::Sealed<B>>::bind::<P>(running, ports.receiving, lanes)
             .map_err(NetworkError::Port)?;
         running.watch(watch).map_err(NetworkError::Watch)?;
         Ok((
@@ -475,7 +508,7 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
                 producer: core::marker::PhantomData,
             },
             socket,
-            boot.with_net(NetworkStart {
+            boot.with_net(NetworkStart::<B, P> {
                 service,
                 stop,
                 stopper,
@@ -514,7 +547,7 @@ impl<P: Produce + 'static, R: ReceiveMode> Network<P, R> {
 /// records and resets. A stop drops the port, with the frames of the station
 /// it still holds, before the station hears of it; the task then serves the
 /// late returns of lent buffers' loans until none is out.
-async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
+async fn serve_network<B: 'static, P: Produce + 'static>(start: NetworkStart<B, P>) {
     let NetworkStart {
         service,
         stop,
@@ -560,22 +593,26 @@ async fn serve_network<P: Produce + 'static>(start: NetworkStart<P>) {
         brand,
         mut port,
     } = retired;
-    // The queues outlive the port, so dropping it returns no frame and
-    // takes back no memory: both happen here first.
+    // Every frame the port holds goes back and every memory the role gave
+    // back is taken, before the role hears of the stop.
     port.give_back();
-    drop(port);
     // The stop is confirmed first: it waits for no lent buffer.
     stopper.stopped();
     // Then this task takes each lent buffer's loan back as it returns,
-    // until the pool's account is closed. A buffer held for ever keeps it
-    // waiting, as nothing expires.
-    oer_protocols_network_runtime::serve_late_loans(
+    // until the pool's account is closed, and keeps the port's returns: a
+    // memory the role gives back after the report (a frame the network
+    // published before it saw the request) goes home to the port's
+    // transmit owner. A buffer held for ever keeps the loans waiting, as
+    // nothing expires; the task, with what it holds, lasts the boot.
+    let returning = core::future::poll_fn(|cx| {
+        port.serve_returns(cx);
+        core::task::Poll::<core::convert::Infallible>::Pending
+    });
+    let loans = oer_protocols_network_runtime::serve_late_loans(
         &mut pool,
         [&mut sockets[..], &mut adopted[..]],
-    )
-    .await;
-    // Memory, lanes and result places are all static, so what a late socket
-    // or observer reaches stays.
-    let _parked =
-        core::mem::ManuallyDrop::new((results, pool, brand, sockets, adopted, returns, producers));
+    );
+    let _held = (&results, &brand, &returns, &producers);
+    let ((), never) = embassy_futures::join::join(loans, returning).await;
+    match never {}
 }

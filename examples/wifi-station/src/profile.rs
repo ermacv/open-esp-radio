@@ -9,7 +9,7 @@ pub enum Security {
 }
 
 /// The network, regulatory domain, channel and transmit power limit, and
-/// the gateway's TCP echo port the image exchanges a line with.
+/// the gateway's UDP echo port the image exchanges a datagram with.
 #[derive(Clone, Copy)]
 pub struct StationProfile {
     pub ssid: &'static [u8],

@@ -8,7 +8,7 @@
 //! alarm, calls the image's `boot1` and reports it booted; hart 0 waits for
 //! that report before it enables its own interrupts, so both boots end
 //! before any executor runs. Hart 1 then runs its thread-mode executor
-//! (`FROM_CPU1`) with the group's IP service and future as its roots.
+//! (`FROM_CPU1`) with the group's networks and future as its roots.
 //!
 //! No waker crosses harts: each future that waits on the other hart waits
 //! on its own executor's signal, which the other hart raises
@@ -43,7 +43,7 @@ pub(crate) type Hart1Executor = Executor<Esp32s31, 1>;
 
 oer_chips_family_platform_executor::tasks! {
     /// Hart 1's executor's tasks: none of the library's; the group's
-    /// IP service and future are its roots.
+    /// networks and future are its roots.
     pub Hart1Tasks: Executor<Esp32s31, 1> {
         @observer: super::executor_observer::<2>();
     }
@@ -171,7 +171,7 @@ pub(crate) fn launch(
 /// Hart 1's main, on its own stacks with its interrupt stack and exception
 /// path installed: make its interrupt context, route its executor's alarm,
 /// run the group, report it booted, enable its interrupts and run its
-/// executor with the group's IP service and future. Not an API.
+/// executor with the group's networks and future. Not an API.
 pub fn hart1_main<H: GroupStarted>(
     handoff: SecondaryHandoff<Port, 1>,
     parts: Hart1Parts,

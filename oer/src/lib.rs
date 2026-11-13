@@ -20,11 +20,10 @@
 //!   AES-128 engine, owned by the image or by the Wi-Fi station;
 //! - [`channel`]: a typed channel between the application's future and the
 //!   group's;
-//! - [`net`]: waiting on the IP service for an address or a link loss;
 //! - `observe` (`observe` feature): what the library observes of its own
 //!   work, for an image that measures it.
 
-pub use oer_chips_family_app::{channel, net};
+pub use oer_chips_family_app::channel;
 pub mod print;
 
 /// What the library observes of its own work, for an image that measures
@@ -60,13 +59,23 @@ macro_rules! entry {
             $crate::__private::start(handoff, $main, $crate::__private::no_group, ())
         }
     };
+    // Without the `group` feature a task group runs on the application's
+    // executor, beside the application's future: its networks with it.
     ($main:path, group = $group:path) => {
-        compile_error!("an image with a task group selects the `group` feature of `oer`");
+        $crate::__private::entry!(
+            __oer_main,
+            $crate::__private::Port,
+            exception = $crate::__private::exception
+        );
+
+        fn __oer_main(handoff: $crate::__private::Handoff<$crate::__private::Port>) -> ! {
+            $crate::__private::start(handoff, $main, $group, ())
+        }
     };
 }
 
-/// The application's entry with a task group: what [`entry!`] is with the
-/// `group` feature.
+/// The application's entry with a task group on its own hart: what
+/// [`entry!`] is with the `group` feature.
 #[cfg(feature = "group")]
 #[macro_export]
 macro_rules! entry {

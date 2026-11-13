@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
 publish.workspace = true
-description = "The HIL image of the Wi-Fi access-point scenario: an oer Wi-Fi access point and its IP service served over the HIL console"
+description = "The HIL image of the Wi-Fi access-point scenario: an oer Wi-Fi access point and its network served over the HIL console"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer = { path = "../../../oer", features = ["access-point", "console"] }

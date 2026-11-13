@@ -9,28 +9,29 @@ publish = false
 description = "The ESP32-S31's application entry: its boot sequence, interrupt layout, executors and service tasks, and the peripherals, drivers and services an image takes, behind `oer`"
 
 [features]
-## The Wi-Fi station and its IP service.
-wifi = []
-## The Wi-Fi access point and its IP service (`wifi::AccessPoint`).
+## The Wi-Fi station (`wifi::Station`), with its network.
+station = ["wifi"]
+## The Wi-Fi access point (`wifi::AccessPoint`), with its network.
 access-point = ["wifi"]
-## The USB Serial/JTAG console as the application's byte stream.
-console = []
-## A task group beside the application (`entry!(main, group = setup)`):
-## on a chip with a second core it runs there on its own executor,
-## otherwise on the application's executor.
-group = []
-## What the library observes of its own work.
-observe = ["oer-chips-family-app/observe"]
-## UDP sockets on the IP stack, each queueing up to 16 received datagrams.
-udp = ["embassy-net/udp", "dep:xarxa"]
-## The network core in place of the IP service, for an image to compare them.
-network = [
+## What every Wi-Fi role shares: the radio, its port, the network core
+## and its composition. An image chooses a role; this feature alone serves
+## none.
+wifi = [
     "dep:oer-portable-events",
     "dep:oer-protocols-network-core",
     "dep:oer-protocols-network-runtime",
     "dep:oer-protocols-network-wire",
     "dep:heapless",
 ]
+## The USB Serial/JTAG console as the application's byte stream.
+console = []
+## The task group (`entry!(main, group = setup)`), with the networks it
+## starts, on its own hart where the chip has a second core. Without it a
+## task group runs on the application's executor, beside the roles'
+## runners: both are product placements.
+group = []
+## What the library observes of its own work.
+observe = ["oer-chips-family-app/observe"]
 
 [dependencies]
 oer-chips-family-app = { path = "../../family/app" }
@@ -38,7 +39,6 @@ oer-chips-family-app = { path = "../../family/app" }
 # The chip implementation runs on the chip target only.
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
-oer-portable-embassy-net = { path = "../../../portable/embassy/net" }
 oer-portable-events = { path = "../../../portable/events", optional = true }
 oer-portable-memory = { path = "../../../portable/memory" }
 heapless = { version = "0.9.3", default-features = false, optional = true }
@@ -67,11 +67,6 @@ oer-portable-riscv = { path = "../../../portable/riscv" }
 oer-portable-trace = { path = "../../../portable/trace" }
 embassy-futures = "0.1.2"
 embassy-time = { workspace = true }
-# The stack the IP service pins (`oer-portable-embassy-net`), with TCP sockets.
-embassy-net = { git = "https://github.com/ermacv/embassy.git", rev = "5638999eb53ef5a12417a2908ee7716295285e19", default-features = false, features = ["tcp"] }
-# The stack's socket receive queue at its largest, with `udp`: some 2.7 ms
-# of 1400-byte datagrams at 65 Mbit/s (the revision the stack pins).
-xarxa = { git = "https://github.com/ermacv/xarxa.git", rev = "fbebde557a08278386b4e4043e2781ff4b863046", default-features = false, features = ["udp-rx-queue-count-16"], optional = true }
 
 [build-dependencies]
 oer-chips-family-facts = { path = "../../family/facts" }

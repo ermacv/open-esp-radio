@@ -45,7 +45,7 @@ type Requests = Either<
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 /// The network's service, with the load's producer in it.
 static NETWORK: ConstStaticCell<
-    wifi::NetworkStorage<udp::LoadProducer, udp::Receive>,
+    wifi::NetworkStorage<udp::Brand, udp::LoadProducer, udp::Receive>,
 > =
     ConstStaticCell::new(wifi::NetworkStorage::new());
 /// What the load's sender hands the producer.
@@ -65,7 +65,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     // The load scenario measures the station at HT 40 MHz where the stand's
     // access point offers it.
     let config = wifi::Config::all_channels(COUNTRY, TX_CAP_DBM)?.with_ht40();
-    let (station, _no_ip_service) = Station::start(p.wifi, p.aes, config, &mut boot)?;
+    let station = Station::start(p.wifi, p.aes, config, &mut boot)?;
     let console = Console::open(p.console, &mut boot)?;
     let load = load::serve::LOAD.application(&mut boot)?;
     let relay = load::relay::RELAY.application(&mut boot)?;
@@ -114,7 +114,14 @@ fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted
     let storage = NETWORK.try_take().ok_or(Error::Storage)?;
     let producer = udp::LoadProducer::new(&SOURCE);
     let (net, socket, mut boot) =
-        wifi::Network::start(device, boot, storage, producer, udp::PORTS)?;
+        wifi::Network::start(
+            device,
+            wifi::Addressing::Dhcp,
+            boot,
+            storage,
+            producer,
+            udp::PORTS,
+        )?;
     let load = load::serve::LOAD.group(&mut boot)?;
     let relay = load::relay::RELAY.group(&mut boot)?;
     let asks = Asked {

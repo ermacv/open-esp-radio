@@ -2425,11 +2425,6 @@ where
                 runner_home,
             );
             let runner_home = queues.is_empty() && purposes.iter().all(Option::is_none);
-            let observed = crate::datapath::ReturnObserved {
-                memory_held: u16::try_from(returns.held()).unwrap_or(u16::MAX),
-                network_running: returns.asked(),
-                lent: 0,
-            };
             if returns.stopping() == crate::network_return::NetworkStopping::Stopped {
                 // A frame the network published before it saw the request
                 // waits in the transport after its report: it goes home too.
@@ -2443,6 +2438,12 @@ where
                 }
                 returns.return_freed::<Unobserved, L, NS, TX, RX, N>(network);
             }
+            // Read after the last drain: what the runner still holds now.
+            let observed = crate::datapath::ReturnObserved {
+                memory_held: u16::try_from(returns.held()).unwrap_or(u16::MAX),
+                network_running: returns.asked(),
+                lent: 0,
+            };
             // Settled, and nothing of the network's left with the runner: a
             // memory that still waits for the return queue's room holds the
             // stop until its deadline.

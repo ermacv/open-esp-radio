@@ -41,7 +41,7 @@ use oer_portable_embassy_time::EmbassyClock;
 // The family's shared parts keep their paths in this crate.
 #[cfg(feature = "observe")]
 use oer_chips_family_app::observe;
-use oer_chips_family_app::{boot, channel, net};
+use oer_chips_family_app::{boot, channel};
 
 pub use oer_chips_esp32s31_platform_runtime::Esp32s31;
 
@@ -106,7 +106,7 @@ pub use aes::AesEngine;
 
 #[cfg(feature = "wifi")]
 mod pilot;
-/// The Wi-Fi station and its IP service.
+/// The Wi-Fi roles and their network.
 #[cfg(feature = "wifi")]
 pub mod wifi;
 
@@ -142,15 +142,16 @@ oer_chips_family_platform_executor::tasks! {
         @observer: executor_observer::<0>();
         /// Feeds the RTC watchdog while the executor polls.
         watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_rtc_watchdog;
-        #[cfg(feature = "wifi")]
+        #[cfg(feature = "station")]
         /// The Wi-Fi station's lifecycle.
         station(launch: wifi::StationStart) = wifi::serve_station;
-        #[cfg(feature = "wifi")]
+        #[cfg(feature = "station")]
         /// The Wi-Fi datapath actor, which owns the radio, beside the
         /// station's lifecycle.
         datapath(datapath: wifi::Datapath) = wifi::datapath;
         #[cfg(feature = "access-point")]
-        /// The Wi-Fi access point, which owns the radio, and its IP service.
+        /// The Wi-Fi access point's runner, which owns the radio while it
+        /// serves; its network runs in the group.
         access_point(launch: wifi::ApStart) = wifi::serve_access_point;
     }
 }
@@ -195,8 +196,11 @@ pub struct Boot {
     pub(crate) boot_id: Option<u64>,
     evidence: Evidence,
     /// The station's network device, for the group.
-    #[cfg(feature = "wifi")]
+    #[cfg(feature = "station")]
     pub(crate) device: Option<wifi::Device>,
+    /// The access point's network device, for the group.
+    #[cfg(feature = "access-point")]
+    pub(crate) access_point_device: Option<wifi::Device>,
     /// The time driver's authority and the comparator for hart 1's
     /// executor, once a station installed the time driver.
     #[cfg(feature = "group")]
@@ -209,7 +213,7 @@ pub struct Boot {
     observe: Option<observed::Hart0>,
 }
 
-/// No IP service: the group started none.
+/// No network: the group started none.
 pub struct NoNet;
 
 impl Boot {
@@ -271,12 +275,12 @@ pub(crate) fn draw_boot_id(
 /// Service tasks a boot step prepared, started with the executor.
 #[derive(Default)]
 pub(crate) struct Pending {
-    #[cfg(feature = "wifi")]
+    #[cfg(feature = "station")]
     pub(crate) station: Option<wifi::StationStart>,
     /// The Wi-Fi datapath actor, started beside the station.
-    #[cfg(feature = "wifi")]
+    #[cfg(feature = "station")]
     pub(crate) datapath: Option<wifi::Datapath>,
-    /// The Wi-Fi access point and its IP service.
+    /// The Wi-Fi access point's runner.
     #[cfg(feature = "access-point")]
     pub(crate) access_point: Option<wifi::ApStart>,
 }
@@ -329,23 +333,27 @@ where
     }
 }
 
-/// What the boot hands the group: the station's network device when
-/// the boot started a station.
+/// What the boot hands the group: each role's network device when the boot
+/// started that role.
 pub struct GroupPeripherals {
-    /// The station's network device, which [`wifi::Net::start`] takes.
-    #[cfg(feature = "wifi")]
+    /// The station's network device, which [`wifi::Network::start`] takes.
+    #[cfg(feature = "station")]
     pub device: Option<wifi::Device>,
+    /// The access point's network device, which [`wifi::Network::start`]
+    /// takes.
+    #[cfg(feature = "access-point")]
+    pub access_point: Option<wifi::Device>,
 }
 
 /// The group's context: `entry!(boot, group = boot1)` calls `boot1`
 /// with it once the boot ended, before any executor, and runs the future it
-/// ends with beside the IP service it started. Both run where the second
+/// ends with beside the networks it started. Both run where the second
 /// boot runs: on hart 0, the application's executor, or with the `group`
 /// feature on hart 1's own executor, which hart 1 runs alone.
 ///
-/// `N` is the IP service the group started, whose pool sizes are the
-/// image's: [`NoNet`] until `wifi::Net::start` consumes the context and
-/// returns it with the service.
+/// `N` is the networks the group started, each over storage the image
+/// lent: [`NoNet`] until `wifi::Network::start` consumes the context and
+/// returns it with that network beside the ones before.
 pub struct GroupBoot<N = NoNet> {
     net: N,
     /// What hart 1 observes only there, bound at its start.
@@ -354,7 +362,7 @@ pub struct GroupBoot<N = NoNet> {
 }
 
 impl GroupBoot {
-    /// The group's context before its IP service.
+    /// The group's context before its networks.
     pub(crate) const fn new() -> Self {
         Self {
             net: NoNet,
@@ -362,12 +370,14 @@ impl GroupBoot {
             observe: None,
         }
     }
+}
 
-    /// The same context with `net` as its IP service.
+impl<N> GroupBoot<N> {
+    /// The same context with `net` beside the networks it started.
     #[cfg(feature = "wifi")]
-    pub(crate) fn with_net<M>(self, net: M) -> GroupBoot<M> {
+    pub(crate) fn with_net<M>(self, net: M) -> GroupBoot<(N, M)> {
         GroupBoot {
-            net,
+            net: (self.net, net),
             #[cfg(all(feature = "observe", feature = "group"))]
             observe: self.observe,
         }
@@ -404,7 +414,7 @@ pub trait GroupStarted: started::Sealed {
     type Future: core::future::Future<Output = AppResult>;
     /// What builds it, where it stays.
     type Build: FnOnce() -> Self::Future;
-    /// The IP service it started, or [`NoNet`].
+    /// The networks it started, or [`NoNet`].
     type Net: NetTask;
     #[doc(hidden)]
     fn into_parts(self) -> (Self::Net, Self::Build);
@@ -461,12 +471,6 @@ pub type AppNotify =
 pub type GroupNotify =
     &'static oer_chips_family_platform_interrupt_table::signal::PeerNotify<Executor<Esp32s31, 1>>;
 
-/// The application's notify, which the IP status publication tells.
-#[cfg(all(feature = "wifi", not(feature = "group")))]
-pub(crate) static APPLICATION: AppNotify = oer_portable_waker::AtomicWaker::new();
-#[cfg(all(feature = "wifi", feature = "group"))]
-pub(crate) static APPLICATION: AppNotify = &hart1::APPLICATION;
-
 impl<A, B, const N: usize> Channel<A, B, N> {
     /// A channel between the application's future and the group's.
     #[cfg(not(feature = "group"))]
@@ -520,7 +524,7 @@ pub fn no_group(_handed: GroupPeripherals, boot: GroupBoot) -> Result<impl Group
     Ok(boot.run(core::future::pending::<AppResult>))
 }
 
-/// An IP service the executor runs beside the application, with the
+/// A network the executor runs beside the application, with the
 /// image's pool sizes; not an API.
 #[doc(hidden)]
 pub trait NetTask: 'static {
@@ -534,7 +538,17 @@ impl NetTask for NoNet {
     }
 }
 
-/// Run the IP service, or end at once without one.
+/// Two networks of the group, served together in one task: the group's
+/// network signal wakes it for either.
+impl<A: NetTask, B: NetTask> NetTask for (A, B) {
+    fn serve(self) -> impl core::future::Future<Output = ()> {
+        async move {
+            let ((), ()) = embassy_futures::join::join(self.0.serve(), self.1.serve()).await;
+        }
+    }
+}
+
+/// Run the networks, or end at once without one.
 async fn run_net(net: impl NetTask) {
     net.serve().await;
 }
@@ -558,24 +572,18 @@ pub enum Error {
     /// The console could not take the USB Serial/JTAG block.
     #[cfg(feature = "console")]
     Console,
-    /// The IP service refused its configuration.
-    #[cfg(feature = "wifi")]
-    Net(oer_portable_embassy_net::ip::Error),
     /// The station's configuration was refused.
     #[cfg(feature = "wifi")]
     WifiConfig(wifi::ConfigError),
     /// A network profile was refused.
-    #[cfg(feature = "wifi")]
+    #[cfg(feature = "station")]
     WifiProfile(wifi::ProfileError),
-    /// A wait on the IP service ended without its condition.
-    #[cfg(feature = "wifi")]
-    NetWait(crate::net::NetError),
-    /// The group asked for the station's device, and the boot started
-    /// no station.
+    /// The group asked for a role's device, and the boot started no such
+    /// role.
     #[cfg(feature = "wifi")]
     NoDevice,
     /// The network core refused its start.
-    #[cfg(all(feature = "wifi", feature = "network"))]
+    #[cfg(feature = "wifi")]
     Network(wifi::NetworkError),
     /// The image named every one of its observed parts.
     #[cfg(feature = "observe")]
@@ -592,17 +600,10 @@ impl From<wifi::ConfigError> for Error {
     }
 }
 
-#[cfg(feature = "wifi")]
+#[cfg(feature = "station")]
 impl From<wifi::ProfileError> for Error {
     fn from(error: wifi::ProfileError) -> Self {
         Self::WifiProfile(error)
-    }
-}
-
-#[cfg(feature = "wifi")]
-impl From<crate::net::NetError> for Error {
-    fn from(error: crate::net::NetError) -> Self {
-        Self::NetWait(error)
     }
 }
 
@@ -619,16 +620,12 @@ impl Error {
             #[cfg(feature = "console")]
             Self::Console => oer_portable_diagnostics::name!("sdk-console"; 32),
             #[cfg(feature = "wifi")]
-            Self::Net(_) => oer_portable_diagnostics::name!("sdk-net"; 32),
-            #[cfg(feature = "wifi")]
             Self::WifiConfig(_) => oer_portable_diagnostics::name!("sdk-wifi-config"; 32),
-            #[cfg(feature = "wifi")]
+            #[cfg(feature = "station")]
             Self::WifiProfile(_) => oer_portable_diagnostics::name!("sdk-wifi-profile"; 32),
             #[cfg(feature = "wifi")]
-            Self::NetWait(_) => oer_portable_diagnostics::name!("sdk-net-wait"; 32),
-            #[cfg(feature = "wifi")]
             Self::NoDevice => oer_portable_diagnostics::name!("sdk-no-device"; 32),
-            #[cfg(all(feature = "wifi", feature = "network"))]
+            #[cfg(feature = "wifi")]
             Self::Network(_) => oer_portable_diagnostics::name!("sdk-network"; 32),
             #[cfg(feature = "observe")]
             Self::ImageParts => oer_portable_diagnostics::name!("sdk-image-parts"; 32),
@@ -644,7 +641,7 @@ pub type AppResult = Result<core::convert::Infallible, Error>;
 /// Run the image: adopt the runtime, report the previous boot's faults,
 /// call `boot` with the peripherals, then the group's setup with what the boot handed
 /// it, and start the executor with the library's service tasks, the second
-/// boot's IP service and future, and the application's future. Any error
+/// boot's networks and future, and the application's future. Any error
 /// records and resets.
 #[doc(hidden)]
 pub fn start<S: Started, H: GroupStarted>(
@@ -751,8 +748,10 @@ pub fn start<S: Started, H: GroupStarted>(
             previous_panic: previous,
             previous_exception,
         },
-        #[cfg(feature = "wifi")]
+        #[cfg(feature = "station")]
         device: None,
+        #[cfg(feature = "access-point")]
+        access_point_device: None,
         #[cfg(feature = "group")]
         timers: None,
         #[cfg(feature = "observe")]
@@ -779,8 +778,10 @@ pub fn start<S: Started, H: GroupStarted>(
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
     let handed = GroupPeripherals {
-        #[cfg(feature = "wifi")]
+        #[cfg(feature = "station")]
         device: setup.device.take(),
+        #[cfg(feature = "access-point")]
+        access_point: setup.access_point_device.take(),
     };
     // On hart 0 the group runs here; with `group` on hart 1, below.
     #[cfg(not(feature = "group"))]
@@ -940,7 +941,7 @@ impl Starts {
     fn spawn(self, library: &Spawner<SdkTasks>) {
         let Self { watchdog, pending } = self;
         let started = SdkTasks::watchdog(library, watchdog).is_ok();
-        #[cfg(feature = "wifi")]
+        #[cfg(feature = "station")]
         let started = started
             && pending
                 .datapath
