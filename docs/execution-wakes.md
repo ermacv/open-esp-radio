@@ -75,6 +75,20 @@ copied or sent to another thread. The RX queue's ordinary wakers and the pool
 waiter remain in one P1 composition; no new cross-priority distribution is
 admitted.
 
+The lending consumer's servicing promise uses its existing P1 return waker.
+Publication offers servicing only after the consumer registered readiness;
+finishing or cancelling that opportunity clears the offer and wakes the
+network service. Physical batch accounting precedes socket credit. Busy
+consumers and retained owners promise no servicing, and the offer gates RX
+alone. The queue's prefix commit frees cells and notifies a waiting producer
+once, including unwind of a completed prefix; this uses the same consumer-to-
+producer direction as an individual receive.
+
+`network-port` uses portable memory's `BatchReturn` ownership vocabulary only
+to delegate a `LentFrame` return to its storage. It selects no queue, waker,
+allocator or execution context; the runtime composes those mechanisms. The
+network layer inventory records this dependency explicitly.
+
 A cell holds one waker, so all its live registrations must be interchangeable
 for waking; otherwise each needs a registration of its own. One task does not
 give this: a combinator may hand each child its own waker. A queue's affine ends

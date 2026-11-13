@@ -701,7 +701,7 @@ anchor = "fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {"
 id = "network-lent-return"
 cfg = "feature = \"wifi\""
 waiter = "datapath actor, lend capacity and returned receive units"
-served_by = "the task dropping a network-owned LentReceive returns memory, lowers held count and notifies the actor unless quiet suppresses notification for another selected ring service"
+served_by = "individual LentReceive drop or a synchronous ReceiveReturns batch returns memory before lowering held count and notifying the actor, unless quiet suppresses notification for another selected ring service"
 condition = "NetworkCredit::poll_count registers before checking held; lend room needs held below its limit and full return needs held == 0"
 held = "the network owns each lent receive unit until drop; the actor retains the remaining receive ring and staged frames"
 bound = "normal lend-room and return waits have no local timeout; the retiring-stop wait has its separate deadline below"
@@ -714,6 +714,36 @@ anchor = "fn poll_count(&self, cx: &mut Context<'_>, ready: impl Fn(usize) -> bo
 [[wait.evidence]]
 site = "chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs"
 anchor = "impl<P: LentNotifies> Drop for ReturnOnDrop<P> {"
+
+[[wait.evidence]]
+site = "chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs"
+anchor = "impl<P: LentNotifies> Drop for ReceiveReturns<P> {"
+
+[[wait]]
+id = "network-rx-servicing"
+cfg = "feature = \"wifi\""
+waiter = "network service, further RX intake after publication to a registered lending consumer"
+served_by = "the runnable lending consumer processes a synchronous receive opportunity or cancels its registered wait"
+condition = "the consumer registers sources before advertising readiness; publication offers servicing only to that ready consumer; completion publishes physical returns before socket credit and clears the offer with a service wake"
+held = "queued and retained frames keep their existing loan owners; the servicing offer reserves no extra credit and does not wait for a retained owner; busy consumers advertise no promise"
+bound = "no local timeout: progress assumes the runnable consumer is polled or its wait is cancelled; one synchronous prefix ends the offer, independent of S31 ready-set order; only further RX is gated, while TX, returns, commands, deadlines and stop remain serviced"
+state = "read"
+
+[[wait.evidence]]
+site = "protocols/network/runtime/src/socket/lent.rs"
+anchor = "fn offer(&self) {"
+
+[[wait.evidence]]
+site = "protocols/network/runtime/src/socket/lent.rs"
+anchor = "fn finished(&self, count: u32) {"
+
+[[wait.evidence]]
+site = "protocols/network/runtime/src/socket/lent/prefix.rs"
+anchor = "pub async fn receive_prefix("
+
+[[wait.evidence]]
+site = "protocols/network/runtime/src/service.rs"
+anchor = "if self.servicing() {"
 
 [[wait]]
 id = "network-stop"
@@ -757,7 +787,7 @@ anchor = "pub async fn send(&mut self, value: O) {"
 
 [[wait.evidence]]
 site = "portable/memory/src/waking_spsc.rs"
-anchor = "if self.producer_waits.swap(false, Ordering::SeqCst) {"
+anchor = "pub fn try_receive(&self) -> Option<T> {"
 
 [[wait]]
 id = "application-receive"

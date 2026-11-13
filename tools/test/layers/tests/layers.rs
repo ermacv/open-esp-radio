@@ -4286,10 +4286,15 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
 }
 
 /// Every network package and the workspace packages it may take, normal or
-/// build: the codec stands on `oer-portable-wire` alone and the contract on the codec.
+/// build: the codec stands on `oer-portable-wire` alone. The contract takes
+/// the codec and portable memory's owner-return vocabulary: LentFrame delegates
+/// BatchReturn to its storage without selecting queues or an execution context.
 const NETWORK_LAYERS: [(&str, &[&str]); 5] = [
     ("protocols/network/wire", &["oer-portable-wire"]),
-    ("protocols/network/port", &["oer-protocols-network-wire"]),
+    (
+        "protocols/network/port",
+        &["oer-protocols-network-wire", "oer-portable-memory"],
+    ),
     (
         "protocols/network/core",
         &[
@@ -4378,6 +4383,7 @@ fn an_unlisted_network_package_and_a_contract_on_another_protocol_are_found() {
         false,
         &[
             "oer-protocols-network-wire",
+            "oer-portable-memory",
             "oer-protocols-ieee80211-wire",
             "heapless",
         ],
@@ -4392,6 +4398,7 @@ fn an_unlisted_network_package_and_a_contract_on_another_protocol_are_found() {
     let workspace = [
         "oer-protocols-network-wire",
         "oer-protocols-network-port",
+        "oer-portable-memory",
         "oer-protocols-ieee80211-wire",
         "oer-portable-wire",
     ]
