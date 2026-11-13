@@ -18,6 +18,7 @@ struct Record {
     diagnosis: Diagnosis,
     trace: Vec<String>,
     prefixes: Vec<usize>,
+    turns: usize,
 }
 
 #[derive(Clone, Default)]
@@ -49,6 +50,9 @@ impl EventSink<NetEvent> for Counted {
 }
 impl EventSink<ServiceEvent> for Counted {
     fn event(&mut self, event: ServiceEvent) {
+        if event == ServiceEvent::TurnBegan {
+            self.0.borrow_mut().turns += 1;
+        }
         if event == ServiceEvent::Accepted {
             let mut record = self.0.borrow_mut();
             record.accepted += 1;
@@ -263,6 +267,7 @@ fn prefixes<B: 'static>(
     assert_eq!(flights.len(), SLOTS);
     assert_eq!(executor.ready.load(Ordering::Acquire), 0);
     let accepted_before = counted.0.borrow().accepted;
+    let turns_before = counted.0.borrow().turns;
     let total = if matches!(arrivals, Arrivals::Backlog) {
         24
     } else {
@@ -308,6 +313,13 @@ fn prefixes<B: 'static>(
             [8, 8, 8],
             "the application processes complete available prefixes"
         );
+        if !mixed && keep == 0 {
+            assert_eq!(
+                record.turns - turns_before,
+                3,
+                "three full prefixes need three service bodies, no courtesy packet turns"
+            );
+        }
     }
     println!(
         "keep={keep}, mixed={mixed}, arrivals={arrivals:?}:\n{}",

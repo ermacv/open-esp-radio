@@ -723,10 +723,10 @@ anchor = "impl<P: LentNotifies> Drop for ReceiveReturns<P> {"
 id = "network-rx-courtesy"
 cfg = "feature = \"wifi\""
 waiter = "network service, one RX-intake deferral after publication to a registered lending consumer"
-served_by = "the network service consumes every pending offer in its next shared packet pass; consumer completion may clear an unused offer earlier"
+served_by = "the network service consumes every pending offer in a lightweight continuation after its fairness yield; consumer completion may clear an unused offer earlier"
 condition = "publication records one offer for a registered consumer; the service consumes it once without waiting for that receive future; physical batch accounting precedes socket credit independently of the offer"
 held = "queued and retained frames keep their existing loan owners; the offer reserves no extra credit and cannot expire an owner; a saved future may remain unpolled"
-bound = "at most one intake pass per publication; all sockets' offers are consumed together; RX readiness stays visible and schedules the next pass independently of consumer polling or cancellation; TX, returns, commands, deadlines and stop remain serviced"
+bound = "at most one additional yield after the publishing turn's fairness yield; all sockets' offers are consumed together; no packet body or wait registrations for the deferral; RX/TX/control readiness is reread before intake independently of consumer polling or cancellation; stop is checked before the extra yield"
 state = "read"
 
 [[wait.evidence]]

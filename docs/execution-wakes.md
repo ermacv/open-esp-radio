@@ -78,7 +78,10 @@ admitted.
 Lending returns use their existing P1 return waker, and physical batch
 accounting precedes socket credit. Publication to a registered consumer may
 request one RX-intake deferral. The service consumes all such offers in one
-packet continuation; RX readiness remains visible and another intake does
+lightweight continuation of the publishing turn, after its fairness yield;
+completion can withdraw it before its one extra yield. It performs no
+packet body, observer epilogue or wait registrations. RX readiness remains
+visible and another intake does
 not wait for a saved receive future to be polled or cancelled. Only another
 publication can rearm a deferral. Consumer completion can clear an unused
 offer earlier, but is not required for other sockets' progress. The queue's

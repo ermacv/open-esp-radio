@@ -70,7 +70,7 @@ fn a_refusal_for_credit_counts_the_loans_then_out() {
 }
 
 #[test]
-fn return_servicing_counts_batches_in_a_turn_and_a_wait() {
+fn return_servicing_counts_batches_without_a_courtesy_packet_turn() {
     #[derive(Debug)]
     struct Net;
     let probe = Probe::on();
@@ -80,8 +80,8 @@ fn return_servicing_counts_batches_in_a_turn_and_a_wait() {
         .filter(|event| matches!(event, ServiceEvent::Returned { .. }))
         .count();
     assert_eq!(
-        waiting, 1,
-        "one drop is collected in the bounded packet continuation, one in a wait"
+        waiting, 2,
+        "both drops are collected in waits; no packet body is appointed for courtesy"
     );
     assert_eq!(total.return_batches, 2);
     assert_eq!(total.credits_restored, 2, "both lent buffers' loans");

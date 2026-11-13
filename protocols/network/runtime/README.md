@@ -206,17 +206,21 @@ hold the executor.
 RX continuation has an explicit, bounded socket contract. A lending receive
 advertises readiness after registering all its sources, then checks them
 again. Publication to that waiter records an offer before notifying it and
-asks for a shared packet continuation. That continuation consumes every
-socket's offer together and defers RX intake once, while still servicing
-returns, TX notices, producer work and results. Commands, deadlines, link
-changes and stop keep their existing checks and order.
+asks for a lightweight continuation of the publishing turn. It consumes every
+socket's remaining offer together after the ordinary fairness yield. If the
+consumer has not completed or cancelled it, the continuation yields once
+more, without another packet body, clock read, observation epilogue or wait
+registration. Stop is checked before that extra yield. The following wait
+collects physical returns and restores credit before intake; it reads every
+source and selects TX or control only for real readiness. Commands,
+deadlines and link changes keep their existing checks and order.
 
 Shared RX readiness is never masked. If frames remain, the ordinary fairness
 yield schedules the next pass, which can receive even if the consumer never
 polls or cancels its saved future. Flushing already published frames cannot
 rearm the offer; only a new publication can request another deferral. The
-bound is one intake pass per publication, not a timeout or an executor-round
-count. Several offered sockets consume that one pass together.
+bound is one additional yield per publication, independent of consumer
+completion or executor order. Several offered sockets share that one bound.
 
 A consumer may clear an unused offer earlier. Its synchronous prefix returns
 physical buffers before publishing socket credits; an individual `receive`
