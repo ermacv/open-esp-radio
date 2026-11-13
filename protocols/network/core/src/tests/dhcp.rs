@@ -1,7 +1,6 @@
 //! The DHCP client through the owner's public calls: link, input, tick,
-//! demands and transmit. Ported from Xarxa fbebde5's `iface::dhcpv4` tests
-//! where they fit, with the times this client's jitter and acceptance points
-//! give.
+//! demands and transmit, with the times this client's jitter and acceptance
+//! points give.
 
 use super::*;
 use crate::{Configuration, DhcpDrop, DhcpState, Ipv4, LeaseFault};

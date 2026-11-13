@@ -18,7 +18,7 @@ use oer_protocols_ieee80211_core_roles_ap::{
 use oer_protocols_ieee80211_core_security_rsn::{PmkDerivation, frames::RsnGtk};
 use oer_protocols_ieee80211_runtime::access_point::{
     AP_BUFFERS, AP_KEYS, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared, ApUnsupported,
-    GROUP_KEY_ID, StopWatch, network::ApNetworkStorage, serves_beacons,
+    GROUP_KEY_ID, StopWatch, serves_beacons,
 };
 use oer_protocols_ieee80211_wire::{
     beacon::AP_BEACON_CAPACITY, phy::LegacyRate, security::spp::Interface,
@@ -26,50 +26,6 @@ use oer_protocols_ieee80211_wire::{
 };
 
 struct Nonces;
-
-/// The network's transmit memory as the bench holds it: each frame copied
-/// into a free pool buffer and published from there.
-struct Copied {
-    publisher: crate::supply::TxPublisher,
-    slots: heapless::Vec<crate::supply::TxSlot, { crate::supply::NETWORK_BUFFERS }>,
-}
-
-impl<F: oer_protocols_network_port::EthernetFrame>
-    oer_protocols_ieee80211_runtime::station::TxSupply<F> for Copied
-{
-    type Memory = TxMemory;
-    fn available(&self) -> bool {
-        !self.slots.is_empty()
-    }
-    fn write(
-        &mut self,
-        mut frame: F,
-    ) -> Result<TxMemory, oer_protocols_ieee80211_runtime::station::TxRefused<F>> {
-        use oer_protocols_network_port::TxStorage as _;
-        let Some(mut slot) = self.slots.pop() else {
-            return Err(oer_protocols_ieee80211_runtime::station::TxRefused::Kept(
-                oer_protocols_network_port::TransmitRefused {
-                    frame,
-                    reason: oer_protocols_network_port::TransmitError::QueueFull,
-                },
-            ));
-        };
-        let view = frame.view().expect("a whole frame");
-        let bytes = slot.bytes_mut();
-        bytes[..6].copy_from_slice(&view.destination);
-        bytes[6..12].copy_from_slice(&view.source);
-        bytes[12..14].copy_from_slice(&view.ether_type.to_be_bytes());
-        bytes[14..][..view.payload.len()].copy_from_slice(view.payload);
-        let len = 14 + view.payload.len();
-        self.publisher
-            .publish(slot, 0, len)
-            .map_err(|_| oer_protocols_ieee80211_runtime::station::TxRefused::Lost)
-    }
-    fn give(&mut self, memory: TxMemory) {
-        // Past its capacity a memory leaves the supply.
-        let _held = self.slots.push(self.publisher.slot(memory));
-    }
-}
 
 impl ApNonces for Nonces {
     fn nonce(&mut self) -> Option<[u8; 32]> {
@@ -244,12 +200,16 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
         let network = NetworkTx::claim(pool, AP_BUFFERS as u8)
             .ok()
             .expect("network buffers");
-        let (publisher, slots) = network.into_owned();
-        let (_device, _transmit, end) = leak(ApNetworkStorage::new())
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, _, _>(
-            slots,
-            |slots| Copied { publisher, slots },
-        );
+        // The station's network channels, as the access point's storage
+        // holds them; the network's ends stay with the bench.
+        let channels = leak(crate::NetworkChannels::<crate::SameHart, TxMemory>::new());
+        let (_device, _transmit, _stopper, ends, state) = channels.split(|queues| {
+            <crate::supply::LocalEnd as crate::supply::NetworkTxEnd<crate::SameHart>>::end(
+                queues,
+                network,
+                leak(crate::supply::LocalTxState::new()),
+            )
+        });
         let mut runner = ApRunner::new(
             port,
             commands,
@@ -264,10 +224,12 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                 packet_numbers:
                     oer_chips_family_radio_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP,
                 group_generation: 1,
+                network_stop: Duration::from_millis(100),
             },
             supported(),
             [0x55; 16],
-            end,
+            ends.ends(),
+            state.network_link(),
             (),
             Nonces,
         );
@@ -290,6 +252,10 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             let end = runner.run(&shared, &airy).await;
             seen.borrow_mut().ended = Some(match end {
                 ApEnd::Stopped => "stopped".into(),
+                ApEnd::NetworkLost(observed) => std::format!("network lost: {observed:?}"),
+                ApEnd::NetworkReturning(observed) => {
+                    std::format!("network returning: {observed:?}")
+                }
                 ApEnd::StartRefused(refused) => std::format!("start refused: {refused:?}"),
                 ApEnd::StopUnconfirmed(unconfirmed) => std::format!("{unconfirmed:?}"),
                 ApEnd::Faulted(fault) => std::format!("faulted: {fault:?}"),
@@ -320,6 +286,10 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                 if let Some(ended) = seen.borrow_mut().ended.as_mut() {
                     ended.push_str(match finished {
                         Ok(StopWatch::Confirmed) => ", stop confirmed",
+                        Ok(StopWatch::NetworkLost(_)) => ", stop confirmed, the network lost",
+                        Ok(StopWatch::NetworkReturning(_)) => {
+                            ", stop confirmed, the network's return goes on"
+                        }
                         Ok(StopWatch::Unkept) => ", an item unkept",
                         Ok(StopWatch::Faulted { .. }) => ", stop unconfirmed, a fault kept",
                         Ok(StopWatch::DeviceFailed { .. }) => {

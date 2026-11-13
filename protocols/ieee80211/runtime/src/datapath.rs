@@ -111,6 +111,7 @@ use oer_protocols_ieee80211_core_upper_mac::ccmp::InstalledCcmpTxKey;
 use oer_protocols_ieee80211_core_upper_mac::rate_selection::{FrameRates, RateSelection};
 use oer_protocols_radio_port::{PoolPath, Slot};
 
+use crate::network_return::{NetworkReturn, NetworkStopping};
 use crate::station::contract::MsduRefusal;
 use crate::station::{
     NetworkStop, Notifies, Outgoing, PortRxBlockAck, RX_COPIED_DEPTH, Received, RxBlockAckView,
@@ -377,28 +378,6 @@ impl<K> Radio<K> {
     }
 }
 
-/// How far the network side's stop came.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum NetworkStopping {
-    /// No stop asked it to stop.
-    NotAsked,
-    /// A stop owes it its stop once the station holds none of the
-    /// network's transmit memory: the stopped radio's ended frames and the
-    /// MSDUs left in the transmit queue went back through `returned`.
-    Owed,
-    /// Asked, and it has not reported.
-    Asked,
-    /// It reported its stop. Units it holds stay lent: they return to the
-    /// lend count, which outlives the installation, whenever they drop.
-    Stopped,
-    /// Its participant was lost: its stop will not be confirmed. The
-    /// station still returns what it holds of the network through the
-    /// return queue; the stop settles once nothing of the network is left
-    /// with the station, looked at after the data's settlement. Units the
-    /// network holds lent do not hold it: the outcome counts them.
-    Lost,
-}
-
 /// A port command the port holds at its barrier, with the group token of
 /// its change.
 struct HeldCommand<'id, D: DatapathPort<'id>> {
@@ -474,11 +453,12 @@ struct Stage<'id, D: DatapathPort<'id>> {
 }
 
 /// The data transmission's state: the plane over the port's arenas, the
-/// TIDs' queues of the network's MSDUs and the network's freed memory.
+/// TIDs' queues of the network's MSDUs, and the network's memory on its way
+/// home with the network's stop.
 struct DataTx<M> {
     plane: Option<DataPlane>,
     queues: queues::TxQueues<M, HELD, 1>,
-    freed: heapless::Deque<TxEnded<M>, HELD>,
+    returns: NetworkReturn<M, HELD>,
 }
 
 /// The station's datapath actor over the data port of `D`: its rates `S`
@@ -506,12 +486,6 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     stage: Stage<'id, D>,
     /// Frames the lifecycle holds.
     frames_out: u8,
-    /// The network side's stop.
-    network_stopping: NetworkStopping,
-    /// The network's MSDUs a stop found left in the transmit queue, at its
-    /// last count: what a stop still holds of the network's memory beside
-    /// the ended frames' (`DataTx::freed`).
-    queued: usize,
     /// The lifecycle retired the actor while the network's return went on:
     /// the actor ends once it came.
     retiring: bool,
@@ -606,7 +580,7 @@ where
             data: DataTx {
                 plane: None,
                 queues: queues::TxQueues::new(),
-                freed: heapless::Deque::new(),
+                returns: NetworkReturn::new(),
             },
             radio: Radio::Stopped,
             held: None,
@@ -620,8 +594,6 @@ where
                 closed: false,
             },
             frames_out: 0,
-            network_stopping: NetworkStopping::NotAsked,
-            queued: 0,
             retiring: false,
             finishing: false,
             reply_out: None,
@@ -676,7 +648,7 @@ where
                     oer_portable_memory::init_in_place!(place, DataTx {
                         plane: None,
                         queues: queues::TxQueues::new(),
-                        freed: heapless::Deque::new(),
+                        returns: NetworkReturn::new(),
                     })
                 },
                 radio: Radio::Stopped,
@@ -693,8 +665,6 @@ where
                     })
                 },
                 frames_out: 0,
-                network_stopping: NetworkStopping::NotAsked,
-                queued: 0,
                 retiring: false,
                 finishing: false,
                 reply_out: None,
@@ -736,7 +706,7 @@ where
     /// confirmed its stop. The composition records it; the radio's stop
     /// was confirmed.
     pub const fn network_lost(&self) -> bool {
-        matches!(self.network_stopping, NetworkStopping::Lost)
+        self.data.returns.lost()
     }
 
     /// How far the radio came, read when the run ended: an end on a fault
@@ -847,8 +817,7 @@ where
         self.stop_unconfirmed = false;
         // A stop that stopped the network ended with its installation: the
         // next stop asks the network of the next installation again.
-        self.network_stopping = NetworkStopping::NotAsked;
-        self.queued = 0;
+        self.data.returns.reset();
         self.retiring = false;
         self.finishing = false;
     }

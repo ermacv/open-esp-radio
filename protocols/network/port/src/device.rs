@@ -194,20 +194,6 @@ pub enum CopyReason {
     Pressure,
 }
 
-/// A refusal before TX admission. The caller receives its unchanged frame.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TransmitError {
-    LinkDown,
-    QueueFull,
-    InvalidLength(FrameLengthError),
-}
-
-#[derive(Debug)]
-pub struct TransmitRefused<F> {
-    pub frame: F,
-    pub reason: TransmitError,
-}
-
 /// The link and receive half of one affine Ethernet port. Poll methods
 /// register before observing readiness. Cancelling a readiness wait consumes
 /// no frame. RX transfers its concrete owner by value. The endpoints and
@@ -234,30 +220,6 @@ pub trait NetDevice {
         copied: <Self::RxFrame as ReceivedFrame>::Copied,
         read: impl FnOnce(EthernetFrameView<'_>) -> R,
     ) -> Result<R, FrameLengthError>;
-}
-
-/// The transmit half of one affine Ethernet port, owned by the network
-/// stack's sending path: a frame goes to the device where the stack wrote
-/// it, in the call that sent it. Only a successful transmission transfers
-/// the caller's owner; a refusal returns it.
-pub trait NetTransmit {
-    /// The stack's packet owner a transmission hands over.
-    type Frame: EthernetFrame;
-    /// Take back the memory the device returned, to the stack: what the
-    /// sending path's next notices and buffers find. A caller asks when what
-    /// it holds runs out, not at every frame.
-    fn reclaim(&mut self);
-    /// Whether the next [`Self::try_transmit`] finds room, as the memory last
-    /// reclaimed leaves it, without registering anything: the sending path
-    /// asks at every frame.
-    fn has_room(&mut self) -> bool;
-    /// [`Self::reclaim`], then as [`Self::has_room`], registering `cx` for
-    /// the next room or returned memory before observing them.
-    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()>;
-    fn try_transmit(&mut self, frame: Self::Frame) -> Result<(), TransmitRefused<Self::Frame>>;
-    /// End a burst of [`Self::try_transmit`]s: a frame it took may wait for
-    /// this call before its device acts on it.
-    fn flush(&mut self);
 }
 
 #[cfg(test)]

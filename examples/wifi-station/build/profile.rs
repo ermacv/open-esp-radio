@@ -105,7 +105,7 @@ pub fn parse(text: &str) -> Result<String, String> {
     let echo_port = u16::try_from(integer("echo_port")?)
         .ok()
         .filter(|port| *port != 0)
-        .ok_or("`echo_port` is a TCP port from 1 to 65535")?;
+        .ok_or("`echo_port` is a UDP port from 1 to 65535")?;
     Ok(format!(
         "/// The station this image is built for.\n\
          pub const PROFILE: crate::profile::StationProfile = crate::profile::StationProfile {{ \

@@ -13,12 +13,10 @@ for HAL values, including `MacLegacyRate`. Portable rate conversions live
 in `mac::portable`.
 
 The explicit `test-support` feature enables synthetic completion evidence
-and DMA models. Portable peer airtime fairness belongs to
-[`oer-protocols-ieee80211-core-upper-mac::airtime`](../../../../../protocols/ieee80211/core/upper-mac/README.md).
-The MAC exposes `mac::tx_cost` and `mac::tx_work`; it does not select peers
-or own the fairness ledger. Tests under `src/mac/airtime_tests` combine the
-upper-MAC scheduler with work receipts and network TX queues, using only
-development dependencies on the upper MAC and `oer-portable-embassy-net`.
+and DMA models. The MAC exposes `mac::tx_cost` and `mac::tx_work`, what an
+attempt cost on the air and what work it did; which frame goes is the MAC's
+queues' choice ([docs/network.md](../../../../../docs/network.md), "Transmit
+on the station: the MAC's queues").
 
 ## Rules
 

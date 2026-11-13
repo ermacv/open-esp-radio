@@ -1,49 +1,35 @@
-//! The Wi-Fi access point on the S31 and its IP service: a WPA2-Personal
-//! BSS of the image's settings on the radio the station would take, its
-//! runner and its IP stack on the application executor, beside the
-//! image's roots.
+//! The Wi-Fi access point on the S31: a WPA2-Personal BSS of the image's
+//! settings on the radio the station would take, its runner on the
+//! application executor beside the image's roots, and its network end for
+//! the group, where [`super::Network::start`] takes it.
 //!
 //! [`AccessPoint::start`] runs in the image's boot; the application then
 //! names the channel and the BSS once with [`AccessPoint::serve`]. Once the
-//! executor runs, the library's access-point task serves the BSS and the
-//! stack together; every exit keeps its typed cause and resets nothing.
+//! executor runs, the library's access-point task serves the BSS; every
+//! exit keeps its typed cause and resets nothing. The access point's
+//! network end is the station's ([`super::Device`]): the group starts a
+//! network over it with a given address ([`super::Addressing::Given`]).
 
-use super::tx_memory::{TX_SLOTS, TxPacket, WifiTx};
 use super::*;
 use oer_chips_esp32s31_radio_ieee80211_station::access_point::{
     self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage,
 };
-use oer_portable_embassy_net::{NetworkInterfaceId, ip};
-use oer_protocols_ieee80211_runtime::access_point::network::{ApNetDevice, ApNetTransmit};
 
 pub use ap::{ApExit, ApSettings, ApSettingsError, StartRefused};
 pub use oer_protocols_ieee80211_runtime::access_point::ApStatus;
 pub use oer_protocols_ieee80211_runtime::access_point::ApUnsupported;
 
-/// The access point's receive packets: each one 1514-byte Ethernet frame.
-pub const AP_RX: usize = 4;
-
-/// The stack's sending path into the access point's BSS: the stack writes
-/// each packet into a transmit buffer past the access point's bank, and the
-/// access point sends that buffer ([`WifiTx`]).
-type ApTransmit = ApNetTransmit<'static, TxPacket, WifiTx>;
-
-/// The access point's stack's executor context: the application's.
-type ApContext = ThreadContext<0>;
-
-type ApIpResources = ip::Resources<ApContext, AP_RX, ApTransmit>;
-type ApIpService = ip::Service<ApContext, AP_RX, ApTransmit, ApNetDevice<'static>, 1>;
-
-/// The IP stack's device of the access point, which sockets name.
-pub type ApIpDevice =
-    oer_portable_embassy_net::OwnedNetworkDevice<'static, ApContext, AP_RX, ApTransmit>;
-
-/// The access point's IP stack.
-pub type ApStack = embassy_net::Stack<'static, ApIpDevice>;
+// With the network on hart 1, one signal wakes the access point's runner:
+// hart 1's network raises it through `FromPeerHart`, the runner's own
+// queue ends through `FromOwnTask`. The network's own wake is the
+// station's (`NETWORK`): one task on hart 1 serves the group's networks.
+#[cfg(feature = "group")]
+oer_chips_family_platform_runtime::placed_static! {
+    static ACCESS_POINT_SIGNAL: IrqSignal<wifi::DriverExecutor> = IrqSignal::new::<(oer_chips_family_platform_interrupt_table::signal::FromPeerHart<super::super::hart1::Hart1Executor, super::super::Hart1WakeToken>, FromOwnTask<wifi::DriverExecutor, WakeToken>), WakeToken>(), in critical_data "hart_peers";
+    static ACCESS_POINT_RUNNER: oer_chips_family_platform_interrupt_table::signal::PeerNotify<wifi::DriverExecutor> = oer_chips_family_platform_interrupt_table::signal::PeerNotify::new(&ACCESS_POINT_SIGNAL), in critical_data "hart_peers";
+}
 
 static AP_STORAGE: StaticCell<AccessPointStorage<binding::Binding>> = StaticCell::new();
-static AP_IP: StaticCell<ApIpResources> = StaticCell::new();
-static AP_CONTROL: StaticCell<ip::Control<'static>> = StaticCell::new();
 
 /// How the access point's installation ended: its exit, or the
 /// installation that did not retire, whole
@@ -52,83 +38,67 @@ pub type ApInstallationEnd = ap::AccessPointEndOwner<binding::Binding>;
 
 static AP_END: StaticCell<EndHome<ApInstallationEnd>> = StaticCell::new();
 
-/// The access point's task: its runner, its IP service and the home its
-/// end goes to.
+/// The access point's task: its runner and the home its end goes to.
 pub(crate) struct ApStart {
     runner: AccessPointRunner<binding::Binding>,
-    service: ApIpService,
     home: EndSender<ApInstallationEnd>,
 }
 
-/// The access point: its control and its IP stack.
+/// The access point: its control.
 pub struct AccessPoint {
     control: AccessPointControl,
     /// Where the access point's task leaves how its installation ended.
     end: Option<EndReceiver<ApInstallationEnd>>,
-    stack: ApStack,
-    net: &'static ip::Control<'static>,
     address: [u8; 6],
 }
 
 impl AccessPoint {
-    /// Prepare the access point on `wifi` with `address` as its static
-    /// IPv4 configuration: the radio executor, the radio actor, the access
-    /// point's runner and its IP service. Its task runs once the executor
-    /// does and waits for [`Self::serve`]; `config` is the regulatory
-    /// configuration until then.
+    /// Prepare the access point on `wifi`: the radio executor, the radio
+    /// actor and the access point's runner, and its network device for the
+    /// group. Its task runs once the executor does and waits for
+    /// [`Self::serve`]; `config` is the regulatory configuration until then.
     ///
     /// # Errors
-    /// The radio started already, or a binding, storage or the stack's
-    /// configuration was refused.
-    pub fn start(
-        wifi: WifiPeripheral,
-        config: Config,
-        address: ip::Ipv4Configuration,
-        boot: &mut Boot,
-    ) -> Result<Self, Error> {
+    /// The radio started already, or a binding or storage was refused.
+    pub fn start(wifi: WifiPeripheral, config: Config, boot: &mut Boot) -> Result<Self, Error> {
         let (home, end) = end_home(&AP_END)?;
         let started = start_radio(wifi, boot)?;
         let mac = started.resources.ap;
         let seed = started.seed;
         let storage = AP_STORAGE
             .try_uninit()
-            .map(|place| place.write(const { AccessPointStorage::new() }))
+            .map(|place| {
+                #[cfg(not(feature = "group"))]
+                let storage =
+                    place.write(const { AccessPointStorage::new(wifi::NetworkChannels::new()) });
+                #[cfg(feature = "group")]
+                let storage = place.write(
+                    const {
+                        AccessPointStorage::new(wifi::NetworkChannels::across_harts(
+                            &NETWORK,
+                            &ACCESS_POINT_RUNNER,
+                        ))
+                    },
+                );
+                storage
+            })
             .ok_or(Error::Storage)?;
-        let (control, device, transmit, runner) =
-            wifi::access_point::access_point::<binding::Binding, WifiTx>(
+        let (control, network, transmit, stopper, runner) =
+            wifi::access_point::access_point::<binding::Binding>(
                 started.resources,
                 config.chip,
                 storage,
                 started.nonces,
             );
-        let resources = AP_IP
-            .try_uninit()
-            .map(|place| place.write(const { ApIpResources::new() }))
-            .ok_or(Error::Storage)?;
-        let (net, service) = resources
-            .start(
-                device,
-                transmit,
-                None,
-                TX_SLOTS.allocator(),
-                NetworkInterfaceId::new(1),
-                mac,
-                seed,
-                ip::Configuration::Static(address),
-            )
-            .map_err(Error::Net)?;
-        let net: &'static ip::Control<'static> = AP_CONTROL.try_init(net).ok_or(Error::Storage)?;
-        let stack = service.stack();
-        boot.pending.access_point = Some(ApStart {
-            runner,
-            service,
-            home,
+        boot.pending.access_point = Some(ApStart { runner, home });
+        boot.access_point_device = Some(Device {
+            network: Some((network, transmit, stopper)),
+            address: mac,
+            seed,
         });
         Ok(Self {
             control,
             end: Some(end),
-            stack,
-            net,
             address: mac,
         })
     }
@@ -171,20 +141,10 @@ impl AccessPoint {
         self.control.changed(seen).await
     }
 
-    /// Stop the access point: it tears its stations down and stops the
-    /// radio.
+    /// Stop the access point: it tears its stations down, stops the radio,
+    /// then its network.
     pub fn stop(&self) {
         self.control.stop();
-    }
-
-    /// The stack sockets of the access point's network open on.
-    pub fn stack(&self) -> ApStack {
-        self.stack
-    }
-
-    /// The IP service's link, IPv4 and lifecycle now.
-    pub fn net_status(&self) -> Status {
-        self.net.status()
     }
 
     /// The access point's own MAC address, its BSSID.
@@ -193,31 +153,16 @@ impl AccessPoint {
     }
 }
 
-/// The access point's task: the runner and the IP service together. Every
-/// end of the access point keeps its typed cause in [`AccessPoint::exit`]
-/// and resets nothing: a completed retire returned its owners and released
-/// the radio; until its stop is confirmed and its release ended, the
-/// runner keeps every owner in its task and the exit says how far the end
-/// came; an installation that did not retire goes whole to the
-/// application ([`AccessPoint::installation_end`]); a refused install
-/// names its cause, its started radio released. An IP service that ends
-/// stops the access point, its cause in the service's status.
+/// The access point's task: the runner. Every end of the access point keeps
+/// its typed cause in [`AccessPoint::exit`] and resets nothing: a completed
+/// retire returned its owners and released the radio; until its stop is
+/// confirmed and its release ended, the runner keeps every owner in its
+/// task and the exit says how far the end came; an installation that did
+/// not retire goes whole to the application
+/// ([`AccessPoint::installation_end`]); a refused install names its cause,
+/// its started radio released.
 pub(crate) async fn serve_access_point(start: ApStart) {
-    let ApStart {
-        runner,
-        mut service,
-        home,
-    } = start;
-    let ip = core::pin::pin!(service.run(|_| {}, |_| {}, |_| {}, |_| {}));
-    let stop = runner.stop_handle();
-    let mut run = core::pin::pin!(runner.run());
-    let ended = match select(run.as_mut(), ip).await {
-        Either::First(ended) => ended,
-        Either::Second(_) => {
-            // The stack's end is in its status; the access point stops.
-            stop.request_stop();
-            run.await
-        }
-    };
+    let ApStart { runner, home } = start;
+    let ended = runner.run().await;
     super::leave(home, ended).await;
 }

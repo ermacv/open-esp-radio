@@ -100,7 +100,7 @@ pub struct RxMsdusCopied {
 }
 
 /// The network side that holds the station's lent receive buffers: the
-/// application's sockets and the IP service. A stop asks it to stop before
+/// application's sockets and the network. A stop asks it to stop before
 /// the port retires, and the port retires once it reported its stop, with
 /// buffers it still holds lent: each returns to the lend count, which
 /// outlives the installation, whenever its holder drops it.

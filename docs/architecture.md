@@ -38,7 +38,7 @@ the end go deeper.
 ## Layers
 
 ```text
-application          credentials, network stack (embassy-net), sockets
+application          credentials, the network core, sockets
   protocol runtime   one async loop per role set, over the protocol's port
   protocols          sans-IO state machines: frames, MAC, RSN, station, AP,
                      BLE link layer and HCI, IEEE 802.15.4 MAC
@@ -202,7 +202,7 @@ time enter as values; actions and the next deadline leave as values. They
 never await, so they run under any executor and in host tests with virtual
 time. Only a protocol's runtime awaits, and it binds no executor: time comes
 from `oer-portable-time`, interrupt signals from `portable/`, no executor,
-`embassy-time`, `embassy-net`, `embassy-sync` or HAL dependency
+`embassy-time`, `embassy-sync` or HAL dependency
 (`embassy-futures` is allowed). The firmware composition declares the tasks
 that poll the futures.
 The Wi-Fi station runtime exposes `station::Control`, the station's
@@ -212,8 +212,8 @@ The runtime owns the nominal command, status, event and failure vocabulary of
 Control. Exhaustive conversions from core values run inside the runtime;
 Control exposes neither station nor upper-MAC core types. The Wi-Fi HIL
 binding mirrors this runtime vocabulary without depending on a core. HIL
-traffic originates at the host or peer; the device uses the IP stack's normal
-ICMP echo reply service. Instrumented image collectors retain diagnostic
+traffic originates at the host or peer; the device uses the network core's
+ICMP echo reply. Instrumented image collectors retain diagnostic
 observations separately from the product contract.
 Commands contain a kind and correlation, with no installation lifetime or pool
 path. The lifecycle receives the station's affine command credits at
@@ -244,20 +244,16 @@ returns the network's transmit memory, stops the network and then retires
 the lifecycle and the actor. HIL retains command correlation and socket workload lifetime,
 without its own station policy loop or product counters.
 The neutral `oer-protocols-network-port::NetDevice` transfers Ethernet owners and publishes
-the link epoch. `oer_portable_embassy_net::ip` builds its pools, one pinned IP stack
-and `EthernetBridge` once. The service selects DHCPv4 or static IPv4 and
-reports link epoch, IPv4 configuration and stop/error through typed product
-values and synchronous status callbacks. Reassociation invalidates DHCP before
-the next stack poll, including a coalesced down/up, while retaining the stack
-and bridge. Stop wakes independently of queue capacity and clears
-configuration; terminal services retain their device and stack owners. Socket applications use the pinned stack API. The HIL
-network vocabulary serializes the resulting values without constructing a
-stack. The stack's sending path hands a frame straight to the device's
-transmit half; a full device returns its owner. Neither the neutral device
-nor the product status exposes a stack packet or Wi-Fi core type.
-The network bridges advance only on RX and link level/epoch events. They have
-no periodic safety timer. IP polling follows the stack's waker and protocol
-deadlines; application deadlines remain image policy.
+the link epoch; the transmit owner (`OwnedTransmit`, the runtime's `LocalTx`)
+writes each frame in the role's transmit buffer it goes to the radio in. The
+network core (`oer-protocols-network-core` and its runtime) is the one network:
+an instance over one role's port, with the storage and brand the image lends
+([docs/network.md](network.md)). Its interface is leased by DHCP or given;
+reassociation is a new link epoch, which the core's DHCP client follows.
+Stop wakes independently of queue capacity. The HIL network vocabulary
+serializes the core's configuration without constructing a network. Neither
+the neutral device nor the configuration exposes a Wi-Fi core type. TCP has
+no implementation.
 Finite connected-task shutdown lives in `oer-portable-time` behind its non-default
 `connected-tasks` feature, without `embassy-sync`; `oer-portable-cooperate` retains only
 hardware-atom admission and its bounds.
@@ -270,13 +266,10 @@ including aliases, optional entries and target-specific entries:
   core-side policy, facts, PAC and HAL roles.
 - `embassy-sync` is development-only. Its one remaining normal edge is
   checked against a shrinking [deviation list](repository-layout.md#known-deviations).
-  Transitive uses inside `embassy-net` and `bt-hci` do not admit direct uses.
+  Transitive uses inside `bt-hci` do not admit direct uses.
 - `embassy-time` belongs to `portable/embassy/time` and the application
   entry (`oer`), which re-exports the executors' clock;
   `embassy-time-driver` belongs to `chips/family/platform/executor`.
-- `embassy-net`, `xarxa` and `xarxa-driver` belong to
-  `portable/embassy/net`, the S31 application entry (`chips/esp32s31/app`)
-  and the images.
 - `bt-hci` belongs to `oer-protocols-bluetooth-hci` and `tools/`. The HCI codec exports selected packet, command and event values,
   without re-exporting the crate. Protocol sources never use
   `bt_hci::controller`.
@@ -359,14 +352,16 @@ An image built on it writes `entry!(main)`: the synchronous `main` runs once
 before any executor, takes the peripherals it needs and builds drivers and
 services with defaults through the boot context, overriding a default only
 by an explicit setting or a static storage of its own (reconnect, drain,
-IP pools), and returns what builds the application's future (`impl
+network storage), and returns what builds the application's future (`impl
 Started`): a closure the entry calls where the future stays, so a root
-future is never moved. `entry!(main, group = setup)` with the `group`
-feature adds a task group: `setup` runs once after `main`, before any
-executor, starts its IP service and returns what builds the group's future;
-the two exchange data through a `Channel`. A chip with a second core runs
-the group there on its own executor (the S31 on hart 1); a chip with one
-runs it beside the application, cooperatively. The entry owns the default
+future is never moved. `entry!(main, group = setup)` adds a task group:
+`setup` runs once after `main`, before any executor, starts its networks and
+returns what builds the group's future; the two exchange data through a
+`Channel`. With the `group` feature a chip with a second core runs the group
+there on its own executor (the S31 on hart 1); without it, or on a chip with
+one core, the group runs beside the application, cooperatively. Both are
+product placements: the roles' runners and their network ends are generic
+over the placement's notifies, which the chip's entry names once. The entry owns the default
 interrupt table, the executors and its service tasks (`SdkTasks`, on the
 same executor as the image's roots, in the frame of the entry's run), and
 applies record and reset on the image's behalf to every boot error,
@@ -414,8 +409,8 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
 | P3, boot hart | radio interrupt handlers and each radio's composed `FROM_CPU` doorbell; the IEEE 802.15.4 engine (192 µs turnaround) | Wi-Fi and BLE handlers only latch status and post events |
 | P2, boot hart, TIMG0 T0 CPU line 16 | SAR/PWDET conversion steps in `Exempt(ExecutorLevel)` | one bounded step per event; below FROM_CPU2 CPU line 17 |
 | P2, boot hart | one radio executor on `FROM_CPU2`, CPU line 17: BLE lower link layer, the radio-system actor, including PHY calibration and tracking | cooperative admission between hardware atoms; long waits use timers |
-| P1 / thread, boot hart | role bodies, network stack, application; the Wi-Fi datapath actor and the station lifecycle, two tasks on one executor | the actor and the lifecycle never preempt each other and share no lock: they talk only in single-producer queues of that executor. One signal wakes the actor (`ACTOR_SIGNAL`: its own task, and hart 1's IP service through `FromPeerHart`); nothing on hart 1 wakes the lifecycle. The actor alone touches the data port; each turn reads the clock once and serves bounded units, and it wakes itself only when a budget ran out with work left |
-| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The entry's task group (`oer`, `group`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the station's IP service and the image's future, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
+| P1 / thread, boot hart | role bodies, network stack, application; the Wi-Fi datapath actor and the station lifecycle, two tasks on one executor | the actor and the lifecycle never preempt each other and share no lock: they talk only in single-producer queues of that executor. One signal wakes the actor (`ACTOR_SIGNAL`: its own task, and hart 1's network task through `FromPeerHart`), and one the access point's runner (`ACCESS_POINT_SIGNAL`, likewise); nothing on hart 1 wakes the lifecycle. The actor alone touches the data port; each turn reads the clock once and serves bounded units, and it wakes itself only when a budget ran out with work left |
+| hart 1, images that declare it | the image's hart-1 main on its own PSRAM task stack, with its SRAM interrupt stack and the common exception path installed; its own router and an interrupt-mode executor on `FROM_CPU1` (hart 1's line 16, P2) with its tasks, and that executor's SYSTIMER alarm on hart 1's line 17 (P3): in boot-smoke the exchange's server, the AES engine and the liveness responder, on alarm 1. The entry's task group (`oer`, `group`) runs a thread-mode executor on `FROM_CPU1` instead (hart 1's lines 40 and 41, P1) with the group's networks and the image's future, on alarm 2, beside the boot hart's radio and station | its sources route only to hart 1's bank; it reaches the boot hart's tasks only by raising their executor's signal (`FromPeerHart`); its timers come through an alarm grant, and the boot hart's writer executor programs its comparator; no `critical-section` and no SYSTIMER register write on hart 1 but its own alarm's acknowledgement |
 
 - `oer-portable-memory::ExecutionContext` owns the unsafe memory-exclusion contract.
   `Entered<X>` is non-transferable, checks entry and rechecks each

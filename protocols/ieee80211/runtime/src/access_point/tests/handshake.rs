@@ -217,7 +217,7 @@ const WMM_INFORMATION: [u8; 9] = [221, 7, 0x00, 0x50, 0xf2, 0x02, 0x00, 0x01, 0x
 fn a_qos_peers_frame_goes_from_the_networks_memory_without_moving_its_payload() {
     use super::network_memory::{data_mpdus, frame, payload};
     use oer_protocols_ieee80211_core_roles_sta::data::MSDU_PAYLOAD_OFFSET;
-    use oer_protocols_network_port::NetTransmit;
+    use oer_protocols_network_port::OwnedTransmit;
     embassy_futures::block_on(with_local_slot(async |claim| {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, supply, shared);
@@ -246,9 +246,9 @@ fn a_qos_peers_frame_goes_from_the_networks_memory_without_moving_its_payload() 
             }
             assert_eq!(shared.status().authorized, 1);
 
-            let memory = supply.next();
             assert!(transmit.try_transmit(frame(PEER)).is_ok());
             transmit.flush();
+            let memory = supply.last();
             for _ in 0..8 {
                 counted.advance(&air, Duration::from_millis(1)).await;
             }
@@ -264,7 +264,7 @@ fn a_qos_peers_frame_goes_from_the_networks_memory_without_moving_its_payload() 
             transmit.reclaim();
             assert_eq!(
                 supply.free(),
-                super::super::network::AP_TX_DEPTH,
+                super::super::AP_TX_DEPTH,
                 "its memory came back, once"
             );
             let back = supply.memory(memory).expect("the same memory came back");

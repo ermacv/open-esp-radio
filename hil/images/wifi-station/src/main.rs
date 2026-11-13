@@ -3,7 +3,7 @@
 #![deny(clippy::panic, clippy::todo, clippy::unimplemented)]
 
 //! The HIL image of the station scenarios: the `oer` Wi-Fi station with the
-//! network core in place of the IP service, the HIL base module and the SDK
+//! network core, the HIL base module and the SDK
 //! station, Wi-Fi station, fault and load services over the USB Serial/JTAG
 //! console.
 

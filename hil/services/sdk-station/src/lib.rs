@@ -91,7 +91,7 @@ pub struct WaitIpv4 {
 pub enum Address {
     Leased(Ipv4),
     TimedOut,
-    /// The IP service stopped or failed.
+    /// The network stopped or failed.
     Stopped,
 }
 
@@ -133,11 +133,11 @@ pub struct WaitLinkDown {
 pub enum LinkLoss {
     Down,
     TimedOut,
-    /// The IP service stopped or failed.
+    /// The network stopped or failed.
     Stopped,
 }
 
-/// Ask what the station and its IP service know now.
+/// Ask what the station and its network know now.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct GetStatus;
 

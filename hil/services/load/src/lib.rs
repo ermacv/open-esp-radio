@@ -386,18 +386,7 @@ pub struct Counters {
     pub cycles: u64,
     /// Instructions the boot hart retired.
     pub instructions: u64,
-    /// Frames the image's network bridge took from the station, those it
-    /// then had refused included.
-    pub bridge_received: u32,
-    /// Bridge frames the IP stack's receive pool had no packet for.
-    pub bridge_refused_pool: u32,
-    /// Bridge frames the IP stack's receive queue had no room for.
-    pub bridge_refused_queue: u32,
-    /// Bridge frames refused for their length or a down link.
-    pub bridge_refused_other: u32,
-    /// Bridge frames the station lent in place that the bridge copied.
-    pub bridge_copied: u32,
-    /// Frames the IP stack took from its device.
+    /// Frames the network took from its device.
     pub stack_received: u32,
     /// The L1 cache's access counts within the window.
     pub cache: CacheCounts,

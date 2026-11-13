@@ -11,12 +11,13 @@ build = "build.rs"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 oer = { path = "../../oer" }
+static_cell.workspace = true
 
 [features]
-# The station of a profile: the SDK's Wi-Fi and the task group of its IP
-# service and exchanges. A build with a profile needs it, one without builds
+# The station of a profile: the SDK's station and the task group of its
+# network and exchanges. A build with a profile needs it, one without builds
 # the NotConfigured image, which links no Wi-Fi and runs no group.
-station = ["oer/wifi", "oer/group"]
+station = ["oer/station", "oer/group"]
 
 [dev-dependencies]
 toml = "=1.1.4"

@@ -2294,13 +2294,6 @@ fn external_crate_allowed(path: &str, role: Role, dependency: &str) -> bool {
                 || path == "chips/esp32s31/app"
         }
         "embassy-time-driver" => path == "chips/family/platform/executor",
-        // The application entry names the stack its IP service pins, for
-        // its applications' sockets, and the stack's socket receive queue.
-        "embassy-net" | "xarxa" | "xarxa-driver" => {
-            path == "portable/embassy/net"
-                || (path == "chips/esp32s31/app" && dependency != "xarxa-driver")
-                || image_path(path)
-        }
         "trouble-host" => path == "portable/embassy/trouble" || image_path(path),
         "bt-hci" => {
             path == "protocols/bluetooth/hci"
@@ -2347,14 +2340,11 @@ fn external_crates_reject_aliased_optional_target_and_runtime_stack_edges() {
     let manifest: toml::Value = toml::from_str(
         r#"
 [dependencies]
-stack = { package = "embassy-net", version = "1" }
 cooperate = { workspace = true, optional = true }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 signal = { package = "embassy-sync", version = "1", optional = true }
 host = { package = "trouble-host", version = "1", optional = true }
 clock = { package = "embassy-time", version = "1" }
-driver = { package = "xarxa-driver", version = "1" }
-ip = { package = "xarxa", version = "1" }
 abi = { package = "embassy-time-driver", version = "1" }
 codec = { package = "bt-hci", version = "1" }
 [dev-dependencies]
@@ -2378,13 +2368,10 @@ embassy-sync = "1"
         external_crate_violations(&[runtime]).expect("runtime role"),
         [
             "bt-hci",
-            "embassy-net",
             "embassy-sync",
             "embassy-time",
             "embassy-time-driver",
             "trouble-host",
-            "xarxa",
-            "xarxa-driver",
         ]
         .map(|dependency| (path.to_owned(), dependency.to_owned()))
         .into()
@@ -2654,18 +2641,6 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
         (
             "embassy-time-driver",
             vec!["chips/family/platform/executor"],
-        ),
-        (
-            "embassy-net",
-            vec!["portable/embassy/net", "hil/probes/esp32s31-radio-root"],
-        ),
-        (
-            "xarxa",
-            vec!["portable/embassy/net", "hil/probes/esp32s31-radio-root"],
-        ),
-        (
-            "xarxa-driver",
-            vec!["portable/embassy/net", "hil/probes/esp32s31-radio-root"],
         ),
         (
             "trouble-host",
@@ -3030,12 +3005,6 @@ tool = { package = "oer-tool-pins", version = "1" }
             &["oer-protocols-ieee80211-wire", "oer-chips-esp32s31-hal"],
         ),
         member(
-            "portable/embassy/net",
-            "oer-portable-embassy-net",
-            false,
-            &["oer-protocols-ieee80211-wire", "oer-chips-esp32s31-hal"],
-        ),
-        member(
             "protocols/ieee80211/wire",
             "oer-protocols-ieee80211-wire",
             false,
@@ -3062,7 +3031,6 @@ tool = { package = "oer-tool-pins", version = "1" }
         BTreeSet::from([
             edge("portable/time", "protocols/ieee80211/wire"),
             edge("portable/time", "chips/esp32s31/hal"),
-            edge("portable/embassy/net", "chips/esp32s31/hal"),
         ])
     );
 }

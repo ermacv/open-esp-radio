@@ -15,16 +15,15 @@
 
 //! Adapter-neutral values and the owned Ethernet device contract at the network/radio ownership boundary.
 //!
-//! `NetDevice` and `NetTransmit` transfer Ethernet owners and report link epochs without an IP
-//! stack, queue implementation, allocator, Wi-Fi type or execution context.
+//! `NetDevice` and `OwnedTransmit` transfer Ethernet owners and report link epochs without a
+//! queue implementation, allocator, Wi-Fi type or execution context.
 
 mod device;
 mod frame;
 mod slot;
 pub use device::{
     CopyReason, EthernetFrame, EthernetFrameView, FrameStorage, LentFrame, LentParts, LinkSnapshot,
-    NetDevice, NetTransmit, ReceivedFrame, StorageAdvanceRefused, TransmitError, TransmitRefused,
-    TxStorage,
+    NetDevice, ReceivedFrame, StorageAdvanceRefused, TxStorage,
 };
 
 pub use frame::{
@@ -32,23 +31,6 @@ pub use frame::{
     Ready, Taken, Unpublished,
 };
 pub use slot::{Held, Slot};
-
-/// Opaque identity of one logical network endpoint sharing a physical radio.
-///
-/// Network adapters preserve this value but never assign Wi-Fi meaning to it.
-/// The radio owner owns the mapping to STA, AP, or another VIF.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NetworkInterfaceId(u8);
-
-impl NetworkInterfaceId {
-    pub const fn new(value: u8) -> Self {
-        Self(value)
-    }
-
-    pub const fn value(self) -> u8 {
-        self.0
-    }
-}
 
 /// Link availability observed at the radio/network boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

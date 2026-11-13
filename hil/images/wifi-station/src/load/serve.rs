@@ -626,7 +626,7 @@ async fn measure(
 }
 
 /// One end's counters: the boot hart's and the library's, read there, and
-/// the frames the IP stack took; with `start`, the cache's counters
+/// the frames the network took; with `start`, the cache's counters
 /// cleared first.
 async fn snapshot(hart0: &mut Client, start: bool, net: &Network) -> Snapshot {
     let stack_received = udp::received_frames(net);

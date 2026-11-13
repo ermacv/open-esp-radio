@@ -54,23 +54,16 @@ pub use oer_protocols_network_runtime::{
     Interest, LocalEnd, Next, Offer, Produce, Refusal, Refused, WatchRefused, Work,
 };
 
-pub struct Brand;
+/// The image's own brand ([`crate::udp::Brand`]).
+use crate::udp::Brand;
 pub const BLOCKS: usize = 64;
 pub const BLOCK: usize = 1472;
-pub type LendingSocket = oer_protocols_network_runtime::LendingSocket<
-    'static,
-    'static,
-    Brand,
-    1472,
-    32,
-    32,
-    32,
-    HostHeld,
->;
-pub type NetworkBlock = oer_protocols_network_core::Block<'static, Brand, 1472>;
-pub type Received = oer_protocols_network_core::Datagram<'static, Brand, 1472>;
-pub type Delivered =
-    oer_protocols_network_runtime::Received<'static, 'static, Brand, 1472, HostHeld>;
+pub type LendingSocket<B> =
+    oer_protocols_network_runtime::LendingSocket<'static, 'static, B, 1472, 32, 32, 32, HostHeld>;
+pub type NetworkBlock<B> = oer_protocols_network_core::Block<'static, B, 1472>;
+pub type Received<B> = oer_protocols_network_core::Datagram<'static, B, 1472>;
+pub type Delivered<B> =
+    oer_protocols_network_runtime::Received<'static, 'static, B, 1472, HostHeld>;
 
 /// The chip's receive mode that lends, by type, as the image names it. The
 /// host's ports lend no buffer, so its sockets meet copies only.
@@ -83,13 +76,13 @@ pub struct Ports {
 }
 
 /// A network the test built: its address is the test's to set.
-pub struct Network<P, R> {
+pub struct Network<B, P, R> {
     pub end: &'static LocalEnd,
     pub configuration: std::rc::Rc<core::cell::Cell<Option<Configuration>>>,
-    pub producer: PhantomData<(P, R)>,
+    pub producer: PhantomData<(B, P, R)>,
 }
 
-impl<P, R> Network<P, R> {
+impl<B, P, R> Network<B, P, R> {
     pub const fn end(&self) -> &'static LocalEnd {
         self.end
     }

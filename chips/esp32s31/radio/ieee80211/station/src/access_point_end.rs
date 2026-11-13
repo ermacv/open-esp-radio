@@ -26,6 +26,10 @@ type StopUnconfirmed =
 pub enum ApEnded {
     /// The application stopped it.
     Stopped,
+    /// The application stopped it, and its network's participant was lost
+    /// before it reported its stop: every network memory went home, as
+    /// observed.
+    NetworkLost(oer_protocols_ieee80211_runtime::datapath::ReturnObserved),
     /// Its radio did not start.
     StartRefused(
         oer_protocols_ieee80211_contracts_port::StartRefused<crate::failure::BackendFault>,
@@ -294,6 +298,7 @@ where
 {
     let unconfirmed = |observed| published.set(Some(ApExitOf::StopUnconfirmed { ended, observed }));
     let mut unkept: UnkeptItems<R::Unkept> = core::array::from_fn(|_| None);
+    let mut network_lost = None;
     let finished = match stop {
         Stop::Confirmed => Ok(()),
         stop => {
@@ -307,6 +312,15 @@ where
                 take_into(&mut unkept, &mut runner);
                 match runner.finish_stop(unconfirmed).await {
                     Ok(StopWatch::Confirmed) => break Ok(()),
+                    // The radio's stop was confirmed and every network
+                    // memory went home; the lost network is the end's.
+                    Ok(StopWatch::NetworkLost(observed)) => {
+                        network_lost = Some(observed);
+                        break Ok(());
+                    }
+                    // The network's return goes on: the watch goes on with
+                    // it, the radio's stop already confirmed.
+                    Ok(StopWatch::NetworkReturning(_)) => {}
                     // The next turn of the loop takes the item, while the
                     // home has room; a full home leaves it with the
                     // runner, and the retire ends there.
@@ -369,6 +383,7 @@ where
             }
         }
     };
+    let ended = network_lost.map_or(ended, ApEnded::NetworkLost);
     // An item the run left with a stop confirmed before the retire; with
     // the home full it stays with the runner.
     take_into(&mut unkept, &mut runner);

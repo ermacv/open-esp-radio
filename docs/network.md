@@ -1,101 +1,70 @@
-# Network stack and Wi-Fi egress
+# Network and Wi-Fi egress
 
-The boundary between the IP stack and the radio. The radio owns peer and
-physical execution state; the network adapter owns its packet storage and the
-stack-facing contract. The application supplies credentials, IP configuration
-and socket workloads. `oer_portable_embassy_net::ip` constructs its pools, stack and
-Ethernet bridge once and owns DHCP/static configuration and product IP status;
-stack APIs never expose radio peer slots or airtime grants.
+The boundary between the network and the radio. The radio owns peer and
+physical execution state; the network core owns its blocks, sockets and the
+choice of work before a frame is built. The application supplies credentials,
+an interface's addressing and socket workloads. TCP has no implementation:
+the network core carries UDP, ARP, DHCP and ICMP echo.
 
-## The stack
+## The network core
 
-One network implementation: the owner's forks of Embassy (`embassy-net`) and
-Xarxa (`xarxa`, `xarxa-driver` and its packet pool), pinned by Git revision in
-the manifests (`portable/embassy/net/Cargo.toml`). Each fork follows
-upstream by periodic merges, never by rebase; the `UPSTREAM.md` at a fork's
-root names the last merged upstream commit and the upstream changes it does
-not take. The driver and socket APIs differ from the released smoltcp-based
-Embassy; package name and version alone do not identify the contract, the
-Git source and revision do.
+One network implementation: the network core (`oer-protocols-network-core`)
+and its runtime (`oer-protocols-network-runtime`), over a role's port. A
+network is an instance over one port: the image lends its storage
+(`oer::wifi::NetworkStorage`: the stop's lane, the service's place, the
+watch of its address, its channel socket's lanes), its blocks in a zeroed
+static of their own (`oer::wifi::NetworkMemory`) and names its brand, a
+type of its own, so nothing of the library makes a second network
+impossible. `oer::wifi::Network::start` takes a role's device (the station's
+or the access point's, the same `Device`) and its addressing: leased by the
+core's DHCP client (`Addressing::Dhcp`), or given (`Addressing::Given`). The
+networks an image starts run in its task group, together in one task: on
+hart 1 with the `group` feature, otherwise on the application's executor
+beside the roles' runners. A socket lives on its network's hart.
 
-Direct normal dependencies on `embassy-net`, `xarxa` and `xarxa-driver`
-belong only to `portable/embassy/net` and firmware. The layer tests resolve
-aliases and include optional and target-specific dependencies.
-
-- `embassy-net` is the multi-interface API: `Stack::new` takes the stack
-  storage, a seed and the `PacketBufAllocator`; the Wi-Fi device is lent with
-  `add_iface_borrowed`, and IP configuration is set on the returned interface.
-- The forks add explicit RX/TX packet pools, packet-owner handoff to the
-  driver, a full device's room wake, bounded polling and construction in resource
-  storage. A UDP or raw send blocked on the device wakes when its interface
-  has room, one blocked on an empty pool when the pool has a buffer again;
-  the stack never busy-retries a pool.
-- A UDP send completes when the stack hands the packet to the driver or
-  queues it for neighbour resolution: API completion is not delivery on air.
-- TCP enters listen state on the first poll of `accept()`; a server must poll
-  `accept()` before it announces readiness and keep that same future through
-  the connection.
+- A UDP send completes when the port accepts the datagram
+  (`Outcome::Accepted`): API completion is not delivery on air.
+- A network's stop answers its role's request: the service retires, its
+  port gives back every frame it holds and takes back every memory the role
+  returned, then it reports; after the report its task keeps the port and
+  serves its returns for the rest of the boot, so a memory the role gives
+  back late still goes home.
 
 ## Owners
 
 | Crate | Owns | Does not own |
 | --- | --- | --- |
-| `oer-protocols-network-core` (`protocols/network/core`) | the sans-IO core with one owner: UDP, ARP, blocks, choosing work before a frame is built; the HIL `wifi-station` image links it | tasks, queues, time |
-| `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task, its sockets and its local producer, and `DevicePort`, whose frames carry the buffers' tickets and whose notices are the buffers' ends; the HIL `wifi-station` image links it | protocol state, the port's implementation |
+| `oer-protocols-network-core` (`protocols/network/core`) | the sans-IO core with one owner: UDP, ARP, DHCP, ICMP echo, blocks, choosing work before a frame is built | tasks, queues, time |
+| `oer-protocols-network-runtime` (`protocols/network/runtime`) | the core's task, its sockets and its local producer, and `DevicePort`, whose frames carry the buffers' tickets and whose notices are the buffers' ends | protocol state, the port's implementation |
 | `oer-protocols-network-testing-model` (`protocols/network/testing/model`) | a host model of one shared medium with several peers, the transmit scenarios over the real stack, and the end-to-end station and network simulation against a simulated access point (its [README](../protocols/network/testing/model/README.md)) | product code; no product package depends on it |
-| `oer-protocols-network-port` (`protocols/network/port`) | logical interfaces, link state, frame and admission errors, the `NetDevice` and `NetTransmit` contracts, and `FramePort` and `FrameSource`, the new core's port | queues, allocator, executor, hardware |
+| `oer-protocols-network-port` (`protocols/network/port`) | link state, frame and admission errors, the `NetDevice` contract, and `FramePort`, `FrameSource` and `OwnedTransmit`, the core's port | queues, allocator, executor, hardware |
 | `oer-protocols-network-wire` (`protocols/network/wire`) | Ethernet II, VLAN, IPv4, IPv6, TCP and UDP header fields; its one dependency is `oer-portable-wire` | decisions about a packet, IEEE 802.11 formats |
 | `oer-protocols-bridges-ieee80211-ethernet` (`protocols/bridges/ieee80211-ethernet`) | the requested WMM user priority of an outgoing frame from its VLAN PCP or IP DSCP | the final priority, which the station decides from its link |
-| `oer-portable-embassy-net` (`portable/embassy/net`) | the Xarxa `PacketBuf` handoff, stack wake registration, RX copying into packet pools, a device's transmit memory parked as the stack's general packets (`ParkedTx`) | radio scheduling, DMA descriptors, a concrete physical allocator |
-| `oer-portable-embassy-net::ip` | final pool/stack storage, one `EthernetBridge` over `NetDevice`, DHCP/static IPv4, link epoch and typed configuration/stop/error status | radio installation, a second stack, a common TCP/UDP API |
+| `oer-protocols-ieee80211-runtime` (`station`, `network_return`) | a role's network end: `Device`, the transmit owner `LocalTx`, the `NetworkLink` and the runner's `NetworkEnds`, with the memory's way home and the network's stop (`NetworkReturn`), shared by the station's actor and the access point's runner | the network's protocol state |
 | `oer-chips-esp32s31-radio-ieee80211-backend::mac` | the TX cost model (`mac::tx_cost`) and work receipts (`mac::tx_work`) of its publications | packet storage |
-| `oer-protocols-ieee80211-core-upper-mac` | the airtime ledger (`airtime`) and affine scheduling reservations | hardware, packet storage |
-| the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets, a second stack |
+| the radio runner (P2) | VIF/peer generations, power-save eligibility, rate and retry state, BA sessions, DMA descriptors, physical credits, terminal TX receipts | sockets |
 
 ## TX path
 
 ```text
-network stack (P1)
-    builds a PacketBuf in a station transmit buffer (its general allocator)
-    hands it to the network end, in the call that sent it
-network end (P1, the same call)
-    takes the buffer out of the packet: the frame stays where it was written
-    copies a frame from elsewhere (a reply in a received buffer) into its spare
-    publishes the buffer to the station
-station (P2)
+network core (P1)
+    chooses ready work; the port grants a transmit buffer of the role
+transmit owner LocalTx (P1, the same call)
+    the core writes the Ethernet frame in that buffer, at its start
+    publishes the buffer to the role's runner
+station's actor or access point's runner (P0)
     writes the 802.11 header in front of the payload, in place
     publishes the same buffer; the buffer returns to P1 after its terminal
 ```
 
-- **The stack's general packets are the station's transmit buffers.** The
-  network end parks every buffer the port does not hold in `TxSlots`
-  (`oer-portable-embassy-net::ethernet`), whose allocator is the stack's
-  general allocator; a dropped packet parks its buffer again. The station's
-  transmit queue is the one queue on the way: a full one refuses the original
-  `PacketBuf` to the stack, which keeps it and waits for the room wake.
-- **A burst wakes the station once.** A frame that finds the station asleep
-  and waiting for its first frame leaves it asleep; the sender's frame wakes
-  the stack's poll task on the network's executor, which runs once the sender
-  yields and tells the station the burst ended, so the burst goes out as one
-  aggregate. A station waiting for several frames wakes at that count.
-## Airtime ledger (`oer-protocols-ieee80211-core-upper-mac::airtime`)
-
-- `AirtimeStorage` holds bounded per-peer deficit accounts apart from packet
-  storage; `scheduler()` borrows it exclusively. Tokens of one ledger cannot
-  settle another's (identity check by reference; no allocation, lock, global
-  counter or `unsafe`).
-- The key is the peer with its association generation, not the flow;
-  duplicate candidates get one share. Idle or sleeping peers earn no credit,
-  lose positive surplus and keep debt. Exhausted rounds advance arithmetically,
-  with no timer or wake.
-- `reserve` deducts a grant before preparation; an unpublished reservation can
-  be cancelled; publication turns it into `AirtimeInFlight`, which retries
-  keep; after terminal detach `completed` joins receipt and reservation;
-  `settle` needs an explicit nonzero modelled cost. Unknown cost is never zero
-  or a refund; dropping a token refunds nothing. Retiring a generation pins it
-  while work is outstanding.
-- `reserve`, `settle` and `cancel` report each grant, settlement and
-  cancellation to the caller's `EventSink`; the ledger holds no sink.
+- **The network's buffers are the role's transmit buffers.** The transmit
+  owner (`LocalTx`) holds every buffer the port does not hold; a frame is
+  written where the radio sends it from. The role's transmit queue is the
+  one queue on the way: a full one, or no free buffer, refuses before the
+  frame is written, and the work stays ready until room or a buffer comes.
+- **A burst wakes the runner once.** The owner publishes a burst's frames
+  and flushes the queue at the burst's end, which tells a waiting runner
+  once, so the burst goes out as one aggregate.
 
 ## TX cost model (`oer-chips-esp32s31-radio-ieee80211-backend::mac`)
 
@@ -180,84 +149,63 @@ only once the port gave the room.
   protection exchange). The reference model declares single MPDUs'
   costs unknown.
 - **Return.** A frame's buffer comes back to the network's one transmit
-  owner (`LocalTx`, or the IP service's `WifiTx`) when its MSDU ends, and
-  is free again at once: no separate settlement follows. A new link epoch
-  or a stopped data plane hands every queued MSDU back with its memory.
-- **The access point's data.** The access point's network memory is the
-  same S31 transmit pool as the station's (`NetworkTx`: every place its
-  port bank does not hold, in the station's `NetworkTxSupply` form), and
-  its frames go through the port's single-MPDU path from that memory
-  (`TxNetworkPool`): no copy into a port buffer. The network places the
-  payload where the longest data prefix ends (`MSDU_PAYLOAD_OFFSET` of the
-  frame region, the S31 region behind its 8-octet transmit metadata); the
-  runner checks the frame, its authorized destination, its key and a
-  packet number left, its rate and power, then draws the sequence number
-  as the engine writes the MAC header, a reserved CCMP header and
-  LLC/SNAP in front of the payload, in place, and only then the packet
-  number. A QoS peer's frame moves nothing; a 24-octet header (a group
-  frame, a non-QoS peer's) moves the payload down two octets once,
-  counted in `ApStatus::payload_moves`. A refusal returns the memory to
-  the network unwritten; the MPDU's terminal returns it through the
-  network's return queue (`TxEnded`), whose depth (`AP_TX_DEPTH`) holds
-  every memory of the bounded storage the network's memory is built over
-  (`ApNetworkStorage::split` takes that storage and proves it at compile
-  time); a refusal, which only a broken queue makes, hands the memory back
-  whole in the named error `ApContract::NetworkReturn`, and the memories
-  not yet returned stay in the queues and the transport,
-  and so does a stop or a client place's takeover for every frame still
-  queued. A refusal after the sequence number was drawn, which the checks
-  exclude, is the runner's named contract break
-  (`ApContract::NetworkAdmission`). In the S31 backend a buffer's memory and
-  the right that takes it home (its bank place, or the network) are one
-  lease (`TxLease`): the queue's descriptor takes it whole at publication
-  and gives it back whole at completion, and no memory is matched to a
-  home afterwards. A lease its buffer refuses back stays whole on the
-  descriptor with its attempt beside it and what is known of the attempt
-  (`Fault::ReturnRefused`, which lets a stop recover); after the confirmed
-  stop the cleanup (`clean_stopped`) gives it back to that attempt, which
-  ends with its known result: a delivery stays delivered, one never
-  published is withdrawn. A lease whose attempt is gone
+  owner (`LocalTx`) when its MSDU ends, and is free again at once: no
+  separate settlement follows. A new link epoch or a stopped data plane
+  hands every queued MSDU back with its memory.
+- **The access point's data.** The access point's runner takes the
+  station's network end, whole: its network memory is the same S31 transmit
+  pool (`NetworkTx`: every place its port bank does not hold), held by the
+  same owner, and its frames go through the port's single-MPDU path from
+  that memory (`TxNetworkPool`): no copy into a port buffer. The network
+  places the payload where the longest data prefix ends
+  (`MSDU_PAYLOAD_OFFSET` of the frame region, the S31 region behind its
+  8-octet transmit metadata); the runner checks the frame, its authorized
+  destination, its key and a packet number left, its rate and power, then
+  draws the sequence number as the engine writes the MAC header, a reserved
+  CCMP header and LLC/SNAP in front of the payload, in place, and only then
+  the packet number. A QoS peer's frame moves nothing; a 24-octet header (a
+  group frame, a non-QoS peer's) moves the payload down two octets once,
+  counted in `ApStatus::payload_moves`. A refusal returns the memory to the
+  network unwritten, as the MPDU's terminal does: each memory waits in the
+  runner's way home (`NetworkReturn`, which holds `AP_TX_DEPTH` memories, at
+  least every network buffer by a compile-time check) until the return
+  queue takes it, so no give-back is refused; a stop or a client place's
+  takeover returns every frame still queued. A refusal after the sequence
+  number was drawn, which the checks exclude, is the runner's named contract
+  break (`ApContract::NetworkAdmission`). In the S31 backend a buffer's
+  memory and the right that takes it home (its bank place, or the network)
+  are one lease (`TxLease`): the queue's descriptor takes it whole at
+  publication and gives it back whole at completion, and no memory is
+  matched to a home afterwards. A lease its buffer refuses back stays whole
+  on the descriptor with its attempt beside it and what is known of the
+  attempt (`Fault::ReturnRefused`, which lets a stop recover); after the
+  confirmed stop the cleanup (`clean_stopped`) gives it back to that
+  attempt, which ends with its known result: a delivery stays delivered,
+  one never published is withdrawn. A lease whose attempt is gone
   (`Fault::CompletionWithoutPending`) goes home by its own home once the
-  completion released it: a bank's to its place at once, a network's to
-  the port's owner (`AccessPointPort::take_network_memory`), which the
-  runner gives back to the network whenever it returns the frames a halt
-  or a stop left. Where "no copy" holds: for a packet the network
-  stack wrote in a transmit slot at its start; a packet written with
-  headroom is moved to the slot's start (`TxPublisher::publish`), and a
-  frame from outside the slots is copied into the spare slot
-  (`ParkedTx::write`), as on the station. A network buffer the runner
-  drops (owners abandoned after a halt) goes back to the pool, not to the
-  network, until the next composition claims the network's places.
-
-## Physical storage contracts (`oer-portable-embassy-net::datapath`)
-
-- `SoftwareTxFrame`: an affine software owner and Ethernet view.
-- `MaterializedTxFrame`: stable DMA ownership, Ethernet geometry and
-  conservative capacity bounds.
-- `PhysicalTxSource`: synchronous transfer of final physical owners.
-- `SelectedBurstMaterializer`: reserve-before-remove single or batch promotion.
-- `TxRequestSource`: admits a selected request without Ethernet bytes; a busy
-  or failed start returns the original request.
-
-Ordinary and aggregate service transitions are synchronous. A timeout abort
-keeps the transaction with a settle deadline; storage is released only after
-hardware detach or the completion of a PPDU the abort found on the air, or
-quarantined if detach fails; early wakes and late completions cannot bypass
-the settle interval.
+  completion released it: a bank's to its place at once, a network's to the
+  port's owner (`AccessPointPort::take_network_memory`), which the runner
+  gives back to the network whenever it returns the frames a halt or a stop
+  left.
+- **The access point's stop.** The station's handshake: once the radio's
+  stop is confirmed, every network memory the runner or the port holds goes
+  home, the network is asked to stop, and its report settles the stop within
+  the policy's deadline (`ApPolicy::network_stop`); a frame the network
+  published before it saw the request is taken at the report. The outcomes
+  are the station's: confirmed, `NetworkLost` once the runner's share is
+  home, or `NetworkReturning`, after which the stop's watch goes on.
 
 ## RX and wakes
 
-- Over Xarxa, RX is copied into the endpoint's RX pool (`OwnedRxPublisher`)
-  before publication. The network retains packet-pool storage independently
-  of the radio's DMA storage, and the packet returns to its pool when dropped.
-- Over the network core, a socket's receive mode is explicit at its bind
+- A socket's receive mode is explicit at its bind
   (`oer::wifi::Copying` or `oer::wifi::Lending<CREDIT>`). A lending socket
   keeps a datagram in the station's receive buffer under a loan of its
   credit. The station's lend count holds `LENT_RX` buffers; the account gives
   the socket `CREDIT` of them and keeps the rest for frames on their way, a
   const check holding `CREDIT` to that count. The station marks each copy
   with its reason: by form (an A-MSDU, or an MSDU sharing its frame with the
-  EAPOL), which a lending socket takes in a block of its group, or by
+  EAPOL; the access point's every MSDU, as its role lends no buffer), which
+  a lending socket takes in a block of its group, or by
   pressure (a backend that lends nothing, as when it stops), which it
   drops. With every lendable buffer out
   the station stops its pull and the frames wait in the ring, so a slow
@@ -279,31 +227,4 @@ the settle interval.
 - Cross-domain wakes are hints over durable state: consumers check, arm and
   recheck before sleeping. An exhausted work budget self-wakes; real resource
   exhaustion waits for its return edge. RX availability and general
-  pool availability (transmit buffers parked again) are separate domains.
-
-## Access point egress
-
-Rules for an access point serving several stations with interleaved
-destinations:
-
-- Retained active frames, awake unicast power-save backlog and producer queues
-  share one destination cursor: a destination present in several gets one
-  turn; its buffered PS prefix goes before active retention, which goes before
-  newer source packets. PS-Poll keeps its single-frame release and DTIM its
-  group release, outside that cursor.
-- Active retention, unicast PS and DTIM group queues share one bounded owner
-  arena outside the movable AP future, borrowed for one AP epoch. A PS release
-  keeps its packet in its slot through terminal TX, so rollback needs no fresh
-  storage; success frees slot and owner exactly once. Endpoint admission is
-  sized to the arena, so every admitted owner can move into PS storage. A
-  dropped PS frame is never counted in the TIM.
-- Stale association generations release their owners before selection;
-  power-save is rechecked before encoding; a sleep transition moves retained
-  frames to PS storage and updates the TIM; a peer that sleeps after
-  selection returns its unpublished grant.
-- Airtime accounting, an HT aggregate byte ceiling from the grant and
-  deficit-based destination selection are optional modes, off by default;
-  round-robin by destination is the default. Equal throughput or full
-  aggregates do not show airtime fairness when peers use different rates.
-- An access point that advertises only CCK rates as basic makes the generic
-  highest-basic-rate rule an invalid HT BlockAck timing assumption.
+  pool availability (transmit buffers returned) are separate domains.

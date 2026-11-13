@@ -34,6 +34,7 @@ use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
 
 use super::{Boot, Error, SamplerToken};
+use crate::observe::Concurrent;
 use crate::observe::addba::{Addba, AddbaCounter, Outcome, Request};
 use crate::observe::connect::{
     Connect, ConnectCounter, Heard, Probe, ScanStep, Stage, Step, Visit,
@@ -42,7 +43,6 @@ use crate::observe::cpu::{Boundary, CpuCounter, ExecutorSample, Phase};
 use crate::observe::link::{Containment, LinkCounter, Positions, Rate, Settled, TxEnd};
 use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading};
 use crate::observe::tracking::{Branches, Ran, Tick, TrackingCounter, TrackingSample};
-use crate::observe::{Bridge, BridgeCounter, Concurrent};
 
 pub use crate::observe::link::{Link, TxAmpdu};
 pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
@@ -74,7 +74,6 @@ static EPOCH: AtomicU32 = AtomicU32::new(0);
 static TRACKING: TrackingCounter = TrackingCounter::new();
 static LINK: LinkCounter = LinkCounter::new();
 static CONNECT: ConnectCounter = ConnectCounter::new();
-static BRIDGE: BridgeCounter = BridgeCounter::new();
 /// The ADDBA Requests the station took; the station service on hart 0 is
 /// their one writer.
 static ADDBA: AddbaCounter = AddbaCounter::new();
@@ -171,11 +170,9 @@ impl StationRxCounts {
     }
 }
 
-/// What the station, its driver and the network bridge counted, each word
-/// read on its own.
+/// What the station and its driver counted, each word read on its own.
 #[derive(Clone, Copy, Debug)]
 pub struct Counters {
-    pub bridge: Bridge,
     pub station_rx: StationRxCounts,
     pub ampdu: TxAmpdu,
     pub link: Link,
@@ -192,7 +189,6 @@ pub struct Counters {
 pub fn counters() -> Counters {
     let load = |count: &AtomicU32| count.load(Ordering::Relaxed);
     Counters {
-        bridge: BRIDGE.read(),
         station_rx: StationRxCounts {
             counts: STATION.each_ref().map(load),
             agreements_started: load(&STARTED),
@@ -532,18 +528,18 @@ fn tracking_tick(observed: station::TrackingTick) -> Tick {
 }
 
 /// The network core's turns; the network's task is their one writer.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 static NETWORK: crate::observe::network::NetworkCounter =
     crate::observe::network::NetworkCounter::new();
 
 /// What the network core's turns did since boot, each word read on its own.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 pub fn network_turns() -> crate::observe::network::NetworkTurns {
     NETWORK.read()
 }
 
 // The last bin of a reservation's size ends at the look-ahead.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 const _: () = {
     if oer_protocols_network_runtime::RESERVE_AHEAD > 16 {
         panic!("a reservation's bins end at 16 blocks");
@@ -552,13 +548,13 @@ const _: () = {
 
 /// The network core's turn profile; the network's task is its one writer,
 /// and only a trace build writes it.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 static PROFILE: crate::observe::profile::ProfileCounter =
     crate::observe::profile::ProfileCounter::new();
 
 /// The network core's turn profile since boot: zeros unless a trace build.
 /// Read on the network's executor, between its polls, each word is whole.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 pub fn turn_profile() -> crate::observe::profile::TurnProfile {
     PROFILE.read()
 }
@@ -580,14 +576,14 @@ pub fn return_bursts() -> crate::observe::profile::Returns {
 /// on, how often they were switched and reset, and what they counted since
 /// the last reset. Read on the network's executor, between its polls, each
 /// word is whole.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 pub fn network_diagnostics() -> oer_chips_family_app::diagnostics::NetworkDiagnostics {
     crate::wifi::DIAGNOSTICS.read()
 }
 
 /// Ask the network core's diagnostics on or off, from the network's next
 /// turn; whether they were asked on before.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 pub fn diagnose_network(on: bool) -> bool {
     crate::wifi::DIAGNOSTICS.switch(on)
 }
@@ -597,26 +593,26 @@ pub fn diagnose_network(on: bool) -> bool {
 /// # Errors
 /// [`diagnostics::ResetRefused`]: their marker's reset count is spent, and
 /// nothing was asked.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 pub fn reset_network_diagnostics() -> Result<(), oer_chips_family_app::diagnostics::ResetRefused> {
     crate::wifi::DIAGNOSTICS.reset()
 }
 
 /// The diagnostics' vocabulary.
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 pub use oer_chips_family_app::diagnostics;
 
 /// The network service's sink: its turns and the core's drops, by reason,
 /// go to [`network_turns`]; in a trace build, each turn's cycles and work go
 /// to [`turn_profile`].
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 #[derive(Default)]
 pub(crate) struct NetworkSink(
     crate::observe::network::TurnTally,
     #[cfg(oer_trace)] crate::observe::profile::ProfileTally,
 );
 
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent> for NetworkSink {
     // Out of the service's turn: inlined, the counting grows the turn past
     // its inlining into `run`, and its tail merging there joined two waker
@@ -698,7 +694,7 @@ impl oer_portable_events::EventSink<oer_protocols_network_runtime::ServiceEvent>
     }
 }
 
-#[cfg(feature = "network")]
+#[cfg(feature = "wifi")]
 impl oer_portable_events::EventSink<oer_protocols_network_core::NetEvent> for NetworkSink {
     // Out of the core's input, as the turns' sink is out of the turn.
     #[inline(never)]
@@ -729,24 +725,6 @@ impl oer_portable_events::EventSink<oer_protocols_network_core::NetEvent> for Ne
             },
         );
     }
-}
-
-/// The network bridge took a frame from the station.
-#[cfg(feature = "wifi")]
-pub(crate) fn bridge_received(_: oer_portable_embassy_net::EthernetFrameView<'_>) {
-    BRIDGE.received();
-}
-
-/// The stack refused a frame from the station for `reason`.
-#[cfg(feature = "wifi")]
-pub(crate) fn bridge_refused(reason: oer_portable_embassy_net::RxEnqueueError) {
-    BRIDGE.refused(reason);
-}
-
-/// The bridge copied a frame the station lent in place.
-#[cfg(feature = "wifi")]
-pub(crate) fn bridge_copied(_: oer_portable_embassy_net::ethernet::LentCopy) {
-    BRIDGE.copied();
 }
 
 /// The samples one session of one hart's sampler keeps.

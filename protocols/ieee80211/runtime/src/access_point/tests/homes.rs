@@ -347,7 +347,7 @@ fn a_late_data_completion_charges_only_the_association_that_owns_its_queue() {
         assert!(started.is_ok(), "the radio starts");
         let old = ApAssociationIdentity::new(STATION, 1, 7).unwrap();
         let new = ApAssociationIdentity::new(STATION, 1, 8).unwrap();
-        let Ok(Some(place)) = runner.homes.place_of(old) else {
+        let Some(place) = runner.homes.place_of(old) else {
             panic!("the place is the old association's");
         };
         let queue = QueueId::new(place, WmmUserPriority::UP0).unwrap();
@@ -374,7 +374,7 @@ fn a_late_data_completion_charges_only_the_association_that_owns_its_queue() {
                     .is_ok()
             );
         }
-        assert!(matches!(runner.homes.place_of(new), Ok(Some(taken)) if taken == place));
+        assert!(matches!(runner.homes.place_of(new), Some(taken) if taken == place));
         assert_eq!(runner.homes.queues.air(queue), 0);
         for _ in 0..64 {
             counted.clock.advance(Duration::from_millis(1)).unwrap();

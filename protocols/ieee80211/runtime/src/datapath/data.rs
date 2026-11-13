@@ -22,15 +22,6 @@ use oer_protocols_ieee80211_core_roles_sta::data::plane::{
     AggregateRate, Intake, PpduKind, SettleError, Waits,
 };
 
-/// Keep `memory`, whose MSDU ended, for the network; the bound holds every
-/// memory the plane and the queues can hold, so a refusal keeps it
-/// quarantined rather than dropping it.
-fn free<M>(freed: &mut heapless::Deque<TxEnded<M>, HELD>, memory: M) {
-    if let Err(ended) = freed.push_back(TxEnded { memory }) {
-        let _quarantined = core::mem::ManuallyDrop::new(ended);
-    }
-}
-
 impl<'id, D: DatapathPort<'id>, S, O> Actor<'id, D, S, O>
 where
     S: RateSelection<
@@ -128,7 +119,7 @@ where
                     DataTx {
                         plane,
                         queues,
-                        freed,
+                        returns,
                     },
                 owed,
                 sequence_hold,
@@ -200,7 +191,7 @@ where
                     Intake::Refused { memory, reason } => {
                         owed.refused(reason.into());
                         // Refused before any arena: it never went.
-                        free(freed, memory);
+                        returns.free(memory);
                     }
                 }
                 // The air waits for a completion, not for the next frame.
@@ -321,7 +312,7 @@ where
                 DataTx {
                     plane,
                     queues,
-                    freed,
+                    returns,
                 },
             owed,
             now,
@@ -334,7 +325,13 @@ where
         };
         let settled = {
             let mut arena = port.arena();
-            plane.completed(&mut arena, done, *now, |memory| free(freed, memory), events)
+            plane.completed(
+                &mut arena,
+                done,
+                *now,
+                |memory| returns.free(memory),
+                events,
+            )
         };
         let settled = match settled {
             Ok(settled) => settled,
@@ -399,7 +396,7 @@ where
                 DataTx {
                     plane,
                     queues,
-                    freed,
+                    returns,
                 },
             ..
         } = self;
@@ -410,14 +407,14 @@ where
                     oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
                 )
             });
-            free(freed, msdu.memory);
+            returns.free(msdu.memory);
         });
         let Some(plane) = plane.as_mut() else {
             return Ok(());
         };
         let mut arena = port.arena();
         plane
-            .stop(&mut arena, |memory| free(freed, memory), events)
+            .stop(&mut arena, |memory| returns.free(memory), events)
             .map(drop)
             .map_err(ActorFault::Port)
     }
@@ -428,7 +425,7 @@ where
         let Self {
             port,
             events,
-            data: DataTx { plane, freed, .. },
+            data: DataTx { plane, returns, .. },
             ..
         } = self;
         let Some(plane) = plane.as_mut() else {
@@ -436,16 +433,19 @@ where
         };
         let mut arena = port.arena();
         plane
-            .withdraw_unpublished(&mut arena, |memory| free(freed, memory), events)
+            .withdraw_unpublished(&mut arena, |memory| returns.free(memory), events)
             .map_err(ActorFault::Port)
     }
 
     /// While a stop owes the network its stop
-    /// ([`NetworkStopping::Owed`]): hand back the MSDUs the network left in
-    /// the transmit queue, each as data left behind, one at a time through
-    /// the ended frames' way home while that way is clear; and once the
-    /// stopped radio holds none of the network's memory, ask the network to
-    /// stop. The network's last turn then takes back all its memory.
+    /// ([`NetworkStopping::Owed`]): hand back the MSDUs the station's queues
+    /// and the network's transmit queue still hold, each as data left
+    /// behind; once the stopped radio holds none of the network's memory,
+    /// ask the network to stop ([`NetworkReturn::return_left`]). The
+    /// network's last turn then takes back all its memory.
+    ///
+    /// [`NetworkStopping::Owed`]: crate::network_return::NetworkStopping::Owed
+    /// [`NetworkReturn::return_left`]: crate::network_return::NetworkReturn::return_left
     pub(super) fn return_network_memory<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -455,50 +455,29 @@ where
         &mut self,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) {
-        if !matches!(
-            self.network_stopping,
-            NetworkStopping::Owed | NetworkStopping::Lost
-        ) {
-            return;
-        }
-        while self.data.freed.is_empty() && network.returned.free_capacity() != 0 {
-            // What the queues took first, then what the network's queue
-            // still holds.
-            let memory = match self.data.queues.pop_any() {
-                Some(msdu) => msdu.memory,
-                None => match network.transmit.try_receive_with(Option::take) {
-                    Ok(Some(Outgoing { memory, .. })) => memory,
-                    _ => break,
-                },
-            };
-            report(&mut self.events, || {
-                oer_protocols_ieee80211_core_roles_sta::events::StaEvent::DataLost(
-                    oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
-                )
-            });
-            // The deque is empty, so it holds this one memory. The station
-            // never took it: it never went.
-            free(&mut self.data.freed, memory);
-            self.return_freed(network);
-        }
-        self.queued = network.transmit.len();
-        if self.network_stopping == NetworkStopping::Owed
-            && matches!(self.radio, Radio::Draining { .. } | Radio::Returning)
-            && self.data_settled()
-            && self.data.freed.is_empty()
-            && self.queued == 0
-        {
-            network.network.request_stop();
-            self.network_stopping = NetworkStopping::Asked;
-        }
+        let may_ask =
+            matches!(self.radio, Radio::Draining { .. } | Radio::Returning) && self.data_settled();
+        let Self { data, events, .. } = self;
+        let DataTx {
+            queues, returns, ..
+        } = data;
+        returns.return_left::<PortReturns<D>, _, _, TX_DEPTH, RX_DEPTH, N>(
+            network,
+            || queues.pop_any().map(|msdu| msdu.memory),
+            || {
+                report(events, || {
+                    oer_protocols_ieee80211_core_roles_sta::events::StaEvent::DataLost(
+                        oer_protocols_ieee80211_core_roles_sta::events::DataLoss::LeftBehind,
+                    )
+                });
+            },
+            may_ask,
+        );
     }
 
     /// Give the network the memory of ended frames while its queue has
-    /// room, as one burst: the burst is published at once at its end
-    /// ([`SlotSender::try_stage_with`]), which tells a waiting network once,
-    /// so its turn finds all of them, a whole Block Ack's when the queue
-    /// holds it. One that armed before the publication rechecks the queue
-    /// at its arming.
+    /// room, as one burst
+    /// ([`crate::network_return::NetworkReturn::return_freed`]).
     pub(super) fn return_freed<
         NS: NetworkStop,
         const TX_DEPTH: usize,
@@ -508,42 +487,18 @@ where
         &mut self,
         network: &mut NetworkEnds<'_, D::TxMemory, D::LentRx, NS, TX_DEPTH, RX_DEPTH, N>,
     ) {
-        let mut burst = false;
-        // Only an observing port reads the queue for its burst.
-        let before = if D::OBSERVES_RETURNS {
-            TX_DEPTH.saturating_sub(network.returned.free_capacity())
-        } else {
-            0
-        };
-        let mut queued = 0_usize;
-        while network.returned.free_capacity() != 0 {
-            let Some(memory) = self.data.freed.pop_front() else {
-                break;
-            };
-            let mut memory = Some(memory);
-            let _sent = network.returned.try_stage_with(|slot| {
-                *slot = memory.take();
-                Ok::<_, core::convert::Infallible>(())
-            });
-            burst = true;
-            if D::OBSERVES_RETURNS {
-                queued = queued.saturating_add(1);
-            }
-            if let Some(memory) = memory {
-                // The room was checked: the queue only keeps it when broken.
-                let _quarantined = core::mem::ManuallyDrop::new(memory);
-            }
-        }
-        if burst {
-            network.returned.flush();
-            if D::OBSERVES_RETURNS {
-                D::returned(super::ReturnBurst {
-                    queued,
-                    before,
-                    after: TX_DEPTH.saturating_sub(network.returned.free_capacity()),
-                    held: self.data.freed.len(),
-                });
-            }
-        }
+        self.data
+            .returns
+            .return_freed::<PortReturns<D>, _, _, TX_DEPTH, RX_DEPTH, N>(network);
+    }
+}
+
+/// The port's observation of the actor's return bursts.
+struct PortReturns<D>(core::marker::PhantomData<D>);
+
+impl<'id, D: DatapathPort<'id>> crate::network_return::ReturnObserver for PortReturns<D> {
+    const OBSERVES: bool = D::OBSERVES_RETURNS;
+    fn returned(burst: ReturnBurst) {
+        D::returned(burst);
     }
 }

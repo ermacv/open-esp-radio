@@ -4,7 +4,6 @@
 //! counters and the sampler's pages, each the difference of a window's two
 //! readings where the service reports one.
 
-use oer::observe::Bridge;
 use oer::observe::addba;
 use oer::observe::cpu::ExecutorSample;
 use oer::observe::link;
@@ -197,15 +196,14 @@ pub(crate) fn addba(reading: &addba::Addba) -> Addba {
     }
 }
 
-/// What one end of a window read: the boot hart's counters, the
-/// bridge's, the frames the IP stack took, the cache's, the receive path's,
+/// What one end of a window read: the boot hart's counters, the frames
+/// the network took, the cache's, the receive path's,
 /// the transmit agreements' and the link's counts, and the ADDBA Requests
 /// the station took since boot.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct Snapshot {
     pub cycles: u64,
     pub instructions: u64,
-    pub bridge: Bridge,
     pub stack_received: u32,
     pub cache: CacheCounts,
     pub cache_geometry: CacheGeometry,
@@ -241,15 +239,9 @@ fn data_window(start: &DataBus, end: &DataBus) -> DataBus {
 /// The counts between the window's ends `start` and `end`; the cache's
 /// geometry is `end`'s.
 pub(crate) fn counters(start: &Snapshot, end: &Snapshot) -> Counters {
-    let bridge = |at: fn(&Bridge) -> u32| at(&end.bridge).wrapping_sub(at(&start.bridge));
     Counters {
         cycles: end.cycles.wrapping_sub(start.cycles),
         instructions: end.instructions.wrapping_sub(start.instructions),
-        bridge_received: bridge(|bridge| bridge.received),
-        bridge_refused_pool: bridge(|bridge| bridge.refused_pool),
-        bridge_refused_queue: bridge(|bridge| bridge.refused_queue),
-        bridge_refused_other: bridge(|bridge| bridge.refused_other),
-        bridge_copied: bridge(|bridge| bridge.copied),
         stack_received: end.stack_received.saturating_sub(start.stack_received),
         cache: CacheCounts {
             ibus0: instruction_window(&start.cache.ibus0, &end.cache.ibus0),
@@ -442,7 +434,7 @@ mod chip {
     }
 
     /// One end of a window: the boot hart's `hart` and the library's
-    /// `counters`, both read on the boot hart; the IP stack's frames are
+    /// `counters`, both read on the boot hart; the network's frames are
     /// hart 1's to count.
     pub(crate) fn snapshot(
         hart: HartCounters,
@@ -452,7 +444,6 @@ mod chip {
         Snapshot {
             cycles: hart.cycles,
             instructions: hart.instructions,
-            bridge: counters.bridge,
             stack_received: 0,
             cache: wire::CacheCounts {
                 ibus0: instruction(hart.cache.ibus0),

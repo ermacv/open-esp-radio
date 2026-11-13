@@ -56,7 +56,7 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
     // Each exception has a direction and a reason in the audit. Counting uses
     // also catches another raw field added to a previously reviewed file.
     let expected = [
-        ("chips/esp32s31/app/src/lib.rs", 3),
+        ("chips/esp32s31/app/src/lib.rs", 2),
         ("chips/esp32s31/app/src/wifi/network.rs", 1),
         ("chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs", 3),
         (

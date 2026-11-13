@@ -84,8 +84,16 @@
 //! confirmed it: only then are the owners free of the hardware. A frame of
 //! the air the engine refuses changes nothing; a frame the runner has no
 //! ticket or buffer for does not go, which its peer's own retry covers.
-
-pub mod network;
+//!
+//! The runner takes the station's network end, whole ([`NetworkEnds`]): the
+//! network's frames come by its transport queue, each in the network's own
+//! transmit memory, which goes back by the return queue once its frame
+//! ended; the MSDUs its authorized peers send go to the network as the
+//! role's copies; the link it publishes is up while the BSS carries data.
+//! The memory's way home and the network's stop are the station's
+//! ([`crate::network_return`]): a stop returns every network memory the
+//! runner or the port holds, then asks the network to stop and waits for
+//! its report within [`ApPolicy::network_stop`].
 
 use core::convert::Infallible;
 use core::future::poll_fn;
@@ -126,8 +134,18 @@ use oer_protocols_ieee80211_core_upper_mac::{
     receive::Integrity,
 };
 
+use crate::datapath::NetworkEnds;
 use crate::datapath::queues::{QueueId, TxQueues};
-use network::{AP_TX_DEPTH, ApNetworkEnd};
+use crate::network_return::{NetworkReturn, Unobserved};
+use crate::station::{CopiedMark, NetworkLink, NetworkStop, Notifies, Outgoing, Received};
+use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
+use oer_protocols_network_port::{CopyReason, LinkSnapshot, LinkState};
+
+/// The network's frames the runner's queues hold, and every network memory
+/// the runner can hold at once: a composition gives the network no more
+/// transmit memory than this, so each memory the runner holds has its place
+/// in the runner's way home ([`NetworkReturn`]).
+pub const AP_TX_DEPTH: usize = 64;
 use oer_protocols_ieee80211_core_roles_sta::data::plane::OutboundMsdu;
 
 /// The length of an Ethernet header in front of an MSDU's payload.
@@ -283,6 +301,10 @@ pub struct ApPolicy {
     pub packet_numbers: CcmpPacketNumberStep,
     /// The group key's generation the BSS announces in Message 3.
     pub group_generation: u32,
+    /// How long a stop waits for the network's report once the runner's
+    /// share of the network's memory went home, as the station's stop
+    /// does (`StopPolicy::drain`).
+    pub network_stop: oer_portable_time::Duration,
 }
 
 /// Fresh handshake values: a new ANonce for each association.
@@ -321,9 +343,16 @@ pub enum ApEnd<F> {
     /// ended before it asked the radio to start, every owner in the
     /// runner.
     Unsupported(ApUnsupported),
-    /// The access point stopped and the radio with it; every owner is back
-    /// in the runner.
+    /// The access point stopped and the radio with it, and the network
+    /// reported its stop; every owner is back in the runner.
     Stopped,
+    /// The radio's stop was confirmed and the network's memory went home,
+    /// but the network's participant was lost before it reported its stop.
+    NetworkLost(crate::datapath::ReturnObserved),
+    /// The radio's stop was confirmed, but the network's stop did not
+    /// settle within its deadline: what the runner still holds of the
+    /// network goes home as [`ApRunner::finish_stop`] goes on with it.
+    NetworkReturning(crate::datapath::ReturnObserved),
     /// The radio did not start, for the port's cause; every owner is in
     /// the runner.
     StartRefused(oer_protocols_ieee80211_contracts_port::StartRefused<F>),
@@ -367,8 +396,14 @@ pub enum ApEnd<F> {
 /// `F` is the port's fault.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StopWatch<F> {
-    /// The port confirmed the stop.
+    /// The port confirmed the stop and the network reported its own.
     Confirmed,
+    /// The port confirmed the stop and the network's memory went home, but
+    /// its participant was lost before it reported.
+    NetworkLost(crate::datapath::ReturnObserved),
+    /// The port confirmed the stop, but the network's stop did not settle
+    /// within its deadline; a later call goes on with it.
+    NetworkReturning(crate::datapath::ReturnObserved),
     /// The port keeps a fault it could not take back
     /// ([`DataPort::recover_for_stop`]) and its stop is unconfirmed, as it
     /// observed: no stop of it can confirm, so the watch ended. Every
@@ -492,12 +527,6 @@ where
     Buffer(Buffer<'id, P, C>),
     /// A network's buffer whose memory the port still holds.
     Network(NetBuffer<'id, P>),
-    /// A network's memory the network's queue back refused
-    /// ([`ApContract::NetworkReturn`]).
-    NetworkMemory(NetworkMemory<'id, P>),
-    /// An earlier association's memory the queue back refused as the place
-    /// passed on, and the new association's frame that was being placed.
-    NetworkMemories([NetworkMemory<'id, P>; 2]),
     /// A refused submission whose ticket found no place, with the owner its
     /// source returned.
     Submission(Ticket<'id, P>, Source<'id, P, C>),
@@ -614,9 +643,6 @@ pub enum ApContract {
     /// key gave no number, or the port's check refused what the runner's
     /// geometry admits.
     NetworkAdmission,
-    /// The network's queue back refused a memory, which it holds room for
-    /// by construction: the queue broke.
-    NetworkReturn,
 }
 
 /// The access point's state, as the application reads it.
@@ -813,8 +839,20 @@ struct HeldMessage3 {
 /// port (a frame to send, a command to issue) waits here as plain data
 /// until the call returned. A command is built from the homes' owners only
 /// when it is issued.
-struct Homes<'id, 's, 'n, P, C, S, X>
-where
+struct Homes<
+    'id,
+    's,
+    'n,
+    P,
+    C,
+    S,
+    X,
+    L,
+    NS: NetworkStop,
+    const TX: usize,
+    const RX: usize,
+    N: Notifies,
+> where
     P: AccessPointPort<'id>,
     C: TxBufferClass,
     Ty<'id, P>: TxBufferPool<'id, C>,
@@ -823,7 +861,15 @@ where
     engine: ApEngine<'s, S>,
     policy: ApPolicy,
     channel: SupportedChannel<Caps<'id, P>>,
-    network: ApNetworkEnd<'n, NetworkMemory<'id, P>>,
+    /// The station's network end, whole: the network's frames, their
+    /// memory's way back, the received MSDUs' copies and the network's stop.
+    network: NetworkEnds<'n, NetworkMemory<'id, P>, L, NS, TX, RX, N>,
+    /// The link the network reads: up while the BSS carries data.
+    link: &'n NetworkLink<N::NetworkWaker>,
+    /// The epoch of the link's last rise.
+    epoch: u64,
+    /// The network's memory on its way home, and the network's stop.
+    returns: NetworkReturn<NetworkMemory<'id, P>, AP_TX_DEPTH>,
     context: <Ty<'id, P> as PortTypes<'id>>::Context,
     nonces: X,
     tickets: heapless::Vec<Ticket<'id, P>, AP_TICKETS>,
@@ -918,7 +964,8 @@ where
     taken: u32,
 }
 
-impl<'id, 's, 'n, P, C, S, X> PortSink<'id, Ty<'id, P>> for Homes<'id, 's, 'n, P, C, S, X>
+impl<'id, 's, 'n, P, C, S, X, L, NS: NetworkStop, const TX: usize, const RX: usize, N: Notifies>
+    PortSink<'id, Ty<'id, P>> for Homes<'id, 's, 'n, P, C, S, X, L, NS, TX, RX, N>
 where
     P: AccessPointPort<'id>,
     C: TxBufferClass,
@@ -1026,8 +1073,21 @@ fn integrity<M: RxMetadata>(meta: &M) -> Integrity {
 
 /// The access point's runner over the port `P`, its command issuer `I` and
 /// the buffer class `C`.
-pub struct ApRunner<'id, 's, 'n, P, I, C, S, X>
-where
+pub struct ApRunner<
+    'id,
+    's,
+    'n,
+    P,
+    I,
+    C,
+    S,
+    X,
+    L,
+    NS: NetworkStop,
+    const TX: usize,
+    const RX: usize,
+    N: Notifies,
+> where
     P: AccessPointPort<'id>,
     I: AccessPointCommands<'id, Types = Ty<'id, P>, Caps = Caps<'id, P>>,
     C: TxBufferClass,
@@ -1036,7 +1096,14 @@ where
 {
     port: P,
     commands: I,
-    homes: Homes<'id, 's, 'n, P, C, S, X>,
+    homes: Homes<'id, 's, 'n, P, C, S, X, L, NS, TX, RX, N>,
+}
+
+/// How the network's stop ended.
+enum NetworkStopped {
+    Confirmed,
+    Lost(crate::datapath::ReturnObserved),
+    Returning(crate::datapath::ReturnObserved),
 }
 
 /// What woke a wait of the runner.
@@ -1049,7 +1116,8 @@ enum Woke<F> {
     Other,
 }
 
-impl<'id, 's, 'n, P, C, S, X> Homes<'id, 's, 'n, P, C, S, X>
+impl<'id, 's, 'n, P, C, S, X, L, NS: NetworkStop, const TX: usize, const RX: usize, N: Notifies>
+    Homes<'id, 's, 'n, P, C, S, X, L, NS, TX, RX, N>
 where
     P: AccessPointPort<'id>,
     C: TxBufferClass,
@@ -1074,7 +1142,7 @@ where
                 self.keys.len(),
                 self.removals.len(),
             ],
-            network: self.network.waiting(),
+            network: !self.network.transmit.is_empty(),
             taken: self.taken.wrapping_add(self.cut_units),
         }
     }
@@ -1096,8 +1164,8 @@ where
     fn begin_stop(&mut self) -> Result<(), Stray<'id, P, C>> {
         self.phase = Phase::TearingDown;
         self.status.running = false;
-        self.network.set_link(false);
-        self.return_network_frames()?;
+        self.set_link(false);
+        self.return_network_frames();
         while let Some(teardown) = self.engine.stopping_peer() {
             self.teardown(teardown)?;
         }
@@ -1109,27 +1177,70 @@ where
     /// the queues and those still in its transport. Nothing carries them
     /// once the access point stops serving.
     ///
-    /// A refusal of the queue back, which holds every network memory, stops
-    /// it there: the refused memory comes back in the error, and the rest
-    /// stay where they are, in the queues and the transport.
-    fn return_network_frames(&mut self) -> Result<(), Stray<'id, P, C>> {
+    fn return_network_frames(&mut self) {
         while let Some(msdu) = self.queues.pop_any() {
-            self.give_memory(msdu.memory)?;
+            self.give_memory(msdu.memory);
         }
         self.queues.unblock();
-        while let Some(outgoing) = self.network.take() {
-            self.give_memory(outgoing.memory)?;
+        while let Some(outgoing) = self.take_network() {
+            self.give_memory(outgoing.memory);
         }
-        Ok(())
     }
 
-    /// Give `memory` back to the network. Its queue back holds every network
-    /// memory, so a refusal is a broken queue: the memory comes back whole in
-    /// the named error.
-    fn give_memory(&mut self, memory: NetworkMemory<'id, P>) -> Result<(), Stray<'id, P, C>> {
+    /// Give `memory` back to the network: it waits in the runner's way home
+    /// until the return queue takes it ([`Self::return_freed`]).
+    fn give_memory(&mut self, memory: NetworkMemory<'id, P>) {
+        self.returns.free(memory);
+    }
+
+    /// Hand the return queue the memory on its way home, while it has room.
+    fn return_freed(&mut self) {
+        self.returns
+            .return_freed::<Unobserved, L, NS, TX, RX, N>(&mut self.network);
+    }
+
+    /// The network's next frame, if one waits.
+    fn take_network(&mut self) -> Option<Outgoing<NetworkMemory<'id, P>>> {
         self.network
-            .give_back(memory)
-            .map_err(|memory| (ApContract::NetworkReturn, Kept::NetworkMemory(memory)))
+            .transmit
+            .try_receive_with(Option::take)
+            .ok()
+            .flatten()
+    }
+
+    /// Hand one received MSDU to the network, as the role's copy: its frame
+    /// in the copies' queue, its mark in the receive queue, both or neither.
+    /// The access point lends no buffer ([`CopyReason::Format`]).
+    fn deliver(&mut self, msdu: MsduParts<'_>) -> bool {
+        if self.network.receive.free_capacity() == 0
+            || self.network.receive_copied.free_capacity() == 0
+        {
+            return false;
+        }
+        let Ok(frame) = EthernetFrame::from_parts(msdu) else {
+            return false;
+        };
+        self.network.receive_copied.try_send(frame).is_ok()
+            && self
+                .network
+                .receive
+                .try_send(Received::Copied(CopiedMark::new(CopyReason::Format)))
+                .is_ok()
+    }
+
+    /// Publish the link the network reads: a rise starts a new epoch.
+    fn set_link(&mut self, up: bool) {
+        let state = if up { LinkState::Up } else { LinkState::Down };
+        if self.link.snapshot().state == state {
+            return;
+        }
+        if up {
+            self.epoch = self.epoch.wrapping_add(1);
+        }
+        self.link.publish(LinkSnapshot {
+            state,
+            epoch: self.epoch,
+        });
     }
 
     /// Queue a teardown of `peer`.
@@ -1628,7 +1739,7 @@ where
                 self.phase = Phase::Running;
                 self.engine.tsf_started(self.now);
                 self.status.running = true;
-                self.network.set_link(true);
+                self.set_link(true);
             }
             // Its keys come off: every pairwise key went with its peer.
             Phase::ClosingReceive => self.phase = Phase::RemovingGroup,
@@ -1787,7 +1898,10 @@ where
     /// whose memory the port still holds stops its operation.
     fn give_network(&mut self, buffer: NetBuffer<'id, P>) -> Result<(), Stray<'id, P, C>> {
         match <Ty<'id, P> as TxNetworkPool<'id>>::into_memory(buffer) {
-            Ok(memory) => self.give_memory(memory),
+            Ok(memory) => {
+                self.give_memory(memory);
+                Ok(())
+            }
             Err(buffer) => Err((ApContract::BufferClass, Kept::Network(buffer))),
         }
     }
@@ -1835,8 +1949,7 @@ where
                 .flatten()
                 .is_some_and(|owner| owner.address() == peer);
             if gone {
-                self.release_place(place)
-                    .map_err(|memory| (ApContract::NetworkReturn, Kept::NetworkMemory(memory)))?;
+                self.release_place(place);
             }
         }
         Ok(())
@@ -1859,47 +1972,34 @@ where
 
     /// Hand the network back what client place `place`'s ended association
     /// left in its queues, and start the place's accounts anew.
-    ///
-    /// A refusal of the queue back stops it there: the refused memory comes
-    /// back, and the rest stay the place's.
-    fn release_place(&mut self, place: usize) -> Result<(), NetworkMemory<'id, P>> {
+    fn release_place(&mut self, place: usize) {
         let Some(peer) = u8::try_from(place).ok() else {
-            return Ok(());
+            return;
         };
         while let Some(msdu) = self.queues.pop_peer(peer) {
-            self.network.give_back(msdu.memory)?;
+            self.give_memory(msdu.memory);
         }
         self.queues.reset_peer(peer);
         if let Some(owner) = self.owners.get_mut(place) {
             *owner = None;
         }
-        Ok(())
     }
 
     /// The queue place of `association`, its queues taken over from an
     /// earlier association of the place, whose frames go back.
-    ///
-    /// # Errors
-    ///
-    /// The queue back refused an earlier association's memory: it comes
-    /// back, and the place stays the earlier association's.
-    fn place_of(
-        &mut self,
-        association: ApAssociationIdentity,
-    ) -> Result<Option<u8>, NetworkMemory<'id, P>> {
-        let Some(place) = association.association_id().checked_sub(1).map(usize::from) else {
-            return Ok(None);
-        };
-        let Some(owner) = self.owners.get(place).copied() else {
-            return Ok(None);
-        };
+    fn place_of(&mut self, association: ApAssociationIdentity) -> Option<u8> {
+        let place = association
+            .association_id()
+            .checked_sub(1)
+            .map(usize::from)?;
+        let owner = self.owners.get(place).copied()?;
         if owner != Some(association) {
-            self.release_place(place)?;
+            self.release_place(place);
             if let Some(slot) = self.owners.get_mut(place) {
                 *slot = Some(association);
             }
         }
-        Ok(u8::try_from(place).ok())
+        u8::try_from(place).ok()
     }
 
     /// A frame of `purpose` did not go: what its terminal would have done
@@ -1926,7 +2026,8 @@ where
     }
 }
 
-impl<'id, 's, 'n, P, I, C, S, X> ApRunner<'id, 's, 'n, P, I, C, S, X>
+impl<'id, 's, 'n, P, I, C, S, X, L, NS: NetworkStop, const TX: usize, const RX: usize, N: Notifies>
+    ApRunner<'id, 's, 'n, P, I, C, S, X, L, NS, TX, RX, N>
 where
     P: AccessPointPort<'id>,
     I: AccessPointCommands<'id, Types = Ty<'id, P>, Caps = Caps<'id, P>>,
@@ -1953,7 +2054,8 @@ where
         policy: ApPolicy,
         channel: SupportedChannel<Caps<'id, P>>,
         group_key: [u8; 16],
-        network: ApNetworkEnd<'n, NetworkMemory<'id, P>>,
+        network: NetworkEnds<'n, NetworkMemory<'id, P>, L, NS, TX, RX, N>,
+        link: &'n NetworkLink<N::NetworkWaker>,
         context: <Ty<'id, P> as PortTypes<'id>>::Context,
         nonces: X,
     ) -> Self {
@@ -1983,6 +2085,9 @@ where
                 policy,
                 channel,
                 network,
+                link,
+                epoch: 0,
+                returns: NetworkReturn::new(),
                 context,
                 nonces,
                 tickets,
@@ -2113,6 +2218,8 @@ where
             let sends = self.homes.phase == Phase::Running && !self.homes.tickets.is_empty();
             let stopping = self.homes.stop;
             let port = &mut self.port;
+            // Memory on its way home waits for the return queue's room.
+            let returning = !self.homes.returns.freed.is_empty();
             let network = &mut self.homes.network;
             let mut held = Facts::default();
             // Only the wait's first poll, which registers for the port's
@@ -2138,12 +2245,20 @@ where
                 }
             };
             // The network's frames wake the runner only while it can send
-            // one; a ticket comes back with a fact.
+            // one; a ticket comes back with a fact. The return queue's room
+            // wakes it while memory waits for it.
             let frames = poll_fn(|cx| {
+                if returning
+                    && core::pin::pin!(network.returned.ready())
+                        .poll(cx)
+                        .is_ready()
+                {
+                    return Poll::Ready(());
+                }
                 if !sends {
                     return Poll::Pending;
                 }
-                if network.waiting() {
+                if !network.transmit.is_empty() {
                     return Poll::Ready(());
                 }
                 let mut ready = core::pin::pin!(network.transmit.ready());
@@ -2181,7 +2296,11 @@ where
             return ApEnd::Unrecycled(refused.fault);
         }
         match watched {
-            Ok(()) => ApEnd::Stopped,
+            Ok(()) => match self.stop_network(clock).await {
+                NetworkStopped::Confirmed => ApEnd::Stopped,
+                NetworkStopped::Lost(observed) => ApEnd::NetworkLost(observed),
+                NetworkStopped::Returning(observed) => ApEnd::NetworkReturning(observed),
+            },
             Err(Unwatched::Ended(unconfirmed) | Unwatched::Kept(unconfirmed)) => {
                 ApEnd::StopUnconfirmed(unconfirmed)
             }
@@ -2236,10 +2355,10 @@ where
         self.homes.stop = true;
         self.homes.phase = Phase::StoppingRadio;
         self.homes.status.running = false;
-        self.homes.network.set_link(false);
+        self.homes.set_link(false);
         // Nothing carries the network's frames once the stop finishes: those
         // a halt left behind its owners go back now.
-        self.return_left_frames();
+        self.return_network_memories();
         let watched = self
             .watch_stop(clock, |observed| -> ControlFlow<Infallible> {
                 unconfirmed(observed);
@@ -2268,9 +2387,89 @@ where
             }
             Ok(()) => {}
         }
-        match self.homes.unrecycled.as_ref() {
-            Some(refused) => Err(refused.fault),
-            None => Ok(StopWatch::Confirmed),
+        if let Some(refused) = self.homes.unrecycled.as_ref() {
+            return Err(refused.fault);
+        }
+        Ok(match self.stop_network(clock).await {
+            NetworkStopped::Confirmed => StopWatch::Confirmed,
+            NetworkStopped::Lost(observed) => StopWatch::NetworkLost(observed),
+            NetworkStopped::Returning(observed) => StopWatch::NetworkReturning(observed),
+        })
+    }
+
+    /// The network's stop, once the radio's stop was confirmed: every
+    /// memory of the network the runner or the port holds goes home first,
+    /// then the network is asked to stop, and its report settles it within
+    /// the policy's deadline. A network lost before it reported settles once
+    /// nothing of it is left with the runner.
+    async fn stop_network<T: Timer>(&mut self, clock: &T) -> NetworkStopped {
+        self.homes.set_link(false);
+        self.return_network_memories();
+        self.homes.returns.owe_stop();
+        let deadline = clock.now().saturating_add(self.homes.policy.network_stop);
+        loop {
+            let Homes {
+                network,
+                returns,
+                queues,
+                purposes,
+                ..
+            } = &mut self.homes;
+            returns.return_freed::<Unobserved, L, NS, TX, RX, N>(network);
+            // The radio stopped: no attempt owes an end once none is out.
+            let runner_home = queues.is_empty() && purposes.iter().all(Option::is_none);
+            returns.return_left::<Unobserved, L, NS, TX, RX, N>(
+                network,
+                || queues.pop_any().map(|msdu| msdu.memory),
+                || {},
+                runner_home,
+            );
+            let runner_home = queues.is_empty() && purposes.iter().all(Option::is_none);
+            if returns.stopping() == crate::network_return::NetworkStopping::Stopped {
+                // A frame the network published before it saw the request
+                // waits in the transport after its report: it goes home too.
+                while let Some(Outgoing { memory, .. }) = network
+                    .transmit
+                    .try_receive_with(Option::take)
+                    .ok()
+                    .flatten()
+                {
+                    returns.free(memory);
+                }
+                returns.return_freed::<Unobserved, L, NS, TX, RX, N>(network);
+            }
+            // Read after the last drain: what the runner still holds now.
+            let observed = crate::datapath::ReturnObserved {
+                memory_held: u16::try_from(returns.held()).unwrap_or(u16::MAX),
+                network_running: returns.asked(),
+                lent: 0,
+            };
+            // Settled, and nothing of the network's left with the runner: a
+            // memory that still waits for the return queue's room holds the
+            // stop until its deadline.
+            if returns.settled(runner_home) && returns.home(runner_home) {
+                return if returns.lost() {
+                    NetworkStopped::Lost(observed)
+                } else {
+                    NetworkStopped::Confirmed
+                };
+            }
+            if clock.now() >= deadline {
+                return NetworkStopped::Returning(observed);
+            }
+            let moved = poll_fn(|cx| {
+                let reported = returns.poll_stop(cx, network);
+                let room = (!returns.freed.is_empty() || returns.owes_queued(network))
+                    && core::pin::pin!(network.returned.ready())
+                        .poll(cx)
+                        .is_ready();
+                if reported || room {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            });
+            let _woke = select(moved, clock.wait_until(deadline)).await;
         }
     }
 
@@ -2392,7 +2591,7 @@ where
                     // memory the port held: it goes home now, beside the
                     // confirmed stop; a refusal waits as the halt's owners
                     // ([`Self::take_kept`]).
-                    self.return_left_frames();
+                    self.return_network_memories();
                     return Ok(());
                 }
                 // A device fault the stop's answer names ends the watch
@@ -2443,13 +2642,13 @@ where
         shared: &ApShared,
     ) -> ApEnd<PortFault<'id, P>> {
         self.homes.status.running = false;
-        self.homes.network.set_link(false);
+        self.homes.set_link(false);
         let end = self.halt_end(halt);
         // Nothing carries the network's frames now: they go back, unless a
         // halt's owners already wait to be taken, which a refused return's
         // memory could not sit beside; then they stay queued until those
         // owners are taken or the stop finishes.
-        self.return_left_frames();
+        self.return_network_memories();
         shared.publish(self.homes.status);
         end
     }
@@ -2505,37 +2704,27 @@ where
     /// the runner's, whole: a step's first, then a terminal's; each once.
     ///
     /// Once a halt's owners are taken, the network's frames that halt left
-    /// behind them go back now ([`Self::return_left_frames`]); any other
+    /// behind them go back now ([`Self::return_network_memories`]); any other
     /// call, a running access point's included, leaves every frame where
     /// it is.
     pub fn take_kept(&mut self) -> Option<Kept<'id, P, C>> {
         if let Some((_, halted)) = self.homes.stopped_on.take() {
-            self.return_left_frames();
+            self.return_network_memories();
             return Some(halted);
         }
         self.homes.kept.take().map(|(_, kept)| kept)
-    }
-
-    /// Give the network back the frames still queued or in its transport,
-    /// unless a halt's owners wait to be taken: a refusal's memory then
-    /// becomes those owners, and the rest stay queued for the next call.
-    fn return_left_frames(&mut self) {
-        if self.homes.stopped_on.is_none()
-            && let Err(kept) = self.return_network_memories()
-        {
-            self.homes.stopped_on = Some(kept);
-        }
     }
 
     /// Give the network every memory of its own the runner or the port
     /// holds: the frames still queued or in its transport, and a memory the
     /// port holds with no attempt to carry it home
     /// ([`AccessPointPort::take_network_memory`]).
-    fn return_network_memories(&mut self) -> Result<(), Stray<'id, P, C>> {
+    fn return_network_memories(&mut self) {
         while let Some(memory) = self.port.take_network_memory() {
-            self.homes.give_memory(memory)?;
+            self.homes.give_memory(memory);
         }
-        self.homes.return_network_frames()
+        self.homes.return_network_frames();
+        self.homes.return_freed();
     }
 
     /// The unit whose recycle the port refused, with the count that
@@ -2611,6 +2800,7 @@ where
         self.run_commands(now)?;
         self.settle(now)?;
         self.homes.advance_stop();
+        self.homes.return_freed();
         let status = self.homes.engine.service().status();
         self.homes.status.associated = status.associated;
         self.homes.status.authorized = status.authorized;
@@ -2836,7 +3026,7 @@ where
                 // A full network queue drops the MSDU: the stack's own
                 // retries cover it.
                 let homes = &mut self.homes;
-                if homes.engine.delivers(&msdu) && !homes.network.deliver(msdu.parts()) {
+                if homes.engine.delivers(&msdu) && !homes.deliver(msdu.parts()) {
                     homes.status.rx_dropped = homes.status.rx_dropped.saturating_add(1);
                 }
                 Ok(())
@@ -2876,7 +3066,7 @@ where
     fn transmit_network(&mut self, now: Instant) -> Result<(), Halt<'id, P, C, PortFault<'id, P>>> {
         let homes = &mut self.homes;
         while homes.queues.has_room() {
-            let Some(mut outgoing) = homes.network.take() else {
+            let Some(mut outgoing) = homes.take_network() else {
                 break;
             };
             let queue = <Ty<'id, P> as TxNetworkPool<'id>>::frame_region(&mut outgoing.memory)
@@ -2889,21 +3079,11 @@ where
                 .and_then(|destination| homes.engine.queue_of(destination, outgoing.priority));
             let Some((association, tid)) = queue else {
                 // No authorized peer of that destination: it does not go.
-                homes.give_memory(outgoing.memory)?;
+                homes.give_memory(outgoing.memory);
                 continue;
             };
             let place = match association {
-                Some(association) => match homes.place_of(association) {
-                    Ok(place) => place,
-                    // Both owners come back: the earlier association's
-                    // memory the queue refused, and this frame.
-                    Err(refused) => {
-                        return Err(Halt::Kept(
-                            ApContract::NetworkReturn,
-                            Kept::NetworkMemories([refused, outgoing.memory]),
-                        ));
-                    }
-                },
+                Some(association) => homes.place_of(association),
                 None => Some(GROUP_PEER),
             };
             let msdu = OutboundMsdu {
@@ -2914,10 +3094,10 @@ where
             match place.and_then(|place| QueueId::new(place, tid)) {
                 Some(queue) => {
                     if let Err(msdu) = homes.queues.push(queue, msdu) {
-                        homes.give_memory(msdu.memory)?;
+                        homes.give_memory(msdu.memory);
                     }
                 }
-                None => homes.give_memory(msdu.memory)?,
+                None => homes.give_memory(msdu.memory),
             }
         }
         for _ in 0..TRANSMIT_BUDGET {
@@ -2941,12 +3121,7 @@ where
                 match owner.filter(|owner| homes.engine.association_is_current(*owner)) {
                     Some(owner) => Some(owner),
                     None => {
-                        if let Err(memory) = homes.release_place(usize::from(queue.peer())) {
-                            return Err(Halt::Kept(
-                                ApContract::NetworkReturn,
-                                Kept::NetworkMemory(memory),
-                            ));
-                        }
+                        homes.release_place(usize::from(queue.peer()));
                         continue;
                     }
                 }
@@ -2957,7 +3132,7 @@ where
             let Some(ticket) = homes.tickets.pop() else {
                 // Excluded by the check above: the frame waits in its queue.
                 if let Err(msdu) = homes.queues.push_front(queue, msdu) {
-                    homes.give_memory(msdu.memory)?;
+                    homes.give_memory(msdu.memory);
                 }
                 break;
             };

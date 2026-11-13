@@ -3,7 +3,7 @@
 #![deny(clippy::panic, clippy::todo, clippy::unimplemented)]
 
 //! The HIL image of the Wi-Fi access-point scenario: the `oer` Wi-Fi
-//! access point and its IP service, the HIL base module and the
+//! access point and its network, the HIL base module and the
 //! access-point service over the USB Serial/JTAG console.
 
 #[cfg(target_arch = "riscv32")]

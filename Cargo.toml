@@ -107,7 +107,6 @@ members = [
     "chips/family/platform/executor",
     "chips/family/platform/port",
     "chips/family/drivers/pmu",
-    "portable/embassy/net",
     "portable/time-virtual",
     "protocols/bluetooth/hci",
     "protocols/bluetooth/le/controller",
@@ -274,7 +273,6 @@ default-members = [
     "chips/family/platform/executor",
     "chips/family/platform/port",
     "chips/family/drivers/pmu",
-    "portable/embassy/net",
     "portable/time-virtual",
     "protocols/bluetooth/hci",
     "protocols/bluetooth/le/controller",
@@ -427,12 +425,7 @@ debug = 1
 incremental = true
 codegen-units = 16
 
-# One copy of the Embassy utilities in the network fork and the workspace;
-# `embassy-sync` is its 0.8.0 release whose mutex and channel run no foreign
-# code inside their state.
+# `embassy-sync` is the owner's fork of its 0.8.0 release, whose mutex and
+# channel run no foreign code inside their state.
 [patch.crates-io]
 embassy-sync = { git = "https://github.com/ermacv/embassy", rev = "cbeed6a32ba1c3135f1518f046c5a5c60e86945d" }
-
-[patch."https://github.com/ermacv/embassy.git"]
-embassy-futures = { version = "0.1.2", registry = "crates-io" }
-embassy-time = { version = "0.5.1", registry = "crates-io" }

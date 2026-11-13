@@ -1,6 +1,5 @@
-//! ICMP echo through the owner's public calls. Ported from Xarxa fbebde5's
-//! echo tests (`tests/echo_backpressure.rs`, `stack.rs`) where they fit:
-//! here a reply holds a block while it waits, and its bounds are counted.
+//! ICMP echo through the owner's public calls: a reply holds a block while
+//! it waits, and its bounds are counted.
 
 use super::*;
 use crate::{ECHO_RATE, ECHOES, IcmpDrop};

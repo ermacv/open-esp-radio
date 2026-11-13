@@ -147,8 +147,10 @@ from its transaction's first REQUEST the port took. A message the port
 refuses for good, or one whose server's neighbor never answers, was not
 sent: it counts neither as a try nor as a lease's start, and its next
 attempt waits for the phase's present time. A first DISCOVER is repeated after 250 ms, doubling to
-10 s in one transaction, as a lost first one cost 10 s on the stand
-(Xarxa fbebde5); each wait is jittered down by up to a quarter. A REQUEST to
+10 s in one transaction: a first DISCOVER can reach the access point before
+its port opens (up to 119 ms after the handshake's last message, seen on the
+stand), and a lost one then cost 10 s; each wait is jittered down by up to a
+quarter. A REQUEST to
 an OFFER is repeated after 5 s, doubling every two, five in all, then
 discovery starts over. At T1 the client renews by unicast to the server
 identifier, at T2 it rebinds by broadcast, each after half the time left and

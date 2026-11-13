@@ -207,7 +207,6 @@ fn the_counters_window_takes_differences_and_keeps_an_overflow() {
         stack_received: 10,
         ..Snapshot::default()
     };
-    start.bridge.received = u32::MAX;
     start.cache.ibus0.hits = 5;
     start.cache.dbus1.overflowed = true;
     let mut end = Snapshot {
@@ -216,16 +215,10 @@ fn the_counters_window_takes_differences_and_keeps_an_overflow() {
         stack_received: 4,
         ..Snapshot::default()
     };
-    end.bridge.received = 2;
-    end.bridge.refused_queue = 1;
     end.cache.ibus0.hits = 9;
     end.cache_geometry.l2_bypassed = true;
     let window = counters(&start, &end);
     assert_eq!((window.cycles, window.instructions), (300, 30));
-    assert_eq!(
-        (window.bridge_received, window.bridge_refused_queue),
-        (3, 1)
-    );
     assert_eq!(
         window.stack_received, 0,
         "a stack count that went back saturates"

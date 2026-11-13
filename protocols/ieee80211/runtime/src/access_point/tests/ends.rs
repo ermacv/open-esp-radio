@@ -60,6 +60,10 @@ fn an_unconfirmed_stop_that_the_port_confirms_later_returns_every_owner() {
             Either::First(Ok(crate::access_point::StopWatch::DeviceFailed { .. })) => {
                 panic!("the device stops")
             }
+            Either::First(Ok(
+                crate::access_point::StopWatch::NetworkLost(_)
+                | crate::access_point::StopWatch::NetworkReturning(_),
+            )) => panic!("the network reports its stop in time"),
             Either::First(Err(fault)) => panic!("the port takes every unit back: {fault:?}"),
             Either::Second(()) => panic!("the port confirms the stop once the MAC is quiet"),
         }

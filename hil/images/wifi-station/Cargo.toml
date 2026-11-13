@@ -8,7 +8,7 @@ publish.workspace = true
 description = "The HIL image of the station scenarios: an oer Wi-Fi station and the network core served over the HIL console"
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer = { path = "../../../oer", features = ["wifi", "console", "group", "observe", "network"] }
+oer = { path = "../../../oer", features = ["station", "console", "group", "observe"] }
 oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-agent = { path = "../../agent" }
 oer-protocols-hil-protocol = { workspace = true }

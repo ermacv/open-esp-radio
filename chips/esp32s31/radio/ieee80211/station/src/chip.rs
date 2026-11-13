@@ -639,13 +639,6 @@ pub fn station<W: Binding>(
         status: control.status_reader(),
     });
     let (places, actor, news, abandon) = storage.actor.split();
-    let crate::ActorConnection {
-        network_stop,
-        transmit,
-        returned,
-        receive: received,
-        receive_copied,
-    } = actor_connection;
     (
         control,
         network,
@@ -674,13 +667,7 @@ pub fn station<W: Binding>(
                     storage: &mut storage.driver,
                 },
                 places,
-                network: oer_protocols_ieee80211_runtime::datapath::NetworkEnds {
-                    transmit,
-                    returned,
-                    receive: received,
-                    receive_copied,
-                    network: network_stop,
-                },
+                network: actor_connection.ends(),
             },
             station: StationRunner {
                 service: ServiceRunner {
