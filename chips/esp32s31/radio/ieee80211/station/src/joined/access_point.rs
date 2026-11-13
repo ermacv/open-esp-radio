@@ -18,7 +18,7 @@ use oer_protocols_ieee80211_core_roles_ap::{
 use oer_protocols_ieee80211_core_security_rsn::{PmkDerivation, frames::RsnGtk};
 use oer_protocols_ieee80211_runtime::access_point::{
     AP_BUFFERS, AP_KEYS, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared, ApUnsupported,
-    GROUP_KEY_ID, StopWatch, network::ApNetworkStorage, serves_beacons,
+    GROUP_KEY_ID, StopWatch, serves_beacons,
 };
 use oer_protocols_ieee80211_wire::{
     beacon::AP_BEACON_CAPACITY, phy::LegacyRate, security::spp::Interface,
@@ -200,12 +200,16 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
         let network = NetworkTx::claim(pool, AP_BUFFERS as u8)
             .ok()
             .expect("network buffers");
-        let (publisher, slots) = network.into_owned();
-        let (_device, _transmit, end) = leak(ApNetworkStorage::new()).split(
-            publisher,
-            leak(crate::supply::LocalTxState::new()),
-            slots,
-        );
+        // The station's network channels, as the access point's storage
+        // holds them; the network's ends stay with the bench.
+        let channels = leak(crate::NetworkChannels::<crate::SameHart, TxMemory>::new());
+        let (_device, _transmit, _stopper, ends, state) = channels.split(|queues| {
+            <crate::supply::LocalEnd as crate::supply::NetworkTxEnd<crate::SameHart>>::end(
+                queues,
+                network,
+                leak(crate::supply::LocalTxState::new()),
+            )
+        });
         let mut runner = ApRunner::new(
             port,
             commands,
@@ -220,10 +224,12 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                 packet_numbers:
                     oer_chips_family_radio_ieee80211_policy::ccmp::TX_PACKET_NUMBER_STEP,
                 group_generation: 1,
+                network_stop: Duration::from_millis(100),
             },
             supported(),
             [0x55; 16],
-            end,
+            ends.ends(),
+            state.network_link(),
             (),
             Nonces,
         );
@@ -246,6 +252,10 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             let end = runner.run(&shared, &airy).await;
             seen.borrow_mut().ended = Some(match end {
                 ApEnd::Stopped => "stopped".into(),
+                ApEnd::NetworkLost(observed) => std::format!("network lost: {observed:?}"),
+                ApEnd::NetworkReturning(observed) => {
+                    std::format!("network returning: {observed:?}")
+                }
                 ApEnd::StartRefused(refused) => std::format!("start refused: {refused:?}"),
                 ApEnd::StopUnconfirmed(unconfirmed) => std::format!("{unconfirmed:?}"),
                 ApEnd::Faulted(fault) => std::format!("faulted: {fault:?}"),
@@ -276,6 +286,10 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                 if let Some(ended) = seen.borrow_mut().ended.as_mut() {
                     ended.push_str(match finished {
                         Ok(StopWatch::Confirmed) => ", stop confirmed",
+                        Ok(StopWatch::NetworkLost(_)) => ", stop confirmed, the network lost",
+                        Ok(StopWatch::NetworkReturning(_)) => {
+                            ", stop confirmed, the network's return goes on"
+                        }
                         Ok(StopWatch::Unkept) => ", an item unkept",
                         Ok(StopWatch::Faulted { .. }) => ", stop unconfirmed, a fault kept",
                         Ok(StopWatch::DeviceFailed { .. }) => {

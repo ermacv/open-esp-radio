@@ -6,8 +6,9 @@
 //! the station's composition does, gives the runner the installation's access-point
 //! tokens, its tickets and the first [`AP_BANK`] transmit buffers, and runs
 //! it with the access point's own engine. Every other pool buffer is the
-//! network's transmit memory, held by the same transmit owner as the
-//! station's ([`ApTransmit`]): the network writes each frame into one, the
+//! network's transmit memory, held by the station's transmit owner over the
+//! station's network channels ([`NetworkChannels`]): the network writes each
+//! frame into one, the
 //! runner writes its MPDU in place and sends that buffer, and gives it back
 //! once its frame ended. The station's tokens of the
 //! installation stay unused: an access-point-only image runs no station.
@@ -18,8 +19,10 @@ use crate::access_point_end::{Retired, Stop};
 use crate::chip::{Binding, Config, InitializationError, Resources};
 use crate::radio::{self, Port};
 use crate::supply::{
-    LocalTxState, NETWORK_BUFFERS, NetworkTx, PORT_BUFFERS, TxMemory, TxPublisher,
+    LocalEnd, LocalTransmit, LocalTxState, NETWORK_BUFFERS, NetworkTx, NetworkTxEnd, PORT_BUFFERS,
+    TxMemory,
 };
+use crate::{Ch, LentRx, Network, NetworkChannels, NetworkStopState, NetworkStopper, Notifies};
 use oer_chips_esp32s31_radio_ieee80211_backend::port::{BufferClass, PortInstallation, TX_TICKETS};
 use oer_chips_family_radio_ieee80211_policy::{access_point::ADVERTISEMENT, ccmp, lmac};
 use oer_portable_embassy_time::EmbassyClock;
@@ -30,10 +33,8 @@ use oer_protocols_ieee80211_core_roles_ap::{
 };
 use oer_protocols_ieee80211_core_security_rsn::{PmkDerivation, frames::RsnGtk};
 use oer_protocols_ieee80211_runtime::access_point::{
-    AP_BUFFERS, AP_KEYS, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared, ApStatus,
-    ApUnsupported, GROUP_KEY_ID,
-    network::{AP_TX_DEPTH, ApNetDevice, ApNetTransmit, ApNetworkEnd, ApNetworkStorage},
-    serves_beacons,
+    AP_BUFFERS, AP_KEYS, AP_TX_DEPTH, ApEnd, ApNonces, ApPolicy, ApResources, ApRunner, ApShared,
+    ApStatus, ApUnsupported, GROUP_KEY_ID, serves_beacons,
 };
 use oer_protocols_ieee80211_wire::{
     beacon::AP_BEACON_CAPACITY, phy::LegacyRate, security::spp::Interface,
@@ -59,7 +60,26 @@ const _: () = {
     if AP_BANK < PORT_BUFFERS {
         panic!("the bank holds at least the station's port buffers");
     }
+    if NETWORK_BUFFERS > AP_TX_DEPTH {
+        panic!("the runner's way home holds every network memory");
+    }
 };
+
+/// The access point's runner's network end: the station's, whole.
+pub type ApNetworkEnds<W> = oer_protocols_ieee80211_runtime::datapath::NetworkEnds<
+    'static,
+    TxMemory,
+    LentRx<<W as Binding>::Notifies>,
+    NetworkStopState<<W as Binding>::Notifies>,
+    { crate::TX_DEPTH },
+    { crate::RX_DEPTH },
+    Ch<<W as Binding>::Notifies>,
+>;
+
+/// The link the access point's runner publishes and its network reads.
+type ApLink<W> = oer_protocols_ieee80211_runtime::station::NetworkLink<
+    <Ch<<W as Binding>::Notifies> as oer_protocols_ieee80211_runtime::station::Notifies>::NetworkWaker,
+>;
 
 /// The transmissions of an individually addressed management frame of the
 /// access point (a response, an EAPOL-Key frame, a teardown): a named
@@ -160,7 +180,9 @@ pub struct AccessPointStorage<W: Binding> {
     active: oer_portable_memory::StaticPlace<ApRunnerOf<W>>,
     peers: AccessPointPeerStorage,
     template: [u8; AP_BEACON_CAPACITY],
-    network: ApNetworkStorage<TxMemory>,
+    /// The network's channels, built for the image's placement of the
+    /// network ([`NetworkChannels::new`] or [`NetworkChannels::across_harts`]).
+    network: NetworkChannels<W::Notifies, TxMemory>,
     /// What the network's transmit owner keeps of its buffers.
     transmit: LocalTxState,
     shared: ApShared,
@@ -168,13 +190,14 @@ pub struct AccessPointStorage<W: Binding> {
 }
 
 impl<W: Binding> AccessPointStorage<W> {
-    pub const fn new() -> Self {
+    /// The storage over the network's channels `network`.
+    pub const fn new(network: NetworkChannels<W::Notifies, TxMemory>) -> Self {
         Self {
             completed: oer_portable_memory::StaticPlace::new(),
             active: oer_portable_memory::StaticPlace::new(),
             peers: AccessPointPeerStorage::new(),
             template: [0; AP_BEACON_CAPACITY],
-            network: ApNetworkStorage::new(),
+            network,
             transmit: LocalTxState::new(),
             shared: ApShared::new(),
             start: StartSlot::new(),
@@ -216,12 +239,6 @@ impl StartSlot {
             embassy_futures::select::Either::First(start) => Some(start),
             embassy_futures::select::Either::Second(()) => None,
         }
-    }
-}
-
-impl<W: Binding> Default for AccessPointStorage<W> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -333,7 +350,8 @@ pub struct AccessPointRunner<W: Binding> {
     active: &'static mut oer_portable_memory::StaticPlace<ApRunnerOf<W>>,
     boot: radio::Boot<W>,
     start: &'static StartSlot,
-    network: ApNetworkEnd<'static, TxMemory>,
+    network: ApNetworkEnds<W>,
+    link: &'static ApLink<W>,
     peers: &'static mut AccessPointPeerStorage,
     template: &'static mut [u8; AP_BEACON_CAPACITY],
     shared: &'static ApShared,
@@ -389,8 +407,10 @@ pub struct ApInputs<W: Binding> {
     /// The boot, or what is left of it; `None` once the port's parts hold
     /// it ([`AccessPointEnd::Refused`]).
     pub boot: Option<radio::BootLeft<W>>,
-    /// The runner's end to the network stack.
-    pub network: ApNetworkEnd<'static, TxMemory>,
+    /// The runner's network end.
+    pub network: ApNetworkEnds<W>,
+    /// The link the runner publishes.
+    pub link: &'static ApLink<W>,
     /// The handshakes' nonce source.
     pub nonces: Nonces,
     /// The settings of the start, when one came.
@@ -444,16 +464,10 @@ pub type UnfinishedAccessPointOf<W> = crate::access_point_end::UnfinishedAccessP
     InitializationError,
 >;
 
-/// The access point's network device.
-pub type ApNetwork = ApNetDevice<'static>;
-
-/// The network's transmit owner into the BSS: every pool buffer past the
-/// bank, each frame written in the buffer it goes to the runner in.
-pub type ApTransmit = ApNetTransmit<'static, TxPublisher, NETWORK_BUFFERS>;
-
-/// Assemble the access point over `resources`: its control, its network
-/// device and the network's transmit owner over every pool buffer past the
-/// bank, and its task, which waits for the control's start. `config` holds
+/// Assemble the access point over `resources`: its control, the network's
+/// ends of the station's network channels (its device, its transmit owner
+/// over every pool buffer past the bank, and its stop), and its task, which
+/// waits for the control's start. `config` holds
 /// the radio's regulatory configuration until the start names the one it
 /// runs on.
 pub fn access_point<W: Binding>(
@@ -463,8 +477,9 @@ pub fn access_point<W: Binding>(
     nonces: &'static mut crate::NonceSource,
 ) -> (
     AccessPointControl,
-    ApNetwork,
-    ApTransmit,
+    Network<'static, W::Notifies>,
+    LocalTransmit<'static, W::Notifies>,
+    NetworkStopper<'static, W::Notifies>,
     AccessPointRunner<W>,
 ) {
     let Resources {
@@ -511,15 +526,15 @@ pub fn access_point<W: Binding>(
         shared,
         start,
     } = storage;
-    // The queue back holds every buffer the network's owner is built over.
-    let (publisher, slots) = memory.into_owned();
-    let (device, transmit, end) = network.split(publisher, transmit, slots);
+    let (device, owner, stopper, ends, state) = network
+        .split(|queues| <LocalEnd as NetworkTxEnd<W::Notifies>>::end(queues, memory, transmit));
     let shared: &'static ApShared = shared;
     let start: &'static StartSlot = start;
     (
         AccessPointControl { shared, start },
         device,
-        transmit,
+        owner,
+        stopper,
         AccessPointRunner {
             completed,
             active,
@@ -544,7 +559,8 @@ pub fn access_point<W: Binding>(
                 storage: &mut station.driver,
             },
             start,
-            network: end,
+            network: ends.ends(),
+            link: state.network_link(),
             peers,
             template,
             shared,
@@ -579,6 +595,7 @@ impl<W: Binding> AccessPointRunner<W> {
             mut boot,
             start: slot,
             network,
+            link,
             peers,
             template,
             shared,
@@ -606,6 +623,7 @@ impl<W: Binding> AccessPointRunner<W> {
                     runner: ApInputs {
                         boot: Some($boot),
                         network,
+                        link,
                         nonces,
                         settings: $settings,
                         peers: $peers,
@@ -796,6 +814,7 @@ impl<W: Binding> AccessPointRunner<W> {
                     runner: ApInputs {
                         boot: None,
                         network,
+                        link,
                         nonces,
                         settings: Some(settings),
                         peers: ApPeers::Service(service),
@@ -847,6 +866,7 @@ impl<W: Binding> AccessPointRunner<W> {
             data_transmissions: DATA_TRANSMITTED,
             packet_numbers: ccmp::TX_PACKET_NUMBER_STEP,
             group_generation: 1,
+            network_stop: config.stop.drain,
         };
         let runner = oer_portable_memory::Placed::init(active.uninit(), |place| {
             place.write(ApRunner::new(
@@ -858,6 +878,7 @@ impl<W: Binding> AccessPointRunner<W> {
                 channel,
                 gtk,
                 network,
+                link,
                 (),
                 nonces,
             ))
@@ -866,6 +887,10 @@ impl<W: Binding> AccessPointRunner<W> {
         let end = runner.run(shared, &EmbassyClock).await;
         let (ended, stop) = match end {
             ApEnd::Stopped => (ApEnded::Stopped, Stop::Confirmed),
+            ApEnd::NetworkLost(observed) => (ApEnded::NetworkLost(observed), Stop::Confirmed),
+            // The radio's stop was confirmed; the retire's watch goes on
+            // with the network's return.
+            ApEnd::NetworkReturning(_) => (ApEnded::Stopped, Stop::Owed),
             ApEnd::StopUnconfirmed(observed) => (
                 ApEnded::Stopped,
                 Stop::Unconfirmed(crate::failure::convert::stop_unconfirmed(observed)),
@@ -916,6 +941,11 @@ pub type ApRunnerOf<W> = ApRunner<
     BufferClass<{ crate::chip::TX }>,
     Interface,
     Nonces,
+    LentRx<<W as Binding>::Notifies>,
+    NetworkStopState<<W as Binding>::Notifies>,
+    { crate::TX_DEPTH },
+    { crate::RX_DEPTH },
+    Ch<<W as Binding>::Notifies>,
 >;
 
 impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
@@ -942,6 +972,8 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
         async {
             watch.await.map(|watched| match watched {
                 StopWatch::Confirmed => StopWatch::Confirmed,
+                StopWatch::NetworkLost(observed) => StopWatch::NetworkLost(observed),
+                StopWatch::NetworkReturning(observed) => StopWatch::NetworkReturning(observed),
                 StopWatch::Unkept => StopWatch::Unkept,
                 StopWatch::Faulted { fault, observed } => StopWatch::Faulted {
                     fault: fault.map(crate::failure::convert::backend_fault),

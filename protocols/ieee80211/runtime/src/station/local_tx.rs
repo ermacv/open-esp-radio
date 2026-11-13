@@ -1,12 +1,10 @@
-//! The network's end of a role's transmit path, as one owner: the
+//! The network's end of the station's transmit path, as one owner: the
 //! network's free buffers, the run each holds from its last frame, the queue
-//! a frame goes to the role's runner by (a station's, an access point's),
-//! and the buffers the runner gives back once their frames ended. All of it
-//! lives on the network's executor, so nothing of it is lent or checked
-//! twice. The air is the MAC's: it chooses what goes and charges each
-//! attempt, so a returned buffer is free at once and no frame's end comes
-//! back as a notice. Each role gives the end its own link view and queue
-//! depth by type: one implementation, monomorphised per role.
+//! a frame goes to the station by, and the buffers the station gives back
+//! once their frames ended. All of it lives on the network's executor, so
+//! nothing of it is lent or checked twice. The air is the MAC's: it chooses
+//! what goes and charges each attempt, so a returned buffer is free at once
+//! and no frame's end comes back as a notice.
 
 use core::task::{Context, Poll};
 
@@ -17,7 +15,7 @@ use oer_protocols_network_port::{
     FrameMeta, Held, LinkState, OwnedTransmit, PortRefusal, Slot, TxStorage, Unpublished,
 };
 
-use super::{LinkView, Notifies, Outgoing, TxEnded};
+use super::{Notifies, Outgoing, TxEnded};
 
 /// An Ethernet header's octets: destination, source and EtherType
 /// (IEEE 802.3, clause 3.1.1).
@@ -105,9 +103,9 @@ impl<S, const SLOTS: usize> Default for LocalTxState<S, SLOTS> {
     }
 }
 
-/// The network's end of a role's transmit path over the pool `P`, of
-/// `SLOTS` buffers and a queue of `TX` frames, reading the role's link `K`.
-pub struct LocalTx<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies, K: LinkView> {
+/// The network's end of the station's transmit path over the pool `P`, of
+/// `SLOTS` buffers and a queue of `TX` frames.
+pub struct LocalTx<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> {
     /// The frames for the station, each in the network's memory, where the
     /// station writes its MPDU header in place.
     transmit: SlotSender<'c, Option<Outgoing<P::Memory>>, TX, N::Station, N::Network>,
@@ -121,14 +119,12 @@ pub struct LocalTx<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifi
     /// ([`OwnedTransmit::flush`]). Only this owner fills the queue and the
     /// station only empties it, so the places counted stay free until used.
     places: usize,
-    link: &'c K,
+    link: &'c super::NetworkLink<N::NetworkWaker>,
 }
 
-impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies, K: LinkView>
-    LocalTx<'c, P, SLOTS, TX, N, K>
-{
-    /// The network's end over the role's transmit channels, `pool` and its
-    /// free buffers `free`, kept in `state`, and the role's `link`.
+impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> LocalTx<'c, P, SLOTS, TX, N> {
+    /// The network's end over the station's transmit channels, `pool` and
+    /// its free buffers `free`, kept in `state`, and the station's `link`.
     /// The network holds at most `SLOTS` buffers, as the type of `free`
     /// bounds them: every one given is held. What `state` held is the
     /// previous end's, which emptied it when it ended.
@@ -138,7 +134,7 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies, K: LinkVie
         pool: P,
         state: &'c mut LocalTxState<P::Slot, SLOTS>,
         free: heapless::Vec<P::Slot, SLOTS>,
-        link: &'c K,
+        link: &'c super::NetworkLink<N::NetworkWaker>,
     ) -> Self {
         state.free = free;
         state.held = [None; SLOTS];
@@ -201,16 +197,16 @@ impl<'c, P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies, K: LinkVie
 }
 
 /// The end's buffers end with it, as they did when it held them by value.
-impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies, K: LinkView> Drop
-    for LocalTx<'_, P, SLOTS, TX, N, K>
+impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> Drop
+    for LocalTx<'_, P, SLOTS, TX, N>
 {
     fn drop(&mut self) {
         self.state.free.clear();
     }
 }
 
-impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies, K: LinkView> OwnedTransmit
-    for LocalTx<'_, P, SLOTS, TX, N, K>
+impl<P: TxPool, const SLOTS: usize, const TX: usize, N: Notifies> OwnedTransmit
+    for LocalTx<'_, P, SLOTS, TX, N>
 {
     /// The buffer's place, which names its frame until its end.
     type Ticket = u8;

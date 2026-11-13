@@ -48,7 +48,7 @@ impl<N: QueueNotify> NetworkLink<N> {
     }
 
     /// Publish `link` and tell the network device.
-    pub(super) fn publish(&self, link: LinkSnapshot) {
+    pub(crate) fn publish(&self, link: LinkSnapshot) {
         self.word.store(Self::encode(link), Ordering::Release);
         self.notify.notify();
     }

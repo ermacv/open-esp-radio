@@ -264,7 +264,7 @@ fn a_qos_peers_frame_goes_from_the_networks_memory_without_moving_its_payload() 
             transmit.reclaim();
             assert_eq!(
                 supply.free(),
-                super::super::network::AP_TX_DEPTH,
+                super::super::AP_TX_DEPTH,
                 "its memory came back, once"
             );
             let back = supply.memory(memory).expect("the same memory came back");

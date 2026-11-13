@@ -78,7 +78,7 @@ where
 }
 
 /// The channels' notify types of `N`.
-type Ch<N> = <N as Notifies>::Channels;
+pub(crate) type Ch<N> = <N as Notifies>::Channels;
 
 /// The station's received MSDUs waiting for the network: two receive Block
 /// Ack windows, so one window's burst fits while the network takes the
@@ -245,9 +245,9 @@ type LentReceive<P> = oer_chips_esp32s31_radio_ieee80211_backend::port::LentRece
 >;
 /// The lent buffer of `N`'s station.
 #[cfg(target_arch = "riscv32")]
-type LentRx<N> = LentReceive<<N as Notifies>::Lent>;
+pub(crate) type LentRx<N> = LentReceive<<N as Notifies>::Lent>;
 #[cfg(not(target_arch = "riscv32"))]
-type LentRx<N> = <N as Notifies>::LentRx;
+pub(crate) type LentRx<N> = <N as Notifies>::LentRx;
 /// The received buffers the station may lend the network at once: the
 /// bound for the network's packet slots of lent frames.
 #[cfg(target_arch = "riscv32")]
@@ -585,15 +585,15 @@ impl<N: Notifies> Drop for NetworkStopper<'_, N> {
         self.state.station.notify();
     }
 }
-/// The station's channels: its commands, its network's transmit (frames in
-/// the network's memory `M`, and the memory's way back), receive and
-/// copies, the network's stop and the link, with `N`'s notifies.
-pub struct Channels<N: Notifies, M> {
+/// A role's network channels: the network's frames and their memory's way
+/// back (frames in the network's memory `M`), the received MSDUs and their
+/// copies, the network's stop and the link the network reads, with `N`'s
+/// notifies. The station's channels hold one; an access point's storage
+/// holds its own. The role's runner takes the runner's ends
+/// ([`ActorConnection::ends`]); the network takes [`Network`], its transmit
+/// end and [`NetworkStopper`].
+pub struct NetworkChannels<N: Notifies, M> {
     network_stop: NetworkStopState<N>,
-    start: StartState,
-    restarts: RestartState,
-    stop: StopState<Exit>,
-    commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
     tx: oer_portable_memory::WakingSlotQueue<
         Option<runtime::Outgoing<M>>,
         TX_DEPTH,
@@ -614,14 +614,10 @@ pub struct Channels<N: Notifies, M> {
 type Net<N> = <Ch<N> as runtime::Notifies>::Network;
 /// A station-side queue end's notify of `N`.
 type Station<N> = <Ch<N> as runtime::Notifies>::Station;
-impl<M> Channels<SameHart, M> {
+impl<M> NetworkChannels<SameHart, M> {
     pub const fn new() -> Self {
         Self {
             network_stop: NetworkStopState::new(),
-            start: StartState::new(),
-            restarts: RestartState::new(),
-            stop: StopState::new(),
-            commands: WakingSpscQueue::new(),
             tx: oer_portable_memory::WakingSlotQueue::new(),
             returned: oer_portable_memory::WakingSlotQueue::new(),
             rx: WakingSpscQueue::new(),
@@ -630,27 +626,110 @@ impl<M> Channels<SameHart, M> {
         }
     }
 }
-impl<NW, SW, M> Channels<AcrossHarts<NW, SW>, M>
+impl<NW, SW, M> NetworkChannels<AcrossHarts<NW, SW>, M>
 where
     NW: oer_portable_memory::QueueNotify + Copy + 'static,
     SW: oer_portable_memory::QueueNotify + Copy + 'static,
 {
     /// Channels whose network end ([`Network`], [`NetworkStopper`]) runs
-    /// on another hart than the station: `network` raises the network
-    /// task's executor signal, `station` the datapath actor's, which polls
-    /// every station end. Each wakes the one task that polls that end.
-    pub const fn across_harts(network: NW, station: SW) -> Self {
+    /// on another hart than the role's runner: `network` raises the network
+    /// task's executor signal, `runner` the runner's, which polls every
+    /// runner end. Each wakes the one task that polls that end.
+    pub const fn across_harts(network: NW, runner: SW) -> Self {
         Self {
-            network_stop: NetworkStopState::with(network, station),
+            network_stop: NetworkStopState::with(network, runner),
+            tx: oer_portable_memory::WakingSlotQueue::across_harts(runner, network),
+            returned: oer_portable_memory::WakingSlotQueue::across_harts(network, runner),
+            rx: WakingSpscQueue::across_harts(network, runner),
+            rx_copied: WakingSpscQueue::across_harts(network, runner),
+            state: runtime::State::across_harts(network),
+        }
+    }
+}
+impl<N: Notifies, M> NetworkChannels<N, M> {
+    /// The network's ends, its transmit end built by `transmit` over the
+    /// network's ends of the transmit queues, the runner's ends and the
+    /// state whose link the runner publishes.
+    #[allow(clippy::type_complexity, reason = "the ends of one split")]
+    pub fn split<'s, E>(
+        &'s mut self,
+        transmit: impl FnOnce(TxQueues<'s, N, M>) -> E,
+    ) -> (
+        Network<'s, N>,
+        E,
+        NetworkStopper<'s, N>,
+        ActorConnection<'s, N, M>,
+        &'s runtime::State<Ch<N>>,
+    ) {
+        self.network_stop.reset();
+        let (tx, runner_transmit) = self.tx.split(|| None);
+        let (returned, back) = self.returned.split(|| None);
+        let (receive, rx) = self.rx.split();
+        let (receive_copied, rx_copied) = self.rx_copied.split();
+        let network = runtime::Device::new(rx, rx_copied, &self.state);
+        let transmit_end = transmit(TxQueues {
+            transmit: tx,
+            returned: back,
+            state: &self.state,
+        });
+        (
+            Network { inner: network },
+            transmit_end,
+            NetworkStopper {
+                state: &self.network_stop,
+            },
+            ActorConnection {
+                network_stop: &self.network_stop,
+                transmit: runner_transmit,
+                returned,
+                receive,
+                receive_copied,
+            },
+            &self.state,
+        )
+    }
+}
+impl<M> Default for NetworkChannels<SameHart, M> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The station's channels: its commands, its start, restarts and stop, and
+/// its network's channels.
+pub struct Channels<N: Notifies, M> {
+    start: StartState,
+    restarts: RestartState,
+    stop: StopState<Exit>,
+    commands: WakingSpscQueue<runtime::ServiceCommand<Caps>, 2>,
+    network: NetworkChannels<N, M>,
+}
+impl<M> Channels<SameHart, M> {
+    pub const fn new() -> Self {
+        Self {
             start: StartState::new(),
             restarts: RestartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
-            tx: oer_portable_memory::WakingSlotQueue::across_harts(station, network),
-            returned: oer_portable_memory::WakingSlotQueue::across_harts(network, station),
-            rx: WakingSpscQueue::across_harts(network, station),
-            rx_copied: WakingSpscQueue::across_harts(network, station),
-            state: runtime::State::across_harts(network),
+            network: NetworkChannels::new(),
+        }
+    }
+}
+impl<NW, SW, M> Channels<AcrossHarts<NW, SW>, M>
+where
+    NW: oer_portable_memory::QueueNotify + Copy + 'static,
+    SW: oer_portable_memory::QueueNotify + Copy + 'static,
+{
+    /// Channels whose network end runs on another hart than the station
+    /// ([`NetworkChannels::across_harts`]): `station` raises the datapath
+    /// actor's signal.
+    pub const fn across_harts(network: NW, station: SW) -> Self {
+        Self {
+            start: StartState::new(),
+            restarts: RestartState::new(),
+            stop: StopState::new(),
+            commands: WakingSpscQueue::new(),
+            network: NetworkChannels::across_harts(network, station),
         }
     }
 }
@@ -671,19 +750,9 @@ impl<N: Notifies, M> Channels<N, M> {
         ),
         runtime::ControlCreateError,
     > {
-        self.network_stop.reset();
         let (send, commands) = self.commands.split();
-        let (tx, station_transmit) = self.tx.split(|| None);
-        let (returned, back) = self.returned.split(|| None);
-        let (receive, rx) = self.rx.split();
-        let (receive_copied, rx_copied) = self.rx_copied.split();
-        let (control, runner) = runtime::Control::new(send, &self.state).map_err(|r| r.reason)?;
-        let network = runtime::Device::new(rx, rx_copied, &self.state);
-        let transmit_end = transmit(TxQueues {
-            transmit: tx,
-            returned: back,
-            state: &self.state,
-        });
+        let (network, transmit_end, stopper, actor, state) = self.network.split(transmit);
+        let (control, runner) = runtime::Control::new(send, state).map_err(|r| r.reason)?;
         Ok((
             Control {
                 inner: control,
@@ -691,11 +760,9 @@ impl<N: Notifies, M> Channels<N, M> {
                 restarts: &self.restarts,
                 stop: &self.stop,
             },
-            Network { inner: network },
+            network,
             transmit_end,
-            NetworkStopper {
-                state: &self.network_stop,
-            },
+            stopper,
             Connection {
                 service: ServiceConnection {
                     start: StartGuard(&self.start),
@@ -703,13 +770,7 @@ impl<N: Notifies, M> Channels<N, M> {
                     commands,
                     runner,
                 },
-                actor: ActorConnection {
-                    network_stop: &self.network_stop,
-                    transmit: station_transmit,
-                    returned,
-                    receive,
-                    receive_copied,
-                },
+                actor,
                 stop: StopGuard(&self.stop),
             },
         ))
@@ -735,9 +796,10 @@ struct ServiceConnection<'a, N: Notifies> {
     commands: oer_portable_memory::WakingSpscReceiver<'a, runtime::ServiceCommand<Caps>, 2>,
     runner: runtime::RunnerControl<'a, Ch<N>>,
 }
-/// The datapath actor's ends of the network's channels.
+/// A role's runner's ends of the network's channels: the datapath actor's,
+/// or the access point's runner's.
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
-struct ActorConnection<'a, N: Notifies, M> {
+pub struct ActorConnection<'a, N: Notifies, M> {
     network_stop: &'a NetworkStopState<N>,
     transmit: oer_portable_memory::SlotReceiver<
         'a,
@@ -761,6 +823,28 @@ struct ActorConnection<'a, N: Notifies, M> {
         Net<N>,
         Station<N>,
     >,
+}
+impl<'a, N: Notifies, M> ActorConnection<'a, N, M> {
+    /// The runner's network end, whole.
+    pub fn ends(
+        self,
+    ) -> oer_protocols_ieee80211_runtime::datapath::NetworkEnds<
+        'a,
+        M,
+        LentRx<N>,
+        NetworkStopState<N>,
+        TX_DEPTH,
+        RX_DEPTH,
+        Ch<N>,
+    > {
+        oer_protocols_ieee80211_runtime::datapath::NetworkEnds {
+            transmit: self.transmit,
+            returned: self.returned,
+            receive: self.receive,
+            receive_copied: self.receive_copied,
+            network: self.network_stop,
+        }
+    }
 }
 
 #[cfg(target_arch = "riscv32")]

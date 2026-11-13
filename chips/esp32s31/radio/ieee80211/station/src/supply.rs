@@ -274,7 +274,6 @@ pub type LocalTransmit<'a, N> = runtime::LocalTx<
     NETWORK_BUFFERS,
     { crate::TX_DEPTH },
     <N as crate::Notifies>::Channels,
-    runtime::NetworkLink<<<N as crate::Notifies>::Channels as runtime::Notifies>::NetworkWaker>,
 >;
 
 impl<N: crate::Notifies> NetworkTxEnd<N> for LocalEnd {

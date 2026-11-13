@@ -53,7 +53,7 @@ macro_rules! written {
     ($runner:ident, $transmit:ident, $destination:expr) => {{
         assert!($transmit.try_transmit(frame($destination)).is_ok());
         $transmit.flush();
-        let Some(outgoing) = $runner.homes.network.take() else {
+        let Some(outgoing) = $runner.homes.take_network() else {
             panic!("the network's frame waits for the runner");
         };
         outgoing.memory
@@ -133,7 +133,7 @@ fn a_group_frame_moves_its_payload_two_octets_once_and_its_memory_comes_back() {
             transmit.reclaim();
             assert_eq!(
                 supply.free(),
-                super::super::network::AP_TX_DEPTH,
+                super::super::AP_TX_DEPTH,
                 "its memory came back, once"
             );
             let back = supply.memory(memory).expect("the same memory came back");
@@ -171,7 +171,7 @@ fn a_stop_returns_every_queued_and_submitted_network_memory_once() {
         transmit.reclaim();
         assert_eq!(
             supply.free(),
-            super::super::network::AP_TX_DEPTH,
+            super::super::AP_TX_DEPTH,
             "every memory came back, once"
         );
     }));
@@ -194,9 +194,9 @@ fn a_refusal_draws_no_number_and_returns_the_memory_whole() {
         // numbered or written.
         // The test carries the frame from the network's queue itself: the
         // BSS carries data for it, as it would once serving.
-        runner.homes.network.set_link(true);
+        runner.homes.set_link(true);
         let memory = written!(runner, transmit, GROUP);
-        runner.homes.network.set_link(false);
+        runner.homes.set_link(false);
         let before = memory.clone();
         let sequence = runner.homes.engine.service().current_data_sequence();
         let back = refused!(runner, memory, length);
@@ -205,9 +205,10 @@ fn a_refusal_draws_no_number_and_returns_the_memory_whole() {
             runner.homes.engine.service().current_data_sequence(),
             sequence
         );
-        assert!(runner.homes.network.give_back(back).is_ok());
+        runner.homes.give_memory(back);
+        runner.homes.return_freed();
         transmit.reclaim();
-        assert_eq!(supply.free(), super::super::network::AP_TX_DEPTH);
+        assert_eq!(supply.free(), super::super::AP_TX_DEPTH);
     }));
 }
 
@@ -251,7 +252,8 @@ fn a_frame_refused_before_or_at_the_port_returns_its_memory_and_draws_nothing_be
             packet_number,
             "no packet number drawn"
         );
-        assert!(runner.homes.network.give_back(back).is_ok());
+        runner.homes.give_memory(back);
+        runner.homes.return_freed();
         transmit.reclaim();
         // A group frame admitted, then refused by the port's submission.
         let memory = written!(runner, transmit, GROUP);
@@ -274,10 +276,11 @@ fn a_frame_refused_before_or_at_the_port_returns_its_memory_and_draws_nothing_be
             runner.homes.purposes.iter().all(Option::is_none),
             "it ended at once"
         );
+        runner.homes.return_freed();
         transmit.reclaim();
         assert_eq!(
             supply.free(),
-            super::super::network::AP_TX_DEPTH,
+            super::super::AP_TX_DEPTH,
             "the prepared memory came back"
         );
         let back = supply.memory(at).expect("the same memory");

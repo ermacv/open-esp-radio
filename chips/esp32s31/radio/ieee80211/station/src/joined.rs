@@ -123,8 +123,9 @@ use oer_protocols_radio_port::{Installations, LocalId, Minted, SlotIdentity, wit
 use oer_protocols_radio_regulatory::{Country, PowerLimits, RegulatoryDomain};
 
 use crate::{
-    ActorConnection, Channels, Connection, FRAME_CAPACITY, Network, NetworkStopState,
-    NetworkStopper, Notifies, RestartState, ServiceConnection, StartState, StopState, TX_DEPTH,
+    ActorConnection, Channels, Connection, FRAME_CAPACITY, Network, NetworkChannels,
+    NetworkStopState, NetworkStopper, Notifies, RestartState, ServiceConnection, StartState,
+    StopState, TX_DEPTH,
     supply::{NETWORK_BUFFERS, NetworkTx, PORT_BUFFERS, TxMemory},
 };
 
@@ -851,16 +852,18 @@ fn joined_with<T: 'static>(
             .ok()
             .expect("network buffers");
         let channels: &'static mut Channels<Joined, TxMemory> = leak(Channels {
-            network_stop: NetworkStopState::with(PriorityWaker::new(), PriorityWaker::new()),
             start: StartState::new(),
             restarts: RestartState::new(),
             stop: StopState::new(),
             commands: WakingSpscQueue::new(),
-            tx: WakingSlotQueue::new(),
-            returned: WakingSlotQueue::new(),
-            rx: WakingSpscQueue::new(),
-            rx_copied: WakingSpscQueue::new(),
-            state: runtime::State::new(),
+            network: NetworkChannels {
+                network_stop: NetworkStopState::with(PriorityWaker::new(), PriorityWaker::new()),
+                tx: WakingSlotQueue::new(),
+                returned: WakingSlotQueue::new(),
+                rx: WakingSpscQueue::new(),
+                rx_copied: WakingSpscQueue::new(),
+                state: runtime::State::new(),
+            },
         });
         let (control, network, transmit, stopper, connection) = channels
             .split(|queues| {
