@@ -342,7 +342,15 @@ where
             (Ending::StartRefused(refused), _) => {
                 (ToActor::Retire, LifecycleEnd::StartRefused(refused))
             }
-            (Ending::Restart(failure), _) => (ToActor::Reinstall, LifecycleEnd::Restart(failure)),
+            // A restart asks for the next installation only once the
+            // retired station's transmit tokens ended
+            // ([`super::ActorEnds::ask_reinstall`]): the actor waits.
+            (Ending::Restart(failure), _) => {
+                return Answer {
+                    messages: Messages::None,
+                    stopped: Some(LifecycleEnd::Restart(failure)),
+                };
+            }
         };
         Answer {
             messages: Messages::One(Unsent::ToActor(message)),

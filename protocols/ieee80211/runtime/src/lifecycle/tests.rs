@@ -1141,12 +1141,22 @@ fn pair_with<const G: usize>(
                         Some(actor_now.run(&mut actor_ends, &mut network, &*clock).await);
                 };
                 let lifecycle_task = async {
-                    *completed.borrow_mut() = Some(
-                        life.take()
-                            .unwrap()
-                            .run(&mut lifecycle_ends, &mut io, &clock, observed.clone())
-                            .await,
-                    );
+                    let mut ended = life
+                        .take()
+                        .unwrap()
+                        .run(&mut lifecycle_ends, &mut io, &clock, observed.clone())
+                        .await;
+                    // A restart ends the retired station's transmit tokens,
+                    // then asks the actor for the next installation.
+                    if let LifecycleEnd::Restart(_) = ended.end {
+                        let tokens = ended.retired.end_transmit_tokens();
+                        assert_eq!(ended.retired.station.transmit_tokens(), 0);
+                        lifecycle_ends
+                            .ask_reinstall(tokens)
+                            .await
+                            .expect("the actor is asked");
+                    }
+                    *completed.borrow_mut() = Some(ended);
                 };
                 let script_task = script(&world);
                 let mut actor_task = core::pin::pin!(actor_task);

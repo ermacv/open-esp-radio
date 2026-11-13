@@ -1321,6 +1321,20 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStatio
         self.profile.take()
     }
 
+    /// End this installation's transmit tokens: its tickets and its
+    /// buffers drop here, each going home to the port that minted it. The
+    /// bank keeps no transmit token after this; a restart ends them before
+    /// it asks for the next installation.
+    pub fn end_transmit_tokens(&mut self) {
+        drop(self.tickets.take_all());
+        drop(self.buffers.take_all());
+    }
+
+    /// The transmit tokens the bank still holds: its tickets and buffers.
+    pub fn transmit_tokens(&self) -> usize {
+        self.tickets.len().saturating_add(self.buffers.len())
+    }
+
     /// End this installation's bank and keep only the station's
     /// configuration and callbacks, for a station on another installation's
     /// owners; every owner of this installation drops with the bank.

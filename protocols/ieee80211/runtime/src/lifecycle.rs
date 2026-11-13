@@ -53,10 +53,13 @@
 //! station's share of the network is home
 //! ([`LifecycleEnd::StoppedNetworkLost`]). A restart keeps the network. A
 //! confirmed stop retires the actor ([`ToActor::Retire`]) after the
-//! application's stop, or ends it for the next installation
-//! ([`ToActor::Reinstall`]) after the station failed: the composition then
-//! reinstalls the port and builds the service again, without a reset
-//! ([`LifecycleEnd::Restart`]). The actor's fault, an unconfirmed stop and a
+//! application's stop. After the station failed it ends as a restart
+//! ([`LifecycleEnd::Restart`]) and the actor waits: the composition ends
+//! the retired station's transmit tokens
+//! ([`RetiredLifecycle::end_transmit_tokens`]), every one home to the port
+//! that minted it, and only then asks the actor for the next installation
+//! ([`ActorEnds::ask_reinstall`], [`ToActor::Reinstall`]); it then
+//! reinstalls the port and builds the service again, without a reset. The actor's fault, an unconfirmed stop and a
 //! broken contract of the actor's returns end the lifecycle with their
 //! typed cause for the image to record ([`LifecycleEnd`]).
 
@@ -517,6 +520,39 @@ struct Inner<'id, D: DatapathPort<'id>, X, T, O> {
     now: Instant,
 }
 
+/// The proof that a retired lifecycle's transmit tokens ended
+/// ([`RetiredLifecycle::end_transmit_tokens`]): the one way to ask the actor
+/// for the next installation ([`ActorEnds::ask_reinstall`]).
+#[must_use = "the proof asks for the next installation"]
+pub struct TransmitTokensEnded(());
+
+/// The actor was not asked for the next installation: it closed its
+/// reception, so it ended already.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReinstallUnasked;
+
+impl<'c, 'id, D: DatapathPort<'id>, const TO: usize, const FROM: usize, const RETURNS: usize>
+    ActorEnds<'c, 'id, D, TO, FROM, RETURNS>
+{
+    /// After a restart, ask the actor to end for the next installation:
+    /// the message follows the end of the retired station's transmit tokens
+    /// (`ended`), so the port finds every buffer and ticket of the
+    /// installation home when it reinstalls. Waits for room in the queue.
+    ///
+    /// # Errors
+    /// [`ReinstallUnasked`]: the actor closed its reception.
+    pub async fn ask_reinstall(
+        &mut self,
+        ended: TransmitTokensEnded,
+    ) -> Result<(), ReinstallUnasked> {
+        let TransmitTokensEnded(()) = ended;
+        let permit = self.to_actor.ready().await.map_err(|_| ReinstallUnasked)?;
+        permit
+            .send(ToActor::Reinstall)
+            .map_err(|_| ReinstallUnasked)
+    }
+}
+
 /// What a finished lifecycle keeps: the station's and the arbiter's banks,
 /// the owners a broken contract left and the events' sink.
 pub struct RetiredLifecycle<
@@ -554,6 +590,18 @@ pub struct RetiredLifecycle<
     >,
     /// The events' sink.
     pub events: O,
+}
+
+impl<'id, D: DatapathPort<'id>, C: StaCallbacks, X, T, const GROUPS: usize, O>
+    RetiredLifecycle<'id, D, C, X, T, GROUPS, O>
+{
+    /// End the retired station's transmit tokens (its tickets and buffers,
+    /// each home to its port as it drops), as a restart does before it asks
+    /// for the next installation; the proof of their end.
+    pub fn end_transmit_tokens(&mut self) -> TransmitTokensEnded {
+        self.station.end_transmit_tokens();
+        TransmitTokensEnded(())
+    }
 }
 
 /// The lifecycle's end and what it keeps.
