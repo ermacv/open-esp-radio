@@ -68,42 +68,47 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   cleaned sans-IO crate's `clippy.toml` holds the union described in
   [docs/unsafe.md](docs/unsafe.md) before it denies both lints at its root.
 - **Terminal decisions.** A reset or a runtime panic exists only at the
-  hardware level, behind a proof marked `HW_PANIC_SOURCE: <name>` at the
-  site and named in `[proofs]` of `tools/test/layers/terminal-sites.toml`.
-  The proof is a statement that the state is impossible, naming the model,
-  revision, preconditions, event order and limits (a cited value alone
-  proves no lifecycle invariant), or an observed hardware failure where
-  continuing would hand another owner memory or a peripheral the hardware
-  may still use. Without such a proof, return a handled typed error and
-  handle it at its own level: an error never travels up the stack to end in
-  a panic or reset. An impossible state returns a named fault retaining its
-  source observations; its owners stay quarantined, then the image or HAL
-  owner calls safe `fatal::reset_recording`, without `panic!`. A watchdog is
-  not this mechanism. That sequence is no license to poison: a new poison
-  (an owner or state quarantined without a recovery path) needs a proof
-  that no handled error can keep the owners, and the owner's approval
-  before any code is written. Existing PHY poison is debt to remove, never
-  a precedent to repeat. The subsystem contracts linked from this file do
-  not lift this requirement. A software contract violation not yet removed
-  by types restarts the station and records its cause, never the chip. The
-  policy and its limits (debugger, retained diagnostics, repeated boot
-  failure) are in [Fatal decisions and reset](docs/architecture.md#fatal-decisions-and-reset).
-- **Unsafe.** A change introduces no new `unsafe` code. Unsafe contracts
-  cover memory safety; operation order and lifecycle are enforced by `&mut`
-  ownership and typestate. `unsafe` stays in `portable/mmio` (volatile
-  access; generated register code has none), `portable/riscv`
-  (architectural instructions), `portable/memory` (cells, placement, DMA
-  proofs, typed symbol exports), `portable/waker`, Espressif interrupt
-  bindings in `chips/family/platform/interrupt-table`, the PAC's one root
-  claim, probe images, the placement constructor, the HAL's PSRAM owner
-  (slice creation) and the HAL's protocol core, narrow and with
-  `// SAFETY:`; crates above the HAL forbid it. Moving an existing site into
-  its narrow home may raise the home's count only by the moved sites, when
-  the touched crates' total falls and no calling crate's count grows; each
-  site retains its narrow contract and `// SAFETY:` proof. The permitted
-  exceptions are listed in [docs/unsafe.md](docs/unsafe.md). Only `oer-portable-riscv` contains `asm!`
-  for architectural operations. Entry/trap ABI assembly uses `global_asm!`
-  or `naked_asm!` only in staged entry/trap code, bootstrap and probes; host
+  hardware level, behind a proof marked `HW_PANIC_SOURCE: <name>` at the site
+  and named in `[proofs]` of `tools/test/layers/terminal-sites.toml`. The
+  proof is a statement that the state is impossible, naming the model,
+  revision, preconditions, event order and limits (a cited value alone proves
+  no lifecycle invariant), or an observed hardware failure where continuing
+  would hand another owner memory or a peripheral the hardware may still use.
+  Without such a proof, return a handled typed error and handle it at its own
+  level: an error never travels up the stack to end in a panic or reset. An
+  impossible state returns a named fault retaining its source observations;
+  its owners stay quarantined, then the image or HAL owner calls safe
+  `fatal::reset_recording`, without `panic!`. A watchdog is not this
+  mechanism. That sequence is no license to quarantine. A quarantine (a
+  peripheral, an installation, an owner or a buffer left unusable until reset:
+  a poisoned state, memory kept out of its pool on purpose) counts as a
+  runtime panic: every peripheral and every owner has a recovery path. A new
+  one needs a proof that no handled error can keep the owners, and the owner's
+  approval before any code is written. Existing quarantine, in the PHY and in
+  the Wi-Fi path, is debt to remove, never a precedent to repeat. The
+  subsystem contracts linked from this file do not lift this requirement. A
+  software contract violation not yet removed by types restarts the station
+  and records its cause, never the chip. The policy and its limits (debugger,
+  retained diagnostics, repeated boot failure) are in [Fatal decisions and
+  reset](docs/architecture.md#fatal-decisions-and-reset).
+- **Unsafe.** A change introduces no new `unsafe` code outside the homes
+  below; inside a home, new `unsafe` needs its benefit shown in the PR (what
+  it replaces and what it costs) and the architect's approval. Unsafe
+  contracts cover memory safety; operation order and lifecycle are enforced by
+  `&mut` ownership and typestate. `unsafe` stays in `portable/mmio` (volatile
+  access; generated register code has none), `portable/riscv` (architectural
+  instructions), `portable/memory` (cells, placement, DMA proofs, typed symbol
+  exports), `portable/waker`, Espressif interrupt bindings in
+  `chips/family/platform/interrupt-table`, the PAC's one root claim, probe
+  images, the placement constructor, the HAL's PSRAM owner (slice creation)
+  and the HAL's protocol core, narrow and with `// SAFETY:`; crates above the
+  HAL forbid it. Moving an existing site into its narrow home may raise the
+  home's count only by the moved sites, when the touched crates' total falls
+  and no calling crate's count grows; each site retains its narrow contract
+  and `// SAFETY:` proof. The permitted exceptions are listed in
+  [docs/unsafe.md](docs/unsafe.md). Only `oer-portable-riscv` contains `asm!`
+  for architectural operations. Entry/trap ABI assembly uses `global_asm!` or
+  `naked_asm!` only in staged entry/trap code, bootstrap and probes; host
   compiler fixtures are test inputs.
 - **Execution.** The critical section is hart-local. An interrupt handler
   never shares a lock with a task. A task waker stays on its executor's
@@ -216,6 +221,11 @@ A page never relaxes a rule above: where they differ, the rule above holds.
 
 ## Work
 
+- **Roles.** The architect, an agent the owner appoints, sets tasks as files
+  in the notes repository (`tasks/`), reviews every result against the code
+  and merges. An executor implements, runs the long and stand runs and reports
+  in the form its task names. A reported check the architect cannot repeat is
+  not evidence.
 - **Do what the task asks and check what it names.** No stand run,
   comparison or measurement series the task does not ask for. A question the
   task does not answer goes to whoever set it.
@@ -280,12 +290,13 @@ A page never relaxes a rule above: where they differ, the rule above holds.
 - **Long commands** (builds, CI watches, stand runs) run in the background;
   never block the conversation.
 - **Pull requests.** Conventional Commit subjects (`fix(esp32s31): …`). Open
-  the PR as a draft at the start, mark it ready when done (`gh pr ready`).
-  The owner merges; an agent never merges. CI builds everything; nobody waits
-  for it: a PR is ready when its host checks pass. A red CI is fixed by
-  whoever broke it. Rebase only on a conflict or when main changed the same
-  files. Cite commit hashes as `git` prints them. Pass lists of paths as
-  arrays, not one string.
+  the PR as a draft at the start, mark it ready when done (`gh pr ready`). The
+  owner or the architect merges, after reviewing the exact revision and
+  repeating its host checks; an executor never merges. CI builds everything;
+  nobody waits for it, a merge included: a PR is ready when its host checks
+  pass. A red CI is fixed by whoever broke it. Rebase only on a conflict or
+  when main changed the same files. Cite commit hashes as `git` prints them.
+  Pass lists of paths as arrays, not one string.
 - **GitHub.** Act only in the owner's repositories; upstream projects are
   read-only.
 - **Documents state the current state,** in English. No plans, history or
