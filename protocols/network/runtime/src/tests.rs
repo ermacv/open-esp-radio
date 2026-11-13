@@ -2949,3 +2949,69 @@ fn a_lease_ends_in_the_service_s_own_wait_and_the_watch_tells() {
         obtained.saturating_add(oer_portable_time::Duration::from_secs(10))
     );
 }
+
+/// Two networks of different brands in one process, each over its own port
+/// and served in one task as a group serves its networks: the first stops
+/// while the second runs, and the second still carries a datagram after it.
+#[test]
+fn two_networks_of_their_own_brands_stop_one_while_the_other_runs() {
+    brand!(First);
+    brand!(Second);
+    let Bench {
+        service: first,
+        socket: mut first_socket,
+        wire: first_wire,
+        stop: first_stop,
+        clock,
+    } = bench::<First>();
+    let Bench {
+        service: second,
+        socket: mut second_socket,
+        wire: second_wire,
+        stop: second_stop,
+        clock: _,
+    } = bench::<Second>();
+    let (mut first_events, mut second_events) = ((), ());
+    let networks = async {
+        let (first, second) = futures_join(
+            serve(first, clock, &mut first_events),
+            serve(second, clock, &mut second_events),
+        )
+        .await;
+        (first, second)
+    };
+    let drive = async {
+        assert_eq!(
+            send_one(&mut first_socket, b"one").await,
+            Sent::Ended(Outcome::Accepted)
+        );
+        assert_eq!(
+            send_one(&mut second_socket, b"two").await,
+            Sent::Ended(Outcome::Accepted)
+        );
+        first_stop.try_send(()).ok().unwrap();
+        // The first network's socket closes with its stop.
+        while !first_socket.closed() {
+            settle().await;
+        }
+        assert_eq!(
+            send_one(&mut second_socket, b"after").await,
+            Sent::Ended(Outcome::Accepted),
+            "the second network runs on"
+        );
+        second_stop.try_send(()).ok().unwrap();
+    };
+    let ((first, second), ()) = run_tasks(clock, networks, drive);
+    assert_eq!(first.cause, EndCause::Stopped);
+    assert_eq!(second.cause, EndCause::Stopped);
+    assert_eq!(datagrams(&first_wire.0.borrow()), [b"one".to_vec()]);
+    assert_eq!(
+        datagrams(&second_wire.0.borrow()),
+        [b"two".to_vec(), b"after".to_vec()]
+    );
+}
+
+/// Both futures to their ends, polled together.
+async fn futures_join<A: Future, B: Future>(a: A, b: B) -> (A::Output, B::Output) {
+    embassy_futures::join::join(a, b).await
+}

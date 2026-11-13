@@ -159,3 +159,35 @@ fn a_memory_returned_after_the_networks_report_reaches_the_networks_owner() {
         );
     }));
 }
+
+/// The network on another hart than the runner: the runner serves, the
+/// network's frames reach the air through its own side's queues, and a stop
+/// asks the network, hears its report and brings every memory home.
+#[test]
+fn across_harts_the_runner_serves_the_network_s_frames_and_its_stop_brings_every_memory_home() {
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let counted = Counted::new();
+        fixture!(claim, counted.clock.clone(), super::network_end_across_harts
+            => runner, air, _device, transmit, supply, side, shared);
+        let script = async {
+            counted.idle(64).await;
+            assert!(shared.status().running, "the access point serves");
+            for _ in 0..4 {
+                assert!(transmit.try_transmit(frame()).is_ok());
+            }
+            transmit.flush();
+            for _ in 0..16 {
+                counted.advance(&air, Duration::from_millis(1)).await;
+            }
+            stop_and_finish(&counted, &air, &shared).await;
+        };
+        stopped(drive(runner.run(&shared, &counted), script).await);
+        assert_eq!(side.asked.get(), 1, "asked once, across harts");
+        transmit.reclaim();
+        assert_eq!(
+            supply.free(),
+            super::super::AP_TX_DEPTH,
+            "every memory came home"
+        );
+    }));
+}

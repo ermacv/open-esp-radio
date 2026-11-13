@@ -9,6 +9,7 @@ use std::rc::Rc;
 use std::vec::Vec;
 
 use embassy_futures::select::{Either, select};
+use oer_portable_memory::AtomicWaker;
 use oer_portable_time::Duration;
 use oer_portable_time_virtual::VirtualClock;
 use oer_protocols_ieee80211_contracts_port::{Channel, ChannelWidth, RegulatedChannel};
@@ -169,6 +170,94 @@ type TestTransmit = crate::station::LocalTx<
 type TestDevice =
     crate::station::Device<'static, oer_protocols_ieee80211_testing_model::ModelLentRx, NET_RX>;
 
+/// The network end's two sides on two harts, as a host test holds them:
+/// each side one waker every end of it registers, the other side's ends
+/// raising it.
+type TwoHarts = crate::station::AcrossHarts<&'static AtomicWaker, &'static AtomicWaker>;
+
+/// The station's network end with its network on another hart than the
+/// runner ([`TwoHarts`]), otherwise as [`network_end`].
+#[allow(clippy::type_complexity, reason = "the ends of one split")]
+fn network_end_across_harts(
+    side: &'static NetworkSide,
+) -> (
+    crate::datapath::NetworkEnds<
+        'static,
+        ModelNetworkMemory,
+        oer_protocols_ieee80211_testing_model::ModelLentRx,
+        NetworkSide,
+        NET_TX,
+        NET_RX,
+        TwoHarts,
+    >,
+    &'static crate::station::NetworkLink<&'static AtomicWaker>,
+    crate::station::LocalTx<'static, ModelTx, { super::AP_TX_DEPTH }, NET_TX, TwoHarts>,
+    crate::station::Device<
+        'static,
+        oer_protocols_ieee80211_testing_model::ModelLentRx,
+        NET_RX,
+        TwoHarts,
+    >,
+    ModelTx,
+) {
+    use crate::station::{Outgoing, Received, State, TxEnded};
+    use oer_portable_memory::{WakingSlotQueue, WakingSpscQueue};
+    let network: &'static AtomicWaker = Box::leak(Box::new(AtomicWaker::new()));
+    let runner: &'static AtomicWaker = Box::leak(Box::new(AtomicWaker::new()));
+    let state: &'static State<TwoHarts> = Box::leak(Box::new(State::across_harts(network)));
+    let transmit = Box::leak(Box::new(WakingSlotQueue::<
+        Option<Outgoing<ModelNetworkMemory>>,
+        NET_TX,
+        &'static AtomicWaker,
+        &'static AtomicWaker,
+    >::across_harts(runner, network)));
+    let returned = Box::leak(Box::new(WakingSlotQueue::<
+        Option<TxEnded<ModelNetworkMemory>>,
+        NET_TX,
+        &'static AtomicWaker,
+        &'static AtomicWaker,
+    >::across_harts(network, runner)));
+    let receive = Box::leak(Box::new(WakingSpscQueue::<
+        Received<oer_protocols_ieee80211_testing_model::ModelLentRx>,
+        NET_RX,
+        &'static AtomicWaker,
+        &'static AtomicWaker,
+    >::across_harts(network, runner)));
+    let copies = Box::leak(Box::new(WakingSpscQueue::<
+        oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame,
+        { crate::station::RX_COPIED_DEPTH },
+        &'static AtomicWaker,
+        &'static AtomicWaker,
+    >::across_harts(network, runner)));
+    let (sender, transport) = transmit.split(|| None);
+    let (back, returns) = returned.split(|| None);
+    let (receive_end, device_receive) = receive.split();
+    let (copies_end, device_copies) = copies.split();
+    let (pool, slots) = ModelTx::new();
+    let owner = crate::station::LocalTx::new(
+        sender,
+        returns,
+        pool.clone(),
+        Box::leak(Box::new(crate::station::LocalTxState::new())),
+        slots,
+        state.network_link(),
+    );
+    let device = crate::station::Device::new(device_receive, device_copies, state);
+    (
+        crate::datapath::NetworkEnds {
+            transmit: transport,
+            returned: back,
+            receive: receive_end,
+            receive_copied: copies_end,
+            network: side,
+        },
+        state.network_link(),
+        owner,
+        device,
+        pool,
+    )
+}
+
 /// The station's network end over fresh queues: the runner's ends, the
 /// network's transmit owner over the model's pool, its device and the link
 /// both read, and the pool's handle.
@@ -279,6 +368,9 @@ macro_rules! fixture {
         fixture!($claim, $clock => $runner, $air, $device, $transmit, $supply, _side, $shared);
     };
     ($claim:ident, $clock:expr => $runner:ident, $air:ident, $device:ident, $transmit:ident, $supply:ident, $side:ident, $shared:ident) => {
+        fixture!($claim, $clock, network_end => $runner, $air, $device, $transmit, $supply, $side, $shared);
+    };
+    ($claim:ident, $clock:expr, $ends:path => $runner:ident, $air:ident, $device:ident, $transmit:ident, $supply:ident, $side:ident, $shared:ident) => {
         let mut installations = Installations::claim($claim);
         let (install, $air) = Port::install(
             &mut installations,
@@ -353,7 +445,7 @@ macro_rules! fixture {
             GroupKeyId::new(GROUP_KEY_ID).unwrap(),
         );
         let $side: &'static NetworkSide = Box::leak(Box::new(NetworkSide::answering()));
-        let (end, link, mut $transmit, $device, $supply) = network_end($side);
+        let (end, link, mut $transmit, $device, $supply) = $ends($side);
         let mut $runner = ApRunner::new(
             port,
             commands,
