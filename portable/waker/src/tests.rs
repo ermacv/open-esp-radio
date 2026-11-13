@@ -156,3 +156,48 @@ fn the_cell_holds_two_words_and_its_state() {
         size_of::<usize>() + size_of::<Waker>()
     );
 }
+
+#[test]
+fn a_dropped_cell_drops_its_waker_once() {
+    let task = Counted::new();
+    let cell = AtomicWaker::new();
+    cell.register(&task.waker());
+    assert_eq!(
+        (task.clones.get(), task.drops.get()),
+        (1, 1),
+        "the original went"
+    );
+    drop(cell);
+    assert_eq!(task.drops.get(), 2, "the stored clone, once");
+    assert_eq!(task.wakes.get(), 0);
+}
+
+#[test]
+fn a_cell_dropped_after_its_take_or_wake_drops_nothing() {
+    let (taken, woken) = (Counted::new(), Counted::new());
+    let cell = AtomicWaker::new();
+    cell.register(&taken.waker());
+    let waker = cell.take();
+    drop(cell);
+    assert_eq!(taken.drops.get(), 1, "only the original");
+    drop(waker);
+    assert_eq!(taken.drops.get(), 2, "the taken clone, by its taker");
+    let cell = AtomicWaker::new();
+    cell.register(&woken.waker());
+    cell.wake();
+    assert_eq!(woken.drops.get(), 2, "the original and the woken clone");
+    drop(cell);
+    assert_eq!(woken.drops.get(), 2, "nothing more");
+}
+
+#[test]
+fn a_replaced_registration_drops_the_old_waker_once() {
+    let (first, second) = (Counted::new(), Counted::new());
+    let cell = AtomicWaker::new();
+    cell.register(&first.waker());
+    cell.register(&second.waker());
+    assert_eq!(first.drops.get(), 2, "the original and the replaced clone");
+    drop(cell);
+    assert_eq!(first.drops.get(), 2, "the old one, once");
+    assert_eq!(second.drops.get(), 2, "the original and the stored clone");
+}
