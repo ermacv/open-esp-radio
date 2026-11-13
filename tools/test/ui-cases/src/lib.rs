@@ -51,7 +51,10 @@ const LOCATIONS: [&str; 2] = ["--> ", "::: "];
 /// `env!("CARGO_TARGET_TMPDIR")`. `features` names every feature a case may
 /// require and whether this build has it, `("test-support",
 /// cfg!(feature = "test-support"))`. With `TRYBUILD=overwrite` the produced
-/// snapshots are copied back to `tests/ui/`.
+/// snapshots are copied back to `tests/ui/`. A case may have a
+/// `<case>.<feature>.stderr` for a feature's different diagnostics. It is
+/// selected while that feature is enabled; at most one such variant may
+/// be active. Otherwise the ordinary `<case>.stderr` is used.
 ///
 /// # Panics
 ///
@@ -176,6 +179,21 @@ impl core::fmt::Display for ExpectedError {
     }
 }
 
+fn snapshot_path(source: &Path, features: &[(&str, bool)]) -> PathBuf {
+    let mut variants = features
+        .iter()
+        .filter(|(_, enabled)| *enabled)
+        .map(|(feature, _)| source.with_extension(format!("{feature}.stderr")))
+        .filter(|path| path.is_file());
+    let selected = variants.next();
+    assert!(
+        variants.next().is_none(),
+        "{}: more than one enabled feature has a diagnostic snapshot",
+        source.display()
+    );
+    selected.unwrap_or_else(|| source.with_extension("stderr"))
+}
+
 impl Case {
     /// The case at `source_path`, or `Err` naming it and the requirement this
     /// build does not meet.
@@ -213,7 +231,7 @@ impl Case {
                 .unwrap_or_else(|error| panic!("{name}: write {}: {error}", path.display()));
         }
 
-        let snapshot = source_path.with_extension("stderr");
+        let snapshot = snapshot_path(&source_path, features);
         if snapshot.exists() {
             let checked_in = read(&snapshot);
             let generated = relocate(&checked_in, CASE_DIR, &twins.reject_dir());
@@ -506,8 +524,36 @@ fn file_name(path: &Path) -> String {
 mod tests {
     use super::{
         Expected, ExpectedError, Place, absolute_includes, markers, relocate, reported_errors,
-        requirements, twin,
+        requirements, snapshot_path, twin,
     };
+
+    #[test]
+    fn a_snapshot_variant_requires_its_declared_feature() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("case.rs");
+        let ordinary = source.with_extension("stderr");
+        let variant = source.with_extension("engine.stderr");
+        std::fs::write(&variant, "feature-specific diagnostic").unwrap();
+        assert_eq!(snapshot_path(&source, &[]), ordinary);
+        assert_eq!(snapshot_path(&source, &[("engine", false)]), ordinary);
+        assert_eq!(snapshot_path(&source, &[("other", true)]), ordinary);
+        assert_eq!(snapshot_path(&source, &[("engine", true)]), variant);
+    }
+
+    #[test]
+    #[should_panic(expected = "more than one enabled feature has a diagnostic snapshot")]
+    fn ambiguous_snapshot_variants_are_rejected() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("case.rs");
+        for feature in ["one", "two"] {
+            std::fs::write(
+                source.with_extension(format!("{feature}.stderr")),
+                "diagnostic",
+            )
+            .unwrap();
+        }
+        let _ = snapshot_path(&source, &[("one", true), ("two", true)]);
+    }
 
     fn code(line: usize, code: &str) -> Expected {
         Expected {

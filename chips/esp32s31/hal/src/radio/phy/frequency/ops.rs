@@ -252,6 +252,11 @@ impl BasebandMode {
 /// SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL.
 const RF_MEMORY_READ_MODE: Bits<2> = Bits::truncate(2);
 
+/// The read mode the P-FREQ diagnostic sheet held for its reads.
+///
+/// SOURCE: HW19_S31_FREQUENCY_SELECTION_20261027.
+const DIAGNOSTIC_MEMORY_READ_MODE: Bits<2> = Bits::truncate(0);
+
 /// Select the recovered two-bit baseband mode.
 pub fn set_baseband_mode<P: PhyPlacement>(
     frequency: &mut FrequencyRegisters<P>,
@@ -376,6 +381,31 @@ pub fn read_memory<P: PhyPlacement>(
         w.set_read_pulse(true);
     });
     // SOURCE: ROM_REV0_PHY_FREQUENCY_CHANNEL, S31_ESP_PACS_SVD.
+    frequency.fe.modify_frequency_memory_read_control(|w| {
+        w.set_read_pulse(false);
+    });
+    frequency.fe.read_frequency_memory_read_result().value()
+}
+
+/// The held mode-0 read used by the P-FREQ diagnostic sheet.
+///
+/// SOURCE: HW19_S31_FREQUENCY_SELECTION_20261027. This preserves that
+/// experiment's selection and read pulse; its empirical reference does not
+/// establish the returned word's decoding or a memory-bank geometry.
+pub fn read_memory_mode0<P: PhyPlacement>(
+    frequency: &mut FrequencyRegisters<P>,
+    address: FrequencyMemoryAddress,
+) -> u32 {
+    frequency.fe.modify_frequency_control(|w| {
+        w.set_memory_address_low(address.low())
+            .set_memory_address_high(address.high());
+    });
+    frequency.fe.modify_i2c_number_control(|w| {
+        w.set_memory_read_mode(DIAGNOSTIC_MEMORY_READ_MODE);
+    });
+    frequency.fe.modify_frequency_memory_read_control(|w| {
+        w.set_read_pulse(true);
+    });
     frequency.fe.modify_frequency_memory_read_control(|w| {
         w.set_read_pulse(false);
     });

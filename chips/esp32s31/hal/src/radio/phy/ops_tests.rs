@@ -664,6 +664,55 @@ golden!(
     ]
 );
 
+// Complete images from the published FE register model: address bit 10 is
+// bit 18 of control, the read pulse is bit 16 of word 0x20, mode is 1:0
+// of word 0x30. Both fills retain every unrelated lane.
+golden!(
+    frequency_rf_memory_read_mode2,
+    FrequencyRegisters,
+    7994,
+    |b| {
+        fr::read_memory(
+            &mut b,
+            fr::FrequencyMemoryAddress::new(0x400).expect("in the memory"),
+        );
+    },
+    [
+        (0, &[(0x001c, 0x00040000), (0x0030, 2)]),
+        (
+            0xffffffff,
+            &[
+                (0x001c, 0xfffc00ff),
+                (0x0020, 0xfffeffff),
+                (0x0030, 0xfffffffe)
+            ]
+        ),
+    ]
+);
+
+golden!(
+    frequency_diagnostic_memory_read_mode0,
+    FrequencyRegisters,
+    7994,
+    |b| {
+        fr::read_memory_mode0(
+            &mut b,
+            fr::FrequencyMemoryAddress::new(0x400).expect("in the memory"),
+        );
+    },
+    [
+        (0, &[(0x001c, 0x00040000)]),
+        (
+            0xffffffff,
+            &[
+                (0x001c, 0xfffc00ff),
+                (0x0020, 0xfffeffff),
+                (0x0030, 0xfffffffc)
+            ]
+        ),
+    ]
+);
+
 golden!(
     frequency_i2c_number_addresses,
     FrequencyRegisters,

@@ -89,7 +89,8 @@ and the retained power observation qualify the measurement separately from the
 opaque pair's value. No per-chain saturation identity is asserted.
 
 P-FREQ captures quiet control/read-mode state, holds hardware updates, reads
-addresses 0/400/0 in mode0, then issues two-fresh-RMW bit18 clear/set from bit18=0
+addresses 0/400/0 through the named `frequency::read_memory_mode0` operation
+(the RF table operation `read_memory` selects mode2), then issues two-fresh-RMW bit18 clear/set from bit18=0
 and reads0 again. Clear is a no-op and set writes 0→1; the address transitions
 0x400→0 supply 1→0 edges. This does not establish a separate reset pulse.
 The first result must match the empirical byte 0x67 adopted from
