@@ -75,14 +75,16 @@ copied or sent to another thread. The RX queue's ordinary wakers and the pool
 waiter remain in one P1 composition; no new cross-priority distribution is
 admitted.
 
-The lending consumer's servicing promise uses its existing P1 return waker.
-Publication offers servicing only after the consumer registered readiness;
-finishing or cancelling that opportunity clears the offer and wakes the
-network service. Physical batch accounting precedes socket credit. Busy
-consumers and retained owners promise no servicing, and the offer gates RX
-alone. The queue's prefix commit frees cells and notifies a waiting producer
-once, including unwind of a completed prefix; this uses the same consumer-to-
-producer direction as an individual receive.
+Lending returns use their existing P1 return waker, and physical batch
+accounting precedes socket credit. Publication to a registered consumer may
+request one RX-intake deferral. The service consumes all such offers in one
+packet continuation; RX readiness remains visible and another intake does
+not wait for a saved receive future to be polled or cancelled. Only another
+publication can rearm a deferral. Consumer completion can clear an unused
+offer earlier, but is not required for other sockets' progress. The queue's
+prefix commit frees cells and notifies a waiting producer once, including
+unwind of a completed prefix; this uses the same consumer-to-producer
+direction as an individual receive.
 
 `network-port` uses portable memory's `BatchReturn` ownership vocabulary only
 to delegate a `LentFrame` return to its storage. It selects no queue, waker,

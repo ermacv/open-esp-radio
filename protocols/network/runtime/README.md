@@ -192,7 +192,7 @@ and ordinary work is known apart from returns:
 | port (`FrameSource::register`) | its return value: a frame not yet taken (`PortReady::received`), or a notice not yet taken, a link changed since the last registration, room for the frame it last refused (`PortReady::other`) |
 | producer (`Produce::register`) | with offers wanted, its return value (data `offer` has not handed out); always, a generation the service has not checked yet, or a hold no longer current, which the service reads itself |
 | returns | taken at once, as above: ready only if a block came home for a socket that waits for one |
-| consumer servicing | a previously registered consumer finishes its synchronous prefix or cancels its wait; RX readiness is deferred until that opportunity ends, independently of retained loans |
+| consumer offer | not a wait source: a publication may defer one intake pass; the service consumes the offer itself, and shared RX readiness stays visible |
 | time | the deadline (the core's, memory pressure's, the producer's) has come |
 
 A registration returns readiness; it does not wake the caller for it. A pass
@@ -203,26 +203,30 @@ before the next turn, so one poll holds at most one turn after a wait. A source
 that says it is ready for good therefore costs a turn a poll, and it cannot
 hold the executor.
 
-RX continuation has an explicit socket contract, not an executor-round
-count. A lending receive advertises readiness only after registering all its
-sources, then checks them again. When the service publishes to such a waiter,
-it records a servicing offer before notifying it. Further RX intake is
-deferred until the consumer services that prefix or cancels its wait. The
-prefix consumer publishes unretained physical returns and socket credits
-before releasing that offer; the service collects the credit before the next
-intake. An individual `receive` instead hands an owner to its caller and
-releases its offer; that owner stays out until its own Drop. TX notices,
-producer work, commands, deadlines, link changes and stop remain serviceable
-while RX is deferred. No service path counts S31 rounds or performs a pair of
-self-yields for a consumer.
+RX continuation has an explicit, bounded socket contract. A lending receive
+advertises readiness after registering all its sources, then checks them
+again. Publication to that waiter records an offer before notifying it and
+asks for a shared packet continuation. That continuation consumes every
+socket's offer together and defers RX intake once, while still servicing
+returns, TX notices, producer work and results. Commands, deadlines, link
+changes and stop keep their existing checks and order.
 
-A busy consumer advertises nothing. Retaining one frame, keeping every
-credit, processing Echo asynchronously, or doing unrelated work makes no
-promise of another receive opportunity. The service does not wait for those
-owners: it continues RX, with the existing exhausted-credit policy. A pending
-receive's cancellation releases its offer without returning a synthetic loan.
-The contract needs the executor to poll a woken task, but no task order or
-ready-snapshot implementation.
+Shared RX readiness is never masked. If frames remain, the ordinary fairness
+yield schedules the next pass, which can receive even if the consumer never
+polls or cancels its saved future. Flushing already published frames cannot
+rearm the offer; only a new publication can request another deferral. The
+bound is one intake pass per publication, not a timeout or an executor-round
+count. Several offered sockets consume that one pass together.
+
+A consumer may clear an unused offer earlier. Its synchronous prefix returns
+physical buffers before publishing socket credits; an individual `receive`
+instead hands an owner to its caller, which returns on its own Drop. Neither
+a saved receive nor a retained owner can park another socket or protocol
+input. A socket that keeps all its credit still gets the existing exhausted-
+credit policy, independently of other sockets. Cancellation returns no
+synthetic loan. Progress does not require a woken parent task to poll that
+particular child future, and no service path counts S31 rounds or performs a
+pair of self-yields for a consumer.
 
 ## Lending sockets
 

@@ -1,6 +1,8 @@
 //! A lending socket through the service: credits, refusals, and loans that
 //! outlive a stop.
 
+mod progress;
+
 extern crate std;
 
 use std::boxed::Box;

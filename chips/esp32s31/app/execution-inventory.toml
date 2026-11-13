@@ -720,18 +720,22 @@ site = "chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs"
 anchor = "impl<P: LentNotifies> Drop for ReceiveReturns<P> {"
 
 [[wait]]
-id = "network-rx-servicing"
+id = "network-rx-courtesy"
 cfg = "feature = \"wifi\""
-waiter = "network service, further RX intake after publication to a registered lending consumer"
-served_by = "the runnable lending consumer processes a synchronous receive opportunity or cancels its registered wait"
-condition = "the consumer registers sources before advertising readiness; publication offers servicing only to that ready consumer; completion publishes physical returns before socket credit and clears the offer with a service wake"
-held = "queued and retained frames keep their existing loan owners; the servicing offer reserves no extra credit and does not wait for a retained owner; busy consumers advertise no promise"
-bound = "no local timeout: progress assumes the runnable consumer is polled or its wait is cancelled; one synchronous prefix ends the offer, independent of S31 ready-set order; only further RX is gated, while TX, returns, commands, deadlines and stop remain serviced"
+waiter = "network service, one RX-intake deferral after publication to a registered lending consumer"
+served_by = "the network service consumes every pending offer in its next shared packet pass; consumer completion may clear an unused offer earlier"
+condition = "publication records one offer for a registered consumer; the service consumes it once without waiting for that receive future; physical batch accounting precedes socket credit independently of the offer"
+held = "queued and retained frames keep their existing loan owners; the offer reserves no extra credit and cannot expire an owner; a saved future may remain unpolled"
+bound = "at most one intake pass per publication; all sockets' offers are consumed together; RX readiness stays visible and schedules the next pass independently of consumer polling or cancellation; TX, returns, commands, deadlines and stop remain serviced"
 state = "read"
 
 [[wait.evidence]]
 site = "protocols/network/runtime/src/socket/lent.rs"
 anchor = "fn offer(&self) {"
+
+[[wait.evidence]]
+site = "protocols/network/runtime/src/socket/lent.rs"
+anchor = "fn take_offer(&self) -> bool {"
 
 [[wait.evidence]]
 site = "protocols/network/runtime/src/socket/lent.rs"
@@ -743,7 +747,7 @@ anchor = "pub async fn receive_prefix("
 
 [[wait.evidence]]
 site = "protocols/network/runtime/src/service.rs"
-anchor = "if self.servicing() {"
+anchor = "if self.defer_intake() {"
 
 [[wait]]
 id = "network-stop"

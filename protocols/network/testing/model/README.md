@@ -46,8 +46,12 @@ contract. Additional cases use synchronous application prefixes and batched
 credit publication, including individually retained owners and the reverse
 task order. A consumer which cancels after publication or stays busy after a
 prefix cannot block RX or TX; genuine held/queued credit still bounds its
-delivery. The model continues to separate physical return, published credit
-and the service's collection, and checks all owners at retirement.
+delivery. The publication offer defers one intake pass only and is consumed
+by the service itself. Runtime regressions also keep an unfinished receive
+future unpolled while another copying or lending socket receives, and keep
+two such futures while ARP and stop progress. The model continues to separate
+physical return, published credit and the service's collection, and checks
+all owners at retirement.
 
 ## Station simulation
 

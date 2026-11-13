@@ -70,7 +70,7 @@ fn a_refusal_for_credit_counts_the_loans_then_out() {
 }
 
 #[test]
-fn return_servicing_counts_its_batches_and_the_credits_it_restored() {
+fn return_servicing_counts_batches_in_a_turn_and_a_wait() {
     #[derive(Debug)]
     struct Net;
     let probe = Probe::on();
@@ -79,17 +79,20 @@ fn return_servicing_counts_its_batches_and_the_credits_it_restored() {
         .iter()
         .filter(|event| matches!(event, ServiceEvent::Returned { .. }))
         .count();
-    assert_eq!(waiting, 2, "each drop was taken back by a pass of the wait");
+    assert_eq!(
+        waiting, 1,
+        "one drop is collected in the bounded packet continuation, one in a wait"
+    );
     assert_eq!(total.return_batches, 2);
     assert_eq!(total.credits_restored, 2, "both lent buffers' loans");
     assert_eq!(total.blocks_returned, 0, "no block came by a return");
     // A pass reads the clock around its return servicing.
-    assert_eq!(total.ticks(Stage::Waiting), 2);
+    assert_eq!(total.ticks(Stage::Waiting), waiting as u64);
     // A receive turn has no notices' or publication's stage.
     let receive = u64::from(total.turns) - total.ticks(Stage::Notices);
     assert_eq!(
         probe.0.borrow().clock,
-        7 * u64::from(total.turns) - 2 * receive + 2 * 2,
+        7 * u64::from(total.turns) - 2 * receive + 2 * waiting as u64,
         "seven reads a turn, five a receive turn, two a pass with returns"
     );
 }

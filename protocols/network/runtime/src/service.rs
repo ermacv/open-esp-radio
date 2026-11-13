@@ -1015,9 +1015,9 @@ impl<
         frames.turned(control, producer)
     }
 
-    /// Shared bounded frame work. It neither runs control nor waits for a
-    /// consumer: an explicit outstanding servicing promise gates intake
-    /// only, while notices, the producer and TX continue in the same order.
+    /// Shared bounded frame work. A publication may defer one intake pass;
+    /// notices, the producer and TX continue in the same order. No pass
+    /// waits for a consumer future to be polled or cancelled.
     fn frames(
         &mut self,
         now: Instant,
@@ -1025,7 +1025,7 @@ impl<
         tally: &mut Tally<D>,
     ) -> FrameWork {
         let intake = self.intake(now, events, tally);
-        let intake_full = intake.batch.end == BatchEnd::Limit && !self.servicing();
+        let intake_full = intake.batch.end == BatchEnd::Limit;
         tally.stage(Stage::Receive, &mut self.diagnostics);
         let mut told_all = false;
         for _ in 0..TURN_NOTICES {
@@ -1045,7 +1045,10 @@ impl<
         let end = self.publish(now, events, tally);
         // More may be ready past the budget; a declining fill kept the
         // producer's flow out of the rest of this turn only.
-        let packets = intake_full || end == PublishEnd::Budget || self.local.filtered().is_some();
+        let packets = intake_full
+            || end == PublishEnd::Budget
+            || self.local.filtered().is_some()
+            || (intake.lent != 0 && self.receive_offer_pending());
         tally.stage(Stage::Publish, &mut self.diagnostics);
         FrameWork {
             packets,
@@ -1080,9 +1083,13 @@ impl<
         // the core work a receive turn does not take (a reply to publish, a
         // copy to deliver, an address to publish): a full turn follows at
         // once. Anything else is named by a wake, which the wait reads.
+        let read = intake.read() != 0;
+        let offered = intake.lent != 0 && self.receive_offer_pending();
         Turned {
-            again: intake.read() != 0,
-            packets: false,
+            again: read || offered,
+            // A publication's bounded courtesy pass services shared TX work,
+            // too: it must not extend a receive-only sequence past TX returns.
+            packets: offered && !read,
         }
     }
 
@@ -1124,15 +1131,26 @@ impl<
             .fold(0_u32, |sum, lent| sum.saturating_add(lent.unreturned()))
     }
 
-    /// A consumer registered before this publication and has not yet
-    /// serviced it (or cancelled that wait). This gates RX alone: TX,
-    /// commands, deadlines, stop and memory returns keep their own progress.
-    fn servicing(&self) -> bool {
+    /// Consume every publication's one intake deferral in this pass. A
+    /// parked consumer cannot rearm it: only another publication can.
+    /// Consume all sockets' offers, even when an earlier one asked to defer,
+    /// so several parked consumers do not postpone successive passes.
+    fn defer_intake(&self) -> bool {
         self.bound
             .iter()
             .flatten()
             .filter_map(|bound| bound.lent.as_ref())
-            .any(LentEnd::servicing)
+            .fold(false, |defer, lent| lent.defer_intake() | defer)
+    }
+
+    /// A fresh publication asks for one shared packet pass after this turn,
+    /// so TX returns and offers are serviced along with the bounded deferral.
+    fn receive_offer_pending(&self) -> bool {
+        self.bound
+            .iter()
+            .flatten()
+            .filter_map(|bound| bound.lent.as_ref())
+            .any(LentEnd::offer_pending)
     }
 
     /// Take one batch of the port's ready frames: each through the core in
@@ -1145,7 +1163,7 @@ impl<
         events: &mut (impl EventSink<NetEvent> + EventSink<ServiceEvent>),
         tally: &mut Tally<D>,
     ) -> oer_protocols_network_core::Intake {
-        if self.servicing() {
+        if self.defer_intake() {
             return oer_protocols_network_core::Intake {
                 batch: oer_protocols_network_port::ReceivedBatch {
                     taken: 0,
@@ -1526,11 +1544,9 @@ impl<
             ready |= port.other;
             ready |= local.register(cx, events);
             let mut returned = false;
-            let mut servicing = false;
             for bound in bound.iter_mut().flatten() {
                 ready |= bound.poll_lanes(cx);
                 returned |= bound.poll_returns(cx);
-                servicing |= bound.lent.as_ref().is_some_and(LentEnd::servicing);
             }
             for late in adopted.iter_mut().flatten() {
                 returned |= late.poll(cx);
@@ -1546,7 +1562,10 @@ impl<
                 report(events, || ServiceEvent::Returned { work: taken.work });
                 ready |= taken.work;
             }
-            let received = port.received && !servicing;
+            // A saved consumer future never masks shared-port readiness.
+            // If intake just consumed a deferral, this ready source takes
+            // the normal bounded fairness yield and schedules the next pass.
+            let received = port.received;
             report(events, || ServiceEvent::Waited {
                 ready: ready || received,
             });

@@ -56,9 +56,9 @@ impl Returns {
     const READY: u32 = 1;
     const OFFERED: u32 = 2;
 
-    /// Only a consumer which registered its wait promises a servicing
-    /// opportunity. A busy consumer (possibly retaining buffers) promises
-    /// nothing, and cannot hold the service's intake back.
+    /// Only a registered consumer can request one intake deferral after a
+    /// publication. A pending child future may be kept without polling it,
+    /// so this readiness is never permission to wait for its completion.
     fn advertise(&self) {
         self.servicing.fetch_or(Self::READY, Ordering::AcqRel);
     }
@@ -77,6 +77,15 @@ impl Returns {
 
     fn servicing(&self) -> bool {
         self.servicing.load(Ordering::Acquire) & Self::OFFERED != 0
+    }
+
+    /// Consume the publication's one deferral. The next intake does not
+    /// depend on the consumer polling or cancelling its receive future.
+    fn take_offer(&self) -> bool {
+        if !self.servicing() {
+            return false;
+        }
+        self.servicing.fetch_and(!Self::OFFERED, Ordering::AcqRel) & Self::OFFERED != 0
     }
 
     /// The synchronous prefix ended (or its wait was cancelled). Payload
@@ -119,7 +128,7 @@ impl Drop for Back<'_> {
 }
 
 /// No ownership is taken by a pending receive. Ending or cancelling that
-/// wait releases its explicit servicing promise, independently of loans.
+/// wait withdraws its readiness and any unused deferral, independently of loans.
 struct Waiting<'a>(Option<&'a Returns>);
 impl Drop for Waiting<'_> {
     fn drop(&mut self) {
@@ -275,7 +284,11 @@ impl<'a, B, H, const RECEIVED: usize> LentEnd<'a, B, H, RECEIVED> {
         self.lent.flush();
     }
 
-    pub(crate) fn servicing(&self) -> bool {
+    pub(crate) fn defer_intake(&self) -> bool {
+        self.returns.take_offer()
+    }
+
+    pub(crate) fn offer_pending(&self) -> bool {
         self.returns.servicing()
     }
 
@@ -479,7 +492,7 @@ impl<
             ready |= pin!(self.socket.credits.stopped()).poll(cx).is_ready();
             // Every source is registered before advertising. Recheck after
             // it: an offer before the advertisement is seen in the queues;
-            // an offer after it sees the promise and wakes these registrations.
+            // an offer after it sees readiness and wakes these registrations.
             self.returns.advertise();
             ready |= !self.lent.is_empty()
                 || !inbound.datagrams.is_empty()
@@ -644,6 +657,53 @@ mod tests {
     }
 
     #[test]
+    fn a_publication_defers_once_without_polling_or_cancelling_the_waiter() {
+        struct Brand;
+        let mut ends = ends::<Brand>();
+        let cx = &mut core::task::Context::from_waker(core::task::Waker::noop());
+        let mut wait = Box::pin(ends.socket.receive_prefix(8, |_| true));
+        assert!(wait.as_mut().poll(cx).is_pending());
+        for _ in 0..2 {
+            let loan = ends.pool.loans().lend(0).unwrap();
+            assert!(
+                ends.lent
+                    .lend(
+                        LentDatagram {
+                            flow: 0,
+                            remote: PEER,
+                            data: 0..1,
+                            loan
+                        },
+                        &mut Some(Frame(std::vec![1]))
+                    )
+                    .is_ok()
+            );
+            ends.lent.flush();
+            assert!(ends.lent.defer_intake());
+            assert!(!ends.lent.defer_intake());
+            ends.lent.flush();
+            assert!(
+                !ends.lent.defer_intake(),
+                "a flush without new owners cannot rearm the offer"
+            );
+            assert_eq!(
+                ends.lent.returns.published(),
+                0,
+                "deferral returns no owner or credit"
+            );
+        }
+        assert_eq!(ends.pool.loans().outstanding(), 2);
+        drop(wait);
+        assert_eq!(ends.lent.returns.published(), 0);
+        assert!(matches!(
+            ends.socket.try_receive_prefix(8, |_| true),
+            Some(super::ReceivedPrefix::Lent(2))
+        ));
+        ends.lent.collect(ends.pool.loans());
+        assert!(ends.pool.loans().released());
+    }
+
+    #[test]
     fn replacing_a_prefix_cell_with_another_sockets_owner_keeps_both_accounts() {
         struct First;
         struct Second;
@@ -751,7 +811,7 @@ mod tests {
             assert!(sent.is_ok());
         }
         lent.flush();
-        assert!(lent.servicing());
+        assert!(lent.offer_pending());
         let waker = Waker::from(Arc::new(Observe {
             physical: physical.clone(),
             returns: lent.returns,
@@ -794,10 +854,10 @@ mod tests {
             );
         }
         ends.lent.flush();
-        assert!(ends.lent.servicing());
+        assert!(ends.lent.offer_pending());
         assert_eq!(ends.lent.unreturned(), 0);
         drop(next);
-        assert!(!ends.lent.servicing());
+        assert!(!ends.lent.offer_pending());
         assert_eq!(ends.pool.loans().outstanding(), 8);
         assert_eq!(
             ends.lent.unreturned(),

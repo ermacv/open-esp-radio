@@ -150,9 +150,9 @@ impl<
     }
 
     /// [`Self::try_receive_prefix`], waiting only until a prefix or close.
-    /// A registered wait promises one synchronous servicing opportunity;
-    /// the service defers further RX until this callback finishes, or the
-    /// wait is cancelled. No promise waits for a retained frame to return.
+    /// Publishing to a registered waiter can defer one service intake pass.
+    /// Its next pass proceeds even if this future is kept without polling
+    /// or cancelling it. Retained frames keep only their existing credit.
     pub async fn receive_prefix(
         &mut self,
         limit: usize,
@@ -163,7 +163,7 @@ impl<
             self.returns.active();
             if let Some(prefix) = self.try_receive_prefix(limit, &mut each) {
                 // The synchronous prefix already published returns and
-                // released the servicing promise together.
+                // withdrew readiness and any unused deferral together.
                 waiting.0 = None;
                 return Ok(prefix);
             }
