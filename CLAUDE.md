@@ -43,6 +43,11 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   automatically. Air, peer, host and API input return a handled error.
   [Operation results](docs/architecture.md#operation-results) is the
   decision procedure.
+- **Decisions are values.** A function another module calls to learn
+  whether a transition may happen never answers `bool` or a bare variant:
+  it returns the proof of the transition, or the value that names
+  everything blocking it, and it changes nothing while it answers. A
+  predicate of one fact inside its own module may be `bool`.
 - **Runtime panics.** Runtime code has zero panics; a change adds no runtime
   panic site. Compile-time panics and test assertions are allowed; a
   compile-time check is `const { if !cond { panic!("…") } }` as a const item
