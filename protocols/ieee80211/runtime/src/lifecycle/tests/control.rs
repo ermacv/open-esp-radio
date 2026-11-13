@@ -213,3 +213,64 @@ fn the_controls_cooperative_stop_retires_the_actor_and_publishes_the_last_notice
         |ends, _| assert!(stopped(ends)),
     );
 }
+
+/// The product's policy across a restart, as the station image runs it:
+/// the application's Connect names the network, a fault restarts the
+/// station, and the next installation joins that network with no command
+/// of the application's; a leave there is admitted and ends.
+#[test]
+fn a_restarted_station_reconnects_by_its_policy_and_its_leave_is_answered() {
+    pair(
+        || two_channels(open()),
+        std::vec![
+            script(|world| {
+                Box::pin(async move {
+                    world.with_control(|control| {
+                        control.configure_reconnect(
+                            ReconnectPolicy::every(Duration::from_secs(1)).unwrap(),
+                        )
+                    });
+                    let mut seen = 0;
+                    world.associate(&mut seen, false).await;
+                    world.connected().await;
+                    // The background scan's move is refused, and so is the
+                    // return home: the arbiter fails the station.
+                    world.air.refuse_enables(2);
+                    world.station_command(StaCommand::BackgroundScan).await;
+                })
+            }),
+            script(|world| {
+                Box::pin(async move {
+                    let mut seen = world.air.sent().len();
+                    world.heard.notices.borrow_mut().clear();
+                    // No command: the policy's Connect.
+                    world.join(&mut seen, beacon(false), false).await;
+                    world.connected().await;
+                    assert_eq!(
+                        world.status().link.state,
+                        oer_protocols_network_port::LinkState::Up
+                    );
+                    let mut control = world.control.borrow_mut().take().unwrap();
+                    let leave = control.disconnect().await.expect("the leave is admitted");
+                    *world.control.borrow_mut() = Some(control);
+                    world
+                        .notice(StaNotice::Disconnected(StaDisconnectReason::LocalRequest))
+                        .await;
+                    assert!(
+                        matches!(leave.await, OperationEnd::Completed(_)),
+                        "the leave ends"
+                    );
+                    world.stop().await;
+                })
+            }),
+        ],
+        |ends, _| {
+            assert_eq!(ends.len(), 2);
+            assert!(matches!(
+                ends[0].lifecycle.as_ref().unwrap().end,
+                LifecycleEnd::Restart(_)
+            ));
+            assert!(stopped(&ends[1..]));
+        },
+    );
+}
