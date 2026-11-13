@@ -291,12 +291,12 @@ A page never relaxes a rule above: where they differ, the rule above holds.
   never block the conversation.
 - **Pull requests.** Conventional Commit subjects (`fix(esp32s31): …`). Open
   the PR as a draft at the start, mark it ready when done (`gh pr ready`). The
-  owner or the architect merges, after reviewing the exact revision, repeating
-  its host checks and seeing a green CI run of that content; an executor never
-  merges. CI builds everything; nobody waits for it: a PR is ready when its
-  host checks pass. A red CI is fixed by whoever broke it. Rebase only on a
-  conflict or when main changed the same files. Cite commit hashes as `git`
-  prints them. Pass lists of paths as arrays, not one string.
+  owner or the architect merges, after reviewing the exact revision and
+  repeating its host checks; an executor never merges. CI builds everything;
+  nobody waits for it, a merge included: a PR is ready when its host checks
+  pass. A red CI is fixed by whoever broke it. Rebase only on a conflict or
+  when main changed the same files. Cite commit hashes as `git` prints them.
+  Pass lists of paths as arrays, not one string.
 - **GitHub.** Act only in the owner's repositories; upstream projects are
   read-only.
 - **Documents state the current state,** in English. No plans, history or
