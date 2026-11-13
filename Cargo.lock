@@ -100,15 +100,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomic-waker"
-version = "1.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
-dependencies = [
- "portable-atomic",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -669,21 +660,6 @@ name = "embassy-futures"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc2d050bdc5c21e0862a89256ed8029ae6c290a93aecefc73084b3002cdebb01"
-
-[[package]]
-name = "embassy-net"
-version = "0.9.1"
-source = "git+https://github.com/ermacv/embassy.git?rev=5638999eb53ef5a12417a2908ee7716295285e19#5638999eb53ef5a12417a2908ee7716295285e19"
-dependencies = [
- "document-features",
- "embassy-futures",
- "embassy-sync",
- "embassy-time",
- "embedded-io-async",
- "heapless",
- "xarxa",
- "xarxa-driver",
-]
 
 [[package]]
 name = "embassy-sync"
@@ -1389,7 +1365,6 @@ name = "oer-chips-esp32s31-app"
 version = "0.1.0"
 dependencies = [
  "embassy-futures",
- "embassy-net",
  "embassy-time",
  "heapless",
  "oer-chips-esp32s31-hal",
@@ -1404,7 +1379,6 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-platform-runtime",
  "oer-portable-diagnostics",
- "oer-portable-embassy-net",
  "oer-portable-embassy-time",
  "oer-portable-events",
  "oer-portable-memory",
@@ -1421,7 +1395,6 @@ dependencies = [
  "oer-protocols-network-runtime",
  "oer-protocols-network-wire",
  "static_cell",
- "xarxa",
 ]
 
 [[package]]
@@ -1592,7 +1565,6 @@ dependencies = [
  "oer-chips-family-platform-interrupt-table",
  "oer-chips-family-radio-coex",
  "oer-chips-family-radio-ieee80211-policy",
- "oer-portable-embassy-net",
  "oer-portable-events",
  "oer-portable-memory",
  "oer-portable-sync",
@@ -1721,7 +1693,6 @@ dependencies = [
 name = "oer-chips-family-app"
 version = "0.1.0"
 dependencies = [
- "oer-portable-embassy-net",
  "oer-portable-memory",
  "oer-portable-waker",
  "oer-protocols-network-port",
@@ -1957,6 +1928,7 @@ dependencies = [
  "oer",
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-radio-regulatory",
+ "static_cell",
  "toml",
 ]
 
@@ -2396,23 +2368,6 @@ dependencies = [
  "bytemuck",
  "oer-portable-trace",
  "oer-tools-test-ui-cases",
-]
-
-[[package]]
-name = "oer-portable-embassy-net"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "embassy-futures",
- "embassy-net",
- "embassy-time",
- "oer-portable-memory",
- "oer-portable-sync",
- "oer-portable-time",
- "oer-portable-time-virtual",
- "oer-protocols-network-port",
- "oer-protocols-network-wire",
- "xarxa-driver",
 ]
 
 [[package]]
@@ -4752,28 +4707,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
-]
-
-[[package]]
-name = "xarxa"
-version = "0.1.0"
-source = "git+https://github.com/ermacv/xarxa.git?rev=fbebde557a08278386b4e4043e2781ff4b863046#fbebde557a08278386b4e4043e2781ff4b863046"
-dependencies = [
- "bitflags 2.13.1",
- "bytemuck",
- "byteorder",
- "document-features",
- "heapless",
- "xarxa-driver",
-]
-
-[[package]]
-name = "xarxa-driver"
-version = "0.1.0"
-source = "git+https://github.com/ermacv/xarxa.git?rev=fbebde557a08278386b4e4043e2781ff4b863046#fbebde557a08278386b4e4043e2781ff4b863046"
-dependencies = [
- "atomic-waker",
- "document-features",
 ]
 
 [[package]]

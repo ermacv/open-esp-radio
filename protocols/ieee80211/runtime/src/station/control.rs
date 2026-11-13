@@ -14,20 +14,15 @@ use core::{
     task::{Context, Poll},
 };
 use embassy_futures::select::{Either, select};
-use oer_portable_memory::{
-    QueueNotify, SlotReceiver, SlotSender, WakingSpscReceiver, WakingSpscSender,
-};
+use oer_portable_memory::{QueueNotify, WakingSpscReceiver, WakingSpscSender};
 use oer_portable_sync::PriorityWaker;
 use oer_portable_time::connected_tasks::{
     ConnectedTaskControlError, ConnectedTaskControlResources, ConnectedTaskController,
     ConnectedTaskEndpoint, ConnectedTaskGroup,
 };
-use oer_protocols_bridges_ieee80211_ethernet::qos::classify_wmm;
-use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MAX_ETHERNET_PAYLOAD_LEN};
+use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::machine::StaProfile;
-use oer_protocols_network_port::{
-    LinkSnapshot, LinkState, NetDevice, NetTransmit, TransmitError, TransmitRefused,
-};
+use oer_protocols_network_port::{LinkSnapshot, LinkState, NetDevice};
 
 /// Latest product state. Events and command owners still reach the callback once.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -570,40 +565,6 @@ impl<K, O: ServiceOutputSink<K>, N: Notifies> ServiceOutputSink<K> for Events<'_
     }
 }
 
-/// The network's memory the station's data MSDUs come in, as the network
-/// end holds it: the memory a frame `P` is handed over in, and the memory
-/// the station gives back once an MSDU ended.
-pub trait TxSupply<P> {
-    /// The memory the station holds for one MSDU
-    /// ([`DatapathPort::TxMemory`](crate::datapath::DatapathPort::TxMemory)).
-    type Memory;
-    /// Whether the frame [`Self::write`] last refused for want of memory
-    /// may go now: memory came back since, or none was refused.
-    fn available(&self) -> bool;
-    /// Hand `frame` over in memory, its Ethernet header where the data
-    /// machine reads it
-    /// ([`MSDU_ETHERNET_OFFSET`](oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET)):
-    /// the memory it was written in, or free memory it is copied into.
-    ///
-    /// # Errors
-    ///
-    /// No free memory for a copy ([`TransmitError::QueueFull`]) or a frame
-    /// the memory does not hold ([`TransmitError::InvalidLength`]) keeps the
-    /// frame; a pool that refuses its own written memory loses both.
-    fn write(&mut self, frame: P) -> Result<Self::Memory, TxRefused<P>>;
-    /// Memory the station gave back, its MSDU ended: free again.
-    fn give(&mut self, memory: Self::Memory);
-}
-
-/// A frame [`TxSupply::write`] did not hand over.
-pub enum TxRefused<P> {
-    /// The frame stays the caller's, and the memory free.
-    Kept(TransmitRefused<P>),
-    /// The pool refused the memory the frame was written in: frame and
-    /// memory left the network's reach, the memory quarantined.
-    Lost,
-}
-
 /// The Wi-Fi implementation of the neutral Ethernet contract's link and
 /// receive half. `L` is the port's lent receive buffer
 /// ([`DatapathPort::LentRx`](crate::datapath::DatapathPort::LentRx)).
@@ -669,167 +630,6 @@ impl<L: oer_protocols_ieee80211_contracts_port::LentRxBuffer, const RX: usize, N
             .try_receive()
             .ok_or(oer_protocols_network_port::FrameLengthError::MissingCopy)?;
         oer_protocols_network_port::EthernetFrame::view(&mut copy).map(read)
-    }
-}
-
-/// What a network's transmit end reads of its link: whether it is up.
-pub trait LinkView {
-    fn snapshot(&self) -> LinkSnapshot;
-}
-
-impl<W: oer_portable_memory::QueueNotify> LinkView for super::NetworkLink<W> {
-    fn snapshot(&self) -> LinkSnapshot {
-        super::NetworkLink::snapshot(self)
-    }
-}
-
-/// The Wi-Fi implementation of the neutral Ethernet contract's transmit
-/// half, for a station's or an access point's MAC. `P` is the network
-/// stack's packet a transmission hands over, `S` the memory its frame goes
-/// into for the MAC and `K` the link it reads.
-pub struct DeviceTransmit<
-    'c,
-    P,
-    S: TxSupply<P>,
-    const TX: usize,
-    N: Notifies = SameHart,
-    K: LinkView + 'c = super::NetworkLink<<N as Notifies>::NetworkWaker>,
-> {
-    /// The frames for the station, each in the network's memory, where the
-    /// station writes its MPDU header in place.
-    transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
-    /// The memory the station gave back, free for the next frames.
-    returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
-    supply: S,
-    link: &'c K,
-    packet: core::marker::PhantomData<fn(P)>,
-}
-impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies> DeviceTransmit<'c, P, S, TX, N> {
-    /// The network end over the station's transmit channels and `state`'s
-    /// link.
-    pub fn new(
-        transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
-        returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
-        supply: S,
-        state: &'c State<N>,
-    ) -> Self {
-        Self::with_link(transmit, returned, supply, state.network_link())
-    }
-}
-impl<'c, P, S: TxSupply<P>, const TX: usize, N: Notifies, K: LinkView + 'c>
-    DeviceTransmit<'c, P, S, TX, N, K>
-{
-    /// The network end over a MAC's transmit channels and `link`.
-    pub fn with_link(
-        transmit: SlotSender<'c, Option<super::Outgoing<S::Memory>>, TX, N::Station, N::Network>,
-        returned: SlotReceiver<'c, Option<super::TxEnded<S::Memory>>, TX, N::Network, N::Station>,
-        supply: S,
-        link: &'c K,
-    ) -> Self {
-        Self {
-            transmit,
-            returned,
-            supply,
-            link,
-            packet: core::marker::PhantomData,
-        }
-    }
-    /// Take back every memory the station returned, here on the network's
-    /// executor.
-    fn take_returned(&mut self) {
-        while let Ok(Some(ended)) = self.returned.try_receive_with(Option::take) {
-            self.supply.give(ended.memory);
-        }
-    }
-}
-impl<
-    'c,
-    P: oer_protocols_network_port::EthernetFrame,
-    S: TxSupply<P>,
-    const TX: usize,
-    N: Notifies,
-    K: LinkView + 'c,
-> NetTransmit for DeviceTransmit<'c, P, S, TX, N, K>
-{
-    type Frame = P;
-    fn reclaim(&mut self) {
-        self.take_returned();
-    }
-    fn has_room(&mut self) -> bool {
-        self.supply.available() && self.transmit.free_capacity() != 0
-    }
-    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        loop {
-            self.take_returned();
-            if core::pin::pin!(self.returned.ready()).poll(cx).is_pending() {
-                break;
-            }
-        }
-        if !self.supply.available() {
-            return Poll::Pending;
-        }
-        core::pin::pin!(self.transmit.ready()).poll(cx)
-    }
-    fn flush(&mut self) {
-        self.transmit.flush();
-    }
-    fn try_transmit(&mut self, mut frame: P) -> Result<(), TransmitRefused<P>> {
-        let checked = if self.link.snapshot().state == LinkState::Down {
-            Err(TransmitError::LinkDown)
-        } else if self.transmit.free_capacity() == 0 {
-            Err(TransmitError::QueueFull)
-        } else {
-            frame
-                .view()
-                .map_err(TransmitError::InvalidLength)
-                .and_then(|view| {
-                    if view.payload.len() > MAX_ETHERNET_PAYLOAD_LEN {
-                        return Err(TransmitError::InvalidLength(
-                            oer_protocols_network_port::FrameLengthError::TooLong,
-                        ));
-                    }
-                    // The frame requests a priority from its VLAN or IP
-                    // marking; the station decides the final one.
-                    let priority = classify_wmm(view.ether_type, view.payload).user_priority;
-                    // Header and payload: at most 14 + MAX_ETHERNET_PAYLOAD_LEN.
-                    let length = view
-                        .payload
-                        .len()
-                        .checked_add(14)
-                        .and_then(|length| u16::try_from(length).ok())
-                        .ok_or(TransmitError::InvalidLength(
-                            oer_protocols_network_port::FrameLengthError::TooLong,
-                        ))?;
-                    Ok((length, priority))
-                })
-        };
-        let (length, priority) = match checked {
-            Ok(checked) => checked,
-            Err(reason) => return Err(TransmitRefused { frame, reason }),
-        };
-        // The frame's memory goes to the station; the packet itself ends
-        // here, on the network's executor.
-        let memory = match self.supply.write(frame) {
-            Ok(memory) => memory,
-            Err(TxRefused::Kept(refused)) => return Err(refused),
-            // Accepted, then lost with its memory, as a frame lost on air.
-            Err(TxRefused::Lost) => return Ok(()),
-        };
-        let mut outgoing = Some(super::Outgoing {
-            memory,
-            length,
-            priority,
-        });
-        let _sent = self.transmit.try_send_held_with(|slot| {
-            *slot = outgoing.take();
-            Ok::<_, core::convert::Infallible>(())
-        });
-        if let Some(outgoing) = outgoing {
-            // The room was checked above: a broken queue keeps the memory
-            // quarantined rather than reused under the station.
-            let _quarantined = core::mem::ManuallyDrop::new(outgoing);
-        }
-        Ok(())
     }
 }
 

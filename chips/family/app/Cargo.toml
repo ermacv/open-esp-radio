@@ -13,7 +13,6 @@ description = "What the family's application entry shares across chips: the boot
 observe = []
 
 [dependencies]
-oer-portable-embassy-net = { path = "../../../portable/embassy/net" }
 oer-portable-memory = { path = "../../../portable/memory" }
 oer-protocols-network-port = { path = "../../../protocols/network/port" }
 oer-portable-waker = { path = "../../../portable/waker" }

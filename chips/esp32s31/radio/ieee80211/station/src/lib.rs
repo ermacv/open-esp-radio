@@ -22,7 +22,7 @@ pub use credentials::{
 };
 use oer_portable_memory::{QueueNotify as _, WakingSpscQueue};
 use oer_protocols_ieee80211_runtime::station as runtime;
-use oer_protocols_network_port::{LinkSnapshot, NetDevice, NetTransmit, TransmitRefused};
+use oer_protocols_network_port::{LinkSnapshot, NetDevice};
 pub use runtime::StopPolicy;
 pub use runtime::{ControlError, OperationEnd};
 
@@ -287,25 +287,6 @@ type EthernetCopy = oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 pub struct Network<'a, N: Notifies> {
     inner: runtime::Device<'a, LentRx<N>, RX_DEPTH, Ch<N>>,
 }
-/// Affine neutral Ethernet transmit end over the network stack's packets
-/// `P`, whose frames go into the network's transmit memory `S`.
-pub struct NetworkTransmit<'a, N: Notifies, P, S: runtime::TxSupply<P>> {
-    inner: runtime::DeviceTransmit<'a, P, S, TX_DEPTH, Ch<N>>,
-}
-impl<'a, N: Notifies, P, S: runtime::TxSupply<P>> NetworkTransmit<'a, N, P, S> {
-    /// The transmit end over `queues` and the free memory `supply`, which
-    /// takes the stack's packets `P`.
-    pub fn over(queues: TxQueues<'a, N, S::Memory>, supply: S) -> Self {
-        Self {
-            inner: runtime::DeviceTransmit::new(
-                queues.transmit,
-                queues.returned,
-                supply,
-                queues.state,
-            ),
-        }
-    }
-}
 /// The network's ends of the station's transmit queues, and the link they
 /// serve: the queue a frame goes to the station by, the queue its memory
 /// comes back by.
@@ -325,26 +306,6 @@ pub struct TxQueues<'a, N: Notifies, M> {
         Station<N>,
     >,
     pub state: &'a runtime::State<Ch<N>>,
-}
-impl<N: Notifies, P: oer_protocols_network_port::EthernetFrame, S: runtime::TxSupply<P>> NetTransmit
-    for NetworkTransmit<'_, N, P, S>
-{
-    type Frame = P;
-    fn reclaim(&mut self) {
-        self.inner.reclaim();
-    }
-    fn has_room(&mut self) -> bool {
-        self.inner.has_room()
-    }
-    fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        self.inner.poll_room(cx)
-    }
-    fn try_transmit(&mut self, frame: P) -> Result<(), TransmitRefused<P>> {
-        self.inner.try_transmit(frame)
-    }
-    fn flush(&mut self) {
-        self.inner.flush();
-    }
 }
 /// One received MSDU: in the station's receive buffer, or the mark of a
 /// copy [`Network`] keeps.
@@ -862,8 +823,8 @@ pub mod policy;
 mod supply;
 #[cfg(target_arch = "riscv32")]
 pub use supply::{
-    FRAME_WORD_OFFSET, LocalEnd, LocalTransmit, NETWORK_BUFFERS, NetworkTx, NetworkTxEnd,
-    NetworkTxSupply, SupplyEnd, TxMemory, TxPublishRefused, TxPublisher, TxSlot,
+    FRAME_WORD_OFFSET, LocalEnd, LocalTransmit, NETWORK_BUFFERS, NetworkTx, NetworkTxEnd, TxMemory,
+    TxPublishRefused, TxPublisher, TxSlot,
 };
 #[cfg(any(test, target_arch = "riscv32"))]
 mod prepare;
@@ -1038,7 +999,6 @@ pub use actor::{RadioActor, RadioResources, WifiHardware};
 )]
 mod tests {
     extern crate std;
-    use self::std::{cell::Cell, rc::Rc};
     use super::*;
     #[test]
     fn a_read_takes_the_count_and_the_cause_of_one_restart() {
@@ -1063,44 +1023,6 @@ mod tests {
         );
     }
 
-    struct Packet(Rc<Cell<usize>>);
-    impl Drop for Packet {
-        fn drop(&mut self) {
-            self.0.set(self.0.get() + 1);
-        }
-    }
-    impl oer_protocols_network_port::EthernetFrame for Packet {
-        fn view(
-            &mut self,
-        ) -> Result<
-            oer_protocols_network_port::EthernetFrameView<'_>,
-            oer_protocols_network_port::FrameLengthError,
-        > {
-            Ok(oer_protocols_network_port::EthernetFrameView {
-                destination: [2; 6],
-                source: [4; 6],
-                ether_type: 0x0800,
-                payload: &[7, 8],
-            })
-        }
-    }
-    /// No free memory: the tests' network sends nothing.
-    struct NoMemory;
-    impl<P> runtime::TxSupply<P> for NoMemory {
-        type Memory = ();
-        fn available(&self) -> bool {
-            false
-        }
-        fn write(&mut self, frame: P) -> Result<(), runtime::TxRefused<P>> {
-            Err(runtime::TxRefused::Kept(
-                oer_protocols_network_port::TransmitRefused {
-                    frame,
-                    reason: oer_protocols_network_port::TransmitError::QueueFull,
-                },
-            ))
-        }
-        fn give(&mut self, (): ()) {}
-    }
     #[test]
     fn a_stopper_reports_its_stop_and_a_dropped_one_is_a_lost_participant() {
         use runtime::NetworkStop as _;
@@ -1118,9 +1040,7 @@ mod tests {
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
         state.reset();
         let mut channels = Channels::<SameHart, ()>::new();
-        let (_, network, transmit, _, _) = channels
-            .split(|queues| NetworkTransmit::<_, Packet, _>::over(queues, NoMemory))
-            .unwrap();
+        let (_, network, transmit, _, _) = channels.split(|_queues| ()).unwrap();
         assert!(state.takes_frames());
         NetworkStopper { state: &state }.no_network(network, transmit);
         assert_eq!(state.poll_stopped(&mut cx), Poll::Ready(Ok(())));
@@ -1136,23 +1056,11 @@ mod tests {
     #[test]
     fn control_and_neutral_device_exist_before_installation_without_minting_a_link_or_consuming_refused_owners()
      {
-        let mut channels = Channels::new();
-        let (mut control, mut net, mut transmit, _stopper, connection) = channels
-            .split(|queues| NetworkTransmit::<_, Packet, _>::over(queues, NoMemory))
-            .unwrap();
+        let mut channels = Channels::<SameHart, ()>::new();
+        let (mut control, mut net, _transmit, _stopper, connection) =
+            channels.split(|_queues| ()).unwrap();
         assert_eq!(control.link(), LinkSnapshot::DOWN);
         assert_eq!(net.link(), LinkSnapshot::DOWN);
-        let dropped = Rc::new(Cell::new(0));
-        let refused = transmit
-            .try_transmit(Packet(dropped.clone()))
-            .err()
-            .unwrap();
-        assert_eq!(
-            refused.reason,
-            oer_protocols_network_port::TransmitError::LinkDown
-        );
-        assert!(Rc::ptr_eq(&refused.frame.0, &dropped));
-        assert_eq!(dropped.get(), 0);
         let credentials =
             embassy_futures::block_on(crate::StationSettings::open(b"lab").unwrap().prepare())
                 .unwrap();
@@ -1205,8 +1113,6 @@ mod tests {
             embassy_futures::block_on(control.wait_stopped()),
             Err(RunnerLost)
         );
-        drop(refused.frame);
-        assert_eq!(dropped.get(), 1);
     }
     #[test]
     fn the_published_exit_is_a_copy_waiters_read_once_it_exists() {
@@ -1240,9 +1146,8 @@ mod tests {
         let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
         let waker = core::task::Waker::from(wakes.clone());
         let mut channels = Channels::<SameHart, ()>::new();
-        let (mut control, _network, _transmit, _stopper, connection) = channels
-            .split(|queues| NetworkTransmit::<_, Packet, _>::over(queues, NoMemory))
-            .unwrap();
+        let (mut control, _network, _transmit, _stopper, connection) =
+            channels.split(|_queues| ()).unwrap();
         let mut cx = Context::from_waker(&waker);
         {
             let mut waiting = core::pin::pin!(control.wait_started());

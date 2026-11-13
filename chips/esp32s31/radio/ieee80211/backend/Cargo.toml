@@ -38,7 +38,6 @@ default = []
 test-support = ["oer-chips-esp32s31-hal/test-support", "oer-chips-family-platform-interrupt-table/host-signal"]
 
 [dev-dependencies]
-oer-portable-embassy-net = { path = "../../../../../portable/embassy/net" }
 oer-chips-family-radio-coex = { path = "../../../../family/radio/coex" }
 oer-chips-esp32s31-hal = { path = "../../../hal", features = ["test-support"] }
 oer-protocols-ieee80211-wire = { path = "../../../../../protocols/ieee80211/wire", features = ["test-support"] }

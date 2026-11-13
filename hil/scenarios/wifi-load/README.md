@@ -67,8 +67,7 @@ share, each named part's polls (tasks, the station work's and the network's
 futures and the datapath actor's spans: count, rate, share of the window
 with an open poll's part, and the mean and longest of the ended polls), and
 the window's counters (the boot hart's cycles and retired instructions, their
-rate per microsecond and per cycle, the network bridge's taken and refused
-frames, the datagrams the network delivered with the hart's instructions over
+rate per microsecond and per cycle, the datagrams the network delivered with the hart's instructions over
 them, the L1 cache's `cache` counts and the receive path's `rx` counts), and
 hart 1's own counters in `hart1`.
 The idle baseline records the parts, counters, link and PHY tracking too.

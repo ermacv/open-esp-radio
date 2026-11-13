@@ -34,82 +34,6 @@ pub mod tracking;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Concurrent;
 
-/// What the network bridge did with the station's frames: the frames it
-/// took, those the stack refused for want of a pool packet, of queue room
-/// or for their length or a down link, and those the station lent in place
-/// and the bridge copied after all.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Bridge {
-    pub received: u32,
-    pub refused_pool: u32,
-    pub refused_queue: u32,
-    pub refused_other: u32,
-    pub copied: u32,
-}
-
-/// The network bridge's counts; the IP service is their one writer, and a
-/// reader takes each word on its own.
-pub struct BridgeCounter {
-    /// Received, refused for the pool, the queue and otherwise, copied.
-    counts: [core::sync::atomic::AtomicU32; 5],
-}
-
-impl BridgeCounter {
-    pub const fn new() -> Self {
-        Self {
-            counts: [const { core::sync::atomic::AtomicU32::new(0) }; 5],
-        }
-    }
-
-    /// The bridge took a frame from the station.
-    pub fn received(&self) {
-        self.bump(0);
-    }
-
-    /// The stack refused a frame for `reason`.
-    pub fn refused(&self, reason: oer_portable_embassy_net::RxEnqueueError) {
-        use oer_portable_embassy_net::RxEnqueueError;
-        self.bump(match reason {
-            RxEnqueueError::PoolExhausted => 1,
-            RxEnqueueError::QueueFull => 2,
-            RxEnqueueError::InvalidLength(_) | RxEnqueueError::LinkDown => 3,
-        });
-    }
-
-    /// The bridge copied a frame the station lent in place.
-    pub fn copied(&self) {
-        self.bump(4);
-    }
-
-    fn bump(&self, index: usize) {
-        if let Some(count) = self.counts.get(index) {
-            bump(count, 1);
-        }
-    }
-
-    /// The counts now.
-    pub fn read(&self) -> Bridge {
-        use core::sync::atomic::Ordering;
-        let [received, refused_pool, refused_queue, refused_other, copied] = self
-            .counts
-            .each_ref()
-            .map(|count| count.load(Ordering::Relaxed));
-        Bridge {
-            received,
-            refused_pool,
-            refused_queue,
-            refused_other,
-            copied,
-        }
-    }
-}
-
-impl Default for BridgeCounter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Add `by` to `count`, wrapping; only its one writer calls it.
 fn bump(count: &core::sync::atomic::AtomicU32, by: u32) {
     use core::sync::atomic::Ordering;
@@ -118,6 +42,3 @@ fn bump(count: &core::sync::atomic::AtomicU32, by: u32) {
         Ordering::Relaxed,
     );
 }
-
-#[cfg(test)]
-mod tests;

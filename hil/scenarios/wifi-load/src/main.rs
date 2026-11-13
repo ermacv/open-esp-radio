@@ -692,7 +692,7 @@ fn hart1(hart1: &Hart1Window, window_us: u64) -> serde_json::Value {
 
 /// The window's counters: the image's measured hart's cycles and retired
 /// instructions with their rate per microsecond (MHz) and per cycle, what
-/// the network bridge did with the station's frames, the datagrams the
+/// the datagrams the
 /// network delivered with the hart's instructions over them, and the L1 cache's
 /// accesses by bus ([`cache`]), and the receive path's counts as the image
 /// took them: the S31 driver's and the station service's receive
@@ -707,13 +707,6 @@ fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
         "instructions": counters.instructions,
         "cycles_per_us": round(cycles / window),
         "instructions_per_cycle": (counters.cycles != 0).then(|| round(instructions / cycles)),
-        "bridge": {
-            "received": counters.bridge_received,
-            "refused_pool": counters.bridge_refused_pool,
-            "refused_queue": counters.bridge_refused_queue,
-            "refused_other": counters.bridge_refused_other,
-            "copied": counters.bridge_copied,
-        },
         "stack_received": counters.stack_received,
         "instructions_per_stack_frame": (counters.stack_received != 0)
             .then(|| round(instructions / f64::from(counters.stack_received))),
@@ -2260,8 +2253,6 @@ mod tests {
             &Counters {
                 cycles: 1_600_000_000,
                 instructions: 480_000_000,
-                bridge_received: 900,
-                bridge_refused_pool: 400,
                 stack_received: 500,
                 ..Counters::default()
             },
@@ -2270,7 +2261,6 @@ mod tests {
         assert_eq!(value["cycles_per_us"], 320.0);
         assert_eq!(value["instructions_per_cycle"], 0.3);
         assert_eq!(value["instructions_per_stack_frame"], 960_000.0);
-        assert_eq!(value["bridge"]["refused_pool"], 400);
         let none = counters(&Counters::default(), 5_000_000);
         assert_eq!(none["rx"]["driver"]["available"], false);
         assert_eq!(none["rx"]["station"]["agreement_window"], 0);

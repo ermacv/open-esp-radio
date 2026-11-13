@@ -34,6 +34,7 @@ use oer_portable_memory::ClaimCell;
 use static_cell::ConstStaticCell;
 
 use super::{Boot, Error, SamplerToken};
+use crate::observe::Concurrent;
 use crate::observe::addba::{Addba, AddbaCounter, Outcome, Request};
 use crate::observe::connect::{
     Connect, ConnectCounter, Heard, Probe, ScanStep, Stage, Step, Visit,
@@ -42,7 +43,6 @@ use crate::observe::cpu::{Boundary, CpuCounter, ExecutorSample, Phase};
 use crate::observe::link::{Containment, LinkCounter, Positions, Rate, Settled, TxEnd};
 use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartReading};
 use crate::observe::tracking::{Branches, Ran, Tick, TrackingCounter, TrackingSample};
-use crate::observe::{Bridge, BridgeCounter, Concurrent};
 
 pub use crate::observe::link::{Link, TxAmpdu};
 pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
@@ -74,7 +74,6 @@ static EPOCH: AtomicU32 = AtomicU32::new(0);
 static TRACKING: TrackingCounter = TrackingCounter::new();
 static LINK: LinkCounter = LinkCounter::new();
 static CONNECT: ConnectCounter = ConnectCounter::new();
-static BRIDGE: BridgeCounter = BridgeCounter::new();
 /// The ADDBA Requests the station took; the station service on hart 0 is
 /// their one writer.
 static ADDBA: AddbaCounter = AddbaCounter::new();
@@ -171,11 +170,9 @@ impl StationRxCounts {
     }
 }
 
-/// What the station, its driver and the network bridge counted, each word
-/// read on its own.
+/// What the station and its driver counted, each word read on its own.
 #[derive(Clone, Copy, Debug)]
 pub struct Counters {
-    pub bridge: Bridge,
     pub station_rx: StationRxCounts,
     pub ampdu: TxAmpdu,
     pub link: Link,
@@ -192,7 +189,6 @@ pub struct Counters {
 pub fn counters() -> Counters {
     let load = |count: &AtomicU32| count.load(Ordering::Relaxed);
     Counters {
-        bridge: BRIDGE.read(),
         station_rx: StationRxCounts {
             counts: STATION.each_ref().map(load),
             agreements_started: load(&STARTED),

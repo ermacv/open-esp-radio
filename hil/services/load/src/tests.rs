@@ -147,11 +147,6 @@ fn the_largest_reports_fit_one_response() {
     let counters = CountersCollected::Report(Counters {
         cycles: u64::MAX,
         instructions: u64::MAX,
-        bridge_received: u32::MAX,
-        bridge_refused_pool: u32::MAX,
-        bridge_refused_queue: u32::MAX,
-        bridge_refused_other: u32::MAX,
-        bridge_copied: u32::MAX,
         stack_received: u32::MAX,
         cache: full_cache(),
         cache_geometry: full_geometry(),
