@@ -8,7 +8,7 @@
 use super::*;
 use core::future::poll_fn;
 use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts, WmmUserPriority};
-use oer_protocols_network_port::NetTransmit;
+use oer_protocols_network_port::OwnedTransmit;
 
 const GROUP: [u8; 6] = [0xff; 6];
 
@@ -45,6 +45,19 @@ pub(super) fn data_mpdus(air: &oer_protocols_ieee80211_testing_model::ModelAir) 
         })
         .map(|frame| frame.plaintext.clone())
         .collect()
+}
+
+/// The network's frame to `$destination`, written through `$transmit` and
+/// taken from `$runner`'s queue before any turn of the runner: its memory.
+macro_rules! written {
+    ($runner:ident, $transmit:ident, $destination:expr) => {{
+        assert!($transmit.try_transmit(frame($destination)).is_ok());
+        $transmit.flush();
+        let Some(outgoing) = $runner.homes.network.take() else {
+            panic!("the network's frame waits for the runner");
+        };
+        outgoing.memory
+    }};
 }
 
 /// Start the radio of `$runner` and turn it until it serves its BSS: the
@@ -101,9 +114,9 @@ fn a_group_frame_moves_its_payload_two_octets_once_and_its_memory_comes_back() {
         let script = async {
             counted.idle(64).await;
             assert!(shared.status().running);
-            let memory = supply.next();
             assert!(transmit.try_transmit(frame(GROUP)).is_ok());
             transmit.flush();
+            let memory = supply.last();
             for _ in 0..8 {
                 counted.advance(&air, Duration::from_millis(1)).await;
             }
@@ -174,21 +187,16 @@ fn a_refusal_draws_no_number_and_returns_the_memory_whole() {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, supply, _shared);
         let now = || oer_portable_time::Clock::now(&*counted.clock);
-        let written = |destination| {
-            let Ok(memory) = crate::station::TxSupply::<EthernetFrame>::write(
-                &mut supply.clone(),
-                frame(destination),
-            ) else {
-                panic!("the network writes its frame");
-            };
-            memory
-        };
         let length = 14 + payload().len();
         let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
         assert!(started.is_ok());
         // No group key yet: a group frame is refused before anything is
         // numbered or written.
-        let memory = written(GROUP);
+        // The test carries the frame from the network's queue itself: the
+        // BSS carries data for it, as it would once serving.
+        runner.homes.network.set_link(true);
+        let memory = written!(runner, transmit, GROUP);
+        runner.homes.network.set_link(false);
         let before = memory.clone();
         let sequence = runner.homes.engine.service().current_data_sequence();
         let back = refused!(runner, memory, length);
@@ -197,7 +205,7 @@ fn a_refusal_draws_no_number_and_returns_the_memory_whole() {
             runner.homes.engine.service().current_data_sequence(),
             sequence
         );
-        crate::station::TxSupply::<EthernetFrame>::give(&mut supply.clone(), back);
+        assert!(runner.homes.network.give_back(back).is_ok());
         transmit.reclaim();
         assert_eq!(supply.free(), super::super::network::AP_TX_DEPTH);
     }));
@@ -215,15 +223,6 @@ fn a_frame_refused_before_or_at_the_port_returns_its_memory_and_draws_nothing_be
         fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, supply, _shared);
         let now = || oer_portable_time::Clock::now(&*counted.clock);
         serving!(runner, counted, air);
-        let written = |destination| {
-            let Ok(memory) = crate::station::TxSupply::<EthernetFrame>::write(
-                &mut supply.clone(),
-                frame(destination),
-            ) else {
-                panic!("the network writes its frame");
-            };
-            memory
-        };
         let length = 14 + payload().len();
         let numbers = || {
             runner
@@ -234,7 +233,7 @@ fn a_frame_refused_before_or_at_the_port_returns_its_memory_and_draws_nothing_be
         };
         let packet_number = numbers();
         assert!(packet_number.is_some(), "the group key is in");
-        let memory = written(PEER);
+        let memory = written!(runner, transmit, PEER);
         let before = memory.clone();
         let sequence = runner.homes.engine.service().current_data_sequence();
         let back = refused!(runner, memory, length);
@@ -252,10 +251,11 @@ fn a_frame_refused_before_or_at_the_port_returns_its_memory_and_draws_nothing_be
             packet_number,
             "no packet number drawn"
         );
-        crate::station::TxSupply::<EthernetFrame>::give(&mut supply.clone(), back);
+        assert!(runner.homes.network.give_back(back).is_ok());
+        transmit.reclaim();
         // A group frame admitted, then refused by the port's submission.
-        let at = supply.next();
-        let memory = written(GROUP);
+        let memory = written!(runner, transmit, GROUP);
+        let at = supply.last();
         let ticket = runner.homes.tickets.pop().unwrap();
         let index = ticket.index();
         let buffer = runner.port.network_buffer(memory);

@@ -56,7 +56,7 @@ impl TxPool for Pool {
 
 const SLOTS: usize = 2;
 const TX: usize = 2;
-type Tx<'c> = LocalTx<'c, Pool, SLOTS, TX, SameHart>;
+type Tx<'c> = LocalTx<'c, Pool, SLOTS, TX, SameHart, crate::station::NetworkLink>;
 type Queue = WakingSlotQueue<Option<Outgoing<Buffer>>, TX>;
 type Back = WakingSlotQueue<Option<TxEnded<Buffer>>, TX>;
 
@@ -566,7 +566,7 @@ fn every_buffer_given_is_held() {
         })
         .collect();
     let mut kept = LocalTxState::<Tracked, SLOTS>::new();
-    let mut tx: LocalTx<'_, Kept, SLOTS, TX, SameHart> =
+    let mut tx: LocalTx<'_, Kept, SLOTS, TX, SameHart, crate::station::NetworkLink> =
         LocalTx::new(sender, back, Kept, &mut kept, slots, state.network_link());
     assert_eq!(dropped.load(Ordering::SeqCst), 0, "no buffer is dropped");
     assert_eq!(tx.buffers(), SLOTS, "every buffer is the network's");

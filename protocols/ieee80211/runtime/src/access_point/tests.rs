@@ -228,12 +228,9 @@ macro_rules! fixture {
             GroupKeyId::new(GROUP_KEY_ID).unwrap(),
         );
         let network = Box::leak(Box::new(ApNetworkStorage::new()));
-        let $supply = ModelTx::empty();
-        let ($device, mut $transmit, end) = network
-            .split::<oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame, _, _, _>(
-                ModelTx::memories(),
-                |memories| $supply.filled(memories),
-            );
+        let state = Box::leak(Box::new(crate::station::LocalTxState::new()));
+        let ($supply, slots) = ModelTx::new();
+        let ($device, mut $transmit, end) = network.split($supply.clone(), state, slots);
         let mut $runner = ApRunner::new(
             port,
             commands,
@@ -250,81 +247,152 @@ macro_rules! fixture {
     };
 }
 
-/// The network's transmit memory over the model: [`AP_TX_DEPTH`] memories,
-/// each frame copied into a free one where the access point reads its
-/// Ethernet header, as the stack's packets are written into theirs.
+/// The network's transmit pool over the model: [`AP_TX_DEPTH`] memories,
+/// each a buffer whose octets start where the access point reads a frame's
+/// Ethernet header. The handle the test keeps beside the network's end
+/// counts what is out and keeps a copy of each memory as it came home.
 #[derive(Clone)]
-struct ModelTx(Rc<core::cell::RefCell<Vec<ModelNetworkMemory>>>);
+struct ModelTx(Rc<core::cell::RefCell<ModelHomes>>);
 
-impl ModelTx {
-    fn empty() -> Self {
-        Self(Rc::new(core::cell::RefCell::new(Vec::new())))
-    }
-
-    /// The network's memories, as many as the runner's queue back holds.
-    fn memories() -> heapless::Vec<ModelNetworkMemory, { super::network::AP_TX_DEPTH }> {
-        (0..super::network::AP_TX_DEPTH)
-            .map(|_| Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]))
-            .collect()
-    }
-
-    /// This supply over `memories`, a handle the test keeps beside it.
-    fn filled(
-        &self,
-        memories: heapless::Vec<ModelNetworkMemory, { super::network::AP_TX_DEPTH }>,
-    ) -> Self {
-        self.0.borrow_mut().extend(memories);
-        self.clone()
-    }
+#[derive(Default)]
+struct ModelHomes {
+    /// Each memory's address, by its place.
+    places: Vec<*const u8>,
+    /// Memories published and not yet back.
+    out: usize,
+    /// The memory published last.
+    last: Option<*const u8>,
+    /// Each memory as it came home last, by its address.
+    back: Vec<(*const u8, Vec<u8>)>,
 }
 
-impl<F: oer_protocols_network_port::EthernetFrame> crate::station::TxSupply<F> for ModelTx {
-    type Memory = ModelNetworkMemory;
-    fn available(&self) -> bool {
-        !self.0.borrow().is_empty()
-    }
-    fn write(&mut self, mut frame: F) -> Result<ModelNetworkMemory, crate::station::TxRefused<F>> {
-        use oer_protocols_ieee80211_core_roles_sta::data::{
-            MSDU_ETHERNET_OFFSET, MSDU_PAYLOAD_OFFSET,
-        };
-        let Some(mut memory) = self.0.borrow_mut().pop() else {
-            return Err(crate::station::TxRefused::Kept(
-                oer_protocols_network_port::TransmitRefused {
-                    frame,
-                    reason: oer_protocols_network_port::TransmitError::QueueFull,
-                },
-            ));
-        };
-        let view = frame.view().unwrap();
-        memory[MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&view.destination);
-        memory[MSDU_ETHERNET_OFFSET + 6..][..6].copy_from_slice(&view.source);
-        memory[MSDU_ETHERNET_OFFSET + 12..][..2].copy_from_slice(&view.ether_type.to_be_bytes());
-        memory[MSDU_PAYLOAD_OFFSET..][..view.payload.len()].copy_from_slice(view.payload);
-        Ok(memory)
-    }
-    fn give(&mut self, memory: ModelNetworkMemory) {
-        self.0.borrow_mut().push(memory);
+/// One of the network's buffers: its place and its memory.
+struct ModelSlot {
+    place: u8,
+    memory: ModelNetworkMemory,
+}
+
+impl oer_protocols_network_port::TxStorage for ModelSlot {
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        use oer_protocols_ieee80211_core_roles_sta::data::MSDU_ETHERNET_OFFSET;
+        &mut self.memory[MSDU_ETHERNET_OFFSET..]
     }
 }
 
 impl ModelTx {
-    /// The memories free for the network.
+    /// The pool and its buffers, as many as the runner's queue back holds.
+    fn new() -> (
+        Self,
+        heapless::Vec<ModelSlot, { super::network::AP_TX_DEPTH }>,
+    ) {
+        let slots: heapless::Vec<ModelSlot, { super::network::AP_TX_DEPTH }> = (0
+            ..super::network::AP_TX_DEPTH)
+            .map(|place| ModelSlot {
+                place: u8::try_from(place).unwrap(),
+                memory: Box::new([0; oer_protocols_ieee80211_testing_model::MODEL_MAX_MPDU]),
+            })
+            .collect();
+        let homes = ModelHomes {
+            places: slots.iter().map(|slot| slot.memory.as_ptr()).collect(),
+            ..ModelHomes::default()
+        };
+        (Self(Rc::new(core::cell::RefCell::new(homes))), slots)
+    }
+
+    /// The memories not out: free in the network's end or being written.
     fn free(&self) -> usize {
-        self.0.borrow().len()
+        super::network::AP_TX_DEPTH - self.0.borrow().out
     }
 
-    /// Where the memory the next frame goes into lies.
-    fn next(&self) -> *const u8 {
-        self.0.borrow().last().unwrap().as_ptr()
+    /// Where the frame published last lies.
+    fn last(&self) -> *const u8 {
+        self.0.borrow().last.unwrap()
     }
 
-    /// A copy of the free memory at `at`, if it is back.
+    /// A copy of the memory at `at` as it last came home, if it did.
     fn memory(&self, at: *const u8) -> Option<Vec<u8>> {
         self.0
             .borrow()
+            .back
             .iter()
-            .find(|memory| memory.as_ptr() == at)
-            .map(|memory| memory.to_vec())
+            .find(|(address, _)| *address == at)
+            .map(|(_, memory)| memory.clone())
+    }
+}
+
+impl crate::station::TxPool for ModelTx {
+    type Slot = ModelSlot;
+    type Memory = ModelNetworkMemory;
+    fn place(slot: &ModelSlot) -> u8 {
+        slot.place
+    }
+    fn publish(
+        &mut self,
+        slot: ModelSlot,
+        _length: usize,
+    ) -> Result<ModelNetworkMemory, crate::station::PoolRefused<ModelSlot>> {
+        let mut homes = self.0.borrow_mut();
+        homes.out += 1;
+        homes.last = Some(slot.memory.as_ptr());
+        Ok(slot.memory)
+    }
+    fn slot(&mut self, memory: ModelNetworkMemory) -> ModelSlot {
+        let mut homes = self.0.borrow_mut();
+        let at = memory.as_ptr();
+        homes.out -= 1;
+        homes.back.retain(|(address, _)| *address != at);
+        homes.back.push((at, memory.to_vec()));
+        let place = homes
+            .places
+            .iter()
+            .position(|address| *address == at)
+            .unwrap();
+        ModelSlot {
+            place: u8::try_from(place).unwrap(),
+            memory,
+        }
+    }
+}
+
+/// The network's sends of an Ethernet frame through its transmit owner, as
+/// the network core writes one.
+trait Sends {
+    fn try_transmit(
+        &mut self,
+        frame: oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame,
+    ) -> Result<
+        u8,
+        oer_protocols_network_port::Unpublished<
+            oer_protocols_network_port::PortRefusal,
+            Infallible,
+        >,
+    >;
+}
+
+impl<T: oer_protocols_network_port::OwnedTransmit<Ticket = u8>> Sends for T {
+    fn try_transmit(
+        &mut self,
+        frame: oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame,
+    ) -> Result<
+        u8,
+        oer_protocols_network_port::Unpublished<
+            oer_protocols_network_port::PortRefusal,
+            Infallible,
+        >,
+    > {
+        let parts = frame.parts();
+        let length = 14 + parts.payload.len();
+        self.publish(
+            oer_protocols_network_port::FrameMeta { length, dscp: None },
+            |slot| {
+                let bytes = slot.open().0;
+                bytes[..6].copy_from_slice(&parts.destination);
+                bytes[6..12].copy_from_slice(&parts.source);
+                bytes[12..14].copy_from_slice(&parts.ether_type.to_be_bytes());
+                bytes[14..length].copy_from_slice(parts.payload);
+                Ok(())
+            },
+        )
     }
 }
 
@@ -1158,7 +1226,7 @@ fn a_port_with_the_callers_timestamp_rule_serves_beacons() {
 #[test]
 fn a_stop_returns_the_network_frames_it_never_carried() {
     use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
-    use oer_protocols_network_port::NetTransmit;
+    use oer_protocols_network_port::OwnedTransmit;
     embassy_futures::block_on(with_local_slot(async |claim| {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, _shared);
@@ -1191,10 +1259,7 @@ fn a_stop_returns_the_network_frames_it_never_carried() {
         while transmit.try_transmit(frame()).is_ok() {
             again += 1;
         }
-        let why = transmit
-            .try_transmit(frame())
-            .err()
-            .map(|refused| refused.reason);
+        let why = transmit.try_transmit(frame()).err();
         assert_eq!(
             again,
             super::network::AP_TX_DEPTH,
@@ -1215,7 +1280,7 @@ fn a_client_place_s_queues_belong_to_one_association() {
     use oer_protocols_ieee80211_core_roles_ap::ApAssociationIdentity;
     use oer_protocols_ieee80211_core_roles_sta::data::plane::OutboundMsdu;
     use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts, WmmUserPriority};
-    use oer_protocols_network_port::NetTransmit;
+    use oer_protocols_network_port::OwnedTransmit;
     embassy_futures::block_on(with_local_slot(async |claim| {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, _shared);
@@ -1306,7 +1371,7 @@ macro_rules! queue_frames {
         use oer_protocols_ieee80211_core_roles_sta::data::{
             EthernetFrame, MsduParts, WmmUserPriority,
         };
-        use oer_protocols_network_port::NetTransmit;
+        use oer_protocols_network_port::OwnedTransmit;
         for _ in 0..$count {
             let mut frame = EthernetFrame::empty();
             frame
@@ -1377,7 +1442,7 @@ fn frames_a_halt_left_go_back_once_its_owners_are_taken() {
     use crate::datapath::queues::QueueId;
     use oer_protocols_ieee80211_core_roles_ap::ApAssociationIdentity;
     use oer_protocols_ieee80211_core_roles_sta::data::WmmUserPriority;
-    use oer_protocols_network_port::NetTransmit;
+    use oer_protocols_network_port::OwnedTransmit;
     embassy_futures::block_on(with_local_slot(async |claim| {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, shared);
@@ -1437,7 +1502,7 @@ fn frames_a_halt_left_go_back_once_its_owners_are_taken() {
 #[test]
 fn taking_no_kept_owner_leaves_a_running_access_point_s_frames() {
     use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
-    use oer_protocols_network_port::NetTransmit;
+    use oer_protocols_network_port::OwnedTransmit;
     embassy_futures::block_on(with_local_slot(async |claim| {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, _shared);
@@ -1465,7 +1530,7 @@ fn taking_no_kept_owner_leaves_a_running_access_point_s_frames() {
 #[test]
 fn a_memory_the_port_holds_without_an_attempt_goes_home_at_a_halt() {
     use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
-    use oer_protocols_network_port::NetTransmit;
+    use oer_protocols_network_port::OwnedTransmit;
     let frame = || {
         let mut frame = EthernetFrame::empty();
         frame
@@ -1507,7 +1572,7 @@ fn a_memory_the_port_holds_without_an_attempt_goes_home_at_a_halt() {
 #[test]
 fn a_memory_the_port_frees_during_the_stop_s_watch_goes_home_at_its_confirmation() {
     use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
-    use oer_protocols_network_port::NetTransmit;
+    use oer_protocols_network_port::OwnedTransmit;
     let frame = || {
         let mut frame = EthernetFrame::empty();
         frame
@@ -1574,7 +1639,7 @@ fn a_memory_the_port_frees_during_the_stop_s_watch_goes_home_at_its_confirmation
 #[test]
 fn a_memory_the_queue_back_refuses_at_the_stop_s_confirmation_waits_whole() {
     use oer_protocols_ieee80211_core_roles_sta::data::{EthernetFrame, MsduParts};
-    use oer_protocols_network_port::NetTransmit;
+    use oer_protocols_network_port::OwnedTransmit;
     embassy_futures::block_on(with_local_slot(async |claim| {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, air, _device, transmit, shared);

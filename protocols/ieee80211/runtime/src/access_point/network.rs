@@ -1,13 +1,13 @@
 //! The access point's network end: the MSDUs its authorized peers send the
-//! network stack, copied, and the stack's frames for the BSS, through the
-//! same transmit boundary as a station's: the stack's sending path hands
-//! the network's transmit memory its frame is in ([`TxSupply`]), with its
+//! network, copied, and the network's frames for the BSS, through the same
+//! transmit owner as a station's ([`LocalTx`]): the network writes each
+//! frame in one of its transmit buffers and the owner publishes it, with its
 //! length and the priority its marking requests, to the runner's queue
 //! ([`Outgoing`]); the runner queues it per peer and TID, writes the
 //! frame's MPDU in place in that same memory and sends it from there, and
 //! gives the memory back ([`TxEnded`]) once the MPDU's terminal came, free
-//! again. A frame no memory or no room takes is refused at once with its
-//! owner, and a stop leaves nothing lent.
+//! again. A frame no buffer or no room takes is refused before it is
+//! written, and a stop leaves nothing lent.
 
 use core::cell::Cell;
 use core::future::Future;
@@ -25,7 +25,7 @@ use oer_protocols_network_port::{
     NetDevice, ReceivedFrame, StorageAdvanceRefused,
 };
 
-use crate::station::{DeviceTransmit, LinkView, Outgoing, SameHart, TxEnded, TxSupply};
+use crate::station::{LinkView, LocalTx, LocalTxState, Outgoing, SameHart, TxEnded, TxPool};
 
 /// The received MSDUs the queue holds for the network.
 pub const AP_RX_DEPTH: usize = 4;
@@ -56,27 +56,27 @@ impl<M> ApNetworkStorage<M> {
         }
     }
 
-    /// Split the storage into the network's device, its transmit half over
-    /// the network's transmit memory, which takes the stack's frames `F`,
-    /// and the runner's end. The memory is the bounded storage `memories`,
-    /// at most `N` of them, which `supply` builds the network's transmit
-    /// memory over: the runner's queue back holds `N`, which this proves at
-    /// compile time, so every memory the runner gives back finds room.
-    pub fn split<F, S: TxSupply<F, Memory = M>, T, const N: usize>(
-        &mut self,
-        memories: heapless::Vec<T, N>,
-        supply: impl FnOnce(heapless::Vec<T, N>) -> S,
+    /// Split the storage into the network's device, its transmit owner
+    /// over `pool` and its free buffers `free`, kept in `state`, and the
+    /// runner's end. The network holds at most `N` buffers, as the type of
+    /// `free` bounds them: the runner's queue back holds `N`, which this
+    /// proves at compile time, so every memory the runner gives back finds
+    /// room.
+    pub fn split<'a, P: TxPool<Memory = M>, const N: usize>(
+        &'a mut self,
+        pool: P,
+        state: &'a mut LocalTxState<P::Slot, N>,
+        free: heapless::Vec<P::Slot, N>,
     ) -> (
-        ApNetDevice<'_>,
-        ApNetTransmit<'_, F, S>,
-        ApNetworkEnd<'_, M>,
+        ApNetDevice<'a>,
+        ApNetTransmit<'a, P, N>,
+        ApNetworkEnd<'a, M>,
     ) {
         const {
             if N > AP_TX_DEPTH {
                 panic!("the runner's queue back holds every network memory");
             }
         }
-        let supply = supply(memories);
         let (receive_sender, receive_receiver) = self.receive.split();
         let (transmit_sender, transmit_receiver) = self.transmit.split(|| None);
         let (returned_sender, returned_receiver) = self.returned.split(|| None);
@@ -88,7 +88,7 @@ impl<M> ApNetworkStorage<M> {
                 observed: LinkSnapshot::DOWN,
                 marked: 0,
             },
-            DeviceTransmit::with_link(transmit_sender, returned_receiver, supply, link),
+            LocalTx::new(transmit_sender, returned_receiver, pool, state, free, link),
             ApNetworkEnd {
                 receive: receive_sender,
                 transmit: transmit_receiver,
@@ -292,10 +292,10 @@ impl NetDevice for ApNetDevice<'_> {
     }
 }
 
-/// The network stack's sending path into the BSS, taking the stack's
-/// frames `F` into the network's transmit memory `S`: the same transmit end
-/// as a station's.
-pub type ApNetTransmit<'a, F, S> = DeviceTransmit<'a, F, S, AP_TX_DEPTH, SameHart, ApLink>;
+/// The network's transmit owner into the BSS over the pool `P` of `N`
+/// buffers: the same owner as a station's, over the access point's link and
+/// its queue depth.
+pub type ApNetTransmit<'a, P, const N: usize> = LocalTx<'a, P, N, AP_TX_DEPTH, SameHart, ApLink>;
 
 #[cfg(test)]
 #[allow(
@@ -307,25 +307,30 @@ mod tests {
     extern crate std;
 
     use super::*;
-    use crate::station::TxRefused;
-    use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
-    use oer_protocols_network_port::{TransmitError, TransmitRefused};
+    use crate::station::PoolRefused;
+    use oer_protocols_network_port::TxStorage;
 
-    /// A supply that copies nothing and holds the memories it was built on.
-    struct Held(heapless::Vec<u8, AP_TX_DEPTH>);
-    impl TxSupply<EthernetFrame> for Held {
+    /// A buffer of one Ethernet header's octets, named by its place.
+    struct Byte(u8, [u8; 14]);
+    impl TxStorage for Byte {
+        fn bytes_mut(&mut self) -> &mut [u8] {
+            &mut self.1
+        }
+    }
+
+    /// A pool whose memory is the buffer's place.
+    struct Places;
+    impl TxPool for Places {
+        type Slot = Byte;
         type Memory = u8;
-        fn available(&self) -> bool {
-            false
+        fn place(slot: &Byte) -> u8 {
+            slot.0
         }
-        fn write(&mut self, frame: EthernetFrame) -> Result<u8, TxRefused<EthernetFrame>> {
-            Err(TxRefused::Kept(TransmitRefused {
-                frame,
-                reason: TransmitError::QueueFull,
-            }))
+        fn publish(&mut self, slot: Byte, _: usize) -> Result<u8, PoolRefused<Byte>> {
+            Ok(slot.0)
         }
-        fn give(&mut self, memory: u8) {
-            let _held = self.0.push(memory);
+        fn slot(&mut self, memory: u8) -> Byte {
+            Byte(memory, [0; 14])
         }
     }
 
@@ -335,14 +340,110 @@ mod tests {
     #[test]
     fn a_memory_the_queue_back_refuses_comes_back_whole() {
         let storage = std::boxed::Box::leak(std::boxed::Box::new(ApNetworkStorage::<u8>::new()));
-        let memories: heapless::Vec<u8, AP_TX_DEPTH> = (0..AP_TX_DEPTH)
-            .map(|memory| u8::try_from(memory).unwrap())
+        let state = std::boxed::Box::leak(std::boxed::Box::new(LocalTxState::new()));
+        let free: heapless::Vec<Byte, AP_TX_DEPTH> = (0..AP_TX_DEPTH)
+            .map(|place| Byte(u8::try_from(place).unwrap(), [0; 14]))
             .collect();
-        let (_device, _transmit, mut end) =
-            storage.split::<EthernetFrame, _, _, AP_TX_DEPTH>(memories, Held);
+        let (_device, _transmit, mut end) = storage.split(Places, state, free);
         for memory in 0..AP_TX_DEPTH {
             assert_eq!(end.give_back(u8::try_from(memory).unwrap()), Ok(()));
         }
         assert_eq!(end.give_back(200), Err(200), "the same memory, whole");
+    }
+
+    /// A memory whose drop is counted: one dropped is one lost.
+    struct Tracked {
+        place: u8,
+        drops: std::sync::Arc<core::sync::atomic::AtomicUsize>,
+    }
+    impl Drop for Tracked {
+        fn drop(&mut self) {
+            self.drops
+                .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// A buffer of one Ethernet header's octets around its memory.
+    struct Tracking(Tracked, [u8; 14]);
+    impl TxStorage for Tracking {
+        fn bytes_mut(&mut self) -> &mut [u8] {
+            &mut self.1
+        }
+    }
+
+    /// A pool that publishes a buffer's memory and wraps it again.
+    struct Wraps;
+    impl TxPool for Wraps {
+        type Slot = Tracking;
+        type Memory = Tracked;
+        fn place(slot: &Tracking) -> u8 {
+            slot.0.place
+        }
+        fn publish(&mut self, slot: Tracking, _: usize) -> Result<Tracked, PoolRefused<Tracking>> {
+            Ok(slot.0)
+        }
+        fn slot(&mut self, memory: Tracked) -> Tracking {
+            Tracking(memory, [0; 14])
+        }
+    }
+
+    /// The network's transmit owner ends (its service retired) while the
+    /// runner holds every one of its memories, half of them given back
+    /// before the end and half after: every one stays in the queue back,
+    /// none refused and none dropped.
+    #[test]
+    fn a_memory_returned_after_the_networks_end_went_is_not_lost() {
+        use oer_protocols_network_port::{FrameMeta, OwnedTransmit};
+        let drops = std::sync::Arc::new(core::sync::atomic::AtomicUsize::new(0));
+        let storage =
+            std::boxed::Box::leak(std::boxed::Box::new(ApNetworkStorage::<Tracked>::new()));
+        let state = std::boxed::Box::leak(std::boxed::Box::new(LocalTxState::new()));
+        let free: heapless::Vec<Tracking, AP_TX_DEPTH> = (0..AP_TX_DEPTH)
+            .map(|place| {
+                Tracking(
+                    Tracked {
+                        place: u8::try_from(place).unwrap(),
+                        drops: drops.clone(),
+                    },
+                    [0; 14],
+                )
+            })
+            .collect();
+        let (_device, mut transmit, mut end) = storage.split(Wraps, state, free);
+        end.set_link(true);
+        let meta = FrameMeta {
+            length: 14,
+            dscp: None,
+        };
+        for _ in 0..AP_TX_DEPTH {
+            assert!(
+                transmit
+                    .publish(meta, |_| Ok::<_, core::convert::Infallible>(()))
+                    .is_ok()
+            );
+        }
+        transmit.flush();
+        let mut held = std::vec::Vec::new();
+        while let Some(outgoing) = end.take() {
+            held.push(outgoing.memory);
+        }
+        assert_eq!(held.len(), AP_TX_DEPTH, "the runner holds every memory");
+        let after = held.split_off(AP_TX_DEPTH / 2);
+        for memory in held {
+            assert!(end.give_back(memory).is_ok());
+        }
+        // The network's service retired: its transmit owner is gone.
+        drop(transmit);
+        for memory in after {
+            assert!(
+                end.give_back(memory).is_ok(),
+                "a memory finds room after the network's end"
+            );
+        }
+        assert_eq!(
+            drops.load(core::sync::atomic::Ordering::Relaxed),
+            0,
+            "no memory was dropped"
+        );
     }
 }

@@ -6,8 +6,8 @@
 //! the station's composition does, gives the runner the installation's access-point
 //! tokens, its tickets and the first [`AP_BANK`] transmit buffers, and runs
 //! it with the access point's own engine. Every other pool buffer is the
-//! network's transmit memory, in the same form as the station's
-//! ([`NetworkTxSupply`]): the network stack writes each frame into one, the
+//! network's transmit memory, held by the same transmit owner as the
+//! station's ([`ApTransmit`]): the network writes each frame into one, the
 //! runner writes its MPDU in place and sends that buffer, and gives it back
 //! once its frame ended. The station's tokens of the
 //! installation stay unused: an access-point-only image runs no station.
@@ -17,7 +17,9 @@
 use crate::access_point_end::{Retired, Stop};
 use crate::chip::{Binding, Config, InitializationError, Resources};
 use crate::radio::{self, Port};
-use crate::supply::{NETWORK_BUFFERS, NetworkTx, NetworkTxSupply, PORT_BUFFERS, TxMemory};
+use crate::supply::{
+    LocalTxState, NETWORK_BUFFERS, NetworkTx, PORT_BUFFERS, TxMemory, TxPublisher,
+};
 use oer_chips_esp32s31_radio_ieee80211_backend::port::{BufferClass, PortInstallation, TX_TICKETS};
 use oer_chips_family_radio_ieee80211_policy::{access_point::ADVERTISEMENT, ccmp, lmac};
 use oer_portable_embassy_time::EmbassyClock;
@@ -159,6 +161,8 @@ pub struct AccessPointStorage<W: Binding> {
     peers: AccessPointPeerStorage,
     template: [u8; AP_BEACON_CAPACITY],
     network: ApNetworkStorage<TxMemory>,
+    /// What the network's transmit owner keeps of its buffers.
+    transmit: LocalTxState,
     shared: ApShared,
     start: StartSlot,
 }
@@ -171,6 +175,7 @@ impl<W: Binding> AccessPointStorage<W> {
             peers: AccessPointPeerStorage::new(),
             template: [0; AP_BEACON_CAPACITY],
             network: ApNetworkStorage::new(),
+            transmit: LocalTxState::new(),
             shared: ApShared::new(),
             start: StartSlot::new(),
         }
@@ -439,15 +444,19 @@ pub type UnfinishedAccessPointOf<W> = crate::access_point_end::UnfinishedAccessP
     InitializationError,
 >;
 
-/// The access point's network device and its sending path.
+/// The access point's network device.
 pub type ApNetwork = ApNetDevice<'static>;
 
+/// The network's transmit owner into the BSS: every pool buffer past the
+/// bank, each frame written in the buffer it goes to the runner in.
+pub type ApTransmit = ApNetTransmit<'static, TxPublisher, NETWORK_BUFFERS>;
+
 /// Assemble the access point over `resources`: its control, its network
-/// device and sending path over the network's transmit memory `S` (every
-/// pool buffer past the bank), which takes the stack's packets, and its
-/// task, which waits for the control's start. `config` holds the radio's
-/// regulatory configuration until the start names the one it runs on.
-pub fn access_point<W: Binding, S: NetworkTxSupply>(
+/// device and the network's transmit owner over every pool buffer past the
+/// bank, and its task, which waits for the control's start. `config` holds
+/// the radio's regulatory configuration until the start names the one it
+/// runs on.
+pub fn access_point<W: Binding>(
     resources: Resources<W>,
     config: Config,
     storage: &'static mut AccessPointStorage<W>,
@@ -455,7 +464,7 @@ pub fn access_point<W: Binding, S: NetworkTxSupply>(
 ) -> (
     AccessPointControl,
     ApNetwork,
-    ApNetTransmit<'static, S::Packet, S>,
+    ApTransmit,
     AccessPointRunner<W>,
 ) {
     let Resources {
@@ -498,16 +507,13 @@ pub fn access_point<W: Binding, S: NetworkTxSupply>(
         peers,
         template,
         network,
+        transmit,
         shared,
         start,
     } = storage;
-    // The queue back holds every buffer of the storage the network's
-    // memory is built over.
+    // The queue back holds every buffer the network's owner is built over.
     let (publisher, slots) = memory.into_owned();
-    let (device, transmit, end) = network
-        .split::<S::Packet, S, _, NETWORK_BUFFERS>(slots, |slots| {
-            S::new(NetworkTx::from_owned(publisher, slots))
-        });
+    let (device, transmit, end) = network.split(publisher, transmit, slots);
     let shared: &'static ApShared = shared;
     let start: &'static StartSlot = start;
     (
