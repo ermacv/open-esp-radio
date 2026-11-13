@@ -38,12 +38,23 @@ struct Returning<'a, H: BatchReturn> {
 
 impl<H: BatchReturn> Returning<'_, H> {
     fn give(&mut self, lent: Lent<'_, H>) {
+        // The callback can replace its cell with a retained owner from
+        // another socket. That owner's physical return and credit stay
+        // together on its individual Drop, outside this socket's batch.
+        if !lent
+            ._back
+            .0
+            .is_some_and(|returns| core::ptr::eq(returns, self.credits.returns))
+        {
+            drop(lent);
+            return;
+        }
         let Lent {
             frame, mut _back, ..
         } = lent;
         frame.return_in(&mut self.frames);
-        // All owners in this private queue were made with this socket's
-        // Returns. A retained owner keeps its Back and returns individually.
+        // Only this socket's owners join its credit batch. A retained
+        // owner keeps its Back and returns individually.
         _back.0 = None;
         self.credits.count = self.credits.count.saturating_add(1);
     }

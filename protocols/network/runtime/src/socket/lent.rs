@@ -644,6 +644,35 @@ mod tests {
     }
 
     #[test]
+    fn replacing_a_prefix_cell_with_another_sockets_owner_keeps_both_accounts() {
+        struct First;
+        struct Second;
+        let mut first = ends::<First>();
+        let mut second = ends::<Second>();
+        loan_prefix(&mut first, 1);
+        loan_prefix(&mut second, 1);
+        let Some(Received::Lent(other)) = second.socket.try_receive() else {
+            panic!("the second socket lent its frame");
+        };
+        let mut replacement = Some(other);
+        let mut retained = None;
+        let prefix = first.socket.try_receive_prefix(8, |cell| {
+            retained = core::mem::replace(cell, replacement.take());
+            true
+        });
+        assert!(matches!(prefix, Some(super::ReceivedPrefix::Lent(1))));
+        assert_eq!(first.lent.returns.published(), 0);
+        assert_eq!(second.lent.returns.published(), 1);
+        first.lent.collect(first.pool.loans());
+        second.lent.collect(second.pool.loans());
+        assert_eq!(first.pool.loans().outstanding(), 1);
+        assert!(second.pool.loans().released());
+        drop(retained);
+        first.lent.collect(first.pool.loans());
+        assert!(first.pool.loans().released());
+    }
+
+    #[test]
     fn physical_batch_accounting_precedes_credit_and_continuation_publication() {
         use core::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
