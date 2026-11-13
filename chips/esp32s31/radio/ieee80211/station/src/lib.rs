@@ -501,7 +501,7 @@ impl<N: Notifies> runtime::NetworkStop for NetworkStopState<N> {
     }
 }
 /// The network side's end of the station's stop: it stops the application
-/// and the IP service, which drop every frame they hold, then reports it.
+/// and the network, which drop every frame they hold, then reports it.
 /// Dropping it unreported fails the station's stop as a lost participant.
 pub struct NetworkStopper<'a, N: Notifies = SameHart> {
     state: &'a NetworkStopState<N>,
@@ -519,7 +519,7 @@ impl<N: Notifies> NetworkStopper<'_, N> {
         })
         .await
     }
-    /// The application and the IP service stopped and hold no frame of the
+    /// The application and the network stopped and hold no frame of the
     /// station but what they lent: the station's stop does not wait for a
     /// lent buffer, which returns to the lend count whenever it drops.
     pub fn stopped(self) {

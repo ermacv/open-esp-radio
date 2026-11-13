@@ -87,7 +87,6 @@ are outside this rule; it does not inspect third-party dependency closures.
 | `embassy-sync` | Development only, with the exact normal-edge deviations above |
 | `embassy-time` | `portable/embassy/time`, `oer` (the executors' clock) |
 | `embassy-time-driver` | `chips/family/platform/executor` |
-| `embassy-net`, `xarxa`, `xarxa-driver` | `portable/embassy/net`, `firmware/*` |
 | `trouble-host` | `portable/embassy/trouble`, `firmware/*` |
 | `bt-hci` | `protocols/bluetooth/hci`, `portable/embassy/trouble`, `tools/*` |
 

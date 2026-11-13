@@ -236,7 +236,7 @@ fn dhcp(cx: &mut Cx<'_>) -> Result<(), Failure> {
     )
 }
 
-/// The router pings the device's address; the device's IP stack answers.
+/// The router pings the device's address; the device's network core answers.
 fn ping(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let ipv4 = status(cx)?
         .ipv4

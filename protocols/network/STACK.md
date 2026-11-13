@@ -1,11 +1,9 @@
 # Network boundaries
 
-This directory owns stack-facing contracts; chip radio execution belongs to
-[`exec`](../../chips/family/platform/executor/README.md). The HIL Wi-Fi station
-image links the network core; the application entry's IP service links the
-pinned Embassy/Xarxa network stack through `portable/embassy/net` in its
-place, and no HIL image selects it. Direct normal stack dependencies belong
-to that adapter and firmware, outside the protocol cores and runtimes.
+This directory owns the network and its contracts with the radio; chip radio
+execution belongs to
+[`exec`](../../chips/family/platform/executor/README.md). The network core is
+the one network: the application entry starts it over a Wi-Fi role's port.
 
 | Path | Responsibility |
 | --- | --- |
@@ -13,7 +11,5 @@ to that adapter and firmware, outside the protocol cores and runtimes.
 | `wire/` | Ethernet, VLAN, ARP, IP, ICMP echo and transport header fields, DHCP messages, the Internet checksum (`oer-protocols-network-wire`) |
 | `core/` | A sans-IO core with one owner: ARP, IPv4, UDP, a DHCPv4 client and ICMP echo over one interface (`oer-protocols-network-core`). The HIL `wifi-station` image links it through `runtime/` |
 | `runtime/` | The task that owns the core, its channel sockets and its local producer (`oer-protocols-network-runtime`) |
-| `../../portable/embassy/net/` | Maintained Embassy/Xarxa packet-owner contract with explicit pools |
 
-Selecting a patched stack does not create another physical radio owner or
-another packet adapter.
+A network instance does not create another physical radio owner.

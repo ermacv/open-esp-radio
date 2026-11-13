@@ -1,7 +1,7 @@
 # oer
 
 The Espressif family's application entry. An image names the capabilities
-it uses (`wifi`, `console`, `group`, `observe`, `udp`) and no chip: the
+it uses (`station`, `access-point`, `console`, `group`, `observe`) and no chip: the
 image pipeline selects the board's chip (`esp32s31`, exactly one). It
 takes the peripherals it needs once and builds drivers and services with
 defaults. The library places their interrupts, executors and service tasks
@@ -11,29 +11,33 @@ and applies record and reset on the image's behalf.
 oer::entry!(boot, group = network);
 
 static LINK: Channel<Request, Reply, 1> = Channel::new();
+enum Brand {}
+static NETWORK: ConstStaticCell<wifi::NetworkStorage<Brand, Producer, wifi::Copying>> =
+    ConstStaticCell::new(wifi::NetworkStorage::new());
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::new(*b"DE", 6, 10)?;
-    let (station, status) = Station::start(p.wifi, p.aes, config, &mut boot)?;
+    let station = Station::start(p.wifi, p.aes, config, &mut boot)?;
     let link = LINK.application(&mut boot)?;
-    Ok(boot.run(move || app(station, status, link)))
+    Ok(boot.run(move || app(station, link)))
 }
 
 fn network(p: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
-    let (net, mut boot) = Net::start(device, NetConfig::Dhcpv4, boot)?;
+    let storage = NETWORK.try_take().ok_or(Error::Storage)?;
+    let (net, socket, mut boot) =
+        wifi::Network::start(device, wifi::Addressing::Dhcp, boot, storage, Producer, PORTS)?;
     let link = LINK.group(&mut boot)?;
-    Ok(boot.run(move || sockets(net, link)))
+    Ok(boot.run(move || sockets(net, socket, link)))
 }
 
-async fn app(mut station: Station, status: NetStatus, link: ApplicationEnd<Request, Reply, 1>) -> AppResult {
+async fn app(mut station: Station, link: ApplicationEnd<Request, Reply, 1>) -> AppResult {
     station.connect(wifi::Profile::wpa2(b"ssid", b"passphrase")?).await?;
-    let ipv4 = status.wait_ipv4().await?;
     // requests to the sockets' future over `link`
 }
 
-async fn sockets(net: Net, link: GroupEnd<Request, Reply, 1>) -> AppResult {
-    // sockets on `net.stack()`, answering `link`
+async fn sockets(net: wifi::Network<Brand, Producer, wifi::Copying>, socket: wifi::Socket<Brand>, link: GroupEnd<Request, Reply, 1>) -> AppResult {
+    // the address from `net.configuration()`, datagrams on `socket`, answering `link`
 }
 ```
 
@@ -55,30 +59,28 @@ is never moved.
 
 `entry!(boot, group = boot1)` names the group. The library calls
 `boot1` once `boot` returned, still before any executor, with what the boot
-handed it (`GroupPeripherals`: the station's network device, which
-`Station::start` keeps for it) and its own context (`GroupBoot`). `boot1`
-starts the IP service (`wifi::Net::start`), whose stack and sockets stay in
-its future, and ends with `GroupBoot::run` and the closure that builds that
-future. The stack has TCP sockets; with
-`udp` also UDP sockets, each queueing up to 16 received datagrams. A
-stopped IP service closes every UDP socket, which returns its queued
-datagrams' lent receive buffers to the station. Data of the image's own reaches
-it through its statics: a `Channel` links the application's future and the
-group's. `entry!(boot)` declares no group; a station's device
-it would take tells the station that no network takes its frames.
+handed it (`GroupPeripherals`: each role's network device, which
+`Station::start` and `AccessPoint::start` keep for it) and its own context
+(`GroupBoot`). `boot1` starts the networks (`wifi::Network::start`), whose
+sockets stay in its future, and ends with `GroupBoot::run` and the closure
+that builds that future. A stopped network closes its sockets, which return
+their datagrams' lent receive buffers to the role. Data of the image's own
+reaches it through its statics: a `Channel` links the application's future
+and the group's. `entry!(boot)` declares no group; a role's device no
+network takes tells its role that no network takes its frames.
 
 The library then installs the system timer (the radio executor writes it
 when a station started, the application executor otherwise), enables
 interrupts and runs the application executor in thread mode with its
 service tasks (`SdkTasks`) and the image's three futures as the executor's
-roots: the group's IP service, at the image's pool sizes, the second
+roots: the group's networks, over the image's storage, the second
 boot's future and the application. The library builds them in the frame of
 its run, which never returns, and they stay there: and are tasks of the executor after `SdkTasks`; no
 static slot names their types, so an image declares no task set and needs
 no unstable feature. `boot` returns `impl Started` and `boot1` `impl
 GroupStarted`, which name the future types: `Boot::run` and
-`GroupBoot::run` make them, and `wifi::Net::start` returns the second
-boot's context with its IP service.
+`GroupBoot::run` make them, and `wifi::Network::start` returns the second
+boot's context with that network beside the ones before.
 
 ## Defaults and settings
 
@@ -92,11 +94,10 @@ a HIL image of one function build it:
 | Drain at a stop | 2 s (`wifi::DRAIN`) | `wifi::Config::with_drain(deadline)` |
 | Channel width of a join | 20 MHz | `wifi::Config::with_ht40()`: 40 MHz where the access point's HT elements name a secondary channel the domain permits |
 | HE (802.11ax) of a connect | off: HT | `wifi::Profile::with_he20()`, experimental: HE20 (one stream, HE-MCS 0 to 9, no optional HE capability, no answer to Trigger frames) with an access point that admits it, HT otherwise; `Connected::phy` names the mode |
-| IP pools (receive frames, transmit credits) | 8, 8 (`wifi::RX`, `TX`); the stack's general packets are the station's transmit buffers | `static POOLS: wifi::Pools<RX, TX>`, `Net::start_with(device, &POOLS, config, boot)` in the group |
+| A network's storage | `wifi::BLOCKS` blocks of `wifi::BLOCK` octets, two sockets | the image's own `static NETWORK: wifi::NetworkStorage<Brand, Producer, Receive>`, one per network |
 
-A zero interval or deadline is refused (`ConfigError`). The pools' sizes are types (`Net<RX, TX>`, `Stack<RX, TX>`),
-defaulting to the library's. Each storage is taken once; a second start
-returns `Error::AlreadyStarted`.
+A zero interval or deadline is refused (`ConfigError`). Each storage is
+taken once; a second start of a device returns `Error::AlreadyStarted`.
 Before the executor starts the library draws the boot's identity
 (`boot_id`, nonzero, random) from the entropy source: a station draws it
 with the source it takes, otherwise the library does once the timer runs.
@@ -111,15 +112,15 @@ with the source it takes, otherwise the library does once the timer runs.
 | profile (`observe`) | 4 | PC sampler (TIMG1 T0, line 22); with `group`, hart 1's PC sampler (TIMG1 T1, line 22 of hart 1) |
 | hart 1 application (`group`) | 1 | hart 1's executor wake (line 40), its alarm (comparator 2, line 41) |
 
-The radio entries exist with the `wifi` feature, the console's with
+The radio entries exist with a Wi-Fi role (`station`, `access-point`), the console's with
 `console`, the sampler's with `observe` and hart 1's with `group`; an entry
 no driver binds routes no source. With `group` the library launches hart 1
-once the boot ended: it runs the group's setup there and then its IP service
+once the boot ended: it runs the group's setup there and then its networks
 and future on its own thread-mode executor, and hart 0 waits for the setup's
 end before it enables its interrupts. The pipeline gives such an image hart
 1's stacks. Service tasks on the application executor: the RTC
-watchdog feed, the station runner, the MAC driver beside it and the IP
-service. The radio executor
+watchdog feed, the station runner and the MAC driver beside it, or the
+access point's runner; without `group`, the group's networks. The radio executor
 runs the radio actor.
 
 | Default | Value |
@@ -161,23 +162,20 @@ connect answers `ConnectError::Stopped`. A
 start the radio refused resets nothing: the first connect answers
 `ConnectError::NotStarted` with the refusal's typed cause and how its
 owners ended.
-`Station::start` returns the station and the IP service's status for the
-application (`NetStatus`), and keeps the station's network device for the
-group. `wifi::Net::start`, in the group,
-runs the existing IP service (`oer-portable-embassy-net`) over that device;
-`wait_ipv4` ends with the configuration over an up link and keeps waiting
-across a link loss, `wait_link_down` ends on a loss or a new link epoch,
-and both end with `NetError::Stopped` or `Failed` when the service ends.
-`Net` has these waits for the group's future, `NetStatus` the same
-and `status()` for the application's: the service publishes each status
-whole for it and wakes it. A `NetStatus` stays with the application's
-future (`!Send`), the one task its waits wake. Sockets open on
-`net.stack()` (`embassy_net`, re-exported) in the group's future. The
-station lends received frames to the IP service in place; when the station
-stops (by `stop()` or after a failure, within the drain deadline) the IP
-service stops first and returns every buffer it holds, and its waits end
-with `NetError::Stopped`. A station whose device no `Net::start` took tells
-the station that no network takes its frames.
+`Station::start` returns the station and keeps its network device for the
+group (`GroupPeripherals::device`); `AccessPoint::start` keeps the access
+point's (`GroupPeripherals::access_point`). `wifi::Network::start`, in the
+group, starts the network core over a role's device with its addressing
+(`Addressing::Dhcp` or `Addressing::Given`), the storage the image lends
+(`NetworkStorage`, of a brand the image names) and a producer, opens its
+channel socket (`Copying` or `Lending<CREDIT>`) and its producer's socket,
+and returns them with the group's context. `configuration()`, `changes()`
+and `changed()` read the interface's address, its lease and the link as the
+service publishes them. The station lends received frames to the network in
+place; when a role stops (by `stop()` or after a failure, within the drain
+deadline) its network stops first and returns every buffer it holds. A role
+whose device no `Network::start` took tells its role that no network takes
+its frames. TCP has no implementation.
 
 `Console::open` takes the USB Serial/JTAG block from the early writer and
 binds its interrupt in the application's context: the stream
@@ -197,8 +195,8 @@ returns `false`; a fatal note still reaches the host.
 | A fatal MAC assertion, a PHY transaction fault, nonce exhaustion | owners quarantined by their fault owner | record and reset |
 | The radio actor's periodic PHY tracking fails, or its deadline is one the clock cannot hold | the actor keeps every owner | the fault's class and variant path (`oer-chips-esp32s31-platform-runtime::radio_fault`) recorded, reset; the next boot prints it |
 | A CPU exception | all owners stay where they are | the runtime records the trap frame before it stops the other hart, the library's hook (`oer-chips-esp32s31-platform-runtime::exception`) what the interrupt controller showed after the stop; reset. The next boot prints both and serves them in `Boot::evidence` (`previous_exception`) |
-| The IP service is refused its context | the service keeps its owners | record and reset |
-| `connect` refused or failed, `wait_ipv4` timed out by the caller, a TCP error | unchanged | handled `Result` |
+| A network's service ends other than by its role's stop | the service keeps its owners | record and reset |
+| `connect` refused or failed, a socket's refusal | unchanged | handled `Result` |
 
 ## Cancellation
 
@@ -206,8 +204,7 @@ returns `false`; a fatal note still reaches the host.
 | --- | --- |
 | `Station::connect` while its profile is prepared | the derivation and the passphrase are erased; nothing was sent |
 | `Station::connect` after admission | the attempt continues; the next connect waits for its end; `disconnect` leaves the network |
-| `Net::wait_ipv4` or `wait_link_down` | it frees its waiter slot; dropped outside the application's context, its waker stays until the next change takes it |
-| `NetStatus::status`, `wait_ipv4` or `wait_link_down` | nothing to free: the application's waker stays registered until the next publication wakes it |
+| `Network::changed` | nothing to free: one task waits at a time, and the next publication wakes it |
 | `ApplicationEnd`/`GroupEnd::send` or `receive` | the value not sent stays with the caller; a received value is never lost: it stays in the queue until a receive returns it |
 
 ## Channels
@@ -225,7 +222,7 @@ polls it (`!Send`).
 
 An image that measures the library's work enables `observe` and declares
 `instrumentation = ["trace"]` (without it the build fails). The library's
-executors, station, RF actor and IP service then report to its own
+executors, station, RF actor and network then report to its own
 counters, which `oer::observe` reads in the library's types; an
 image translates them into whatever reports them:
 
@@ -233,7 +230,7 @@ image translates them into whatever reports them:
 | --- | --- |
 | `executors()` | each executor's work and idle microseconds since boot (application, radio, hart 1) |
 | `parts()` | each part's polls and their time, and the longest of the epoch: the library's tasks and futures, the Wi-Fi datapath actor's spans, and up to four futures the image names (`Part::claim(name)?.polled(future)`) |
-| `counters()` | the network bridge's frames, the station's receive decisions, its transmit agreements' settlements, the link's rates and the receive driver's counters |
+| `counters()` | the station's receive decisions, its transmit agreements' settlements, the link's rates and the receive driver's counters |
 | `tracking()` | the RF actor's PHY tracking ticks, with the epoch's temperatures and longest tick |
 | `Boot::observe` | the boot hart's handle (`Hart0`, `!Send`): its cycle and instruction counters, the L1 cache's counters and the PC sampler on TIMG1 T0, once |
 | `GroupBoot::observe` (`group`) | hart 1's handle (`Hart1`, `!Send`): its PC sampler on TIMG1 T1, once; each hart's sampler keeps 1024 samples |
@@ -247,8 +244,9 @@ takes differences.
 
 The application runs on hart 0. The AES engine runs the accelerator in
 Typical mode without DMA, one synchronous block at a time; the station
-computes RFC 3394 key unwrap on it. One station and one IP service per
-image. `println!("ipv4 {}/{}", Ipv4(address), prefix)` writes a typed line
+computes RFC 3394 key unwrap on it. One radio holder at a time: an image
+with both roles serves one of them on the air at once; each role's network
+is its own instance. `println!("ipv4 {}/{}", Ipv4(address), prefix)` writes a typed line
 (`oer_portable_diagnostics::typed_line!`): the format's static pieces and the
 values, which the host prints; the target formats nothing. A hole is a bare
 `{}`; `Hex` and `Ipv4` choose a value's text, and an error that describes
@@ -258,7 +256,7 @@ It uses the early writer, which waits for room within its budget per line.
 ```console
 cargo test -p oer
 cargo clippy -p oer --all-targets
-cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,udp
+cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,station,console,group
 RUSTFLAGS="--cfg oer_trace" CARGO_TARGET_DIR=target/instrumented/oer \
-  cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,wifi,console,hart1,observe,udp
+  cargo clippy -p oer --target riscv32imafc-unknown-none-elf --features esp32s31,station,console,group,observe
 ```

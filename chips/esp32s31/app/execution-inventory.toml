@@ -369,7 +369,7 @@ check = ['route-hart']
 gap = ['the set names a SWI, not a context', 'the observer index is written by hand']
 
 [[task-root]]
-name = 'IP service, group and application on hart 0'
+name = 'networks, group and application on hart 0'
 site = 'chips/esp32s31/app/src/lib.rs'
 anchor = 'oer_chips_family_platform_executor::Root::new(second.as_mut()),'
 executor = 'application'
@@ -694,8 +694,8 @@ anchor = "let bundle = core::future::poll_fn(|cx: &mut Context<'_>| {"
 [[wait]]
 id = "network-queues"
 cfg = "feature = \"wifi\""
-waiter = "datapath actor and network service, queue readiness"
-served_by = "the other queue endpoint publishes data or releases capacity; NETWORK and DATAPATH with group, local wakers otherwise"
+waiter = "datapath actor or access point runner, and network service, queue readiness"
+served_by = "the other queue endpoint publishes data or releases capacity; NETWORK and DATAPATH (the access point's ACCESS_POINT_RUNNER) with group, local wakers otherwise"
 condition = "the actor polls eligible transmit input and returned-buffer capacity; the network polls receive data and transmit credits; a published batch flushes its notify"
 held = "queue endpoints and queued frames; unsent owners stay with the caller or actor; a pending readiness wait reserves no queue credit"
 bound = "queue readiness has no per-operation timeout; the actor polls its other sources and any armed protocol deadline in the same round"
@@ -714,8 +714,12 @@ site = "protocols/ieee80211/runtime/src/station/control.rs"
 anchor = "fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {"
 
 [[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/station/control.rs"
+site = "protocols/ieee80211/runtime/src/station/local_tx.rs"
 anchor = "fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {"
+
+[[wait.evidence]]
+site = "protocols/ieee80211/runtime/src/access_point.rs"
+anchor = "let mut ready = core::pin::pin!(network.transmit.ready());"
 
 [[wait]]
 id = "network-lent-return"

@@ -434,7 +434,7 @@ mod chip {
     }
 
     /// One end of a window: the boot hart's `hart` and the library's
-    /// `counters`, both read on the boot hart; the IP stack's frames are
+    /// `counters`, both read on the boot hart; the network's frames are
     /// hart 1's to count.
     pub(crate) fn snapshot(
         hart: HartCounters,

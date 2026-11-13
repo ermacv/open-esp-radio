@@ -46,7 +46,7 @@ pub(crate) enum Command {
 )]
 pub(crate) enum Reply {
     Sampler(Result<(), LoadError>),
-    /// One end of a window, without the IP stack's frames, which hart 1
+    /// One end of a window, without the network's frames, which hart 1
     /// counts.
     Counters(Snapshot),
     /// The radio device's stall snapshot, `None` when it took none in

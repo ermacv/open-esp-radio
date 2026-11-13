@@ -226,7 +226,7 @@ mod tests {
     fn a_build_feature_that_reaches_the_entrys_group_selects_it() {
         let metadata = serde_json::json!({"packages": [{
             "name": "image",
-            "features": {"station": ["oer/wifi", "oer/group"], "default": []},
+            "features": {"station": ["oer/station", "oer/group"], "default": []},
         }]});
         assert!(selects_a_group(
             &metadata,

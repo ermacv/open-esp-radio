@@ -4,19 +4,17 @@ The image of the [SDK station](../../scenarios/sdk-station/README.md),
 [Wi-Fi station](../../scenarios/wifi-station/README.md) and
 [Wi-Fi load](../../scenarios/wifi-load/README.md) scenarios: an
 application of the entry `oer` (`oer`, features
-`wifi`, `console`, `group`, `observe` and `network`; the build selects the chip). Its boot takes the Wi-Fi
+`station`, `console`, `group` and `observe`; the build selects the chip). Its boot takes the Wi-Fi
 station (on the AES accelerator) with the library's defaults and the USB
 Serial/JTAG console; its group starts the network core
-(`wifi::Network::start`, protocols/network) over the station's device in
-place of the IP service. The library places their interrupts, executors and
+(`wifi::Network::start`, protocols/network) over the station's device. The library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image
 declares no interrupt, DMA or service task of its own. Its boot is the
 [station example's](../../../examples/wifi-station/README.md) with
 these differences: the `observe` feature with the `trace` and
 `fault-injection` instrumentation (the library's observations, which the
 load service reports, and the fault service's refused publication), the
-`network` feature (the network core in the IP service's place: ARP, IPv4,
-UDP, a DHCPv4 client and ICMP echo, without TCP), the `console` feature and
+`console` feature and
 `Console::open`, and every channel scanned (`wifi::Config::all_channels`)
 in place of the profile's one. Its group
 (`entry!(boot, group = network)`) starts the network with the load's

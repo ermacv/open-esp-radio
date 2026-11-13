@@ -30,7 +30,7 @@ pub enum LibraryPart {
     Datapath,
     /// The radio executor's task: the shared RF actor.
     RadioActor,
-    /// The group's IP service and future.
+    /// The group's networks and future.
     Ip,
     Group,
     /// Inside the datapath actor: its spans, one whole turn and, within

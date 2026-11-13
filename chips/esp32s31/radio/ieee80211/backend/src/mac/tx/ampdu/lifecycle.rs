@@ -202,7 +202,7 @@ impl<const SLOTS: usize> HtAmpduTxStorage<SLOTS> {
     ///
     /// The referenced network leases must remain retained until the unique
     /// radio lifecycle owner resets the MAC; returning them would make
-    /// potentially DMA-visible allocations writable by `embassy-net`.
+    /// potentially DMA-visible allocations writable by the network.
     pub fn require_reset(self: Pin<&mut Self>, cookie: TxCookie) -> Result<(), HtAmpduTxError> {
         let storage = self.project();
         if *storage.state != TxDmaState::HardwareOwned || *storage.active != cookie {

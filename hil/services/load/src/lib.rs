@@ -386,7 +386,7 @@ pub struct Counters {
     pub cycles: u64,
     /// Instructions the boot hart retired.
     pub instructions: u64,
-    /// Frames the IP stack took from its device.
+    /// Frames the network took from its device.
     pub stack_received: u32,
     /// The L1 cache's access counts within the window.
     pub cache: CacheCounts,

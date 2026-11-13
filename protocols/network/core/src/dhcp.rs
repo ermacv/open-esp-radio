@@ -1,12 +1,11 @@
 //! The DHCPv4 client of the one interface.
 //!
 //! SOURCE: RFC 2131, 3.1, 3.2, 4.1 and 4.4 (client behaviour, Figure 5's
-//! states, Table 5's fields and options); RFC 2132 for the options. Ported
-//! from Xarxa fbebde5 (`src/iface/dhcpv4.rs`): a DISCOVER's first repeat after
-//! 250 ms, doubling to 10 s in one transaction; REQUEST retries after 5 s,
-//! doubling every two, five in all; renewals and rebinds after half the time
-//! left, no less than 60 s apart. Unlike the fork: each wait is jittered down
-//! by up to a quarter, as RFC 2131, 4.1 asks for a randomized backoff; a lease
+//! states, Table 5's fields and options); RFC 2132 for the options. The
+//! client's own times: a DISCOVER's first repeat after 250 ms, doubling to
+//! 10 s in one transaction; REQUEST retries after 5 s, doubling every two,
+//! five in all; renewals and rebinds after half the time left, no less than
+//! 60 s apart. Each wait is jittered down by up to a quarter, as RFC 2131, 4.1 asks for a randomized backoff; a lease
 //! counts from its REQUEST's first acceptance by the port, RFC 2131, 4.4.1 and
 //! 4.4.5; a renewal goes to the server identifier, RFC 2131, 4.1; an ACK
 //! without a lease time or subnet mask is refused, not given a default; a link
@@ -29,7 +28,7 @@ use crate::interface::{BROADCAST, Ipv4, UNSPECIFIED, is_unicast};
 
 /// The first wait for an OFFER: a first DISCOVER can reach an access point
 /// before its port opens, which a station cannot see (up to 119 ms after the
-/// handshake's last message on the stand, Xarxa fbebde5).
+/// handshake's last message, seen on the stand).
 const DISCOVER_FIRST: Duration = Duration::from_millis(250);
 /// The longest wait for an OFFER.
 const DISCOVER_MOST: Duration = Duration::from_secs(10);
@@ -760,7 +759,7 @@ fn lease(
         return Err(LeaseFault::Mask);
     }
     // The first router that is a host, in the server's order of preference,
-    // RFC 2132, 3.5: one of 0.0.0.0 is none (Xarxa fbebde5).
+    // RFC 2132, 3.5: one of 0.0.0.0 is none.
     let router = match message.option(option::ROUTER) {
         None => None,
         Some(routers) => {
@@ -829,8 +828,7 @@ fn lease(
 
 /// T1 and T2 of a lease of `length`, always T1 < T2 < the lease, as RFC 2131,
 /// 4.4.5 requires: the server's when they are so ordered; with T1 alone below
-/// the lease, T2 three quarters of the way from it to the end (Xarxa
-/// fbebde5); with T2 alone above zero and below the lease, T1 half the lease,
+/// the lease, T2 three quarters of the way from it to the end; with T2 alone above zero and below the lease, T1 half the lease,
 /// or half T2 when T2 comes first; otherwise, values out of that order
 /// included, the defaults, half and seven eighths. A lease is at least one
 /// second, so each of these is strict.
