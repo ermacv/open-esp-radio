@@ -798,6 +798,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.check().err()
     }
 
+    /// Refuse the next publication as a missing key, with its key
+    /// installed: the image's one-shot fault.
+    #[cfg(test)]
+    pub(crate) fn refuse_publication_for_test(&mut self) {
+        self.driver.refuse_publication_for_test = true;
+    }
+
     /// Refuse the next publication past its buffer's attachment.
     #[cfg(test)]
     pub(crate) fn refuse_values_for_test(&mut self) {

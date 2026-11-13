@@ -565,6 +565,16 @@ struct Ends<T: 'static> {
     /// The device came back from the retired port, and its frontier.
     released: Option<bool>,
     frontier: Option<ModelFrontier>,
+    /// After a reinstall end: the stopped port's cleanup and its reinstall,
+    /// as the facade's datapath task runs them.
+    reinstalled: Option<Result<(), Reinstalled>>,
+}
+
+/// Why the facade's reinstall of the stopped port refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Reinstalled {
+    Cleanup(crate::failure::CleanupCause),
+    Refused(port::ReinstallRefused),
 }
 
 impl<T: 'static> Default for Ends<T> {
@@ -575,6 +585,7 @@ impl<T: 'static> Default for Ends<T> {
             actor: None,
             released: None,
             frontier: None,
+            reinstalled: None,
         }
     }
 }
@@ -984,6 +995,21 @@ fn joined_with<T: 'static>(
                 ActorEnd::Reinstall => ActorEndSeen::Reinstall,
                 ActorEnd::Faulted(_) => ActorEndSeen::Faulted,
             });
+            if let ActorEnd::Reinstall = end {
+                // The facade's datapath task: the stopped port's cleanup,
+                // then its reinstall in place under the next TSF epoch.
+                let cleaned = crate::release::clean(actor.port_mut());
+                ends.reinstalled = Some(match cleaned.result {
+                    Err(cause) => Err(Reinstalled::Cleanup(cause)),
+                    Ok(()) => actor
+                        .port_mut()
+                        .reinstall(&mut installations, 2)
+                        .map(drop)
+                        .map_err(Reinstalled::Refused),
+                });
+                drop(cleaned.removed);
+                return;
+            }
             // The facade's `release`: the stopped port's cleanup, then the
             // port's release.
             // Its receipt, if one, stays here past the release.
@@ -1981,5 +2007,41 @@ fn a_completion_after_turns_that_took_none_puts_the_prepared_ppdu_on_the_air() {
             "the completion's turn published the prepared PPDU"
         );
         assert_eq!(bench.atoms.rule_breaks(), []);
+    });
+}
+
+/// A restart of the station, as the facade runs it after a refused
+/// publication: the lifecycle stops the radio with the network staying,
+/// then asks the actor to reinstall; the stopped port's cleanup and its
+/// reinstall in place follow. With the network's traffic through it before
+/// the stop, the port is retirable and the next installation comes.
+#[test]
+fn a_restart_after_traffic_reinstalls_the_stopped_port() {
+    struct Network;
+    joined::<Network>(|bench| {
+        one_datagram_out(bench);
+        bench.land_from_peer(&udp_from_peer(b"in before the restart"));
+        let datagram = bench.receive_datagram();
+        let mut socket = bench.socket.take().unwrap();
+        socket
+            .release(datagram.block)
+            .ok()
+            .expect("the block goes home");
+        bench.socket = Some(socket);
+        bench.settle();
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
+        bench.send(ToActor::Reinstall);
+        bench.until("the actor ends", |bench| {
+            bench.ends.borrow().reinstalled.is_some()
+        });
+        let ends = bench.ends.borrow();
+        assert_eq!(ends.actor, Some(ActorEndSeen::Reinstall));
+        assert_eq!(ends.reinstalled, Some(Ok(())), "the next installation");
     });
 }

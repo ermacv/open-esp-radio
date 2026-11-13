@@ -756,6 +756,64 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
     });
 }
 
+/// The image's one-shot fault: a publication refused as a missing key with
+/// its key still installed, as the station's restart on the stand meets
+/// it. The refused MPDU goes back to its queue; the stop and the retired
+/// port's reinstall follow, and the new installation publishes.
+#[test]
+fn a_publication_refused_with_its_key_installed_restarts_into_a_working_port() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(3),
+        );
+        assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+        let key = match fixture.outbox.terminals.pop() {
+            Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) => key,
+            _ => panic!("the installation terminal returns the key"),
+        };
+        let attempt = fixture.protected_mpdu(&key).expect("attempt");
+        fixture.port.refuse_publication_for_test();
+        let now = fixture.now();
+        let _ = fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .unwrap();
+        assert_eq!(
+            fixture.port.fault(),
+            Some(Fault::Unpublished(crate::port::Unpublished::Key))
+        );
+        assert!(fixture.port.recover_for_stop());
+        let _ = fixture.turn();
+        assert_eq!(fixture.port.fault(), None);
+        fixture.advance(crate::port::COMMAND_BOUND);
+        fixture.advance(crate::port::COMMAND_BOUND);
+        fixture.stop();
+        assert_eq!(fixture.port.fault(), None);
+        assert_eq!(fixture.take_completed(), 1, "the refused MPDU came back");
+        drop(key);
+        let mut second = reinstall(fixture, installations)
+            .ok()
+            .expect("every owner came home");
+        second.start();
+        let attempt = second.mpdu(None).expect("attempt");
+        let now = second.now();
+        second
+            .port
+            .submit(attempt, now, &mut second.outbox)
+            .unwrap()
+            .ok()
+            .expect("the new installation publishes");
+        let _ = second.turn();
+        assert_eq!(second.take_completed(), 1, "and its frame completes");
+        second.stop();
+    });
+}
+
 #[test]
 fn a_publication_refused_past_its_attachment_ends_withdrawn_with_every_owner_and_no_fault() {
     with_installations(|mut fixture, installations| {

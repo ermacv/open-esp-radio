@@ -403,6 +403,10 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     /// Refuse the next publication's values, past its buffer's attachment.
     #[cfg(test)]
     pub(super) refuse_values_for_test: bool,
+    /// Refuse the next publication as a missing key, on the path the
+    /// image's one-shot fault takes, with the key installed.
+    #[cfg(test)]
+    pub(super) refuse_publication_for_test: bool,
     /// Refuse the next step of this kind, which the counts exclude.
     #[cfg(test)]
     pub(super) refuse_for_test: Option<TestRefusal>,
@@ -491,6 +495,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             tickets: crate::lower_mac::TicketBank::empty(),
             #[cfg(test)]
             refuse_values_for_test: false,
+            #[cfg(test)]
+            refuse_publication_for_test: false,
             #[cfg(test)]
             refuse_for_test: None,
             free: QueueHomes::empty(),
@@ -1227,6 +1233,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         #[cfg(oer_fault_injection)]
         let checked = checked.and_then(|checked| {
             if super::debug::publication_refused() {
+                Err(Unpublished::Key)
+            } else {
+                Ok(checked)
+            }
+        });
+        #[cfg(test)]
+        let checked = checked.and_then(|checked| {
+            if core::mem::take(&mut self.refuse_publication_for_test) {
                 Err(Unpublished::Key)
             } else {
                 Ok(checked)
