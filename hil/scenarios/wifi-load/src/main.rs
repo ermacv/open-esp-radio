@@ -36,15 +36,15 @@ use std::{
 };
 
 use oer_hil_services_load::{
-    Addba, AddbaCollected, CacheGeometry, CacheLevel, Collect, CollectAddba, CollectCounters,
-    CollectDiagnostics, CollectHart1, CollectLink, CollectMac, CollectNetwork, CollectParts,
-    CollectPositions, CollectProfile, CollectStall, CollectStallMac, CollectTracking, Collected,
-    Counters, CountersCollected, DataBus, Diagnose, DiagnosticsCollected, Hart1Collected,
-    Hart1Window, InstructionBus, Link, LinkCollected, Load, MAC_COUNT_NAMES, MAX_PARTS, Mac,
-    MacCollected, NetworkCollected, NetworkTurns, PROFILE_PAGES, PartWindow, PartsCollected,
-    Positions, PositionsCollected, ProfileCollected, Report, Stall, StallCollected, StallMac,
-    StallMacCollected, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking, TrackingCollected,
-    Transmit,
+    Addba, AddbaCollected, Begin, Begun, CacheGeometry, CacheLevel, Collect, CollectAddba,
+    CollectCounters, CollectDiagnostics, CollectHart1, CollectLink, CollectMac, CollectNetwork,
+    CollectParts, CollectPositions, CollectProfile, CollectStall, CollectStallMac, CollectTracking,
+    Collected, Counters, CountersCollected, DataBus, Diagnose, DiagnosticsCollected,
+    Hart1Collected, Hart1Window, InstructionBus, Link, LinkCollected, Load, MAC_COUNT_NAMES,
+    MAX_PARTS, Mac, MacCollected, NetworkCollected, NetworkTurns, PROFILE_PAGES, PartWindow,
+    PartsCollected, Positions, PositionsCollected, ProfileCollected, Report, Stall, StallCollected,
+    StallMac, StallMacCollected, Start, Started, TUNE_KNOBS, TUNE_UNSET, Tracking,
+    TrackingCollected, Transmit,
 };
 use oer_hil_services_wifi_station::{
     GetConnectTimes, GetScanVisit, GetStatus, Join, Joined, Leave, Left, ScanVisit,
@@ -284,6 +284,11 @@ struct Ended {
 }
 
 fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
+    let report = collect_report(cx, run)?;
+    collect_ended(cx, run, report)
+}
+
+fn collect_report(cx: &mut Cx<'_>, run: u32) -> Result<Report, Failure> {
     let started = Instant::now();
     let report = loop {
         match cx.call(Collect { run }, CALL)? {
@@ -296,6 +301,10 @@ fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
             }
         }
     };
+    Ok(report)
+}
+
+fn collect_ended(cx: &mut Cx<'_>, run: u32, report: Report) -> Result<Ended, Failure> {
     let mut parts = Vec::new();
     loop {
         let from = u8::try_from(parts.len())
@@ -947,6 +956,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             run,
             port: DEVICE_PORT,
             delay_ms: 0,
+            synchronised: false,
             duration_ms: 1000,
             drain_ms: DRAIN_MS,
             transmit: Some(Transmit {
@@ -1026,6 +1036,7 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
             run: idle,
             port: DEVICE_PORT,
             delay_ms: 0,
+            synchronised: false,
             duration_ms: DURATION_MS,
             drain_ms: 0,
             transmit: None,
@@ -1275,6 +1286,7 @@ fn stop_under_load(cx: &mut Cx<'_>) -> Result<(), Failure> {
             run,
             port: DEVICE_PORT,
             delay_ms: DELAY_MS,
+            synchronised: false,
             duration_ms: 10_000,
             drain_ms: DRAIN_MS,
             transmit: None,
@@ -1550,11 +1562,13 @@ fn measured_level(
     let before = link::read(cx, station);
     let since = Instant::now();
     let transmit = device_transmit(offer, host, host_port);
+    let start_call_us = endpoint.now_us();
     let started = cx.call(
         Start {
             run,
             port: DEVICE_PORT,
             delay_ms: DELAY_MS,
+            synchronised: true,
             duration_ms: window_ms()?,
             drain_ms: DRAIN_MS,
             transmit,
@@ -1563,6 +1577,7 @@ fn measured_level(
         },
         CALL,
     )?;
+    let start_answer_us = endpoint.now_us();
     check(
         started == Started::Running,
         format!("the image's load: {started:?}"),
@@ -1570,42 +1585,89 @@ fn measured_level(
     let peer = SocketAddrV4::new(device, DEVICE_PORT);
     let stop = AtomicBool::new(false);
     let window = Duration::from_millis(u64::from(window_ms()?));
-    let (sent, probes, echoes) = std::thread::scope(|scope| {
-        // The host's window starts with the image's, as near as the HIL
-        // answer's latency allows; the image counts only its own window.
-        // The probes go within the window only; their late replies are
-        // still read during the drain.
-        std::thread::sleep(Duration::from_millis(u64::from(DELAY_MS)));
-        let probes = probing
-            .then(|| scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop)));
-        let requests = (window.as_millis() / ping::PERIOD.as_millis()) as u32;
-        let echoes = offer
-            .ping
-            .then(|| scope.spawn(move || ping::echo(device, requests)));
-        let sent = if mode == Mode::Tx {
+    let (sent, probes, echoes, report, begun, begin_call_us, begin_answer_us) =
+        std::thread::scope(|scope| {
+            let _stop_on_error = traffic::StopOnDrop(&stop);
+            // Start the incoming flow while the image is armed, and keep it
+            // going until the image reports its completed window and drain.
+            // The device releases the barrier only after it actually delivered
+            // this run's load. Host response latency cannot create an empty head
+            // or cause a separately timed sender to stop before the window ends.
+            let sender = (mode != Mode::Tx).then(|| {
+                scope.spawn(|| {
+                    traffic::send_until(
+                        &endpoint,
+                        peer,
+                        run,
+                        offer.payload,
+                        each,
+                        offer.burst,
+                        window
+                            + Duration::from_millis(u64::from(DELAY_MS + DRAIN_MS))
+                            + Duration::from_secs(20),
+                        &stop,
+                    )
+                })
+            });
+            let begin_call_us = endpoint.now_us();
+            let waiting = Instant::now();
+            let begun = loop {
+                match cx.call(
+                    Begin {
+                        run,
+                        receive: mode != Mode::Tx,
+                    },
+                    CALL,
+                )? {
+                    ready @ Begun::Ready { .. } => break ready,
+                    Begun::WaitingForLoad if waiting.elapsed() < Duration::from_secs(5) => {
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
+                    other => {
+                        return Err(Failure::Incomplete(format!(
+                            "the load start barrier: {other:?}"
+                        )));
+                    }
+                }
+            };
+            let begin_answer_us = endpoint.now_us();
+            let probes = probing
+                .then(|| scope.spawn(|| traffic::probe(&endpoint, peer, run, PROBE_PERIOD, &stop)));
+            let requests = (window.as_millis() / ping::PERIOD.as_millis()) as u32;
+            let echoes = offer
+                .ping
+                .then(|| scope.spawn(move || ping::echo(device, requests)));
+            // Begin acknowledges the actual opening, after device preparation.
             std::thread::sleep(window);
-            traffic::Sent::default()
-        } else {
-            traffic::send(
-                &endpoint,
-                peer,
-                run,
-                offer.payload,
-                each,
-                offer.burst,
-                window,
-            )
-        };
-        stop.store(true, Ordering::Relaxed);
-        let probes = probes.map_or(0, |probes| probes.join().unwrap_or(0));
-        std::thread::sleep(Duration::from_millis(u64::from(DRAIN_MS)));
-        let echoes = echoes.map(|echoes| echoes.join().unwrap_or_else(|_| Err("ping".to_owned())));
-        (sent, probes, echoes)
-    });
+            let report = collect_report(cx, run)?;
+            stop.store(true, Ordering::Relaxed);
+            let sent = match sender {
+                Some(sender) => sender
+                    .join()
+                    .map_err(|_| Failure::Incomplete("host load sender panicked".to_owned()))?,
+                None => traffic::Sent::default(),
+            };
+            let probes = probes.map_or(0, |probes| probes.join().unwrap_or(0));
+            let echoes =
+                echoes.map(|echoes| echoes.join().unwrap_or_else(|_| Err("ping".to_owned())));
+            Ok((
+                sent,
+                probes,
+                echoes,
+                report,
+                begun,
+                begin_call_us,
+                begin_answer_us,
+            ))
+        })?;
+    check(
+        start_consistent(&begun, &report, mode != Mode::Tx),
+        "the device start boundary is inconsistent",
+    )?;
     let echoes = echoes.transpose().map_err(Failure::Incomplete)?;
     let after = link::read(cx, station);
     let span = since.elapsed();
-    let ended = collect(cx, run)?;
+    let ended = collect_ended(cx, run, report)?;
     let diagnosed = if diagnosing {
         let collected: DiagnosticsCollected = cx.call(CollectDiagnostics { run }, CALL)?;
         Some(collected)
@@ -1630,6 +1692,28 @@ fn measured_level(
     let name = &offer.name;
     let mut value = measurement(offer, &sent, &received, &ended);
     if let Some(object) = value.as_object_mut() {
+        object.insert("start_boundary".to_owned(), serde_json::json!({
+            "protocol": "armed-flow-begin",
+            "host_clock": "endpoint monotonic microseconds; not synchronised with device",
+            "host_start_call_us": start_call_us,
+            "host_start_answer_us": start_answer_us,
+            "host_begin_call_us": begin_call_us,
+            "host_begin_answer_us": begin_answer_us,
+            "host_first_send_us": sent.first_us,
+            "host_last_send_us": sent.last_us,
+            "host_first_receive_us": received.first_us,
+            "host_last_receive_us": received.last_us,
+            "device_begin": begun,
+            "device_armed_us": ended.report.armed_us,
+            "device_triggered_us": ended.report.triggered_us,
+            "device_window_start_us": ended.report.window_start_us,
+            "device_window_end_us": ended.report.window_end_us,
+            "device_first_delivery_us": ended.report.received.first_us,
+            "device_last_delivery_us": ended.report.received.last_us,
+            "device_first_send_us": ended.report.sent.first_us,
+            "device_last_send_us": ended.report.sent.last_us,
+            "rx_loss_scope": "entire host flow including warm-up and drain; window delivery uses device counters",
+        }));
         if let Some(echoes) = &echoes {
             object.insert("ping".to_owned(), rtt(echoes));
         }
@@ -1672,6 +1756,27 @@ fn measured_level(
     }
     cx.measure(name.clone(), value);
     Ok(echoes.unwrap_or_default())
+}
+
+/// Only device-clock boundaries are compared. Host send stamps have their
+/// own epoch and cannot establish a cross-clock latency by subtraction.
+fn start_consistent(begun: &Begun, report: &Report, receive: bool) -> bool {
+    let Begun::Ready {
+        at_us,
+        first_received_us,
+        window_start_us,
+    } = *begun
+    else {
+        return false;
+    };
+    report.armed_us <= at_us
+        && report.triggered_us == at_us
+        && report.window_start_us == window_start_us
+        && window_start_us >= at_us
+        && report.window_end_us > window_start_us
+        && (!receive
+            || first_received_us
+                .is_some_and(|first| first <= at_us && report.received.first_us == Some(first)))
 }
 
 /// One level's measurement. Throughput is over the measuring window: the
@@ -1787,6 +1892,40 @@ fn percent(part: u64, whole: u64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_window_is_qualified_only_by_consistent_device_barrier_stamps() {
+        let mut report = Report {
+            armed_us: 100,
+            triggered_us: 300,
+            window_start_us: 600,
+            window_end_us: 5_000_600,
+            received: oer_hil_services_load::Received {
+                first_us: Some(200),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let begun = Begun::Ready {
+            at_us: 300,
+            first_received_us: Some(200),
+            window_start_us: 600,
+        };
+        assert!(start_consistent(&begun, &report, true));
+        report.triggered_us = 200;
+        assert!(!start_consistent(&begun, &report, true));
+        report.triggered_us = 300;
+        report.received.first_us = Some(700);
+        assert!(!start_consistent(&begun, &report, true));
+        // TX-only requires the receiver, not an incoming load datagram.
+        let tx = Begun::Ready {
+            at_us: 300,
+            first_received_us: None,
+            window_start_us: 600,
+        };
+        assert!(start_consistent(&tx, &report, false));
+        assert!(!start_consistent(&tx, &report, true));
+    }
+
     #[test]
     fn the_ping_period_meets_every_sparse_shape_at_as_many_phases_as_its_replies_need() {
         let period = u32::try_from(ping::PERIOD.as_millis()).unwrap();
@@ -1964,6 +2103,7 @@ mod tests {
             bytes: 65_000_000 / 8,
             failed: 0,
             elapsed: Duration::from_secs(5),
+            ..Default::default()
         };
         let ended = Ended {
             report,
@@ -2057,6 +2197,7 @@ mod tests {
             bytes: 0,
             failed: 0,
             elapsed: Duration::from_secs(1),
+            ..Default::default()
         };
         let ended = Ended {
             report,
