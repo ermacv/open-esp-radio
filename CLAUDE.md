@@ -124,6 +124,20 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   the armed RTC watchdog; a timeout is a typed boot failure, never a
   fallback value. Portable protocols take no `critical-section` and no
   blocking mutex.
+- **Static call graph.** Library code an image's roots reach (drivers,
+  protocols, runtimes, the platform, the application entry) makes no
+  indirect call but through the executor's one waker vtable, the generated
+  interrupt table and a compiler jump table, and never reaches `core::fmt`:
+  no trait object, no function pointer chosen at run time, no `write!`,
+  `format_args!` or `Debug`/`Display` call outside tests and host tools. A
+  `dyn` the optimizer happens to devirtualize is still one. A closed set is
+  a generic parameter, an enum or a tuple; diagnostics are binary records
+  the host renders (`oer-portable-diagnostics`). The image stack analysis
+  bounds a stack only over such code
+  ([stack bounds](tools/image/stack/README.md)): an image that declares
+  `task-stack = "proven"` does not link otherwise, and every interrupt
+  handler follows the rule in every image. An application may use both in
+  its own tasks by declaring its task stack's size in place of the proof.
 - **Hardware facts.** A fact about the hardware (an address, a memory
   region, a peripheral, an interrupt source, a CPU line count, the number of
   cores, an ISA extension, a ROM function) has one source of truth in the
