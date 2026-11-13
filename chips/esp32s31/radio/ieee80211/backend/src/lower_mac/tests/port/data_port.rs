@@ -985,6 +985,75 @@ fn a_refused_submission_and_command_return_their_owners_unchanged() {
     });
 }
 
+/// A receive continuation that passed with no interrupt since, while a
+/// queued MPDU's lifetime bounds a later deadline: the port's next
+/// recompute names that later deadline, never the passed continuation the
+/// actor drops as past (its `deadline` keeps only instants after its own).
+#[test]
+fn a_passed_receive_continuation_never_hides_a_later_transmit_deadline() {
+    use crate::rx::receive::CONTINUATION_WAIT;
+    with_fixture(|fixture| {
+        fixture.start();
+        // The units first: their delivery configures the station, which
+        // would withdraw a station MPDU queued before it.
+        fixture.observed.borrow_mut().continuous_rx = true;
+        fixture.deliver(5);
+        let gate = fixture.gate.take().expect("gate");
+        assert!(matches!(
+            fixture.run(PortCommand::CloseGate(gate)),
+            Ok(CommandProgress::Done)
+        ));
+        let attempt = fixture.station_mpdu().expect("attempt");
+        let admitted = fixture.now();
+        fixture
+            .port
+            .submit(attempt, admitted, &mut fixture.outbox)
+            .unwrap()
+            .ok()
+            .expect("queued");
+        let expiry = admitted.saturating_add(
+            EdcaParameterSet::STANDARD_DEFAULT
+                .access_category(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort)
+                .msdu_lifetime,
+        );
+        // Four units, then the ring's continuation.
+        let now = fixture.now();
+        let mut held = Vec::new();
+        let at = loop {
+            match fixture.port.receive(32, now).expect("receive") {
+                RxPull::Unit { frame, .. } => held.push(frame),
+                RxPull::Later(at) => break at,
+                RxPull::Empty => panic!("the ring continues later"),
+            }
+        };
+        assert_eq!(held.len(), 4);
+        for frame in held {
+            assert!(fixture.port.recycle(frame).is_ok());
+        }
+        assert!(at < expiry);
+        assert_eq!(
+            fixture.port.deadline(),
+            Some(at),
+            "the continuation comes first"
+        );
+        // The continuation passes; nothing raises the ring since, and the
+        // next call that recomputes the deadline is a transmit service.
+        fixture.advance(CONTINUATION_WAIT);
+        fixture.advance(oer_portable_time::Duration::from_micros(1));
+        assert!(fixture.now() > at);
+        assert!(
+            fixture.turn().is_none(),
+            "nothing completes behind the gate"
+        );
+        assert_eq!(
+            fixture.port.deadline(),
+            Some(expiry),
+            "the transmit deadline, not the passed continuation"
+        );
+        fixture.observed.borrow_mut().continuous_rx = false;
+    });
+}
+
 #[test]
 fn a_queued_mpdu_bounds_the_deadline_until_it_expires_behind_a_closed_gate() {
     with_fixture(|fixture| {
