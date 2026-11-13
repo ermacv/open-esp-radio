@@ -227,6 +227,9 @@ pub struct StationQueues {
     /// The columns this parser knows that the header lacks: unavailable in
     /// every row.
     pub missing_columns: Vec<String>,
+    /// The last row as printed, when the file filled the kernel's buffer:
+    /// cut there, it gives no value and names no TID for certain.
+    pub cut_row: Option<String>,
     pub tids: Vec<TidQueue>,
 }
 
@@ -263,6 +266,10 @@ pub struct RadioQueues {
     pub unknown_names: Vec<String>,
     /// The names this parser knows that the file lacks.
     pub missing_names: Vec<String>,
+    /// The name of the last row when the file filled the kernel's buffer:
+    /// cut there, it gives no value, not even a number it still holds.
+    /// A known name the cut row's text begins, else the text itself.
+    pub cut_names: Vec<String>,
     pub values: BTreeMap<String, RadioEntry>,
 }
 

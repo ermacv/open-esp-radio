@@ -45,6 +45,36 @@ const RADIO_NAMES: [(&str, Counts); 9] = [
     ("fq_quantum", Counts::RadioQuantum),
 ];
 
+/// The longest text the phy's `aqm` file gives: mac80211 prints it into a
+/// 200-byte buffer with `scnprintf`, which keeps 199 characters and cuts
+/// the rest, a row's number included.
+///
+/// SOURCE: Linux `net/mac80211/debugfs.c::aqm_read`, `char buf[200]`.
+const RADIO_TEXT_MAX: usize = 200 - 1;
+
+/// The longest text the station's `aqm` file gives: one buffer of
+/// `AQM_TXQ_ENTRY_LEN * (IEEE80211_NUM_TIDS + 2)` bytes filled by
+/// `scnprintf`. Its 17 TID queues' rows at their widest (ten digits per
+/// counter, every flag) take 135 characters each beside the 108 of its
+/// header, more than the buffer holds: the file can be cut too.
+///
+/// SOURCE: Linux `net/mac80211/debugfs_sta.c::sta_aqm_read`,
+/// `AQM_TXQ_ENTRY_LEN` 130, `IEEE80211_NUM_TIDS` 16
+/// (`include/linux/ieee80211.h`), `txq[IEEE80211_NUM_TIDS + 1]`
+/// (`include/net/mac80211.h`).
+const STATION_TEXT_MAX: usize = 130 * (16 + 2) - 1;
+
+/// Whether a file's text, `header` and `rows` as the kernel printed them,
+/// filled the kernel's buffer of `max` characters: a whole file ends with
+/// its last row's newline, so only a cut one reaches `max` without it, and
+/// its last row is then cut.
+fn filled(header: &str, rows: &[&str], max: usize) -> bool {
+    let printed = rows.iter().fold(header.len(), |length, row| {
+        length.saturating_add(row.len() + 1)
+    });
+    !rows.is_empty() && printed == max
+}
+
 /// The router's boot clock as `/proc/uptime`'s first field prints it,
 /// seconds with two decimals (`508749.69`), in milliseconds: 10 ms steps.
 ///
@@ -135,8 +165,15 @@ pub fn parse_station(lines: &[&str]) -> Result<Option<StationQueues>> {
     if !columns.contains(&"tid") {
         return Err("the router's station aqm header names no `tid`".into());
     }
+    let cut_row = filled(header, &rows, STATION_TEXT_MAX)
+        .then(|| rows.last().map(|row| (*row).to_owned()))
+        .flatten();
+    let whole = match (&cut_row, rows.split_last()) {
+        (Some(_), Some((_, whole))) => whole,
+        _ => &rows[..],
+    };
     let mut tids: Vec<TidQueue> = Vec::new();
-    for row in &rows {
+    for row in whole {
         let fields = fields(row)
             .filter(|fields| fields.len() == columns.len())
             .ok_or_else(|| {
@@ -216,6 +253,7 @@ pub fn parse_station(lines: &[&str]) -> Result<Option<StationQueues>> {
             .filter(|column| !columns.contains(column))
             .map(|column| (*column).to_owned())
             .collect(),
+        cut_row,
         tids,
     }))
 }
@@ -232,9 +270,16 @@ pub fn parse_radio(lines: &[&str]) -> Result<Option<RadioQueues>> {
     let position = |name: &str| columns.iter().position(|column| *column == name);
     let name_at = position("name").ok_or("the router's radio aqm header names no `name`")?;
     let (access_at, value_at) = (position("access"), position("value"));
+    let cut = filled(header, &rows, RADIO_TEXT_MAX)
+        .then(|| rows.last().copied())
+        .flatten();
+    let whole = match (cut, rows.split_last()) {
+        (Some(_), Some((_, whole))) => whole,
+        _ => &rows[..],
+    };
     let mut values = BTreeMap::new();
     let mut unknown_names = Vec::new();
-    for row in &rows {
+    for row in whole {
         let fields = row.split_whitespace().collect::<Vec<_>>();
         if fields.len() != columns.len() {
             return Err(format!(
@@ -267,6 +312,25 @@ pub fn parse_radio(lines: &[&str]) -> Result<Option<RadioQueues>> {
             return Err(format!("the router's radio aqm names `{name}` twice"));
         }
     }
+    // The cut row's name: the known names its text could begin, or the text
+    // itself. None of them is missing: the file named it, the buffer cut it.
+    let cut_names: Vec<String> = cut
+        .map(|row| {
+            let partial = row.split_whitespace().nth(name_at).unwrap_or_default();
+            let known = RADIO_NAMES
+                .iter()
+                .map(|(name, _)| *name)
+                .filter(|name| !partial.is_empty() && name.starts_with(partial))
+                .filter(|name| !values.contains_key(*name))
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            if known.is_empty() {
+                vec![row.trim().to_owned()]
+            } else {
+                known
+            }
+        })
+        .unwrap_or_default();
     Ok(Some(RadioQueues {
         raw: Raw {
             observed_at_ms,
@@ -281,9 +345,12 @@ pub fn parse_radio(lines: &[&str]) -> Result<Option<RadioQueues>> {
         unknown_names,
         missing_names: RADIO_NAMES
             .iter()
-            .filter(|(name, _)| !values.contains_key(*name))
+            .filter(|(name, _)| {
+                !values.contains_key(*name) && !cut_names.iter().any(|cut| cut == name)
+            })
             .map(|(name, _)| (*name).to_owned())
             .collect(),
+        cut_names,
         values,
     }))
 }
