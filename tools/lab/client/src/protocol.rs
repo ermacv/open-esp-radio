@@ -26,9 +26,11 @@ use serde::{Deserialize, Serialize};
 pub mod station_link;
 
 /// The protocol version; another one is refused at the hello, before any
-/// operation. Version 3 added [`Reply::Ready`]; version 4 adds
-/// [`Operation::FlashConsole`], which a version 3 service cannot parse.
-pub const PROTOCOL: u32 = 4;
+/// operation. Version 3 added [`Reply::Ready`]; version 4
+/// [`Operation::FlashConsole`]; version 5 names the rows of a router's queue
+/// file the kernel's buffer cut (`station_link::queue`), which a version 4
+/// client cannot parse.
+pub const PROTOCOL: u32 = 5;
 /// The token a command runs under: its client joins the lease the token
 /// belongs to, for no more than the token allows, instead of queueing.
 pub const LEASE_ENV: &str = "OER_LAB_LEASE";
