@@ -534,18 +534,43 @@ pub trait NetTask: 'static {
 
 impl NetTask for NoNet {
     fn serve(self) -> impl core::future::Future<Output = ()> {
-        core::future::ready(())
+        // Ready at every poll: `core::future::ready` would panic at a
+        // second one.
+        core::future::poll_fn(|_| core::task::Poll::Ready(()))
     }
 }
 
 /// Two networks of the group, served together in one task: the group's
 /// network signal wakes it for either.
 impl<A: NetTask, B: NetTask> NetTask for (A, B) {
-    fn serve(self) -> impl core::future::Future<Output = ()> {
-        async move {
-            let ((), ()) = embassy_futures::join::join(self.0.serve(), self.1.serve()).await;
-        }
+    async fn serve(self) {
+        let first = core::pin::pin!(self.0.serve());
+        let second = core::pin::pin!(self.1.serve());
+        both(first, second).await;
     }
+}
+
+/// Poll both futures until both ended, each never again after its end:
+/// no output is held, so none is taken twice.
+async fn both(
+    mut first: core::pin::Pin<&mut impl core::future::Future<Output = ()>>,
+    mut second: core::pin::Pin<&mut impl core::future::Future<Output = ()>>,
+) {
+    let (mut first_ended, mut second_ended) = (false, false);
+    core::future::poll_fn(|cx| {
+        if !first_ended {
+            first_ended = first.as_mut().poll(cx).is_ready();
+        }
+        if !second_ended {
+            second_ended = second.as_mut().poll(cx).is_ready();
+        }
+        if first_ended && second_ended {
+            core::task::Poll::Ready(())
+        } else {
+            core::task::Poll::Pending
+        }
+    })
+    .await;
 }
 
 /// Run the networks, or end at once without one.

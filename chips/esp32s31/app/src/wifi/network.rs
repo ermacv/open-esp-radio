@@ -359,7 +359,7 @@ const BLOCK_WORD_OFFSET: usize =
     (wifi::FRAME_WORD_OFFSET + HEADER_LEN + IPV4_HEADER_LEN + UDP_HEADER_LEN) % 4;
 const _: () = {
     // Every block starts as the first does.
-    if BLOCK % 4 != 0 {
+    if !BLOCK.is_multiple_of(4) {
         panic!("a block's length is a whole number of words");
     }
 };
@@ -604,15 +604,21 @@ async fn serve_network<B: 'static, P: Produce + 'static>(start: NetworkStart<B, 
     // published before it saw the request) goes home to the port's
     // transmit owner. A buffer held for ever keeps the loans waiting, as
     // nothing expires; the task, with what it holds, lasts the boot.
-    let returning = core::future::poll_fn(|cx| {
-        port.serve_returns(cx);
-        core::task::Poll::<core::convert::Infallible>::Pending
-    });
-    let loans = oer_protocols_network_runtime::serve_late_loans(
+    let mut loans = core::pin::pin!(oer_protocols_network_runtime::serve_late_loans(
         &mut pool,
         [&mut sockets[..], &mut adopted[..]],
-    );
+    ));
     let _held = (&results, &brand, &returns, &producers);
-    let ((), never) = embassy_futures::join::join(loans, returning).await;
+    // The loans' future is polled until it ends and never after; the
+    // port's returns are served for good.
+    let mut loans_ended = false;
+    let never = core::future::poll_fn(|cx| {
+        if !loans_ended {
+            loans_ended = loans.as_mut().poll(cx).is_ready();
+        }
+        port.serve_returns(cx);
+        core::task::Poll::<core::convert::Infallible>::Pending
+    })
+    .await;
     match never {}
 }
