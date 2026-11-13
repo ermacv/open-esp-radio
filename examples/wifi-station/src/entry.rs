@@ -20,6 +20,8 @@ type Socket = wifi::Socket<Brand>;
 
 static NETWORK: static_cell::ConstStaticCell<Storage> =
     static_cell::ConstStaticCell::new(Storage::new());
+static MEMORY: static_cell::ConstStaticCell<wifi::NetworkMemory> =
+    static_cell::ConstStaticCell::new(wifi::NetworkMemory::new());
 
 /// The channel socket's port, and the producer's, which sends nothing.
 const PORTS: wifi::Ports = wifi::Ports {
@@ -45,8 +47,9 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
 fn network(p: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
     let storage = NETWORK.try_take().ok_or(Error::Storage)?;
+    let memory = MEMORY.try_take().ok_or(Error::Storage)?;
     let (net, socket, mut boot) =
-        wifi::Network::start(device, wifi::Addressing::Dhcp, boot, storage, Silent, PORTS)?;
+        wifi::Network::start(device, wifi::Addressing::Dhcp, boot, storage, memory, Silent, PORTS)?;
     let requests = EXCHANGES.group(&mut boot)?;
     Ok(boot.run(move || exchanges(net, socket, requests)))
 }

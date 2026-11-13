@@ -14,6 +14,8 @@ static LINK: Channel<Request, Reply, 1> = Channel::new();
 enum Brand {}
 static NETWORK: ConstStaticCell<wifi::NetworkStorage<Brand, Producer, wifi::Copying>> =
     ConstStaticCell::new(wifi::NetworkStorage::new());
+static MEMORY: ConstStaticCell<wifi::NetworkMemory> =
+    ConstStaticCell::new(wifi::NetworkMemory::new());
 
 fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
     let config = wifi::Config::new(*b"DE", 6, 10)?;
@@ -25,8 +27,10 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
 fn network(p: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
     let storage = NETWORK.try_take().ok_or(Error::Storage)?;
-    let (net, socket, mut boot) =
-        wifi::Network::start(device, wifi::Addressing::Dhcp, boot, storage, Producer, PORTS)?;
+    let memory = MEMORY.try_take().ok_or(Error::Storage)?;
+    let (net, socket, mut boot) = wifi::Network::start(
+        device, wifi::Addressing::Dhcp, boot, storage, memory, Producer, PORTS,
+    )?;
     let link = LINK.group(&mut boot)?;
     Ok(boot.run(move || sockets(net, socket, link)))
 }
@@ -94,7 +98,7 @@ a HIL image of one function build it:
 | Drain at a stop | 2 s (`wifi::DRAIN`) | `wifi::Config::with_drain(deadline)` |
 | Channel width of a join | 20 MHz | `wifi::Config::with_ht40()`: 40 MHz where the access point's HT elements name a secondary channel the domain permits |
 | HE (802.11ax) of a connect | off: HT | `wifi::Profile::with_he20()`, experimental: HE20 (one stream, HE-MCS 0 to 9, no optional HE capability, no answer to Trigger frames) with an access point that admits it, HT otherwise; `Connected::phy` names the mode |
-| A network's storage | `wifi::BLOCKS` blocks of `wifi::BLOCK` octets, two sockets | the image's own `static NETWORK: wifi::NetworkStorage<Brand, Producer, Receive>`, one per network |
+| A network's storage | `wifi::BLOCKS` blocks of `wifi::BLOCK` octets, two sockets | the image's own `static NETWORK: wifi::NetworkStorage<Brand, Producer, Receive>` and its zeroed `static MEMORY: wifi::NetworkMemory` (the blocks), one each per network |
 
 A zero interval or deadline is refused (`ConfigError`). Each storage is
 taken once; a second start of a device returns `Error::AlreadyStarted`.
@@ -167,7 +171,8 @@ group (`GroupPeripherals::device`); `AccessPoint::start` keeps the access
 point's (`GroupPeripherals::access_point`). `wifi::Network::start`, in the
 group, starts the network core over a role's device with its addressing
 (`Addressing::Dhcp` or `Addressing::Given`), the storage the image lends
-(`NetworkStorage`, of a brand the image names) and a producer, opens its
+(`NetworkStorage`, of a brand the image names, and `NetworkMemory`, its
+blocks) and a producer, opens its
 channel socket (`Copying` or `Lending<CREDIT>`) and its producer's socket,
 and returns them with the group's context. `configuration()`, `changes()`
 and `changed()` read the interface's address, its lease and the link as the

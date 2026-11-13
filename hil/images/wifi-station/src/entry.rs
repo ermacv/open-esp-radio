@@ -48,6 +48,8 @@ static NETWORK: ConstStaticCell<
     wifi::NetworkStorage<udp::Brand, udp::LoadProducer, udp::Receive>,
 > =
     ConstStaticCell::new(wifi::NetworkStorage::new());
+static MEMORY: ConstStaticCell<wifi::NetworkMemory> =
+    ConstStaticCell::new(wifi::NetworkMemory::new());
 /// What the load's sender hands the producer.
 static SOURCE: udp::Source = udp::Source::new();
 /// The worker asks the group for the network's address, which only the
@@ -112,6 +114,7 @@ fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted
     let device = p.device.ok_or(Error::NoDevice)?;
     let hart1 = boot.observe().ok_or(Error::ObserveTaken)?;
     let storage = NETWORK.try_take().ok_or(Error::Storage)?;
+    let memory = MEMORY.try_take().ok_or(Error::Storage)?;
     let producer = udp::LoadProducer::new(&SOURCE);
     let (net, socket, mut boot) =
         wifi::Network::start(
@@ -119,6 +122,7 @@ fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted
             wifi::Addressing::Dhcp,
             boot,
             storage,
+            memory,
             producer,
             udp::PORTS,
         )?;

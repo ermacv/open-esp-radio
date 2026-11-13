@@ -11,8 +11,9 @@ the network core carries UDP, ARP, DHCP and ICMP echo.
 One network implementation: the network core (`oer-protocols-network-core`)
 and its runtime (`oer-protocols-network-runtime`), over a role's port. A
 network is an instance over one port: the image lends its storage
-(`oer::wifi::NetworkStorage`: blocks, the stop's lane, the service's place,
-the watch of its address, its channel socket's lanes) and names its brand, a
+(`oer::wifi::NetworkStorage`: the stop's lane, the service's place, the
+watch of its address, its channel socket's lanes), its blocks in a zeroed
+static of their own (`oer::wifi::NetworkMemory`) and names its brand, a
 type of its own, so nothing of the library makes a second network
 impossible. `oer::wifi::Network::start` takes a role's device (the station's
 or the access point's, the same `Device`) and its addressing: leased by the

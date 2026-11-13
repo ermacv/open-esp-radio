@@ -314,13 +314,13 @@ impl<B: 'static, const CREDIT: usize> receive::Sealed<B> for Lending<CREDIT> {
 type Placed<B, P> = &'static mut Option<NetService<B, P>>;
 
 /// What an image lends a network branded `B` whose producer is `P`, in a
-/// static of its own: the network's memory and its stop's lane, where the
-/// service stays, the producer's end flag, which the service sets at its
-/// end ([`LocalEnd`]), the watch of the interface's address and the channel
-/// socket's lanes. Nothing of a network is the library's: a second instance
-/// is a second storage of another brand.
+/// static of its own: its stop's lane, where the service stays, the
+/// producer's end flag, which the service sets at its end ([`LocalEnd`]),
+/// the watch of the interface's address and the channel socket's lanes. The
+/// network's blocks are a zeroed static of their own ([`NetworkMemory`]).
+/// Nothing of a network is the library's: a second instance is a second
+/// storage of another brand.
 pub struct NetworkStorage<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> {
-    memory: Memory,
     stop: StopLane,
     service: Option<NetService<B, P>>,
     end: LocalEnd,
@@ -334,10 +334,6 @@ impl<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> NetworkStorage<B, P, R
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            memory: Memory {
-                before: [0; BLOCK_WORD_OFFSET],
-                blocks: [[0; BLOCK]; BLOCKS],
-            },
             stop: StopLane::new(),
             service: None,
             end: LocalEnd::new(),
@@ -364,11 +360,30 @@ const _: () = {
     }
 };
 
-/// The network's memory, its blocks at [`BLOCK_WORD_OFFSET`].
+/// A network's block memory, for all its sockets and both directions, its
+/// blocks at [`BLOCK_WORD_OFFSET`]: all zero, so the image's static of it
+/// is zeroed memory, never initialized data. An image lends one per network
+/// at its start ([`Network::start`]).
 #[repr(C, align(4))]
-struct Memory {
+pub struct NetworkMemory {
     before: [u8; BLOCK_WORD_OFFSET],
     blocks: [[u8; BLOCK]; BLOCKS],
+}
+
+impl NetworkMemory {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            before: [0; BLOCK_WORD_OFFSET],
+            blocks: [[0; BLOCK]; BLOCKS],
+        }
+    }
+}
+
+impl Default for NetworkMemory {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// The station's transmit end the network takes: it owns the network's
@@ -444,7 +459,7 @@ impl<B: 'static, P: Produce + 'static> crate::NetTask for NetworkStart<B, P> {
 
 impl<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> Network<B, P, R> {
     /// Take a role's `device` for the network, addressed as `addressing`
-    /// says, and `storage` for its service; open the channel socket on
+    /// says, `storage` for its service and `memory` for its blocks; open the channel socket on
     /// `ports.receiving` and `producer`'s send-only socket on
     /// `ports.sending`: the service runs from the group's start beside the
     /// group's other networks and calls `producer` in its turns. A datagram
@@ -464,6 +479,7 @@ impl<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> Network<B, P, R> {
         addressing: Addressing,
         boot: GroupBoot<N>,
         storage: &'static mut NetworkStorage<B, P, R>,
+        memory: &'static mut NetworkMemory,
         producer: P,
         ports: Ports,
     ) -> Result<(Self, R::Socket, GroupBoot<(N, NetworkStart<B, P>)>), Error> {
@@ -478,7 +494,6 @@ impl<B: 'static, P: Produce + 'static, R: ReceiveMode<B>> Network<B, P, R> {
         }
         .map_err(NetworkError::Interface)?;
         let NetworkStorage {
-            memory,
             stop,
             service,
             end,

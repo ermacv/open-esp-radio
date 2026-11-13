@@ -46,6 +46,8 @@ static MAILBOX: ConstStaticCell<Mailbox<Request>> = ConstStaticCell::new(Mailbox
 enum Brand {}
 type Storage = wifi::NetworkStorage<Brand, Silent, wifi::Copying>;
 static NETWORK: ConstStaticCell<Storage> = ConstStaticCell::new(Storage::new());
+static MEMORY: ConstStaticCell<wifi::NetworkMemory> =
+    ConstStaticCell::new(wifi::NetworkMemory::new());
 /// The worker asks the group for the network's address, which the group's
 /// future reads.
 static ADDRESSES: Channel<(), Option<Ipv4>, 1> = Channel::new();
@@ -71,8 +73,9 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
 fn network(p: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.access_point.ok_or(Error::NoDevice)?;
     let storage = NETWORK.try_take().ok_or(Error::Storage)?;
+    let memory = MEMORY.try_take().ok_or(Error::Storage)?;
     let (net, _socket, mut boot) =
-        wifi::Network::start(device, ADDRESS, boot, storage, Silent, PORTS)?;
+        wifi::Network::start(device, ADDRESS, boot, storage, memory, Silent, PORTS)?;
     let mut asked = ADDRESSES.group(&mut boot)?;
     Ok(boot.run(move || async move {
         loop {
