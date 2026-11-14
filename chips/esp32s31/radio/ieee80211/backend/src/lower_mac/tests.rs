@@ -4573,10 +4573,49 @@ fn an_he_aggregate_is_bounded_by_its_rates_apep_not_the_ht_ceiling() {
         [HeMcs::Mcs9, HeMcs::Mcs7, HeMcs::Mcs0].map(|mcs| full_subframes(he(mcs))),
         [32, 24, 2]
     );
-    assert_eq!(
-        ampdu::esp32s31_ampdu_length(he(HeMcs::Mcs9)),
-        Some(ESP32S31_AMPDU_MAX_LENGTH)
-    );
+    // The port's length at an HE rate is that APEP: HE-MCS 9's 50 000.
+    assert_eq!(ampdu::esp32s31_ampdu_length(he(HeMcs::Mcs9)), Some(50_000));
+}
+
+#[test]
+fn the_cores_plan_at_an_he_rate_is_what_the_budget_admits() {
+    use oer_protocols_ieee80211_core_upper_mac::aggregate::{AmpduLimits, subframe_bound};
+    // Full Ethernet frames: the core plans each subframe at its bound, the
+    // port takes the bound's PSDU.
+    const ETHERNET: usize = 1_514;
+    let psdu = subframe_bound(ETHERNET).unwrap() as usize - 4;
+    for mcs in [0, 7, 9] {
+        let rate = PhyRate::He(
+            phy::HeRate::new(
+                phy::HeMcs::new(mcs).unwrap(),
+                SpatialStreams::ONE,
+                PpduBandwidth::Mhz20,
+                HeGiLtf::Ltf2xGi800Ns,
+                FecCoding::Ldpc,
+                false,
+            )
+            .unwrap(),
+        );
+        let limits = AmpduLimits {
+            window: 64,
+            port: ampdu::esp32s31_ampdu_capabilities(32),
+            // The recipient's longest length (exponent 3) and no spacing.
+            peer_ampdu_parameters: 3,
+            txop_limit_micros: None,
+            rate,
+        };
+        let planned = limits.run(core::iter::repeat_n(ETHERNET, 40));
+        let tx = crate::mac::tx::TxPhyRate::try_from(rate).unwrap();
+        let mut budget = ampdu::AmpduBudget::new(
+            tx,
+            0,
+            crate::mac::tx::HtAmpduDensity::from_spacing_code(0),
+            32,
+        )
+        .unwrap();
+        let admitted = (0..40).take_while(|_| budget.push(psdu).is_ok()).count();
+        assert_eq!(planned, admitted, "HE-MCS {mcs}");
+    }
 }
 
 #[test]
@@ -4591,8 +4630,8 @@ fn the_port_table_holds_the_lengths_the_core_plans_by() {
     // The vendor's table is indexed by the rate code, whose short-GI codes
     // start at 26: short-GI MCS 3 takes the entry after long-GI MCS 9's.
     assert_eq!(at(ht40), Ok(43_200));
-    // HE: the owner's own limit; each aggregate is bounded by its APEP.
-    assert_eq!(at(he_rate()), Ok(65_535));
+    // HE: the rate's APEP at the default TXOP, HE-MCS 7's 37 600.
+    assert_eq!(at(he_rate()), Ok(37_600));
     // One spatial stream only, HE at 20 MHz only.
     assert!(at(ht_rate(8)).is_err());
     let he40 = PhyRate::He(
