@@ -513,11 +513,51 @@ impl<L> sealed::Owner for TxDmaPublication<'_, L> {}
 
 // The token holds the one owner `TxDmaStart` borrows from, so the authority
 // names the chain `descriptor_head` reads.
-impl<L> CommitTxDma for TxDmaPublication<'_, L> {
+impl<L: PlacedBacking> CommitTxDma for TxDmaPublication<'_, L> {
     type Started<'a> = TxDmaStart<'a>;
 
     fn commit(self, start: impl for<'a> FnOnce(&Self::Started<'a>)) {
         TxDmaPublication::commit(self, start);
+    }
+
+    /// The one descriptor this owner publishes, read from its attached
+    /// buffer at the address the descriptor names.
+    #[cfg(any(test, feature = "test-support"))]
+    fn read_chain(&mut self, read: &mut dyn FnMut(&[u8])) -> Result<(), TxChainUnreadable> {
+        let descriptor = self.owner.storage.as_ref().get_ref().descriptor.word0();
+        if !descriptor.tx_owned() {
+            return Err(TxChainUnreadable::NotOwned);
+        }
+        let address = self
+            .owner
+            .storage
+            .as_ref()
+            .get_ref()
+            .descriptor
+            .buffer_address();
+        let length = usize::from(descriptor.length());
+        let attached = self
+            .owner
+            .backing
+            .as_mut()
+            .ok_or(TxChainUnreadable::OutsideBuffers)?;
+        let offset = address
+            .checked_sub(attached.region.start().get())
+            .and_then(|offset| usize::try_from(offset).ok())
+            .ok_or(TxChainUnreadable::OutsideBuffers)?;
+        let bytes = attached
+            .lease
+            .stable_dma_region()
+            .into_mut_slice()
+            .get(offset..)
+            .and_then(|bytes| bytes.get(..length))
+            .ok_or(TxChainUnreadable::OutsideBuffers)?;
+        read(bytes);
+        if descriptor.tx_last() {
+            Ok(())
+        } else {
+            Err(TxChainUnreadable::NoLast)
+        }
     }
 }
 

@@ -26,12 +26,12 @@
 //! A beacon is submitted at its TBTT with the next TBTT as its deadline, a
 //! freshness bound: one not published by then ends expired, and a beacon
 //! that ends in any way is not sent again: the next TBTT's beacon replaces
-//! it. The beacon's Timestamp is written at its preparation
-//! ([`BeaconTimestamp::Caller`]): the runner's time since the TSF restart;
-//! the deadline says nothing of its accuracy on the air. The runner needs
-//! that rule: over a port whose capabilities declare no `Caller` rule (none,
-//! or only [`BeaconTimestamp::Transmitter`], which the runner does not
-//! support) a run ends at once, before the radio starts,
+//! it. The beacon's Timestamp is the transmitter's
+//! ([`BeaconTimestamp::Transmitter`]): the runner writes zero there, and the
+//! port's MAC writes the access point's TSF as the beacon goes out; the
+//! runner takes the DTIM count and its TBTT schedule from the access point's
+//! TSF, its own time since the TSF restarted. Over a port whose capabilities
+//! declare no Timestamp rule a run ends at once, before the radio starts,
 //! [`ApEnd::Unsupported`] with every owner in the runner; a composition
 //! checks [`serves_beacons`] before it starts the radio at all.
 //!
@@ -316,21 +316,19 @@ pub trait ApNonces {
 /// What the port's capabilities lack for the access point to serve.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApUnsupported {
-    /// The port declares no beacon Timestamp rule the runner writes
-    /// ([`BeaconTimestamp::Caller`]): it would run without beacons.
+    /// The port declares no beacon Timestamp rule
+    /// ([`BeaconTimestamp::Transmitter`]): it would run without beacons.
     BeaconTimestamp,
 }
 
 /// Whether a port of the capabilities `K` serves the runner's beacons: it
-/// declares the [`BeaconTimestamp::Caller`] rule. A port that declares only
-/// [`BeaconTimestamp::Transmitter`] needs that rule's support in the runner
-/// first.
+/// declares the [`BeaconTimestamp::Transmitter`] rule.
 ///
 /// # Errors
 ///
 /// What `K` lacks.
 pub const fn serves_beacons<K: AccessPointCapabilities>() -> Result<(), ApUnsupported> {
-    match BeaconStamp::<K>::new(BeaconTimestamp::Caller) {
+    match BeaconStamp::<K>::new(BeaconTimestamp::Transmitter) {
         Some(_) => Ok(()),
         None => Err(ApUnsupported::BeaconTimestamp),
     }
@@ -3646,7 +3644,7 @@ where
         };
         let beacon = match (frame.kind, deadline) {
             (ApFrameKind::Beacon, Some(deadline)) => {
-                let Some(stamp) = BeaconStamp::new(BeaconTimestamp::Caller) else {
+                let Some(stamp) = BeaconStamp::new(BeaconTimestamp::Transmitter) else {
                     return Err((ticket, Source::Fresh(buffer)));
                 };
                 let Some(permission) = homes.beacon.take() else {

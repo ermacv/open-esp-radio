@@ -1,8 +1,7 @@
 //! The access point's runner over the real S31 port, device, receive
 //! session and DMA owners, on the backend's model of the hardware atoms and
-//! virtual time. The S31 declares no beacon Timestamp rule, so the runner
-//! refuses the port before its radio starts; the runner's positive start,
-//! beacon and stop paths run over the model only.
+//! virtual time: the runner starts the radio and the TSF, beacons, answers a
+//! probe and stops, its frames read from the model's air.
 //!
 //! The bench polls the runner only once woken, runs the interrupt handler's
 //! signals before each poll, ends each PPDU the air takes and moves time to
@@ -42,6 +41,11 @@ struct Seen {
     /// contract), then the release the facade's retire asks once the
     /// runner ended them; what the port still held when it refused.
     released: Option<[Result<(), std::string::String>; 2]>,
+    /// Every PPDU the air took, in order, with the model's time it ended.
+    air: Vec<(
+        u64,
+        oer_chips_esp32s31_radio_ieee80211_backend::hardware_model::AirFrame,
+    )>,
 }
 
 /// Run the bench until `done` holds, given the shared status and the run's
@@ -50,7 +54,12 @@ type Until<'u> = &'u mut dyn FnMut(&str, &mut dyn FnMut(&ApShared, Option<&str>)
 
 /// Start the access point over the real S31 port and run `script` on it,
 /// with the bench's register model and clock.
-fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked, &RefCell<Seen>)) {
+/// Land a received MPDU in the ring, as the air does, and latch its event.
+type Land<'l> = &'l mut dyn FnMut(&[u8]);
+
+fn on_the_s31_port(
+    script: impl FnOnce(Until<'_>, Land<'_>, &ApShared, &Atoms, &Clocked, &RefCell<Seen>),
+) {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Clocked::new();
         let reader = clock.clock.clone();
@@ -68,6 +77,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked, &
         .ok()
         .expect("a zeroed static binds");
         let requests = rx.requests();
+        let storage = rx.rx();
         let walker: &'static RefCell<RxWalkerModel> = leak(RefCell::new(RxWalkerModel::new()));
         let cell: &'static HandlerCell<WifiIrqLine<Deferred>> = leak(HandlerCell::new());
         let line = Rc::new(ModelLine::new(cell, requests, atoms.clone()));
@@ -208,7 +218,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked, &
         // The station's network channels, as the access point's storage
         // holds them; the network's ends stay with the bench.
         let channels = leak(crate::NetworkChannels::<crate::SameHart, TxMemory>::new());
-        let (_device, _transmit, _stopper, ends, state) = channels.split(|queues| {
+        let (_device, _transmit, stopper, ends, state) = channels.split(|queues| {
             <crate::supply::LocalEnd as crate::supply::NetworkTxEnd<crate::SameHart>>::end(
                 queues,
                 network,
@@ -250,6 +260,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked, &
             running: false,
             ended: None,
             released: None,
+            air: Vec::new(),
         });
         let airy = Airy {
             clock: clock.clone(),
@@ -333,12 +344,18 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked, &
             core::mem::size_of_val(&*run)
         );
         let mut task = Task::new(run.as_mut());
+        // The network's side, as the application's: it stops when asked.
+        let mut network = pin!(async {
+            stopper.requested().await;
+            stopper.stopped();
+        });
+        let mut network = Task::new(network.as_mut());
 
         let mut until = |what: &str, done: &mut dyn FnMut(&ApShared, Option<&str>) -> bool| {
             for _ in 0..PASSES {
                 for _ in 0..PASSES {
                     oer_chips_family_platform_interrupt_table::signal::service::<Deferred>();
-                    let ran = task.run();
+                    let ran = task.run() | network.run();
                     if ran {
                         clock.pass(POLL_MICROS);
                     }
@@ -346,6 +363,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked, &
                     let air = !frames.is_empty();
                     for frame in frames {
                         line.latch(atoms.end_ppdu(frame.queue, 0, 0));
+                        seen.borrow_mut().air.push((clock.now().as_micros(), frame));
                     }
                     seen.borrow_mut().running = shared.status().running;
                     // Each step is looked at: a state one turn passes
@@ -364,7 +382,20 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked, &
             }
             panic!("{what}: {PASSES} passes without an end");
         };
-        script(&mut until, &shared, &atoms, &clock, &seen);
+        let mut received = ModelRx::new(storage, walker, atoms.clone());
+        let mut land = |mpdu: &[u8]| {
+            let (landing, event) = received
+                .land(&RxPrefix::new(), mpdu)
+                .expect("the unit fits its buffer");
+            assert!(
+                matches!(landing, RxWalkerLanding::Landed(_)),
+                "the walker takes the unit: {landing:?}"
+            );
+            if let Some(event) = event {
+                line.latch(event);
+            }
+        };
+        script(&mut until, &mut land, &shared, &atoms, &clock, &seen);
         let _held = &seen;
     }));
 }
@@ -391,50 +422,78 @@ impl Timer for Airy {
     }
 }
 
-/// The S31 declares no beacon Timestamp rule the runner writes: a run over
-/// the real S31 port ends unsupported before it asks the radio to start.
-/// The MAC runtime never runs and no beacon is counted; the runner
-/// keeps every owner (none kept apart, returned or unrecycled), and the
-/// composition's start check refuses with the same cause first.
-#[test]
-fn the_access_point_over_the_s31_port_is_refused_unsupported_before_the_radio_starts() {
-    assert_eq!(
-        serves_beacons::<Caps>(),
-        Err(ApUnsupported::BeaconTimestamp)
-    );
-    on_the_s31_port(|until, shared, atoms, _, _| {
-        until("the run ends unsupported", &mut |shared, ended| {
-            assert!(!atoms.running(), "the MAC runtime never runs");
-            assert!(!shared.status().running, "the access point never runs");
-            match ended {
-                None => false,
-                Some(ended) => {
-                    assert_eq!(ended, "unsupported: BeaconTimestamp, owners in the runner");
-                    true
-                }
-            }
-        });
-        assert_eq!(shared.status().beacons, 0);
-    });
+/// A client's Probe Request for the access point's SSID (IEEE Std
+/// 802.11-2020 9.3.3.9): header, SSID and Supported Rates elements.
+fn probe_request(client: [u8; 6]) -> Vec<u8> {
+    let mut frame = std::vec![0x40, 0x00, 0x00, 0x00];
+    frame.extend_from_slice(&ACCESS_POINT);
+    frame.extend_from_slice(&client);
+    frame.extend_from_slice(&ACCESS_POINT);
+    frame.extend_from_slice(&[0x10, 0x00]);
+    frame.extend_from_slice(&[0x00, 6]);
+    frame.extend_from_slice(b"s31-ap");
+    frame.extend_from_slice(&[0x01, 1, 0x82]);
+    frame
 }
 
-/// The access point's retire over the real S31 port: the runner holds its
-/// own tickets and transmit buffers, and a release asked while it holds
-/// them finds the buffers out of the port's bank; the facade's retire ends
-/// them first, and the release succeeds.
+/// The Timestamp field of a beacon or probe response as it went on the air.
+fn timestamp(mpdu: &[u8]) -> u64 {
+    u64::from_le_bytes(mpdu[24..32].try_into().unwrap())
+}
+
+/// The S31 serves the access point over the hardware model: the runner
+/// starts the radio and the TSF, its beacons leave on the voice queue with
+/// the access point's TSF in their Timestamp (the transmitter's rule, the
+/// model's `TX-AP-TIMESTAMP`), a client's probe is answered the same way,
+/// and a stop returns every owner: the port's release, refused while the
+/// runner holds its transmit tokens, succeeds once it ended them.
 #[test]
-fn the_access_point_s_release_finds_its_buffers_home_once_its_runner_ended_them() {
-    on_the_s31_port(|until, _, _, _, seen| {
-        until("the run ends and the release answers", &mut |_, ended| {
-            ended.is_some()
+fn the_access_point_over_the_s31_port_beacons_with_its_tsf_answers_a_probe_and_stops() {
+    assert_eq!(serves_beacons::<Caps>(), Ok(()));
+    const CLIENT: [u8; 6] = [0x02, 0, 0, 0, 0, 0x42];
+    on_the_s31_port(|until, land, shared, atoms, _, seen| {
+        until("three beacons", &mut |shared, _| {
+            shared.status().beacons >= 3
         });
-        let [holding, ended] = seen
-            .borrow()
-            .released
-            .clone()
-            .expect("the release answered");
-        std::println!("the access point's release, holding: {holding:?}");
-        let holding = holding.expect_err("refused while the runner holds them");
+        assert!(shared.status().running);
+        land(&probe_request(CLIENT));
+        until("the probe is answered", &mut |_, _| {
+            seen.borrow()
+                .air
+                .iter()
+                .any(|(_, frame)| frame.mpdus[0][0] == 0x50 && frame.mpdus[0][4..10] == CLIENT)
+        });
+        shared.request_stop();
+        until("the access point stops", &mut |_, ended| ended.is_some());
+        assert_eq!(atoms.rule_breaks(), []);
+        let seen = seen.borrow();
+        assert_eq!(seen.ended.as_deref(), Some("stopped"));
+        let beacons: Vec<_> = seen
+            .air
+            .iter()
+            .filter(|(_, frame)| frame.mpdus[0][0] == 0x80)
+            .collect();
+        assert!(beacons.len() >= 3);
+        for (_, beacon) in &beacons {
+            assert_eq!(beacon.queue, 0, "a beacon contends as voice");
+        }
+        // The Timestamps follow the model's time one for one: the
+        // transmitter's TSF, not a value the runner wrote.
+        for pair in beacons.windows(2) {
+            let ((first_at, first), (second_at, second)) = (pair[0], pair[1]);
+            assert_eq!(
+                timestamp(&second.mpdus[0]) - timestamp(&first.mpdus[0]),
+                second_at - first_at
+            );
+        }
+        let (_, response) = seen
+            .air
+            .iter()
+            .find(|(_, frame)| frame.mpdus[0][0] == 0x50)
+            .expect("a probe response");
+        assert!(timestamp(&response.mpdus[0]) > timestamp(&beacons[0].1.mpdus[0]));
+        let [holding, ended] = seen.released.clone().expect("the release answered");
+        let holding = holding.expect_err("refused while the runner holds its tokens");
         assert!(holding.contains("transmit_out: 8"), "{holding}");
         assert_eq!(ended, Ok(()), "released once the runner ended them");
     });

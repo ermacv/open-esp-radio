@@ -212,7 +212,7 @@ fn beacon<'s>(
         source,
         power: SupportedPower::new(TxPower::Calibrated).unwrap(),
         permission,
-        stamp: BeaconStamp::new(BeaconTimestamp::Caller).unwrap(),
+        stamp: BeaconStamp::new(BeaconTimestamp::Transmitter).unwrap(),
         deadline,
     }
     .admit();
@@ -878,4 +878,44 @@ fn the_model_passes_every_access_point_case() {
             assert_eq!(ap_cases::check(&mut harness, case), Ok(()), "{case:?}");
         }));
     }
+}
+
+/// The model's Timestamp rule (`Transmitter`): a beacon goes on the air with
+/// the access point's TSF in its Timestamp field, the time since its
+/// restart, while the buffer keeps what the caller wrote there (zero here).
+#[test]
+fn a_beacon_goes_on_the_model_s_air_with_the_access_point_s_tsf_and_its_buffer_as_written() {
+    use oer_protocols_ieee80211_contracts_port::TsfControl;
+    embassy_futures::block_on(with_local_slot(async |claim| {
+        let mut harness = ApHarness::new(Harness::new(claim));
+        ap_cases::start(&mut harness).unwrap();
+        let configure = harness.configure(
+            Issued::Current,
+            ap_cases::Receive::Bss,
+            Some(TsfControl::Restart),
+        );
+        ap_cases::done(&mut harness, configure).unwrap();
+        let restarted = harness.now();
+        harness.advance(Duration::from_micros(1_234));
+        let deadline = harness.now().saturating_add(Duration::from_secs(1));
+        let beacon = harness.beacon(Issued::Current, deadline);
+        ap_cases::submit(&mut harness, beacon).unwrap();
+        ap_cases::service(&mut harness).unwrap();
+        let sent = harness.hr().air.sent();
+        let beacon = sent
+            .iter()
+            .find(|sent| sent.frame.first() == Some(&0x80))
+            .expect("the beacon went");
+        let on_air = u64::from_le_bytes(beacon.frame[24..32].try_into().unwrap());
+        assert_eq!(beacon.plaintext[24..32], [0; 8], "the buffer as written");
+        assert!(on_air >= 1_234, "the access point's TSF: {on_air}");
+        assert!(
+            on_air
+                <= harness
+                    .now()
+                    .saturating_duration_since(restarted)
+                    .as_micros(),
+            "no later than now: {on_air}"
+        );
+    }));
 }

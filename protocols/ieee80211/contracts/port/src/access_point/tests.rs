@@ -60,9 +60,7 @@ impl AccessPointCapabilities for Sourced {
 
 #[test]
 fn an_unsourced_timestamp_or_tsf_control_has_no_checked_value() {
-    for source in [BeaconTimestamp::Transmitter, BeaconTimestamp::Caller] {
-        assert!(BeaconStamp::<Unsourced>::new(source).is_none());
-    }
+    assert!(BeaconStamp::<Unsourced>::new(BeaconTimestamp::Transmitter).is_none());
     for control in [TsfControl::Restart, TsfControl::Stop] {
         assert!(SupportedTsfControl::<Unsourced>::new(control).is_none());
     }
@@ -74,7 +72,6 @@ fn only_the_declared_timestamp_rule_has_a_stamp() {
         BeaconStamp::<Sourced>::new(BeaconTimestamp::Transmitter).map(|stamp| stamp.source()),
         Some(BeaconTimestamp::Transmitter)
     );
-    assert!(BeaconStamp::<Sourced>::new(BeaconTimestamp::Caller).is_none());
     for control in [TsfControl::Restart, TsfControl::Stop] {
         assert_eq!(
             SupportedTsfControl::<Sourced>::new(control).map(|control| control.get()),

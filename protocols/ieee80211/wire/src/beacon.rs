@@ -566,15 +566,20 @@ pub fn write_tim_partial_virtual_bitmap(
     Some(new_len)
 }
 
-/// Replace the TSF, DTIM phase and group-traffic indication before HW submit.
-pub fn stamp(bytes: &mut [u8], timestamp: u64, group_pending: bool) -> Option<(u8, u8)> {
+/// Write the DTIM count and the group-traffic indication of the beacon due
+/// at the access point's TSF value `tsf`, and zero into its Timestamp field
+/// (IEEE Std 802.11-2020 9.4.1.10): the transmitter writes the TSF there as
+/// the beacon goes out. The DTIM count and its group indication, the beacon
+/// that carries them, and `(count, period)`.
+pub fn stamp(bytes: &mut [u8], tsf: u64, group_pending: bool) -> Option<(u8, u8)> {
     const FIXED_BEACON_LENGTH: usize = 24 + 8 + 2 + 2;
     if bytes.len() < FIXED_BEACON_LENGTH {
         return None;
     }
     oer_portable_wire::Writer::new(bytes.get_mut(24..32)?)
-        .write(&timestamp.to_le_bytes())
+        .write(&0_u64.to_le_bytes())
         .ok()?;
+    let timestamp = tsf;
 
     let (tim_offset, _, period) = dtim(bytes)?;
     let interval_tu = oer_portable_wire::Reader::new(bytes.get(32..)?)

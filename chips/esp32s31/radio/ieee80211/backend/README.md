@@ -128,21 +128,18 @@ on the station: the MAC's queues").
   point, the station's attempts still publish (`ConfiguringView::other_interface`).
   Its group key installs and removes through the same RX cut as the
   station's. A beacon queued on VO past its deadline ends `Expired` with
-  its permission (`expire_beacons`). No Timestamp rule is declared
-  (`AccessPointServices::beacon_timestamp` is `None`), so no `BeaconStamp`
-  exists for the S31 and the port takes no beacon: the vendor's beacon path
-  writes the MAC's local-time count, not the access point's TSF, into the
-  frame in software, no timestamp-insertion control is known, and whether
-  the hardware replaces the field at transmission is not established. The
-  access point's runner writes the Timestamp itself (`Caller`): over this
-  port it ends `ApEnd::Unsupported` before the radio starts, and the S31
-  composition's start refuses `StartRefused::Unsupported` with its
-  settings before anything starts. Should the field turn out to be the
-  transmitter's (`Transmitter`), the runner needs that rule's support
-  before the S31 can serve an access point. On the S31 the access-point
-  suite's beacon cases end `Fixture`, which is no coverage; its two stops
-  run over ordinary access-point frames (`StopsAloneFrames`,
-  `SharedStopFrames`).
+  its permission (`expire_beacons`). The Timestamp rule is the
+  transmitter's (`AccessPointServices::beacon_timestamp` is
+  `Some(Transmitter)`, from the hardware evidence
+  `HW_AP_BEACON_TIMESTAMP_RUN4_20261110`): on a voice-queue management
+  transmission of the access point's interface the MAC writes that
+  interface's TSF into octets 24..32 of the MPDU on the air, after the queue
+  and medium wait; the caller's value is replaced there and stays in the
+  buffer. It was observed for beacons and probe responses at DSSS 1 Mb/s;
+  action frames, other rates and the exact write moment inside the PPDU are
+  not established. The access-point suite runs whole on the S31, its beacon
+  cases included, and the hardware model plays the rule (`AP-TSF`,
+  `TX-AP-TIMESTAMP`).
 - **Publication observations.** `Esp32s31Port`'s last parameter `O` is
   the port's observation receiver (`port::Observations`, an
   `oer_portable_events::EventSink<ContentionDraw>`). It arrives in `PortParts`, is

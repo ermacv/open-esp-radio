@@ -25,6 +25,8 @@
 //! | `TX-DONE` | an ended PPDU latches its queue's completion and TX complete | `BLOB_LIBPP_ORDINARY_TX_OWNERSHIP_EDGES`, `BLOB_LIBPP_WDEV_PROCESS_FIQ` |
 //! | `TX-DETACH` | a taken completion's disable ends hardware ownership | `BLOB_LIBPP_ORDINARY_TX_OWNERSHIP_EDGES` |
 //! | `STOP-RUN` | a stop request leaves the MAC active, then idle | `BLOB_LIBPP_MAC_CHANNEL_SWITCH` |
+//! | `AP-TSF` | the access point's TSF counts from zero from its restart, until its stop | `HW_AP_BEACON_TIMESTAMP_RUN4_20261110` |
+//! | `TX-AP-TIMESTAMP` | a legacy beacon or probe response the access point's interface sends on the voice queue goes on the air with that TSF in octets 24..32; the buffer keeps what the caller wrote | `HW_AP_BEACON_TIMESTAMP_RUN4_20261110` |
 //!
 //! # Adverse inputs
 //!
@@ -179,6 +181,8 @@ struct Queue {
     ended: bool,
     /// What the next timeout detach finds: the hardware took the PPDU.
     taken_by_air: bool,
+    /// The interface of the queue's legacy program, since its preparation.
+    interface: Option<MacInterface>,
 }
 
 struct State {
@@ -194,6 +198,9 @@ struct State {
     stop_reads: u32,
     promiscuous: bool,
     station_tsf: u64,
+    /// `AP-TSF`: the MAC clock at the access point's TSF restart, while it
+    /// runs.
+    access_point_tsf: Option<u64>,
     tbtt: Option<StaTbttSchedule>,
     tx_blocked: bool,
     /// The HE BSS the MAC matches (its color, enabled, partial) and the
@@ -223,6 +230,7 @@ impl Atoms {
             stop_reads: 1,
             promiscuous: false,
             station_tsf: 0,
+            access_point_tsf: None,
             tbtt: None,
             tx_blocked: false,
             he_bss: None,
@@ -363,6 +371,7 @@ impl ModelRegisters {
             }
             place.named = Some(head.bits());
             place.format = Some(format);
+            place.interface = None;
             false
         });
         if busy {
@@ -463,9 +472,13 @@ impl TxHardware for ModelRegisters {
         &mut self,
         dma: &impl PreparedTxDma<DmaRef<WifiTxDmaDescriptor>>,
         queue: MacTxQueueIndex,
-        _program: MacLegacyTxProgram,
+        program: MacLegacyTxProgram,
     ) -> Result<(), MacTxPrepareRefused> {
-        self.prepare(dma.descriptor_head(), queue, AirFormat::Legacy)
+        self.prepare(dma.descriptor_head(), queue, AirFormat::Legacy)?;
+        self.atoms.queue(queue.get() as u8, |place| {
+            place.interface = Some(program.interface());
+        });
+        Ok(())
     }
 
     fn prepare_bound_ht_tx(
@@ -525,6 +538,10 @@ impl TxHardware for ModelRegisters {
         if let Some(rule) = metadata {
             self.atoms.broke(rule);
         }
+        let interface = self.atoms.queue(index, |place| place.interface);
+        self.atoms.with(|state| {
+            transmitter_timestamp(state, index, format, interface, &mut mpdus);
+        });
         handed_over();
         publication.commit(|_started| {});
         self.atoms.queue(index, |place| {
@@ -784,20 +801,27 @@ impl MacSnifferHardware for ModelRegisters {
 }
 
 impl ApRxPolicyHardware for ModelRegisters {
+    // The receive policy shapes no transmission the model plays, and the
+    // model's air lands units for the test; its write is taken as its
+    // removal's is.
     fn apply_ap_link_policy(&mut self, _access_point: [u8; 6]) {
-        self.atoms.unmodelled("apply_ap_link_policy");
+        self.atoms.with(|_| {});
     }
     fn disable_ap_link_policy(&mut self) {
         self.atoms.with(|_| {});
     }
 }
 
+/// `AP-TSF`: the restart sets the counter to zero and starts it; the stop
+/// stops it.
 impl ApTsfHardware for ModelRegisters {
     fn reset_and_start_access_point_tsf(&mut self, _write: AccessPointTsfWrite) {
-        self.atoms.unmodelled("reset_and_start_access_point_tsf");
+        self.atoms.with(|state| {
+            state.access_point_tsf = Some((state.clock)());
+        });
     }
     fn stop_access_point_tsf(&mut self, _write: AccessPointTsfWrite) {
-        self.atoms.with(|_| {});
+        self.atoms.with(|state| state.access_point_tsf = None);
     }
 }
 
@@ -1172,4 +1196,39 @@ impl<const N: usize, const B: usize, const S: usize> ModelRx<N, B, S> {
 /// `value`, placed for the rest of the test's process, as a static is.
 pub fn leak<T>(value: T) -> &'static mut T {
     Box::leak(Box::new(value))
+}
+
+/// `TX-AP-TIMESTAMP`: a legacy PPDU on the voice queue of the access point's
+/// interface whose MPDU is a beacon or a probe response goes on the air
+/// with the access point's TSF in octets 24..32 (IEEE Std 802.11-2020
+/// 9.4.1.10), while the TSF runs. `mpdus` are the air's copies: the buffer
+/// keeps what the caller wrote. SOURCE: `HW_AP_BEACON_TIMESTAMP_RUN4_20261110`
+/// (voice-queue management on interface one, DSSS 1 Mb/s).
+fn transmitter_timestamp(
+    state: &State,
+    queue: u8,
+    format: AirFormat,
+    interface: Option<MacInterface>,
+    mpdus: &mut [Vec<u8>],
+) {
+    /// Frame Control octet 0: management type, beacon or probe response
+    /// subtype (IEEE Std 802.11-2020 9.2.4.1.3, Table 9-1).
+    const BEACON: u8 = 0x80;
+    const PROBE_RESPONSE: u8 = 0x50;
+    let (Some(since), AirFormat::Legacy, Some(MacInterface::AccessPoint)) =
+        (state.access_point_tsf, format, interface)
+    else {
+        return;
+    };
+    if queue != crate::mac::tx::LegacyTxQueue::Voice.index() {
+        return;
+    }
+    let tsf = (state.clock)().saturating_sub(since);
+    for mpdu in mpdus {
+        if matches!(mpdu.first(), Some(&(BEACON | PROBE_RESPONSE)))
+            && let Some(field) = mpdu.get_mut(24..32)
+        {
+            field.copy_from_slice(&tsf.to_le_bytes());
+        }
+    }
 }

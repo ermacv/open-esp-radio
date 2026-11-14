@@ -131,10 +131,8 @@ pub const BEACON_ACCESS_CATEGORY: WmmAccessCategory = WmmAccessCategory::Voice;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum BeaconTimestamp {
     /// The transmitter writes the interface's TSF into the field as the
-    /// beacon goes out; what the caller wrote there is replaced.
+    /// beacon goes out; what the caller wrote there is replaced on the air.
     Transmitter,
-    /// The field goes on the air as the caller wrote it.
-    Caller,
 }
 
 /// What a backend serves of the access-point role beyond the shared port.
