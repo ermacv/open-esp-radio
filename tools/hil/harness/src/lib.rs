@@ -33,6 +33,7 @@ mod run;
 mod stand;
 
 pub use finish::Cleanup;
+pub use oer_tools_image_bundle::BuildChoice;
 pub use oer_tools_lab_client::protocol::{RouterChannelWidth, RouterOperation};
 pub use run::{Outcome, Verdict};
 
@@ -150,7 +151,7 @@ impl<'a> Cx<'a> {
     /// What the run's image was built with: its features in Cargo's words
     /// and the instrumentation they resulted in, from the bundle the
     /// harness built and checked against the running image.
-    pub fn built(&self) -> &oer_tools_image_bundle::BuildChoice {
+    pub fn built(&self) -> &BuildChoice {
         self.dut.built()
     }
 

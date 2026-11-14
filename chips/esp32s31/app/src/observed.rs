@@ -21,7 +21,6 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::{Context, Poll};
 
 use embassy_futures::yield_now;
-use oer_chips_esp32s31_hal::peripherals::cache_counters::{Buses, CacheCounters};
 use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1AlarmInterrupt, Timg1AlarmParts};
 #[cfg(feature = "group")]
 use oer_chips_esp32s31_hal::peripherals::timg1_alarm::{Timg1Timer1Interrupt, Timg1Timer1Parts};
@@ -45,10 +44,6 @@ use crate::observe::parts::{ImageNames, LibraryPart, PARTS, PartCounter, PartRea
 use crate::observe::tracking::{Branches, Ran, Tick, TrackingCounter, TrackingSample};
 
 pub use crate::observe::link::{Link, TxAmpdu};
-pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
-    DataBus, Geometry as CacheGeometry, InstructionBus, Level as CacheLevel,
-    Snapshot as CacheSnapshot,
-};
 pub use oer_chips_esp32s31_radio_ieee80211_station::WifiRxReport;
 pub use oer_chips_esp32s31_radio_ieee80211_station::observation::StationRxKind;
 pub use oer_chips_esp32s31_radio_ieee80211_station::{
@@ -781,17 +776,15 @@ impl oer_portable_trace::Observer for Hart1Samples {
     }
 }
 
-/// What the boot hart observes only there: its cycle and retired
-/// instruction counters, the L1 cache's counters and the PC sampler, which
-/// samples it. It stays on the boot hart.
+/// What the boot hart observes only there: the PC sampler, which samples
+/// it. Its counters are [`crate::cpu::Cpu0`]'s. It stays on the boot hart.
 pub struct Hart0 {
-    cache: CacheCounters,
     sampler: Sampler,
     _hart: PhantomData<*mut ()>,
 }
 
-/// What hart 1 observes only there: its cycle and retired instruction
-/// counters and its PC sampler. It stays on hart 1.
+/// What hart 1 observes only there: its PC sampler. Its counters are
+/// [`crate::cpu::Cpu1`]'s. It stays on hart 1.
 #[cfg(feature = "group")]
 pub struct Hart1 {
     sampler: Hart1Sampler,
@@ -800,14 +793,6 @@ pub struct Hart1 {
 
 #[cfg(feature = "group")]
 impl Hart1 {
-    /// Hart 1's own counters now.
-    pub fn counters(&mut self) -> HartClock {
-        HartClock {
-            cycles: oer_portable_riscv::cycle64(),
-            instructions: oer_portable_riscv::instret64(),
-        }
-    }
-
     /// Hart 1's PC sampler.
     pub fn sampler(&mut self) -> &mut Hart1Sampler {
         &mut self.sampler
@@ -819,40 +804,7 @@ impl Hart1 {
 #[cfg(feature = "group")]
 pub type Hart1Sampler = Sampler<Timer<super::Sampler1Token, sampler::Timer1>>;
 
-/// A hart's own cycle and retired instruction counters at one instant.
-#[cfg(feature = "group")]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct HartClock {
-    pub cycles: u64,
-    pub instructions: u64,
-}
-
-/// The boot hart's counters at one instant.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct HartCounters {
-    pub cycles: u64,
-    pub instructions: u64,
-    pub cache: CacheSnapshot,
-    pub cache_geometry: CacheGeometry,
-}
-
 impl Hart0 {
-    /// The boot hart's counters and the cache's; with `start`, clear and run
-    /// every bus's cache counters first.
-    pub fn counters(&mut self, start: bool) -> HartCounters {
-        if start {
-            self.cache.start(Buses::ALL);
-        }
-        let cycles = oer_portable_riscv::cycle64();
-        let instructions = oer_portable_riscv::instret64();
-        HartCounters {
-            cycles,
-            instructions,
-            cache: self.cache.snapshot(),
-            cache_geometry: self.cache.geometry(),
-        }
-    }
-
     /// The PC sampler.
     pub fn sampler(&mut self) -> &mut Sampler {
         &mut self.sampler
@@ -976,7 +928,6 @@ impl<I: Entry<Part = T::Interrupt> + 'static, T: SamplerTimer> Sampler<Timer<I, 
 /// taken before.
 pub(crate) fn hart0(
     #[cfg_attr(not(feature = "group"), allow(unused_mut))] mut timg1: Timg1AlarmParts,
-    cache: CacheCounters,
     boot: &mut Boot,
     token: SamplerToken,
 ) -> Hart0 {
@@ -993,7 +944,6 @@ pub(crate) fn hart0(
         super::fail(Error::Storage.name());
     }
     Hart0 {
-        cache,
         sampler: Sampler {
             sampler,
             kept: &KEPT,

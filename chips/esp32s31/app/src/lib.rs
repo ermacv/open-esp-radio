@@ -84,6 +84,7 @@ macro_rules! observed_root {
     ($root:ident, $part:ident) => {};
 }
 
+pub mod cpu;
 #[cfg(feature = "observe")]
 pub mod observed;
 #[cfg(feature = "observe")]
@@ -211,12 +212,22 @@ pub struct Boot {
     /// What only the boot hart observes, until the boot takes it.
     #[cfg(feature = "observe")]
     observe: Option<observed::Hart0>,
+    /// The boot hart's counters, until the boot takes them.
+    cpu: Option<cpu::Cpu0>,
 }
 
 /// No network: the group started none.
 pub struct NoNet;
 
 impl Boot {
+    /// The boot hart's counters and the cache's, once.
+    ///
+    /// # Errors
+    /// [`Error::CpuTaken`] when the boot took them before.
+    pub fn cpu(&mut self) -> Result<cpu::Cpu0, Error> {
+        self.cpu.take().ok_or(Error::CpuTaken)
+    }
+
     pub(crate) fn router(
         &mut self,
     ) -> &mut oer_chips_family_platform_interrupt_table::Router<InterruptController, 0> {
@@ -359,6 +370,9 @@ pub struct GroupBoot<N = NoNet> {
     /// What hart 1 observes only there, bound at its start.
     #[cfg(all(feature = "observe", feature = "group"))]
     observe: Option<observed::Hart1>,
+    /// Hart 1's counters, until the group takes them.
+    #[cfg(feature = "group")]
+    cpu: Option<cpu::Cpu1>,
 }
 
 impl GroupBoot {
@@ -368,6 +382,8 @@ impl GroupBoot {
             net: NoNet,
             #[cfg(all(feature = "observe", feature = "group"))]
             observe: None,
+            #[cfg(feature = "group")]
+            cpu: Some(cpu::Cpu1::new()),
         }
     }
 }
@@ -380,7 +396,17 @@ impl<N> GroupBoot<N> {
             net: (self.net, net),
             #[cfg(all(feature = "observe", feature = "group"))]
             observe: self.observe,
+            #[cfg(feature = "group")]
+            cpu: self.cpu,
         }
+    }
+}
+
+#[cfg(feature = "group")]
+impl<N> GroupBoot<N> {
+    /// Hart 1's counters, once.
+    pub fn cpu(&mut self) -> Option<cpu::Cpu1> {
+        self.cpu.take()
     }
 }
 
@@ -616,6 +642,8 @@ pub enum Error {
     /// The boot took what the boot hart observes before.
     #[cfg(feature = "observe")]
     ObserveTaken,
+    /// The boot took its hart's counters before.
+    CpuTaken,
 }
 
 #[cfg(feature = "wifi")]
@@ -656,6 +684,7 @@ impl Error {
             Self::ImageParts => oer_portable_diagnostics::name!("sdk-image-parts"; 32),
             #[cfg(feature = "observe")]
             Self::ObserveTaken => oer_portable_diagnostics::name!("sdk-observe-taken"; 32),
+            Self::CpuTaken => oer_portable_diagnostics::name!("sdk-cpu-taken"; 32),
         }
     }
 }
@@ -726,7 +755,6 @@ pub fn start<S: Started, H: GroupStarted>(
                     timg1_alarm: hardware.timg1_alarm,
                     #[cfg(all(feature = "observe", feature = "group"))]
                     timg1_timer1: hardware.timg1_timer1,
-                    #[cfg(feature = "observe")]
                     cache_counters: hardware.cache_counters,
                     #[cfg(feature = "wifi")]
                     wifi: wifi::WifiPeripheral {
@@ -781,15 +809,11 @@ pub fn start<S: Started, H: GroupStarted>(
         timers: None,
         #[cfg(feature = "observe")]
         observe: None,
+        cpu: Some(cpu::Cpu0::new(hardware.cache_counters)),
     };
     #[cfg(feature = "observe")]
     {
-        let hart0 = observed::hart0(
-            hardware.timg1_alarm,
-            hardware.cache_counters,
-            &mut setup,
-            interrupts.sampler,
-        );
+        let hart0 = observed::hart0(hardware.timg1_alarm, &mut setup, interrupts.sampler);
         setup.observe = Some(hart0);
     }
     let peripherals = Peripherals {
@@ -1001,7 +1025,6 @@ struct Owned {
     timg1_alarm: oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1AlarmParts,
     #[cfg(all(feature = "observe", feature = "group"))]
     timg1_timer1: oer_chips_esp32s31_hal::peripherals::timg1_alarm::Timg1Timer1Parts,
-    #[cfg(feature = "observe")]
     cache_counters: oer_chips_esp32s31_hal::peripherals::cache_counters::CacheCounters,
     #[cfg(feature = "wifi")]
     wifi: wifi::WifiPeripheral,

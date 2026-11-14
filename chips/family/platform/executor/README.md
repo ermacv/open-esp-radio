@@ -233,6 +233,18 @@ signal cells; each software line and executor mode has its own typed static
 signal list. Signal task handles are `Send` values, while mutable payload
 access remains confined to the receiving execution context.
 
+## Idle account
+
+Every build keeps each hart's time in its thread-mode executor's wait for an
+interrupt and its wakes (`IDLE`, one `idle::IdleAccount` a hart, under
+`chip`). The wait reads the platform's monotonic microseconds at its two
+edges, with interrupts masked, and adds the span: two clock reads and a few
+stores a wake, nothing a poll or a frame. The hart's thread mode is the one
+writer; a reader on either hart takes the account whole
+(`IdleAccount::read`) or is answered `Concurrent` and reads again. Totals
+wrap; a reader takes differences between two reads. The trace's idle
+boundaries below reuse the same two readings.
+
 ## Trace observations
 
 `tasks!` accepts `@observer: image::Observer;` before its task declarations;

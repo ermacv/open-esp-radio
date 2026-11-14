@@ -20,6 +20,8 @@
 //!   AES-128 engine, owned by the image or by the Wi-Fi station;
 //! - [`channel`]: a typed channel between the application's future and the
 //!   group's;
+//! - `cpu` (`esp32s31`): each hart's cycle, instruction and cache counters
+//!   and idle account, in every build;
 //! - `observe` (`observe` feature): what the library observes of its own
 //!   work, for an image that measures it.
 

@@ -10,10 +10,19 @@
 
 use core::convert::Infallible;
 
-use oer::observe::{self, Hart0, Sampler};
+#[cfg(feature = "trace")]
+use oer::observe::{self, Sampler};
+#[cfg(feature = "trace")]
 use oer::time::{Instant, Timer};
 use oer::{ApplicationEnd, Channel, GroupEnd};
-use oer_hil_services_load::{LoadError, RxSnapshot, STALL_WAIT_MS, SamplesCollected, StallMac};
+#[cfg(feature = "trace")]
+use oer_hil_services_load::STALL_WAIT_MS;
+#[cfg(feature = "trace")]
+use oer_hil_services_load::{LoadError, SamplesCollected};
+use oer_hil_services_load::{RxSnapshot, StallMac};
+
+use crate::measure::Hart0;
+#[cfg(feature = "trace")]
 use oer_protocols_hil_protocol::RequestIdentity;
 
 use super::report::Snapshot;
@@ -21,18 +30,23 @@ use super::report::Snapshot;
 /// What the load server asks the boot hart.
 pub(crate) enum Command {
     /// Whether a sampled run can start.
+    #[cfg(feature = "trace")]
     Available,
     /// Forget the last session's samples and sample every `period_us`.
+    #[cfg(feature = "trace")]
     Start { period_us: u32 },
     /// Ask the running session to stop at its next tick: no reply.
+    #[cfg(feature = "trace")]
     RequestStop,
     /// Stop the session and take it back.
+    #[cfg(feature = "trace")]
     Stop,
     /// The boot hart's counters and the library's counts now; with
     /// `start`, the cache's counters cleared and running first.
     Counters { start: bool },
     /// Answer `RequestIdentity` with the last session's samples from the
     /// one numbered `from`: no reply.
+    #[cfg(feature = "trace")]
     Page(RequestIdentity, u16),
     /// Ask the radio device for a stall snapshot and wait for it and its
     /// facts after the turn's receive pull, at most [`STALL_WAIT_MS`].
@@ -45,6 +59,7 @@ pub(crate) enum Command {
     reason = "a reply lives in place in its static queue until its one reader takes it; the image has no allocator"
 )]
 pub(crate) enum Reply {
+    #[cfg(feature = "trace")]
     Sampler(Result<(), LoadError>),
     /// One end of a window, without the network's frames, which hart 1
     /// counts.
@@ -64,22 +79,25 @@ pub(crate) type Client = GroupEnd<Reply, Command, 1>;
 
 /// Serve the load server's commands with the boot hart's `hart0` until the
 /// chip resets.
+#[cfg(feature = "trace")]
 pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
     loop {
         let reply = match relay.receive().await {
-            Command::Available => Reply::Sampler(available(hart0.sampler())),
+            Command::Available => Reply::Sampler(available(hart0.observe.sampler())),
             Command::Start { period_us } => Reply::Sampler(
                 hart0
+                    .observe
                     .sampler()
                     .start(period_us)
                     .map_err(|_| LoadError::NoSampler),
             ),
             Command::RequestStop => {
-                hart0.sampler().request_stop();
+                hart0.observe.sampler().request_stop();
                 continue;
             }
             Command::Stop => Reply::Sampler(
                 hart0
+                    .observe
                     .sampler()
                     .stop()
                     .await
@@ -87,12 +105,12 @@ pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
             ),
             Command::Counters { start } => {
                 // The counters first: the ADDBA reading may yield.
-                let (hart, counters) = (hart0.counters(start), observe::counters());
+                let (hart, counters) = (hart0.cpu.counters(start), observe::counters());
                 let addba = observe::addba_requests().await;
                 Reply::Counters(super::report::snapshot(hart, counters, &addba))
             }
             Command::Page(identity, from) => {
-                oer_hil_agent::answer(identity, &page(hart0.sampler(), from));
+                oer_hil_agent::answer(identity, &page(hart0.observe.sampler(), from));
                 continue;
             }
             Command::Stall => {
@@ -104,6 +122,23 @@ pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
     }
 }
 
+/// Serve the load server's commands with the boot hart's `hart0` until the
+/// chip resets: the measuring build has no sampler and takes no stall
+/// snapshot, and its counters are the boot hart's own.
+#[cfg(not(feature = "trace"))]
+pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
+    loop {
+        let reply = match relay.receive().await {
+            Command::Counters { start } => {
+                Reply::Counters(super::report::cpu_snapshot(hart0.cpu.counters(start)))
+            }
+            Command::Stall => Reply::Stall(None, StallMac::default()),
+        };
+        relay.send(reply).await;
+    }
+}
+
+#[cfg(feature = "trace")]
 /// How often the relay looks for the device's snapshot while it waits.
 const STALL_POLL_US: u64 = 500;
 
@@ -111,12 +146,13 @@ const STALL_POLL_US: u64 = 500;
 /// recorded its facts after the turn's receive pull, or as it stands when
 /// [`STALL_WAIT_MS`] passed; each time is read against this hart's clock
 /// beside the device's.
+#[cfg(feature = "trace")]
 async fn stall(hart0: &mut Hart0) -> (Option<RxSnapshot>, StallMac) {
-    let ticket = hart0.request_rx_snapshot();
+    let ticket = hart0.observe.request_rx_snapshot();
     let deadline = now_us().saturating_add(u64::from(STALL_WAIT_MS).saturating_mul(1000));
     let mut taken = None;
     loop {
-        if let Some(reading) = hart0.rx_snapshot(ticket) {
+        if let Some(reading) = hart0.observe.rx_snapshot(ticket) {
             let now = now_us();
             let served = reading.resume.is_some_and(|resume| resume.serviced);
             taken = Some(super::report::stall(&reading, now));
@@ -136,11 +172,13 @@ async fn stall(hart0: &mut Hart0) -> (Option<RxSnapshot>, StallMac) {
     }
 }
 
+#[cfg(feature = "trace")]
 /// The image's monotonic microseconds: the library's clock.
 fn now_us() -> u64 {
     Instant::now().as_micros()
 }
 
+#[cfg(feature = "trace")]
 fn available(sampler: &Sampler) -> Result<(), LoadError> {
     if sampler.available() {
         Ok(())
@@ -149,6 +187,7 @@ fn available(sampler: &Sampler) -> Result<(), LoadError> {
     }
 }
 
+#[cfg(feature = "trace")]
 /// The last session's page from the sample numbered `from`.
 fn page(sampler: &Sampler, from: u16) -> SamplesCollected {
     let page = sampler.session().and_then(|session| {
@@ -168,6 +207,7 @@ async fn call(client: &mut Client, command: Command) -> Reply {
     client.receive().await
 }
 
+#[cfg(feature = "trace")]
 /// Whether a sampled run can start.
 ///
 /// # Errors
@@ -176,6 +216,7 @@ pub(crate) async fn sampler_available(client: &mut Client) -> Result<(), LoadErr
     sampler(call(client, Command::Available).await)
 }
 
+#[cfg(feature = "trace")]
 /// Start sampling the boot hart every `period_us`.
 ///
 /// # Errors
@@ -184,11 +225,13 @@ pub(crate) async fn start_sampler(client: &mut Client, period_us: u32) -> Result
     sampler(call(client, Command::Start { period_us }).await)
 }
 
+#[cfg(feature = "trace")]
 /// Ask the running session to stop at its next tick.
 pub(crate) async fn request_stop(client: &mut Client) {
     client.send(Command::RequestStop).await;
 }
 
+#[cfg(feature = "trace")]
 /// Stop the running session and take it back.
 ///
 /// # Errors
@@ -202,7 +245,9 @@ pub(crate) async fn stop_sampler(client: &mut Client) -> Result<(), LoadError> {
 pub(crate) async fn counters(client: &mut Client, start: bool) -> Option<Snapshot> {
     match call(client, Command::Counters { start }).await {
         Reply::Counters(snapshot) => Some(snapshot),
-        Reply::Sampler(_) | Reply::Stall(..) => None,
+        #[cfg(feature = "trace")]
+        Reply::Sampler(_) => None,
+        Reply::Stall(..) => None,
     }
 }
 
@@ -211,15 +256,19 @@ pub(crate) async fn counters(client: &mut Client, start: bool) -> Option<Snapsho
 pub(crate) async fn stall_snapshot(client: &mut Client) -> Option<(Option<RxSnapshot>, StallMac)> {
     match call(client, Command::Stall).await {
         Reply::Stall(snapshot, mac) => Some((snapshot, mac)),
-        Reply::Sampler(_) | Reply::Counters(_) => None,
+        #[cfg(feature = "trace")]
+        Reply::Sampler(_) => None,
+        Reply::Counters(_) => None,
     }
 }
 
+#[cfg(feature = "trace")]
 /// Have the boot hart answer `identity` with a page of samples.
 pub(crate) async fn page_of(client: &mut Client, identity: RequestIdentity, from: u16) {
     client.send(Command::Page(identity, from)).await;
 }
 
+#[cfg(feature = "trace")]
 /// A sampler call's result; the relay answers each call in order, so a
 /// reply of another kind does not arise and refuses the call.
 fn sampler(reply: Reply) -> Result<(), LoadError> {

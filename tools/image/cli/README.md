@@ -12,7 +12,7 @@ on the application entry names no chip: the build selects the board's chip
 cargo fw sizes <base-output-directory> <head-output-directory>
 cargo fw sizes <base-image> <new-composition> --add-base <second-base-image>
 cargo fw decode-console <console.raw.txt>
-cargo fw build <image>
+cargo fw build <image> [--no-default-features] [--features <a,b>]
 cargo fw build <probe-image> --bin <binary> --diagnostic
 cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout <duration>]
@@ -133,7 +133,8 @@ resets the board into its image, which stops what the command left running.
 ## Sizes
 
 `cargo fw sizes` compares `sizes.json` files without building: `same`/`report`
-exit 0, unreadable input or incompatible provenance exit 1. See the [summary format and
+exit 0, unreadable input or incompatible provenance exit 1; two builds of
+one image with different features or instrumentation are incompatible. See the [summary format and
 owner thresholds](../build/README.md#size-summaries-and-verdicts).
 
 With `--add-base`, each directory names one `sizes.json` bundle. This explicit

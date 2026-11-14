@@ -65,7 +65,7 @@ impl IdleAccount {
     /// [`Concurrent`]: the hart wrote it meanwhile.
     pub fn read(&self) -> Result<IdleReading, Concurrent> {
         let before = self.sequence.load(Ordering::Acquire);
-        if before % 2 != 0 {
+        if !before.is_multiple_of(2) {
             return Err(Concurrent);
         }
         let [low, high] = &self.idle;

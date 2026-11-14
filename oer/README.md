@@ -239,8 +239,17 @@ image translates them into whatever reports them:
 | `parts()` | each part's polls and their time, and the longest of the epoch: the library's tasks and futures, the Wi-Fi datapath actor's spans, and up to four futures the image names (`Part::claim(name)?.polled(future)`) |
 | `counters()` | the station's receive decisions, its transmit agreements' settlements, the link's rates and the receive driver's counters |
 | `tracking()` | the RF actor's PHY tracking ticks, with the epoch's temperatures and longest tick |
-| `Boot::observe` | the boot hart's handle (`Hart0`, `!Send`): its cycle and instruction counters, the L1 cache's counters and the PC sampler on TIMG1 T0, once |
+| `Boot::observe` | the boot hart's handle (`Hart0`, `!Send`): the PC sampler on TIMG1 T0 and the receive path's stall snapshot, once |
 | `GroupBoot::observe` (`group`) | hart 1's handle (`Hart1`, `!Send`): its PC sampler on TIMG1 T1, once; each hart's sampler keeps 1024 samples |
+
+What a hart counts of its own work is apart from these, in `oer::cpu`,
+with or without `observe`: it hooks no poll and no frame.
+
+| Reader | What |
+| --- | --- |
+| `Boot::cpu` | the boot hart's `Cpu0`, once (`Error::CpuTaken` after): `counters(start)` reads its cycles, retired instructions and the L1 cache's counters, with `start` the cache's cleared and running first |
+| `GroupBoot::cpu` (`group`) | hart 1's `Cpu1`, once: `counters()` reads its cycles and retired instructions |
+| `cpu::idle(hart)` | the hart's idle account: its microseconds in the executor's wait for an interrupt since boot and its wakes, or `Concurrent` while the hart writes it (read again) |
 
 `start_epoch()` starts a new epoch of the longest polls and the extremes.
 Each counter has one writer; a reader in thread mode on either hart takes a

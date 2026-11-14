@@ -243,11 +243,13 @@ impl Source {
     }
 
     /// The wakes the source gave the network's task.
+    #[cfg(feature = "trace")]
     pub(crate) fn wakes(&self) -> u32 {
         self.wakes.load(Ordering::Relaxed)
     }
 
     /// The datagrams whose end is not known.
+    #[cfg(feature = "trace")]
     pub(crate) fn unknown(&self) -> u32 {
         self.unknown.load(Ordering::Relaxed)
     }
@@ -414,7 +416,7 @@ pub(crate) struct Network {
     /// Where the network core's turns are kept ([`Turns`]), once the group
     /// gave it. The chip counts them; the host's tests of this facade have
     /// none.
-    #[cfg(target_arch = "riscv32")]
+    #[cfg(all(target_arch = "riscv32", feature = "trace"))]
     turns: Cell<Option<&'static mut Turns>>,
 }
 
@@ -433,7 +435,7 @@ impl Network {
             source,
             delivered: Cell::new(0),
             parked: RefCell::new(Vec::new()),
-            #[cfg(target_arch = "riscv32")]
+            #[cfg(all(target_arch = "riscv32", feature = "trace"))]
             turns: Cell::new(None),
         }
     }
@@ -483,7 +485,7 @@ pub(crate) fn received_frames(net: &Network) -> u32 {
 }
 
 /// No window of the network core's turns.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::NetworkTurns {
     available: false,
     turns: 0,
@@ -526,7 +528,7 @@ const TURNS_NONE: oer_hil_services_load::NetworkTurns = oer_hil_services_load::N
 /// window, kept until the next one closes: in a static the group takes once,
 /// as neither a run's futures, whose polls would copy them, nor the group's
 /// stack should hold them.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 pub(crate) struct Turns {
     start: oer_hil_services_load::NetworkTurns,
     window: oer_hil_services_load::NetworkTurns,
@@ -543,7 +545,7 @@ pub(crate) struct Turns {
 }
 
 /// The one place of the turns.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 pub(crate) static TURNS: static_cell::ConstStaticCell<Turns> =
     static_cell::ConstStaticCell::new(Turns {
         start: TURNS_NONE,
@@ -556,7 +558,7 @@ pub(crate) static TURNS: static_cell::ConstStaticCell<Turns> =
         diagnostics_window: Err(oer::observe::diagnostics::NoWindow::Changed),
     });
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 const DIAGNOSTICS_NONE: oer::observe::diagnostics::NetworkDiagnostics = {
     use oer::observe::diagnostics::*;
     NetworkDiagnostics {
@@ -581,7 +583,7 @@ const DIAGNOSTICS_NONE: oer::observe::diagnostics::NetworkDiagnostics = {
 
 // The load service carries the diagnostics' stages as the library counts
 // them.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 const _: () = {
     if oer::observe::diagnostics::STAGES != oer_hil_services_load::DIAGNOSTIC_STAGES {
         panic!("the load service's diagnostics have the library's stages");
@@ -589,7 +591,7 @@ const _: () = {
 };
 
 /// Switch the network core's diagnostics as `diagnose` asks.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 pub(crate) fn diagnose(
     diagnose: oer_hil_services_load::Diagnose,
 ) -> oer_hil_services_load::Diagnosed {
@@ -606,7 +608,7 @@ pub(crate) fn diagnose(
 }
 
 /// What the network core's diagnostics counted over the last closed window.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 pub(crate) fn diagnostics_window(net: &Network) -> oer_hil_services_load::DiagnosticsCollected {
     use oer::observe::diagnostics::NoWindow;
     use oer_hil_services_load::{DiagnosticsCollected, NetworkDiagnostics};
@@ -631,7 +633,7 @@ pub(crate) fn diagnostics_window(net: &Network) -> oer_hil_services_load::Diagno
     }
 }
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 const PROFILE_NONE: oer::observe::profile::TurnProfile = {
     use oer::observe::profile::*;
     TurnProfile {
@@ -649,7 +651,7 @@ const PROFILE_NONE: oer::observe::profile::TurnProfile = {
     }
 };
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 const RETURNS_NONE: oer::observe::profile::Returns = {
     use oer::observe::profile::*;
     Returns {
@@ -664,7 +666,7 @@ const RETURNS_NONE: oer::observe::profile::Returns = {
 };
 
 // The load service carries the library's profile as the library counts it.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 const _: () = {
     use oer::observe::profile as library;
     use oer_hil_services_load as service;
@@ -684,7 +686,7 @@ const _: () = {
 };
 
 /// Page `page` of the last closed window's profile: none before one closed.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 pub(crate) fn profile_page(net: &Network, page: u8) -> oer_hil_services_load::ProfileCollected {
     use oer_hil_services_load::{
         LoadError, ProfileCollected, ReturnBursts, TurnCell, TurnCells, TurnMoments, TurnSpread,
@@ -731,7 +733,7 @@ pub(crate) fn profile_page(net: &Network, page: u8) -> oer_hil_services_load::Pr
     }
 }
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 impl Network {
     /// Keep the network core's turns in `turns`.
     pub(crate) fn keep_turns(&self, turns: &'static mut Turns) {
@@ -750,7 +752,7 @@ impl Network {
 }
 
 /// Open a window of the network core's turns.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 pub(crate) fn open_turns(net: &Network) {
     net.turns(|turns| {
         turns.start = network_turns(net.source);
@@ -762,7 +764,7 @@ pub(crate) fn open_turns(net: &Network) {
 
 /// Close the open window of the network core's turns, which
 /// [`network_window`] answers from here on.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 pub(crate) fn close_turns(net: &Network) {
     net.turns(|turns| {
         turns.window =
@@ -782,14 +784,14 @@ pub(crate) fn close_turns(net: &Network) {
 
 /// The last closed window of the network core's turns; none before one
 /// closed.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 pub(crate) fn network_window(net: &Network) -> oer_hil_services_load::NetworkTurns {
     net.turns(|turns| turns.window)
 }
 
 /// What the network core's turns did since boot, as the load service names
 /// it: the chip's observation, which the host's tests of this facade lack.
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
 fn network_turns(source: &Source) -> oer_hil_services_load::NetworkTurns {
     let turns = oer::observe::network_turns();
     oer_hil_services_load::NetworkTurns {

@@ -11,11 +11,15 @@ use core::pin::pin;
 use embassy_futures::select::{Either as Raced, Either3, select, select3};
 use oer::{
     AppResult, ApplicationEnd, Boot, Channel, Console, Error, GroupBoot, GroupEnd,
-    GroupPeripherals, GroupStarted, Peripherals, Started, observe,
+    GroupPeripherals, GroupStarted, Peripherals, Started,
     time::{Duration, with_timeout},
     wifi::{self, ConnectError, LinkState, NetworkError, Station, StopError, WatchRefused},
 };
-use oer_hil_agent::{Inbox, Mailbox, answer, answer_then_trap};
+#[cfg(feature = "trace")]
+use oer::observe;
+#[cfg(feature = "fault")]
+use oer_hil_agent::answer_then_trap;
+use oer_hil_agent::{Inbox, Mailbox, answer};
 use oer_hil_services_sdk_station::{
     Address, Connect, Connection, Exchanged, LinkLoss, Request, Status, WaitIpv4,
     WaitLinkDown,
@@ -35,12 +39,18 @@ const COUNTRY: [u8; 2] = *b"DE";
 /// The transmit power cap: above the domain's ceiling, which decides.
 const TX_CAP_DBM: i8 = 20;
 
-/// A request of the SDK station service, of the Wi-Fi station service, of
-/// the fault service or of the load service.
-type Requests = Either<
-    Either<Either<Request, wifi_station::Request>, oer_hil_services_fault::Request>,
-    oer_hil_services_load::Request,
->;
+/// A request of the SDK station service or of the Wi-Fi station service.
+type StationRequests = Either<Request, wifi_station::Request>;
+
+/// A station request, or one of the fault service (`fault`).
+#[cfg(feature = "fault")]
+type BootRequests = Either<StationRequests, oer_hil_services_fault::Request>;
+/// A station request: the measuring build serves no fault service.
+#[cfg(not(feature = "fault"))]
+type BootRequests = StationRequests;
+
+/// A request of the boot's services or of the load service.
+type Requests = Either<BootRequests, oer_hil_services_load::Request>;
 
 static MAILBOX: ConstStaticCell<Mailbox<Requests>> = ConstStaticCell::new(Mailbox::new());
 /// The network's service, with the load's producer in it.
@@ -76,8 +86,12 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         ipv4: IPV4_WAITS.application(&mut boot)?,
         links: LINK_WAITS.application(&mut boot)?,
     };
-    let hart0 = boot.observe()?;
-    let relay_part = observe::Part::claim("relay")?;
+    let hart0 = measure::Hart0 {
+        cpu: boot.cpu()?,
+        #[cfg(feature = "trace")]
+        observe: boot.observe()?,
+    };
+    let relay_part = measure::Part::claim("relay")?;
     let evidence = boot.evidence();
     let (outbox, inbox) = MAILBOX.try_take().ok_or(Error::Storage)?.split();
     let worker = Worker {
@@ -98,8 +112,8 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
 async fn application(
     worker: Worker,
     relay: load::relay::Relay,
-    hart0: observe::Hart0,
-    part: observe::Part,
+    hart0: measure::Hart0,
+    part: measure::Part,
 ) -> AppResult {
     let mut relay = pin!(load::relay::serve(relay, hart0));
     match select(worker.run(), part.polled(relay.as_mut())).await {
@@ -112,7 +126,11 @@ async fn application(
 /// worker and the load server on it.
 fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted, Error> {
     let device = p.device.ok_or(Error::NoDevice)?;
-    let hart1 = boot.observe().ok_or(Error::ObserveTaken)?;
+    let hart1 = measure::Hart1 {
+        cpu: boot.cpu().ok_or(Error::CpuTaken)?,
+        #[cfg(feature = "trace")]
+        observe: boot.observe().ok_or(Error::ObserveTaken)?,
+    };
     let storage = NETWORK.try_take().ok_or(Error::Storage)?;
     let memory = MEMORY.try_take().ok_or(Error::Storage)?;
     let producer = udp::LoadProducer::new(&SOURCE);
@@ -134,10 +152,13 @@ fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted
         links: LINK_WAITS.group(&mut boot)?,
     };
     let tally = load::serve::TALLY.try_take().ok_or(Error::Storage)?;
+    #[cfg(feature = "trace")]
     let turns = udp::TURNS.try_take().ok_or(Error::Storage)?;
-    let part = observe::Part::claim("load")?;
+    let part = measure::Part::claim("load")?;
     let net = udp::Network::new(net, socket, &SOURCE);
-    Ok(boot.run(move || sockets(net, load, relay, asks, hart1, tally, turns, part)))
+    #[cfg(feature = "trace")]
+    net.keep_turns(turns);
+    Ok(boot.run(move || sockets(net, load, relay, asks, hart1, tally, part)))
 }
 
 /// The load server beside the answers to the worker, which never end but
@@ -151,12 +172,10 @@ async fn sockets(
     load: load::serve::Requests,
     relay: load::relay::Client,
     asks: Asked,
-    hart1: observe::Hart1,
+    hart1: measure::Hart1,
     tally: load::serve::RunTally,
-    turns: &'static mut udp::Turns,
-    part: observe::Part,
+    part: measure::Part,
 ) -> AppResult {
-    net.keep_turns(turns);
     let mut server = pin!(load::serve::serve(&net, load, relay, hart1, tally));
     match select(part.polled(server.as_mut()), answer_asks(&net, asks)).await {
         Raced::First(never) => match never {},
@@ -259,32 +278,26 @@ impl Worker {
     async fn run(mut self) -> AppResult {
         loop {
             let (identity, request) = self.requests.next().await;
-            match request {
-                Either::First(Either::First(Either::First(request))) => {
-                    self.sdk_request(identity, request).await;
-                }
-                Either::First(Either::First(Either::Second(request))) => {
-                    self.station_request(identity, request).await;
-                }
-                // Traps once the answer is written; a write the console
-                // cannot confirm ends the application, which records it.
-                Either::First(Either::Second(oer_hil_services_fault::Request::RaiseException(
-                    _,
-                ))) => match answer_then_trap(identity, &oer_hil_services_fault::Raising).await? {},
-                Either::First(Either::Second(
-                    oer_hil_services_fault::Request::RefusePublication(_),
-                )) => {
-                    oer::wifi::debug::refuse_next_publication();
-                    answer(identity, &oer_hil_services_fault::Refusing);
-                }
-                Either::First(Either::Second(oer_hil_services_fault::Request::GetRestarts(_))) => {
-                    answer(identity, &self.restarts());
-                }
+            let request = match request {
+                Either::First(request) => request,
                 // The load server in the group answers it.
                 Either::Second(request) => {
                     self.load.send((identity, request)).await;
                     self.load.receive().await.publish(identity);
+                    continue;
                 }
+            };
+            #[cfg(feature = "fault")]
+            let request = match request {
+                Either::First(request) => request,
+                Either::Second(request) => {
+                    self.fault_request(identity, request).await?;
+                    continue;
+                }
+            };
+            match request {
+                Either::First(request) => self.sdk_request(identity, request).await,
+                Either::Second(request) => self.station_request(identity, request).await,
             }
         }
     }
@@ -326,7 +339,32 @@ impl Worker {
         }
     }
 
+    /// A request of the fault service.
+    #[cfg(feature = "fault")]
+    async fn fault_request(
+        &mut self,
+        identity: RequestIdentity,
+        request: oer_hil_services_fault::Request,
+    ) -> Result<(), Error> {
+        match request {
+            // Traps once the answer is written; a write the console cannot
+            // confirm ends the application, which records it.
+            oer_hil_services_fault::Request::RaiseException(_) => {
+                match answer_then_trap(identity, &oer_hil_services_fault::Raising).await? {}
+            }
+            oer_hil_services_fault::Request::RefusePublication(_) => {
+                oer::wifi::debug::refuse_next_publication();
+                answer(identity, &oer_hil_services_fault::Refusing);
+            }
+            oer_hil_services_fault::Request::GetRestarts(_) => {
+                answer(identity, &self.restarts());
+            }
+        }
+        Ok(())
+    }
+
     /// The station's restarts without a reset and the last one's cause.
+    #[cfg(feature = "fault")]
     fn restarts(&self) -> oer_hil_services_fault::Restarts {
         let restarts = self.station.restarts();
         let mut cause = [0; oer_hil_services_fault::MAX_CAUSE];
@@ -470,7 +508,15 @@ fn milliseconds(timeout_ms: u32) -> Duration {
     Duration::from_millis(u64::from(timeout_ms))
 }
 
+/// The last connect as the service reports it: the measuring build records
+/// no timeline, and every stage is absent.
+#[cfg(not(feature = "trace"))]
+fn connect_times() -> wifi_station::ConnectTimes {
+    wifi_station::ConnectTimes::default()
+}
+
 /// The last connect as the service reports it.
+#[cfg(feature = "trace")]
 fn connect_times() -> wifi_station::ConnectTimes {
     let connect = observe::connect();
     let stages = connect.stages;
@@ -489,7 +535,15 @@ fn connect_times() -> wifi_station::ConnectTimes {
     }
 }
 
+/// Visit `index` of the last connect's scan: the measuring build records
+/// none.
+#[cfg(not(feature = "trace"))]
+fn scan_visit(_index: u8) -> wifi_station::ScanVisitAnswer {
+    wifi_station::ScanVisitAnswer(None)
+}
+
 /// Visit `index` of the last connect's scan as the service reports it.
+#[cfg(feature = "trace")]
 fn scan_visit(index: u8) -> wifi_station::ScanVisitAnswer {
     wifi_station::ScanVisitAnswer(observe::connect_visit(usize::from(index)).map(|visit| {
         wifi_station::ScanVisit {

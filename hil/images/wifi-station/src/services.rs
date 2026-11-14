@@ -2,7 +2,7 @@
 //! of the keys of the SDK station service, of the Wi-Fi station service, of
 //! the fault service, of the load service and of the base module.
 
-#[cfg(target_arch = "riscv32")]
+#[cfg(all(target_arch = "riscv32", feature = "fault"))]
 oer_protocols_hil_agent::image_keys! {
     /// The station image: the base module, the SDK station service, the
     /// Wi-Fi station service, the fault service and the load service.
@@ -10,6 +10,17 @@ oer_protocols_hil_agent::image_keys! {
         oer_hil_services_sdk_station::Request,
         oer_hil_services_wifi_station::Request,
         oer_hil_services_fault::Request,
+        oer_hil_services_load::Request,
+    ]
+}
+
+#[cfg(all(target_arch = "riscv32", not(feature = "fault")))]
+oer_protocols_hil_agent::image_keys! {
+    /// The measuring build: the base module, the SDK station service, the
+    /// Wi-Fi station service and the load service; no fault service.
+    pub(crate) KEYS = [
+        oer_hil_services_sdk_station::Request,
+        oer_hil_services_wifi_station::Request,
         oer_hil_services_load::Request,
     ]
 }

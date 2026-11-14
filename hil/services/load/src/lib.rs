@@ -386,18 +386,20 @@ pub struct Counters {
     pub cycles: u64,
     /// Instructions the boot hart retired.
     pub instructions: u64,
-    /// Frames the network took from its device.
+    /// Frames the network took from its device: the network's own count,
+    /// in every build.
     pub stack_received: u32,
     /// The L1 cache's access counts within the window.
     pub cache: CacheCounts,
     /// The cache geometry at the window's end.
     pub cache_geometry: CacheGeometry,
     /// The receive path's counts within the window: the S31 driver's and
-    /// the station service's. Only a trace build counts them; others report
-    /// zeros.
-    pub rx: RxCounts,
-    /// The transmit path's counts within the window.
-    pub tx: TxCounts,
+    /// the station service's. Only a trace build counts them: `None` from
+    /// the measuring build.
+    pub rx: Option<RxCounts>,
+    /// The transmit path's counts within the window, from the station's
+    /// observer: `None` from the measuring build.
+    pub tx: Option<TxCounts>,
 }
 
 /// The receive path's counts within one window, from the window's start
@@ -1232,6 +1234,9 @@ pub enum Reset {
     /// It was refused: the diagnostics' marker has counted all the resets
     /// it can, and the counts are as they were.
     Refused,
+    /// The image was built without the network's diagnostics (its measuring
+    /// build): nothing was switched or reset.
+    NotBuilt,
 }
 
 /// What the network core's diagnostics counted within run `run`'s window.
@@ -1869,6 +1874,10 @@ pub enum LoadError {
     NoSampler,
     /// The run was not sampled: its [`Start`] had no [`Profile`].
     NotSampled,
+    /// The image was built without what this collection reads: its
+    /// measuring build (no trace) reads each hart's counters and idle
+    /// account and the run's tally, and nothing else.
+    NotBuilt,
     /// A synchronised run's window was not released within
     /// [`MAX_DELAY_MS`] of its [`Start`]: no [`Begin`] came, or the run's
     /// incoming flow never delivered a load datagram. The run ended without

@@ -136,6 +136,18 @@ runtime and the bootstrap with the classes' cfgs (`oer_trace`,
 `cfg(oer_probe)` for its own builds alone, no production crate reads it, no
 crate has a probe feature, and production has no item only a probe uses.
 
+A feature of the application package may bring classes of its own, in a
+table of its name beside the package's list:
+`[package.metadata.open-radio.features.<feature>] instrumentation = [...]`.
+The build's classes are the package's list and those of every feature the
+build enables (`manifest::enabled_features`: the asked ones, the defaults
+unless `--no-default-features`, and what each enables of the package's own
+features, transitively). A class the pipeline does not know, in the
+package's list or a feature's, fails the build with its name and where it
+was declared. The bundle's provenance records the enabled features and the
+resulting classes (`BuildChoice`), and two summaries whose choices differ
+are incompatible: `cargo fw sizes` refuses to compare them.
+
 An image build fills an `ImageBundle` (format and contents:
 [`oer-tools-image-bundle`](../bundle/README.md)) with the files below the bundle's
 own, and records `purpose: Flash` or `Analysis`.

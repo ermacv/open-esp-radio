@@ -4,7 +4,9 @@
 (`Scenario::new`) names its image (`oer_tools_image_build::images`) and the keys
 of the services that image must serve, and lists its cases; `main` then:
 
-1. builds the image through the image pipeline, before it waits for the stand;
+1. builds the image through the image pipeline, before it waits for the stand,
+   with the features the run names in Cargo's words (`--no-default-features`,
+   `--features <a,b>`; the package's defaults otherwise);
 2. leases the board (`--board`, or the one board of the image's chip with
    the `dut` role) from the LAB service
    ([tools/lab/service](../../lab/service/README.md)), which runs every
@@ -21,12 +23,15 @@ of the services that image must serve, and lists its cases; `main` then:
    serial line;
 5. checks that the running image is the built one (Hello's `image_crc32`
    against the bundle's runtime CRC-32, also after a reboot) and that its key
-   pages hold every required key;
+   pages hold every required key: a build without a service the scenario
+   requires (a measuring build without the fault service) is refused there;
 6. runs the cases (`--case` selects some, `--list` prints them), printing
    each outcome as soon as it is known, and each measurement a case records
    (`Cx::measure`) when it records it; a run with measurements writes them
    with its outcomes, cleanup and verdict to
-   `target/hil/results/<scenario>-<time in ns>.json` once the lease is released;
+   `target/hil/results/<scenario>-<time in ns>.json` once the lease is released,
+   with the build (`build`: the features and the instrumentation the bundle
+   recorded, `Cx::built`);
 7. checks the device at the end of the cases: one that runs the built image
    and left no request unconfirmed ends clean; one with a request whose
    outcome is unknown, or whose image does not answer, is reported. The

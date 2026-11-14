@@ -1,7 +1,10 @@
 use super::*;
+#[cfg(feature = "trace")]
 use oer::observe::parts::{LIBRARY_PARTS, PartSample};
+#[cfg(feature = "trace")]
 use oer_portable_trace::profile::{PcSample, ReturnSample};
 
+#[cfg(feature = "trace")]
 fn executor(executor: u8, hart: u8, work_us: Option<u64>, idle_us: Option<u64>) -> ExecutorSample {
     ExecutorSample {
         executor,
@@ -14,6 +17,7 @@ fn executor(executor: u8, hart: u8, work_us: Option<u64>, idle_us: Option<u64>) 
     }
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn the_cpu_report_sums_each_harts_idle_and_lists_each_working_executor() {
     let samples = [
@@ -53,6 +57,7 @@ fn the_cpu_report_sums_each_harts_idle_and_lists_each_working_executor() {
     );
 }
 
+#[cfg(feature = "trace")]
 fn reading(name: Option<&'static str>, polls: u32, us: u32, longest: Option<u32>) -> PartReading {
     PartReading {
         name,
@@ -65,6 +70,7 @@ fn reading(name: Option<&'static str>, polls: u32, us: u32, longest: Option<u32>
     }
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn a_window_holds_the_named_parts_differences_and_the_ends_longest_poll() {
     let mut start = [PartReading::default(); PARTS];
@@ -98,6 +104,7 @@ fn a_window_holds_the_named_parts_differences_and_the_ends_longest_poll() {
     );
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn pages_of_parts_start_at_their_number_and_hold_at_most_one_answer() {
     let mut start = [PartReading::default(); PARTS];
@@ -118,6 +125,7 @@ fn pages_of_parts_start_at_their_number_and_hold_at_most_one_answer() {
     assert!(page(&windows, PARTS as u8).parts.is_empty());
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn the_tracking_window_counts_differences_with_the_ends_extremes() {
     let start = TrackingSample {
@@ -161,6 +169,7 @@ fn the_tracking_window_counts_differences_with_the_ends_extremes() {
     );
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn the_aggregates_histogram_wraps_at_two_to_the_sixteen() {
     let ampdu = link::TxAmpdu {
@@ -185,6 +194,7 @@ fn the_aggregates_histogram_wraps_at_two_to_the_sixteen() {
     assert_eq!(wire.acknowledged, 9);
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn the_link_keeps_every_rate_and_end() {
     let mut counted = link::Link::default();
@@ -228,6 +238,7 @@ fn the_counters_window_takes_differences_and_keeps_an_overflow() {
     assert!(window.cache_geometry.l2_bypassed);
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn pages_of_samples_cover_every_kept_sample_once_and_stop_at_the_end() {
     const CAPACITY: usize = 256;
@@ -290,6 +301,7 @@ fn the_link_window_takes_the_rates_differences() {
     assert_eq!(window.tx.delivered, 4);
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn an_owner_stamp_is_its_age_before_the_image_s_reading() {
     assert_eq!(stamped(10_000, 2_500), 7_500);
@@ -311,6 +323,7 @@ fn an_owner_stamp_is_its_age_before_the_image_s_reading() {
     );
 }
 
+#[cfg(feature = "trace")]
 #[test]
 fn the_addba_requests_keep_each_tid_s_record_and_the_counts_as_read() {
     use oer::observe::addba::{self as observed, Outcome, Request};

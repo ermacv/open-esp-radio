@@ -4,19 +4,29 @@
 //! counters and the sampler's pages, each the difference of a window's two
 //! readings where the service reports one.
 
+#[cfg(feature = "trace")]
 use oer::observe::addba;
+#[cfg(feature = "trace")]
 use oer::observe::cpu::ExecutorSample;
+#[cfg(feature = "trace")]
 use oer::observe::link;
+#[cfg(feature = "trace")]
 use oer::observe::parts::{PARTS, PartReading};
+#[cfg(feature = "trace")]
 use oer::observe::tracking::TrackingSample;
 use oer_hil_services_load::{
-    Addba, AddbaOutcome, AddbaRequest, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx,
-    ExecutorLoad, HartLoad, InstructionBus, Link, Load, MAX_PAGE_SAMPLES, MAX_PARTS, Mac,
-    PartWindow, Parts, Positions, Rates, RxCounts, RxLink, Sample, Samples, StallBoundary,
-    StationRx, Tracking, TxAmpdu, TxCounts, TxLink,
+    Addba, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, InstructionBus, Link, Load,
+    Mac, PartWindow, Positions, RxCounts, StationRx, TxAmpdu, TxCounts,
 };
+#[cfg(feature = "trace")]
+use oer_hil_services_load::{
+    AddbaOutcome, AddbaRequest, ExecutorLoad, HartLoad, MAX_PAGE_SAMPLES, MAX_PARTS, Parts, Rates,
+    RxLink, Sample, Samples, StallBoundary, Tracking, TxLink,
+};
+#[cfg(feature = "trace")]
 use oer_portable_trace::profile::Thinning;
 
+#[cfg(feature = "trace")]
 /// The CPU report at image microsecond `now_us` of every executor's
 /// sample: a hart's idle time for each executor that saw idle, the work of
 /// each that saw work. Only differences between two reports count.
@@ -58,8 +68,13 @@ pub(crate) fn load(now_us: u64, samples: &[ExecutorSample]) -> Load {
 }
 
 /// Every named part's window, in the order of its number.
+#[cfg(feature = "trace")]
 pub(crate) type Windows = heapless::Vec<PartWindow, PARTS>;
+/// The measuring build counts no part.
+#[cfg(not(feature = "trace"))]
+pub(crate) type Windows = heapless::Vec<PartWindow, 0>;
 
+#[cfg(feature = "trace")]
 /// Every part named at both ends of one window, between the readings
 /// `start` and `end`; the longest polls are `end`'s.
 pub(crate) fn parts(start: &[PartReading; PARTS], end: &[PartReading; PARTS]) -> Windows {
@@ -82,6 +97,7 @@ pub(crate) fn parts(start: &[PartReading; PARTS], end: &[PartReading; PARTS]) ->
     windows
 }
 
+#[cfg(feature = "trace")]
 /// The windows from the part numbered `from`, as many as one answer holds.
 pub(crate) fn page(windows: &Windows, from: u8) -> Parts {
     let mut parts = Parts::default();
@@ -92,6 +108,7 @@ pub(crate) fn page(windows: &Windows, from: u8) -> Parts {
     parts
 }
 
+#[cfg(feature = "trace")]
 /// The tracking ticks between the window's ends `start` and `end`; the
 /// extremes are `end`'s, of the window's epoch.
 pub(crate) fn tracking(start: &TrackingSample, end: &TrackingSample) -> Tracking {
@@ -116,6 +133,7 @@ pub(crate) fn tracking(start: &TrackingSample, end: &TrackingSample) -> Tracking
     }
 }
 
+#[cfg(feature = "trace")]
 fn rates(rates: &link::Rates) -> Rates {
     Rates {
         ht20_long_gi: rates.ht20_long_gi,
@@ -129,6 +147,7 @@ fn rates(rates: &link::Rates) -> Rates {
     }
 }
 
+#[cfg(feature = "trace")]
 /// The link's counts as the wire names them.
 pub(crate) fn link(link: &link::Link) -> Link {
     Link {
@@ -150,6 +169,7 @@ pub(crate) fn link(link: &link::Link) -> Link {
     }
 }
 
+#[cfg(feature = "trace")]
 /// The transmit agreements' counts as the wire names them: its size
 /// histogram wraps at 2^16.
 pub(crate) fn tx_ampdu(ampdu: &link::TxAmpdu) -> TxAmpdu {
@@ -173,6 +193,7 @@ pub(crate) fn tx_ampdu(ampdu: &link::TxAmpdu) -> TxAmpdu {
     }
 }
 
+#[cfg(feature = "trace")]
 /// The ADDBA Requests the station took, as the wire names them.
 pub(crate) fn addba(reading: &addba::Addba) -> Addba {
     let request = |request: &addba::Request| AddbaRequest {
@@ -207,8 +228,10 @@ pub(crate) struct Snapshot {
     pub stack_received: u32,
     pub cache: CacheCounts,
     pub cache_geometry: CacheGeometry,
-    pub rx: RxCounts,
-    pub tx: TxCounts,
+    /// The trace's: `None` from the measuring build.
+    pub rx: Option<RxCounts>,
+    /// The trace's: `None` from the measuring build.
+    pub tx: Option<TxCounts>,
     pub link: Link,
     pub mac: Mac,
     pub positions: Positions,
@@ -250,13 +273,14 @@ pub(crate) fn counters(start: &Snapshot, end: &Snapshot) -> Counters {
             dbus1: data_window(&start.cache.dbus1, &end.cache.dbus1),
         },
         cache_geometry: end.cache_geometry,
-        rx: RxCounts {
-            driver: DriverRx::window(&start.rx.driver, &end.rx.driver),
-            station: StationRx::window(&start.rx.station, &end.rx.station),
-        },
-        tx: TxCounts {
-            ampdu: TxAmpdu::window(&start.tx.ampdu, &end.tx.ampdu),
-        },
+        // Both ends from one build: the trace's, or neither.
+        rx: start.rx.zip(end.rx).map(|(start, end)| RxCounts {
+            driver: DriverRx::window(&start.driver, &end.driver),
+            station: StationRx::window(&start.station, &end.station),
+        }),
+        tx: start.tx.zip(end.tx).map(|(start, end)| TxCounts {
+            ampdu: TxAmpdu::window(&start.ampdu, &end.ampdu),
+        }),
     }
 }
 
@@ -275,6 +299,7 @@ pub(crate) fn link_window(start: &Snapshot, end: &Snapshot) -> Link {
     Link::window(&start.link, &end.link)
 }
 
+#[cfg(feature = "trace")]
 /// The page of `buffer` from the sample numbered `from`, of a session that
 /// reported `ticks` ticks, `stray` ticks without a session, and was `cut`.
 pub(crate) fn samples<const N: usize>(
@@ -313,12 +338,14 @@ pub(crate) fn samples<const N: usize>(
 /// The image's time of a radio owner's stamp read `age` microseconds before
 /// the image read its own clock at `now_us`: both clocks count the one
 /// system timer, so an age carries over from one to the other.
+#[cfg(feature = "trace")]
 pub(crate) fn stamped(now_us: u64, age: u32) -> u64 {
     now_us.saturating_sub(u64::from(age))
 }
 
 /// A boundary that took `count` steps, its last `age` microseconds before
 /// `now_us`; without a step it has no time.
+#[cfg(feature = "trace")]
 pub(crate) fn boundary(now_us: u64, count: u32, age: u32) -> StallBoundary {
     StallBoundary {
         count,
@@ -326,20 +353,26 @@ pub(crate) fn boundary(now_us: u64, count: u32, age: u32) -> StallBoundary {
     }
 }
 
+#[cfg(all(target_arch = "riscv32", not(feature = "trace")))]
+pub(crate) use chip::cpu_snapshot;
 #[cfg(target_arch = "riscv32")]
-pub(crate) use chip::{hart_count, snapshot, stall};
+pub(crate) use chip::hart_count;
+#[cfg(all(target_arch = "riscv32", feature = "trace"))]
+pub(crate) use chip::{snapshot, stall};
 
 /// The chip's own types: the cache's, the driver's and the station's.
 #[cfg(target_arch = "riscv32")]
 mod chip {
+    use oer::cpu::{CacheGeometry, CacheLevel, DataBus, HartClock, HartCounters, InstructionBus};
+    #[cfg(feature = "trace")]
     use oer::observe::{
-        CacheGeometry, CacheLevel, Counters, DataBus, HartClock, HartCounters, InstructionBus,
-        MacBank, RxProgress, RxStallReading, StationRxCounts, StationRxKind, WifiRxReport,
+        Counters, MacBank, RxProgress, RxStallReading, StationRxCounts, StationRxKind, WifiRxReport,
     };
     use oer_hil_services_load as wire;
 
     use super::Snapshot;
 
+    #[cfg(feature = "trace")]
     /// The radio owner's stall `reading`, taken with the image's clock at
     /// `now_us`: the snapshot and the MAC's banks as the wire names them.
     pub(crate) fn stall(
@@ -433,6 +466,7 @@ mod chip {
         }
     }
 
+    #[cfg(feature = "trace")]
     /// One end of a window: the boot hart's `hart` and the library's
     /// `counters`, both read on the boot hart; the network's frames are
     /// hart 1's to count.
@@ -452,13 +486,13 @@ mod chip {
                 dbus1: data(hart.cache.dbus1),
             },
             cache_geometry: geometry(hart.cache_geometry),
-            rx: wire::RxCounts {
+            rx: Some(wire::RxCounts {
                 driver: counters.driver.map(driver).unwrap_or_default(),
                 station: station(&counters.station_rx),
-            },
-            tx: wire::TxCounts {
+            }),
+            tx: Some(wire::TxCounts {
                 ampdu: super::tx_ampdu(&counters.ampdu),
-            },
+            }),
             link: super::link(&counters.link),
             mac: wire::Mac::new(counters.mac.0, counters.mac.1),
             positions: wire::Positions {
@@ -468,6 +502,25 @@ mod chip {
                 interior: counters.positions.interior,
             },
             addba: super::addba(addba),
+        }
+    }
+
+    /// One end of a window of the measuring build: the boot hart's `hart`
+    /// counters and its cache's alone; the library's counts are the trace
+    /// build's.
+    #[cfg(not(feature = "trace"))]
+    pub(crate) fn cpu_snapshot(hart: HartCounters) -> Snapshot {
+        Snapshot {
+            cycles: hart.cycles,
+            instructions: hart.instructions,
+            cache: wire::CacheCounts {
+                ibus0: instruction(hart.cache.ibus0),
+                ibus1: instruction(hart.cache.ibus1),
+                dbus0: data(hart.cache.dbus0),
+                dbus1: data(hart.cache.dbus1),
+            },
+            cache_geometry: geometry(hart.cache_geometry),
+            ..Snapshot::default()
         }
     }
 
@@ -506,6 +559,7 @@ mod chip {
         }
     }
 
+    #[cfg(feature = "trace")]
     fn driver(report: WifiRxReport) -> wire::DriverRx {
         let prefix = report.prefix;
         wire::DriverRx {
@@ -539,6 +593,7 @@ mod chip {
         }
     }
 
+    #[cfg(feature = "trace")]
     fn station(counts: &StationRxCounts) -> wire::StationRx {
         use StationRxKind as Kind;
         let at = |kind: Kind| counts.count(kind);

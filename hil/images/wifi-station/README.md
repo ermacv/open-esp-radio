@@ -4,16 +4,15 @@ The image of the [SDK station](../../scenarios/sdk-station/README.md),
 [Wi-Fi station](../../scenarios/wifi-station/README.md) and
 [Wi-Fi load](../../scenarios/wifi-load/README.md) scenarios: an
 application of the entry `oer` (`oer`, features
-`station`, `console`, `group` and `observe`; the build selects the chip). Its boot takes the Wi-Fi
+`station`, `console` and `group`, and `observe` with the image's `trace`;
+the build selects the chip). Its boot takes the Wi-Fi
 station (on the AES accelerator) with the library's defaults and the USB
 Serial/JTAG console; its group starts the network core
 (`wifi::Network::start`, protocols/network) over the station's device. The library places their interrupts, executors and
 service tasks and records and resets on the image's behalf. The image
 declares no interrupt, DMA or service task of its own. Its boot is the
 [station example's](../../../examples/wifi-station/README.md) with
-these differences: the `observe` feature with the `trace` and
-`fault-injection` instrumentation (the library's observations, which the
-load service reports, and the fault service's refused publication), the
+these differences: the instrumentation its features bring (below), the
 `console` feature and
 `Console::open`, and every channel scanned (`wifi::Config::all_channels`)
 in place of the profile's one. Its group
@@ -25,6 +24,38 @@ load server reaches the boot hart's counters and sampler over another. The
 fault service is a handler, not a change to the boot. Review keeps the two
 boots in step; `oer-tools-test-layers` checks only that the image takes
 nothing the SDK places.
+
+## Two builds
+
+The image's features name its instrumentation, both in `default`:
+
+| Feature | Brings | Class |
+| --- | --- | --- |
+| `trace` | `oer/observe`: the library's observers and their counts, both harts' PC samplers, the relay of profiles and stall snapshots, the network core's turns, profile and diagnostics, the connect timeline | `trace` |
+| `fault` | the fault service (`RaiseException`, `RefusePublication`, `GetRestarts`) | `fault-injection` |
+
+The build without default features (`--no-default-features`) is the
+measuring one: no `oer_trace`, no `oer_fault_injection`, and nothing of
+either linked. It serves the SDK station, Wi-Fi station and load services,
+not the fault service, so the `wifi-station` scenario cannot run on it and
+`wifi-load` can. At a window's two ends it reads each hart's cycle and
+instruction counters, the boot hart's cache counters (`oer::cpu`), the
+run's tally and the network's frames, and each hart's idle account; it
+answers every collection fed by the trace (`CollectParts`, `CollectLink`,
+`CollectMac`, `CollectPositions`, `CollectTracking`, `CollectStall`,
+`CollectStallMac`, `CollectNetwork`, `CollectDiagnostics`,
+`CollectAddba`, `CollectProfile`, `CollectSamples`) with `NotBuilt`, a
+`Diagnose` with `Reset::NotBuilt`, a `Start` that names a tune knob with
+`NotBuilt` and one with a profile with `NoSampler`; its counters' `rx` and
+`tx` are absent. The connect timeline (`GetConnectTimes`,
+`GetScanVisit`) is empty: no stage, no visit.
+
+Each hart's busy share comes from its idle account in both builds (the
+executor's wait for an interrupt reads the platform's microseconds at its
+two edges,
+[executor](../../../chips/family/platform/executor/README.md)): `GetCpu`
+and the window's ends report a hart row each from it, and the trace build
+adds each executor's work from its observer.
 
 | Service | Handler |
 | --- | --- |

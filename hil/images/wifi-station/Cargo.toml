@@ -7,16 +7,27 @@ license = "Apache-2.0"
 publish.workspace = true
 description = "The HIL image of the station scenarios: an oer Wi-Fi station and the network core served over the HIL console"
 
+[features]
+default = ["trace", "fault"]
+## The trace: the library's observers and their counts, the PC samplers,
+## the relay of profiles. Without it the image is the measuring build: it
+## reads each hart's counters and idle account at a window's two ends and
+## nothing inside it.
+trace = ["oer/observe", "dep:oer-portable-trace"]
+## The fault service: a one-shot refused publication, an exception, the
+## station's restarts.
+fault = ["dep:oer-hil-services-fault"]
+
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-oer = { path = "../../../oer", features = ["station", "console", "group", "observe"] }
+oer = { path = "../../../oer", features = ["station", "console", "group"] }
 oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-features = false }
 oer-hil-agent = { path = "../../agent" }
 oer-protocols-hil-protocol = { workspace = true }
-oer-hil-services-fault = { path = "../../services/fault" }
+oer-hil-services-fault = { path = "../../services/fault", optional = true }
 oer-hil-services-load = { path = "../../services/load" }
 oer-hil-services-sdk-station = { path = "../../services/sdk-station" }
 oer-hil-services-wifi-station = { path = "../../services/wifi-station" }
-oer-portable-trace = { path = "../../../portable/trace" }
+oer-portable-trace = { path = "../../../portable/trace", optional = true }
 embassy-futures = "0.1.2"
 heapless = "0.9.3"
 static_cell.workspace = true
@@ -41,6 +52,16 @@ embassy-futures = "0.1.2"
 heapless = "0.9.3"
 postcard = { version = "1.1.3", default-features = false }
 
+# The producer's wakes and its datagrams of unknown end are counts the
+# trace's report reads: the measuring build keeps no reader of them.
+[[test]]
+name = "wait"
+required-features = ["trace"]
+
+[[test]]
+name = "unknown"
+required-features = ["trace"]
+
 [lints]
 workspace = true
 
@@ -48,11 +69,19 @@ workspace = true
 critical-section-hart = "boot"
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
+# Nothing holds in every build: the trace and the fault service each bring
+# their class with their feature.
+instrumentation = []
+
 # The SDK's observations (`observe`) report through the executors', the
 # station's, the RF actor's and the network's observers, which only
-# `oer_trace` builds call; the fault service refuses one publication under
-# `oer_fault_injection`.
-instrumentation = ["trace", "fault-injection"]
+# `oer_trace` builds call.
+[package.metadata.open-radio.features.trace]
+instrumentation = ["trace"]
+
+# The fault service refuses one publication under `oer_fault_injection`.
+[package.metadata.open-radio.features.fault]
+instrumentation = ["fault-injection"]
 
 [package.metadata.open-radio.panic-budget]
 # Reachable panic sites by layer (the image check's `*-panics.txt`): each a
