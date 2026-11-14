@@ -31,26 +31,23 @@ use crate::ampdu_tx::{AmpduTxRoleAdapter, HtAmpduPublicationInputs, ht_ampdu_pub
 /// rate's length.
 pub const ESP32S31_AMPDU_MAX_LENGTH: u16 = u16::MAX;
 
-/// The longest HE aggregate: the vendor's lowest HT ceiling (MCS 0, long
-/// guard interval, [`HtRate::vendor_ampdu_byte_limit`]) at every HE20 SU
-/// rate. Which rate code the vendor's per-rate selector receives for an HE
-/// rate is not established, so no HE rate takes a higher HT ceiling.
-pub const ESP32S31_HE_AMPDU_MAX_LENGTH: u16 = match HtRate::new(
-    HtMcs::Mcs0,
-    HtGuardInterval::Long800Ns,
-    HtChannelWidth::Mhz20,
-)
-.vendor_ampdu_byte_limit()
-{
-    Some(limit) => limit,
-    None => panic!("the vendor sets a ceiling at HT MCS 0"),
-};
-
 /// The longest aggregate the core publishes at `rate`: at an HT rate the
 /// vendor's per-rate ceiling (`rx11NRate2AMPDULimit`, see
 /// [`HtRate::vendor_ampdu_byte_limit`]), or [`ESP32S31_AMPDU_MAX_LENGTH`]
 /// where the vendor sets none; at an HE rate
-/// [`ESP32S31_HE_AMPDU_MAX_LENGTH`]; `None` at a legacy rate.
+/// [`ESP32S31_AMPDU_MAX_LENGTH`], as the vendor sets no per-rate ceiling
+/// there and [`AmpduBudget`] bounds each aggregate by the A-PSDU its rate
+/// carries within the TXOP; `None` at a legacy rate.
+///
+/// SOURCE(esp32s31): `libpp[trc.o]::rcSetTxAmpduLimit` stores the per-rate
+/// ceiling (`rcGetAmpduSched+0x90`, `rx11NRate2AMPDULimit`) beside the
+/// peer's length at the controller's `+0x80` and `+0x7e`, which only the HT
+/// check `libpp[pp.o]::ppCheckTxAMPDUlength` (`+0x38`, `+0x4e`) reads. The HE
+/// check `libpp[pp.o]::ppCheckTxHEAMPDUlength` bounds an aggregate by the
+/// BlockAck window (`+0x6c`) and by `libpp[trc.o]::rx11AXRate2AMPDULimit`
+/// (`+0x154`), the APEP of the rate within its access category's TXOP
+/// (`g_he_max_apep_length_tab`, filled by
+/// `rx11AXRate2AMPDULimit_update` from `he_max_apep_length` or the TXOP).
 pub const fn esp32s31_ampdu_length(rate: crate::mac::tx::TxPhyRate) -> Option<u16> {
     use crate::mac::tx::TxPhyRate;
     match rate {
@@ -58,7 +55,7 @@ pub const fn esp32s31_ampdu_length(rate: crate::mac::tx::TxPhyRate) -> Option<u1
             Some(limit) => limit,
             None => ESP32S31_AMPDU_MAX_LENGTH,
         }),
-        TxPhyRate::He(_) => Some(ESP32S31_HE_AMPDU_MAX_LENGTH),
+        TxPhyRate::He(_) => Some(ESP32S31_AMPDU_MAX_LENGTH),
         TxPhyRate::Legacy(_) => None,
     }
 }
@@ -101,7 +98,7 @@ const fn esp32s31_ampdu_lengths() -> AmpduLengthTable {
     while mcs < 10 {
         let mut guard = 0;
         while guard < 3 {
-            table.he[0][guard][mcs] = ESP32S31_HE_AMPDU_MAX_LENGTH as u32;
+            table.he[0][guard][mcs] = ESP32S31_AMPDU_MAX_LENGTH as u32;
             guard += 1;
         }
         mcs += 1;
@@ -167,9 +164,7 @@ impl AmpduBudget {
                 let apep = rate
                     .checked_maximum_apep_bytes(txop)
                     .ok_or(super::AmpduRefusal::Length)?;
-                let max_bytes = u16::try_from(apep)
-                    .unwrap_or(u16::MAX)
-                    .min(ESP32S31_HE_AMPDU_MAX_LENGTH);
+                let max_bytes = u16::try_from(apep).unwrap_or(ESP32S31_AMPDU_MAX_LENGTH);
                 (max_bytes, Some(policy))
             }
             TxPhyRate::Legacy(_) => return Err(super::AmpduRefusal::LegacyRate),

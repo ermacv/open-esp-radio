@@ -4561,6 +4561,25 @@ fn each_ht_rate_sizes_its_aggregate_by_the_vendor_ceiling() {
 }
 
 #[test]
+fn an_he_aggregate_is_bounded_by_its_rates_apep_not_the_ht_ceiling() {
+    use crate::mac::rx::HeGuardIntervalAndLtf;
+    use crate::mac::tx::{HeMcs, HeRate, TxPhyRate};
+    let he = |mcs| TxPhyRate::He(HeRate::new(mcs, HeGuardIntervalAndLtf::TwoLtf800Ns));
+    // The vendor bounds an HE aggregate by the APEP within the TXOP and by
+    // the BlockAck window, never by the HT ceiling's 6 490 octets (four full
+    // subframes at every HE rate): at the default TXOP the ROM's APEP takes
+    // the owner's 32 at HE-MCS 9, 24 at HE-MCS 7 and two at HE-MCS 0.
+    assert_eq!(
+        [HeMcs::Mcs9, HeMcs::Mcs7, HeMcs::Mcs0].map(|mcs| full_subframes(he(mcs))),
+        [32, 24, 2]
+    );
+    assert_eq!(
+        ampdu::esp32s31_ampdu_length(he(HeMcs::Mcs9)),
+        Some(ESP32S31_AMPDU_MAX_LENGTH)
+    );
+}
+
+#[test]
 fn the_port_table_holds_the_lengths_the_core_plans_by() {
     let lengths = &ampdu::ESP32S31_AMPDU_LENGTHS;
     let at = |rate| lengths.at(rate).map(|length| length.get());
@@ -4572,7 +4591,8 @@ fn the_port_table_holds_the_lengths_the_core_plans_by() {
     // The vendor's table is indexed by the rate code, whose short-GI codes
     // start at 26: short-GI MCS 3 takes the entry after long-GI MCS 9's.
     assert_eq!(at(ht40), Ok(43_200));
-    assert_eq!(at(he_rate()), Ok(6_490));
+    // HE: the owner's own limit; each aggregate is bounded by its APEP.
+    assert_eq!(at(he_rate()), Ok(65_535));
     // One spatial stream only, HE at 20 MHz only.
     assert!(at(ht_rate(8)).is_err());
     let he40 = PhyRate::He(

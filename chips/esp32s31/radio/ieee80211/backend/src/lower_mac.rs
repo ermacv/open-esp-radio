@@ -221,8 +221,7 @@ use keys::{KeyUseCount, TransmitKeyToken, removals::Removal};
 
 pub use ampdu::{
     AmpduFormat, AmpduPublication, ESP32S31_AMPDU_LENGTHS, ESP32S31_AMPDU_MAX_LENGTH,
-    ESP32S31_HE_AMPDU_MAX_LENGTH, Esp32s31AmpduOwner, esp32s31_ampdu_capabilities,
-    esp32s31_ampdu_length,
+    Esp32s31AmpduOwner, esp32s31_ampdu_capabilities, esp32s31_ampdu_length,
 };
 
 use crate::{
