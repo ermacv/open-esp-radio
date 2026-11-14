@@ -13,6 +13,7 @@ cargo fw sizes <base-output-directory> <head-output-directory>
 cargo fw sizes <base-image> <new-composition> --add-base <second-base-image>
 cargo fw decode-console <console.raw.txt>
 cargo fw build <image> [--no-default-features] [--features <a,b>]
+cargo fw cfgs <package> [--no-default-features] [--features <a,b>]
 cargo fw build <probe-image> --bin <binary> --diagnostic
 cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout <duration>]
@@ -129,6 +130,13 @@ resets the board into its image, which stops what the command left running.
   device below it and the stand file's hub policy allows it (the stand file,
   in `tools/lab/router`). The board must leave USB while the port is off, or the
   port "did not cut power"; then it waits for the board to return.
+
+## Instrumentation cfgs
+
+`cfgs` prints the `--cfg` flags of the instrumentation classes a build of
+the package compiles (its own list and those of the features it enables),
+as `build` sets them, and builds nothing: CI type-checks each instrumented
+image's default build and its build without default features with them.
 
 ## Sizes
 

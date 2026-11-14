@@ -89,11 +89,31 @@ impl Instrumentation {
     /// declaration is malformed (an unknown class, one named twice in a
     /// list, a feature table for a feature the package does not have).
     pub fn declared(root: &Path, application: &crate::Application) -> Result<Self> {
-        Self::of_metadata(
-            &crate::manifest::workspace_metadata(root)?,
+        Self::of_build(
+            root,
             &application.package,
             &application.features,
             application.default_features,
+        )
+    }
+
+    /// The classes a build of `package` with `features` (and its defaults
+    /// when `default_features`) has, from the workspace at `root`.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::declared`].
+    pub fn of_build(
+        root: &Path,
+        package: &str,
+        features: &[String],
+        default_features: bool,
+    ) -> Result<Self> {
+        Self::of_metadata(
+            &crate::manifest::workspace_metadata(root)?,
+            package,
+            features,
+            default_features,
         )
     }
 
@@ -167,7 +187,7 @@ impl Instrumentation {
     }
 
     /// The Rust flags that set the classes' cfgs, in class order.
-    pub(crate) fn rustflags(&self) -> impl Iterator<Item = String> + '_ {
+    pub fn rustflags(&self) -> impl Iterator<Item = String> + '_ {
         self.classes().map(|class| format!("--cfg {}", class.cfg()))
     }
 

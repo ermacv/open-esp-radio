@@ -43,6 +43,17 @@ enum Command {
         #[arg(long)]
         no_default_features: bool,
     },
+    /// Print the `--cfg` flags of the instrumentation a build of `package`
+    /// compiles, as the image pipeline sets them; builds nothing.
+    Cfgs {
+        package: String,
+        /// Cargo features of the image package, comma-separated or repeated.
+        #[arg(long, value_delimiter = ',')]
+        features: Vec<String>,
+        /// Without the image package's default features.
+        #[arg(long)]
+        no_default_features: bool,
+    },
     /// Compare sizes.json files in two output directories; builds nothing.
     /// Exit 0 for same/report, 1 for incompatible provenance or unreadable input.
     Sizes {
@@ -196,6 +207,19 @@ fn main() -> ExitCode {
                     source_root.as_deref().unwrap_or(&root),
                 )?;
                 println!("refreshed {count} image summaries");
+            }
+            Command::Cfgs {
+                package,
+                features,
+                no_default_features,
+            } => {
+                let classes = oer_tools_image_build::instrumentation::Instrumentation::of_build(
+                    &root,
+                    &package,
+                    &features,
+                    !no_default_features,
+                )?;
+                println!("{}", classes.rustflags().collect::<Vec<_>>().join(" "));
             }
             Command::Probe { package, jobs } => {
                 println!("{}", probe::build(&root, &package, jobs)?.display());
