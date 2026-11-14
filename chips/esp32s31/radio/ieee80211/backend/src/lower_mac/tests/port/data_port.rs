@@ -709,6 +709,13 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
     fn refusals_left(&self) -> usize {
         self.outbox.refuse
     }
+    fn fault(&mut self, whole: bool) {
+        self.observed.borrow_mut().fail_poll = Some(if whole {
+            Fault::ReceiveLost
+        } else {
+            Fault::RemovalMismatch
+        });
+    }
     fn end_tokens(&mut self) {
         // Each token goes home to the port's bank as it drops.
         drop(core::mem::take(&mut self.buffers));

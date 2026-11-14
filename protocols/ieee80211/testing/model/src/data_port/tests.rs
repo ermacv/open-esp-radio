@@ -668,6 +668,12 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     fn refusals_left(&self) -> usize {
         self.sink.refuse
     }
+    fn fault(&mut self, whole: bool) {
+        self.air.poison_at_next_service();
+        if whole {
+            self.air.allow_recovery();
+        }
+    }
     fn end_tokens(&mut self) {
         // Each token goes home to its pool as it drops.
         self.tickets.clear();

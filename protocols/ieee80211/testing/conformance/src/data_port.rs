@@ -126,6 +126,10 @@ pub trait DataPortHarness<'id> {
     fn refuse(&mut self, count: usize);
     /// The refusals [`Self::refuse`] asked that the sink has not made yet.
     fn refusals_left(&self) -> usize;
+    /// Fail the fixture's hardware at the port's next service: a fault
+    /// that leaves every owner whole when `whole`, one that holds owners no
+    /// stop returns otherwise.
+    fn fault(&mut self, whole: bool);
     /// Hold every start of the port before it ends, while `hold` is set:
     /// its poll answers that it goes on.
     fn hold_start(&mut self, hold: bool);
@@ -318,11 +322,17 @@ pub enum Case {
     /// What the installation issued is home or out, class by class, after
     /// every call, by the suite's own ledger.
     Conservation,
+    /// A fault that leaves its owners whole is taken back, and its stop
+    /// returns them all, by the ledger.
+    FaultWhole,
+    /// A fault that holds owners no stop returns is kept, with what it
+    /// leaves out, and the port does not retire, by the ledger.
+    FaultHolding,
 }
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 10] = [
         Self::QuietCalls,
         Self::Refusals,
         Self::ReceiveRoom,
@@ -331,6 +341,8 @@ impl Case {
         Self::RetryHistory,
         Self::Proofs,
         Self::Conservation,
+        Self::FaultWhole,
+        Self::FaultHolding,
     ];
 }
 
@@ -394,6 +406,8 @@ pub fn check<'id, H: DataPortHarness<'id>>(harness: &mut H, case: Case) -> Resul
         Case::RetryHistory => retry_history(harness),
         Case::Proofs => proofs(harness),
         Case::Conservation => conservation(harness),
+        Case::FaultWhole => fault_conservation(harness, true),
+        Case::FaultHolding => fault_conservation(harness, false),
     }
 }
 
@@ -892,6 +906,8 @@ struct Ledger {
     refused: usize,
     /// An aggregate arena it published has not settled.
     arena: bool,
+    /// The port reported a fault it has not taken back.
+    faulted: bool,
 }
 
 impl Ledger {
@@ -916,6 +932,9 @@ impl Ledger {
         }
         if outstanding.count(class::QUEUED) + outstanding.running != self.in_flight {
             classes |= class::QUEUED | class::RUNNING;
+        }
+        if outstanding.fault.is_some() != self.faulted {
+            classes |= class::FAULT;
         }
         if outstanding.unconsumed != self.refused {
             classes |= class::UNCONSUMED;
@@ -1108,5 +1127,110 @@ fn conservation<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
     ledger.lent -= 1;
     ledger.check(harness, 13)?;
     harness.keep_stopped(next);
+    Ok(())
+}
+
+fn fault_conservation<'id, H: DataPortHarness<'id>>(
+    harness: &mut H,
+    whole: bool,
+) -> Result<(), Violation> {
+    use oer_protocols_ieee80211_contracts_port::{Recovery, outstanding::class};
+    let mut ledger = Ledger::default();
+    start(harness)?;
+    ledger.running = true;
+    // A station MPDU on the air when the fault comes.
+    harness.hold_air(true);
+    let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
+    let now = harness.now();
+    let (port, sink) = harness.parts();
+    crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
+        .map_err(|_| Violation::Refusal)?;
+    ledger.in_flight += 1;
+    let _served = service(harness)?;
+    ledger.check(harness, 30)?;
+    harness.fault(whole);
+    // The service meets the fault: the port reports it, and keeps it.
+    for _ in 0..PROGRESS_STEPS {
+        let _served = service(harness);
+        harness.settle();
+        let (port, _) = harness.parts();
+        if port.fault().is_some() {
+            break;
+        }
+    }
+    let (port, _) = harness.parts();
+    if port.fault().is_none() {
+        return Err(Violation::Fixture);
+    }
+    ledger.faulted = true;
+    ledger.in_flight -= harness.take_completed().min(ledger.in_flight);
+    ledger.check(harness, 31)?;
+    let (port, _) = harness.parts();
+    let before = port.outstanding();
+    match port.recover_for_stop() {
+        Recovery::Recovered(_) if whole => ledger.faulted = false,
+        // The kept fault comes with what it leaves out, as the port has it.
+        Recovery::Kept(_, out) if !whole && out == before => {}
+        _ => {
+            return Err(Violation::Conserved {
+                step: 32,
+                classes: class::FAULT,
+            });
+        }
+    }
+    ledger.check(harness, 32)?;
+    harness.hold_air(false);
+    let mut stop = None;
+    for _ in 0..PROGRESS_STEPS {
+        let waker = harness.waker();
+        let now = harness.now();
+        let (port, _) = harness.parts();
+        match port.poll_stop(&mut Context::from_waker(&waker), now) {
+            core::task::Poll::Ready(Ok(stopped)) => {
+                stop = Some(stopped);
+                break;
+            }
+            core::task::Poll::Ready(Err(_)) if !whole => break,
+            core::task::Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
+            core::task::Poll::Pending => {
+                let _served = service(harness);
+                harness.settle();
+            }
+        }
+        ledger.in_flight -= harness.take_completed().min(ledger.in_flight);
+        ledger.check(harness, 33)?;
+    }
+    ledger.in_flight -= harness.take_completed().min(ledger.in_flight);
+    harness.end_tokens();
+    if whole {
+        // Every owner came home: the port retires.
+        let stopped = stop.ok_or(Violation::Lifecycle)?;
+        ledger.running = false;
+        ledger.check(harness, 34)?;
+        let (port, _) = harness.parts();
+        if port.retire(stopped).is_err() {
+            return Err(Violation::Conserved {
+                step: 35,
+                classes: 0,
+            });
+        }
+        return Ok(());
+    }
+    // The kept fault holds the port: no retirement, and what is out is
+    // the ledger's.
+    ledger.running = stop.is_none();
+    ledger.check(harness, 34)?;
+    if let Some(stopped) = stop {
+        let (port, _) = harness.parts();
+        match port.retire(stopped) {
+            Err(ProofRefused::Refused(_, out)) if out.classes() & class::FAULT != 0 => {}
+            _ => {
+                return Err(Violation::Conserved {
+                    step: 35,
+                    classes: class::FAULT,
+                });
+            }
+        }
+    }
     Ok(())
 }
