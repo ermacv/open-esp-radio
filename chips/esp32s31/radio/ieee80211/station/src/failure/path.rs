@@ -500,6 +500,7 @@ pub(crate) fn stop_unconfirmed(
             fault.push_path(path);
         }
         StopCause::CoreEnabled => path.name("CoreEnabled"),
+        StopCause::Released => path.name("Released"),
     }
     outstanding_path(&unconfirmed.outstanding, path);
 }

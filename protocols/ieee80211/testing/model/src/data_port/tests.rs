@@ -653,6 +653,12 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         };
         Some(cases::StationSent { end, retry })
     }
+    fn hold_start(&mut self, hold: bool) {
+        self.air.hold_start(hold);
+    }
+    fn hold_stop(&mut self, hold: bool) {
+        self.air.hold_stop(hold);
+    }
     fn end_tokens(&mut self) {
         // Each token goes home to its pool as it drops.
         self.tickets.clear();

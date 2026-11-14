@@ -694,6 +694,12 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
         };
         Some(cases::StationSent { end, retry })
     }
+    fn hold_start(&mut self, hold: bool) {
+        self.observed.borrow_mut().hold_start = hold;
+    }
+    fn hold_stop(&mut self, hold: bool) {
+        self.observed.borrow_mut().hold_stop = hold;
+    }
     fn end_tokens(&mut self) {
         // Each token goes home to the port's bank as it drops.
         drop(core::mem::take(&mut self.buffers));

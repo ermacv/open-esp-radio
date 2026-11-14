@@ -112,6 +112,7 @@ pub(crate) fn stop_unconfirmed(
             Source::Deadline => Source::Deadline,
             Source::Device(fault) => Source::Device(backend_fault(fault)),
             Source::CoreEnabled => Source::CoreEnabled,
+            Source::Released => Source::Released,
         },
         outstanding: value.outstanding.map_fault(backend_fault),
     }

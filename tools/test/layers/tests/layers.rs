@@ -2011,7 +2011,9 @@ fn path_attribute(attribute: &TokenStream) -> Option<String> {
     }
 }
 
-/// Whether an identifier marks waiting or sequencing for a scan.
+/// Whether an identifier marks waiting or sequencing for a scan. It is
+/// asked of each identifier, and of `Type::name` where the identifier
+/// follows a path's `::` after another one.
 type Marker = dyn Fn(&str) -> bool;
 
 /// Production tokens of one module body: items configured for tests are
@@ -2109,9 +2111,30 @@ fn production_markers(
             continue;
         }
         attributes.clear();
+        // The path's last two segments, when `word` follows `Type::`.
+        let qualified = match (
+            index.checked_sub(4).and_then(|at| tokens.get(at)),
+            index.checked_sub(3).and_then(|at| tokens.get(at)),
+            index.checked_sub(2).and_then(|at| tokens.get(at)),
+            token,
+        ) {
+            (
+                Some(TokenTree::Ident(owner)),
+                Some(TokenTree::Punct(first)),
+                Some(TokenTree::Punct(second)),
+                TokenTree::Ident(word),
+            ) if first.as_char() == ':' && second.as_char() == ':' => {
+                Some(format!("{owner}::{word}"))
+            }
+            _ => None,
+        };
         match token {
             TokenTree::Ident(word) if marker(&word.to_string()) => {
                 found.push(format!("{}: {word}", file.display()));
+            }
+            TokenTree::Ident(_) if qualified.as_deref().is_some_and(marker) => {
+                let qualified = qualified.unwrap_or_default();
+                found.push(format!("{}: {qualified}", file.display()));
             }
             // Item bodies (`impl`, `fn`, blocks) skip their test-only items too.
             TokenTree::Group(group) => {
@@ -2120,6 +2143,19 @@ fn production_markers(
             _ => {}
         }
     }
+}
+
+/// A crate root: it owns its directory, whatever its name (a binary's
+/// `src/hardware.rs` declares its modules beside it).
+fn crate_root_markers(file: &Path, marker: &Marker, found: &mut Vec<String>) {
+    let tokens = std::fs::read_to_string(file)
+        .ok()
+        .and_then(|source| source.parse::<TokenStream>().ok());
+    let (Some(tokens), Some(parent)) = (tokens, file.parent()) else {
+        found.push(format!("{}: unreadable module", file.display()));
+        return;
+    };
+    production_markers(tokens, parent, file, true, marker, found);
 }
 
 /// A module file: `lib.rs` and `mod.rs` own their directory; another file
@@ -4043,11 +4079,80 @@ const HAL_MARKERS_IN_ATOMS: &[(&str, usize, &str)] = &[
     ),
 ];
 
+/// The calls that make a proof of a port's installation state.
+const PROOF_ISSUES: [&str; 4] = [
+    "Stopped::issue",
+    "Starting::issue",
+    "Retired::issue",
+    "Recovering::issue",
+];
+
+fn issues_a_proof(word: &str) -> bool {
+    PROOF_ISSUES.contains(&word)
+}
+
+/// Whether production code of the package at `path`, in `file`, may make a
+/// proof: a port's implementation (the S31 backend's port) and the testing
+/// packages (the reference model, the conformance suite's forged proof).
+fn may_issue_proofs(file: &str) -> bool {
+    file.starts_with("chips/esp32s31/radio/ieee80211/backend/src/port")
+        || file.starts_with("protocols/ieee80211/testing/")
+}
+
+/// Only a port issues a proof of its state: outside its implementation and
+/// the tests, no production code makes one, so none skips the transition
+/// the proof stands for. The list of exceptions is empty.
+#[test]
+fn only_a_port_and_its_tests_issue_its_proofs() {
+    let root = root();
+    let workspace = read_toml(&root.join("Cargo.toml"));
+    let mut found = BTreeMap::new();
+    let mut issuers = 0;
+    // The proofs are the port contract's: only it and its dependents can
+    // name them.
+    let contract = "oer-protocols-ieee80211-contracts-port";
+    for (path, manifest) in packages(&root).into_iter().filter(|(_, manifest)| {
+        manifest["package"]["name"].as_str() == Some(contract)
+            || normal_dependencies(manifest, &workspace["workspace"]).contains(contract)
+    }) {
+        for crate_root in crate_roots(&root.join(&path), &manifest) {
+            for (file, count) in marker_counts(&root, &crate_root, &issues_a_proof) {
+                if may_issue_proofs(&file) {
+                    issuers += count;
+                } else {
+                    found.insert(file, count);
+                }
+            }
+        }
+    }
+    // The scan sees the ports' own issues: it reads the paths it names.
+    assert!(issuers > 0, "no port issues a proof");
+    assert!(found.is_empty(), "proofs made outside a port: {found:?}");
+}
+
+#[test]
+fn the_proof_scan_reads_qualified_calls_and_skips_tests() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let source = directory.path().join("lib.rs");
+    std::fs::write(
+        &source,
+        "fn forge() -> Retired<'static> { Retired::issue(StateSerial::FIRST) }
+         fn other() { slot.issue(3); Stopped::is_of(&p, s); }
+         #[cfg(test)]
+mod tests { fn t() { let _ = Stopped::issue(FIRST); } }
+",
+    )
+    .expect("source");
+    let mut found = Vec::new();
+    production_file_markers(&source, &issues_a_proof, &mut found);
+    assert_eq!(found, [format!("{}: Retired::issue", source.display())]);
+}
+
 /// Marker counts of the production files reachable from `crate_root`, by
 /// path below `root`.
 fn marker_counts(root: &Path, crate_root: &Path, marker: &Marker) -> BTreeMap<String, usize> {
     let mut found = Vec::new();
-    production_file_markers(crate_root, marker, &mut found);
+    crate_root_markers(crate_root, marker, &mut found);
     let unreadable = found
         .iter()
         .filter(|entry| entry.ends_with(": unreadable module"))

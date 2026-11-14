@@ -20,7 +20,9 @@
 //! the same in every call; no call reads the port's state to decide
 //! whether a proof holds. A second copy of a proof (a stopped port answers
 //! every [`poll_stop`](crate::DataPort::poll_stop) with its stop's proof)
-//! is the same proof, and stale with it once the port moved.
+//! is the same proof, and stale with it once the port moved. A proof of
+//! another serial is refused; who may issue one (a port's implementation
+//! and tests) is held by the layer tests' scan, not by this module.
 
 use core::marker::PhantomData;
 
@@ -58,8 +60,8 @@ macro_rules! proof {
 
         impl<'id> $name<'id> {
             /// The proof of the port's state at `serial`. A port issues it
-            /// at the transition it proves; one made elsewhere is at worst
-            /// refused.
+            /// at the transition it proves; the layer tests hold that only
+            /// a port's implementation and tests call it.
             pub const fn issue(serial: StateSerial) -> Self {
                 Self {
                     serial,

@@ -35,9 +35,9 @@ use oer_protocols_ieee80211_contracts_port::{
     LendRefusal, LendRefused, Outstanding, PairwiseIssue, PortAnswer, PortArena, PortCommand,
     PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
     ProofRefused, Recovering, Recovery, ReinstallRefused, Removed, RemovedKey, Retired, RunPhase,
-    RxPull, StaleProof, StartFailure, StartPoll, StartProof, StateSerial, StationSubmission,
-    StopCause, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts,
-    Unconsumed, Unkeeping, Unkept,
+    RxPull, StaleProof, StartFailure, StartPoll, StartProof, Starting, StateSerial,
+    StationSubmission, StopCause, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt,
+    SubmitRefusal, TxFacts, Unconsumed, Unkeeping, Unkept,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
@@ -406,6 +406,8 @@ pub type ModelAdmitted<Id, C, X> = AdmittedTxParts<
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Radio {
     Stopped,
+    /// A start waits for the MAC's enable ([`ModelAir::hold_start`]).
+    Starting,
     Running,
     /// A fault was taken back: nothing new goes out until the stop.
     Recovering,
@@ -476,6 +478,8 @@ pub struct ModelPort<
     serial: StateSerial,
     /// The serial of the last stop: a stopped port's answer to a stop.
     stop_serial: StateSerial,
+    /// The port released its installations: it holds none.
+    released: bool,
     /// The TSF epoch the last reinstall named.
     tsf_epoch: Option<u32>,
     loan: BodyLoan<'id, Id, Backend<Id, C, X>>,
@@ -570,6 +574,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 generation,
                 serial: StateSerial::FIRST,
                 stop_serial: StateSerial::FIRST,
+                released: false,
                 tsf_epoch: None,
                 loan,
                 channel,
@@ -1562,7 +1567,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 }
             }
             let refusal = match self.radio {
-                Radio::Stopped => Some(SubmitRefusal::NotEnabled),
+                Radio::Stopped | Radio::Starting => Some(SubmitRefusal::NotEnabled),
                 Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
                 Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
                     Some(SubmitRefusal::Stopping)
@@ -1918,16 +1923,30 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if !proof.is_of(self.serial) {
             return StartPoll::Stale(StaleProof { proof });
         }
-        // The model's start ends at its first poll: a refusal before it
-        // began leaves the port, and its proof, as they were.
-        if self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal() {
-            let stopped = match proof {
-                StartProof::Stopped(stopped) => stopped,
-                StartProof::Starting(_) => self.stop_proof(),
-            };
-            return StartPoll::Refused(stopped, StartFailure::Device);
+        // A start's own proof goes on with it; a stop's begins it. A refusal
+        // before it began leaves the port, and its proof, as they were; one
+        // of a start going on ends it stopped, with a new stop's proof.
+        let refused =
+            self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal();
+        match proof {
+            StartProof::Stopped(stopped) if refused => {
+                return StartPoll::Refused(stopped, StartFailure::Device);
+            }
+            StartProof::Starting(_) if refused => {
+                self.radio = Radio::Stopped;
+                return StartPoll::Refused(self.stop_proof(), StartFailure::Device);
+            }
+            StartProof::Stopped(_) => {
+                // The start begins: every proof of the stopped port ends.
+                self.raise();
+                self.radio = Radio::Starting;
+            }
+            StartProof::Starting(_) => {}
         }
-        // The start begins: every proof of the stopped port ends.
+        if self.air.start_held() {
+            return StartPoll::Pending(Starting::issue(self.serial));
+        }
+        // The start ends here, and its proof with it.
         self.raise();
         if self.air.take_unstopped_enable() {
             // The MAC began the start: its stop begins now and goes on in
@@ -1958,9 +1977,22 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if let Err(fault) = self.check(ModelPortCall::Stop) {
             return Poll::Ready(Err(self.unconfirmed(StopCause::Device(fault))));
         }
+        if self.released {
+            // No installation is left to stop, and no proof to give.
+            return Poll::Ready(Err(self.unconfirmed(StopCause::Released)));
+        }
         let since = match self.radio {
-            Radio::Stopped => {
+            // The stop's proof while nothing moved the port since; after a
+            // retirement the port is stopped again under a new serial.
+            Radio::Stopped if self.serial == self.stop_serial => {
                 return Poll::Ready(Ok(Stopped::issue(self.stop_serial)));
+            }
+            Radio::Stopped => return Poll::Ready(Ok(self.stop_proof())),
+            // The stop ends the start, and its proof with it; the MAC never
+            // enabled.
+            Radio::Starting => {
+                self.raise();
+                now
             }
             Radio::Running | Radio::Recovering => {
                 self.air
@@ -2033,6 +2065,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         Outstanding {
             phase: match self.radio {
                 Radio::Stopped => RunPhase::Stopped,
+                Radio::Starting => RunPhase::Starting,
                 Radio::Running => RunPhase::Running,
                 Radio::Recovering => RunPhase::Recovering,
                 Radio::Stopping { .. } => RunPhase::Stopping,
@@ -2150,6 +2183,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn release(&mut self, retired: Retired<'id>) -> Result<(), StaleProof<Retired<'id>>> {
         if retired.is_of(self.serial) {
             self.raise();
+            self.released = true;
             Ok(())
         } else {
             Err(StaleProof { proof: retired })

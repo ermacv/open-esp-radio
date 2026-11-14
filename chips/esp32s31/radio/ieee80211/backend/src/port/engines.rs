@@ -365,6 +365,8 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     serial: StateSerial,
     /// The serial of the last stop: a stopped port's answer to a stop.
     stop_serial: StateSerial,
+    /// The port released its installations: it holds none.
+    released: bool,
     /// The caller's waker from its last [`DataPort::poll_facts`]: a held
     /// receive cut registers the caller's own task with the receive session,
     /// so the image keeps one waker vtable.
@@ -679,6 +681,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             core_disabled: false,
             serial: StateSerial::FIRST,
             stop_serial: StateSerial::FIRST,
+            released: false,
             waker: None,
             fault: prepared.err(),
             unconsumed: unconsumed::Store::new(),
@@ -3048,11 +3051,31 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         now: Instant,
     ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<Fault>>> {
         self.now = now;
+        if self.released {
+            // No installation is left to stop, and no proof to give.
+            return Poll::Ready(Err(StopUnconfirmed {
+                cause: StopCause::Released,
+                outstanding: self.held_out(),
+            }));
+        }
         let since = match self.state {
-            PortState::Stopped => {
+            // The stop's proof while nothing moved the port since; after a
+            // retirement the port is stopped again under a new serial, so
+            // its answer is always a proof it takes.
+            PortState::Stopped if self.serial == self.stop_serial => {
                 return Poll::Ready(Ok(Stopped::issue(self.stop_serial)));
             }
-            PortState::Starting { .. } | PortState::RollingBack { .. } | PortState::Running => {
+            PortState::Stopped => return Poll::Ready(Ok(self.stop_proof())),
+            PortState::Starting { .. } | PortState::RollingBack { .. } => {
+                // The stop ends the start: its proof ends with it.
+                self.raise();
+                self.state = PortState::Stopping { since: now };
+                self.stop_served = false;
+                self.forget_held();
+                self.recompute_deadline();
+                now
+            }
+            PortState::Running => {
                 self.state = PortState::Stopping { since: now };
                 self.stop_served = false;
                 // A stopping port refuses the held command back to its
@@ -3223,6 +3246,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             return Err(StaleProof { proof: retired });
         }
         self.raise();
+        self.released = true;
         let _reusable = self.retire_driver();
         Ok(&mut *self.device)
     }

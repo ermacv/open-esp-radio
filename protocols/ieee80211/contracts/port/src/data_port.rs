@@ -485,6 +485,9 @@ pub enum StopCause<F> {
     /// A failed start had enabled the MAC: the port's next service
     /// disables it, and [`DataPort::poll_stop`] goes on from there.
     CoreEnabled,
+    /// The port released its installations: it holds none, so there is no
+    /// stop to confirm and no proof to give. Final: no later poll confirms.
+    Released,
 }
 
 /// The station's data arenas as a data port lends them for one turn
@@ -803,10 +806,12 @@ pub trait DataPort<'id> {
     /// Stop the radio: queued attempts end withdrawn, a published one is
     /// waited for, then the MAC, its DMA and interrupt work stop, within
     /// the backend's command bound from the first call. A confirmed stop
-    /// gives its proof, and a stopped port answers each call with its
-    /// stop's proof: one its holder dropped is had again, and once the
-    /// port moved on (a retirement) the answer is stale; an unconfirmed
-    /// stop says why, with everything the port has out.
+    /// gives its proof, and a stopped port answers each call with a proof
+    /// it takes: its stop's, which a holder that dropped it has again, or,
+    /// on a port that retired since, a new stop's (the port is stopped
+    /// again: a retirement's proof still held is stale, and the retirement
+    /// is asked again). An unconfirmed stop says why, with everything the
+    /// port has out; a released port answers [`StopCause::Released`].
     fn poll_stop(
         &mut self,
         cx: &mut Context<'_>,
