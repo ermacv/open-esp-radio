@@ -117,6 +117,15 @@ pub trait DataPortHarness<'id> {
     /// Send the fixture's transmit tokens home (its tickets and buffers):
     /// what a retirement needs of the fixture.
     fn end_tokens(&mut self);
+    /// The transmit buffers of the current installation the fixture holds
+    /// itself (its own and its kept station MPDU's): what it was handed and
+    /// has not handed the port.
+    fn buffers_held(&self) -> usize;
+    /// Make the sink refuse its next `count` deliveries, terminals and
+    /// units alike.
+    fn refuse(&mut self, count: usize);
+    /// The refusals [`Self::refuse`] asked that the sink has not made yet.
+    fn refusals_left(&self) -> usize;
     /// Hold every start of the port before it ends, while `hold` is set:
     /// its poll answers that it goes on.
     fn hold_start(&mut self, hold: bool);
@@ -306,11 +315,14 @@ pub enum Case {
     RetryHistory,
     /// A proof holds only while the state it proves lasts.
     Proofs,
+    /// What the installation issued is home or out, class by class, after
+    /// every call, by the suite's own ledger.
+    Conservation,
 }
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::QuietCalls,
         Self::Refusals,
         Self::ReceiveRoom,
@@ -318,6 +330,7 @@ impl Case {
         Self::Deadline,
         Self::RetryHistory,
         Self::Proofs,
+        Self::Conservation,
     ];
 }
 
@@ -347,6 +360,15 @@ pub enum Violation {
     /// return its proof or changed what the port has out: the step of
     /// [`Case::Proofs`] that found it.
     Proof(u8),
+    /// What the port has out differs from the suite's ledger after the
+    /// `step` of [`Case::Conservation`], in the classes `classes`
+    /// ([`outstanding::class`](oer_protocols_ieee80211_contracts_port::outstanding::class)).
+    Conserved {
+        /// The step.
+        step: u8,
+        /// The classes that differ.
+        classes: u32,
+    },
     /// A send of a [`RETRY_HISTORIES`] entry, by its positions, ended
     /// otherwise than listed or never ended.
     Retry {
@@ -371,6 +393,7 @@ pub fn check<'id, H: DataPortHarness<'id>>(harness: &mut H, case: Case) -> Resul
         Case::Deadline => deadline(harness),
         Case::RetryHistory => retry_history(harness),
         Case::Proofs => proofs(harness),
+        Case::Conservation => conservation(harness),
     }
 }
 
@@ -847,5 +870,243 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
         }
         _ => return Err(Violation::Proof(21)),
     }
+    Ok(())
+}
+
+/// The suite's own ledger of what the port handed it and what it gave
+/// back: the classes of [`Outstanding`] it can count from its side, each
+/// compared after every call of [`Case::Conservation`].
+///
+/// [`Outstanding`]: oer_protocols_ieee80211_contracts_port::Outstanding
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct Ledger {
+    /// The radio runs or a start or stop is under way.
+    running: bool,
+    /// Received units the suite holds.
+    received: usize,
+    /// Received units it lent to the network, not yet dropped.
+    lent: usize,
+    /// Attempts it submitted whose terminal it has not taken.
+    in_flight: usize,
+    /// Terminals the sink refused, which the port keeps.
+    refused: usize,
+    /// An aggregate arena it published has not settled.
+    arena: bool,
+}
+
+impl Ledger {
+    /// The classes in which `outstanding` differs from the ledger, the
+    /// transmit buffers with the fixture's own `held`.
+    fn differs<F>(
+        &self,
+        outstanding: &oer_protocols_ieee80211_contracts_port::Outstanding<F>,
+        held: usize,
+    ) -> u32 {
+        use oer_protocols_ieee80211_contracts_port::{RunPhase, outstanding::class};
+        let mut classes = 0;
+        if (outstanding.phase != RunPhase::Stopped) != self.running {
+            classes |= class::PHASE;
+        }
+        if outstanding.received != self.received {
+            classes |= class::RECEIVED;
+        }
+        if outstanding.lent != self.lent {
+            // Lent units are no class: the bit names them here alone.
+            classes |= 1 << 31;
+        }
+        if outstanding.count(class::QUEUED) + outstanding.running != self.in_flight {
+            classes |= class::QUEUED | class::RUNNING;
+        }
+        if outstanding.unconsumed != self.refused {
+            classes |= class::UNCONSUMED;
+        }
+        if (outstanding.arenas == oer_protocols_ieee80211_contracts_port::ArenaState::Held)
+            != self.arena
+        {
+            classes |= class::ARENAS;
+        }
+        // Every buffer the installation issued is with the fixture, in an
+        // attempt out, or in a refused terminal the port keeps.
+        if outstanding.transmit_out != held + self.in_flight + self.refused {
+            classes |= class::TRANSMIT_OUT;
+        }
+        classes
+    }
+
+    /// Compare with the port after `step`.
+    fn check<'id, H: DataPortHarness<'id>>(
+        &self,
+        harness: &mut H,
+        step: u8,
+    ) -> Result<(), Violation> {
+        let held = harness.buffers_held();
+        let (port, _) = harness.parts();
+        match self.differs(&port.outstanding(), held) {
+            0 => Ok(()),
+            classes => Err(Violation::Conserved { step, classes }),
+        }
+    }
+}
+
+fn conservation<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+    let mut ledger = Ledger::default();
+    ledger.check(harness, 0)?;
+    start(harness)?;
+    ledger.running = true;
+    ledger.check(harness, 1)?;
+    // Two units received: one recycled, one lent to the network.
+    harness.deliver(2);
+    let mut units = (None, None);
+    for _ in 0..PROGRESS_STEPS {
+        let now = harness.now();
+        let (port, _) = harness.parts();
+        match port.receive(2, now).map_err(|_| Violation::Fault)? {
+            RxPull::Unit { frame, .. } => {
+                if units.0.is_none() {
+                    units.0 = Some(frame);
+                } else {
+                    units.1 = Some(frame);
+                }
+                ledger.received += 1;
+                ledger.check(harness, 2)?;
+                if units.1.is_some() {
+                    break;
+                }
+            }
+            _ => harness.settle(),
+        }
+    }
+    let (Some(recycled), Some(lent)) = units else {
+        return Err(Violation::Fixture);
+    };
+    let (port, _) = harness.parts();
+    if port.recycle(recycled).is_err() {
+        return Err(Violation::Receive);
+    }
+    ledger.received -= 1;
+    ledger.check(harness, 3)?;
+    let (port, _) = harness.parts();
+    let Ok(lent) = port.lend(lent) else {
+        return Err(Violation::Receive);
+    };
+    ledger.received -= 1;
+    ledger.lent += 1;
+    ledger.check(harness, 4)?;
+    // An aggregate on the air when the stop begins, and a station MPDU
+    // queued behind it.
+    if !harness.publish_held_arena() {
+        return Err(Violation::Fixture);
+    }
+    ledger.arena = true;
+    ledger.check(harness, 5)?;
+    let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
+    let now = harness.now();
+    let (port, sink) = harness.parts();
+    crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
+        .map_err(|_| Violation::Refusal)?;
+    ledger.in_flight += 1;
+    ledger.check(harness, 6)?;
+    let _served = service(harness)?;
+    ledger.check(harness, 14)?;
+    // The station MPDU's terminal refused by the sink at the stop: the
+    // port keeps it.
+    harness.refuse(1);
+    harness.hold_air(false);
+    let mut stop = None;
+    for _ in 0..PROGRESS_STEPS {
+        let waker = harness.waker();
+        let now = harness.now();
+        let (port, _) = harness.parts();
+        match port.poll_stop(&mut Context::from_waker(&waker), now) {
+            core::task::Poll::Ready(Ok(stopped)) => {
+                stop = Some(stopped);
+                break;
+            }
+            core::task::Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
+            core::task::Poll::Pending => {
+                // The stop waits for the aggregate: it ends, and settles.
+                harness.release_arena();
+                if let Some(done) = service(harness)? {
+                    harness.settle_arena(done);
+                    ledger.arena = false;
+                }
+                harness.settle();
+            }
+        }
+        if harness.take_completed() > 0 {
+            ledger.in_flight -= 1;
+        }
+        if harness.refusals_left() == 0 && ledger.in_flight > 0 {
+            // The sink refused the MPDU's terminal: the port keeps it.
+            ledger.in_flight -= 1;
+            ledger.refused += 1;
+        }
+        ledger.running = true;
+        ledger.check(harness, 15)?;
+    }
+    let stopped = stop.ok_or(Violation::Lifecycle)?;
+    ledger.running = false;
+    if ledger.refused != 1 {
+        // The stop withdrew the MPDU, and the sink refused its terminal.
+        return Err(Violation::Conserved {
+            step: 7,
+            classes: oer_protocols_ieee80211_contracts_port::outstanding::class::UNCONSUMED,
+        });
+    }
+    if ledger.arena {
+        // The stop confirmed with the aggregate settled.
+        return Err(Violation::Conserved {
+            step: 16,
+            classes: oer_protocols_ieee80211_contracts_port::outstanding::class::ARENAS,
+        });
+    }
+    ledger.check(harness, 7)?;
+    // A retirement with the refused terminal kept names it, and changes
+    // nothing.
+    harness.end_tokens();
+    ledger.check(harness, 8)?;
+    let (port, _) = harness.parts();
+    let stopped = match port.retire(stopped) {
+        Err(ProofRefused::Refused(stopped, out))
+            if out.classes()
+                & oer_protocols_ieee80211_contracts_port::outstanding::class::UNCONSUMED
+                != 0 =>
+        {
+            stopped
+        }
+        _ => {
+            return Err(Violation::Conserved {
+                step: 9,
+                classes: 0,
+            });
+        }
+    };
+    ledger.check(harness, 9)?;
+    // The kept terminal comes once after the stop; its owners go home.
+    let (port, sink) = harness.parts();
+    if port.take_unconsumed(&stopped, sink).is_err() {
+        return Err(Violation::Lifecycle);
+    }
+    ledger.refused = 0;
+    let _ended = harness.take_completed();
+    harness.end_tokens();
+    ledger.check(harness, 10)?;
+    // The retirement, then the next installation with the network's unit
+    // still lent across it.
+    let (port, _) = harness.parts();
+    let Ok(retired) = port.retire(stopped) else {
+        return Err(Violation::Conserved {
+            step: 11,
+            classes: 0,
+        });
+    };
+    let next = harness
+        .reinstall(retired)
+        .map_err(|_| Violation::Lifecycle)?;
+    ledger.check(harness, 12)?;
+    drop(lent);
+    ledger.lent -= 1;
+    ledger.check(harness, 13)?;
+    harness.keep_stopped(next);
     Ok(())
 }

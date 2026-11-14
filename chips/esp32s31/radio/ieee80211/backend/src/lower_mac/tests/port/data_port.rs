@@ -700,6 +700,15 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
     fn hold_stop(&mut self, hold: bool) {
         self.observed.borrow_mut().hold_stop = hold;
     }
+    fn buffers_held(&self) -> usize {
+        self.buffers.len() + usize::from(self.station.is_some())
+    }
+    fn refuse(&mut self, count: usize) {
+        self.outbox.refuse = count;
+    }
+    fn refusals_left(&self) -> usize {
+        self.outbox.refuse
+    }
     fn end_tokens(&mut self) {
         // Each token goes home to the port's bank as it drops.
         drop(core::mem::take(&mut self.buffers));

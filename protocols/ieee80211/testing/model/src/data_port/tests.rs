@@ -659,6 +659,15 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     fn hold_stop(&mut self, hold: bool) {
         self.air.hold_stop(hold);
     }
+    fn buffers_held(&self) -> usize {
+        self.small.len() + usize::from(self.station.is_some())
+    }
+    fn refuse(&mut self, count: usize) {
+        self.sink.refuse = count;
+    }
+    fn refusals_left(&self) -> usize {
+        self.sink.refuse
+    }
     fn end_tokens(&mut self) {
         // Each token goes home to its pool as it drops.
         self.tickets.clear();
