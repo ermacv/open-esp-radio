@@ -1938,15 +1938,36 @@ policy = { package = "oer-chips-family-radio-ieee80211-policy", version = "1" }
     );
 }
 
-/// The sans-IO IEEE 802.11 cores: they take inputs and return actions as
-/// values and never wait.
-const IEEE80211_SANS_IO_CORES: [&str; 6] = [
-    "protocols/ieee80211/core/upper-mac",
-    "protocols/ieee80211/core/security/rsn",
-    "protocols/ieee80211/core/roles/sta",
-    "protocols/ieee80211/core/roles/ap",
-    "protocols/ieee80211/core/arbiter",
-    "protocols/ieee80211/core/extensions/esp-now",
+/// Whether the protocol package at `path` must never wait: every package
+/// under `protocols/` but a runtime, a port, a model, an agent, a package
+/// under `testing/` and the radio port. They take inputs and return
+/// actions as values; the set is computed, so a new core is covered the day
+/// it appears.
+fn must_not_wait(path: &str) -> bool {
+    let Some(below) = path.strip_prefix("protocols/") else {
+        return false;
+    };
+    let leaf = below.rsplit('/').next().unwrap_or(below);
+    !["runtime", "port", "model", "agent"].contains(&leaf)
+        && !below.split('/').any(|part| part == "testing")
+        && path != "protocols/radio/port"
+}
+
+/// The production files of a package that must not wait which still do,
+/// with their exact marker counts and the change that removes each. The
+/// list only shrinks: a lower count lowers its entry, and a file without
+/// markers leaves it. No new file belongs here.
+const WAITING_DEVIATIONS: &[(&str, usize, &str)] = &[
+    (
+        "protocols/network/core/src/owner.rs",
+        2,
+        "the network owner in the network runtime (phase C): `register_port` takes a `Context`",
+    ),
+    (
+        "protocols/hil/protocol/src/io.rs",
+        1,
+        "the async `write_frame` out of the wire protocol, to the HIL agent's transport; it has no caller in the workspace",
+    ),
 ];
 
 /// The identifiers of waiting: an `async` item and the task vocabulary.
@@ -2126,17 +2147,57 @@ fn waiting(word: &str) -> bool {
 }
 
 #[test]
-fn ieee80211_cores_never_wait_outside_their_tests() {
+fn protocol_cores_never_wait_outside_their_tests() {
     let root = root();
-    let packages = packages(&root);
-    let mut found = Vec::new();
-    for core in IEEE80211_SANS_IO_CORES {
-        let manifest = packages.get(core).expect("the core is a workspace member");
-        for crate_root in crate_roots(&root.join(core), manifest) {
-            production_file_markers(&crate_root, &waiting, &mut found);
+    let mut found = BTreeMap::new();
+    let mut cores = 0;
+    for (path, manifest) in packages(&root)
+        .into_iter()
+        .filter(|(path, _)| must_not_wait(path))
+    {
+        cores += 1;
+        for crate_root in crate_roots(&root.join(&path), &manifest) {
+            found.extend(marker_counts(&root, &crate_root, &waiting));
         }
     }
-    assert!(found.is_empty(), "a core waits: {found:?}");
+    // The rule takes the cores the tree has today, and more as they come.
+    assert!(cores >= 22, "only {cores} packages must not wait");
+    let known = WAITING_DEVIATIONS
+        .iter()
+        .map(|(file, count, _)| (*file, *count))
+        .collect::<Vec<_>>();
+    let differences = count_differences(&found, &known);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn every_protocol_package_but_runtimes_ports_models_and_tests_must_not_wait() {
+    for core in [
+        "protocols/ieee80211/core/upper-mac",
+        "protocols/ieee80211/wire",
+        "protocols/network/core",
+        "protocols/bridges/ieee80211-ethernet",
+        "protocols/radio/coex",
+        "protocols/hil/protocol",
+        "protocols/ieee80211/contracts/security",
+        // A core that does not exist yet is taken the day it appears.
+        "protocols/zigbee/nwk",
+    ] {
+        assert!(must_not_wait(core), "{core}");
+    }
+    for other in [
+        "protocols/ieee80211/runtime",
+        "protocols/network/port",
+        "protocols/bluetooth/le/model",
+        "protocols/hil/agent",
+        "protocols/ieee80211/testing/conformance",
+        "protocols/network/testing/model",
+        "protocols/radio/port",
+        "portable/time",
+        "chips/esp32s31/hal",
+    ] {
+        assert!(!must_not_wait(other), "{other}");
+    }
 }
 
 #[test]
@@ -4066,6 +4127,712 @@ fn hal_production_code_gains_no_waits_or_sequences() {
         })
         .collect::<Vec<_>>();
     assert!(unassigned.is_empty(), "no removing series: {unassigned:?}");
+}
+
+/// The removal of the Wi-Fi DMA's machines from the HAL.
+const WIFI_DMA: &str = "Wi-Fi DMA ownership out of the HAL, with the Wi-Fi quarantines";
+/// The removal of the PHY's calibration machines and temperature resource.
+const PHY_DRIVER: &str = "to the PHY driver, with the PHY's poison";
+
+/// HAL production code that decides (state machines, error policy,
+/// quarantine) beside its owners and atoms, by path below
+/// `chips/esp32s31/hal/src/`: a file, or a directory (`…/`) whose production
+/// files count together, each with its lines and the change that removes
+/// it. The list only shrinks; under [`HAL_DECISION_FILE_ROOTS`] every
+/// production file has an entry of its own, so no new file joins there.
+const HAL_DECISIONS: &[(&str, usize, &str)] = &[
+    ("radio/ieee80211/dma/descriptor.rs", 362, WIFI_DMA),
+    ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
+    ("radio/ieee80211/dma/rx_dma.rs", 527, WIFI_DMA),
+    ("radio/ieee80211/dma/rx_dma/model.rs", 881, WIFI_DMA),
+    ("radio/ieee80211/dma/rx_ring.rs", 3073, WIFI_DMA),
+    ("radio/ieee80211/dma/rx_storage.rs", 1198, WIFI_DMA),
+    ("radio/ieee80211/dma/rx_storage/buffers.rs", 511, WIFI_DMA),
+    ("radio/ieee80211/dma/rx_storage/host_dma.rs", 203, WIFI_DMA),
+    ("radio/ieee80211/dma/space.rs", 95, WIFI_DMA),
+    ("radio/ieee80211/dma/tx_ampdu_storage.rs", 1375, WIFI_DMA),
+    ("radio/ieee80211/dma/tx_storage.rs", 565, WIFI_DMA),
+    (
+        "radio/bluetooth/engine/",
+        15925,
+        "Bluetooth controller driver out of the HAL (#848)",
+    ),
+    ("radio/phy/i2c.rs", 685, PHY_DRIVER),
+    ("radio/phy/restore.rs", 368, PHY_DRIVER),
+    ("radio/phy/temperature.rs", 152, PHY_DRIVER),
+    ("radio/phy/temperature/", 78, PHY_DRIVER),
+    ("radio/domain/transaction.rs", 542, PHY_DRIVER),
+    ("radio/domain/transaction/", 321, PHY_DRIVER),
+];
+
+/// Directories below the HAL's sources whose every production file is an
+/// entry of [`HAL_DECISIONS`] by itself.
+const HAL_DECISION_FILE_ROOTS: &[&str] = &["radio/ieee80211/dma/"];
+
+/// The production files reachable from `crate_root`, by path below `root`:
+/// every module the production tree follows, its test modules skipped.
+fn production_files(root: &Path, crate_root: &Path) -> BTreeSet<String> {
+    marker_counts(root, crate_root, &|_: &str| true)
+        .into_keys()
+        .collect()
+}
+
+/// Lines of each entry of `known`, from the production `files` (paths below
+/// `prefix`) and the file system below `root`: a file's own lines, a
+/// directory's production files summed; and each production file below a
+/// file root that has no entry of its own, by itself.
+fn decision_lines(
+    root: &Path,
+    prefix: &str,
+    files: &BTreeSet<String>,
+    known: &[(&str, usize, &str)],
+    file_roots: &[&str],
+) -> BTreeMap<String, usize> {
+    let lines = |file: &str| {
+        std::fs::read_to_string(root.join(file)).map_or(0, |source| source.lines().count())
+    };
+    let mut found = BTreeMap::new();
+    for (entry, _, _) in known {
+        let total = if entry.ends_with('/') {
+            files
+                .iter()
+                .filter(|file| {
+                    file.strip_prefix(prefix)
+                        .is_some_and(|below| below.starts_with(entry))
+                })
+                .map(|file| lines(file))
+                .sum()
+        } else if files.contains(&format!("{prefix}{entry}")) {
+            lines(&format!("{prefix}{entry}"))
+        } else {
+            0
+        };
+        if total != 0 {
+            found.insert((*entry).to_owned(), total);
+        }
+    }
+    for file in files {
+        let Some(below) = file.strip_prefix(prefix) else {
+            continue;
+        };
+        if file_roots.iter().any(|root| below.starts_with(root)) && !found.contains_key(below) {
+            found.insert(below.to_owned(), lines(file));
+        }
+    }
+    found
+}
+
+#[test]
+fn hal_code_that_decides_is_listed_and_only_shrinks() {
+    let root = root();
+    let package = "chips/esp32s31/hal";
+    let manifest = packages(&root)
+        .remove(package)
+        .expect("the HAL is a workspace member");
+    let mut files = BTreeSet::new();
+    for crate_root in crate_roots(&root.join(package), &manifest) {
+        files.extend(production_files(&root, &crate_root));
+    }
+    let found = decision_lines(
+        &root,
+        "chips/esp32s31/hal/src/",
+        &files,
+        HAL_DECISIONS,
+        HAL_DECISION_FILE_ROOTS,
+    );
+    let known = HAL_DECISIONS
+        .iter()
+        .map(|(entry, lines, _)| (*entry, *lines))
+        .collect::<Vec<_>>();
+    let differences = count_differences(&found, &known);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+#[test]
+fn the_decision_list_takes_directories_whole_and_refuses_a_new_file_under_a_file_root() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let root = directory.path();
+    for (file, lines) in [
+        ("src/dma/ring.rs", 3),
+        ("src/dma/new.rs", 2),
+        ("src/engine/a.rs", 4),
+        ("src/engine/b/c.rs", 5),
+        ("src/other.rs", 7),
+    ] {
+        let path = root.join(file);
+        std::fs::create_dir_all(path.parent().expect("a parent")).expect("directory");
+        std::fs::write(path, "x\n".repeat(lines)).expect("file");
+    }
+    let files = [
+        "src/dma/ring.rs",
+        "src/dma/new.rs",
+        "src/engine/a.rs",
+        "src/engine/b/c.rs",
+        "src/other.rs",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<BTreeSet<_>>();
+    let known: &[(&str, usize, &str)] = &[("dma/ring.rs", 3, "x"), ("engine/", 9, "y")];
+    let found = decision_lines(root, "src/", &files, known, &["dma/"]);
+    let known = known
+        .iter()
+        .map(|(entry, lines, _)| (*entry, *lines))
+        .collect::<Vec<_>>();
+    // A directory counts its files together; a new file under a file root
+    // is its own new entry; a file outside both is not taken.
+    assert_eq!(count_differences(&found, &known), ["new: dma/new.rs (2)"]);
+}
+
+/// Whether a package's production sources are library code an image may
+/// reach, for the `dyn` scan: every package under `portable/`,
+/// `protocols/`, `chips/`, `hil/images`, `hil/services` and `hil/agent`, and
+/// the entry `oer`.
+fn reaches_images(path: &str) -> bool {
+    [
+        "portable/",
+        "protocols/",
+        "chips/",
+        "hil/images/",
+        "hil/services/",
+    ]
+    .iter()
+    .any(|prefix| path.starts_with(prefix))
+        || ["oer", "hil/agent"].contains(&path)
+}
+
+fn trait_object(word: &str) -> bool {
+    word == "dyn"
+}
+
+/// The production files of those packages that still hold a trait object,
+/// with their exact `dyn` counts and why each stays or what removes it. The
+/// list only shrinks.
+const TRAIT_OBJECTS: &[(&str, usize, &str)] = &[
+    // Product code: each goes with a generic parameter or an enum (T8b).
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
+        2,
+        "product: `&mut dyn FnMut(&[u8])` of `read_chain`, removed in T8b",
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
+        1,
+        "product: `&mut dyn FnMut(&[u8])` of `read_chain`, removed in T8b",
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/sampler.rs",
+        1,
+        "product: `&mut dyn FnMut()` of the masked section, removed in T8b",
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs",
+        1,
+        "product: `&mut dyn FindOldest`, removed in T8b",
+    ),
+    (
+        "protocols/ieee802154/port/src/owner.rs",
+        1,
+        "product: `&dyn Release`, removed in T8b",
+    ),
+    // Never in an image: each stays.
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_dma/model.rs",
+        2,
+        "stays: the receive walker's host model, behind `cfg(any(test, feature = \"test-support\"))`",
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs",
+        2,
+        "stays: the hardware model, behind `test` or host `test-support`",
+    ),
+    (
+        "chips/esp32s31/platform/layout/src/lib.rs",
+        3,
+        "stays: the layout crate's host half, behind the `build` feature its build scripts take",
+    ),
+    (
+        "chips/family/platform/layout/src/build.rs",
+        5,
+        "stays: the layout crate's host half, behind the `build` feature its build scripts take",
+    ),
+    (
+        "chips/family/facts/src/layers.rs",
+        5,
+        "stays: the facts' layer loader, a build-dependency of image crates and a host tool's",
+    ),
+    (
+        "chips/family/facts/src/lib.rs",
+        2,
+        "stays: the facts' layer loader, a build-dependency of image crates and a host tool's",
+    ),
+    (
+        "protocols/ieee80211/testing/model/src/air_time.rs",
+        2,
+        "stays: the IEEE 802.11 reference model, a testing package",
+    ),
+    (
+        "protocols/ieee80211/testing/model/src/data_port.rs",
+        1,
+        "stays: the IEEE 802.11 reference model, a testing package",
+    ),
+    (
+        "protocols/ieee80211/testing/model/src/lib.rs",
+        3,
+        "stays: the IEEE 802.11 reference model, a testing package",
+    ),
+];
+
+#[test]
+fn the_trait_object_scan_takes_library_packages_and_skips_tests_and_tools() {
+    for library in [
+        "portable/time",
+        "protocols/network/core",
+        "chips/esp32s31/hal",
+        "oer",
+        "hil/agent",
+        "hil/images/wifi-station",
+        "hil/services/load",
+    ] {
+        assert!(reaches_images(library), "{library}");
+    }
+    for other in [
+        "tools/image/build",
+        "hil/scenarios/wifi-load",
+        "hil/probes/esp32s31-mcycle",
+        "examples/wifi-station",
+    ] {
+        assert!(!reaches_images(other), "{other}");
+    }
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let source = directory.path().join("lib.rs");
+    std::fs::write(
+        &source,
+        "pub fn run(f: &mut dyn FnMut()) {}\n#[cfg(test)]\nmod tests { fn t(_: &dyn Fn()) {} }\n// a dyn in a comment\n",
+    )
+    .expect("source");
+    let mut found = Vec::new();
+    production_file_markers(&source, &trait_object, &mut found);
+    assert_eq!(found, [format!("{}: dyn", source.display())]);
+}
+
+#[test]
+fn library_code_holds_no_trait_object() {
+    let root = root();
+    let mut found = BTreeMap::new();
+    for (path, manifest) in packages(&root)
+        .into_iter()
+        .filter(|(path, _)| reaches_images(path))
+    {
+        for crate_root in crate_roots(&root.join(&path), &manifest) {
+            found.extend(marker_counts(&root, &crate_root, &trait_object));
+        }
+    }
+    let known = TRAIT_OBJECTS
+        .iter()
+        .map(|(file, count, _)| (*file, *count))
+        .collect::<Vec<_>>();
+    let differences = count_differences(&found, &known);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+/// `Trait::method` of each method of a trait in `tokens` whose return type
+/// is `bool`; items configured for tests are skipped.
+fn bool_trait_methods(tokens: TokenStream, found: &mut BTreeSet<String>) {
+    let tokens = tokens.into_iter().collect::<Vec<_>>();
+    let mut index = 0;
+    let mut test = false;
+    while let Some(token) = tokens.get(index) {
+        index += 1;
+        match token {
+            TokenTree::Punct(hash) if hash.as_char() == '#' => {
+                if let Some(TokenTree::Group(attribute)) = tokens.get(index)
+                    && attribute.delimiter() == Delimiter::Bracket
+                {
+                    test |= test_only(&attribute.stream());
+                    index += 1;
+                }
+                continue;
+            }
+            TokenTree::Ident(word) if word == "trait" && !test => {
+                let Some(TokenTree::Ident(name)) = tokens.get(index) else {
+                    continue;
+                };
+                // The trait's body: its first brace group.
+                let body = tokens.iter().skip(index).find_map(|token| match token {
+                    TokenTree::Group(body) if body.delimiter() == Delimiter::Brace => Some(body),
+                    _ => None,
+                });
+                if let Some(body) = body {
+                    bool_methods(&name.to_string(), body.stream(), found);
+                }
+            }
+            TokenTree::Group(group) if !test => bool_trait_methods(group.stream(), found),
+            _ => {}
+        }
+        if !matches!(token, TokenTree::Ident(word) if word == "pub") {
+            test = false;
+        }
+    }
+}
+
+/// The methods of trait `name`'s `body` that return `bool`.
+fn bool_methods(name: &str, body: TokenStream, found: &mut BTreeSet<String>) {
+    let tokens = body.into_iter().collect::<Vec<_>>();
+    let mut test = false;
+    for (index, token) in tokens.iter().enumerate() {
+        match token {
+            TokenTree::Group(attribute)
+                if attribute.delimiter() == Delimiter::Bracket
+                    && matches!(index.checked_sub(1).and_then(|at| tokens.get(at)), Some(TokenTree::Punct(hash)) if hash.as_char() == '#') =>
+            {
+                test |= test_only(&attribute.stream());
+            }
+            TokenTree::Ident(word) if word == "fn" => {
+                let method = tokens.get(index + 1);
+                // `-> bool` ends the signature: before `;`, `{` or `where`.
+                let mut at = index + 2;
+                let mut returns_bool = false;
+                while let Some(token) = tokens.get(at) {
+                    match token {
+                        TokenTree::Punct(end) if end.as_char() == ';' => break,
+                        TokenTree::Group(body) if body.delimiter() == Delimiter::Brace => break,
+                        TokenTree::Punct(dash)
+                            if dash.as_char() == '-'
+                                && matches!(tokens.get(at + 1), Some(TokenTree::Punct(arrow)) if arrow.as_char() == '>') =>
+                        {
+                            returns_bool = matches!(tokens.get(at + 2), Some(TokenTree::Ident(ty)) if ty == "bool")
+                                && !matches!(tokens.get(at + 3), Some(TokenTree::Punct(more)) if more.as_char() == ':' || more.as_char() == '<');
+                            break;
+                        }
+                        _ => {}
+                    }
+                    at += 1;
+                }
+                if let (Some(TokenTree::Ident(method)), true, false) = (method, returns_bool, test)
+                {
+                    found.insert(format!("{name}::{method}"));
+                }
+                test = false;
+            }
+            TokenTree::Punct(end) if end.as_char() == ';' => test = false,
+            _ => {}
+        }
+    }
+}
+
+/// The methods of a trait in production code of `protocols/` and `chips/`
+/// that answer a bare `bool`, each a predicate of one fact (which stays) or
+/// a decision with the package that removes it. The list only shrinks.
+/// A register or hardware port's sampled bit: a predicate of one fact.
+const SAMPLED_BIT: &str = "predicate: a sampled bit of the hardware";
+/// A conformance harness's observation, in a testing package.
+const HARNESS: &str = "predicate: a test harness observation (testing package)";
+const P1: &str = "decision: P1, the installation in the port contract";
+const P2: &str = "decision: P2, the installation machine and the composition";
+const P3: &str = "decision: P3, the engine";
+const PHASE_C: &str = "decision: phase C, the network owner in the network runtime";
+const RADIO_SYSTEM: &str = "decision: no package yet (the radio system and Bluetooth)";
+
+const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
+    ("AccessPointHarness::holds_beacon", HARNESS),
+    ("AccessPointHarness::idle", HARNESS),
+    ("AccessPointHarness::install_station_key", HARNESS),
+    ("AccessPointHarness::take_station_configured", HARNESS),
+    (
+        "AirWorld::land",
+        "predicate: a frame landed (reference model, testing package)",
+    ),
+    ("Alarm::alarm_at", SAMPLED_BIT),
+    ("Alarm::start", SAMPLED_BIT),
+    ("AnalogI2cPowerAccess::analog_i2c_is_powered", SAMPLED_BIT),
+    (
+        "AnalogI2cPowerAccess::analog_i2c_reset_is_released",
+        SAMPLED_BIT,
+    ),
+    ("BankControl::fault_acknowledged", SAMPLED_BIT),
+    ("BluetoothBackend::admits", RADIO_SYSTEM),
+    (
+        "BluetoothBackend::is_stopped",
+        "predicate: the backend stopped",
+    ),
+    (
+        "BluetoothSchedulerCancellationControl::observe_status_0208",
+        SAMPLED_BIT,
+    ),
+    (
+        "BluetoothSchedulerCancellationControl::observe_status_0324",
+        SAMPLED_BIT,
+    ),
+    (
+        "BluetoothSchedulerInsertionExecutionObservationControl::observe_execution_lock_ready",
+        SAMPLED_BIT,
+    ),
+    (
+        "BluetoothSchedulerInsertionExecutionObservationControl::observe_execution_modify_ready",
+        SAMPLED_BIT,
+    ),
+    (
+        "BluetoothSchedulerInsertionExecutionObservationControl::observe_execution_modify_rejected",
+        SAMPLED_BIT,
+    ),
+    (
+        "BluetoothSchedulerSoftwareListRemovalControl::read_command_0_status_26",
+        SAMPLED_BIT,
+    ),
+    (
+        "BluetoothSchedulerSoftwareListRemovalControl::read_command_1_status_18",
+        SAMPLED_BIT,
+    ),
+    ("CacheSyncRegisters::done", SAMPLED_BIT),
+    (
+        "Capability::supported",
+        "predicate: a capability is supported",
+    ),
+    ("CcmpKeyHardware::ccmp_entry_is_valid", SAMPLED_BIT),
+    ("ClientBackend::admits", RADIO_SYSTEM),
+    ("ClockUpdate::update_pending", SAMPLED_BIT),
+    ("Control::btbb_held", SAMPLED_BIT),
+    ("Control::commands_ready", SAMPLED_BIT),
+    ("Control::engines_idle", SAMPLED_BIT),
+    ("Control::is_busy", SAMPLED_BIT),
+    ("Control::ready", SAMPLED_BIT),
+    ("Control::rejected", SAMPLED_BIT),
+    ("Control::reset_released", SAMPLED_BIT),
+    ("Control::time_pending", SAMPLED_BIT),
+    ("Control::timer_separated", SAMPLED_BIT),
+    (
+        "ControllerTimeRegisters::latch_request_pending",
+        SAMPLED_BIT,
+    ),
+    (
+        "Correlation::is_backend_reserved",
+        "predicate: the correlation is the backend's",
+    ),
+    ("Count::on", "predicate: the switchable diagnostics are on"),
+    ("CounterLatch::valid", SAMPLED_BIT),
+    ("DataPort::lend_room", P3),
+    ("DataPort::recover_for_stop", P1),
+    ("DataPortHarness::publish_held_arena", HARNESS),
+    ("DataPortHarness::take_configured", HARNESS),
+    ("Device::cut_held_by_units", P3),
+    ("Device::event_waiting", P3),
+    ("Device::is_running", P2),
+    ("Device::returns_quiet", P1),
+    (
+        "Diagnostics::on",
+        "predicate: the switchable diagnostics are on",
+    ),
+    ("DriverEnv::halted", P2),
+    ("DriverEnv::reject_group_replacement", P3),
+    ("DriverEnv::stopping", P2),
+    ("EarlyText::text", "predicate: the bytes are whole text"),
+    ("EndpointRegisters::has_data", SAMPLED_BIT),
+    ("EndpointRegisters::has_room", SAMPLED_BIT),
+    ("ExecutorPlatform::debugger_connected", SAMPLED_BIT),
+    ("ExecutorPlatform::is_pending", SAMPLED_BIT),
+    ("FetchSuspendRegisters::autoload_done", SAMPLED_BIT),
+    ("FetchSuspendRegisters::autoload_enabled", SAMPLED_BIT),
+    ("FetchSuspendRegisters::freeze_done", SAMPLED_BIT),
+    ("FetchSuspendRegisters::lock_done", SAMPLED_BIT),
+    ("FetchSuspendRegisters::preload_done", SAMPLED_BIT),
+    ("FetchSuspendRegisters::sync_done", SAMPLED_BIT),
+    ("FlashCommandRegisters::busy", SAMPLED_BIT),
+    ("FlashCommandRegisters::mode_bits_from_status", SAMPLED_BIT),
+    ("FramePort::is_fault", PHASE_C),
+    (
+        "FramePort::is_final",
+        "predicate: whether the port ended the frame",
+    ),
+    ("FrameSource::register", PHASE_C),
+    ("Hooks::observing", "predicate: the trace observes"),
+    (
+        "Hooks::recycled_probe_pending",
+        "predicate: a probe is pending (trace hooks)",
+    ),
+    ("Ieee802154LowLevel::cca_busy", SAMPLED_BIT),
+    ("Ieee802154LowLevel::etm_channel_enabled", SAMPLED_BIT),
+    ("Ieee802154LowLevel::is_current_rx_frame", SAMPLED_BIT),
+    ("Ieee802154LowLevel::pending_mode", SAMPLED_BIT),
+    ("Ieee802154LowLevel::rx_auto_ack", SAMPLED_BIT),
+    ("Ieee802154LowLevel::tx_auto_ack", SAMPLED_BIT),
+    ("Ieee802154LowLevel::tx_enhanced_ack", SAMPLED_BIT),
+    ("InTransit::holds", P3),
+    ("Io::ready", SAMPLED_BIT),
+    ("Local::again", PHASE_C),
+    ("Local::deliver", PHASE_C),
+    ("Local::offers", PHASE_C),
+    ("Local::register", PHASE_C),
+    (
+        "MacColdHandshakeHardware::sample_cold_handshake_ready",
+        SAMPLED_BIT,
+    ),
+    (
+        "MacRuntimeLowRateHardware::phy_low_rate_enabled",
+        SAMPLED_BIT,
+    ),
+    (
+        "Mask::take_interrupts",
+        "predicate: interrupts were enabled before the mask",
+    ),
+    ("Memory::retirement_ready", SAMPLED_BIT),
+    ("Memory::scheduler_stopped", SAMPLED_BIT),
+    (
+        "ModemClockDependency::refcounted",
+        "predicate: a fact of the modem clock's dependency (chip knowledge)",
+    ),
+    (
+        "ModemClockDependency::retained_while_wifi_initialized",
+        "predicate: a fact of the modem clock's dependency (chip knowledge)",
+    ),
+    (
+        "ModemLpTimerHandlerRegisterTransaction::sample_state_0024_low_byte_nonzero",
+        SAMPLED_BIT,
+    ),
+    (
+        "ModemLpTimerHandlerRegisterTransaction::sample_state_002c_low_byte_nonzero",
+        SAMPLED_BIT,
+    ),
+    (
+        "ModemLpTimerInterruptTransaction::control_0058_bit_2_is_set",
+        SAMPLED_BIT,
+    ),
+    (
+        "ModemLpTimerLowPowerInitTransaction::control_2_is_set",
+        SAMPLED_BIT,
+    ),
+    (
+        "ModemLpTimerRuntimeTransaction::rollover_low_byte_nonzero",
+        SAMPLED_BIT,
+    ),
+    ("NetworkStop::takes_frames", P2),
+    ("Observation::rx_walker_enabled", SAMPLED_BIT),
+    ("OwnedTransmit::notice_waiting", PHASE_C),
+    ("ParallelAnalogBus::is_busy", SAMPLED_BIT),
+    ("PbusAccess::is_busy", SAMPLED_BIT),
+    ("PbusContext::wifi_baseband_enabled", SAMPLED_BIT),
+    ("PhyI2cParallelAccess::is_busy", SAMPLED_BIT),
+    (
+        "PhyShortDelay::settle_micros",
+        "decision: whether a short settle was taken; no package yet (the PHY driver, with the PHY's poison)",
+    ),
+    ("PllRegisters::calibration_done", SAMPLED_BIT),
+    (
+        "PowerBaselinePort::bus_matches",
+        "predicate: a register matches the cold baseline",
+    ),
+    (
+        "PowerBaselinePort::source_matches",
+        "predicate: a register matches the cold baseline",
+    ),
+    (
+        "PowerBaselinePort::syscon_matches",
+        "predicate: a register matches the cold baseline",
+    ),
+    ("Produce::current", PHASE_C),
+    ("Produce::register", PHASE_C),
+    ("PsramCommandRegisters::busy", SAMPLED_BIT),
+    ("RadioController::can_prepare", RADIO_SYSTEM),
+    (
+        "RadioController::is_retired",
+        "predicate: the controller retired",
+    ),
+    ("Registers::mode1_reset", SAMPLED_BIT),
+    ("Registers::mode1_software", SAMPLED_BIT),
+    ("Registers::rtc_wake_pending", SAMPLED_BIT),
+    ("RuntimeRegisters::held", SAMPLED_BIT),
+    ("RuntimeRegisters::is_stalled", SAMPLED_BIT),
+    ("RxDma::reload_pending", SAMPLED_BIT),
+    ("RxDma::walker_enabled", SAMPLED_BIT),
+    ("SamplePort::is_busy", SAMPLED_BIT),
+    ("SamplerTimer::acknowledge", SAMPLED_BIT),
+    ("SamplerTimer::alarm_at", SAMPLED_BIT),
+    ("SamplerTimer::arm_after", SAMPLED_BIT),
+    ("SchedulerRoleStorage::admits", RADIO_SYSTEM),
+    ("SchedulerTaskPort::commands_ready", SAMPLED_BIT),
+    ("SchedulerTaskPort::execution_modify_ready", SAMPLED_BIT),
+    ("SchedulerTaskPort::execution_modify_rejected", SAMPLED_BIT),
+    ("SecondaryFetchRegisters::autoload_done", SAMPLED_BIT),
+    ("SecondaryFetchRegisters::autoload_enabled", SAMPLED_BIT),
+    ("SecondaryFetchRegisters::freeze_done", SAMPLED_BIT),
+    ("SecondaryFetchRegisters::preload_done", SAMPLED_BIT),
+    (
+        "SequenceSpace::precedes",
+        "predicate: sequence-number order (IEEE 802.11 modulo arithmetic)",
+    ),
+    ("SharedPhyAccess::analog_i2c_is_powered", SAMPLED_BIT),
+    ("SharedPhyAccess::analog_i2c_reset_is_released", SAMPLED_BIT),
+    ("SharedPhyAccess::tx_dc_measurement_is_ready", SAMPLED_BIT),
+    ("TaskControl::head_present", SAMPLED_BIT),
+    ("TxArena::claim_arenas", P3),
+    ("TxArena::event_waiting", P3),
+    (
+        "TxHardware::begin_tx_timeout_abort",
+        "decision: P3, the transmit slot the hardware never ends",
+    ),
+];
+
+#[test]
+fn the_bool_scan_takes_trait_methods_and_leaves_tests_free_functions_and_other_types() {
+    let source = r#"
+pub trait Port {
+    fn ready(&self) -> bool;
+    fn taken(&mut self) -> Result<bool, ()>;
+    fn proof(&self) -> Option<Proof>;
+    #[cfg(test)]
+    fn fixture(&self) -> bool;
+    fn with_default(&self) -> bool { true }
+    fn generic<T>(&self, value: T) -> bool where T: Copy;
+}
+pub fn free() -> bool { false }
+impl Port for Thing { fn ready(&self) -> bool { true } }
+#[cfg(test)]
+trait Fake { fn fake(&self) -> bool; }
+mod inner { pub(crate) trait Nested { fn nested(&self) -> bool; } }
+"#;
+    let mut found = BTreeSet::new();
+    bool_trait_methods(source.parse().expect("tokens"), &mut found);
+    assert_eq!(
+        found.into_iter().collect::<Vec<_>>(),
+        [
+            "Nested::nested",
+            "Port::generic",
+            "Port::ready",
+            "Port::with_default"
+        ]
+    );
+}
+
+#[test]
+fn contracts_answer_no_bare_yes_or_no() {
+    let root = root();
+    let mut found = BTreeSet::new();
+    for (path, manifest) in packages(&root)
+        .into_iter()
+        .filter(|(path, _)| path.starts_with("protocols/") || path.starts_with("chips/"))
+    {
+        for crate_root in crate_roots(&root.join(&path), &manifest) {
+            for file in production_files(&root, &crate_root) {
+                let tokens = std::fs::read_to_string(root.join(&file))
+                    .ok()
+                    .and_then(|source| source.parse::<TokenStream>().ok());
+                match tokens {
+                    Some(tokens) => bool_trait_methods(tokens, &mut found),
+                    None => panic!("unreadable production file {file}"),
+                }
+            }
+        }
+    }
+    let known = BOOL_TRAIT_METHODS
+        .iter()
+        .map(|(method, _)| (*method).to_owned())
+        .collect::<BTreeSet<_>>();
+    let new = found.difference(&known).collect::<Vec<_>>();
+    let gone = known.difference(&found).collect::<Vec<_>>();
+    assert!(
+        new.is_empty() && gone.is_empty(),
+        "new: {new:?}\ngone, drop the entry: {gone:?}"
+    );
 }
 
 #[test]

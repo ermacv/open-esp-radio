@@ -101,7 +101,7 @@ dependencies ([layer tests](../tools/test/layers/README.md)).
 | Level | Roles | May | May not |
 | --- | --- | --- | --- |
 | Facts | `Facts` | values, tables and pure functions with their `SOURCE:` | hardware access, waits, operation order |
-| PAC | `Pac` | generated accessors, the one claim, owned parts | hand-written sequences, polls, policy |
+| PAC | `Pac` | generated accessors, the one claim, owned parts; beside ownership its policy holds the catalogue of named transactions | hand-written sequences, polls, policy |
 | HAL | `Hal` | the root and its partitions, owners, typestate, routing; atoms; implementations of the family drivers' register ports and of the platform contracts; the DMA memory core | waits, polls, deadlines, `async`, retries, error policy, reference counts and membership, algorithms, startup order; chip drivers, services, protocols |
 | Driver | `HardwareDriver`, `ChipAdapter` | sequences over register ports or HAL atoms, waits that yield to the executor (named boot waits before it), typed errors, stop and recovery, calibration and scheduling algorithms | the PAC, raw pointers, protocol cores and runtimes, the platform runtime |
 | Platform | `PlatformContract`, `Platform` | startup order, the boot deadline, staging, handoff and adoption, entry and trap ABI, interrupt table, executor, fatal policy | register access past the HAL; chip knowledge past the platform port |
@@ -124,8 +124,10 @@ normal path. HIL has `HilProtocol` (framing and message skeleton), `HilAgent` (t
 device library), `HilBinding` (the dictionary beside one facade or one
 test-only service) and `HilImage`, an application of the entry (`Sdk`) with
 the HIL agent on the entry (`HilSdkAgent`), the bindings and the agent. HAL files whose production code waits are a per-file list in the
-layer tests that only shrinks; the HAL also still holds driver code without
-a waiting marker ([HAL](../chips/esp32s31/hal/README.md)).
+layer tests that only shrinks, and so are the HAL's files and directories
+that decide (the Wi-Fi DMA's machines, the Bluetooth engine, the PHY's
+calibration machines and temperature resource, the domain's transactions),
+by their lines ([HAL](../chips/esp32s31/hal/README.md)).
 
 Wi-Fi is split into `wire` (over-the-air formats), `contracts/` (the
 backend port and the installed-protection contract), the sans-IO cores under
@@ -200,7 +202,9 @@ operation exists.
 Protocol cores are **sans-IO**: frames, completed operations and the current
 time enter as values; actions and the next deadline leave as values. They
 never await, so they run under any executor and in host tests with virtual
-time. Only a protocol's runtime awaits, and it binds no executor: time comes
+time; the layer tests scan every package under `protocols/` but a runtime,
+a port, a model, an agent and a testing package for waiting, with a list of
+the files that still wait which only shrinks. Only a protocol's runtime awaits, and it binds no executor: time comes
 from `oer-portable-time`, interrupt signals from `portable/`, no executor,
 `embassy-time`, `embassy-sync` or HAL dependency
 (`embassy-futures` is allowed). The firmware composition declares the tasks

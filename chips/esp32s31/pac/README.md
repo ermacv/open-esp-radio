@@ -23,6 +23,10 @@ over it is the HAL's, each vendor step with its `SOURCE:`.
   from an `oer_portable_memory::DmaRef` of its target layout or a `DmaWindowAddress`,
   never from an integer; a pointer's high field only to its placement's
   prefix.
+- **Transactions.** Beside ownership the policy holds the catalogue of
+  named transactions: each a named write of one register of an owner (a
+  field replace, a fixed image, a masked modify, …) with its source,
+  rendered as one method of that owner.
 - **Ownership.** Each part of the policy is one owner type over its words:
   the interrupt and task sides of a block, the parts of a divided block,
   read-only and `Copy` views and shared blocks. A part that serves an
