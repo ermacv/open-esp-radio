@@ -70,6 +70,31 @@ is gone both fail, so every list only shrinks:
 - `BOOL_TRAIT_METHODS`: trait methods of `protocols/` and `chips/` that
   answer a bare `bool`, each a predicate of one fact or a decision with its
   package.
+- the rules' lists, each counted by file (or by variant) over production
+  code, each entry with what removes it, which a package that removes one
+  corrects (`t8c_print`, ignored, prints them from the tree):
+  - `CLAIMS`: places claimed at run time in the entry and the facade
+    (`try_take`, `try_init`, `try_uninit`, an option's `take()` answered by
+    a refusal);
+  - `VIOLATION_VARIANTS`: the variants of `ActorViolation`,
+    `LifecycleViolation` and `ApContract`, each with the sites that make or
+    match it;
+  - `ERROR_STATES`: error types with a variant that names the caller's
+    state (`Already…`, `Not…` of a state, `Running`, `Stopped`, `Closed`,
+    `Open`, `Active`);
+  - `STATUS_FAILURES`: statuses (`…Step`, `…Phase`, `…State`, `…Progress`,
+    `…Poll`, `…Collected`, `…Selection`) with a failure among their
+    variants;
+  - `DROPPED_RESULTS`: a statement `.ok();`, an `unwrap_or_default()`, an
+    `unwrap_or_else(|_| …)`;
+  - `KEPT_OUT`: `ManuallyDrop`, `mem::forget`, `Box::leak`, and names
+    `Poison…`, `Quarantin…`, `ResetRequired…`, `Unfinished…`;
+  - `COMPATIBILITY`: `#[serde(default)]`, `#[serde(alias)]`,
+    `#[deprecated]`, a renamed re-export `pub use … as …`;
+  - `HAND_BITS`: a shift by a literal or a hexadecimal mask beside a bit
+    operator, in the HAL's register and PHY files and the wire crates. It
+    misses a shift or a mask by a named value and counts arithmetic that is
+    no register access.
 
 - `EXTERNAL_ASYNC_CRATES`: the direct normal `embassy-sync` edge of the
   HIL agent.
