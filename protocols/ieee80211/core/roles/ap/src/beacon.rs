@@ -1,11 +1,11 @@
-//! Bounded AP beacon storage and executor-time TSF publication.
+//! Bounded AP beacon storage and its TSF-driven publication.
 //!
-//! The beacon is a template the access point prepares for publication:
-//! the TSF (its own time since its TSF restarted), the management sequence,
-//! the TIM and the DTIM count. Its schedule is an absolute TBTT cursor that a
-//! late publication does not move.
-//! Preparation stamps the supplied executor time; a software TX queue can
-//! delay hardware submission and on-air transmission.
+//! The beacon is a template the access point prepares for publication: the
+//! management sequence, the TIM and the DTIM count of its TSF's value (its
+//! own time since its TSF restarted). The Timestamp field goes zero: the
+//! transmitter writes the access point's TSF there as the beacon goes out
+//! (`BeaconTimestamp::Transmitter`). Its schedule is an absolute TBTT cursor
+//! that a late publication does not move.
 //!
 //! A move of the BSS to another channel is announced in the template: the
 //! Channel Switch Announcement (and, for a 40 MHz channel, the Secondary
@@ -270,16 +270,15 @@ impl<'storage> ApBeacon<'storage> {
         })
     }
 
-    /// Stamp one frame using `now` and advance its TBTT schedule.
+    /// Prepare one frame at the access point's TSF value `now` (its DTIM
+    /// count; the Timestamp field zero, which the transmitter writes) and
+    /// advance its TBTT schedule.
     ///
     /// The returned publication owns the exact group queue prefix advertised
     /// by this frame. Retain its context until the TX terminal; only a
     /// delivered beacon grants that prefix's release. Later queue arrivals
     /// and later TIM phases cannot enlarge it.
     ///
-    /// The returned frame can wait in a software TX queue before submission.
-    /// This method does not refresh the timestamp at hardware submission or
-    /// on-air transmission.
     ///
     /// `None` also while an announced switch is due: no beacon goes out on
     /// the old channel after the one that counted one.

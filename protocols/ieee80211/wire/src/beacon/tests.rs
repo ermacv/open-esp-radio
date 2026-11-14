@@ -29,8 +29,9 @@ fn beacon() -> [u8; 44] {
 }
 
 #[test]
-fn executor_tsf_drives_dtim_and_group_indication() {
+fn the_access_point_s_tsf_drives_dtim_and_group_indication_and_the_timestamp_stays_zero() {
     let mut bytes = beacon();
+    bytes[24..32].copy_from_slice(&[0xa5; 8]);
 
     assert_eq!(stamp(&mut bytes, 0, true), Some((1, 2)));
     assert_eq!(dtim(&bytes), Some((38, 1, 2)));
@@ -42,6 +43,11 @@ fn executor_tsf_drives_dtim_and_group_indication() {
 
     assert_eq!(stamp(&mut bytes, 3 * 100 * 1_024, false), Some((0, 2)));
     assert_eq!(bytes[42] & 1, 0);
+    assert_eq!(
+        bytes[24..32],
+        [0; 8],
+        "the transmitter writes the Timestamp"
+    );
 }
 
 #[test]

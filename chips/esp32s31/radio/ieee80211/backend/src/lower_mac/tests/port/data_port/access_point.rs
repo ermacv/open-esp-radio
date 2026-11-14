@@ -341,7 +341,7 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> ApFixture<'a, 'id, Id> {
             source: prepared,
             power: SupportedPower::new(TxPower::Calibrated).expect("power"),
             permission,
-            stamp: BeaconStamp::new(BeaconTimestamp::Caller)?,
+            stamp: BeaconStamp::new(BeaconTimestamp::Transmitter)?,
             deadline,
         }
         .admit();
@@ -765,26 +765,14 @@ fn an_expired_configuration_and_pairwise_removal_undo_their_barriers_on_the_s31_
     }
 }
 
-/// The cases that submit a beacon. The S31 declares no Timestamp rule, so
-/// no beacon stamp exists and the fixture cannot build a beacon: such a case
-/// ends `Violation::Fixture`, which means it has NO coverage on the S31, not
-/// that the port refused a beacon. Their positive paths run on the model
-/// only; the two stops run here over ordinary access-point frames
-/// ([`FRAME_STOP_CASES`]).
-const BEACON_CASES: [ap_cases::Case; 6] = [
-    ap_cases::Case::BeaconPermission,
-    ap_cases::Case::StoppedBeacon,
-    ap_cases::Case::BeaconExpires,
-    ap_cases::Case::StaleBeacon,
-    ap_cases::Case::StopsAlone,
-    ap_cases::Case::SharedStop,
-];
-
+/// The S31 declares the transmitter's Timestamp rule, from run 4's
+/// evidence: a beacon stamp exists and the port takes beacons.
 #[test]
-fn the_s31_declares_no_beacon_timestamp_rule() {
-    for source in [BeaconTimestamp::Caller, BeaconTimestamp::Transmitter] {
-        assert!(BeaconStamp::<Caps>::new(source).is_none(), "{source:?}");
-    }
+fn the_s31_declares_the_transmitter_s_beacon_timestamp_rule() {
+    assert_eq!(
+        BeaconStamp::<Caps>::new(BeaconTimestamp::Transmitter).map(|stamp| stamp.source()),
+        Some(BeaconTimestamp::Transmitter)
+    );
 }
 
 /// The access point's own stop beside a running station and the shared
@@ -801,20 +789,14 @@ fn the_access_point_stops_alone_and_with_the_shared_stop_over_ordinary_frames_on
     }
 }
 
-/// Every case but the beacon ones passes; a beacon case ends `Fixture`:
-/// it runs nothing on the S31 (no coverage), see [`BEACON_CASES`].
+/// Every case of the shared access-point suite passes on the S31 port, the
+/// beacon cases included.
 #[test]
-fn every_access_point_case_without_a_beacon_passes_on_the_s31_port() {
+fn every_access_point_case_passes_on_the_s31_port() {
     let failed: Vec<_> = ap_cases::Case::ALL
         .into_iter()
         .map(|case| (case, run_case(case)))
-        .filter(|(case, result)| {
-            if BEACON_CASES.contains(case) {
-                *result != Err(ap_cases::Violation::Fixture)
-            } else {
-                result.is_err()
-            }
-        })
+        .filter(|(_, result)| result.is_err())
         .collect();
     assert!(failed.is_empty(), "{failed:?}");
 }

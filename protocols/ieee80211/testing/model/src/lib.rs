@@ -253,12 +253,16 @@ impl Ieee80211Capabilities for ModelCaps {
     const CAPS: LowerMacCapabilities = MODEL_CAPABILITIES;
 }
 
-/// What the model serves of the access-point role: the field of a beacon
-/// goes on its air as the caller wrote it, and its TSF restarts and stops
-/// as the commands say. These are the model's own rules, not a chip's.
+/// What the model serves of the access-point role: its air writes the access
+/// point's TSF into a beacon's and a probe response's Timestamp field as
+/// they go out on the voice queue, the buffer left as the caller wrote it
+/// (`Transmitter`, the S31's rule), and its TSF restarts and stops as the
+/// commands say.
 pub const MODEL_ACCESS_POINT: oer_protocols_ieee80211_contracts_port::AccessPointServices =
     oer_protocols_ieee80211_contracts_port::AccessPointServices {
-        beacon_timestamp: Some(oer_protocols_ieee80211_contracts_port::BeaconTimestamp::Caller),
+        beacon_timestamp: Some(
+            oer_protocols_ieee80211_contracts_port::BeaconTimestamp::Transmitter,
+        ),
         tsf_control: true,
     };
 
@@ -3674,13 +3678,49 @@ fn publish_single<'id, B: ModelComposition>(
     // A denied PPDU or a data frame behind a missing CTS never reached the
     // air the journal records.
     if !matches!(answer, SingleAnswer::AirDenied | SingleAnswer::CtsTimeout) {
-        held.air.sent.record(frame);
+        held.air
+            .sent
+            .record(transmitter_timestamp(held, &plan, frame));
     }
     Some(Publication {
         started: held.air.monotonic_now().as_micros(),
         air,
         work: Published { plan, answer },
     })
+}
+
+/// The model's Timestamp rule (`BeaconTimestamp::Transmitter`): a beacon or
+/// a probe response the access point's interface sends on the voice queue
+/// goes on the air with the interface's TSF in octets 24..32 (IEEE Std
+/// 802.11-2020 9.4.1.10), while its TSF runs; its buffer (`plaintext`) stays
+/// as the caller wrote it. Any other frame goes as it is.
+fn transmitter_timestamp<'id, B: ModelComposition>(
+    held: &ModelHeld<'id, B>,
+    plan: &SinglePlan<'id, B>,
+    mut frame: AirFrame,
+) -> AirFrame {
+    /// Frame Control octet 0: management type, beacon or probe response
+    /// subtype (IEEE Std 802.11-2020 9.2.4.1.3, Table 9-1).
+    const BEACON: u8 = 0x80;
+    const PROBE_RESPONSE: u8 = 0x50;
+    let stamped = frame.role == VifRole::AccessPoint
+        && plan.prepared.queue == oer_protocols_ieee80211_wire::qos::WmmAccessCategory::Voice
+        && matches!(frame.frame.first(), Some(&(BEACON | PROBE_RESPONSE)));
+    if let (true, ModelAccessPointTsf::Running { since }) =
+        (stamped, held.air.access_point.get().tsf)
+    {
+        let tsf = held
+            .air
+            .monotonic_now()
+            .saturating_duration_since(since)
+            .as_micros();
+        if let Some(field) = frame.frame.get_mut(24..32) {
+            for (octet, value) in field.iter_mut().zip(tsf.to_le_bytes()) {
+                *octet = value;
+            }
+        }
+    }
+    frame
 }
 
 /// The exchange of a single MPDU on a timed air: `frame` as it went, under

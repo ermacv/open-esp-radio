@@ -12,10 +12,10 @@
 //!
 //! The beacon follows the access point's TSF: the caller names the instant
 //! the TSF restarted ([`ApEngine::tsf_started`]); the TBTT schedule and the
-//! Timestamp field are that clock's, measured in the caller's time since the
-//! restart. The Timestamp is written when the beacon is prepared; the delay
-//! between the preparation and the beacon's first symbol (queueing, channel
-//! access) is not in it.
+//! DTIM count are that clock's, measured in the caller's time since the
+//! restart. The Timestamp field is the transmitter's: the beacon leaves the
+//! engine with it zero, and the MAC writes the access point's TSF there as
+//! it goes out.
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_core_security_rsn::{

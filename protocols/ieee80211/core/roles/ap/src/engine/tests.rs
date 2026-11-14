@@ -408,8 +408,9 @@ fn the_beacon_follows_the_tsf_from_its_restart() {
     assert_eq!(engine.next_beacon(), Some(at(1_000)));
     let (frame, fresh, _context) = engine.beacon(at(1_250), &mut output).unwrap().unwrap();
     assert_eq!(frame.kind, ApFrameKind::Beacon);
-    // The Timestamp is the TSF at the preparation: 250 µs after the restart.
-    assert_eq!(output[24..32], 250_u64.to_le_bytes());
+    // The Timestamp is the transmitter's: the beacon leaves the engine with
+    // it zero, whatever the TSF reads at the preparation.
+    assert_eq!(output[24..32], [0; 8]);
     // Fresh until the next TBTT on the TSF, one interval (100 TU) on.
     assert_eq!(fresh, at(1_000 + 102_400));
     assert_eq!(engine.next_beacon(), Some(fresh));

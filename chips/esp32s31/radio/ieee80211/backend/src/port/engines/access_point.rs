@@ -20,7 +20,8 @@ use oer_protocols_ieee80211_contracts_port::{
     AccessPointCapabilities, AccessPointCommand, AccessPointCommandFailed, AccessPointCommands,
     AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
     AccessPointRefusal, AccessPointServices, AccessPointSubmission, AccessPointTypes, BeaconParts,
-    BeaconSubmission, CommandFailed, ConfigurePermission, SupportedTsfControl, TsfControl,
+    BeaconSubmission, BeaconTimestamp, CommandFailed, ConfigurePermission, SupportedTsfControl,
+    TsfControl,
 };
 
 /// An access-point command of the port's types.
@@ -67,18 +68,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 
 impl<const B: usize> AccessPointCapabilities for Esp32s31Caps<B> {
     const ACCESS_POINT: AccessPointServices = AccessPointServices {
-        // No Timestamp rule is sourced, so no beacon stamp exists and the
-        // port takes no beacon. SOURCE(esp32s31): complete pinned
-        // `libnet80211[ieee80211_hostap.o]::ieee80211_hostap_send_beacon_process`
-        // stores the MAC local-time counter (`hal_now`, MODEM_PWR+0x800),
-        // not the access point's TSF, into the frame's Timestamp in software
-        // before `ic_tx_pkt`; no function of the examined TX path
-        // (`ppTxPkt`, `ppTxProtoProc`, `lmacSetTxFrame`,
-        // `hal_mac_tx_set_ppdu`, `mac_tx_set_plcp0`) sets a
-        // timestamp-insertion bit, and the S31 TX descriptor model has no
-        // such field. Whether the MAC replaces the field on the air is not
-        // established.
-        beacon_timestamp: None,
+        // The transmitter writes the access point's TSF into a beacon's
+        // Timestamp after the queue and medium wait; the caller's value is
+        // replaced on the air and stays in the buffer. SOURCE(esp32s31):
+        // hardware evidence `HW_AP_BEACON_TIMESTAMP_RUN4_20261110`
+        // (`chips/esp32s31/registers/evidence/hw-ap-beacon-timestamp.toml`):
+        // voice-queue management transmissions on the access point's
+        // interface, DSSS 1 Mb/s. The vendor's software stamp of the MAC
+        // local time
+        // (`libnet80211[ieee80211_hostap.o]::ieee80211_hostap_send_beacon_process`)
+        // is replaced the same way.
+        beacon_timestamp: Some(BeaconTimestamp::Transmitter),
         // SOURCE(esp32s31): complete pinned `libpp[hal_mac.o]::hal_mac_tsf_reset`
         // (the SoftAP restart) and `libpp[hal_tsf.o]::hal_disable_softap_tsf`,
         // the HAL's `reset_and_start_access_point_tsf` and
