@@ -34,6 +34,51 @@ pub(crate) fn answered<R, E, V>(answer: Result<R, E>, unkept: V) -> Result<R, V>
 }
 
 pub mod access_point;
+
+/// Whether a fixture keeps an operation of its port at its barrier or lets
+/// it go on: the one choice every `hold_…` of a harness takes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Hold {
+    /// Keep it held.
+    Held,
+    /// Let it go on.
+    Released,
+}
+
+impl Hold {
+    /// Whether it is kept held.
+    pub const fn is_held(self) -> bool {
+        matches!(self, Self::Held)
+    }
+}
+
+/// What a fault of the fixture's hardware leaves: every owner whole, or
+/// owners no stop returns.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FaultReach {
+    /// A stop returns every owner.
+    Whole,
+    /// It holds owners no stop returns.
+    Holding,
+}
+
+/// Whether a station MPDU's submission is its first or a retransmission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Submission {
+    /// Its first.
+    First,
+    /// A retransmission of the same MPDU.
+    Again,
+}
+
+/// Whether a frame goes open or under the installed key.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Keying {
+    /// Open.
+    Open,
+    /// Under the key.
+    Keyed,
+}
 pub mod arena;
 pub mod data_port;
 pub mod edca;

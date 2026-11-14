@@ -344,18 +344,35 @@ fn withdraw<'p, 'id: 'p, F: Fixture<'p, 'id>>(
     Ok(())
 }
 
+/// How a publication went out: one MPDU, or an aggregate.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Shape {
+    Single,
+    Aggregate,
+}
+
+/// Which of a publication's frames carry the Retry bit: none, or all.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Retried {
+    None,
+    All,
+}
+
 fn expect_published<'p, 'id: 'p, F: Fixture<'p, 'id>>(
     fixture: &F,
     tags: &[u8],
-    aggregate: bool,
-    retried: bool,
+    shape: Shape,
+    retried: Retried,
 ) -> Result<(), Violation> {
     let published = fixture.published().ok_or(Violation::Publication)?;
-    if published.tags() != tags || published.aggregate != aggregate {
+    if published.tags() != tags || published.aggregate != (shape == Shape::Aggregate) {
         return Err(Violation::Publication);
     }
     let all = FrameMask::first(published.count).ok_or(Violation::Publication)?;
-    let expected = if retried { all } else { FrameMask::EMPTY };
+    let expected = match retried {
+        Retried::All => all,
+        Retried::None => FrameMask::EMPTY,
+    };
     if published.retried != expected {
         return Err(Violation::Retry);
     }
@@ -401,7 +418,7 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             fill(fixture, &first, sent.get())?;
             let aggregate = fixture.aggregate(first);
             publish(fixture, aggregate)?;
-            expect_published(fixture, sent.get(), true, false)?;
+            expect_published(fixture, sent.get(), Shape::Aggregate, Retried::None)?;
             let all = FrameMask::first(frames).ok_or(Violation::Fixture)?;
             let even = FrameMask::from_bits(0x5555_5555_5555_5555 & all.bits())
                 .ok_or(Violation::Fixture)?;
@@ -428,7 +445,7 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             }
             let aggregate = fixture.aggregate(first);
             publish(fixture, aggregate)?;
-            expect_published(fixture, missing.get(), true, true)?;
+            expect_published(fixture, missing.get(), Shape::Aggregate, Retried::All)?;
             fixture.answer(Answer::BlockAck(
                 FrameMask::first(retry.count()).ok_or(Violation::Fixture)?,
             ));
@@ -451,7 +468,7 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             fill(fixture, &second, &[30])?;
             let single = fixture.single(second);
             publish(fixture, single)?;
-            expect_published(fixture, &[30], false, false)?;
+            expect_published(fixture, &[30], Shape::Single, Retried::None)?;
             fixture.answer(Answer::Ack);
             let done = serve(fixture, ArenaId::Second, 1)?;
             if !matches!(done.end(), AttemptEnd::Acked { .. }) {
@@ -505,7 +522,7 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             for (at, &tag) in (0_u8..).zip(sent.get()) {
                 let single = fixture.single(arena);
                 publish(fixture, single)?;
-                expect_published(fixture, &[tag], false, false)?;
+                expect_published(fixture, &[tag], Shape::Single, Retried::None)?;
                 fixture.answer(Answer::Ack);
                 let remaining = frames.saturating_sub(at);
                 let done = serve(fixture, ArenaId::First, remaining)?;
@@ -545,7 +562,7 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             let first = retain_all(fixture, done, all)?;
             let aggregate = fixture.aggregate(first);
             publish(fixture, aggregate)?;
-            expect_published(fixture, sent, true, false)?;
+            expect_published(fixture, sent, Shape::Aggregate, Retried::None)?;
             fixture.answer(Answer::NoResponse);
             let done = serve(fixture, ArenaId::First, frames)?;
             if !matches!(done.end(), AttemptEnd::NoResponse(_)) {
@@ -554,7 +571,7 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             let first = retain_all(fixture, done, all)?;
             let aggregate = fixture.aggregate(first);
             publish(fixture, aggregate)?;
-            expect_published(fixture, sent, true, true)?;
+            expect_published(fixture, sent, Shape::Aggregate, Retried::All)?;
             fixture.answer(Answer::BlockAck(all));
             let done = serve(fixture, ArenaId::First, frames)?;
             let first = release(fixture, done, sent)?;
@@ -573,7 +590,7 @@ pub fn exercise<'p, 'id: 'p, F: Fixture<'p, 'id>>(
             // The second goes on the air with the first unsettled.
             let aggregate = fixture.aggregate(second);
             publish(fixture, aggregate)?;
-            expect_published(fixture, &[92, 93], true, false)?;
+            expect_published(fixture, &[92, 93], Shape::Aggregate, Retried::None)?;
             let first = release(fixture, done, &[90, 91])?;
             if fixture.port().on_air() != Some(ArenaId::Second) {
                 return Err(Violation::Publication);

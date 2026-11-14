@@ -124,13 +124,31 @@ pub struct Sent {
     pub protected: bool,
 }
 
+/// Whether the interface receives the BSS's frames.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Reception {
+    /// It does not.
+    Off,
+    /// It does.
+    On,
+}
+
+/// Whether the interface's TSF runs.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TsfClock {
+    /// It does not.
+    Stopped,
+    /// It does.
+    Running,
+}
+
 /// What the fixture's hardware does for the access point's interface.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Interface {
-    /// It receives the BSS's frames.
-    pub receives: bool,
-    /// Its TSF runs.
-    pub tsf_running: bool,
+    /// Whether it receives the BSS's frames.
+    pub reception: Reception,
+    /// Whether its TSF runs.
+    pub tsf: TsfClock,
 }
 
 /// An access-point command terminal the harness took from the sink, its
@@ -203,12 +221,12 @@ pub trait AccessPointHarness<'id> {
     /// How long the backend lets a published frame stay on its queue.
     fn publication_bound(&self) -> Duration;
 
-    /// Keep the published frames of `category` from completing (`true`), or
-    /// let them complete (`false`).
-    fn hold(&mut self, category: WmmAccessCategory, hold: bool);
-    /// Keep the port's group-key mutations at their barrier (`true`), or let
-    /// them pass (`false`).
-    fn hold_group_commands(&mut self, hold: bool);
+    /// Keep the published frames of `category` from completing, or let
+    /// them complete.
+    fn hold(&mut self, category: WmmAccessCategory, hold: crate::Hold);
+    /// Keep the port's group-key mutations at their barrier, or let them
+    /// pass.
+    fn hold_group_commands(&mut self, hold: crate::Hold);
 
     /// An access-point data frame to the fixture's peer on `category`,
     /// under the pairwise key of `key` when given, admitted by the port.
@@ -218,11 +236,11 @@ pub trait AccessPointHarness<'id> {
         category: WmmAccessCategory,
     ) -> Option<<Self::Port as DataPort<'id>>::Admitted>;
     /// A station data frame on `category`, under the station's installed
-    /// key when `keyed`, admitted by the port.
+    /// key as `keying` says, admitted by the port.
     fn station_frame(
         &mut self,
         category: WmmAccessCategory,
-        keyed: bool,
+        keying: crate::Keying,
     ) -> Option<<Self::Port as DataPort<'id>>::Admitted>;
     /// A beacon under the beacon permission `of`, which must be published
     /// by `deadline`, admitted by the port. `None` while the harness does
@@ -717,15 +735,15 @@ fn station_configure_apart<'id, H: AccessPointHarness<'id>>(
     // A station frame on the air holds the station's configuration; a
     // second station frame waits behind an access-point frame on the air in
     // another queue.
-    harness.hold(STATION_QUEUE, true);
-    let first = harness.station_frame(STATION_QUEUE, false);
+    harness.hold(STATION_QUEUE, crate::Hold::Held);
+    let first = harness.station_frame(STATION_QUEUE, crate::Keying::Open);
     let first = submit(harness, first)?;
     let waiting = WmmAccessCategory::Background;
-    harness.hold(waiting, true);
+    harness.hold(waiting, crate::Hold::Held);
     let blocker = harness.access_point_frame(None, waiting);
     let blocker = submit(harness, blocker)?;
     service(harness)?;
-    let queued = harness.station_frame(waiting, false);
+    let queued = harness.station_frame(waiting, crate::Keying::Open);
     let queued = submit(harness, queued)?;
     let configure = harness.station_configure();
     let mut held = station_command(harness, configure)?;
@@ -750,8 +768,8 @@ fn station_configure_apart<'id, H: AccessPointHarness<'id>>(
     // The air answers: the station's frame ends, the access point's frame
     // ahead of the queued station frame ends, the queued one ends
     // withdrawn, never published, and the configuration takes effect.
-    harness.hold(STATION_QUEUE, false);
-    harness.hold(waiting, false);
+    harness.hold(STATION_QUEUE, crate::Hold::Released);
+    harness.hold(waiting, crate::Hold::Released);
     let (mut first_ended, mut blocker_ended, mut configured) = (false, false, false);
     for _ in 0..PROGRESS_STEPS {
         service(harness)?;
@@ -778,14 +796,14 @@ fn station_configure_apart<'id, H: AccessPointHarness<'id>>(
 
 fn configure_barrier<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     start(harness)?;
-    harness.hold(ACCESS_POINT_QUEUE, true);
+    harness.hold(ACCESS_POINT_QUEUE, crate::Hold::Held);
     let frame = harness.access_point_frame(None, ACCESS_POINT_QUEUE);
     let frame = submit(harness, frame)?;
     service(harness)?;
     // The station configures and sends while the access point's frame is
     // out.
     configure_station(harness)?;
-    let station = harness.station_frame(STATION_QUEUE, false);
+    let station = harness.station_frame(STATION_QUEUE, crate::Keying::Open);
     let station = submit(harness, station)?;
     service(harness)?;
     ends(harness, &[Ended::Frame(station, End::Delivered)])?;
@@ -794,7 +812,7 @@ fn configure_barrier<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result
     if harness.take_terminal().is_some() {
         return Err(Violation::Barrier);
     }
-    harness.hold(ACCESS_POINT_QUEUE, false);
+    harness.hold(ACCESS_POINT_QUEUE, crate::Hold::Released);
     service(harness)?;
     ends(harness, &[Ended::Frame(frame, End::Delivered)])?;
     done(harness, Some(command))?;
@@ -803,7 +821,7 @@ fn configure_barrier<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result
         port_generation(port)
     };
     terminal(harness, Terminal::Configured(installation))?;
-    if !harness.interface().receives {
+    if harness.interface().reception == Reception::Off {
         return Err(Violation::Interface);
     }
     Ok(())
@@ -821,7 +839,7 @@ fn beacon_permission<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result
     start(harness)?;
     // The beacon's queue is busy with an access-point frame: the beacon
     // waits while another queue's frame goes.
-    harness.hold(BEACON_QUEUE, true);
+    harness.hold(BEACON_QUEUE, crate::Hold::Held);
     let busy = harness.access_point_frame(None, BEACON_QUEUE);
     let busy = submit(harness, busy)?;
     let deadline = far(harness);
@@ -834,7 +852,7 @@ fn beacon_permission<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result
     if harness.holds_beacon(Issued::Current) {
         return Err(Violation::Owners);
     }
-    harness.hold(BEACON_QUEUE, false);
+    harness.hold(BEACON_QUEUE, crate::Hold::Released);
     for _ in 0..2 {
         service(harness)?;
     }
@@ -893,7 +911,7 @@ fn beacon_expires<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<()
     // A held access-point frame keeps the beacon's queue busy past the
     // beacon's deadline, within the frame's own publication bound.
     let fresh = Duration::from_micros(harness.publication_bound().as_micros() / 2);
-    harness.hold(BEACON_QUEUE, true);
+    harness.hold(BEACON_QUEUE, crate::Hold::Held);
     let busy = harness.access_point_frame(None, BEACON_QUEUE);
     let busy = submit(harness, busy)?;
     let deadline = harness.now().saturating_add(fresh);
@@ -911,7 +929,7 @@ fn beacon_expires<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<()
     if !harness.holds_beacon(Issued::Current) {
         return Err(Violation::Owners);
     }
-    harness.hold(BEACON_QUEUE, false);
+    harness.hold(BEACON_QUEUE, crate::Hold::Released);
     service(harness)?;
     ends(harness, &[Ended::Frame(busy, End::Delivered)])?;
     let beacons = harness
@@ -1161,8 +1179,8 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(
     terminal(harness, Terminal::Configured(0))?;
     if harness.interface()
         != (Interface {
-            receives: true,
-            tsf_running: true,
+            reception: Reception::On,
+            tsf: TsfClock::Running,
         })
     {
         return Err(Violation::Interface);
@@ -1171,7 +1189,7 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(
     // An access-point frame under its key on the air in the beacon's
     // queue, a beacon (or a second frame) queued behind it, a station frame
     // on the air.
-    harness.hold(BEACON_QUEUE, true);
+    harness.hold(BEACON_QUEUE, crate::Hold::Held);
     let ap_frame = harness.access_point_frame(Some(Issued::Current), BEACON_QUEUE);
     let ap_frame = submit(harness, ap_frame)?;
     let queued_behind = match behind {
@@ -1182,15 +1200,15 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(
         Behind::Frame => harness.access_point_frame(Some(Issued::Current), BEACON_QUEUE),
     };
     let queued_behind = submit(harness, queued_behind)?;
-    harness.hold(STATION_QUEUE, true);
-    let station_on_air = harness.station_frame(STATION_QUEUE, true);
+    harness.hold(STATION_QUEUE, crate::Hold::Held);
+    let station_on_air = harness.station_frame(STATION_QUEUE, crate::Keying::Keyed);
     let station_on_air = submit(harness, station_on_air)?;
     service(harness)?;
     if !harness.take_ends().as_ref().is_empty() {
         return Err(Violation::Ends);
     }
     // A station frame waits in a free queue as the access point stops.
-    let station_queued = harness.station_frame(WmmAccessCategory::Background, false);
+    let station_queued = harness.station_frame(WmmAccessCategory::Background, crate::Keying::Open);
     let station_queued = submit(harness, station_queued)?;
     // The access point stops: its configuration Off waits for its frame on
     // the air; the station's queued frame goes out meanwhile.
@@ -1200,15 +1218,15 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(
     ends(harness, &[Ended::Frame(station_queued, End::Delivered)])?;
     // The station is not held by the access point's stop: its frame ends, a
     // new one goes, and its own command runs.
-    harness.hold(STATION_QUEUE, false);
+    harness.hold(STATION_QUEUE, crate::Hold::Released);
     service(harness)?;
     ends(harness, &[Ended::Frame(station_on_air, End::Delivered)])?;
-    let station_next = harness.station_frame(STATION_QUEUE, true);
+    let station_next = harness.station_frame(STATION_QUEUE, crate::Keying::Keyed);
     let station_next = submit(harness, station_next)?;
     service(harness)?;
     ends(harness, &[Ended::Frame(station_next, End::Delivered)])?;
     // The access point's frame ends; its configuration completes.
-    harness.hold(BEACON_QUEUE, false);
+    harness.hold(BEACON_QUEUE, crate::Hold::Released);
     let mut command = Some(command);
     let mut finished = false;
     for _ in 0..PROGRESS_STEPS {
@@ -1247,7 +1265,7 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(
         return Err(Violation::Owners);
     }
     terminal(harness, Terminal::Configured(0))?;
-    if harness.interface().receives {
+    if harness.interface().reception == Reception::On {
         return Err(Violation::Interface);
     }
     // Its keys come off, its TSF stops last, with its configure permission.
@@ -1255,11 +1273,11 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(
     let configure = harness.configure(Issued::Current, Receive::Off, Some(TsfControl::Stop));
     done(harness, configure)?;
     terminal(harness, Terminal::Configured(0))?;
-    if harness.interface().tsf_running {
+    if harness.interface().tsf == TsfClock::Running {
         return Err(Violation::Interface);
     }
     // The station keeps working on its key after the access point left.
-    let station_after = harness.station_frame(STATION_QUEUE, true);
+    let station_after = harness.station_frame(STATION_QUEUE, crate::Keying::Keyed);
     let station_after = submit(harness, station_after)?;
     service(harness)?;
     if last_sent(harness)
@@ -1280,7 +1298,7 @@ fn stops_alone<'id, H: AccessPointHarness<'id>>(
 
 fn held_command_apart<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     start(harness)?;
-    harness.hold_group_commands(true);
+    harness.hold_group_commands(crate::Hold::Held);
     let install = harness.install_group(Issued::Current, Issued::Current, Issued::Current);
     let install = held(harness, install)?;
     // The station's command runs meanwhile.
@@ -1291,7 +1309,7 @@ fn held_command_apart<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Resul
     if harness.take_terminal().is_some() {
         return Err(Violation::Barrier);
     }
-    harness.hold_group_commands(false);
+    harness.hold_group_commands(crate::Hold::Released);
     stop(harness)
 }
 
@@ -1363,22 +1381,22 @@ pub fn expired_configure<'id, H: AccessPointHarness<'id>>(
     harness: &mut H,
 ) -> Result<(), Violation> {
     start(harness)?;
-    harness.hold(ACCESS_POINT_QUEUE, true);
+    harness.hold(ACCESS_POINT_QUEUE, crate::Hold::Held);
     let frame = harness.access_point_frame(None, ACCESS_POINT_QUEUE);
     let frame = submit(harness, frame)?;
     service(harness)?;
     let configure = harness.configure(Issued::Current, Receive::Bss, None);
     let command = held(harness, configure)?;
     expire(harness, command, AccessPointCommandKind::Configure)?;
-    if harness.take_terminal().is_some() || harness.interface().receives {
+    if harness.take_terminal().is_some() || harness.interface().reception == Reception::On {
         return Err(Violation::Barrier);
     }
-    harness.hold(ACCESS_POINT_QUEUE, false);
+    harness.hold(ACCESS_POINT_QUEUE, crate::Hold::Released);
     one_end(harness, frame)?;
     let configure = harness.configure(Issued::Current, Receive::Bss, None);
     done(harness, configure)?;
     terminal(harness, Terminal::Configured(0))?;
-    if !harness.interface().receives {
+    if harness.interface().reception == Reception::Off {
         return Err(Violation::Interface);
     }
     stop(harness)
@@ -1397,7 +1415,7 @@ pub fn expired_pairwise_removal<'id, H: AccessPointHarness<'id>>(
 ) -> Result<(), Violation> {
     start(harness)?;
     install_keys(harness, 0)?;
-    harness.hold(ACCESS_POINT_QUEUE, true);
+    harness.hold(ACCESS_POINT_QUEUE, crate::Hold::Held);
     let frame = harness.access_point_frame(Some(Issued::Current), ACCESS_POINT_QUEUE);
     let frame = submit(harness, frame)?;
     service(harness)?;
@@ -1407,7 +1425,7 @@ pub fn expired_pairwise_removal<'id, H: AccessPointHarness<'id>>(
     if harness.take_terminal().is_some() {
         return Err(Violation::Barrier);
     }
-    harness.hold(ACCESS_POINT_QUEUE, false);
+    harness.hold(ACCESS_POINT_QUEUE, crate::Hold::Released);
     one_end(harness, frame)?;
     // The key is active again: a frame under it goes out protected.
     let frame = harness.access_point_frame(Some(Issued::Current), ACCESS_POINT_QUEUE);
@@ -1430,11 +1448,11 @@ fn expired_removal<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
     start(harness)?;
     install_keys(harness, 0)?;
     // The group key's removal waits for the air's group commands.
-    harness.hold_group_commands(true);
+    harness.hold_group_commands(crate::Hold::Held);
     let remove = harness.remove_group(Issued::Current, Issued::Current);
     let remove = held(harness, remove)?;
     expire(harness, remove, AccessPointCommandKind::RemoveGroup)?;
-    harness.hold_group_commands(false);
+    harness.hold_group_commands(crate::Hold::Released);
     if harness.take_terminal().is_some() {
         return Err(Violation::Barrier);
     }
@@ -1473,7 +1491,7 @@ pub fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Viol
 
 fn stop_returns_held<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     start(harness)?;
-    harness.hold_group_commands(true);
+    harness.hold_group_commands(crate::Hold::Held);
     let install = harness.install_group(Issued::Current, Issued::Current, Issued::Current);
     let install = held(harness, install)?;
     stop(harness)?;
@@ -1507,7 +1525,7 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(
     terminal(harness, Terminal::Configured(0))?;
     // A beacon (or an access-point frame) on the air and a station frame
     // queued behind a busy queue when the shared owner stops.
-    harness.hold(BEACON_QUEUE, true);
+    harness.hold(BEACON_QUEUE, crate::Hold::Held);
     let on_air = match behind {
         Behind::Beacon => {
             let deadline = far(harness);
@@ -1516,10 +1534,10 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(
         Behind::Frame => harness.access_point_frame(None, BEACON_QUEUE),
     };
     let on_air = submit(harness, on_air)?;
-    harness.hold(STATION_QUEUE, true);
-    let busy = harness.station_frame(STATION_QUEUE, false);
+    harness.hold(STATION_QUEUE, crate::Hold::Held);
+    let busy = harness.station_frame(STATION_QUEUE, crate::Keying::Open);
     let busy = submit(harness, busy)?;
-    let queued = harness.station_frame(STATION_QUEUE, false);
+    let queued = harness.station_frame(STATION_QUEUE, crate::Keying::Open);
     let queued = submit(harness, queued)?;
     service(harness)?;
     let waker = harness.waker();
@@ -1535,8 +1553,8 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(
     }
     // What is on the air ends as the air answers; what waits behind it ends
     // withdrawn, never published.
-    harness.hold(BEACON_QUEUE, false);
-    harness.hold(STATION_QUEUE, false);
+    harness.hold(BEACON_QUEUE, crate::Hold::Released);
+    harness.hold(STATION_QUEUE, crate::Hold::Released);
     stop(harness)?;
     let ended = harness.take_ends();
     let ended = ended.as_ref();
@@ -1561,8 +1579,8 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(
     }
     if harness.interface()
         != (Interface {
-            receives: false,
-            tsf_running: false,
+            reception: Reception::Off,
+            tsf: TsfClock::Stopped,
         })
     {
         return Err(Violation::Interface);
@@ -1623,7 +1641,7 @@ fn removal_at_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
     let mut ledger = RemovalLedger::default();
     ledger.check(harness)?;
     // A frame under the pairwise key on the air.
-    harness.hold(BEACON_QUEUE, true);
+    harness.hold(BEACON_QUEUE, crate::Hold::Held);
     let frame = harness.access_point_frame(Some(Issued::Current), BEACON_QUEUE);
     submit(harness, frame)?;
     ledger.in_flight += 1;
@@ -1652,7 +1670,7 @@ fn removal_at_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
     let _begun = port.poll_stop(right, &mut Context::from_waker(&waker), now);
     ledger.take(harness);
     ledger.check(harness)?;
-    harness.hold(BEACON_QUEUE, false);
+    harness.hold(BEACON_QUEUE, crate::Hold::Released);
     stop(harness)?;
     ledger.take(harness);
     ledger.check(harness)?;

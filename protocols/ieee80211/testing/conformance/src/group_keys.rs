@@ -71,9 +71,27 @@ pub struct Trace<E> {
     /// Material writes performed by this operation only.
     pub writes: usize,
     /// Whether material inactive after the cut still admitted a frame.
-    pub inactive_material_accepted: bool,
+    pub inactive_material: InactiveMaterial,
     /// Whether ingress remained enabled through the terminal.
-    pub continuous_rx_at_terminal: bool,
+    pub ingress: Ingress,
+}
+
+/// What material inactive after a cut did with a frame.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InactiveMaterial {
+    /// It refused it.
+    Refused,
+    /// It still admitted it.
+    Admitted,
+}
+
+/// Whether ingress stayed enabled through a terminal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Ingress {
+    /// It was interrupted.
+    Interrupted,
+    /// It stayed enabled.
+    Continuous,
 }
 
 /// One admission-to-completion measurement on the backend's monotonic clock.
@@ -163,10 +181,10 @@ pub fn verify<E: AsRef<[Event]>>(
     if trace.writes != usize::from(!selected) {
         return Err(Violation::Reinstallation);
     }
-    if trace.inactive_material_accepted {
+    if trace.inactive_material == InactiveMaterial::Admitted {
         return Err(Violation::InactiveMaterial);
     }
-    if !trace.continuous_rx_at_terminal {
+    if trace.ingress == Ingress::Interrupted {
         return Err(Violation::UnboundedIngress);
     }
     Ok(())
@@ -219,8 +237,8 @@ mod tests {
                     Event::NewRx
                 ],
                 writes: 0,
-                inactive_material_accepted: false,
-                continuous_rx_at_terminal: true,
+                inactive_material: InactiveMaterial::Refused,
+                ingress: Ingress::Continuous,
             };
             assert_eq!(
                 verify(Case::SelectCurrent, trace, Duration::from_micros(10)),
@@ -291,8 +309,8 @@ mod tests {
                     Event::NewRx
                 ],
                 writes: 1,
-                inactive_material_accepted: false,
-                continuous_rx_at_terminal: true,
+                inactive_material: InactiveMaterial::Refused,
+                ingress: Ingress::Continuous,
             };
             assert_eq!(
                 verify(Case::InstallBeside, trace, Duration::from_micros(1)),
