@@ -138,6 +138,8 @@ struct Harness<'s> {
     counter: Arc<Counter>,
     /// The access point's own permissions.
     access_point: Option<ModelAccessPointPermissions<'s, B<'s>>>,
+    /// The installation's stop, while the radio is stopped.
+    stopped: Option<Stopped<'s>>,
     /// The station MPDU the last station terminal returned `Sent`, kept for a
     /// retransmission.
     station: Option<(
@@ -172,6 +174,7 @@ impl<'s> Harness<'s> {
             port,
             commands,
             resources,
+            stopped,
         } = install;
         let ModelResources {
             shared:
@@ -221,6 +224,18 @@ impl<'s> Harness<'s> {
             counter: Arc::new(Counter(AtomicUsize::new(0))),
             access_point: Some(access_point),
             station: None,
+            stopped: Some(stopped),
+        }
+    }
+
+    /// Poll the stop once: whether it confirmed, keeping its proof.
+    fn poll_stopped(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
+        match self.port.poll_stop(cx, now) {
+            Poll::Ready(Ok(stopped)) => {
+                self.stopped = Some(stopped);
+                true
+            }
+            Poll::Ready(Err(_)) | Poll::Pending => false,
         }
     }
 
@@ -406,6 +421,12 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
 
     fn parts(&mut self) -> (&mut Port<'s>, &mut Sink<'s>) {
         (&mut self.port, &mut self.sink)
+    }
+    fn take_stopped(&mut self) -> Option<Stopped<'s>> {
+        self.stopped.take()
+    }
+    fn keep_stopped(&mut self, stopped: Stopped<'s>) {
+        self.stopped = Some(stopped);
     }
     fn now(&self) -> Instant {
         self.clock.now()
@@ -1110,10 +1131,7 @@ fn a_stop_ends_an_exchange_the_air_still_owes() {
             oer_protocols_ieee80211_contracts_port::arena::AttemptEnd::Aborted
         ));
         harness.settle_arena(done);
-        assert!(matches!(
-            harness.port.poll_stop(&mut cx, now),
-            Poll::Ready(Ok(()))
-        ));
+        assert!(harness.poll_stopped(&mut cx, now));
     });
 }
 
@@ -1428,12 +1446,7 @@ fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop
         ));
         let waker = harness.waker();
         let now = harness.clock.now();
-        assert!(matches!(
-            harness
-                .port
-                .poll_stop(&mut Context::from_waker(&waker), now),
-            Poll::Ready(Ok(()))
-        ));
+        assert!(harness.poll_stopped(&mut Context::from_waker(&waker), now));
     });
 }
 
@@ -1448,12 +1461,7 @@ fn a_held_command_refused_by_a_stop_measures_its_bound_from_the_restart() {
         };
         let waker = harness.waker();
         let now = harness.clock.now();
-        assert!(matches!(
-            harness
-                .port
-                .poll_stop(&mut Context::from_waker(&waker), now),
-            Poll::Ready(Ok(()))
-        ));
+        assert!(harness.poll_stopped(&mut Context::from_waker(&waker), now));
         let CommandProgress::Refused(install, CommandRefusal::NotEnabled) =
             harness.command(install)
         else {
@@ -1546,24 +1554,24 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         assert_eq!(harness.port.deadline(), Some(now));
         harness.service();
         assert_eq!(harness.take_completed(), 1);
-        assert!(matches!(
-            harness.port.poll_stop(&mut cx, now),
-            Poll::Ready(Ok(()))
-        ));
+        assert!(harness.poll_stopped(&mut cx, now));
         assert_eq!(harness.air.disable_calls(), 1);
-        let Harness {
-            port,
-            mut installations,
-            ..
-        } = harness;
-        let Ok(ModelInstall { port, .. }) = port.reinstall(&mut installations) else {
+        let retired = harness
+            .port
+            .retire(harness.stopped.take().unwrap())
+            .unwrap();
+        let Ok((_stopped, _installed)) =
+            harness
+                .port
+                .reinstall(retired, 1, &mut harness.installations)
+        else {
             panic!("a retired port reinstalls");
         };
-        assert_eq!(port.generation(), 1);
-        assert_eq!(port.lent(), 1, "the network's unit stays lent");
+        assert_eq!(harness.port.generation().get().get(), 2);
+        assert_eq!(harness.port.lent(), 1, "the network's unit stays lent");
         drop(lent);
         assert_eq!(
-            port.lent(),
+            harness.port.lent(),
             0,
             "its return lowers the new installation's count"
         );
@@ -1571,22 +1579,29 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
 }
 
 #[test]
-fn a_port_with_work_out_does_not_reinstall() {
-    embassy_futures::block_on(with_local_slot(async |claim| {
-        let mut harness = Harness::new(claim);
+fn a_retirement_with_a_unit_out_names_its_class_and_changes_nothing() {
+    with_harness(|harness| {
         harness.start();
-        let Harness {
-            port,
-            mut installations,
-            ..
-        } = harness;
-        let Err(refused) = port.reinstall(&mut installations) else {
-            panic!("a running port does not reinstall");
+        harness.deliver(1);
+        let now = harness.clock.now();
+        let RxPull::Unit { frame, .. } = harness.port.receive(1, now).unwrap() else {
+            panic!("a unit");
         };
-        let (port, refused) = *refused;
-        assert_eq!(refused, ModelReinstallRefused::NotRetired);
-        assert_eq!(port.generation(), 0);
-    }));
+        stop_radio(harness);
+        let stopped = harness.stopped.take().unwrap();
+        let Err(ProofRefused::Refused(stopped, outstanding)) = harness.port.retire(stopped) else {
+            panic!("a port with a unit out does not retire");
+        };
+        assert_eq!(
+            outstanding.classes(),
+            oer_protocols_ieee80211_contracts_port::outstanding::class::RECEIVED
+        );
+        assert_eq!(outstanding.received, 1);
+        assert_eq!(harness.port.generation().get().get(), 1);
+        // The unit home, the same proof retires.
+        assert!(harness.port.recycle(frame).is_ok());
+        assert!(harness.port.retire(stopped).is_ok());
+    });
 }
 
 #[test]
@@ -1974,7 +1989,10 @@ fn stop_radio(harness: &mut Harness<'_>) {
             .port
             .poll_stop(&mut Context::from_waker(&waker), now)
         {
-            Poll::Ready(result) => return result.unwrap(),
+            Poll::Ready(result) => {
+                harness.stopped = Some(result.unwrap());
+                return;
+            }
             Poll::Pending => {
                 let _arena = harness.service();
                 harness.advance(oer_portable_time::Duration::from_millis(10));
@@ -2026,11 +2044,8 @@ fn a_refused_terminal_is_kept_and_offered_again_first_once_the_sink_has_room() {
         // What the port keeps makes nothing due: the sink owns the wake.
         let now = harness.now();
         assert!(harness.port.deadline().is_none_or(|at| at > now));
-        // Before a confirmed stop the port offers them itself.
-        assert_eq!(
-            harness.port.take_unconsumed(&mut harness.sink),
-            Err(UnconsumedRefused::NotStopped)
-        );
+        // Before a confirmed stop the port offers them itself; no stop's
+        // proof exists to take them otherwise.
         for _ in 0..8 {
             let _arena = harness.service();
             harness.advance(oer_portable_time::Duration::from_millis(1));
@@ -2066,17 +2081,23 @@ fn terminals_kept_at_a_confirmed_stop_leave_only_through_take_unconsumed_each_on
         // Refused again, it stays; then it leaves once.
         harness.sink.refuse = 1;
         assert_eq!(
-            harness.port.take_unconsumed(&mut harness.sink),
+            harness
+                .port
+                .take_unconsumed(harness.stopped.as_ref().unwrap(), &mut harness.sink),
             Ok(Unconsumed::Kept)
         );
         assert!(harness.sink.terminals.is_empty());
         assert_eq!(
-            harness.port.take_unconsumed(&mut harness.sink),
+            harness
+                .port
+                .take_unconsumed(harness.stopped.as_ref().unwrap(), &mut harness.sink),
             Ok(Unconsumed::None)
         );
         assert_eq!(completed_tickets(harness), [ticket]);
         assert_eq!(
-            harness.port.take_unconsumed(&mut harness.sink),
+            harness
+                .port
+                .take_unconsumed(harness.stopped.as_ref().unwrap(), &mut harness.sink),
             Ok(Unconsumed::None)
         );
         assert_eq!(harness.take_completed(), 1);

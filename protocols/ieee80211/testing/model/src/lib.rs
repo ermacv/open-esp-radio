@@ -390,6 +390,10 @@ impl<T> Bounded<T> {
     fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
+
+    fn len(&self) -> usize {
+        self.items.len()
+    }
 }
 
 /// The kind of the model's transmit tickets.
@@ -3125,8 +3129,8 @@ mod data_port;
 pub use data_port::{
     MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAccessPointGroupInstall,
     ModelAccessPointPairwiseInstall, ModelAdmitted, ModelCommands, ModelGroupInstall, ModelInstall,
-    ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
-    ModelPortObservation, ModelReinstallRefused, ModelUnkeep,
+    ModelOutstanding, ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall,
+    ModelPortFault, ModelPortObservation, ModelUnkeep,
 };
 
 /// The composition's initial software depth for each access category.

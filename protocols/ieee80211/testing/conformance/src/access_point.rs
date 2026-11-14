@@ -164,6 +164,12 @@ pub trait AccessPointHarness<'id> {
 
     /// The port and the sink, borrowed together for one call.
     fn parts(&mut self) -> (&mut Self::Port, &mut Self::Sink);
+    /// Take the stop's proof the harness keeps: the port's installation
+    /// starts stopped, so the harness holds one until a start takes it.
+    fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>>;
+    /// Keep the stop's proof `stopped` for the next start, clean or
+    /// retirement.
+    fn keep_stopped(&mut self, stopped: oer_protocols_ieee80211_contracts_port::Stopped<'id>);
     /// The fixture's virtual time.
     fn now(&self) -> Instant;
     /// Move virtual time on by `by`.
@@ -431,16 +437,33 @@ pub fn check<'id, H: AccessPointHarness<'id>>(
 /// [`Violation::Lifecycle`] when it does not start.
 pub fn start<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     let channel = harness.channel();
+    let Some(mut stopped) = harness.take_stopped() else {
+        return Err(Violation::Lifecycle);
+    };
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
         let (port, _) = harness.parts();
-        match port.poll_start(&mut Context::from_waker(&waker), channel, now) {
-            Poll::Ready(Ok(())) => return Ok(()),
-            Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
-            Poll::Pending => harness.settle(),
+        match port.poll_start(&mut Context::from_waker(&waker), stopped, channel, now) {
+            oer_protocols_ieee80211_contracts_port::StartPoll::Started => return Ok(()),
+            oer_protocols_ieee80211_contracts_port::StartPoll::Pending(proof) => {
+                stopped = proof;
+                harness.settle();
+            }
+            oer_protocols_ieee80211_contracts_port::StartPoll::Refused(proof, _) => {
+                harness.keep_stopped(proof);
+                return Err(Violation::Lifecycle);
+            }
+            oer_protocols_ieee80211_contracts_port::StartPoll::Stale(stale) => {
+                harness.keep_stopped(stale.proof);
+                return Err(Violation::Lifecycle);
+            }
+            oer_protocols_ieee80211_contracts_port::StartPoll::Unstopped { .. } => {
+                return Err(Violation::Lifecycle);
+            }
         }
     }
+    harness.keep_stopped(stopped);
     Err(Violation::Lifecycle)
 }
 
@@ -1407,7 +1430,10 @@ pub fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Viol
         let now = harness.now();
         let (port, _) = harness.parts();
         match port.poll_stop(&mut Context::from_waker(&waker), now) {
-            Poll::Ready(Ok(())) => return Ok(()),
+            Poll::Ready(Ok(stopped)) => {
+                harness.keep_stopped(stopped);
+                return Ok(());
+            }
             Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
             Poll::Pending => {
                 service(harness)?;

@@ -320,20 +320,13 @@ pub enum Unconsumed {
     Kept,
 }
 
-/// Why [`DataPort::take_unconsumed`] offered nothing.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UnconsumedRefused {
-    /// The radio has not confirmed a stop: the port offers what it keeps at
-    /// its calls with a sink.
-    NotStopped,
-}
-
 /// Why [`DataPort::clean_stopped`] did not finish the cleanup the stop
 /// left to the port.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CleanupRefused<F> {
-    /// The radio has not confirmed a stop: nothing was done.
-    NotStopped,
+    /// The stop's proof is not of the port's installation: nothing was
+    /// done.
+    Stale(crate::InstallationGeneration),
     /// The port holds the backend's contract fault: the cleanup wrote
     /// nothing to the hardware, and the port does not retire.
     Faulted(F),
@@ -469,33 +462,6 @@ pub enum SubmitRefusal {
     },
 }
 
-/// Why [`DataPort::poll_start`] did not start the radio. `F` is the port's
-/// [`DataPort::Fault`], which names why the front end did not tune. Except
-/// for [`Self::Unstopped`], nothing runs: the port is stopped and can start
-/// again.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum StartRefused<F> {
-    /// The radio runs already, or its stop has not confirmed yet.
-    Running,
-    /// The radio front end did not tune the channel, for the port's cause.
-    Retune(F),
-    /// The start did not end within the backend's command bound.
-    Deadline,
-    /// The device refused the start.
-    Device,
-    /// The start failed for `cause` after it began on the device or the
-    /// MAC, and the stop of what it began is not confirmed (`stop`): the
-    /// port is stopping, not stopped. [`DataPort::poll_stop`] goes on with
-    /// that stop, and the port refuses a start
-    /// ([`Self::Running`]) until the stop confirms.
-    Unstopped {
-        /// Why the start failed.
-        cause: StartFailure<F>,
-        /// What the stop of the begun start observed.
-        stop: StopUnconfirmed<F>,
-    },
-}
-
 /// Why a start that began failed: the subset of [`StartRefused`] a start's
 /// own steps produce.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -506,27 +472,6 @@ pub enum StartFailure<F> {
     Deadline,
     /// The device refused the start.
     Device,
-}
-
-impl<F> From<StartFailure<F>> for StartRefused<F> {
-    fn from(failure: StartFailure<F>) -> Self {
-        match failure {
-            StartFailure::Retune(cause) => Self::Retune(cause),
-            StartFailure::Deadline => Self::Deadline,
-            StartFailure::Device => Self::Device,
-        }
-    }
-}
-
-/// The radio did not confirm its stop: the backend cannot prove the MAC,
-/// its DMA and its interrupt work quiet. The cause names the port's fault
-/// `F` the stop met, and the observations say what it still held.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct StopUnconfirmed<F> {
-    /// Why the stop ended unconfirmed.
-    pub cause: StopCause<F>,
-    /// What the port held when it gave up.
-    pub observations: StopObservations,
 }
 
 /// Why a stop ended unconfirmed; `F` is the port's fault.
@@ -541,19 +486,6 @@ pub enum StopCause<F> {
     /// A failed start had enabled the MAC: the port's next service
     /// disables it, and [`DataPort::poll_stop`] goes on from there.
     CoreEnabled,
-}
-
-/// What a port held when its stop ended unconfirmed.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct StopObservations {
-    /// A data arena was on the air.
-    pub arena_on_air: bool,
-    /// Single MPDUs published to the hardware.
-    pub published: u8,
-    /// Single MPDUs admitted and not yet published.
-    pub queued: u8,
-    /// The station's receive configuration had not ended.
-    pub configuring: bool,
 }
 
 /// The station's data arenas as a data port lends them for one turn
@@ -638,6 +570,17 @@ pub trait DataPort<'id> {
     /// A station MPDU the port accepted from its sealed attempt
     /// ([`Self::admit`]), carrying no borrow of the port.
     type Admitted;
+    /// Everything the installation has out, by class
+    /// ([`Outstanding`](crate::Outstanding)).
+    type Outstanding: crate::OutstandingClasses + Copy + core::fmt::Debug + Eq;
+    /// What a reinstall takes beside the epoch: the port's installations.
+    type Installations;
+    /// What a reinstall gives: the next installation's commands and tokens.
+    type Installed;
+    /// What a release gives the binding to give the radio up.
+    type Released<'a>
+    where
+        Self: 'a;
     /// The station's data arenas, lent for one turn.
     type Arena<'t>: PortArena<
             't,
@@ -836,51 +779,66 @@ pub trait DataPort<'id> {
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> CommandAnswer<'id, Self>;
 
+    /// The installation the port runs.
+    fn generation(&self) -> crate::InstallationGeneration;
+
+    /// Everything the installation has out, read whole; it changes
+    /// nothing.
+    fn outstanding(&self) -> Self::Outstanding;
+
+    /// The backend's contract fault the port holds, which every later call
+    /// answers with.
+    fn fault(&self) -> Option<Self::Fault>;
+
     /// Start the stopped radio on `channel`, within the backend's command
-    /// bound from the first call. A start that fails after the device began
-    /// it stops what it began before it answers the refusal; a stop that
-    /// does not confirm, and a start that enabled the MAC before it failed,
-    /// leave the port stopping: the answer is [`StartRefused::Unstopped`]
-    /// with the start's cause, and [`Self::poll_stop`] goes on with the
-    /// stop.
+    /// bound from the first call. It takes the stop's proof: the proof
+    /// comes back while the start goes on or after it failed with the radio
+    /// stopped, and ends with a start. A start that fails after the device
+    /// began it stops what it began before it answers; a stop that does not
+    /// confirm, and a start that enabled the MAC before it failed, leave
+    /// the port stopping ([`StartPoll::Unstopped`](crate::StartPoll)), and
+    /// [`Self::poll_stop`] goes on with the stop.
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
+        stopped: crate::Stopped<'id>,
         channel: SupportedChannel<Self::Caps>,
         now: Instant,
-    ) -> Poll<Result<(), StartRefused<Self::Fault>>>;
+    ) -> crate::StartPoll<'id, Self::Fault, Self::Outstanding>;
 
     /// Stop the radio: queued attempts end withdrawn, a published one is
     /// waited for, then the MAC, its DMA and interrupt work stop, within
-    /// the backend's command bound from the first call.
+    /// the backend's command bound from the first call. A confirmed stop
+    /// gives its proof; an unconfirmed one says why, with everything the
+    /// port has out.
     fn poll_stop(
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed<Self::Fault>>>;
+    ) -> Poll<Result<crate::Stopped<'id>, crate::StopUnconfirmed<Self::Fault, Self::Outstanding>>>;
 
-    /// After the radio's confirmed stop: offer what a sink refused and the
-    /// port keeps to `sink`, oldest first, each once, until the sink refuses
-    /// one again, which stays with everything newer. Each terminal and unit
-    /// leaves the port once, with its own outcome and owners.
+    /// Offer what a sink refused and the port keeps to `sink`, oldest
+    /// first, each once, until the sink refuses one again, which stays with
+    /// everything newer. Each terminal and unit leaves the port once, with
+    /// its own outcome and owners.
     ///
     /// # Errors
     ///
-    /// The stop is not confirmed: nothing is offered here; the port offers
-    /// what it keeps at its calls with a sink.
+    /// The proof is not of the port's installation: nothing was offered.
     fn take_unconsumed(
         &mut self,
+        stopped: &crate::Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<Unconsumed, UnconsumedRefused>;
+    ) -> Result<Unconsumed, crate::StaleProof<()>>;
 
-    /// After the radio's confirmed stop: the cleanup the stop leaves to the
-    /// port (a backend's write that releases hardware a failed operation
-    /// left in use), by the lifecycle owner that stopped it, whether or not
-    /// the datapath actor still runs. The owners the cleanup frees leave
-    /// through their terminals in `sink`, each once; a terminal the sink
-    /// refuses stays with the port for [`Self::take_unconsumed`]. A port
-    /// whose cleanup did not finish does not retire. Nothing calls it on
-    /// its own: each call is the owner's.
+    /// The cleanup the stop leaves to the port (a backend's write that
+    /// releases hardware a failed operation left in use), by the lifecycle
+    /// owner that stopped it, whether or not the datapath actor still runs.
+    /// The owners the cleanup frees leave through their terminals in
+    /// `sink`, each once; a terminal the sink refuses stays with the port
+    /// for [`Self::take_unconsumed`]. A port whose cleanup did not finish
+    /// does not retire. Nothing calls it on its own: each call is the
+    /// owner's.
     ///
     /// The answer's refusal says why the cleanup did not finish
     /// ([`CleanupRefused`]).
@@ -890,19 +848,61 @@ pub trait DataPort<'id> {
     /// A freed terminal the call could neither give `sink` nor keep, beside
     /// its answer ([`Unkeeping`]). An item an earlier call left refuses
     /// this one before it cleans anything: [`Input::NotAccepted`] of `()`.
-    fn clean_stopped(
+    fn clean(
         &mut self,
+        stopped: &crate::Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>>;
 
-    /// Take back the fault the port last reported, so that a stop can run
-    /// and return the owners it holds: whether it can. From then on the port
-    /// admits and publishes nothing new, as a stopping port does, however
-    /// late the stop comes; only its service of what is out goes on. A port
-    /// that holds an owner no stop can return keeps its fault.
-    fn recover_for_stop(&mut self) -> bool {
-        false
-    }
+    /// End the stopped installation's use of what it holds: its proof that
+    /// nothing blocks its end.
+    ///
+    /// # Errors
+    ///
+    /// The stop's proof back, with everything still out
+    /// ([`ProofRefused::Refused`](crate::ProofRefused)), or the proof of
+    /// another installation: nothing changed.
+    fn retire(
+        &mut self,
+        stopped: crate::Stopped<'id>,
+    ) -> Result<crate::Retired<'id>, crate::ProofRefused<crate::Stopped<'id>, Self::Outstanding>>;
+
+    /// Install the next installation in place, from `installations`, with
+    /// TSF epoch `tsf_epoch`: its stop's proof (an installation starts
+    /// stopped) and its commands and tokens.
+    ///
+    /// # Errors
+    ///
+    /// The retirement's proof back with why nothing was installed, or the
+    /// proof of another installation.
+    fn reinstall(
+        &mut self,
+        retired: crate::Retired<'id>,
+        tsf_epoch: u32,
+        installations: &mut Self::Installations,
+    ) -> Result<
+        (crate::Stopped<'id>, Self::Installed),
+        crate::ProofRefused<crate::Retired<'id>, crate::ReinstallRefused>,
+    >;
+
+    /// End the port's installations: what the binding needs to give the
+    /// radio up. The port then holds no installation a later call could
+    /// run.
+    ///
+    /// # Errors
+    ///
+    /// The proof of another installation: nothing was released.
+    fn release(
+        &mut self,
+        retired: crate::Retired<'id>,
+    ) -> Result<Self::Released<'_>, crate::StaleProof<crate::Retired<'id>>>;
+
+    /// Take back the fault the port holds, so that a stop can run and
+    /// return the owners it holds: the recovery's proof, or the fault with
+    /// what it leaves out. From a recovery on the port admits and publishes
+    /// nothing new, as a stopping port does, however late the stop comes;
+    /// only its service of what is out goes on.
+    fn recover_for_stop(&mut self) -> crate::Recovery<'id, Self::Fault, Self::Outstanding>;
 
     /// A reading of the port's radio clock.
     ///

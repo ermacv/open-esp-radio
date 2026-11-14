@@ -100,19 +100,65 @@ pub struct StaleProof<P> {
     pub installation: InstallationGeneration,
 }
 
-/// The answer of a start's poll, which takes the stop's proof.
+/// A call that takes proof `P` and did not make its transition: the proof
+/// names another installation, or the port refused for `R`. Either way the
+/// proof comes back, and nothing changed.
 #[derive(Debug, Eq, PartialEq)]
-pub enum StartPoll<'id, R> {
+pub enum ProofRefused<P, R> {
+    /// The proof is not of the port's installation.
+    Stale(StaleProof<P>),
+    /// The port refused the transition for `R`.
+    Refused(P, R),
+}
+
+impl<P, R> ProofRefused<P, R> {
+    /// The proof, back.
+    pub fn proof(self) -> P {
+        match self {
+            Self::Stale(stale) => stale.proof,
+            Self::Refused(proof, _) => proof,
+        }
+    }
+}
+
+/// The answer of a start's poll, which takes the stop's proof. `F` is the
+/// port's fault, `O` its [`Outstanding`](crate::Outstanding).
+#[derive(Debug, Eq, PartialEq)]
+pub enum StartPoll<'id, F, O> {
     /// The radio runs: the stop's proof ended with the start.
     Started,
     /// The start goes on: the proof, for the next poll.
     Pending(Stopped<'id>),
-    /// The start was refused and the radio is stopped: the proof, with why.
-    Refused(Stopped<'id>, R),
-    /// The start began on the device and failed, and the stop of what it
-    /// began is not confirmed (`R` names the cause): the port is stopping,
-    /// and its stop gives a new proof.
-    Unstopped(R),
+    /// The start failed before it began on the device, or its stop
+    /// confirmed: the radio is stopped, and the proof comes back with why.
+    Refused(Stopped<'id>, crate::StartFailure<F>),
+    /// The start began on the device or the MAC and failed for `cause`, and
+    /// the stop of what it began is not confirmed (`stop`): the port is
+    /// stopping, and its stop gives a new proof.
+    Unstopped {
+        /// Why the start failed.
+        cause: crate::StartFailure<F>,
+        /// What the stop of the begun start observed.
+        stop: StopUnconfirmed<F, O>,
+    },
+    /// The proof is not of the port's installation: nothing started.
+    Stale(StaleProof<Stopped<'id>>),
+}
+
+/// Why a reinstall installed nothing; the retirement's proof comes back,
+/// and every refusal but [`Self::Resources`] leaves the port as it was.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ReinstallRefused {
+    /// The next installation's TSF epoch repeats the current one.
+    SameEpoch,
+    /// The port's channel names no channel it installs on.
+    ChannelUnset,
+    /// The installations refused the receipt (another installation's, or
+    /// their generations are used up): the port stays as it was.
+    Receipt,
+    /// The retired installation kept a resource the next one needs: the
+    /// port keeps its fault.
+    Resources,
 }
 
 /// A stop that did not confirm: why, and everything the port still has

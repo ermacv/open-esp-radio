@@ -90,9 +90,8 @@ mod data_port;
 pub use data_port::{
     CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, Input,
     PortAnswer, PortArena, PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
-    RxPull, StartFailure, StartRefused, StationSubmission, StopCause, StopObservations,
-    StopUnconfirmed, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts, Unconsumed,
-    UnconsumedRefused, Unkeeping, Unkept,
+    RxPull, StartFailure, StationSubmission, StopCause, SubmitAnswer, SubmitHalt, SubmitRefusal,
+    TxFacts, Unconsumed, Unkeeping, Unkept,
 };
 mod layout;
 pub use layout::{
@@ -174,8 +173,8 @@ pub use owner::{
 pub mod installation;
 pub mod outstanding;
 pub use installation::{
-    InstallationGeneration, OutstandingClasses, Recovering, Recovery, Retired, StaleProof,
-    StartPoll, Stopped,
+    InstallationGeneration, OutstandingClasses, ProofRefused, Recovering, Recovery,
+    ReinstallRefused, Retired, StaleProof, StartPoll, StopUnconfirmed, Stopped,
 };
 pub use outstanding::{ArenaState, Outstanding, RunPhase};
 mod interface_commands;
