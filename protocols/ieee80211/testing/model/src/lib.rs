@@ -825,7 +825,11 @@ impl<'id, B: ModelComposition> ExecutionPayload for ModelMpdu<'id, B> {
 impl<B: ModelComposition> ModelMpduExecution<'_, '_, B> {
     fn publish(&mut self, role: VifRole, key: Option<&RawKeyIdentity>) -> Result<(), ModelFault> {
         let mpdu = &mut *self.mpdu;
-        mpdu.preflight(key.is_some())?;
+        mpdu.preflight(if key.is_some() {
+            oer_protocols_ieee80211_contracts_port::MpduProtection::Ccmp
+        } else {
+            oer_protocols_ieee80211_contracts_port::MpduProtection::Open
+        })?;
         if mpdu.published.is_some() {
             return Ok(());
         }
@@ -1039,7 +1043,10 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
     }
 
     /// Validate geometry before publication; fresh PNs were allocated by the caller.
-    fn preflight(&self, protected: bool) -> Result<(), ModelFault> {
+    fn preflight(
+        &self,
+        protection: oer_protocols_ieee80211_contracts_port::MpduProtection,
+    ) -> Result<(), ModelFault> {
         let memory = self.buffer.memory();
         memory
             .split_at_checked(self.layout.mpdu_len())
@@ -1049,7 +1056,7 @@ impl<'id, B: ModelComposition> ModelMpdu<'id, B> {
                 self.buffer,
                 ModelAnyBuffer::Small(_) | ModelAnyBuffer::Large(_) | ModelAnyBuffer::Network(_)
             );
-        if protected && fresh {
+        if protection == oer_protocols_ieee80211_contracts_port::MpduProtection::Ccmp && fresh {
             memory
                 .split_at_checked(self.layout.header_len())
                 .ok_or(ModelFault)?
@@ -2305,15 +2312,18 @@ impl ModelAir {
     /// `clock_advanced` for the deadline wake; the driver poisons at
     /// GROUP_COMMAND_BOUND. Normal disable finishes
     /// admitted commands instead of waiting for this test hold to be released.
-    pub fn hold_group_commands(&self, held: bool) {
-        self.group_held.set(held);
+    pub fn hold_group_commands(&self, held: oer_protocols_ieee80211_testing_conformance::Hold) {
+        self.group_held.set(held.is_held());
         self.wake_world();
     }
 
     /// Hold the access point's configuration at its barrier while `held`, as
     /// a frame of the access point on the air does.
-    pub fn hold_access_point_configure(&self, held: bool) {
-        self.access_point_configure_held.set(held);
+    pub fn hold_access_point_configure(
+        &self,
+        held: oer_protocols_ieee80211_testing_conformance::Hold,
+    ) {
+        self.access_point_configure_held.set(held.is_held());
         self.wake_world();
     }
 
@@ -2324,8 +2334,8 @@ impl ModelAir {
 
     /// Keep the MAC from going quiet: a stop stays unconfirmed, past its
     /// bound, until the hold ends.
-    pub fn hold_stop(&self, held: bool) {
-        self.stop_held.set(held);
+    pub fn hold_stop(&self, held: oer_protocols_ieee80211_testing_conformance::Hold) {
+        self.stop_held.set(held.is_held());
         self.wake_world();
     }
 
@@ -2534,18 +2544,18 @@ impl ModelAir {
     pub fn hold(
         &self,
         access_category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
-        held: bool,
+        held: oer_protocols_ieee80211_testing_conformance::Hold,
     ) {
         let mut queues = self.held.get();
-        *access_category.select_mut(&mut queues) = held;
+        *access_category.select_mut(&mut queues) = held.is_held();
         self.held.set(queues);
         self.wake_world();
     }
 
     /// Say that an event waits, or no longer waits, for the port's next
     /// poll.
-    pub fn set_event_waiting(&self, waiting: bool) {
-        self.event_waiting.set(waiting);
+    pub fn set_event_waiting(&self, waiting: oer_protocols_ieee80211_contracts_port::Signal) {
+        self.event_waiting.set(waiting.is_raised());
     }
 
     /// How many arena ends the port served ahead of its transmit service.
@@ -2558,10 +2568,10 @@ impl ModelAir {
     pub fn hold_completion(
         &self,
         category: oer_protocols_ieee80211_wire::qos::WmmAccessCategory,
-        held: bool,
+        held: oer_protocols_ieee80211_testing_conformance::Hold,
     ) {
         let mut results = self.held_results.get();
-        *category.select_mut(&mut results) = held;
+        *category.select_mut(&mut results) = held.is_held();
         self.held_results.set(results);
         self.wake_world();
     }
@@ -2610,8 +2620,8 @@ impl ModelAir {
     /// port's start goes on ([`StartProgress::Pending`]) until it clears.
     ///
     /// [`StartProgress::Pending`]: oer_protocols_ieee80211_contracts_port::StartProgress::Pending
-    pub fn hold_start(&self, hold: bool) {
-        self.hold_start.set(hold);
+    pub fn hold_start(&self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
+        self.hold_start.set(hold.is_held());
     }
 
     /// Fail the next stop poll with a fault of the device, once: the stop
@@ -2860,14 +2870,13 @@ impl ModelAir {
         self.answers.pop_front().unwrap_or(default)
     }
 
-    /// The next answer to a data arena's publication: one MPDU (`single`)
-    /// soliciting an ACK, or an A-MPDU soliciting a BlockAck of every frame
-    /// unless an answer is queued.
-    fn arena_result(&self, single: bool) -> AirAnswer {
-        self.next_answer(if single {
-            AirAnswer::Ack
-        } else {
-            AirAnswer::BlockAck(u64::MAX)
+    /// The next answer to a data arena's publication: one MPDU soliciting
+    /// an ACK, or an A-MPDU soliciting a BlockAck of every frame unless an
+    /// answer is queued.
+    fn arena_result(&self, shape: arena::Shape) -> AirAnswer {
+        self.next_answer(match shape {
+            arena::Shape::Single => AirAnswer::Ack,
+            arena::Shape::Aggregate => AirAnswer::BlockAck(u64::MAX),
         })
     }
 
@@ -3228,7 +3237,12 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
         }
     }
 
-    fn activate_group(&mut self, held: &ModelHeld<'id, B>, identity: &RawKeyIdentity, write: bool) {
+    fn activate_group(
+        &mut self,
+        held: &ModelHeld<'id, B>,
+        identity: &RawKeyIdentity,
+        write: GroupWrite,
+    ) {
         let Some(role) = identity.0.group_role else {
             return;
         };
@@ -3238,7 +3252,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
             }
         }
         identity.0.rx_active.set(true);
-        if write {
+        if write == GroupWrite::Written {
             held.air
                 .group_writes
                 .set(held.air.group_writes.get().saturating_add(1));
@@ -3265,7 +3279,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
             pending.key,
             &held.air,
         );
-        self.activate_group(held, &identity, true);
+        self.activate_group(held, &identity, GroupWrite::Written);
         OwnedLowerMacEvent::Terminal(OwnedLowerMacTerminal::GroupKeyInstalled(R::installed(
             ModelGroupKey {
                 identity,
@@ -3313,7 +3327,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                     key,
                     &held.air,
                 );
-                self.activate_group(held, &identity, true);
+                self.activate_group(held, &identity, GroupWrite::Written);
                 Some(OwnedLowerMacEvent::Terminal(
                     OwnedLowerMacTerminal::GroupKeyReplaced {
                         key: ModelGroupKey {
@@ -3328,7 +3342,7 @@ impl<'id, B: ModelComposition> Driver<'id, B> {
                 permission,
                 installed,
             } => {
-                self.activate_group(held, &installed.identity, false);
+                self.activate_group(held, &installed.identity, GroupWrite::Selected);
                 Some(OwnedLowerMacEvent::Terminal(
                     OwnedLowerMacTerminal::GroupKeySelected {
                         key: installed,
@@ -4384,3 +4398,12 @@ pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = AmpduLengthTable::uniform(65_
 
 mod values;
 use values::*;
+
+/// Whether a group key's activation wrote its material or only selected it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GroupWrite {
+    /// The material was written.
+    Written,
+    /// Material already installed was selected.
+    Selected,
+}

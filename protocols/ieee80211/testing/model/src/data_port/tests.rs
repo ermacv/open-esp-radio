@@ -475,7 +475,7 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     fn identity(attempt: &ModelAdmitted<LocalId<'s>, ModelCaps, ()>) -> u8 {
         attempt.operation.ticket().index()
     }
-    fn hold_air(&mut self, hold: bool) {
+    fn hold_air(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.air.hold_completion(CATEGORY, hold);
     }
     fn configure(&mut self) -> Option<PortCommand<'s, Types<'s>, ModelCaps>> {
@@ -529,11 +529,17 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         completed
     }
     fn publish_held_arena(&mut self) -> bool {
-        self.air.hold_completion(CATEGORY, true);
+        self.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         self.publish_arena()
     }
     fn release_arena(&mut self) {
-        self.air.hold_completion(CATEGORY, false);
+        self.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
     }
     fn settle_arena(&mut self, done: ModelArenaCompleted) {
         let mut arena = self.port.arena();
@@ -555,9 +561,10 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     }
     fn submit_station(
         &mut self,
-        again: bool,
+        submission: oer_protocols_ieee80211_testing_conformance::Submission,
         transmissions: NonZeroU8,
     ) -> Result<(), cases::Violation> {
+        let again = submission == oer_protocols_ieee80211_testing_conformance::Submission::Again;
         let kept = self.station.take();
         let attempt = match (again, kept) {
             (true, Some((ticket, sent))) => {
@@ -658,10 +665,10 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         };
         Some(cases::StationSent { end, retry })
     }
-    fn hold_start(&mut self, hold: bool) {
+    fn hold_start(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.air.hold_start(hold);
     }
-    fn hold_stop(&mut self, hold: bool) {
+    fn hold_stop(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.air.hold_stop(hold);
     }
     fn buffers_held(&self) -> usize {
@@ -673,9 +680,9 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     fn refusals_left(&self) -> usize {
         self.sink.refuse
     }
-    fn fault(&mut self, whole: bool) {
+    fn fault(&mut self, reach: oer_protocols_ieee80211_testing_conformance::FaultReach) {
         self.air.poison_at_next_service();
-        if whole {
+        if reach == oer_protocols_ieee80211_testing_conformance::FaultReach::Whole {
             self.air.allow_recovery();
         }
     }
@@ -1350,7 +1357,10 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
     with_harness(|harness| {
         harness.start();
         assert_eq!(harness.port.deadline(), None, "an idle port has none");
-        harness.air.hold(CATEGORY, true);
+        harness.air.hold(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         let admitted = harness.clock.now();
         harness
@@ -1379,8 +1389,14 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
         assert_eq!(harness.take_completed(), 1);
         assert_eq!(harness.air.expired_msdus(), 1);
         // A published MPDU bounds the deadline until its completion.
-        harness.air.hold(CATEGORY, false);
-        harness.air.hold_completion(CATEGORY, true);
+        harness.air.hold(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
         harness
@@ -1399,7 +1415,10 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
             harness.port.deadline(),
             Some(now.saturating_add(MODEL_PUBLICATION_BOUND))
         );
-        harness.air.hold_completion(CATEGORY, false);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
         harness.service();
         assert_eq!(harness.take_completed(), 1);
         assert_eq!(harness.port.deadline(), None, "the completion took it off");
@@ -1410,7 +1429,10 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
 fn a_configuration_is_held_behind_a_published_station_mpdu_then_runs() {
     with_harness(|harness| {
         harness.start();
-        harness.air.hold_completion(CATEGORY, true);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
         harness
@@ -1425,7 +1447,10 @@ fn a_configuration_is_held_behind_a_published_station_mpdu_then_runs() {
             panic!("a station MPDU on the air holds the configuration");
         };
         assert!(!harness.take_configured());
-        harness.air.hold_completion(CATEGORY, false);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
         harness.service();
         assert_eq!(harness.take_completed(), 1);
         assert!(matches!(harness.command(command), CommandProgress::Done));
@@ -1455,11 +1480,15 @@ fn a_group_installation_is_held_while_the_air_holds_group_commands_then_runs() {
     with_harness(|harness| {
         harness.start();
         let install = group_install(harness);
-        harness.air.hold_group_commands(true);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("held group commands hold the installation");
         };
-        harness.air.hold_group_commands(false);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         assert!(matches!(harness.command(install), CommandProgress::Done));
         assert!(matches!(
             harness.sink.terminals.as_slice(),
@@ -1526,7 +1555,9 @@ fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop
     with_harness(|harness| {
         harness.start();
         let install = group_install(harness);
-        harness.air.hold_group_commands(true);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("held");
         };
@@ -1542,7 +1573,9 @@ fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop
         assert!(harness.sink.terminals.is_empty(), "it did not run");
         assert_eq!(harness.port.deadline(), None, "no held command's bound");
         // The port runs on: the same command runs once the air lets it.
-        harness.air.hold_group_commands(false);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         assert!(matches!(harness.command(install), CommandProgress::Done));
         assert!(matches!(
             harness.sink.terminals.as_slice(),
@@ -1559,7 +1592,9 @@ fn a_held_command_refused_by_a_stop_measures_its_bound_from_the_restart() {
     with_harness(|harness| {
         harness.start();
         let install = group_install(harness);
-        harness.air.hold_group_commands(true);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("held");
         };
@@ -1578,7 +1613,9 @@ fn a_held_command_refused_by_a_stop_measures_its_bound_from_the_restart() {
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("the air still holds group commands");
         };
-        harness.air.hold_group_commands(false);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         assert!(matches!(harness.command(install), CommandProgress::Done));
         assert!(matches!(
             harness.sink.terminals.as_slice(),
@@ -1591,7 +1628,10 @@ fn a_held_command_refused_by_a_stop_measures_its_bound_from_the_restart() {
 fn a_quarantined_air_is_named_with_what_the_port_held() {
     with_harness(|harness| {
         harness.start();
-        harness.air.hold_completion(CATEGORY, true);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
         harness
@@ -1648,7 +1688,10 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
             panic!("a unit");
         };
         let lent = harness.port.lend(frame).ok().unwrap();
-        harness.air.hold(CATEGORY, true);
+        harness.air.hold(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         harness
             .port
@@ -1749,7 +1792,10 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
             ModelKeys::<B<'_>, Station>::pairwise_identity(&key) == identity,
             "the issued identity names the installed key"
         );
-        harness.air.hold_completion(CATEGORY, true);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let ticket = harness.tickets.pop().unwrap();
         let buffer = harness.small.pop().unwrap();
         let attempt = harness.admitted_under(ticket, buffer, Some(&key));
@@ -1767,7 +1813,10 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
             panic!("a published MPDU under the key holds its removal");
         };
         assert!(harness.sink.terminals.is_empty(), "no removal terminal yet");
-        harness.air.hold_completion(CATEGORY, false);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
         harness.service();
         assert_eq!(harness.take_completed(), 1);
         assert!(matches!(harness.command(remove), CommandProgress::Done));

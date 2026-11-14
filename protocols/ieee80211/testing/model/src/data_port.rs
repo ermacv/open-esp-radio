@@ -62,23 +62,46 @@ pub const MODEL_STOP_BOUND: oer_portable_time::Duration =
 /// A key's activity before a removal held at its barrier changed it.
 struct HeldKey {
     key: RawKeyIdentity,
-    active: bool,
-    rx_active: bool,
+    /// The key's activity for transmission.
+    transmit: Activity,
+    /// The key's activity for reception.
+    receive: Activity,
+}
+
+/// One direction of a held key's activity.
+#[derive(Clone, Copy)]
+enum Activity {
+    Inactive,
+    Active,
+}
+
+impl Activity {
+    const fn is_active(self) -> bool {
+        matches!(self, Self::Active)
+    }
 }
 
 impl HeldKey {
     fn of(key: &RawKeyIdentity) -> Self {
         Self {
             key: key.clone(),
-            active: key.0.active.get(),
-            rx_active: key.0.rx_active.get(),
+            transmit: if key.0.active.get() {
+                Activity::Active
+            } else {
+                Activity::Inactive
+            },
+            receive: if key.0.rx_active.get() {
+                Activity::Active
+            } else {
+                Activity::Inactive
+            },
         }
     }
 
     /// The removal did not run: the key is as it was.
     fn restore(self) {
-        self.key.0.active.set(self.active);
-        self.key.0.rx_active.set(self.rx_active);
+        self.key.0.active.set(self.transmit.is_active());
+        self.key.0.rx_active.set(self.receive.is_active());
     }
 }
 
@@ -823,17 +846,25 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         now: Instant,
     ) -> Result<Option<PortCompleted<'id, Self>>, ModelPortFault> {
         let results = self.air.held_results.get();
-        let abort = self.held.draining.get();
+        let drain = if self.held.draining.get() {
+            crate::arena::Drain::Draining
+        } else {
+            crate::arena::Drain::Running
+        };
         let ticket = self.arena_ticket();
         let progress = ticket.map(|ticket| self.air.air_progress(ticket));
         let on_air = progress == Some(AirProgress::Pending);
-        let collided = progress == Some(AirProgress::Collided);
+        let collision = if progress == Some(AirProgress::Collided) {
+            crate::arena::Collision::Collided
+        } else {
+            crate::arena::Collision::Clear
+        };
         let served = self.held.arenas.try_borrow_mut().map(|mut arenas| {
             arenas.serve::<C>(
                 now,
                 |category| *category.select(&results) || on_air,
-                abort,
-                collided,
+                drain,
+                collision,
             )
         });
         let Ok(served) = served else {
@@ -934,7 +965,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             && let Some(at) = arenas.due(
                 now,
                 |category| *category.select(&results) || arena_waits,
-                self.held.draining.get(),
+                if self.held.draining.get() {
+                    crate::arena::Drain::Draining
+                } else {
+                    crate::arena::Drain::Running
+                },
             )
         {
             due(at);

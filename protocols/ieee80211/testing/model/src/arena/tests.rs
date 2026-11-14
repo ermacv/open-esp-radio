@@ -213,7 +213,7 @@ fn encryption_needs_the_pairwise_key() {
             else {
                 panic!("an encrypted publication without a key is refused");
             };
-            fixture.port.set_key(true);
+            fixture.port.set_key(super::ModelArenaKey::Installed);
             // The frame's Protected bit contradicts the encryption.
             let Err(PublishError::Refused {
                 publication,
