@@ -27,7 +27,7 @@
 //!
 //! A refusal ([`CommandProgress::Refused`], [`SubmitRefusal`] with the
 //! attempt's withdrawn terminal in the sink,
-//! [`LendRefused`](crate::LendRefused), [`StartRefused`]) changed nothing
+//! [`LendRefused`](crate::LendRefused), [`StartRefused`](crate::StartRefused)) changed nothing
 //! and returns every owner. [`DataPort::Fault`] names a broken contract of
 //! the backend's own state; it keeps its observations, and the backend
 //! keeps the owners it holds. A command the port did not take comes back
@@ -123,21 +123,38 @@ impl TxFacts {
     }
 }
 
+/// Whether one signal of the port came in a poll: one fact of the poll.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum Signal {
+    /// It did not.
+    #[default]
+    Quiet,
+    /// It did.
+    Raised,
+}
+
+impl Signal {
+    /// Whether it did.
+    pub const fn is_raised(self) -> bool {
+        matches!(self, Self::Raised)
+    }
+}
+
 /// What the port's signals held when the actor polled them.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Facts {
     /// Transmit events to serve with [`DataPort::service_tx`].
     pub tx: Option<TxFacts>,
     /// A TBTT of the station's schedule, served with the transmit events.
-    pub tbtt: bool,
+    pub tbtt: Signal,
     /// The receive ring has work for [`DataPort::receive`].
-    pub rx: bool,
+    pub rx: Signal,
 }
 
 impl Facts {
     /// Whether the signals held nothing.
     pub const fn is_empty(&self) -> bool {
-        self.tx.is_none() && !self.tbtt && !self.rx
+        self.tx.is_none() && !self.tbtt.is_raised() && !self.rx.is_raised()
     }
 }
 
@@ -636,7 +653,7 @@ pub trait DataPort<'id> {
     fn service_tx(
         &mut self,
         tx: TxFacts,
-        tbtt: bool,
+        tbtt: Signal,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> ServiceAnswer<'id, Self>;
@@ -788,12 +805,12 @@ pub trait DataPort<'id> {
 
     /// Start the stopped radio on `channel`, within the backend's command
     /// bound from the first call. It takes the stop's proof to begin and the
-    /// start's ([`StartPoll::Pending`](crate::StartPoll)) to go on; a start
+    /// start's ([`StartProgress::Pending`](crate::StartProgress)) to go on; a start
     /// that failed with the radio stopped gives the new stop's proof, and a
     /// start that ran ends its proof. A start that fails after the device
     /// began it stops what it began before it answers; a stop that does not
     /// confirm, and a start that enabled the MAC before it failed, leave
-    /// the port stopping ([`StartPoll::Unstopped`](crate::StartPoll)), and
+    /// the port stopping ([`StartRefused::Unstopped`](crate::StartRefused)), and
     /// [`Self::poll_stop`] goes on with the stop.
     fn poll_start(
         &mut self,
@@ -811,9 +828,12 @@ pub trait DataPort<'id> {
     /// on a port that retired since, a new stop's (the port is stopped
     /// again: a retirement's proof still held is stale, and the retirement
     /// is asked again). An unconfirmed stop says why, with everything the
-    /// port has out; a released port answers [`StopCause::Released`].
+    /// port has out; a released port answers [`StopCause::Released`]. It
+    /// takes the stop's right ([`crate::StopRight`]), which only its holder
+    /// lends.
     fn poll_stop(
         &mut self,
+        right: &mut crate::StopRight<'id>,
         cx: &mut Context<'_>,
         now: Instant,
     ) -> Poll<Result<crate::Stopped<'id>, crate::StopUnconfirmed<Self::Fault>>>;
@@ -872,9 +892,10 @@ pub trait DataPort<'id> {
         crate::ProofRefused<crate::Stopped<'id>, crate::Outstanding<Self::Fault>>,
     >;
 
-    /// Install the next installation in place, from `installations`, with
-    /// TSF epoch `tsf_epoch`: its stop's proof (an installation starts
-    /// stopped) and its commands and tokens.
+    /// Install the next installation in place, from `installations`, at the
+    /// port's next TSF epoch, which the port keeps and raises itself: its
+    /// stop's proof (an installation starts stopped) and its commands and
+    /// tokens.
     ///
     /// # Errors
     ///
@@ -883,7 +904,6 @@ pub trait DataPort<'id> {
     fn reinstall(
         &mut self,
         retired: crate::Retired<'id>,
-        tsf_epoch: u32,
         installations: &mut Self::Installations,
     ) -> Result<
         (crate::Stopped<'id>, Self::Installed),
@@ -906,8 +926,12 @@ pub trait DataPort<'id> {
     /// return the owners it holds: the recovery's proof, or the fault with
     /// what it leaves out. From a recovery on the port admits and publishes
     /// nothing new, as a stopping port does, however late the stop comes;
-    /// only its service of what is out goes on.
-    fn recover_for_stop(&mut self) -> crate::Recovery<'id, Self::Fault>;
+    /// only its service of what is out goes on. It takes the stop's right
+    /// ([`crate::StopRight`]), as a stop does.
+    fn recover_for_stop(
+        &mut self,
+        right: &mut crate::StopRight<'id>,
+    ) -> crate::Recovery<Self::Fault>;
 
     /// A reading of the port's radio clock.
     ///
@@ -938,11 +962,11 @@ mod tests {
                 ..Facts::default()
             },
             Facts {
-                tbtt: true,
+                tbtt: Signal::Raised,
                 ..Facts::default()
             },
             Facts {
-                rx: true,
+                rx: Signal::Raised,
                 ..Facts::default()
             },
         ] {

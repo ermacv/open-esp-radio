@@ -34,15 +34,16 @@ use oer_protocols_ieee80211_contracts_port::{
     CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input,
     LendRefusal, LendRefused, Outstanding, PairwiseIssue, PortAnswer, PortArena, PortCommand,
     PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
-    ProofRefused, Recovering, Recovery, ReinstallRefused, Removed, RemovedKey, Retired, RunPhase,
-    RxPull, StaleProof, StartFailure, StartPoll, StartProof, Starting, StateSerial,
-    StationSubmission, StopCause, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt,
+    ProofRefused, Recovery, ReinstallRefused, Removed, RemovedKey, Retired, RunPhase, RxPull,
+    StaleProof, StartFailure, StartPoll, StartProgress, StartProof, StartRefused, Starting,
+    StateSerial, StationSubmission, StopCause, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt,
     SubmitRefusal, TxFacts, Unconsumed, Unkeeping, Unkept,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
     },
 };
+use oer_protocols_ieee80211_contracts_port::{Signal, StopRight};
 use oer_protocols_radio_port::{Installation, Installations, Minted, RemintRefused};
 
 /// The model's backend type of the composition `(Id, C, X)`.
@@ -446,6 +447,9 @@ pub struct ModelInstall<
     pub resources: ModelResources<'id, Backend<Id, C, X>>,
     /// The installation's stop: it starts stopped.
     pub stopped: Stopped<'id>,
+    /// The stop's right, given once with the port's first installation: a
+    /// reinstall gives none, and it stays with its holder.
+    pub stop_right: StopRight<'id>,
 }
 
 /// What the model port has out, by class; its transmit queues are EDCA's,
@@ -480,8 +484,8 @@ pub struct ModelPort<
     stop_serial: StateSerial,
     /// The port released its installations: it holds none.
     released: bool,
-    /// The TSF epoch the last reinstall named.
-    tsf_epoch: Option<u32>,
+    /// The installation's TSF epoch, raised by the port at each reinstall.
+    tsf_epoch: u32,
     loan: BodyLoan<'id, Id, Backend<Id, C, X>>,
     channel: Channel,
     addresses: [IndividualAddress; 2],
@@ -566,6 +570,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         held.network = network;
         ModelInstall {
             stopped: Stopped::issue(StateSerial::FIRST),
+            stop_right: StopRight::issue(),
             port: Self {
                 air: air.clone(),
                 held,
@@ -575,7 +580,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 serial: StateSerial::FIRST,
                 stop_serial: StateSerial::FIRST,
                 released: false,
-                tsf_epoch: None,
+                tsf_epoch: 0,
                 loan,
                 channel,
                 addresses,
@@ -1394,9 +1399,18 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             } else {
                 TxFacts::DUE
             }),
-            tbtt: self.air.tbtt.take(),
-            rx: self.radio == Radio::Running
-                && (!self.air.rx.is_empty() || group_ready || streaming),
+            tbtt: if self.air.tbtt.take() {
+                Signal::Raised
+            } else {
+                Signal::Quiet
+            },
+            rx: if self.radio == Radio::Running
+                && (!self.air.rx.is_empty() || group_ready || streaming)
+            {
+                Signal::Raised
+            } else {
+                Signal::Quiet
+            },
         }
     }
 
@@ -1436,7 +1450,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn service_tx(
         &mut self,
         _: TxFacts,
-        tbtt: bool,
+        tbtt: Signal,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> PortAnswer<'id, Self::Types, (), Result<Option<PortCompleted<'id, Self>>, ModelPortFault>>
@@ -1450,7 +1464,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
         let answer = (|| -> Result<Option<PortCompleted<'id, Self>>, ModelPortFault> {
             self.check(ModelPortCall::ServiceTx)?;
-            if tbtt {
+            if tbtt.is_raised() {
                 sink.tbtt(oer_protocols_ieee80211_contracts_port::TbttEvent {
                     tbtt: oer_protocols_ieee80211_contracts_port::VifTsf::new(
                         VifRole::Station,
@@ -1921,7 +1935,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         now: Instant,
     ) -> StartPoll<'id, ModelPortFault> {
         if !proof.is_of(self.serial) {
-            return StartPoll::Stale(StaleProof { proof });
+            return Err(StartRefused::Stale(StaleProof { proof }));
         }
         // A start's own proof goes on with it; a stop's begins it. A refusal
         // before it began leaves the port, and its proof, as they were; one
@@ -1930,11 +1944,14 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal();
         match proof {
             StartProof::Stopped(stopped) if refused => {
-                return StartPoll::Refused(stopped, StartFailure::Device);
+                return Err(StartRefused::Refused(stopped, StartFailure::Device));
             }
             StartProof::Starting(_) if refused => {
                 self.radio = Radio::Stopped;
-                return StartPoll::Refused(self.stop_proof(), StartFailure::Device);
+                return Err(StartRefused::Refused(
+                    self.stop_proof(),
+                    StartFailure::Device,
+                ));
             }
             StartProof::Stopped(_) => {
                 // The start begins: every proof of the stopped port ends.
@@ -1944,7 +1961,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             StartProof::Starting(_) => {}
         }
         if self.air.start_held() {
-            return StartPoll::Pending(Starting::issue(self.serial));
+            return Ok(StartProgress::Pending(Starting::issue(self.serial)));
         }
         // The start ends here, and its proof with it.
         self.raise();
@@ -1958,19 +1975,20 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             self.refresh_deadline(now);
             // The MAC the start enabled is still on: the stop is not done
             // yet, and no fault names it.
-            return StartPoll::Unstopped {
+            return Err(StartRefused::Unstopped {
                 cause: StartFailure::Device,
                 stop: self.unconfirmed(StopCause::CoreEnabled),
-            };
+            });
         }
         self.channel = channel.channel();
         self.radio = Radio::Running;
         self.refresh_deadline(now);
-        StartPoll::Started
+        Ok(StartProgress::Started)
     }
 
     fn poll_stop(
         &mut self,
+        _right: &mut StopRight<'id>,
         cx: &mut Context<'_>,
         now: Instant,
     ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<ModelPortFault>>> {
@@ -2044,7 +2062,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         Poll::Pending
     }
 
-    fn recover_for_stop(&mut self) -> Recovery<'id, ModelPortFault> {
+    fn recover_for_stop(&mut self, _right: &mut StopRight<'id>) -> Recovery<ModelPortFault> {
         let Some(fault) = self.fault.or_else(|| {
             self.air.failed().then(|| ModelPortFault::Quarantined {
                 call: ModelPortCall::Retire,
@@ -2062,7 +2080,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             self.held.draining.set(true);
             self.raise();
         }
-        Recovery::Recovered(Recovering::issue(self.serial))
+        Recovery::TakenBack
     }
 
     fn outstanding(&self) -> ModelOutstanding {
@@ -2130,7 +2148,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn reinstall(
         &mut self,
         retired: Retired<'id>,
-        tsf_epoch: u32,
         installations: &mut Installations<Id, ModelPools>,
     ) -> Result<
         (
@@ -2145,9 +2162,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if !retired.is_of(self.serial) {
             return Err(ProofRefused::Stale(StaleProof { proof: retired }));
         }
-        if self.tsf_epoch == Some(tsf_epoch) {
-            return Err(ProofRefused::Refused(retired, ReinstallRefused::SameEpoch));
-        }
+        // The port keeps its TSF epoch and raises it for each next
+        // installation.
+        let Some(tsf_epoch) = self.tsf_epoch.checked_add(1) else {
+            return Err(ProofRefused::Refused(retired, ReinstallRefused::Epochs));
+        };
         let Some(installation) = self.installation.take() else {
             return Err(ProofRefused::Refused(retired, ReinstallRefused::Receipt));
         };
@@ -2171,7 +2190,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         self.held = held;
         self.driver = Driver::new();
         self.installation = Some(installation);
-        self.tsf_epoch = Some(tsf_epoch);
+        self.tsf_epoch = tsf_epoch;
         self.radio = Radio::Stopped;
         self.deadline = None;
         self.held_since = None;

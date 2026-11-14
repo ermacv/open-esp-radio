@@ -30,12 +30,32 @@ pub enum StationHe {
     He20(He20Association),
 }
 
+/// Whether an HE BSS's color is in use, as its HE Operation's BSS Color
+/// Disabled subfield says (IEEE 802.11ax-2021, 9.4.2.249).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BssColorUse {
+    /// The color is disabled: transmissions carry zero.
+    Disabled,
+    /// The color is in use.
+    Enabled,
+}
+
+/// Whether an HE BSS's color is partial, as its Partial BSS Color subfield
+/// says (IEEE 802.11ax-2021, 9.4.2.249).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BssColorScope {
+    /// The whole color.
+    Full,
+    /// A partial color.
+    Partial,
+}
+
 /// The BSS color of an HE BSS as its HE Operation names it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeBssColor {
     color: BssColor,
-    enabled: bool,
-    partial: bool,
+    used: BssColorUse,
+    scope: BssColorScope,
 }
 
 impl HeBssColor {
@@ -44,22 +64,30 @@ impl HeBssColor {
         match BssColor::new(operation.bss_color) {
             Some(color) => Some(Self {
                 color,
-                enabled: operation.bss_color_enabled,
-                partial: operation.partial_bss_color,
+                used: if operation.bss_color_enabled {
+                    BssColorUse::Enabled
+                } else {
+                    BssColorUse::Disabled
+                },
+                scope: if operation.partial_bss_color {
+                    BssColorScope::Partial
+                } else {
+                    BssColorScope::Full
+                },
             }),
             None => None,
         }
     }
 
-    /// The color, whether it is enabled and whether it is partial.
-    pub const fn get(&self) -> (BssColor, bool, bool) {
-        (self.color, self.enabled, self.partial)
+    /// The color, whether it is in use and whether it is partial.
+    pub const fn get(&self) -> (BssColor, BssColorUse, BssColorScope) {
+        (self.color, self.used, self.scope)
     }
 
     /// The color the station's HE transmissions carry: the BSS color while
     /// it is enabled, else zero.
     pub const fn transmit_color(&self) -> BssColor {
-        if self.enabled {
+        if matches!(self.used, BssColorUse::Enabled) {
             self.color
         } else {
             BssColor::ZERO
@@ -152,8 +180,16 @@ impl He20Association {
         Ok(Self {
             color: HeBssColor {
                 color,
-                enabled: peer.bss_color_enabled,
-                partial: peer.partial_bss_color,
+                used: if peer.bss_color_enabled {
+                    BssColorUse::Enabled
+                } else {
+                    BssColorUse::Disabled
+                },
+                scope: if peer.partial_bss_color {
+                    BssColorScope::Partial
+                } else {
+                    BssColorScope::Full
+                },
             },
             association_id,
             minimum_mpdu_start_spacing,

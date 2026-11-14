@@ -88,14 +88,14 @@ pub struct MacResourceLimits {
 pub struct MacInterfaceCapabilities {
     pub station_interfaces: u8,
     pub access_point_interfaces: u8,
-    pub simultaneous_station_access_point: bool,
+    pub simultaneous_station_access_point: crate::Support,
     /// A monitor tap can own the radio without a protocol VIF.
-    pub standalone_monitor: bool,
+    pub standalone_monitor: crate::Support,
     /// A monitor tap can remain active while a protocol VIF runs.
-    pub monitor_with_interfaces: bool,
-    pub raw_monitor_tap: bool,
-    pub normalized_monitor_tap: bool,
-    pub protocol_validated_monitor_tap: bool,
+    pub monitor_with_interfaces: crate::Support,
+    pub raw_monitor_tap: crate::Support,
+    pub normalized_monitor_tap: crate::Support,
+    pub protocol_validated_monitor_tap: crate::Support,
 }
 
 impl MacInterfaceCapabilities {
@@ -108,9 +108,11 @@ impl MacInterfaceCapabilities {
 
     pub const fn supports_monitor_tap(self, point: crate::MonitorTapPoint) -> bool {
         match point {
-            crate::MonitorTapPoint::Raw => self.raw_monitor_tap,
-            crate::MonitorTapPoint::Normalized => self.normalized_monitor_tap,
-            crate::MonitorTapPoint::ProtocolValidated => self.protocol_validated_monitor_tap,
+            crate::MonitorTapPoint::Raw => self.raw_monitor_tap.is_supported(),
+            crate::MonitorTapPoint::Normalized => self.normalized_monitor_tap.is_supported(),
+            crate::MonitorTapPoint::ProtocolValidated => {
+                self.protocol_validated_monitor_tap.is_supported()
+            }
         }
     }
 }

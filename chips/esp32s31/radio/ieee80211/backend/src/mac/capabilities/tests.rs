@@ -49,10 +49,28 @@ fn profile_advertises_only_materialized_interface_and_monitor_topologies() {
     let interfaces = ESP32S31_MAC_SERVICE_CAPABILITIES.interfaces;
     assert_eq!(interfaces.station_interfaces, 1);
     assert_eq!(interfaces.access_point_interfaces, 1);
-    assert!(interfaces.simultaneous_station_access_point);
-    assert!(interfaces.standalone_monitor);
-    assert!(!interfaces.monitor_with_interfaces);
-    assert!(!interfaces.raw_monitor_tap);
-    assert!(interfaces.normalized_monitor_tap);
-    assert!(!interfaces.protocol_validated_monitor_tap);
+    assert_eq!(
+        interfaces.simultaneous_station_access_point,
+        oer_protocols_ieee80211_contracts_port::Support::Supported
+    );
+    assert_eq!(
+        interfaces.standalone_monitor,
+        oer_protocols_ieee80211_contracts_port::Support::Supported
+    );
+    assert_eq!(
+        interfaces.monitor_with_interfaces,
+        oer_protocols_ieee80211_contracts_port::Support::Unsupported
+    );
+    assert_eq!(
+        interfaces.raw_monitor_tap,
+        oer_protocols_ieee80211_contracts_port::Support::Unsupported
+    );
+    assert_eq!(
+        interfaces.normalized_monitor_tap,
+        oer_protocols_ieee80211_contracts_port::Support::Supported
+    );
+    assert_eq!(
+        interfaces.protocol_validated_monitor_tap,
+        oer_protocols_ieee80211_contracts_port::Support::Unsupported
+    );
 }

@@ -4185,7 +4185,7 @@ const PROOF_ISSUES: [&str; 4] = [
     "Stopped::issue",
     "Starting::issue",
     "Retired::issue",
-    "Recovering::issue",
+    "StopRight::issue",
 ];
 
 fn issues_a_proof(word: &str) -> bool {

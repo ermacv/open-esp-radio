@@ -164,6 +164,15 @@ pub trait AccessPointHarness<'id> {
 
     /// The port and the sink, borrowed together for one call.
     fn parts(&mut self) -> (&mut Self::Port, &mut Self::Sink);
+    /// The port and the stop's right the harness holds, borrowed together
+    /// for a stop or a recovery: the port gave the right with its first
+    /// installation.
+    fn stop_parts(
+        &mut self,
+    ) -> (
+        &mut Self::Port,
+        &mut oer_protocols_ieee80211_contracts_port::StopRight<'id>,
+    );
     /// Take the stop's proof the harness keeps: the port's installation
     /// starts stopped, so the harness holds one until a start takes it.
     fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>>;
@@ -452,16 +461,16 @@ pub fn start<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Vio
         let now = harness.now();
         let (port, _) = harness.parts();
         match port.poll_start(&mut Context::from_waker(&waker), proof, channel, now) {
-            oer_protocols_ieee80211_contracts_port::StartPoll::Started => return Ok(()),
-            oer_protocols_ieee80211_contracts_port::StartPoll::Pending(starting) => {
+            Ok(oer_protocols_ieee80211_contracts_port::StartProgress::Started) => return Ok(()),
+            Ok(oer_protocols_ieee80211_contracts_port::StartProgress::Pending(starting)) => {
                 proof = starting.into();
                 harness.settle();
             }
-            oer_protocols_ieee80211_contracts_port::StartPoll::Refused(proof, _) => {
+            Err(oer_protocols_ieee80211_contracts_port::StartRefused::Refused(proof, _)) => {
                 harness.keep_stopped(proof);
                 return Err(Violation::Lifecycle);
             }
-            oer_protocols_ieee80211_contracts_port::StartPoll::Stale(stale) => {
+            Err(oer_protocols_ieee80211_contracts_port::StartRefused::Stale(stale)) => {
                 if let oer_protocols_ieee80211_contracts_port::StartProof::Stopped(stopped) =
                     stale.proof
                 {
@@ -469,7 +478,7 @@ pub fn start<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Vio
                 }
                 return Err(Violation::Lifecycle);
             }
-            oer_protocols_ieee80211_contracts_port::StartPoll::Unstopped { .. } => {
+            Err(oer_protocols_ieee80211_contracts_port::StartRefused::Unstopped { .. }) => {
                 return Err(Violation::Lifecycle);
             }
         }
@@ -1440,8 +1449,8 @@ pub fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Viol
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
-        let (port, _) = harness.parts();
-        match port.poll_stop(&mut Context::from_waker(&waker), now) {
+        let (port, right) = harness.stop_parts();
+        match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
             Poll::Ready(Ok(stopped)) => {
                 harness.keep_stopped(stopped);
                 return Ok(());
@@ -1516,9 +1525,9 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(
     let waker = harness.waker();
     let now = harness.now();
     {
-        let (port, _) = harness.parts();
+        let (port, right) = harness.stop_parts();
         if port
-            .poll_stop(&mut Context::from_waker(&waker), now)
+            .poll_stop(right, &mut Context::from_waker(&waker), now)
             .is_ready()
         {
             return Err(Violation::Lifecycle);
@@ -1639,8 +1648,8 @@ fn removal_at_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
     // The stop begins with the removal waiting.
     let waker = harness.waker();
     let now = harness.now();
-    let (port, _) = harness.parts();
-    let _begun = port.poll_stop(&mut Context::from_waker(&waker), now);
+    let (port, right) = harness.stop_parts();
+    let _begun = port.poll_stop(right, &mut Context::from_waker(&waker), now);
     ledger.take(harness);
     ledger.check(harness)?;
     harness.hold(BEACON_QUEUE, false);

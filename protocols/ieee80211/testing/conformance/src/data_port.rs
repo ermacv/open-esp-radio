@@ -32,8 +32,8 @@ use core::task::{Context, Waker};
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
     CleanupRefused, CommandKind, CommandProgress, CommandRefusal, DataPort, PortCommand, PortSink,
-    ProofRefused, ReinstallRefused, Retired, RxPull, StartPoll, StartProof, Stopped, SubmitRefusal,
-    SupportedChannel, TxFacts,
+    ProofRefused, ReinstallRefused, Retired, RxPull, StartProgress, StartProof, StartRefused,
+    Stopped, SubmitRefusal, SupportedChannel, TxFacts,
 };
 
 /// The calls a case may repeat before it gives up on the port's progress.
@@ -53,6 +53,15 @@ pub trait DataPortHarness<'id> {
 
     /// The port and the sink, borrowed together for one call.
     fn parts(&mut self) -> (&mut Self::Port, &mut Self::Sink);
+    /// The port and the stop's right the harness holds, borrowed together
+    /// for a stop or a recovery: the port gave the right with its first
+    /// installation.
+    fn stop_parts(
+        &mut self,
+    ) -> (
+        &mut Self::Port,
+        &mut oer_protocols_ieee80211_contracts_port::StopRight<'id>,
+    );
     /// Take the stop's proof the harness keeps: the port's installation
     /// starts stopped, so the harness holds one until a start takes it.
     fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>>;
@@ -138,8 +147,9 @@ pub trait DataPortHarness<'id> {
     fn hold_start(&mut self, hold: bool);
     /// Hold every stop of the port unconfirmed, while `hold` is set.
     fn hold_stop(&mut self, hold: bool);
-    /// Reinstall the port in place with `retired`, at the fixture's next
-    /// TSF epoch from its installations: the new installation's stop. Its
+    /// Reinstall the port in place with `retired`, from the fixture's
+    /// installations (the port raises its TSF epoch): the new
+    /// installation's stop. Its
     /// tokens end with the fixture.
     ///
     /// # Errors
@@ -430,16 +440,16 @@ pub fn start<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violat
         let now = harness.now();
         let (port, _) = harness.parts();
         match port.poll_start(&mut Context::from_waker(&waker), proof, channel, now) {
-            StartPoll::Started => return Ok(()),
-            StartPoll::Pending(starting) => {
+            Ok(StartProgress::Started) => return Ok(()),
+            Ok(StartProgress::Pending(starting)) => {
                 proof = starting.into();
                 harness.settle();
             }
-            StartPoll::Refused(proof, _) => {
+            Err(StartRefused::Refused(proof, _)) => {
                 harness.keep_stopped(proof);
                 return Err(Violation::Lifecycle);
             }
-            StartPoll::Stale(stale) => {
+            Err(StartRefused::Stale(stale)) => {
                 if let oer_protocols_ieee80211_contracts_port::StartProof::Stopped(stopped) =
                     stale.proof
                 {
@@ -447,7 +457,7 @@ pub fn start<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violat
                 }
                 return Err(Violation::Lifecycle);
             }
-            StartPoll::Unstopped { .. } => return Err(Violation::Lifecycle),
+            Err(StartRefused::Unstopped { .. }) => return Err(Violation::Lifecycle),
         }
     }
     // A start still going on after the case's steps: its proof ends here.
@@ -709,8 +719,8 @@ fn stopped<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<Stopped<'id>
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
-        let (port, _) = harness.parts();
-        match port.poll_stop(&mut Context::from_waker(&waker), now) {
+        let (port, right) = harness.stop_parts();
+        match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
             core::task::Poll::Ready(Ok(stopped)) => return Ok(stopped),
             core::task::Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
             core::task::Poll::Pending => {
@@ -739,7 +749,7 @@ fn refuses_stale_stop<'id, H: DataPortHarness<'id>>(
     let before = port.outstanding();
     let stale = match port.poll_start(&mut Context::from_waker(&waker), stale.into(), channel, now)
     {
-        StartPoll::Stale(refused) => match refused.proof {
+        Err(StartRefused::Stale(refused)) => match refused.proof {
             StartProof::Stopped(stopped) if stopped == *copy => stopped,
             _ => return Err(Violation::Proof(step)),
         },
@@ -841,13 +851,13 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
     let channel = harness.channel();
     let waker = harness.waker();
     let now = harness.now();
-    let (port, _) = harness.parts();
-    let StartPoll::Pending(starting) =
+    let (port, right) = harness.stop_parts();
+    let Ok(StartProgress::Pending(starting)) =
         port.poll_start(&mut Context::from_waker(&waker), next.into(), channel, now)
     else {
         return Err(Violation::Proof(17));
     };
-    let _begun = port.poll_stop(&mut Context::from_waker(&waker), now);
+    let _begun = port.poll_stop(right, &mut Context::from_waker(&waker), now);
     let before = port.outstanding();
     match port.poll_start(
         &mut Context::from_waker(&waker),
@@ -855,7 +865,7 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
         channel,
         now,
     ) {
-        StartPoll::Stale(refused) if matches!(refused.proof, StartProof::Starting(_)) => {}
+        Err(StartRefused::Stale(refused)) if matches!(refused.proof, StartProof::Starting(_)) => {}
         _ => return Err(Violation::Proof(18)),
     }
     if port.outstanding() != before {
@@ -880,8 +890,8 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
     // A released port holds no installation: its stop gives no proof.
     let waker = harness.waker();
     let now = harness.now();
-    let (port, _) = harness.parts();
-    match port.poll_stop(&mut Context::from_waker(&waker), now) {
+    let (port, right) = harness.stop_parts();
+    match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
         core::task::Poll::Ready(Err(unconfirmed))
             if unconfirmed.cause == oer_protocols_ieee80211_contracts_port::StopCause::Released => {
         }
@@ -1038,8 +1048,8 @@ fn conservation<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
-        let (port, _) = harness.parts();
-        match port.poll_stop(&mut Context::from_waker(&waker), now) {
+        let (port, right) = harness.stop_parts();
+        match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
             core::task::Poll::Ready(Ok(stopped)) => {
                 stop = Some(stopped);
                 break;
@@ -1168,10 +1178,10 @@ fn fault_conservation<'id, H: DataPortHarness<'id>>(
     ledger.faulted = true;
     ledger.in_flight -= harness.take_completed().min(ledger.in_flight);
     ledger.check(harness, 31)?;
-    let (port, _) = harness.parts();
+    let (port, right) = harness.stop_parts();
     let before = port.outstanding();
-    match port.recover_for_stop() {
-        Recovery::Recovered(_) if whole => ledger.faulted = false,
+    match port.recover_for_stop(right) {
+        Recovery::TakenBack if whole => ledger.faulted = false,
         // The kept fault comes with what it leaves out, as the port has it.
         Recovery::Kept(_, out) if !whole && out == before => {}
         _ => {
@@ -1187,8 +1197,8 @@ fn fault_conservation<'id, H: DataPortHarness<'id>>(
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
-        let (port, _) = harness.parts();
-        match port.poll_stop(&mut Context::from_waker(&waker), now) {
+        let (port, right) = harness.stop_parts();
+        match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
             core::task::Poll::Ready(Ok(stopped)) => {
                 stop = Some(stopped);
                 break;

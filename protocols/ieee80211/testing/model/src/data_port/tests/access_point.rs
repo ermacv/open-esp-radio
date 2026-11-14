@@ -359,9 +359,7 @@ pub(super) fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelReso
         .retire(harness.stopped.take().unwrap())
         .unwrap();
     let Ok((stopped, (commands, resources))) =
-        harness
-            .port
-            .reinstall(retired, 1, &mut harness.installations)
+        harness.port.reinstall(retired, &mut harness.installations)
     else {
         panic!("a retired port reinstalls");
     };
@@ -556,6 +554,15 @@ impl<'s> AccessPointHarness<'s> for ApHarness<'s> {
     fn parts(&mut self) -> (&mut Port<'s>, &mut Sink<'s>) {
         let harness = self.h();
         (&mut harness.port, &mut harness.sink)
+    }
+    fn stop_parts(
+        &mut self,
+    ) -> (
+        &mut Port<'s>,
+        &mut oer_protocols_ieee80211_contracts_port::StopRight<'s>,
+    ) {
+        let harness = self.h();
+        (&mut harness.port, &mut harness.stop_right)
     }
     fn take_stopped(&mut self) -> Option<Stopped<'s>> {
         self.h().stopped.take()

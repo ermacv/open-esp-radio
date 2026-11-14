@@ -1566,7 +1566,7 @@ fn a_port_without_its_registers_faults_without_publishing() {
         assert!(matches!(
             fixture
                 .port
-                .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox).unwrap(),
+                .service_tx(TxFacts::DUE, oer_protocols_ieee80211_contracts_port::Signal::Quiet, now, &mut fixture.outbox).unwrap(),
             Err(fault) if fault == refused
         ));
         assert!(

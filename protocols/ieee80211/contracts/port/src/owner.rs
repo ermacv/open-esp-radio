@@ -62,13 +62,13 @@
 //! #         bands: BandSet::GHZ2_4,
 //! #         widths: WidthSet::MHZ20,
 //! #         rates: RateSupport {
-//! #             dsss_cck: true,
-//! #             ofdm: true,
+//! #             dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported,
+//! #             ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
 //! #             ht_max_mcs: HtMcs::new(7),
 //! #             he_max_mcs: HeMcs::new(9),
 //! #             he_max_bandwidth_mhz: 20,
-//! #             he_dcm: false,
-//! #             he_ldpc: false,
+//! #             he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
+//! #             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 //! #             spatial_streams: 1,
 //! #         },
 //! #         services: HardwareServices::FCS,
@@ -105,13 +105,13 @@
 //! #         bands: BandSet::GHZ2_4,
 //! #         widths: WidthSet::MHZ20,
 //! #         rates: RateSupport {
-//! #             dsss_cck: true,
-//! #             ofdm: true,
+//! #             dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported,
+//! #             ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
 //! #             ht_max_mcs: HtMcs::new(7),
 //! #             he_max_mcs: HeMcs::new(9),
 //! #             he_max_bandwidth_mhz: 20,
-//! #             he_dcm: false,
-//! #             he_ldpc: false,
+//! #             he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
+//! #             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 //! #             spatial_streams: 1,
 //! #         },
 //! #         services: HardwareServices::FCS,
@@ -637,6 +637,26 @@ impl Tid {
     }
 }
 
+/// Whether a QoS data frame ends the current service period: its EOSP
+/// subfield (IEEE 802.11-2020, 9.2.4.5.3).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ServicePeriod {
+    /// The service period goes on.
+    Continues,
+    /// This frame ends it.
+    Ends,
+}
+
+/// What a QoS data frame's body carries: its A-MSDU Present subfield
+/// (IEEE 802.11-2020, 9.2.4.5.9).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum QosBody {
+    /// One MSDU.
+    Msdu,
+    /// An A-MSDU.
+    Amsdu,
+}
+
 /// The QoS Control field of a QoS data frame, but its Ack Policy: the
 /// backend writes that from the frame's response
 /// (its [`TxFrame`] kind), the one source of it.
@@ -645,9 +665,9 @@ pub struct QosControl {
     /// The traffic identifier of this QoS data frame.
     pub tid: Tid,
     /// Whether this frame ends the current service period.
-    pub end_of_service_period: bool,
-    /// Whether the body carries an A-MSDU.
-    pub amsdu_present: bool,
+    pub service_period: ServicePeriod,
+    /// What the body carries.
+    pub body: QosBody,
     /// The field's high octet (TXOP limit, queue size or mesh control).
     pub high: u8,
 }
@@ -657,9 +677,9 @@ impl QosControl {
     pub const fn field(self, policy: QosAckPolicy) -> QosControlField {
         QosControlField::new(
             oer_portable_wire::U8::from_low_bits(self.tid.get()),
-            self.end_of_service_period,
+            matches!(self.service_period, ServicePeriod::Ends),
             policy,
-            self.amsdu_present,
+            matches!(self.body, QosBody::Amsdu),
             self.high,
         )
     }
@@ -668,8 +688,16 @@ impl QosControl {
     pub const fn from_field(field: QosControlField) -> Self {
         Self {
             tid: Tid(field.tid().get()),
-            end_of_service_period: field.eosp(),
-            amsdu_present: field.amsdu(),
+            service_period: if field.eosp() {
+                ServicePeriod::Ends
+            } else {
+                ServicePeriod::Continues
+            },
+            body: if field.amsdu() {
+                QosBody::Amsdu
+            } else {
+                QosBody::Msdu
+            },
             high: field.upper(),
         }
     }

@@ -1,6 +1,6 @@
 //! The HE settings' values stay within their fields.
 
-use super::{He20Association, He20AssociationError, HeBssColor};
+use super::{BssColorScope, BssColorUse, He20Association, He20AssociationError, HeBssColor};
 use crate::BssColor;
 use oer_protocols_ieee80211_wire::he::{He20Operation, He20PeerState};
 
@@ -29,7 +29,11 @@ fn an_association_keeps_the_peer_values_it_was_made_of() {
     assert_eq!(association.max_co_hosted_bssid_indicator(), Some(3));
     assert_eq!(
         association.color().get(),
-        (BssColor::new(42).unwrap(), true, true)
+        (
+            BssColor::new(42).unwrap(),
+            BssColorUse::Enabled,
+            BssColorScope::Partial
+        )
     );
     assert!(association.extended_range_single_user_disabled());
 }
@@ -43,7 +47,14 @@ fn a_bss_color_is_the_scan_s_and_a_disabled_one_is_transmitted_as_zero() {
         basic_mcs_nss_map: 0xfffc,
     };
     let color = HeBssColor::of(&operation).expect("a color");
-    assert_eq!(color.get(), (BssColor::new(42).unwrap(), true, false));
+    assert_eq!(
+        color.get(),
+        (
+            BssColor::new(42).unwrap(),
+            BssColorUse::Enabled,
+            BssColorScope::Full
+        )
+    );
     assert_eq!(color.transmit_color().get(), 42);
     operation.bss_color_enabled = false;
     assert_eq!(

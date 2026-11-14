@@ -1025,7 +1025,7 @@ fn returned_access_point_command<Id: radio::SlotIdentity>(
     AccessPointHarness::restore(harness, command);
     if !matches!(
         harness.f().port.recover_for_stop(),
-        oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
     ) || harness.f().port.fault().is_some()
     {
         return Err(CaseViolation::Owners);

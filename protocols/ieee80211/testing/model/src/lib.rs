@@ -217,13 +217,13 @@ pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
     bands: BandSet::GHZ2_4.union(BandSet::GHZ5),
     widths: WidthSet::MHZ20.union(WidthSet::MHZ40),
     rates: RateSupport {
-        dsss_cck: true,
-        ofdm: true,
+        dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported,
+        ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
         ht_max_mcs: HtMcs::new(7),
         he_max_mcs: HeMcs::new(9),
         he_max_bandwidth_mhz: 20,
-        he_dcm: true,
-        he_ldpc: true,
+        he_dcm: oer_protocols_ieee80211_contracts_port::Support::Supported,
+        he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported,
         spatial_streams: 1,
     },
     services: HardwareServices::FCS
@@ -2607,9 +2607,9 @@ impl ModelAir {
     }
 
     /// Hold every start before the MAC enables, while `hold` is set: the
-    /// port's start goes on ([`StartPoll::Pending`]) until it clears.
+    /// port's start goes on ([`StartProgress::Pending`]) until it clears.
     ///
-    /// [`StartPoll::Pending`]: oer_protocols_ieee80211_contracts_port::StartPoll::Pending
+    /// [`StartProgress::Pending`]: oer_protocols_ieee80211_contracts_port::StartProgress::Pending
     pub fn hold_start(&self, hold: bool) {
         self.hold_start.set(hold);
     }

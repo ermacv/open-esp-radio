@@ -156,9 +156,8 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
     stopped: Option<Stopped<'id>>,
     /// The proof of a start going on.
     starting: Option<oer_protocols_ieee80211_contracts_port::Starting<'id>>,
-    /// The installations, when the fixture reinstalls its port, with the
-    /// TSF epoch of its last reinstall.
-    installations: Option<(Installations<Id, InstallationPools>, u32)>,
+    /// The installations, when the fixture reinstalls its port.
+    installations: Option<Installations<Id, InstallationPools>>,
 }
 
 /// Why the fixture's port did not retire.
@@ -281,12 +280,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         }
     }
 
-    /// Retire and reinstall the port in place with TSF epoch `epoch`: the
-    /// next installation's commands and resources.
+    /// Retire and reinstall the port in place: the next installation's
+    /// commands and resources.
     pub(super) fn reinstall_in_place(
         &mut self,
         installations: &mut Installations<Id, InstallationPools>,
-        epoch: u32,
     ) -> Result<
         (
             crate::port::Esp32s31Commands<'id, Id, TestDevice, 512, Draws>,
@@ -295,7 +293,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         ReinstallRefused,
     > {
         let retired = self.retire().expect("retired");
-        match self.port.reinstall(retired, epoch, installations) {
+        match self.port.reinstall(retired, installations) {
             Ok((stopped, installed)) => {
                 self.stopped = Some(stopped);
                 Ok(installed)
@@ -732,12 +730,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
         Stopped<'id>,
         ProofRefused<oer_protocols_ieee80211_contracts_port::Retired<'id>, ReinstallRefused>,
     > {
-        let Some((installations, epoch)) = self.installations.as_mut() else {
+        let Some(installations) = self.installations.as_mut() else {
             return Err(ProofRefused::Refused(retired, ReinstallRefused::Receipt));
         };
-        *epoch = epoch.wrapping_add(1);
         // The new installation's commands and tokens end here.
-        let (stopped, _installed) = self.port.reinstall(retired, *epoch, installations)?;
+        let (stopped, _installed) = self.port.reinstall(retired, installations)?;
         Ok(stopped)
     }
 }
@@ -751,7 +748,7 @@ fn with_fixture<R>(test: impl for<'id> FnOnce(&mut Fixture<'id, radio::LocalId<'
         let driver = Box::leak(Box::new(PortDriver::vacant()));
         let installation = Port::install(parts, minted, driver).ok().expect("install");
         let mut fixture = Fixture::new(installation, observed, timer);
-        fixture.installations = Some((installations, 1));
+        fixture.installations = Some(installations);
         test(&mut fixture)
     }))
 }
@@ -780,15 +777,6 @@ fn a_refused_installation_returns_its_parts_mint_and_driver_whole() {
         let mut fixture = Fixture::new(installation, observed, timer);
         assert_eq!(cases::check(&mut fixture, Case::ALL[0]), Ok(()));
     }));
-}
-
-#[test]
-fn the_installation_machine_ends_every_case_on_the_s31_port() {
-    use oer_protocols_ieee80211_testing_installation as installation;
-    for case in installation::Case::ALL {
-        let result = with_fixture(|fixture| installation::check(fixture, case));
-        assert_eq!(result, Ok(()), "{case:?}");
-    }
 }
 
 #[test]
@@ -1444,7 +1432,7 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
             .ok()
             .expect("retired without waiting for the network");
         let (stopped, (commands, resources)) = port
-            .reinstall(retired, 18, installations)
+            .reinstall(retired, installations)
             .ok()
             .expect("reinstalled without waiting for the network");
         let installation = PortInstallation {

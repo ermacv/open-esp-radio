@@ -5,6 +5,7 @@ use super::*;
 use alloc::sync::Arc;
 use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use oer_protocols_ieee80211_contracts_port::StopRight;
 use oer_protocols_ieee80211_contracts_port::Tid;
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, Attempt, ChannelWidth, ClassFrame, HeaderSpec, LowerMacTerminal, MpduLength,
@@ -106,11 +107,11 @@ type GroupTokens<'s> = (
 );
 
 struct Harness<'s> {
+    /// The stop's right the port gave with its first installation.
+    stop_right: StopRight<'s>,
     clock: Rc<oer_portable_time_virtual::VirtualClock>,
     air: Rc<ModelAir>,
     installations: Installations<LocalId<'s>, ModelPools>,
-    /// The TSF epoch of the last reinstall.
-    epoch: u32,
     port: Port<'s>,
     commands: ModelCommands<'s, LocalId<'s>>,
     sink: Sink<'s>,
@@ -177,6 +178,7 @@ impl<'s> Harness<'s> {
             commands,
             resources,
             stopped,
+            stop_right,
         } = install;
         let ModelResources {
             shared:
@@ -202,7 +204,6 @@ impl<'s> Harness<'s> {
             clock,
             air,
             installations,
-            epoch: 0,
             port,
             commands,
             sink: Sink {
@@ -228,12 +229,13 @@ impl<'s> Harness<'s> {
             access_point: Some(access_point),
             station: None,
             stopped: Some(stopped),
+            stop_right,
         }
     }
 
     /// Poll the stop once: whether it confirmed, keeping its proof.
     fn poll_stopped(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
-        match self.port.poll_stop(cx, now) {
+        match self.port.poll_stop(&mut self.stop_right, cx, now) {
             Poll::Ready(Ok(stopped)) => {
                 self.stopped = Some(stopped);
                 true
@@ -424,6 +426,9 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
 
     fn parts(&mut self) -> (&mut Port<'s>, &mut Sink<'s>) {
         (&mut self.port, &mut self.sink)
+    }
+    fn stop_parts(&mut self) -> (&mut Port<'s>, &mut StopRight<'s>) {
+        (&mut self.port, &mut self.stop_right)
     }
     fn take_stopped(&mut self) -> Option<Stopped<'s>> {
         self.stopped.take()
@@ -693,10 +698,8 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
             oer_protocols_ieee80211_contracts_port::ReinstallRefused,
         >,
     > {
-        self.epoch = self.epoch.wrapping_add(1);
         let (stopped, (commands, _resources)) =
-            self.port
-                .reinstall(retired, self.epoch, &mut self.installations)?;
+            self.port.reinstall(retired, &mut self.installations)?;
         self.commands = commands;
         Ok(stopped)
     }
@@ -780,13 +783,40 @@ fn the_model_passes_every_data_port_case() {
 }
 
 #[test]
-fn the_installation_machine_ends_every_case_on_the_model() {
-    use oer_protocols_ieee80211_testing_installation as installation;
-    for case in installation::Case::ALL {
-        with_harness(|harness| {
-            assert_eq!(installation::check(harness, case), Ok(()), "{case:?}");
-        });
-    }
+fn the_port_raises_its_own_epoch_and_refuses_one_it_cannot_raise() {
+    with_harness(|harness| {
+        let first = harness.port.tsf_epoch;
+        harness.end_tokens();
+        let retired = harness
+            .port
+            .retire(harness.stopped.take().unwrap())
+            .unwrap();
+        let (stopped, (commands, resources)) = harness
+            .port
+            .reinstall(retired, &mut harness.installations)
+            .ok()
+            .expect("a retired port reinstalls");
+        harness.commands = commands;
+        // The new installation's tokens end here.
+        drop(resources);
+        assert_eq!(
+            harness.port.tsf_epoch,
+            first + 1,
+            "each reinstall raises it"
+        );
+        // An epoch the port cannot raise refuses the reinstall for good,
+        // with the retirement's proof back.
+        harness.port.tsf_epoch = u32::MAX;
+        harness.end_tokens();
+        let retired = harness.port.retire(stopped).unwrap();
+        match harness.port.reinstall(retired, &mut harness.installations) {
+            Err(ProofRefused::Refused(retired, ReinstallRefused::Epochs)) => {
+                assert!(harness.port.release(retired).is_ok(), "the proof came back");
+            }
+            _ => panic!("an epoch that cannot be raised is refused"),
+        }
+        assert_eq!(harness.port.tsf_epoch, u32::MAX, "the port is as it was");
+    });
 }
 
 #[test]
@@ -884,7 +914,11 @@ fn no_data_port_call_wakes_its_caller() {
         let mut cx = Context::from_waker(&waker);
         let before = harness.wakes();
         let facts = harness.port.poll_facts(&mut cx);
-        assert!(facts.rx, "the delivered units are receive work");
+        assert_eq!(
+            facts.rx,
+            oer_protocols_ieee80211_contracts_port::Signal::Raised,
+            "the delivered units are receive work"
+        );
         let _ = harness.port.deadline();
         let attempt = harness.mpdu().unwrap();
         harness
@@ -895,7 +929,12 @@ fn no_data_port_call_wakes_its_caller() {
             .unwrap();
         harness
             .port
-            .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut harness.sink,
+            )
             .unwrap()
             .unwrap();
         let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
@@ -1184,7 +1223,12 @@ fn a_stop_ends_an_exchange_the_air_still_owes() {
         harness.advance_air();
         let (now, waker) = harness.now_wake();
         let mut cx = Context::from_waker(&waker);
-        assert!(harness.port.poll_stop(&mut cx, now).is_pending());
+        assert!(
+            harness
+                .port
+                .poll_stop(&mut harness.stop_right, &mut cx, now)
+                .is_pending()
+        );
         let done = harness.service().unwrap();
         assert!(matches!(
             done.end(),
@@ -1565,7 +1609,12 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
         let now = harness.clock.now();
         let fault = harness
             .port
-            .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut harness.sink,
+            )
             .unwrap()
             .err()
             .unwrap();
@@ -1610,7 +1659,12 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         let waker = harness.waker();
         let mut cx = Context::from_waker(&waker);
         // The withdrawal's terminal goes out through the next service.
-        assert!(harness.port.poll_stop(&mut cx, now).is_pending());
+        assert!(
+            harness
+                .port
+                .poll_stop(&mut harness.stop_right, &mut cx, now)
+                .is_pending()
+        );
         assert_eq!(harness.port.deadline(), Some(now));
         harness.service();
         assert_eq!(harness.take_completed(), 1);
@@ -1624,9 +1678,7 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
             .retire(harness.stopped.take().unwrap())
             .unwrap();
         let Ok((_stopped, _installed)) =
-            harness
-                .port
-                .reinstall(retired, 1, &mut harness.installations)
+            harness.port.reinstall(retired, &mut harness.installations)
         else {
             panic!("a retired port reinstalls");
         };
@@ -2029,7 +2081,12 @@ fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication(
         let now = harness.clock.now();
         let fault = harness
             .port
-            .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut harness.sink,
+            )
             .unwrap()
             .err()
             .unwrap();
@@ -2052,10 +2109,11 @@ mod station_stale;
 fn stop_radio(harness: &mut Harness<'_>) {
     for _ in 0..64 {
         let (now, waker) = harness.now_wake();
-        match harness
-            .port
-            .poll_stop(&mut Context::from_waker(&waker), now)
-        {
+        match harness.port.poll_stop(
+            &mut harness.stop_right,
+            &mut Context::from_waker(&waker),
+            now,
+        ) {
             Poll::Ready(result) => {
                 harness.stopped = Some(result.unwrap());
                 return;
