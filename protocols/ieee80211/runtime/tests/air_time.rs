@@ -663,6 +663,7 @@ fn run<const HELD: u8>(inputs: Inputs) -> Outcome {
             port,
             mut commands,
             resources,
+            stopped,
         } = install;
         let ModelResources {
             shared: oer_protocols_ieee80211_testing_model::ModelShared { block_acks, .. },
@@ -708,6 +709,7 @@ fn run<const HELD: u8>(inputs: Inputs) -> Outcome {
         let mut actor = Actor::<P<'_, HELD>, _, _>::init_in_place(
             Box::leak(Box::new(core::mem::MaybeUninit::uninit())),
             port,
+            stopped,
             FixedRate(stand_rate()),
             storage.view(),
             (),

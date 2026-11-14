@@ -386,6 +386,7 @@ macro_rules! fixture {
             port,
             commands,
             resources,
+            stopped,
         } = install;
         let shared_resources = resources.shared;
         let ap = resources.access_point;
@@ -448,6 +449,7 @@ macro_rules! fixture {
         let (end, link, mut $transmit, $device, $supply) = $ends($side);
         let mut $runner = ApRunner::new(
             port,
+            stopped,
             commands,
             resources,
             engine,

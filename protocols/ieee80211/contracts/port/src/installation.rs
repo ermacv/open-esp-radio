@@ -179,6 +179,9 @@ pub enum ReinstallRefused {
 /// the port's fault, `O` its [`Outstanding`](crate::Outstanding).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StartRefused<F> {
+    /// The radio runs, or its stop has not confirmed: the caller holds no
+    /// stop's proof to start with, so no start was asked of the port.
+    Running,
     /// The radio front end did not tune the channel, for the port's cause.
     Retune(F),
     /// The start did not end within the backend's command bound.

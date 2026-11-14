@@ -29,7 +29,7 @@ fn a_terminal_without_a_home_of_the_runners_is_refused_whole_and_stays_with_the_
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, air, _device, _shared);
         let now = || oer_portable_time::Clock::now(&*counted.clock);
-        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        let started = poll_fn(|cx| runner.poll_start(cx, now())).await;
         assert!(started.is_ok(), "the radio starts");
         // A ticket and a buffer taken out by hand: the runner gave the
         // ticket no purpose.
@@ -72,7 +72,7 @@ fn a_terminal_without_a_home_of_the_runners_is_refused_whole_and_stays_with_the_
             let _served = runner
                 .port
                 .service_tx(TxFacts::DUE, false, at, &mut runner.homes);
-            match runner.port.poll_stop(cx, at) {
+            match runner.poll_stop(cx, at) {
                 core::task::Poll::Pending => {
                     cx.waker().wake_by_ref();
                     core::task::Poll::Pending
@@ -83,8 +83,8 @@ fn a_terminal_without_a_home_of_the_runners_is_refused_whole_and_stays_with_the_
         .await;
         assert!(stop.is_ok(), "the stop confirms");
         assert_eq!(
-            runner.port.take_unconsumed(&mut runner.homes),
-            Ok(Unconsumed::Kept)
+            runner.unconsumed(),
+            Some(Ok(oer_protocols_ieee80211_contracts_port::Unconsumed::Kept))
         );
         assert_eq!(runner.homes.tickets.len(), tickets);
         // Once the ticket has its purpose, the homes take it whole, once.
@@ -95,15 +95,15 @@ fn a_terminal_without_a_home_of_the_runners_is_refused_whole_and_stays_with_the_
             None,
         ));
         assert_eq!(
-            runner.port.take_unconsumed(&mut runner.homes),
-            Ok(Unconsumed::None)
+            runner.unconsumed(),
+            Some(Ok(oer_protocols_ieee80211_contracts_port::Unconsumed::None))
         );
         assert_eq!(runner.homes.tickets.len(), tickets + 1);
         assert_eq!(runner.homes.buffers.len(), buffers + 1);
         assert!(runner.homes.purposes[usize::from(index)].is_none());
         assert_eq!(
-            runner.port.take_unconsumed(&mut runner.homes),
-            Ok(Unconsumed::None)
+            runner.unconsumed(),
+            Some(Ok(oer_protocols_ieee80211_contracts_port::Unconsumed::None))
         );
         assert_eq!(runner.homes.tickets.len(), tickets + 1);
     }));
@@ -129,7 +129,7 @@ fn owners_an_operation_stopped_on_hold_every_later_terminal_in_the_port_and_leav
         })
         .await;
         assert!(matches!(rerun, ApEnd::Contract(ApContract::ForeignKey)));
-        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        let started = poll_fn(|cx| runner.poll_start(cx, now())).await;
         assert!(started.is_ok(), "the radio starts");
         // A frame of the runner's, with its purpose: its terminal would come
         // home, but a terminal's owners are out without a home.
@@ -207,7 +207,7 @@ fn an_item_the_port_cannot_keep_ends_the_turn_and_leaves_the_runner_once() {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
         let now = || oer_portable_time::Clock::now(&*counted.clock);
-        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        let started = poll_fn(|cx| runner.poll_start(cx, now())).await;
         assert!(started.is_ok(), "the radio starts");
         // A frame whose ticket has no purpose: its terminal finds no home.
         let ticket = runner.homes.tickets.pop().unwrap();
@@ -265,7 +265,7 @@ fn a_stop_watch_returns_while_an_item_is_unkept_and_goes_on_once_it_is_taken() {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, air, _device, shared);
         let now = || oer_portable_time::Clock::now(&*counted.clock);
-        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        let started = poll_fn(|cx| runner.poll_start(cx, now())).await;
         assert!(started.is_ok(), "the radio starts");
         let ticket = runner.homes.tickets.pop().unwrap();
         let mut buffer = runner.homes.buffers.pop().unwrap();
@@ -343,7 +343,7 @@ fn a_late_data_completion_charges_only_the_association_that_owns_its_queue() {
         let counted = Counted::new();
         fixture!(claim, counted.clock.clone() => runner, air, _device, _shared);
         let now = || oer_portable_time::Clock::now(&*counted.clock);
-        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        let started = poll_fn(|cx| runner.poll_start(cx, now())).await;
         assert!(started.is_ok(), "the radio starts");
         let old = ApAssociationIdentity::new(STATION, 1, 7).unwrap();
         let new = ApAssociationIdentity::new(STATION, 1, 8).unwrap();

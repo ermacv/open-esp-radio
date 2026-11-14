@@ -65,7 +65,7 @@ macro_rules! written {
 macro_rules! serving {
     ($runner:ident, $counted:expr, $air:expr) => {{
         let now = || oer_portable_time::Clock::now(&*$counted.clock);
-        let started = poll_fn(|cx| $runner.port.poll_start(cx, supported(), now())).await;
+        let started = poll_fn(|cx| $runner.poll_start(cx, now())).await;
         assert!(started.is_ok(), "the radio starts");
         let mut turns = 0;
         while $runner.homes.phase != Phase::Running {
@@ -188,7 +188,7 @@ fn a_refusal_draws_no_number_and_returns_the_memory_whole() {
         fixture!(claim, counted.clock.clone() => runner, _air, _device, transmit, supply, _shared);
         let now = || oer_portable_time::Clock::now(&*counted.clock);
         let length = 14 + payload().len();
-        let started = poll_fn(|cx| runner.port.poll_start(cx, supported(), now())).await;
+        let started = poll_fn(|cx| runner.poll_start(cx, now())).await;
         assert!(started.is_ok());
         // No group key yet: a group frame is refused before anything is
         // numbered or written.

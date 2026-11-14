@@ -862,7 +862,10 @@ pub trait DataPort<'id> {
     fn retire(
         &mut self,
         stopped: crate::Stopped<'id>,
-    ) -> Result<crate::Retired<'id>, crate::ProofRefused<crate::Stopped<'id>, crate::Outstanding<Self::Fault>>>;
+    ) -> Result<
+        crate::Retired<'id>,
+        crate::ProofRefused<crate::Stopped<'id>, crate::Outstanding<Self::Fault>>,
+    >;
 
     /// Install the next installation in place, from `installations`, with
     /// TSF epoch `tsf_epoch`: its stop's proof (an installation starts

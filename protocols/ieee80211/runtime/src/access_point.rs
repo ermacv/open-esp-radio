@@ -110,11 +110,14 @@ use oer_protocols_ieee80211_contracts_port::{
     ConfigurePermission, Configured, ConnectionFrame, DataPort, Facts, GroupKeyId, Input,
     InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal, NumberedKey, PhyRate, PortSink,
     PortTypes, Protection, ReceiveAccounting, ReceiveFilter, RecycleRefused, Removed, RemovedKey,
-    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StopCause,
-    StopObservations, StopUnconfirmed, SupportedChannel, SupportedFilter, SupportedPower,
-    SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass, TxBufferMemory,
-    TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxNetworkPool, TxOperation, TxOutcome, TxPower,
-    TxProtection, TxSource, Unconsumed, UnconsumedRefused,
+    RetryPlan, RetryStage, RxCryptoStatus, RxEvidence, RxMetadata, RxPull, SingleEnd, StartPoll,
+    StartRefused, StopCause, StopUnconfirmed, Stopped, SupportedChannel, SupportedFilter,
+    SupportedPower, SupportedTsfControl, TbttEvent, TerminalAccess, TsfControl, TxBufferClass,
+    TxBufferMemory, TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxNetworkPool, TxOperation,
+    TxOutcome, TxPower, TxProtection, TxSource,
+};
+use oer_protocols_ieee80211_contracts_port::{
+    InstallationGeneration, Outstanding, ProofRefused, Recovery, Retired,
 };
 use oer_protocols_ieee80211_contracts_port::{NetworkFrames, NetworkTxBuffer};
 use oer_protocols_ieee80211_core_roles_ap::{
@@ -426,7 +429,7 @@ pub enum StopWatch<F> {
         /// The fault the stop's own answer named.
         fault: F,
         /// What the port held then.
-        observations: StopObservations,
+        outstanding: Outstanding<F>,
     },
     /// The runner holds an item a port call could not keep
     /// ([`ApRunner::take_unkept`]): the watch made no port call after it
@@ -437,6 +440,20 @@ pub enum StopWatch<F> {
     /// ([`DataPort::deadline`]), as the S31 port does until its stop is
     /// served.
     Unkept,
+}
+
+/// Why the runner's port did not retire and release; `F` is the port's
+/// fault. Nothing was taken: the runner keeps its stop's proof.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApReleaseRefused<F> {
+    /// The radio's stop did not confirm: the runner holds no stop's proof.
+    NotStopped,
+    /// The port did not retire: what it has out.
+    Held(Outstanding<F>),
+    /// The runner's proof is of another installation than the port's: a
+    /// proof's brand is the port's lifetime, which a `'static` port shares
+    /// with every other, so its generation is checked.
+    Stale(InstallationGeneration),
 }
 
 /// Why a watch of the radio's stop ended before the port confirmed it; `F`
@@ -452,7 +469,7 @@ enum Unwatched<F, E> {
         /// The fault the answer named.
         fault: F,
         /// What the port held then.
-        observations: StopObservations,
+        outstanding: Outstanding<F>,
     },
     /// The runner holds an item a port call could not keep.
     Unkept,
@@ -1095,6 +1112,9 @@ pub struct ApRunner<
     port: P,
     commands: I,
     homes: Homes<'id, 's, 'n, P, C, S, X, L, NS, TX, RX, N>,
+    /// The proof of the port's confirmed stop, while the radio is stopped:
+    /// the run's start spends it, and a confirmed stop gives the next.
+    stopped: Option<Stopped<'id>>,
 }
 
 /// How the network's stop ended.
@@ -1105,11 +1125,11 @@ enum NetworkStopped {
 }
 
 /// What woke a wait of the runner.
-enum Woke<F> {
+enum Woke<'id, F> {
     /// The port's facts.
     Facts(Facts),
     /// The radio's stop ended, confirmed or not.
-    Stopped(Result<(), StopUnconfirmed<F>>),
+    Stopped(Result<Stopped<'id>, StopUnconfirmed<F>>),
     /// A deadline, the network, the stop request or the yield.
     Other,
 }
@@ -2046,6 +2066,7 @@ where
     )]
     pub fn new(
         port: P,
+        stopped: Stopped<'id>,
         commands: I,
         resources: ApResources<'id, P, C>,
         engine: ApEngine<'s, S>,
@@ -2131,6 +2152,7 @@ where
                 fault: None,
                 taken: 0,
             },
+            stopped: Some(stopped),
         }
     }
 
@@ -2160,12 +2182,7 @@ where
             return ApEnd::Contract(*contract);
         }
         // The radio starts on the BSS's channel.
-        let channel = self.homes.channel;
-        let started = poll_fn(|cx| {
-            let now = clock.now();
-            self.port.poll_start(cx, channel, now)
-        })
-        .await;
+        let started = poll_fn(|cx| self.poll_start(cx, clock.now())).await;
         if let Err(refused) = started {
             return ApEnd::StartRefused(refused);
         }
@@ -2302,13 +2319,12 @@ where
             Err(Unwatched::Ended(unconfirmed) | Unwatched::Kept(unconfirmed)) => {
                 ApEnd::StopUnconfirmed(unconfirmed)
             }
-            Err(Unwatched::Device {
-                fault,
-                observations,
-            }) => ApEnd::StopUnconfirmed(StopUnconfirmed {
-                cause: StopCause::Device(fault),
-                observations,
-            }),
+            Err(Unwatched::Device { fault, outstanding }) => {
+                ApEnd::StopUnconfirmed(StopUnconfirmed {
+                    cause: StopCause::Device(fault),
+                    outstanding,
+                })
+            }
             // The stop's watch found an item the port could not keep; no
             // service follows it until its owner took it.
             Err(Unwatched::Unkept) => ApEnd::Unkept,
@@ -2347,7 +2363,9 @@ where
     ) -> Result<StopWatch<PortFault<'id, P>>, ReceiveAccounting> {
         // The port is asked to take the run's fault back once: a later call
         // of the same stop asks nothing again for it.
-        if core::mem::take(&mut self.homes.faulted) && !self.port.recover_for_stop() {
+        if core::mem::take(&mut self.homes.faulted)
+            && !matches!(self.port.recover_for_stop(), Recovery::Recovered(_))
+        {
             self.homes.fault_kept = true;
         }
         self.homes.stop = true;
@@ -2374,14 +2392,8 @@ where
                     observed,
                 });
             }
-            Err(Unwatched::Device {
-                fault,
-                observations,
-            }) => {
-                return Ok(StopWatch::DeviceFailed {
-                    fault,
-                    observations,
-                });
+            Err(Unwatched::Device { fault, outstanding }) => {
+                return Ok(StopWatch::DeviceFailed { fault, outstanding });
             }
             Ok(()) => {}
         }
@@ -2517,7 +2529,7 @@ where
                 ));
                 if let Input::Accepted(Err(fault)) = served {
                     self.homes.fault = Some(fault);
-                    if !self.port.recover_for_stop() {
+                    if !matches!(self.port.recover_for_stop(), Recovery::Recovered(_)) {
                         self.homes.fault_kept = true;
                         // The kept fault's answer is reported, even one
                         // equal to the last.
@@ -2548,7 +2560,7 @@ where
             let mut first = true;
             let polled = poll_fn(|cx| {
                 match port.poll_stop(cx, clock.now()) {
-                    Poll::Ready(Ok(())) => return Poll::Ready(Woke::Stopped(Ok(()))),
+                    Poll::Ready(Ok(stopped)) => return Poll::Ready(Woke::Stopped(Ok(stopped))),
                     Poll::Ready(Err(observed)) if reported != Some(observed) => {
                         reported = Some(observed);
                         return Poll::Ready(Woke::Stopped(Err(observed)));
@@ -2583,7 +2595,8 @@ where
                 Either::Second(()) => Woke::Other,
             };
             match woke {
-                Woke::Stopped(Ok(())) => {
+                Woke::Stopped(Ok(stopped)) => {
+                    self.stopped = Some(stopped);
                     self.take_unconsumed();
                     // The stop's last progress may have freed the network's
                     // memory the port held: it goes home now, beside the
@@ -2603,7 +2616,7 @@ where
                     if let StopCause::Device(fault) = observed.cause {
                         return Err(Unwatched::Device {
                             fault,
-                            observations: observed.observations,
+                            outstanding: observed.outstanding,
                         });
                     }
                     if let ControlFlow::Break(end) = ended {
@@ -2621,8 +2634,11 @@ where
     /// with the port. A unit goes back to its ring, until the port refuses
     /// one.
     fn take_unconsumed(&mut self) {
-        let _kept: Result<Unconsumed, UnconsumedRefused> =
-            self.port.take_unconsumed(&mut self.homes);
+        // What the homes refused again stays with the port, counted in its
+        // outstanding units.
+        if let Some(stopped) = self.stopped.as_ref() {
+            let _kept = self.port.take_unconsumed(stopped, &mut self.homes);
+        }
         while self.homes.unrecycled.is_none()
             && let Some((frame, _)) = self.homes.cut.pop_front()
         {
@@ -2769,6 +2785,100 @@ where
     /// The port, for the composition's release once the stop is confirmed.
     pub fn port_mut(&mut self) -> &mut P {
         &mut self.port
+    }
+
+    /// Poll the radio's start on the BSS's channel with the confirmed
+    /// stop's proof: the proof goes back to the runner while the start is
+    /// pending or once it is refused, and is spent once it started.
+    /// Without a proof (a stop that did not confirm) or with a stale one,
+    /// the start is refused as one of a radio not stopped.
+    fn poll_start(
+        &mut self,
+        cx: &mut Context<'_>,
+        now: Instant,
+    ) -> Poll<Result<(), StartRefused<PortFault<'id, P>>>> {
+        let Some(stopped) = self.stopped.take() else {
+            return Poll::Ready(Err(StartRefused::Running));
+        };
+        match self.port.poll_start(cx, stopped, self.homes.channel, now) {
+            StartPoll::Started => Poll::Ready(Ok(())),
+            StartPoll::Pending(stopped) => {
+                self.stopped = Some(stopped);
+                Poll::Pending
+            }
+            StartPoll::Refused(stopped, failure) => {
+                self.stopped = Some(stopped);
+                Poll::Ready(Err(failure.into()))
+            }
+            StartPoll::Unstopped { cause, stop } => {
+                Poll::Ready(Err(StartRefused::Unstopped { cause, stop }))
+            }
+            StartPoll::Stale(_) => Poll::Ready(Err(StartRefused::Running)),
+        }
+    }
+
+    /// The port's stop, as a test polls it: a confirmed stop's proof stays
+    /// with the runner.
+    #[cfg(test)]
+    fn poll_stop(
+        &mut self,
+        cx: &mut Context<'_>,
+        now: Instant,
+    ) -> Poll<Result<(), StopUnconfirmed<PortFault<'id, P>>>> {
+        self.port.poll_stop(cx, now).map(|stopped| {
+            stopped.map(|stopped| {
+                self.stopped = Some(stopped);
+            })
+        })
+    }
+
+    /// The port's `take_unconsumed` into the homes, as a test calls it,
+    /// with the runner's stop's proof; `None` without one.
+    #[cfg(test)]
+    fn unconsumed(
+        &mut self,
+    ) -> Option<
+        Result<
+            oer_protocols_ieee80211_contracts_port::Unconsumed,
+            oer_protocols_ieee80211_contracts_port::StaleProof<()>,
+        >,
+    > {
+        let stopped = self.stopped.as_ref()?;
+        Some(self.port.take_unconsumed(stopped, &mut self.homes))
+    }
+
+    /// The stopped port with its confirmed stop's proof, for the
+    /// composition's cleanup: no proof while the radio's stop did not
+    /// confirm.
+    pub fn stopped_port(&mut self) -> (&mut P, Option<&Stopped<'id>>) {
+        (&mut self.port, self.stopped.as_ref())
+    }
+
+    /// Retire and release the stopped port, once its run ended: what the
+    /// binding needs to give the radio up.
+    ///
+    /// # Errors
+    ///
+    /// What blocks it; the runner keeps its stop's proof.
+    pub fn release(
+        &mut self,
+    ) -> Result<<P as DataPort<'id>>::Released<'_>, ApReleaseRefused<PortFault<'id, P>>> {
+        let Some(stopped) = self.stopped.take() else {
+            return Err(ApReleaseRefused::NotStopped);
+        };
+        let retired: Retired<'id> = match self.port.retire(stopped) {
+            Ok(retired) => retired,
+            Err(ProofRefused::Refused(stopped, outstanding)) => {
+                self.stopped = Some(stopped);
+                return Err(ApReleaseRefused::Held(outstanding));
+            }
+            Err(ProofRefused::Stale(stale)) => {
+                return Err(ApReleaseRefused::Stale(stale.installation));
+            }
+        };
+        self.port
+            .release(retired)
+            .map_err(|stale| ApReleaseRefused::Stale(stale.installation))
     }
 
     /// The access point's status now.
