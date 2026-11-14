@@ -7657,8 +7657,14 @@ fn the_rule_lists_name_their_removers() {
         COMPATIBILITY,
         RAW_REGISTERS,
         RAW_BYTES,
+        DOOR_CALLERS,
     ] {
         for (entry, _, remover) in list {
+            assert!(!remover.is_empty(), "{entry}");
+        }
+    }
+    for list in [STATE_FLAGS, OPTION_SLOTS, BOOL_PARAMETERS] {
+        for (entry, remover) in list {
             assert!(!remover.is_empty(), "{entry}");
         }
     }
@@ -7782,3 +7788,3136 @@ fn t8c_print() {
         std::println!("];");
     }
 }
+
+// ---- K0: a state is a sum, and one function calls a port's transition -----
+
+/// K0's packages: the protocols, the Wi-Fi radio crates, the applications'
+/// entries and `oer`, but testing packages and models.
+fn state_code(path: &str) -> bool {
+    let wifi = path.starts_with("chips/") && path.contains("/radio/ieee80211");
+    let app = path.starts_with("chips/") && path.ends_with("/app");
+    (path.starts_with("protocols/") || wifi || app || path == "oer")
+        && !path.split('/').any(|part| part == "testing")
+        && !path.ends_with("/model")
+}
+
+/// The door scan's packages: K0's that can hold a data port (the Wi-Fi
+/// protocols, radio crates and entries), but the port that implements it
+/// (the S31 backend; the model and the conformance suite are testing
+/// packages).
+fn door_code(path: &str) -> bool {
+    let wifi = path.starts_with("protocols/ieee80211") || path.contains("/radio/ieee80211");
+    state_code(path)
+        && (wifi || path.ends_with("/app") || path == "oer")
+        && path != "chips/esp32s31/radio/ieee80211/backend"
+}
+
+/// The parts of `tokens` between top-level commas, the angle brackets of a
+/// type counted (an arrow's `>` is not one).
+fn comma_parts(tokens: &[TokenTree]) -> Vec<&[TokenTree]> {
+    let mut parts = Vec::new();
+    let mut depth = 0_i32;
+    let mut start = 0;
+    for (index, token) in tokens.iter().enumerate() {
+        if let TokenTree::Punct(punct) = token {
+            let arrow = index
+                .checked_sub(1)
+                .is_some_and(|before| punct_at(tokens, before, '-'));
+            match punct.as_char() {
+                '<' => depth += 1,
+                '>' if !arrow => depth -= 1,
+                ',' if depth == 0 => {
+                    parts.extend(tokens.get(start..index));
+                    start = index + 1;
+                }
+                _ => {}
+            }
+        }
+    }
+    if start < tokens.len() {
+        parts.extend(tokens.get(start..));
+    }
+    parts
+}
+
+/// A named field or a parameter: its name and its type's tokens, the
+/// attributes, the visibility and a binding's `mut` passed over.
+fn named_part(part: &[TokenTree]) -> Option<(String, &[TokenTree])> {
+    let mut at = 0;
+    loop {
+        match part.get(at)? {
+            TokenTree::Punct(hash) if hash.as_char() == '#' => at += 2,
+            TokenTree::Ident(word) if word == "pub" || word == "mut" => {
+                at += 1;
+                if group_at(part, at, Delimiter::Parenthesis).is_some() {
+                    at += 1;
+                }
+            }
+            _ => break,
+        }
+    }
+    let name = ident_at(part, at)?;
+    (punct_at(part, at + 1, ':') && !punct_at(part, at + 2, ':'))
+        .then(|| (name, part.get(at + 2..).unwrap_or(&[])))
+}
+
+/// Whether a type's tokens are `bool`.
+fn is_bool(ty: &[TokenTree]) -> bool {
+    matches!(ty, [TokenTree::Ident(word)] if word == "bool")
+}
+
+/// Whether a type's tokens are an `Option<…>`.
+fn is_option(ty: &[TokenTree]) -> bool {
+    let words = ty
+        .iter()
+        .take_while(|token| !matches!(token, TokenTree::Punct(punct) if punct.as_char() == '<'))
+        .filter_map(|token| match token {
+            TokenTree::Ident(word) => Some(word.to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    words.last().is_some_and(|word| word == "Option")
+        && ty
+            .iter()
+            .any(|token| matches!(token, TokenTree::Punct(punct) if punct.as_char() == '<'))
+}
+
+/// The item named after the keyword `keyword` at `at`, and the first group
+/// of `delimiter` after its name and generics, before a `;`.
+fn item_group<'t>(
+    tokens: &'t [TokenTree],
+    at: usize,
+    keyword: &str,
+    delimiter: Delimiter,
+) -> Option<(String, &'t proc_macro2::Group)> {
+    if ident_at(tokens, at)? != keyword {
+        return None;
+    }
+    let name = ident_at(tokens, at + 1)?;
+    let mut index = at + 2;
+    while let Some(token) = tokens.get(index) {
+        match token {
+            TokenTree::Group(group) if group.delimiter() == delimiter => {
+                return Some((name, group));
+            }
+            TokenTree::Punct(punct) if punct.as_char() == ';' => return None,
+            TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => return None,
+            _ => index += 1,
+        }
+    }
+    None
+}
+
+/// A struct's name and its named fields, each with its type's tokens.
+type Fields = (String, Vec<(String, Vec<TokenTree>)>);
+
+/// The named fields of the struct at `at`: their names and types.
+fn struct_fields(tokens: &[TokenTree], at: usize) -> Option<Fields> {
+    let (name, body) = item_group(tokens, at, "struct", Delimiter::Brace)?;
+    let body = body.stream().into_iter().collect::<Vec<_>>();
+    let fields = comma_parts(&body)
+        .into_iter()
+        .filter_map(named_part)
+        .map(|(field, ty)| (field, ty.to_vec()))
+        .collect();
+    Some((name, fields))
+}
+
+/// `STATE_FLAGS`: a struct with two or more `bool` fields, by name.
+fn state_flags_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let (name, fields) = struct_fields(tokens, at)?;
+    (fields.iter().filter(|(_, ty)| is_bool(ty)).count() >= 2).then_some(name)
+}
+
+/// `BOOL_PARAMETERS`: a function with a `bool` parameter, by name.
+fn bool_parameter_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let (name, parameters) = item_group(tokens, at, "fn", Delimiter::Parenthesis)?;
+    let parameters = parameters.stream().into_iter().collect::<Vec<_>>();
+    comma_parts(&parameters)
+        .into_iter()
+        .filter_map(named_part)
+        .any(|(_, ty)| is_bool(ty))
+        .then_some(name)
+}
+
+/// What a slot's use at `at` does to the field it names: `.field.take()`,
+/// `.replace(…)`, `.insert(…)`, `.get_or_insert…`, or `.field = Some(…)` /
+/// `= None`.
+fn slot_use_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    if !punct_at(tokens, at, '.') {
+        return None;
+    }
+    let field = ident_at(tokens, at + 1)?;
+    if punct_at(tokens, at + 2, '.') {
+        let method = ident_at(tokens, at + 3)?;
+        let fills = ["take", "replace", "insert"].contains(&method.as_str())
+            || method.starts_with("get_or_insert");
+        return (fills && group_at(tokens, at + 4, Delimiter::Parenthesis).is_some())
+            .then_some(field);
+    }
+    let assigns = matches!(
+        tokens.get(at + 2),
+        Some(TokenTree::Punct(equals)) if equals.as_char() == '='
+            && equals.spacing() == proc_macro2::Spacing::Alone
+    );
+    let value = ident_at(tokens, at + 3);
+    (assigns && value.is_some_and(|value| value == "Some" || value == "None")).then_some(field)
+}
+
+/// The production code of the packages `select` takes, by crate: what
+/// `find` reports of each token, with its file below the root.
+fn crate_hits(select: &Select, find: &Finder) -> Vec<Vec<(String, String)>> {
+    let root = root();
+    let mut crates = Vec::new();
+    for (path, manifest) in packages(&root) {
+        if !select(&path) {
+            continue;
+        }
+        for crate_root in crate_roots(&root.join(&path), &manifest) {
+            let mut hits = Vec::new();
+            walk_crate_root(&crate_root, &mut |file: &Path, seen: Seen<'_>| {
+                let file = file.strip_prefix(&root).map_or_else(
+                    |_| file.display().to_string(),
+                    |file| file.display().to_string(),
+                );
+                if let Seen::Token(tokens, at) = seen
+                    && let Some(what) = find(tokens, at)
+                {
+                    hits.push((file, what));
+                }
+            });
+            crates.push(hits);
+        }
+    }
+    crates
+}
+
+/// `OPTION_SLOTS`: an `Option` field its own crate fills or takes, as
+/// `file::Struct.field`.
+fn option_slots(select: &Select) -> BTreeSet<String> {
+    let fields: &Finder = &|tokens, at| {
+        let (name, fields) = struct_fields(tokens, at)?;
+        let options = fields
+            .iter()
+            .filter(|(_, ty)| is_option(ty))
+            .map(|(field, _)| field.as_str())
+            .collect::<Vec<_>>();
+        (!options.is_empty()).then(|| std::format!("{name} {}", options.join(" ")))
+    };
+    let uses: &Finder = &|tokens, at| slot_use_at(tokens, at).map(|field| std::format!(".{field}"));
+    let both: &Finder = &|tokens, at| fields(tokens, at).or_else(|| uses(tokens, at));
+    let mut slots = BTreeSet::new();
+    for hits in crate_hits(select, both) {
+        let used = hits
+            .iter()
+            .filter_map(|(_, what)| what.strip_prefix('.'))
+            .collect::<BTreeSet<_>>();
+        for (file, what) in &hits {
+            let mut words = what.split(' ');
+            let Some(name) = words.next().filter(|name| !name.starts_with('.')) else {
+                continue;
+            };
+            for field in words.filter(|field| used.contains(field)) {
+                slots.insert(std::format!("{file}::{name}.{field}"));
+            }
+        }
+    }
+    slots
+}
+
+/// `file::name` for each hit, once.
+fn by_path(hits: &[(String, String)]) -> BTreeSet<String> {
+    hits.iter()
+        .map(|(file, name)| std::format!("{file}::{name}"))
+        .collect()
+}
+
+/// The paths of a scan against its list: a new one and an entry with no
+/// hit both fail.
+fn assert_paths(found: &BTreeSet<String>, list: &[(&str, &str)]) {
+    let listed = list.iter().map(|(path, _)| *path).collect::<BTreeSet<_>>();
+    let new = found
+        .iter()
+        .filter(|path| !listed.contains(path.as_str()))
+        .map(|path| std::format!("new: {path}"));
+    let gone = listed
+        .iter()
+        .filter(|path| !found.contains(**path))
+        .map(|path| std::format!("gone, remove its entry: {path}"));
+    let differences = new.chain(gone).collect::<Vec<_>>();
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+/// The door scan: a call of a data port's transition (`poll_start`,
+/// `poll_stop`, `take_unconsumed`, `clean`, `retire`, `reinstall`,
+/// `release`, `recover_for_stop`) by method name.
+fn door_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    if !punct_at(tokens, at, '.') {
+        return None;
+    }
+    let method = ident_at(tokens, at + 1)?;
+    let door = [
+        "poll_start",
+        "poll_stop",
+        "take_unconsumed",
+        "clean",
+        "retire",
+        "reinstall",
+        "release",
+        "recover_for_stop",
+    ]
+    .contains(&method.as_str());
+    (door && group_at(tokens, at + 2, Delimiter::Parenthesis).is_some()).then_some(method)
+}
+
+#[test]
+fn state_flags_are_listed_and_only_shrink() {
+    assert_paths(
+        &by_path(&scan_hits(&state_code, &state_flags_at, NO_ATTRIBUTE)),
+        STATE_FLAGS,
+    );
+}
+
+#[test]
+fn option_slots_are_listed_and_only_shrink() {
+    assert_paths(&option_slots(&state_code), OPTION_SLOTS);
+}
+
+#[test]
+fn bool_parameters_are_listed_and_only_shrink() {
+    assert_paths(
+        &by_path(&scan_hits(&state_code, &bool_parameter_at, NO_ATTRIBUTE)),
+        BOOL_PARAMETERS,
+    );
+}
+
+#[test]
+fn only_a_port_and_its_suite_call_a_ports_transition() {
+    assert_scan(&scan_hits(&door_code, &door_at, NO_ATTRIBUTE), DOOR_CALLERS);
+}
+
+/// The K0 finders on a source of each shape, its tests skipped.
+#[test]
+fn the_state_scans_find_their_shapes_and_skip_tests() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let source = directory.path().join("lib.rs");
+    std::fs::write(
+        &source,
+        r#"
+pub struct Flags<T: Copy> { pub(crate) running: bool, #[doc = "x"] stopping: bool, value: T }
+pub struct One { running: bool, slot: Option<u8>, datum: Option<Vec<u8>> }
+fn f(this: &mut One, mut start: bool, f: fn(u8) -> bool) {
+    let _ = this.slot.take();
+    this.datum = None;
+    this.datum.as_ref();
+    port.retire(stopped);
+}
+#[cfg(test)]
+mod tests {
+    struct T { a: bool, b: bool }
+    fn t(x: bool) { port.release(r); }
+}
+"#,
+    )
+    .expect("source");
+    let finders: [(&str, &Finder); 4] = [
+        ("flags", &state_flags_at),
+        ("parameters", &bool_parameter_at),
+        ("uses", &slot_use_at),
+        ("doors", &door_at),
+    ];
+    let mut found = BTreeMap::<&str, Vec<String>>::new();
+    walk_file(&source, &mut |_: &Path, seen: Seen<'_>| {
+        if let Seen::Token(tokens, at) = seen {
+            for (name, find) in &finders {
+                if let Some(hit) = find(tokens, at) {
+                    found.entry(name).or_default().push(hit);
+                }
+            }
+        }
+    });
+    assert_eq!(found["flags"], ["Flags"]);
+    assert_eq!(found["parameters"], ["f"]);
+    assert_eq!(found["uses"], ["slot", "datum"]);
+    assert_eq!(found["doors"], ["retire"]);
+}
+
+#[test]
+#[ignore = "prints the K0 lists from the scans' hits"]
+fn k0_print() {
+    let print = |name: &str, paths: &BTreeSet<String>| {
+        std::println!("const {name}: &[(&str, &str)] = &[");
+        for path in paths {
+            std::println!("    ({path:?}, {}),", remover_name(path));
+        }
+        std::println!("];");
+    };
+    print(
+        "STATE_FLAGS",
+        &by_path(&scan_hits(&state_code, &state_flags_at, NO_ATTRIBUTE)),
+    );
+    print("OPTION_SLOTS", &option_slots(&state_code));
+    print(
+        "BOOL_PARAMETERS",
+        &by_path(&scan_hits(&state_code, &bool_parameter_at, NO_ATTRIBUTE)),
+    );
+    std::println!("const DOOR_CALLERS: &[(&str, usize, &str)] = &[");
+    for (file, count) in by_file(&scan_hits(&door_code, &door_at, NO_ATTRIBUTE)) {
+        std::println!("    ({file:?}, {count}, {}),", remover_name(&file));
+    }
+    std::println!("];");
+}
+
+/// K0, `STATE_FLAGS`: a struct with two or more `bool` fields, by path: a
+/// state kept as flags. The list only shrinks.
+const STATE_FLAGS: &[(&str, &str)] = &[
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/datapath/mod.rs::DatapathControlContext",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::MpduParameters",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::MpduValues",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::OnAir",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq.rs::IrqSnapshot",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/model.rs::MacInterruptModel",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx.rs::HeMuSignal",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx.rs::HeSuSignal",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx.rs::HtSignal",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::HtDuplicateTxLinkCapabilities",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::MpduOf",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::PortSettings",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs::WifiRxExhaustion",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxDescriptorCounts",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxDeviceView",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxSessionView",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxWalkerView",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/transaction/observation.rs::ServiceObservation",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/chip.rs::Config",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/failure.rs::PowerError",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/observation.rs::StationTxAmpdu",
+        BY_P2,
+    ),
+    (
+        "chips/family/app/src/diagnostics.rs::NetworkDiagnostics",
+        BY_NONE,
+    ),
+    ("chips/family/app/src/observe/connect.rs::Heard", BY_NONE),
+    (
+        "chips/family/app/src/observe/network.rs::TurnTally",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/tracking.rs::Branches",
+        BY_NONE,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::HeLowMetricReportFeatures",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::PhyModeSelectionInput",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::RateDecode",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::StaRateControlAssociationInput",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_record.rs::BeamformingReportRate",
+        BY_P3,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/advertising.rs::LeLegacyAdvertisingPrimaryChannels",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/scanning.rs::LeLegacyScanParameters",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection/acknowledgement.rs::Acknowledgement",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/security.rs::LePeripheralEncryptionProcedure",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/port/src/capabilities.rs::LeRadioCapabilities",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/port/src/capabilities.rs::LegacyAdvertisingTypes",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/hil/protocol/src/framing.rs::FrameDecoder",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/capabilities.rs::RateSupport",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/contract.rs::MacInterfaceCapabilities",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/data_port.rs::Facts",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/he.rs::HeBssColor",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/owner.rs::QosControl",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/coordinator.rs::ApBands",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/installation/src/lib.rs::Flight",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/installation/src/lib.rs::Waits",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::AccessPointService",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApAssociationCapabilities",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeerStatus",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/events.rs::ScanHeard",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::RxLink",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::StaTxBlockAck",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::ModemSleep",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::PmNullFlags",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::PmTim",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::PmTraffic",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/twt.rs::IndividualTwtAgreement",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/element.rs::ManagementFrameProtection",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxAddbaRequest",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckSession",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes",
+        BY_P2,
+    ),
+    ("protocols/ieee80211/runtime/src/datapath.rs::Actor", BY_P2),
+    ("protocols/ieee80211/runtime/src/datapath.rs::Stage", BY_P2),
+    (
+        "protocols/ieee80211/runtime/src/datapath/messages.rs::StopObserved",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath/turn.rs::Collected",
+        BY_P2,
+    ),
+    ("protocols/ieee80211/runtime/src/lifecycle.rs::Inner", BY_P2),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::LinkCustody",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/reconnect.rs::Policy",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ApAssociationSecurityObservation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ApProtectedDataFrame",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ApProtectedDataPrefix",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/fragmentation.rs::OpenDataFragment",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ftm.rs::FtmResponseParameters",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/he.rs::He20Capabilities",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/he.rs::He20Operation", BY_P3),
+    ("protocols/ieee80211/wire/src/he.rs::He20PeerState", BY_P3),
+    (
+        "protocols/ieee80211/wire/src/ndpa.rs::HeNdpaStationEncoding",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/scan.rs::ScanRecord", BY_P3),
+    (
+        "protocols/ieee80211/wire/src/station/association.rs::AssociationResponse",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/station_beacon.rs::StaTimObservation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/trigger.rs::TriggerCommonEncoding",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/trigger.rs::TriggerCommonInfo",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/trigger.rs::TriggerResponseSchedulingControl",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/trigger.rs::TriggerScheduledUserEncoding",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/trigger.rs::TriggerUserRuInfo",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/trigger.rs::TriggerUserSpatialStreamInfo",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/twt.rs::IndividualTwtControl",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/twt.rs::IndividualTwtParameterSet",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee802154/port/src/link_metrics.rs::LinkMetrics",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee802154/port/src/pending.rs::AckPending",
+        BY_NONE,
+    ),
+    ("protocols/network/core/src/machine.rs::Socket", BY_PHASE_C),
+    (
+        "protocols/network/runtime/src/local.rs::Producer",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/observation.rs::TurnEnd",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Bound",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Returned",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Turned",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::Socket",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/radio/port/src/slot.rs::SlotJoin",
+        BY_RADIO_SYSTEM,
+    ),
+];
+/// K0, `OPTION_SLOTS`: an `Option` field its own crate takes, replaces,
+/// inserts into or assigns `Some`/`None` to, by `file::Struct.field`: a
+/// slot filled and taken. It names a field by its name in the crate, so a
+/// field of another struct of that name counts it. The list only shrinks.
+const OPTION_SLOTS: &[(&str, &str)] = &[
+    (
+        "chips/esp32s31/app/src/lib.rs::Boot.access_point_device",
+        BY_P2,
+    ),
+    ("chips/esp32s31/app/src/lib.rs::Boot.app_alarm", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.boot_id", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.device", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.entropy", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.observe", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.radio", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.timer", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.timers", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.urgent", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::GroupBoot.observe", BY_P2),
+    (
+        "chips/esp32s31/app/src/lib.rs::GroupPeripherals.access_point",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/app/src/lib.rs::GroupPeripherals.device",
+        BY_P2,
+    ),
+    ("chips/esp32s31/app/src/lib.rs::Handed.access_point", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Handed.device", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Pending.access_point", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Pending.datapath", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Pending.station", BY_P2),
+    ("chips/esp32s31/app/src/observed.rs::Sampler.ended", BY_P2),
+    ("chips/esp32s31/app/src/wifi.rs::Device.network", BY_P2),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.block_ack",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.completion",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.format",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.interface",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.named",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.access_point_tsf",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.active_reads",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.he",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.he_bss",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.tbtt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::LowerMacCore.fault",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::LowerMacCore.tbtt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/ampdu.rs::AmpduBudget.he",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Chain.admission",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Esp32s31TxArena.fault",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Esp32s31TxArena.program",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::SingleRetry.air_rate",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs::CoreOwner.bank",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs::VacantView.bank",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/consumer.rs::IrqPublication.receive",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/model.rs::MacInterruptModel.fatal_assertion_raw",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/local_time.rs::MacTimeline.last",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rate/low.rs::MacLowRateSession.hardware",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx/pool.rs::NetworkRxFrame.times",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::HeAmpduTxConfig.trigger_based",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::HeTriggerBasedTxConfig.runtime_handoff_window_micros",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::TxSlot.home",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs::HtAmpduTxStorage.trigger_publication_snapshot",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs::HtAmpduTxStorage.trigger_reservation",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs::RetainedDmaAmpduTx.dma",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs::RetainedDmaAmpduTx.storage",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxOwner.active",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxOwner.last_outcome",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxParked.last_outcome",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxReport.completion",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::Buffer.admission",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::Execution.beacon",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::NetworkBuffer.admission",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.active",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.actor",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.continuation",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.failed_retune",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.power",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.retune",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::StallOwner.after",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.arena",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.barrier",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.closing",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.configuring",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.observations",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.retained_group",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.air",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.beacon",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.try_work",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Sink.tbtt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.access_point_holding",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.access_point_since",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.deadline",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.fault",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.group_mutator",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.group_since",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.holding",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.receipt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.waker",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::PortSettings.color",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::PortSettings.he",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/keys.rs::Removing.place",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::CallPlace.item",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::CallPlace.vacancy",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs::WifiRetunePending.immediate",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs::WifiRetunePending.pending",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs::WifiRxExhaustion.next_after_doorbell",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxStallSnapshot.hardware",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs::Receiver.full_since",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs::RecycledProbe.wait",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.full_since",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_close_started",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_mask_started",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_settle",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_stop_deadline",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/chip.rs::Config.target",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/radio.rs::Platform.power",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Cleaned.removed",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Freed.removed",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Freed.unkept",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Returning.removed",
+        BY_P2,
+    ),
+    (
+        "chips/family/app/src/observe/connect.rs::Connect.ended",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/connect.rs::Visit.ended",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/network.rs::TurnTally.publish",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/profile.rs::ProfileTally.began",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/profile.rs::ProfileTally.ended",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/profile.rs::ProfileTally.gap",
+        BY_NONE,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_selection.rs::EspressifRateSelection.control",
+        BY_P3,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/acl.rs::LeHostAclPacket.in_flight_end",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/dtm.rs::LeDtmCommandCompleteEvent.packet_count",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/scanning.rs::LeLegacyScanningConfiguration.parameters",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/h4.rs::CommandReceiver.expected",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/bootstrap.rs::LeControllerBootstrap.host_buffers",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/bootstrap.rs::LeControllerBootstrap.requested_random_address",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Pending.admitted",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Pending.config",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service.lease",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service.pending",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service.response",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service.retained",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnection.pending_channel_map",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnection.pending_connection_update",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionEventCompleted.connection_timing_transition",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionEventPrepared.connection_timing_transition",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionRecurringEventProvisional.connection_timing_transition",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection/acknowledgement.rs::Acknowledgement.in_flight",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.data_length_request",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.peer_features",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.peer_version",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.remote_features_result",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.remote_version_result",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.termination",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/hil/agent/src/capture/collector.rs::State.failure",
+        BY_NONE,
+    ),
+    (
+        "protocols/hil/agent/src/capture/collector.rs::State.identity",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiConfig.monitor",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiPlan.monitor",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/coordinator.rs::ChannelCoordinator.last_follow",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::AbsenceTerminal.then_leave",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.absence",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.cycle",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.primary",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.absence_end",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.absence_started",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.announce",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.leave",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.moved",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.primary_end",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.primary_started",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.start",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::StationPlaceReturns.absence",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::StationPlaceReturns.lease",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs::EspNowPeerSlot.config",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs::EspNowEncryptedPeerSlot.state",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs::EspNowPmkOwner.key",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/installation/src/lib.rs::Machine.goal",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/beacon.rs::ApBeacon.channel_switch",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/beacon.rs::ApBeacon.next_publication",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/engine.rs::ApEngine.probe_after",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/engine.rs::ApEngine.tsf_epoch",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.authenticator",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.pmk",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.pmkid",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.wpa2_retry_alarm",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::ArenaBook.published",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::ArenaBook.right",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataLink.retry",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataPlane.link",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataPlane.rate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/events.rs::AggregateSettled.rate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/ftm.rs::FtmPartialResult.pending",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/ftm.rs::SessionData.last_measurement",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/ftm.rs::SessionData.pending",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::LinkHandover.data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::RxLink.replay",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link_monitor.rs::StaBeaconMonitor.deadline",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link_monitor.rs::StaBeaconMonitor.last_observation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.background",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.block_ack",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.confirmation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.report",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.rsn",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.fault",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.management",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.replay",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Handshake.management",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Handshake.supplicant",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Keys.group_permission",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Keys.stray",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::NewConnection.confirmation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::NewHandshake.management",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::NewHandshake.supplicant",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.configuration",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.notice",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.profile",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.absence_place",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.configuration",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.place",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.profile",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::StationRestart.notice",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.absence_place",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.configuration",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.place",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.profile",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/group_keys.rs::GroupKeys.current",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.group",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.request",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.response",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::StaTxBlockAck.pending",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::PhaseTiming.deadline",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/request.rs::StationScanChannelOrderIter.preferred",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/sa_query.rs::StationSaQuery.active",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator.rs::RsnAuthenticator.association_security_binding",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator.rs::RsnAuthenticator.pending_ptk",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.keys",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.own",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.peer_commit",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.stored_confirm",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/retry.rs::RsnRetry.pending",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/sae.rs::SaeComebackTokens.key_drawn",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::RsnApState.latest_built",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnConnectedSupplicant.completed_group_message1",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnStaSupplicant.completed_message3",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnStaSupplicant.ptk",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/aggregate.rs::AmpduRun.previous",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Bank.active",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Bank.free",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Header.association",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/originator.rs::Agreement.alarm",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/originator.rs::Agreement.due",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckSession.gap",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/reorder.rs::RxReorderRelease.rejected",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/fragmentation/reassembly.rs::ReassemblySlot.identity",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/monitor.rs::MonitorFilter.any_address",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/monitor.rs::MonitorFilter.minimum_rssi_dbm",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacIndividualRetries.final_rate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::ApRunner.starting",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::ApRunner.stopped",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.association",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.beacon",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.broken",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.configure",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.fault",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_pending",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_permission",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_slot",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.held",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.kept",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.returned",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.stopped_on",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unaccepted",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unkept",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unrecycled",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.armed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.end",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.group",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.held",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.held_back",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.link",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.pairwise",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.reply_out",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.retired",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.rx_later",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.sequence_hold",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.starting",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.stash",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.stopped",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::DataTx.plane",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.gate",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.pairwise",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.retuned",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.sequence",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.started",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.stopped",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.tbtt",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.completed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.group",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.link",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.link_return",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.pairwise",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.returned",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unaccepted",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unkept",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unrecycled",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Stage.group_terminal",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Stage.tbtt",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.arbiter",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.armed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.confirmed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.end",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.ending",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.group",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.lesson",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.pairwise",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.rejected",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.reply",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.retune",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::LinkCustody.epoch",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.arbiter",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.confirmed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.rejected",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle/inbox.rs::Answer.stopped",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/monitor/capture.rs::MonitorCaptureMetadata.channel",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/monitor/capture.rs::MonitorCaptureSink.channel",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/monitor/injection.rs::MonitorInjectionMailboxOwner.active",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.connect",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.disconnect",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.scan",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/control.rs::RunnerControl.endpoint",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/control.rs::Status.notice",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/reconnect.rs::Policy.next",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ApAssociationSecurityObservation.rsn_ie",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ApAssociationSecurityObservation.rsnxe",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::AddressFields.address3",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::AddressFields.address4",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::AddressFields.sequence_control",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::AddressFields.transmitter",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::DecodedHeader.address4",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::DecodedHeader.qos",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::MacHeader.address4",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::MacHeader.qos",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/sae.rs::SaeReceivedCommit.rejected_groups",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/sae.rs::SaeReceivedCommit.token",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ds_channel",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ht_capability_ie",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ht_operation_ie",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/security.rs::RsnAssociation.pmkid",
+        BY_P3,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.lease",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.link",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.owed",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.sent",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Configuration.lease",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Kept.outcome",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Kept.tag",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Socket.port",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Socket.prepared",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/owner.rs::NetworkOwner.broken",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/payload.rs::Payload.left",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/places.rs::Line.head",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/places.rs::Line.tail",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/places.rs::Place.next",
+        BY_PHASE_C,
+    ),
+    ("protocols/network/core/src/places.rs::Place.on", BY_PHASE_C),
+    (
+        "protocols/network/core/src/places.rs::Place.previous",
+        BY_PHASE_C,
+    ),
+    ("protocols/network/port/src/slot.rs::Slot.held", BY_PHASE_C),
+    (
+        "protocols/network/runtime/src/local.rs::Producer.at",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/local.rs::Producer.ends",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/local.rs::Producer.hold",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/local.rs::Producer.socket",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Bound.closing",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Bound.open",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Ended.returns",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Service.ended",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Service.pressure_at",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Service.returns",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Service.watch",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::Inbound.stopped",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::Socket.inbound",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/wire/src/checksum.rs::Checksum.odd",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/radio/port/src/pool/fifo.rs::Place.ticket",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/radio/port/src/slot.rs::SlotRegistration.invocation",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/radio/port/src/slot.rs::SlotRegistration.owner",
+        BY_RADIO_SYSTEM,
+    ),
+];
+/// K0, `BOOL_PARAMETERS`: a function with a `bool` parameter, by path (one
+/// entry for same-named functions of a file). The list only shrinks.
+const BOOL_PARAMETERS: &[(&str, &str)] = &[
+    ("chips/esp32s31/app/src/cpu.rs::counters", BY_P2),
+    (
+        "chips/esp32s31/app/src/observed.rs::diagnose_network",
+        BY_P2,
+    ),
+    ("chips/esp32s31/app/src/pilot.rs::sample", BY_P2),
+    ("chips/esp32s31/app/src/wifi.rs::chip", BY_P2),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/cooperative_hardware.rs::connect_he20_bss",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/cooperative_hardware.rs::set_power_save_tx_block",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::connect_he20_bss",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::set_power_save_tx_block",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::arena_single",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::connect_he20_bss",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::end_arena_service",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::plan_mpdu",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::set_monitor",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::set_power_save_tx_block",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::submit_checked",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::protection_matches",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::republish_single",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::serve",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle.rs::finish_retune",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs::configure_in_place",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/coex_runtime.rs::configure_itwt_pti",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/coex_runtime.rs::publish_itwt_pti",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/edca.rs::new",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rate/low.rs::configure_phy_low_rate",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rate/low.rs::from_enabled",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx.rs::view_ccmp_data_in",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::is_supported_by",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::new",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::with_trigger_flow_model",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::with_trigger_packet_counts_model",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/capacity.rs::can_commit_frame_in_capacity",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/length.rs::length_after_append",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/length.rs::push_with_hardware_he_control",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs::prepare_format",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::abort_cause",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::finish_aborted_attempt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::service_queued_single_attempt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::service_shared_edge",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port.rs::returns_quiet",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::returns_quiet",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::collect",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::complete",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::conclude",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::enqueue",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::next_try",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::owner_free_refusal",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::service_tx",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::served_tx",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::service_tx",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::turn",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs::lend_to",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs::poll_returns",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs::mac_interrupt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs::strict_refusable",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::bool",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs::quiet",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/transaction/hooks.rs::log_recycle_refused",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/transaction/hooks.rs::probe_reasons",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/chip.rs::new",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/radio.rs::returns_quiet",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/radio.rs::span",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::released_exit",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::retired",
+        BY_P2,
+    ),
+    ("chips/family/app/src/diagnostics.rs::switch", BY_NONE),
+    ("chips/family/app/src/observe/network.rs::ended", BY_NONE),
+    ("chips/family/app/src/observe/network.rs::waited", BY_NONE),
+    ("chips/family/app/src/observe/parts.rs::observe", BY_NONE),
+    ("chips/family/app/src/observe/profile.rs::waited", BY_NONE),
+    (
+        "chips/family/radio/ieee80211/policy/src/classification.rs::uses_fixed_per_packet_rate",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/lmac.rs::ampdu_retry_policy",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::beamforming_report_rate",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::beamforming_report_rate_for_metric",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::control_schedule",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::highest_dot11g",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::ht_metric_schedule",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_record.rs::new",
+        BY_P3,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/acl.rs::copy_from_ll",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/acl.rs::new",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/acl.rs::observe_fragment_completion",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/peripheral.rs::new",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/cipher/src/lib.rs::decrypt_ccm",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/cipher/src/lib.rs::decrypt_packet",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/cipher/src/lib.rs::encrypt_ccm",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/cipher/src/lib.rs::encrypt_packet",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/cipher/src/lib.rs::nonce",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/bootstrap.rs::dispatch",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection/acknowledgement.rs::receive",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::observe_transmission_completion",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::request_termination",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/security.rs::observe_transmission_completion",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/wire/src/channel.rs::new",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/data_port.rs::service_tx",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/engine.rs::eapol_sent",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::bss_protection",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service/power_save.rs::complete_buffered_group",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service/power_save.rs::complete_buffered_group_release",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service/power_save.rs::complete_buffered_unicast_release",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service/security.rs::observe_wpa2_transmit",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/association.rs::select_association_phy",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/association.rs::select_phy",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/ftm.rs::complete",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::for_test",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::hold",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::msdus",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/core/roles/sta/src/link.rs::new", BY_P3),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::receive",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::absence_over",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::data_link_up",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::encode_management",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::group_installed",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::group_removal",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::group_transition",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::handover_data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::lease_ended",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::owe_link",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::own_number",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::select",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::station_number",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::take_group_key",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/block_ack.rs::for_test",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/block_ack.rs::new",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/group_keys.rs::install",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/group_keys.rs::restore",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/management.rs::deadline",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::associate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::deadline",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::poll",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::coex_go_to_sleep",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::go_to_wake",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::null_done",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::null_done_into",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::process_tim",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::recalculate_slice",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::rx_data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::rx_data_into",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::send_null",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::tx_data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::tx_data_done",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::tx_data_done_into",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::tx_data_into",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::wake_ahead",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/receive.rs::scan_heard",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/security.rs::personal_rsn",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/twt.rs::complete_transmission",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/twt.rs::individual_twt_control",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/twt.rs::retry_or_finish_setup",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::commit_step",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::commit_step_with",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::draw_commit",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/frames/key_data.rs::new",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/frames/key_data.rs::parse_group_gtk_key_data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/frames/key_data.rs::parse_gtk_key_data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/frames/key_data.rs::parse_key_data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::complete_message2_mic",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::complete_message3_preparation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::complete_message4_mic",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::complete_ptk",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::message1",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/supplicant.rs::complete_key_data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/supplicant.rs::complete_key_install",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/supplicant.rs::complete_message3_mic",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/supplicant.rs::complete_ptk",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::complete_group_key_install",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::complete_key_install",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::complete_retry_install",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/ampdu.rs::discard",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/ampdu.rs::observe",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/ampdu.rs::observe_block_ack_request",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/ampdu.rs::resort",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/ampdu.rs::retain_or_unaggregate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::offer",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::request",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::request",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/reorder.rs::resynchronize_stale_initial_ampdu",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/session.rs::progress",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/duplicate.rs::is_duplicate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/duplicate.rs::is_known_duplicate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/fragmentation/reassembly.rs::admit_unfragmented",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/fragmentation/reassembly.rs::admit_unfragmented_in_epoch",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/protection.rs::ht_protects",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/protection/bss.rs::with",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/rate_selection.rs::learn",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/rate_selection.rs::learn_aggregate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/retry.rs::finish_or_retry",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/core/upper-mac/src/tx.rs::new", BY_P3),
+    (
+        "protocols/ieee80211/core/upper-mac/src/tx.rs::set_block_ack_operational",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/vif.rs::select",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::set_link",
+        BY_P2,
+    ),
+    ("protocols/ieee80211/runtime/src/datapath.rs::span", BY_P2),
+    ("protocols/ieee80211/runtime/src/datapath/rx.rs::rx", BY_P2),
+    (
+        "protocols/ieee80211/runtime/src/datapath/turn.rs::facts_again",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath/turn.rs::observed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/monitor/capture.rs::try_capture",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/network_return.rs::home",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/network_return.rs::return_left",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/network_return.rs::settled",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/reconnect.rs::command",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/reconnect.rs::observe",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/reconnect.rs::pending",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/reconnect.rs::ready",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/reconnect.rs::wanted",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ap_amsdu_frame_length",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::association_security_observation",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/ap.rs::new", BY_P3),
+    ("protocols/ieee80211/wire/src/ap/profile.rs::new", BY_P3),
+    ("protocols/ieee80211/wire/src/beacon.rs::set", BY_P3),
+    ("protocols/ieee80211/wire/src/beacon.rs::stamp", BY_P3),
+    (
+        "protocols/ieee80211/wire/src/block_ack/frame.rs::encode_addba_request",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/block_ack/frame.rs::encode_addba_response",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/block_ack/frame.rs::encode_delba",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/data.rs::plan_data_encapsulation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/data.rs::plan_data_encapsulation_with_he_control",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/data.rs::set_amsdu", BY_P3),
+    ("protocols/ieee80211/wire/src/data.rs::set_more_data", BY_P3),
+    ("protocols/ieee80211/wire/src/data.rs::set_order", BY_P3),
+    ("protocols/ieee80211/wire/src/data.rs::set_protected", BY_P3),
+    ("protocols/ieee80211/wire/src/eapol.rs::new", BY_P3),
+    (
+        "protocols/ieee80211/wire/src/extensions/wmm.rs::encode_wmm_parameter_element",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/extensions/wmm.rs::new", BY_P3),
+    ("protocols/ieee80211/wire/src/frame.rs::new", BY_P3),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::with_protected",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/frame.rs::with_retry", BY_P3),
+    ("protocols/ieee80211/wire/src/ftm.rs::new", BY_P3),
+    ("protocols/ieee80211/wire/src/he.rs::decode", BY_P3),
+    ("protocols/ieee80211/wire/src/phy.rs::new", BY_P3),
+    (
+        "protocols/ieee80211/wire/src/protection.rs::information",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/protection.rs::new", BY_P3),
+    (
+        "protocols/ieee80211/wire/src/sae.rs::anti_clogging_token",
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/sae.rs::encode", BY_P3),
+    ("protocols/ieee80211/wire/src/sae.rs::parse", BY_P3),
+    (
+        "protocols/ieee80211/wire/src/station/data/template.rs::new",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/station/data/template.rs::serves",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee802154/mac/src/security.rs::transmit_security",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee802154/mac/src/security.rs::transmit_security_with_csl",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee802154/port/src/owner.rs::set_automatic_acknowledgement",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee802154/port/src/owner.rs::set_pan_coordinator",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee802154/port/src/owner.rs::set_promiscuous",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee802154/port/src/pending.rs::ack_pending",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee802154/wire/src/enhanced_ack.rs::generate_enhanced_ack",
+        BY_NONE,
+    ),
+    ("protocols/network/core/src/machine.rs::commit", BY_PHASE_C),
+    ("protocols/network/core/src/neighbor.rs::learn", BY_PHASE_C),
+    (
+        "protocols/network/runtime/src/diagnostics.rs::new",
+        BY_PHASE_C,
+    ),
+    ("protocols/radio/port/src/slot.rs::invalid", BY_RADIO_SYSTEM),
+];
+/// K0, the door scan: calls of a data port's transitions by method name
+/// outside the port, its suite and (from K2) `runtime/src/installation.rs`,
+/// by file with their count. It names a method by its name, so a call of
+/// another type's `release` or `clean` counts. The list only shrinks.
+const DOOR_CALLERS: &[(&str, usize, &str)] = &[
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/radio.rs",
+        2,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs",
+        3,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs",
+        1,
+        BY_P2,
+    ),
+    ("protocols/ieee80211/core/installation/src/lib.rs", 6, BY_P3),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs",
+        1,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/runtime/src/access_point.rs", 12, BY_P2),
+    ("protocols/ieee80211/runtime/src/datapath.rs", 5, BY_P2),
+    ("protocols/ieee80211/runtime/src/datapath/turn.rs", 8, BY_P2),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle/step.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/control/operation.rs",
+        5,
+        BY_P2,
+    ),
+];

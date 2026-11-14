@@ -100,6 +100,21 @@ is gone both fail, so every list only shrinks:
     protocol packages, the `wire` crates among them. It misses an index of a
     slice of bytes named otherwise.
 
+- A state is a sum (`CLAUDE.md`). Over the protocols, the Wi-Fi radio
+  crates, the applications' entries and `oer`, lists that only shrink,
+  each entry a path so that a new one in a listed file still fails:
+  - `STATE_FLAGS`: a struct with two or more `bool` fields;
+  - `OPTION_SLOTS`: an `Option` field its own crate takes, replaces,
+    inserts into or assigns `Some`/`None` to (`file::Struct.field`, the
+    field found by its name in the crate);
+  - `BOOL_PARAMETERS`: a function with a `bool` parameter.
+- `DOOR_CALLERS`: calls of a data port's transitions (`poll_start`,
+  `poll_stop`, `take_unconsumed`, `clean`, `retire`, `reinstall`,
+  `release`, `recover_for_stop`) by method name, in the Wi-Fi packages but
+  the S31 backend that implements the port, by file with their count. Only
+  the port, its tests and suite, and the installation's `drive` call them;
+  every other caller is listed and only shrinks.
+
 - `EXTERNAL_ASYNC_CRATES`: the direct normal `embassy-sync` edge of the
   HIL agent.
 

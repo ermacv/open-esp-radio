@@ -683,6 +683,17 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   typestate or token; the world's (air, hardware, peers, time) a typed
   refusal or outcome. A `Busy` the caller's own state explains is a design
   defect.
+- A state is a sum: an enum whose variant holds exactly what exists in
+  it, no flag or slot beside it. A core is joined to its pump by a step
+  that yields one thing at a time and is resumed with its answer: what
+  answers at once (a call of the port) is asked inside the step, and only
+  what comes later (another task, the next turn, a deadline) is an input.
+  Neither side keeps a ticket, a flag "asked" or a slot for an answer; the
+  pump is a loop of one `match` with no field. A request's order is the
+  caller's type, a permit the request takes and its end returns, so a core
+  has no refusal for "not now, you already asked". The layer tests list
+  what is not yet so (`STATE_FLAGS`, `OPTION_SLOTS`, `BOOL_PARAMETERS`) and
+  who calls a port's transition outside the one function that may.
 - A guarantee is written down only with what enforces it: a type with a
   compile-fail test, or a stated run-time check. A type-level mechanism names
   the bug it prevents.
