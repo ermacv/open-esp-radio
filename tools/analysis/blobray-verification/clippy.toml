@@ -1,0 +1,34 @@
+# The workspace configuration, with the tools' thresholds.
+disallowed-methods = [
+    { path = "oer_chips_family_platform_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
+    { path = "core::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
+    { path = "core::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
+    { path = "std::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
+    { path = "std::mem::transmute", reason = "representation changes use typed conversions or a documented narrow boundary" },
+    { path = "core::hint::spin_loop", reason = "production radio code must yield through its executor or platform" },
+    # A typed DMA address comes from placed storage or a loan, made only in
+    # the chip's HAL `dma_address` module (docs/hardware-memory.md).
+    { path = "oer_portable_memory::DmaWindowAddress::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    { path = "oer_portable_memory::DmaRef::new_unchecked", reason = "typed DMA addresses come from the chip HAL's dma_address module" },
+    # Typed register blocks are claimed once, by the chip PAC's root from
+    # the single reset root (docs/unsafe.md, Generated access).
+    { path = "oer_portable_mmio::assume_owned", reason = "register blocks are claimed by the chip PAC's root from the single reset root" },
+    # Only the interrupt table's once gate constructs entry tokens. Binding
+    # independently checks table membership and refuses claimed storage.
+    { path = "oer_chips_family_platform_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
+]
+
+# The workspace panic lints (`unwrap_used`, `expect_used`, `panic`,
+# `indexing_slicing`) apply to production code; tests may assert freely.
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+
+# Check runtime-accessible const functions as well as ordinary code.
+suppress-restriction-lint-in-const = false
+
+# The developer's machine: the two lints of `A state is a sum` do not apply
+# to the tools (owner, 2026-11-15), so their thresholds are out of reach.
+max-struct-bools = 255
+max-fn-params-bools = 255
