@@ -1,4 +1,5 @@
-# The workspace configuration, with the tools' thresholds.
+# The tools' configuration, which every package under `tools/` reads but
+# the layer tests (their own file keeps the rule's thresholds).
 disallowed-methods = [
     { path = "oer_chips_family_platform_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
     { path = "core::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },

@@ -1,4 +1,5 @@
-# The workspace configuration, with the tools' thresholds.
+# The workspace configuration: the layer tests are the check and keep the
+# rule's thresholds, beside the tools' own.
 disallowed-methods = [
     { path = "oer_chips_family_platform_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
     { path = "core::mem::zeroed", reason = "zero initialization uses a Zeroable proof" },
@@ -28,7 +29,7 @@ allow-indexing-slicing-in-tests = true
 # Check runtime-accessible const functions as well as ordinary code.
 suppress-restriction-lint-in-const = false
 
-# The developer's machine: the two lints of `A state is a sum` do not apply
-# to the tools (owner, 2026-11-15), so their thresholds are out of reach.
-max-struct-bools = 255
-max-fn-params-bools = 255
+# A state is a sum (CLAUDE.md): more than one `bool` field is a state kept
+# as flags; a `bool` parameter selects behaviour.
+max-struct-bools = 1
+max-fn-params-bools = 0

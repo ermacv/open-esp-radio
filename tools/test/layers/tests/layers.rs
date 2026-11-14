@@ -8310,14 +8310,20 @@ fn bit_parameters(path: &str) -> bool {
     )
 }
 
-/// The Clippy configuration a package reads: its own, or the root's.
+/// The Clippy configuration a package reads, as Clippy finds it: the
+/// nearest `clippy.toml` from the package's directory up to the root.
 fn clippy_config_of(path: &str) -> (PathBuf, toml::Value) {
     let root = root();
-    let own = root.join(path).join("clippy.toml");
-    let file = if own.is_file() {
-        own
-    } else {
-        root.join("clippy.toml")
+    let mut directory = root.join(path);
+    let file = loop {
+        let candidate = directory.join("clippy.toml");
+        if candidate.is_file() || directory == root {
+            break candidate;
+        }
+        match directory.parent() {
+            Some(parent) => directory = parent.to_path_buf(),
+            None => break root.join("clippy.toml"),
+        }
     };
     let config = read_toml(&file);
     (file, config)
@@ -8370,6 +8376,7 @@ fn a_bool_lint_silenced_by_any_spelling_is_found() {
 #[test]
 fn every_clippy_config_holds_the_rules_thresholds() {
     let root = root();
+    let common = read_toml(&root.join("clippy.toml"));
     let mut problems = Vec::new();
     for (path, _) in packages(&root) {
         let (file, config) = clippy_config_of(&path);
@@ -8378,12 +8385,14 @@ fn every_clippy_config_holds_the_rules_thresholds() {
         } else {
             (1, i64::from(bit_parameters(&path)))
         };
-        if outside_the_bool_lints(&path) && !root.join(&path).join("clippy.toml").is_file() {
-            problems.push(std::format!("{path}: a tool reads the root's thresholds"));
-        }
-        if bit_parameters(&path) && !root.join(&path).join("clippy.toml").is_file() {
+        // The file the package reads keeps every common ban, wherever it
+        // stands: one between the root and the package checks for each
+        // package below it.
+        let missing = missing_lints(&config, &common, "disallowed-methods");
+        if !missing.is_empty() {
             problems.push(std::format!(
-                "{path}: a hardware layer reads the root's threshold 0"
+                "{path}: {} lost common bans: {missing:?}",
+                file.display()
             ));
         }
         if config
@@ -8402,7 +8411,8 @@ fn every_clippy_config_holds_the_rules_thresholds() {
             != Some(fn_bools)
         {
             problems.push(std::format!(
-                "{path}: max-fn-params-bools is not {fn_bools}"
+                "{path}: max-fn-params-bools is not {fn_bools} in {}",
+                file.display()
             ));
         }
     }
@@ -8429,15 +8439,10 @@ fn every_package_inherits_the_workspace_lints_and_no_more() {
     );
 }
 
-/// Where a Clippy configuration may stand: the root and a package's own
-/// directory, and never as `.clippy.toml`.
-fn clippy_config_misplaced(file: &Path, root: &Path, packages: &BTreeSet<PathBuf>) -> bool {
-    let name = file.file_name().and_then(std::ffi::OsStr::to_str);
-    if name == Some(".clippy.toml") {
-        return true;
-    }
-    let directory = file.parent().unwrap_or(root);
-    name == Some("clippy.toml") && directory != root && !packages.contains(directory)
+/// Whether `file` is a Clippy configuration the checks would not read: a
+/// `.clippy.toml`, which Clippy reads before a `clippy.toml` beside it.
+fn clippy_config_hidden(file: &Path) -> bool {
+    file.file_name().and_then(std::ffi::OsStr::to_str) == Some(".clippy.toml")
 }
 
 /// Whether a Cargo configuration names one of the two lints, a Clippy lint
@@ -8475,12 +8480,8 @@ fn every_file(directory: &Path, found: &mut Vec<PathBuf>) {
 }
 
 #[test]
-fn clippy_configurations_stand_at_the_root_and_in_packages_alone() {
+fn no_clippy_configuration_hides_and_no_cargo_configuration_lowers_a_lint() {
     let root = root();
-    let packages = packages(&root)
-        .into_keys()
-        .map(|path| root.join(path))
-        .collect::<BTreeSet<_>>();
     let mut files = Vec::new();
     every_file(&root, &mut files);
     let relative = |file: &PathBuf| {
@@ -8489,15 +8490,15 @@ fn clippy_configurations_stand_at_the_root_and_in_packages_alone() {
             .display()
             .to_string()
     };
-    let misplaced = files
+    let hidden = files
         .iter()
-        .filter(|file| clippy_config_misplaced(file, &root, &packages))
+        .filter(|file| clippy_config_hidden(file))
         .map(relative)
         .collect::<Vec<_>>();
     assert!(
-        misplaced.is_empty(),
-        "misplaced Clippy configuration:\n{}",
-        misplaced.join("\n")
+        hidden.is_empty(),
+        "a `.clippy.toml`:\n{}",
+        hidden.join("\n")
     );
     let lowering = files
         .iter()
@@ -8518,36 +8519,32 @@ fn clippy_configurations_stand_at_the_root_and_in_packages_alone() {
 }
 
 #[test]
-fn a_misplaced_or_lowering_configuration_is_found() {
-    let root = Path::new("/r");
-    let packages = [PathBuf::from("/r/a/b")]
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    assert!(!clippy_config_misplaced(
-        Path::new("/r/clippy.toml"),
-        root,
-        &packages
-    ));
-    assert!(!clippy_config_misplaced(
-        Path::new("/r/a/b/clippy.toml"),
-        root,
-        &packages
-    ));
-    assert!(clippy_config_misplaced(
-        Path::new("/r/a/clippy.toml"),
-        root,
-        &packages
-    ));
-    assert!(clippy_config_misplaced(
-        Path::new("/r/a/b/.clippy.toml"),
-        root,
-        &packages
-    ));
-    assert!(clippy_config_misplaced(
-        Path::new("/r/.clippy.toml"),
-        root,
-        &packages
-    ));
+fn the_workspace_denies_both_bool_lints() {
+    let manifest = read_toml(&root().join("Cargo.toml"));
+    let table = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("lints"))
+        .and_then(|lints| lints.get("clippy"));
+    for lint in bool_lints() {
+        let level = table
+            .and_then(|table| table.get(lint.as_str()))
+            .and_then(|level| {
+                level
+                    .as_str()
+                    .or_else(|| level.get("level").and_then(toml::Value::as_str))
+            });
+        assert!(
+            matches!(level, Some("deny" | "forbid")),
+            "clippy::{lint} is {level:?} in the workspace's table"
+        );
+    }
+}
+
+#[test]
+fn a_hidden_or_lowering_configuration_is_found() {
+    assert!(clippy_config_hidden(Path::new("/r/a/b/.clippy.toml")));
+    assert!(clippy_config_hidden(Path::new("/r/.clippy.toml")));
+    assert!(!clippy_config_hidden(Path::new("/r/a/clippy.toml")));
     let [structs, _] = bool_lints();
     for source in [
         std::format!("rustflags = [\"-A\", \"clippy::{structs}\"]"),
