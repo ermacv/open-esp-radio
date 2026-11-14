@@ -111,8 +111,8 @@ pub(crate) trait Stopped {
 pub(crate) enum Unreleased {
     /// Its radio's stop is not confirmed.
     StopUnconfirmed,
-    /// Its stop's proof is of another installation than the port's.
-    Stale(oer_protocols_ieee80211_contracts_port::InstallationGeneration),
+    /// Its proof is not of the port's state.
+    Stale,
     /// Its radio's stop is confirmed and the port still holds owners: what
     /// it holds.
     Held(crate::failure::Outstanding),
@@ -125,7 +125,7 @@ impl From<Unreleased> for crate::failure::ReleaseCause {
     fn from(unreleased: Unreleased) -> Self {
         match unreleased {
             Unreleased::StopUnconfirmed => Self::StopUnconfirmed,
-            Unreleased::Stale(installation) => Self::Stale(installation),
+            Unreleased::Stale => Self::Stale,
             Unreleased::Held(outstanding) => Self::Held(outstanding),
             Unreleased::FrontierHeld => Self::FrontierHeld,
         }

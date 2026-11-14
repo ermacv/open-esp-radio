@@ -1559,13 +1559,17 @@ where
         cx: &mut Context<'_>,
         channel: SupportedChannel<D::Caps>,
     ) -> Poll<Result<(), StartRefused<PortFault<'id, D>>>> {
-        let Some(stopped) = self.stopped.take() else {
-            return Poll::Ready(Err(StartRefused::Running));
-        };
-        match self.port.poll_start(cx, stopped, channel, self.now) {
+        // The start's own proof goes on with it; the stop's begins it.
+        let proof: oer_protocols_ieee80211_contracts_port::StartProof<'id> =
+            match (self.starting.take(), self.stopped.take()) {
+                (Some(starting), _) => starting.into(),
+                (None, Some(stopped)) => stopped.into(),
+                (None, None) => return Poll::Ready(Err(StartRefused::Running)),
+            };
+        match self.port.poll_start(cx, proof, channel, self.now) {
             StartPoll::Started => Poll::Ready(Ok(())),
-            StartPoll::Pending(stopped) => {
-                self.stopped = Some(stopped);
+            StartPoll::Pending(starting) => {
+                self.starting = Some(starting);
                 Poll::Pending
             }
             StartPoll::Refused(stopped, failure) => {

@@ -965,7 +965,7 @@ impl<W: Binding> crate::release::Stopped for ApRunnerOf<W> {
             RetireRefused::Held(outstanding) => {
                 Unreleased::Held(outstanding.map_fault(crate::failure::convert::backend_fault))
             }
-            RetireRefused::Stale(installation) => Unreleased::Stale(installation),
+            RetireRefused::Stale => Unreleased::Stale,
         })?;
         crate::radio::StoppedRadio::of(device).ok_or(Unreleased::FrontierHeld)
     }

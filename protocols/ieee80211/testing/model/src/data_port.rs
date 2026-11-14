@@ -32,10 +32,10 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_contracts_port::{
     AccessPointCommandFailed, AdmittedTxParts, ArenaState, CleanupRefused, CommandFailed,
     CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input,
-    InstallationGeneration, LendRefusal, LendRefused, Outstanding, PairwiseIssue, PortAnswer,
-    PortArena, PortCommand, PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer,
-    PortRxPull, PortSink, ProofRefused, Recovering, Recovery, ReinstallRefused, Removed,
-    RemovedKey, Retired, RunPhase, RxPull, StaleProof, StartFailure, StartPoll, StationSubmission,
+    LendRefusal, LendRefused, Outstanding, PairwiseIssue, PortAnswer, PortArena, PortCommand,
+    PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
+    ProofRefused, Recovering, Recovery, ReinstallRefused, Removed, RemovedKey, Retired, RunPhase,
+    RxPull, StaleProof, StartFailure, StartPoll, StartProof, StateSerial, StationSubmission,
     StopCause, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts,
     Unconsumed, Unkeeping, Unkept,
     arena::{
@@ -471,6 +471,11 @@ pub struct ModelPort<
     installation: Option<Installation<Id, ModelPools>>,
     /// The installation's generation, as its receipt names it.
     generation: u32,
+    /// The serial of the port's state: raised at every transition that
+    /// ends a proof's state, the one value a proof is checked against.
+    serial: StateSerial,
+    /// The serial of the last stop: a stopped port's answer to a stop.
+    stop_serial: StateSerial,
     /// The TSF epoch the last reinstall named.
     tsf_epoch: Option<u32>,
     loan: BodyLoan<'id, Id, Backend<Id, C, X>>,
@@ -556,13 +561,15 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         // lend limit until it drops them.
         held.network = network;
         ModelInstall {
-            stopped: Stopped::issue(proof_generation(generation)),
+            stopped: Stopped::issue(StateSerial::FIRST),
             port: Self {
                 air: air.clone(),
                 held,
                 driver: Driver::new(),
                 installation: Some(installation),
                 generation,
+                serial: StateSerial::FIRST,
+                stop_serial: StateSerial::FIRST,
                 tsf_epoch: None,
                 loan,
                 channel,
@@ -1164,14 +1171,23 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
     }
 
-    /// Whether `generation` is this installation's.
-    fn ours(&self, generation: InstallationGeneration) -> bool {
-        generation == proof_generation(self.generation)
+    /// The installation the port runs, counted from zero by its
+    /// installations: the model's own count, which no proof carries.
+    pub const fn installation_count(&self) -> u32 {
+        self.generation
     }
 
-    /// The installation's own generation, as a proof names it.
-    fn installation_generation(&self) -> InstallationGeneration {
-        proof_generation(self.generation)
+    /// The next state: its serial, which ends every proof of the last.
+    fn raise(&mut self) -> StateSerial {
+        self.serial = self.serial.raised();
+        self.serial
+    }
+
+    /// The radio stopped: the new state's serial, which a stopped port's
+    /// stop answers with.
+    fn stop_proof(&mut self) -> Stopped<'id> {
+        self.stop_serial = self.raise();
+        Stopped::issue(self.stop_serial)
     }
 }
 
@@ -1384,11 +1400,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         stopped: &Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> Result<Unconsumed, StaleProof<()>> {
-        if !self.ours(stopped.generation()) {
-            return Err(StaleProof {
-                proof: (),
-                installation: self.installation_generation(),
-            });
+        if !stopped.is_of(self.serial) {
+            return Err(StaleProof { proof: () });
         }
         self.keep_posted();
         Ok(self.offer_kept(sink))
@@ -1400,10 +1413,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         stopped: &Stopped<'id>,
         _sink: &mut impl PortSink<'id, Self::Types>,
     ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
-        let answer = if self.ours(stopped.generation()) {
+        let answer = if stopped.is_of(self.serial) {
             Ok(())
         } else {
-            Err(CleanupRefused::Stale(self.installation_generation()))
+            Err(CleanupRefused::Stale)
         };
         self.answer(answer)
     }
@@ -1898,19 +1911,24 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn poll_start(
         &mut self,
         _: &mut Context<'_>,
-        stopped: Stopped<'id>,
+        proof: StartProof<'id>,
         channel: SupportedChannel<C>,
         now: Instant,
     ) -> StartPoll<'id, ModelPortFault> {
-        if !self.ours(stopped.generation()) {
-            return StartPoll::Stale(StaleProof {
-                proof: stopped,
-                installation: self.installation_generation(),
-            });
+        if !proof.is_of(self.serial) {
+            return StartPoll::Stale(StaleProof { proof });
         }
+        // The model's start ends at its first poll: a refusal before it
+        // began leaves the port, and its proof, as they were.
         if self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal() {
+            let stopped = match proof {
+                StartProof::Stopped(stopped) => stopped,
+                StartProof::Starting(_) => self.stop_proof(),
+            };
             return StartPoll::Refused(stopped, StartFailure::Device);
         }
+        // The start begins: every proof of the stopped port ends.
+        self.raise();
         if self.air.take_unstopped_enable() {
             // The MAC began the start: its stop begins now and goes on in
             // `poll_stop`.
@@ -1942,7 +1960,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
         let since = match self.radio {
             Radio::Stopped => {
-                return Poll::Ready(Ok(Stopped::issue(self.installation_generation())));
+                return Poll::Ready(Ok(Stopped::issue(self.stop_serial)));
             }
             Radio::Running | Radio::Recovering => {
                 self.air
@@ -1972,7 +1990,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 .access_point
                 .set(ModelAccessPointInterface::default());
             self.refresh_deadline(now);
-            return Poll::Ready(Ok(Stopped::issue(self.installation_generation())));
+            return Poll::Ready(Ok(self.stop_proof()));
         }
         if now.saturating_duration_since(since) >= MODEL_STOP_BOUND {
             self.refresh_deadline(now);
@@ -2002,12 +2020,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if self.radio == Radio::Running {
             self.radio = Radio::Recovering;
             self.held.draining.set(true);
+            self.raise();
         }
-        Recovery::Recovered(Recovering::issue(self.installation_generation()))
-    }
-
-    fn generation(&self) -> InstallationGeneration {
-        self.installation_generation()
+        Recovery::Recovered(Recovering::issue(self.serial))
     }
 
     fn outstanding(&self) -> ModelOutstanding {
@@ -2057,15 +2072,12 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         &mut self,
         stopped: Stopped<'id>,
     ) -> Result<Retired<'id>, ProofRefused<Stopped<'id>, ModelOutstanding>> {
-        if !self.ours(stopped.generation()) {
-            return Err(ProofRefused::Stale(StaleProof {
-                proof: stopped,
-                installation: self.installation_generation(),
-            }));
+        if !stopped.is_of(self.serial) {
+            return Err(ProofRefused::Stale(StaleProof { proof: stopped }));
         }
         let outstanding = DataPort::outstanding(self);
         if outstanding.is_empty() {
-            Ok(Retired::issue(stopped.generation()))
+            Ok(Retired::issue(self.raise()))
         } else {
             Err(ProofRefused::Refused(stopped, outstanding))
         }
@@ -2086,11 +2098,8 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         ),
         ProofRefused<Retired<'id>, ReinstallRefused>,
     > {
-        if !self.ours(retired.generation()) {
-            return Err(ProofRefused::Stale(StaleProof {
-                proof: retired,
-                installation: self.installation_generation(),
-            }));
+        if !retired.is_of(self.serial) {
+            return Err(ProofRefused::Stale(StaleProof { proof: retired }));
         }
         if self.tsf_epoch == Some(tsf_epoch) {
             return Err(ProofRefused::Refused(retired, ReinstallRefused::SameEpoch));
@@ -2132,20 +2141,15 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             air: self.air.clone(),
             loan: self.loan,
         };
-        Ok((
-            Stopped::issue(self.installation_generation()),
-            (commands, resources.lend(&self.loan)),
-        ))
+        Ok((self.stop_proof(), (commands, resources.lend(&self.loan))))
     }
 
     fn release(&mut self, retired: Retired<'id>) -> Result<(), StaleProof<Retired<'id>>> {
-        if self.ours(retired.generation()) {
+        if retired.is_of(self.serial) {
+            self.raise();
             Ok(())
         } else {
-            Err(StaleProof {
-                proof: retired,
-                installation: self.installation_generation(),
-            })
+            Err(StaleProof { proof: retired })
         }
     }
 
@@ -2184,8 +2188,3 @@ pub(crate) fn model_ampdu_capabilities(subframes: u8) -> AmpduCapabilities {
 mod tests;
 
 mod access_point;
-
-/// The proof's generation of the model's installation `generation`.
-fn proof_generation(generation: u32) -> InstallationGeneration {
-    InstallationGeneration::of_count(generation)
-}

@@ -363,7 +363,7 @@ pub(super) fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelReso
     else {
         panic!("a retired port reinstalls");
     };
-    assert_eq!(harness.port.generation().get().get(), 2);
+    assert_eq!(harness.port.installation_count(), 1);
     harness.commands = commands;
     harness.stopped = Some(stopped);
     (harness, resources)
@@ -495,8 +495,7 @@ impl<'s> ApHarness<'s> {
 
     /// The tokens of the installation `generation`.
     fn of(&mut self, generation: u32) -> &mut ApTokens<'s> {
-        // A proof's generation counts from one, the tokens' from zero.
-        if generation.checked_add(1) == Some(self.hr().port.generation().get().get()) {
+        if generation == self.hr().port.installation_count() {
             &mut self.current
         } else {
             &mut self.earlier

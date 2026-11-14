@@ -4617,7 +4617,7 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("Device::cut_held_by_units", P3),
     ("Device::event_waiting", P3),
     ("Device::is_running", P2),
-    ("Device::returns_quiet", P1),
+    ("Device::returns_quiet", P3),
     (
         "Diagnostics::on",
         "predicate: the switchable diagnostics are on",

@@ -557,9 +557,9 @@ pub enum ReleaseCause {
     /// The port has not confirmed its radio's stop: nothing was released,
     /// and the port keeps the radio and every owner.
     StopUnconfirmed,
-    /// The stop's proof was of another installation than the port's (this
-    /// installation's generation): nothing was released.
-    Stale(oer_protocols_ieee80211_contracts_port::InstallationGeneration),
+    /// The proof was not of the port's state (the port moved since its
+    /// issue): nothing was released.
+    Stale,
     /// The port confirmed its radio's stop and still holds owners (admitted
     /// work, a received unit, an item a sink refused, a removal waiting),
     /// each class with its count: nothing was released, and the port keeps
@@ -596,9 +596,9 @@ pub enum ReleaseCause {
 pub enum CleanupCause {
     /// The radio had not confirmed a stop: no stop's proof to clean with.
     NotStopped,
-    /// The stop's proof was of another installation than the port's (this
-    /// installation's generation): nothing was cleaned.
-    Stale(oer_protocols_ieee80211_contracts_port::InstallationGeneration),
+    /// The stop's proof was not of the port's state (the port moved since
+    /// its issue): nothing was cleaned.
+    Stale,
     /// The port holds its contract fault.
     Faulted(BackendFault),
     /// The cleanup's next step could not run and wrote nothing.
@@ -659,9 +659,9 @@ pub enum ReinstallCause {
     /// The stopped port faulted or held work: what it still holds, each
     /// class with its count.
     NotRetired(Outstanding),
-    /// The stop's proof was of another installation than the port's (this
-    /// installation's generation).
-    Stale(oer_protocols_ieee80211_contracts_port::InstallationGeneration),
+    /// The proof was not of the port's state (the port moved since its
+    /// issue).
+    Stale,
     /// The TSF epoch repeated.
     SameEpoch,
     /// The port's channel named no Wi-Fi channel.

@@ -173,8 +173,8 @@ pub use owner::{
 pub mod installation;
 pub mod outstanding;
 pub use installation::{
-    InstallationGeneration, ProofRefused, Recovering, Recovery, ReinstallRefused, Retired,
-    StaleProof, StartPoll, StartRefused, StopUnconfirmed, Stopped,
+    ProofRefused, Recovering, Recovery, ReinstallRefused, Retired, StaleProof, StartPoll,
+    StartProof, StartRefused, Starting, StateSerial, StopUnconfirmed, Stopped,
 };
 pub use outstanding::{ACCESS_CATEGORIES, ArenaState, Outstanding, RunPhase};
 mod interface_commands;

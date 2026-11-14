@@ -7,46 +7,39 @@
 //! port and every proof as they were and names what blocks it; after it,
 //! the next state's proof.
 //!
-//! A proof is one word: the installation's [`InstallationGeneration`], under the brand
-//! `'id` of the port's installations. It is affine (neither `Copy` nor
-//! `Clone`), and every transition takes the proof of the one before it by
-//! value or by reference, so a proof does not outlive the state it proves:
-//! a start takes the stop's proof ([`StartPoll`]), a retirement the stop's,
-//! a reinstall or a release the retirement's. Only a port issues a proof;
-//! a port compares each proof it is given with its own generation and
-//! answers one of another installation with [`StaleProof`], the one check
-//! the types leave.
+//! A proof is one word: the port's [`StateSerial`] at its issue, under the
+//! brand `'id` of the port's installations. It is affine (neither `Copy`
+//! nor `Clone`), and every transition takes the proof of the one before it
+//! by value or by reference: a start takes the stop's proof
+//! ([`StartPoll`]), a retirement the stop's, a reinstall or a release the
+//! retirement's. The port raises its serial at every transition that ends
+//! a proof's state (a start beginning and ending, a stop confirming, a
+//! recovery of a running radio, a retirement, a reinstall, a release) and
+//! takes a proof only when it equals its serial: otherwise
+//! [`StaleProof`], nothing changed. That is the one check the types leave,
+//! the same in every call; no call reads the port's state to decide
+//! whether a proof holds. A second copy of a proof (a stopped port answers
+//! every [`poll_stop`](crate::DataPort::poll_stop) with its stop's proof)
+//! is the same proof, and stale with it once the port moved.
 
 use core::marker::PhantomData;
-use core::num::NonZeroU32;
 
-/// An installation's place in the count of installations the port made,
-/// from one.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct InstallationGeneration(NonZeroU32);
+/// The serial of a port's state: raised at every transition that ends the
+/// state a proof proves. It has no reader: a port compares a proof with
+/// its own ([`Stopped::is_of`]). It counts in 32 bits and wraps: a proof
+/// held across 2^32 transitions of its port is the one a wrapped serial
+/// could take again.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StateSerial(u32);
 
-impl InstallationGeneration {
-    /// The generation numbered `generation`.
-    pub const fn new(generation: NonZeroU32) -> Self {
-        Self(generation)
-    }
+impl StateSerial {
+    /// A port's serial at its first installation.
+    pub const FIRST: Self = Self(0);
 
-    /// Its number.
-    pub const fn get(self) -> NonZeroU32 {
-        self.0
-    }
-
-    /// The generation of the installation the radio port's installations
-    /// number `generation`: they count from zero, a proof from one. The
-    /// last count names the last generation.
-    pub const fn of_count(generation: u32) -> Self {
-        match generation.checked_add(1) {
-            Some(next) => match NonZeroU32::new(next) {
-                Some(next) => Self(next),
-                None => Self(NonZeroU32::MAX),
-            },
-            None => Self(NonZeroU32::MAX),
-        }
+    /// The serial after one more transition.
+    #[must_use]
+    pub const fn raised(self) -> Self {
+        Self(self.0.wrapping_add(1))
     }
 }
 
@@ -59,35 +52,44 @@ macro_rules! proof {
         #[must_use = "a proof is the only way to the next transition"]
         #[derive(Debug, Eq, PartialEq)]
         pub struct $name<'id> {
-            generation: InstallationGeneration,
+            serial: StateSerial,
             brand: Brand<'id>,
         }
 
         impl<'id> $name<'id> {
-            /// The proof of installation `generation`. Only the port that
-            /// made that installation issues it, at the transition it
-            /// proves.
-            pub const fn issue(generation: InstallationGeneration) -> Self {
+            /// The proof of the port's state at `serial`. A port issues it
+            /// at the transition it proves; one made elsewhere is at worst
+            /// refused.
+            pub const fn issue(serial: StateSerial) -> Self {
                 Self {
-                    generation,
+                    serial,
                     brand: PhantomData,
                 }
             }
 
-            /// The installation it proves the state of.
-            pub const fn generation(&self) -> InstallationGeneration {
-                self.generation
+            /// Whether it is the proof of the port's state at `serial`: the
+            /// port's one check of a proof.
+            pub fn is_of(&self, serial: StateSerial) -> bool {
+                self.serial == serial
             }
         }
     };
 }
 
 proof! {
-    /// The installation's radio stopped and nothing started it since: a
-    /// port gives it at the installation (an installation starts stopped)
-    /// and at a confirmed stop, and takes it at a start, a clean, a take of
-    /// what a sink refused and a retirement.
+    /// The installation's radio stopped and nothing moved the port since:
+    /// a port gives it at the installation (an installation starts
+    /// stopped), at a confirmed stop and at a refused start, and takes it
+    /// at a start, a clean, a take of what a sink refused and a
+    /// retirement.
     Stopped
+}
+
+proof! {
+    /// A start in progress: the port gives it when the start goes on
+    /// ([`StartPoll::Pending`]) and takes it at the next poll of the start
+    /// alone. It is no stop's proof, so nothing else takes it.
+    Starting
 }
 
 proof! {
@@ -103,22 +105,52 @@ proof! {
     Recovering
 }
 
-/// A proof a port did not take: it is not of the port's installation
-/// (`installation`), or the port's state left it behind. Nothing changed.
+/// What a start's poll takes: the stop's proof to begin, or the proof of
+/// the start in progress to go on.
+#[derive(Debug, Eq, PartialEq)]
+pub enum StartProof<'id> {
+    /// Begin the start.
+    Stopped(Stopped<'id>),
+    /// Go on with the start.
+    Starting(Starting<'id>),
+}
+
+impl<'id> StartProof<'id> {
+    /// Whether it is the proof of the port's state at `serial`.
+    pub fn is_of(&self, serial: StateSerial) -> bool {
+        match self {
+            Self::Stopped(proof) => proof.is_of(serial),
+            Self::Starting(proof) => proof.is_of(serial),
+        }
+    }
+}
+
+impl<'id> From<Stopped<'id>> for StartProof<'id> {
+    fn from(proof: Stopped<'id>) -> Self {
+        Self::Stopped(proof)
+    }
+}
+
+impl<'id> From<Starting<'id>> for StartProof<'id> {
+    fn from(proof: Starting<'id>) -> Self {
+        Self::Starting(proof)
+    }
+}
+
+/// A proof a port did not take: the port moved since its issue, or it is
+/// another installation's. Nothing changed.
 #[derive(Debug, Eq, PartialEq)]
 pub struct StaleProof<P> {
     /// The proof, unchanged.
     pub proof: P,
-    /// The port's installation.
-    pub installation: InstallationGeneration,
 }
 
 /// A call that takes proof `P` and did not make its transition: the proof
-/// names another installation, or the port refused for `R`. Either way the
+/// is stale, or the port refused for `R`. Either way the
 /// proof comes back, and nothing changed.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofRefused<P, R> {
-    /// The proof is not of the port's installation.
+    /// The proof is not of the port's state.
     Stale(StaleProof<P>),
     /// The port refused the transition for `R`.
     Refused(P, R),
@@ -134,16 +166,19 @@ impl<P, R> ProofRefused<P, R> {
     }
 }
 
-/// The answer of a start's poll, which takes the stop's proof. `F` is the
-/// port's fault.
+/// The answer of a start's poll, which takes the stop's proof to begin and
+/// the start's to go on. `F` is the port's fault.
 #[derive(Debug, Eq, PartialEq)]
 pub enum StartPoll<'id, F> {
-    /// The radio runs: the stop's proof ended with the start.
+    /// The radio runs: the start's proof ended with the start.
     Started,
-    /// The start goes on: the proof, for the next poll.
-    Pending(Stopped<'id>),
+    /// The start goes on: its proof, for the next poll. It carries the
+    /// serial the start's beginning raised, and it is no [`Stopped`], so
+    /// no retirement, clean or take can be asked with it.
+    Pending(Starting<'id>),
     /// The start failed before it began on the device, or its stop
-    /// confirmed: the radio is stopped, and the proof comes back with why.
+    /// confirmed: the radio is stopped, and its new stop's proof comes
+    /// with why.
     Refused(Stopped<'id>, crate::StartFailure<F>),
     /// The start began on the device or the MAC and failed for `cause`, and
     /// the stop of what it began is not confirmed (`stop`): the port is
@@ -154,8 +189,8 @@ pub enum StartPoll<'id, F> {
         /// What the stop of the begun start observed.
         stop: StopUnconfirmed<F>,
     },
-    /// The proof is not of the port's installation: nothing started.
-    Stale(StaleProof<Stopped<'id>>),
+    /// The proof is not of the port's state: nothing started.
+    Stale(StaleProof<StartProof<'id>>),
 }
 
 /// Why a reinstall installed nothing; the retirement's proof comes back,
@@ -237,15 +272,16 @@ pub enum Recovery<'id, F> {
 mod tests {
     use super::*;
 
-    fn first() -> InstallationGeneration {
-        InstallationGeneration::new(NonZeroU32::MIN)
-    }
-
     #[test]
-    fn a_proof_is_one_word_and_names_its_installation() {
+    fn a_proof_is_one_word_and_holds_at_its_serial_alone() {
         assert_eq!(core::mem::size_of::<Stopped<'static>>(), 4);
         assert_eq!(core::mem::size_of::<Retired<'static>>(), 4);
-        assert_eq!(Stopped::issue(first()).generation(), first());
+        let first = StateSerial::FIRST;
+        let proof = Stopped::issue(first);
+        assert!(proof.is_of(first));
+        assert!(!proof.is_of(first.raised()));
+        // The serial wraps: the one after the last is the first.
+        assert_eq!(StateSerial(u32::MAX).raised(), first);
     }
 
     #[test]

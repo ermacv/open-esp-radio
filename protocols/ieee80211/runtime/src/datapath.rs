@@ -89,11 +89,10 @@ use oer_portable_memory::{
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed,
-    GateOpen, Ieee80211Capabilities, InstallationGeneration, KeyTypes, LentRxBuffer,
-    LowerMacTerminal, Outstanding, PortBlockAckSlot, PortCommand, PortSingleOutcome, PortSink,
-    PortTypes, ProofRefused, RecycleRefused, ReinstallRefused, Retired, RxBuffer, StartRefused,
-    StopUnconfirmed, Stopped, SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass,
-    TxBufferPool, TxFacts,
+    GateOpen, Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, Outstanding,
+    PortBlockAckSlot, PortCommand, PortSingleOutcome, PortSink, PortTypes, ProofRefused,
+    RecycleRefused, ReinstallRefused, Retired, RxBuffer, StartRefused, StopUnconfirmed, Stopped,
+    SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool, TxFacts,
 };
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::data::plane::{DataPlane, OutboundMsdu, TxWindow};
@@ -313,10 +312,10 @@ pub enum RetireRefused<F> {
     NotStopped,
     /// The port did not retire: what it has out.
     Held(Outstanding<F>),
-    /// The owner's proof is of another installation than the port's: a
-    /// proof's brand is the port's lifetime, which a `'static` port shares
-    /// with every other, so its generation is checked.
-    Stale(InstallationGeneration),
+    /// The owner's proof is not of the port's state: the port moved since
+    /// its issue, or it is another installation's (a `'static` port shares
+    /// its brand with every other), so its serial is checked.
+    Stale,
 }
 
 /// Why the actor's port did not reinstall; `F` is the port's fault.
@@ -560,6 +559,8 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     /// The proof of the port's retirement, when its reinstall was refused:
     /// a release takes it.
     retired: Option<Retired<'id>>,
+    /// The proof of the port's start going on.
+    starting: Option<oer_protocols_ieee80211_contracts_port::Starting<'id>>,
 }
 
 /// Owners a broken contract leaves with the actor.
@@ -663,6 +664,7 @@ where
             stop_unconfirmed: false,
             stopped: Some(stopped),
             retired: None,
+            starting: None,
         }
     }
 
@@ -737,6 +739,7 @@ where
                 stop_unconfirmed: false,
                 stopped: Some(stopped),
                 retired: None,
+                starting: None,
             })
         })
     }
@@ -843,9 +846,7 @@ where
                 self.retired = Some(retired);
                 Err(ActorReinstallRefused::Refused(refused))
             }
-            Err(ProofRefused::Stale(stale)) => Err(ActorReinstallRefused::Retire(
-                RetireRefused::Stale(stale.installation),
-            )),
+            Err(ProofRefused::Stale(_)) => Err(ActorReinstallRefused::Retire(RetireRefused::Stale)),
         }
     }
 
@@ -862,9 +863,7 @@ where
         RetireRefused<<D::Port as DataPort<'id>>::Fault>,
     > {
         let retired = self.retire()?;
-        self.port
-            .release(retired)
-            .map_err(|stale| RetireRefused::Stale(stale.installation))
+        self.port.release(retired).map_err(|_| RetireRefused::Stale)
     }
 
     /// The retired installation's proof: the one a refused reinstall left,
@@ -882,7 +881,7 @@ where
                 self.stopped = Some(stopped);
                 Err(RetireRefused::Held(outstanding))
             }
-            Err(ProofRefused::Stale(stale)) => Err(RetireRefused::Stale(stale.installation)),
+            Err(ProofRefused::Stale(_)) => Err(RetireRefused::Stale),
         }
     }
 

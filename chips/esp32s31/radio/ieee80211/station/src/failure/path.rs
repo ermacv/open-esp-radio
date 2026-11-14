@@ -147,10 +147,7 @@ const fn crypto_key_error_name(error: CryptoKeyError) -> &'static str {
 fn cleanup_path(cause: CleanupCause, path: &mut DiagPath) {
     match cause {
         CleanupCause::NotStopped => path.name("NotStopped"),
-        CleanupCause::Stale(installation) => {
-            path.name("Stale");
-            path.word(installation.get().get());
-        }
+        CleanupCause::Stale => path.name("Stale"),
         CleanupCause::Faulted(fault) => {
             path.name("Faulted");
             fault.push_path(path);
@@ -467,7 +464,7 @@ impl DiagnosticPath for LifecycleFailure {
                 path.name(match cause {
                     ReinstallCause::NotStopped => "NotStopped",
                     ReinstallCause::NotRetired(_) => "NotRetired",
-                    ReinstallCause::Stale(_) => "Stale",
+                    ReinstallCause::Stale => "Stale",
                     ReinstallCause::SameEpoch => "SameEpoch",
                     ReinstallCause::ChannelUnset => "ChannelUnset",
                     ReinstallCause::Receipt => "Receipt",
@@ -480,9 +477,6 @@ impl DiagnosticPath for LifecycleFailure {
                 }
                 if let ReinstallCause::NotRetired(outstanding) = cause {
                     outstanding_path(outstanding, path);
-                }
-                if let ReinstallCause::Stale(installation) = cause {
-                    path.word(installation.get().get());
                 }
             }
             Self::Mailbox => path.name("Mailbox"),
@@ -545,10 +539,7 @@ impl DiagnosticPath for ReleaseCause {
     fn push_path(&self, path: &mut DiagPath) {
         match self {
             Self::StopUnconfirmed => path.name("StopUnconfirmed"),
-            Self::Stale(installation) => {
-                path.name("Stale");
-                path.word(installation.get().get());
-            }
+            Self::Stale => path.name("Stale"),
             Self::Held(outstanding) => {
                 path.name("Held");
                 outstanding_path(outstanding, path);
@@ -580,10 +571,7 @@ impl DiagnosticPath for ReleaseCause {
                 path.name("Cleanup");
                 match cause {
                     CleanupCause::NotStopped => path.name("NotStopped"),
-                    CleanupCause::Stale(installation) => {
-                        path.name("Stale");
-                        path.word(installation.get().get());
-                    }
+                    CleanupCause::Stale => path.name("Stale"),
                     CleanupCause::Faulted(fault) => {
                         path.name("Faulted");
                         fault.push_path(path);

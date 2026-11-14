@@ -324,9 +324,8 @@ pub enum Unconsumed {
 /// left to the port.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CleanupRefused<F> {
-    /// The stop's proof is not of the port's installation: nothing was
-    /// done.
-    Stale(crate::InstallationGeneration),
+    /// The stop's proof is not of the port's state: nothing was done.
+    Stale,
     /// The port holds the backend's contract fault: the cleanup wrote
     /// nothing to the hardware, and the port does not retire.
     Faulted(F),
@@ -776,9 +775,6 @@ pub trait DataPort<'id> {
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> CommandAnswer<'id, Self>;
 
-    /// The installation the port runs.
-    fn generation(&self) -> crate::InstallationGeneration;
-
     /// Everything the installation has out, read whole; it changes
     /// nothing.
     fn outstanding(&self) -> crate::Outstanding<Self::Fault>;
@@ -788,9 +784,10 @@ pub trait DataPort<'id> {
     fn fault(&self) -> Option<Self::Fault>;
 
     /// Start the stopped radio on `channel`, within the backend's command
-    /// bound from the first call. It takes the stop's proof: the proof
-    /// comes back while the start goes on or after it failed with the radio
-    /// stopped, and ends with a start. A start that fails after the device
+    /// bound from the first call. It takes the stop's proof to begin and the
+    /// start's ([`StartPoll::Pending`](crate::StartPoll)) to go on; a start
+    /// that failed with the radio stopped gives the new stop's proof, and a
+    /// start that ran ends its proof. A start that fails after the device
     /// began it stops what it began before it answers; a stop that does not
     /// confirm, and a start that enabled the MAC before it failed, leave
     /// the port stopping ([`StartPoll::Unstopped`](crate::StartPoll)), and
@@ -798,7 +795,7 @@ pub trait DataPort<'id> {
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
-        stopped: crate::Stopped<'id>,
+        proof: crate::StartProof<'id>,
         channel: SupportedChannel<Self::Caps>,
         now: Instant,
     ) -> crate::StartPoll<'id, Self::Fault>;
@@ -806,8 +803,10 @@ pub trait DataPort<'id> {
     /// Stop the radio: queued attempts end withdrawn, a published one is
     /// waited for, then the MAC, its DMA and interrupt work stop, within
     /// the backend's command bound from the first call. A confirmed stop
-    /// gives its proof; an unconfirmed one says why, with everything the
-    /// port has out.
+    /// gives its proof, and a stopped port answers each call with its
+    /// stop's proof: one its holder dropped is had again, and once the
+    /// port moved on (a retirement) the answer is stale; an unconfirmed
+    /// stop says why, with everything the port has out.
     fn poll_stop(
         &mut self,
         cx: &mut Context<'_>,
@@ -821,7 +820,8 @@ pub trait DataPort<'id> {
     ///
     /// # Errors
     ///
-    /// The proof is not of the port's installation: nothing was offered.
+    /// The proof is stale (the port moved since its issue): nothing was
+    /// offered.
     fn take_unconsumed(
         &mut self,
         stopped: &crate::Stopped<'id>,
@@ -857,8 +857,8 @@ pub trait DataPort<'id> {
     /// # Errors
     ///
     /// The stop's proof back, with everything still out
-    /// ([`ProofRefused::Refused`](crate::ProofRefused)), or the proof of
-    /// another installation: nothing changed.
+    /// ([`ProofRefused::Refused`](crate::ProofRefused)), or a stale proof:
+    /// nothing changed.
     fn retire(
         &mut self,
         stopped: crate::Stopped<'id>,
@@ -873,8 +873,8 @@ pub trait DataPort<'id> {
     ///
     /// # Errors
     ///
-    /// The retirement's proof back with why nothing was installed, or the
-    /// proof of another installation.
+    /// The retirement's proof back with why nothing was installed, or a
+    /// stale proof.
     fn reinstall(
         &mut self,
         retired: crate::Retired<'id>,
@@ -891,7 +891,7 @@ pub trait DataPort<'id> {
     ///
     /// # Errors
     ///
-    /// The proof of another installation: nothing was released.
+    /// A stale proof: nothing was released.
     fn release(
         &mut self,
         retired: crate::Retired<'id>,

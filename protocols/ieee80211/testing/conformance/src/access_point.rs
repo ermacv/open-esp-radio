@@ -437,17 +437,18 @@ pub fn check<'id, H: AccessPointHarness<'id>>(
 /// [`Violation::Lifecycle`] when it does not start.
 pub fn start<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     let channel = harness.channel();
-    let Some(mut stopped) = harness.take_stopped() else {
+    let Some(stopped) = harness.take_stopped() else {
         return Err(Violation::Lifecycle);
     };
+    let mut proof = oer_protocols_ieee80211_contracts_port::StartProof::from(stopped);
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
         let (port, _) = harness.parts();
-        match port.poll_start(&mut Context::from_waker(&waker), stopped, channel, now) {
+        match port.poll_start(&mut Context::from_waker(&waker), proof, channel, now) {
             oer_protocols_ieee80211_contracts_port::StartPoll::Started => return Ok(()),
-            oer_protocols_ieee80211_contracts_port::StartPoll::Pending(proof) => {
-                stopped = proof;
+            oer_protocols_ieee80211_contracts_port::StartPoll::Pending(starting) => {
+                proof = starting.into();
                 harness.settle();
             }
             oer_protocols_ieee80211_contracts_port::StartPoll::Refused(proof, _) => {
@@ -455,7 +456,11 @@ pub fn start<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Vio
                 return Err(Violation::Lifecycle);
             }
             oer_protocols_ieee80211_contracts_port::StartPoll::Stale(stale) => {
-                harness.keep_stopped(stale.proof);
+                if let oer_protocols_ieee80211_contracts_port::StartProof::Stopped(stopped) =
+                    stale.proof
+                {
+                    harness.keep_stopped(stopped);
+                }
                 return Err(Violation::Lifecycle);
             }
             oer_protocols_ieee80211_contracts_port::StartPoll::Unstopped { .. } => {
@@ -463,7 +468,8 @@ pub fn start<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Vio
             }
         }
     }
-    harness.keep_stopped(stopped);
+    // A start still going on after the case's steps: its proof ends here.
+    drop(proof);
     Err(Violation::Lifecycle)
 }
 

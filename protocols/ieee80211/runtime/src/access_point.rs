@@ -1100,6 +1100,8 @@ pub struct ApRunner<
     /// The proof of the port's confirmed stop, while the radio is stopped:
     /// the run's start spends it, and a confirmed stop gives the next.
     stopped: Option<Stopped<'id>>,
+    /// The proof of the run's start going on.
+    starting: Option<oer_protocols_ieee80211_contracts_port::Starting<'id>>,
 }
 
 /// How the network's stop ended.
@@ -2138,6 +2140,7 @@ where
                 taken: 0,
             },
             stopped: Some(stopped),
+            starting: None,
         }
     }
 
@@ -2782,13 +2785,17 @@ where
         cx: &mut Context<'_>,
         now: Instant,
     ) -> Poll<Result<(), StartRefused<PortFault<'id, P>>>> {
-        let Some(stopped) = self.stopped.take() else {
-            return Poll::Ready(Err(StartRefused::Running));
-        };
-        match self.port.poll_start(cx, stopped, self.homes.channel, now) {
+        // The start's own proof goes on with it; the stop's begins it.
+        let proof: oer_protocols_ieee80211_contracts_port::StartProof<'id> =
+            match (self.starting.take(), self.stopped.take()) {
+                (Some(starting), _) => starting.into(),
+                (None, Some(stopped)) => stopped.into(),
+                (None, None) => return Poll::Ready(Err(StartRefused::Running)),
+            };
+        match self.port.poll_start(cx, proof, self.homes.channel, now) {
             StartPoll::Started => Poll::Ready(Ok(())),
-            StartPoll::Pending(stopped) => {
-                self.stopped = Some(stopped);
+            StartPoll::Pending(starting) => {
+                self.starting = Some(starting);
                 Poll::Pending
             }
             StartPoll::Refused(stopped, failure) => {
@@ -2857,13 +2864,9 @@ where
                 self.stopped = Some(stopped);
                 return Err(RetireRefused::Held(outstanding));
             }
-            Err(ProofRefused::Stale(stale)) => {
-                return Err(RetireRefused::Stale(stale.installation));
-            }
+            Err(ProofRefused::Stale(_)) => return Err(RetireRefused::Stale),
         };
-        self.port
-            .release(retired)
-            .map_err(|stale| RetireRefused::Stale(stale.installation))
+        self.port.release(retired).map_err(|_| RetireRefused::Stale)
     }
 
     /// The access point's status now.

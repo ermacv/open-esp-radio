@@ -1832,12 +1832,12 @@ fn a_stopped_port_reinstalls_in_place_under_the_same_actor_without_a_reset() {
             storage.view(),
             Recorder::default(),
         );
-        let generation = actor.port().generation().get().get();
+        let generation = actor.port().installation_count();
         // The radio never ran; the network keeps no unit: the installation
         // retires and the next one takes its place under the same actor,
         // which holds the new installation's stop.
         assert!(actor.reinstall_in_place(1, &mut installations).is_ok());
-        assert_eq!(actor.port().generation().get().get(), generation + 1);
+        assert_eq!(actor.port().installation_count(), generation + 1);
         assert!(actor.stopped_port().1.is_some(), "the next stop's proof");
         assert_eq!(air.disable_calls(), 0, "no stop, no reset");
     }));
@@ -1936,22 +1936,19 @@ fn a_refused_reinstall_names_its_reason_and_the_retired_installation_reinstalls_
             Recorder::default(),
         );
         assert!(actor.reinstall_in_place(1, &mut installations).is_ok());
-        let generation = actor.port().generation();
+        let generation = actor.port().installation_count();
         // The same epoch again: the port retired and refused the next
         // installation, by name; it stays the one it was.
         assert!(matches!(
             actor.reinstall_in_place(1, &mut installations),
             Err(ActorReinstallRefused::Refused(ReinstallRefused::SameEpoch))
         ));
-        assert_eq!(actor.port().generation(), generation);
+        assert_eq!(actor.port().installation_count(), generation);
         assert!(actor.stopped_port().1.is_none(), "retired, not stopped");
         // The retired installation the actor kept reinstalls at the next
         // epoch.
         assert!(actor.reinstall_in_place(2, &mut installations).is_ok());
-        assert_eq!(
-            actor.port().generation().get().get(),
-            generation.get().get() + 1
-        );
+        assert_eq!(actor.port().installation_count(), generation + 1);
     }));
 }
 

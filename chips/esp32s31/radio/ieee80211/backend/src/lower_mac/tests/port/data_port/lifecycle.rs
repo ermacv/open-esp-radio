@@ -153,18 +153,20 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     ) -> Start {
         let waker = self.waker();
         let now = self.now();
-        let Some(stopped) = self.stopped.take() else {
-            return Start::NoProof;
+        let proof = match (self.starting.take(), self.stopped.take()) {
+            (Some(starting), _) => starting.into(),
+            (None, Some(stopped)) => stopped.into(),
+            (None, None) => return Start::NoProof,
         };
         match self.port.poll_start(
             &mut Context::from_waker(&waker),
-            stopped,
+            proof,
             supported(wifi),
             now,
         ) {
             StartPoll::Started => Start::Started,
-            StartPoll::Pending(stopped) => {
-                self.stopped = Some(stopped);
+            StartPoll::Pending(starting) => {
+                self.starting = Some(starting);
                 Start::Pending
             }
             StartPoll::Refused(stopped, failure) => {

@@ -109,6 +109,8 @@ struct Harness<'s> {
     clock: Rc<oer_portable_time_virtual::VirtualClock>,
     air: Rc<ModelAir>,
     installations: Installations<LocalId<'s>, ModelPools>,
+    /// The TSF epoch of the last reinstall.
+    epoch: u32,
     port: Port<'s>,
     commands: ModelCommands<'s, LocalId<'s>>,
     sink: Sink<'s>,
@@ -200,6 +202,7 @@ impl<'s> Harness<'s> {
             clock,
             air,
             installations,
+            epoch: 0,
             port,
             commands,
             sink: Sink {
@@ -649,6 +652,29 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
             _ => panic!("the harness submits small buffers"),
         };
         Some(cases::StationSent { end, retry })
+    }
+    fn end_tokens(&mut self) {
+        // Each token goes home to its pool as it drops.
+        self.tickets.clear();
+        self.small.clear();
+        self.station = None;
+    }
+    fn reinstall(
+        &mut self,
+        retired: oer_protocols_ieee80211_contracts_port::Retired<'s>,
+    ) -> Result<
+        Stopped<'s>,
+        ProofRefused<
+            oer_protocols_ieee80211_contracts_port::Retired<'s>,
+            oer_protocols_ieee80211_contracts_port::ReinstallRefused,
+        >,
+    > {
+        self.epoch = self.epoch.wrapping_add(1);
+        let (stopped, (commands, _resources)) =
+            self.port
+                .reinstall(retired, self.epoch, &mut self.installations)?;
+        self.commands = commands;
+        Ok(stopped)
     }
 }
 
@@ -1567,7 +1593,7 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         else {
             panic!("a retired port reinstalls");
         };
-        assert_eq!(harness.port.generation().get().get(), 2);
+        assert_eq!(harness.port.installation_count(), 1);
         assert_eq!(harness.port.lent(), 1, "the network's unit stays lent");
         drop(lent);
         assert_eq!(
@@ -1597,7 +1623,7 @@ fn a_retirement_with_a_unit_out_names_its_class_and_changes_nothing() {
             oer_protocols_ieee80211_contracts_port::outstanding::class::RECEIVED
         );
         assert_eq!(outstanding.received, 1);
-        assert_eq!(harness.port.generation().get().get(), 1);
+        assert_eq!(harness.port.installation_count(), 0);
         // The unit home, the same proof retires.
         assert!(harness.port.recycle(frame).is_ok());
         assert!(harness.port.retire(stopped).is_ok());

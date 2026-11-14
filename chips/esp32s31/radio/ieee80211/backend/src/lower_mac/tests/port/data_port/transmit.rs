@@ -1787,11 +1787,8 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
             panic!("the first completion comes back unkept");
         };
         assert_eq!(fixture.port.waiting_for_test(), (0, 2));
-        fixture.port.confirm_stop_for_test();
         // The stop the test confirmed gives the proof a stop gives.
-        fixture.stopped = Some(oer_protocols_ieee80211_contracts_port::Stopped::issue(
-            oer_protocols_ieee80211_contracts_port::DataPort::generation(&fixture.port),
-        ));
+        fixture.stopped = Some(fixture.port.confirm_stop_for_test());
         // The first cleanup's first delivery is refused: it fills the
         // place and the other stays with the driver.
         fixture.outbox.refuse = 1;

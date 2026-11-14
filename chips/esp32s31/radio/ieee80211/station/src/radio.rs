@@ -943,7 +943,7 @@ pub(crate) fn take_stopped<W: Binding>(
         RetireRefused::Held(outstanding) => {
             Unreleased::Held(outstanding.map_fault(crate::failure::convert::backend_fault))
         }
-        RetireRefused::Stale(installation) => Unreleased::Stale(installation),
+        RetireRefused::Stale => Unreleased::Stale,
     })?;
     StoppedRadio::of(device).ok_or(Unreleased::FrontierHeld)
 }

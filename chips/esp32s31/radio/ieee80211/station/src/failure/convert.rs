@@ -883,7 +883,7 @@ pub(crate) fn cleanup(
 ) -> CleanupCause {
     use oer_protocols_ieee80211_contracts_port::CleanupRefused as Source;
     match refused {
-        Source::Stale(installation) => CleanupCause::Stale(installation),
+        Source::Stale => CleanupCause::Stale,
         Source::Faulted(fault) => CleanupCause::Faulted(backend_fault(fault)),
         Source::Unavailable(fault) => CleanupCause::Unavailable(backend_fault(fault)),
         Source::Held(fault) => CleanupCause::Held(backend_fault(fault)),
@@ -906,7 +906,7 @@ pub(crate) fn reinstall(
         Source::Retire(Retire::Held(outstanding)) => {
             ReinstallCause::NotRetired(outstanding.map_fault(backend_fault))
         }
-        Source::Retire(Retire::Stale(installation)) => ReinstallCause::Stale(installation),
+        Source::Retire(Retire::Stale) => ReinstallCause::Stale,
         Source::Refused(Port::SameEpoch) => ReinstallCause::SameEpoch,
         Source::Refused(Port::ChannelUnset) => ReinstallCause::ChannelUnset,
         Source::Refused(Port::Receipt) => ReinstallCause::Receipt,
