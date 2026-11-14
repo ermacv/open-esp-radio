@@ -455,5 +455,123 @@ where
     }
 }
 
+impl oer_portable_diagnostics::DiagnosticPath for ApEnded {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
+        match self {
+            Self::Stopped => path.name("Stopped"),
+            Self::NetworkLost(observed) => {
+                path.name("NetworkLost");
+                path.word(u32::from(observed.memory_held));
+                path.word(u32::from(observed.network_running));
+                path.word(u32::from(observed.lent));
+            }
+            // The start's refusal, the contract, the port's refusal and the
+            // count are subtrees of their own.
+            Self::StartRefused(_) => {
+                path.name("StartRefused");
+                path.truncated();
+            }
+            Self::Faulted(fault) => {
+                path.name("Faulted");
+                fault.push_path(path);
+            }
+            Self::Contract(_) => {
+                path.name("Contract");
+                path.truncated();
+            }
+            Self::Refused(_) => {
+                path.name("Refused");
+                path.truncated();
+            }
+            Self::Unrecycled(_) => {
+                path.name("Unrecycled");
+                path.truncated();
+            }
+            Self::Unsupported(_) => path.name("Unsupported"),
+            Self::Unkept => path.name("Unkept"),
+            Self::Unaccepted => path.name("Unaccepted"),
+        }
+    }
+}
+
+impl oer_portable_diagnostics::DiagnosticPath for UnkeptStop {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
+        match self {
+            Self::Unconfirmed => path.name("Unconfirmed"),
+            Self::Confirmed => path.name("Confirmed"),
+            Self::Unrecycled(_) => {
+                path.name("Unrecycled");
+                path.truncated();
+            }
+        }
+    }
+}
+
+/// How the access point ended: the end's name, why it ended, then what the
+/// end holds (the release's cause with what the port still holds, the
+/// stop's observations, the start's refusal).
+impl<E: oer_portable_diagnostics::DiagnosticPath> oer_portable_diagnostics::DiagnosticPath
+    for ApExitOf<E>
+{
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
+        match self {
+            Self::Ended(ended) => {
+                path.name("Ended");
+                ended.push_path(path);
+            }
+            Self::StopUnconfirmed { ended, observed } => {
+                path.name("StopUnconfirmed");
+                ended.push_path(path);
+                crate::failure::path::stop_unconfirmed(observed, path);
+            }
+            Self::ReleaseRefused { ended, cause } => {
+                path.name("ReleaseRefused");
+                ended.push_path(path);
+                cause.push_path(path);
+            }
+            Self::Unrecycled {
+                ended, released, ..
+            } => {
+                path.name("Unrecycled");
+                ended.push_path(path);
+                if let Err(cause) = released {
+                    cause.push_path(path);
+                }
+            }
+            Self::Unavailable(unavailable) => {
+                path.name("Unavailable");
+                unavailable.push_path(path);
+            }
+            Self::Unkept { ended, stop } => {
+                path.name("Unkept");
+                ended.push_path(path);
+                stop.push_path(path);
+            }
+            Self::StopFaulted {
+                ended,
+                fault,
+                observed,
+            } => {
+                path.name("StopFaulted");
+                ended.push_path(path);
+                if let Some(fault) = fault {
+                    fault.push_path(path);
+                }
+                crate::failure::path::stop_unconfirmed(observed, path);
+            }
+            Self::StopDeviceFailed { ended, fault, .. } => {
+                path.name("StopDeviceFailed");
+                ended.push_path(path);
+                fault.push_path(path);
+            }
+            Self::Unaccepted { ended, stop } => {
+                path.name("Unaccepted");
+                ended.push_path(path);
+                stop.push_path(path);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;

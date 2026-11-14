@@ -16,7 +16,7 @@ meanwhile.
 | `beacons` | Over a three-second window, the beacons delivered and expired equal the window's TBTTs at 100 TU within two, one for each status request's latency; none expired |
 | `associate` | The fixture's station (WPA2, HT, static `192.168.4.2/24`) associates and completes the 4-way handshake: its supplicant reaches `COMPLETED` on the device's BSSID, and the device counts one station associated and authorized |
 | `ping` | The station pings `192.168.4.1` twenty times at 200 ms; at least nineteen replies |
-| `stop` | The device stops: it no longer beacons and counts no station |
+| `stop` | The device stops: its access point stopped and its radio was released (`Stopped::Down`, the exit `Ended/Stopped`), it no longer beacons and counts no station; any other end fails the case with its path |
 
 The cases run in order on one boot: each needs what the one before did.
 The passphrase reaches the fixture only on its standard input; the

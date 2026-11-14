@@ -21,14 +21,20 @@ cap of 20 dBm, above the domain's ceiling, which decides.
   point refuses answers `InvalidSettings`, a second serve
   `AlreadyServing`. The answer is `Beaconing` with the BSSID once the
   status counts a beacon, within 20 s, else `Timeout`.
-- **GetStatus** answers the access point's status (`AccessPoint::status`)
-  and its IPv4 configuration.
-- **Stop** asks the access point to stop (`AccessPoint::stop`) and answers
-  `Down` once it no longer runs, within 10 s, else `Timeout`; before a
-  serve it answers `NotServing`.
+- **GetStatus** answers the access point's status (`AccessPoint::status`),
+  its IPv4 configuration and, once its task ended, how it ended
+  (`AccessPoint::exit` as its line reads: `wifi-ap-end` and the exit's
+  variant path).
+- **Stop** asks the access point to stop (`AccessPoint::stop`) and waits
+  for its task to end (`AccessPoint::installation_end`), within 10 s, else
+  `Timeout`: it answers `Down` when the access point stopped and its radio
+  was released (`ApExit::Ended(ApEnded::Stopped)`), otherwise `Ended` with
+  the exit's line (a refused release names what the port still holds);
+  before a serve it answers `NotServing`. The installation's end is kept
+  for the boot.
 
-An exit of the access point other than an ordinary stop records its named
-cause and resets the chip. The image builds in no credentials.
+No exit of the access point resets the chip. The image builds in no
+credentials.
 
 `cargo fw build hil-wifi-access-point` builds it; the scenario's harness
 builds and flashes it.

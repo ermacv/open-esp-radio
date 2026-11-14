@@ -96,11 +96,13 @@ fn address(net: &wifi::Network<Brand, Silent, wifi::Copying>) -> Option<Ipv4> {
 
 /// Answer each request in order, each to completion.
 async fn worker(
-    access_point: AccessPoint,
+    mut access_point: AccessPoint,
     mut addresses: ApplicationEnd<(), Option<Ipv4>, 1>,
     mut requests: Inbox<'static, Request>,
 ) -> AppResult {
     let mut serving = false;
+    // How the installation ended, once its task did: kept for the boot.
+    let mut installation = None;
     loop {
         let (identity, request) = requests.next().await;
         match request {
@@ -111,16 +113,29 @@ async fn worker(
             Request::GetStatus(_) => {
                 addresses.send(()).await;
                 let ipv4 = addresses.receive().await;
-                answer(identity, &status(&access_point, ipv4));
+                answer(identity, &status(&access_point, installation.is_some(), ipv4));
             }
             Request::Stop(_) => {
                 let stopped = if !serving {
                     Stopped::Refused(AccessPointError::NotServing)
                 } else {
                     access_point.stop();
-                    match until(|| !access_point.status().running, STOP_BOUND).await {
-                        true => Stopped::Down,
-                        false => Stopped::Refused(AccessPointError::Timeout),
+                    // The answer waits for the access point's task to end:
+                    // its exit is then final, the release's included.
+                    let ended = embassy_futures::select::select(
+                        access_point.installation_end(),
+                        Timer::after(STOP_BOUND),
+                    )
+                    .await;
+                    match (ended, access_point.exit()) {
+                        (embassy_futures::select::Either::First(end), Some(exit)) => {
+                            installation = Some(end);
+                            match exit {
+                                wifi::ApExit::Ended(wifi::ApEnded::Stopped) => Stopped::Down,
+                                exit => Stopped::Ended(end_line(&exit)),
+                            }
+                        }
+                        _ => Stopped::Refused(AccessPointError::Timeout),
                     }
                 };
                 answer(identity, &stopped);
@@ -180,7 +195,19 @@ async fn until(done: impl Fn() -> bool, bound: Duration) -> bool {
     }
 }
 
-fn status(access_point: &AccessPoint, ipv4: Option<Ipv4>) -> Status {
+/// How the access point ended, as its line reads; a text longer than the
+/// dictionary's keeps its first bytes.
+fn end_line(exit: &wifi::ApExit) -> oer_hil_services_wifi_access_point::End {
+    let mut text = [0; oer_hil_services_wifi_access_point::MAX_END];
+    let length = wifi::access_point_end_text(exit, &mut text);
+    text.get(..length)
+        .and_then(|text| core::str::from_utf8(text).ok())
+        .and_then(|text| heapless::String::try_from(text).ok())
+        .unwrap_or_default()
+}
+
+/// The access point's status, and how it ended once its task `ended`.
+fn status(access_point: &AccessPoint, ended: bool, ipv4: Option<Ipv4>) -> Status {
     let status = access_point.status();
     Status {
         address: access_point.address(),
@@ -192,6 +219,10 @@ fn status(access_point: &AccessPoint, ipv4: Option<Ipv4>) -> Status {
         refused: status.refused,
         rx_dropped: status.rx_dropped,
         ipv4,
+        ended: ended
+            .then(|| access_point.exit())
+            .flatten()
+            .map(|exit| end_line(&exit)),
     }
 }
 

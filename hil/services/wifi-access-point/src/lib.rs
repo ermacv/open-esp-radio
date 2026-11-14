@@ -39,6 +39,14 @@ use serde::{Deserialize, Serialize};
 pub const MAX_SSID: usize = 32;
 /// The longest WPA2 passphrase (IEEE 802.11-2020 J.4.1).
 pub const MAX_PASSPHRASE: usize = 63;
+/// The longest end of the access point as its line reads.
+pub const MAX_END: usize = 96;
+
+/// How the access point ended, as its line reads: `wifi-ap-end` and the
+/// variant path of the product's exit (`Ended/Stopped` once it stopped and
+/// its radio was released; `ReleaseRefused/…` with what the port still
+/// holds; another end with its cause).
+pub type End = heapless::String<MAX_END>;
 
 oer_protocols_hil_protocol::messages! {
     endpoint Serve = "wifi-access-point/serve" => Served;
@@ -75,7 +83,7 @@ pub enum Served {
 pub struct GetStatus;
 
 /// The answer to [`GetStatus`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Status {
     /// The access point's own address, its BSSID.
     pub address: [u8; 6],
@@ -96,6 +104,8 @@ pub struct Status {
     pub rx_dropped: u32,
     /// Its static IPv4 configuration.
     pub ipv4: Option<Ipv4>,
+    /// How it ended, once its task ended ([`End`]); none before.
+    pub ended: Option<End>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -109,10 +119,13 @@ pub struct Ipv4 {
 pub struct Stop;
 
 /// The answer to [`Stop`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum Stopped {
-    /// The access point no longer beacons.
+    /// The access point stopped and its radio was released.
     Down,
+    /// It ended otherwise ([`End`]): a refused release, with what the port
+    /// still holds, or an end that was not the stop.
+    Ended(End),
     Refused(AccessPointError),
 }
 

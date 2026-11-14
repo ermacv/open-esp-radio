@@ -15,7 +15,7 @@ use oer_chips_esp32s31_radio_ieee80211_station::access_point::{
     self as ap, AccessPointControl, AccessPointRunner, AccessPointStorage,
 };
 
-pub use ap::{ApExit, ApSettings, ApSettingsError, StartRefused};
+pub use ap::{ApEnded, ApExit, ApSettings, ApSettingsError, StartRefused};
 pub use oer_protocols_ieee80211_runtime::access_point::ApStatus;
 pub use oer_protocols_ieee80211_runtime::access_point::ApUnsupported;
 

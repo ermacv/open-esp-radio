@@ -1965,6 +1965,7 @@ dependencies = [
 name = "oer-hil-images-wifi-access-point"
 version = "0.1.0"
 dependencies = [
+ "embassy-futures",
  "heapless",
  "oer",
  "oer-hil-agent",

@@ -347,6 +347,11 @@ fn ping(cx: &mut Cx<'_>) -> Result<(), Failure> {
 fn stop(cx: &mut Cx<'_>) -> Result<(), Failure> {
     match cx.call(Stop, STOP_TIMEOUT)? {
         Stopped::Down => {}
+        Stopped::Ended(end) => {
+            return Err(Failure::Fail(format!(
+                "the access point ended otherwise: {end}"
+            )));
+        }
         Stopped::Refused(error) => return Err(Failure::Fail(format!("stop refused: {error:?}"))),
     }
     let status = status(cx)?;

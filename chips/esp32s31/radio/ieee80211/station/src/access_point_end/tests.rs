@@ -633,3 +633,38 @@ fn a_device_fault_the_stop_named_first_ends_the_retire_unfinished_and_named() {
     assert!(unfinished.receipt.is_none(), "no cleanup ran");
     assert!(unfinished.owner.port.receipt.is_some() && unfinished.owner.other.is_some());
 }
+
+/// A start refusal of the test's own, with its path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Refusal;
+
+impl oer_portable_diagnostics::DiagnosticPath for Refusal {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
+        path.name("Refusal");
+    }
+}
+
+/// The access point's end reads as its path: the end, why it ended, then
+/// what the end holds; a refused release names the class still out.
+#[test]
+fn the_access_point_s_end_names_why_and_what_is_still_out() {
+    use oer_portable_diagnostics::DiagPath;
+    use oer_protocols_ieee80211_contracts_port::outstanding::class;
+    let stopped: ApExitOf<Refusal> = ApExitOf::Ended(ApEnded::Stopped);
+    assert_eq!(DiagPath::of(&stopped).names(), ["Ended", "Stopped"]);
+    let refused: ApExitOf<Refusal> = ApExitOf::ReleaseRefused {
+        ended: ApEnded::Stopped,
+        cause: ReleaseCause::Held(crate::failure::tests::held()),
+    };
+    let path = DiagPath::of(&refused);
+    assert_eq!(path.names(), ["ReleaseRefused", "Stopped", "Held"]);
+    assert_eq!(path.words(), [class::TRANSMIT_OUT, 4 << 16, 0, 0]);
+    let unavailable: ApExitOf<Refusal> = ApExitOf::Unavailable(crate::failure::Unavailable {
+        cause: Refusal,
+        cleanup: Ok(()),
+    });
+    assert_eq!(
+        DiagPath::of(&unavailable).names(),
+        ["Unavailable", "Refusal"]
+    );
+}

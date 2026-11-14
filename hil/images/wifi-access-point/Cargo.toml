@@ -13,6 +13,7 @@ oer-protocols-hil-agent = { path = "../../../protocols/hil/agent", default-featu
 oer-hil-agent = { path = "../../agent" }
 oer-protocols-hil-protocol = { workspace = true }
 oer-hil-services-wifi-access-point = { path = "../../services/wifi-access-point" }
+embassy-futures = "0.1.2"
 heapless = "0.9.3"
 static_cell.workspace = true
 
