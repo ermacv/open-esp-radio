@@ -423,3 +423,8 @@ disallowed-macros = [
     # Canonical sans-IO catalogue (tools/test/layers/sans-io-lints.toml).
     "oer_chips_family_radio_ieee802154_engine::engine::vendor_assert",
 ]
+
+# A state is a sum (CLAUDE.md): more than one `bool` field is a state kept
+# as flags; a `bool` parameter selects behaviour.
+max-struct-bools = 1
+max-fn-params-bools = 0

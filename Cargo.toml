@@ -395,6 +395,11 @@ debug_assert_with_mut_call = "deny"
 # `clippy.toml` lists methods radio code must not call, such as busy waiting
 # instead of yielding; an intentional use carries a local `allow` with a reason.
 disallowed_methods = "deny"
+# A state is a sum (CLAUDE.md): flags in a struct and a `bool` parameter
+# that selects behaviour are errors, with no `allow` and no `expect` (the
+# layer tests refuse both). The thresholds are in each `clippy.toml`.
+struct_excessive_bools = "deny"
+fn_params_excessive_bools = "deny"
 # Panics are visible but do not block yet: each crate moves to `deny` once
 # its sites are fixed, air-input parsers first.
 unwrap_used = "warn"

@@ -11,7 +11,7 @@ use proc_macro2::{Delimiter, TokenStream, TokenTree};
 
 /// The name of the package at `path`: `oer-` and its whole path, the root
 /// included; the application entry (`oer/`) is `oer`.
-fn expected_name(path: &str, _executable: bool) -> String {
+fn expected_name(path: &str) -> String {
     if path == "oer" {
         return "oer".to_owned();
     }
@@ -20,67 +20,45 @@ fn expected_name(path: &str, _executable: bool) -> String {
 
 #[test]
 fn the_name_follows_the_path() {
-    for (path, executable, name) in [
-        ("portable/time", false, "oer-portable-time"),
+    for (path, name) in [
+        ("portable/time", "oer-portable-time"),
         (
             "protocols/ieee80211/core/roles/sta",
-            false,
             "oer-protocols-ieee80211-core-roles-sta",
         ),
         (
             "chips/esp32s31/radio/ieee80211/backend",
-            false,
             "oer-chips-esp32s31-radio-ieee80211-backend",
         ),
         (
             "hil/probes/esp32s31-boot-smoke",
-            true,
             "oer-hil-probes-esp32s31-boot-smoke",
         ),
-        ("hil/scenarios/aes", true, "oer-hil-scenarios-aes"),
-        ("hil/services/aes", false, "oer-hil-services-aes"),
-        ("hil/services/load", false, "oer-hil-services-load"),
-        (
-            "hil/scenarios/wifi-load",
-            true,
-            "oer-hil-scenarios-wifi-load",
-        ),
+        ("hil/scenarios/aes", "oer-hil-scenarios-aes"),
+        ("hil/services/aes", "oer-hil-services-aes"),
+        ("hil/services/load", "oer-hil-services-load"),
+        ("hil/scenarios/wifi-load", "oer-hil-scenarios-wifi-load"),
         (
             "hil/scenarios/wifi-station",
-            true,
             "oer-hil-scenarios-wifi-station",
         ),
-        (
-            "hil/services/wifi-station",
-            false,
-            "oer-hil-services-wifi-station",
-        ),
+        ("hil/services/wifi-station", "oer-hil-services-wifi-station"),
         (
             "hil/scenarios/wifi-access-point",
-            true,
             "oer-hil-scenarios-wifi-access-point",
         ),
         (
             "hil/services/wifi-access-point",
-            false,
             "oer-hil-services-wifi-access-point",
         ),
-        ("tools/image/build", false, "oer-tools-image-build"),
-        ("tools/image/bundle", false, "oer-tools-image-bundle"),
-        ("tools/vendor/scenario", false, "oer-tools-vendor-scenario"),
-        (
-            "tools/vendor/scenario-cli",
-            true,
-            "oer-tools-vendor-scenario-cli",
-        ),
-        ("tools/image/cli", true, "oer-tools-image-cli"),
-        (
-            "tools/image/large-values",
-            true,
-            "oer-tools-image-large-values",
-        ),
+        ("tools/image/build", "oer-tools-image-build"),
+        ("tools/image/bundle", "oer-tools-image-bundle"),
+        ("tools/vendor/scenario", "oer-tools-vendor-scenario"),
+        ("tools/vendor/scenario-cli", "oer-tools-vendor-scenario-cli"),
+        ("tools/image/cli", "oer-tools-image-cli"),
+        ("tools/image/large-values", "oer-tools-image-large-values"),
     ] {
-        assert_eq!(expected_name(path, executable), name);
+        assert_eq!(expected_name(path), name);
     }
 }
 
@@ -91,7 +69,7 @@ fn compiler_imports_stay_in_the_reporter_and_its_private_bridge() {
             .expect("the compiler reporter has a manifest");
     assert_eq!(
         manifest["package"]["name"].as_str(),
-        Some(expected_name("tools/image/large-values", true).as_str())
+        Some(expected_name("tools/image/large-values").as_str())
     );
     let main = include_str!("../../../image/large-values/src/main.rs");
     assert!(main.contains("#![forbid(unsafe_code)]"));
@@ -2041,7 +2019,15 @@ type Visit<'v> = dyn FnMut(&Path, Seen<'_>) + 'v;
 /// own directory, inside an inline module to that module's directory. Each
 /// token is shown to `visit` before its group is walked, and each attribute
 /// of a production item before the item.
-fn walk(tokens: TokenStream, directory: &Path, file: &Path, top_level: bool, visit: &mut Visit) {
+/// Where a walked module body is: a file's top, whose `#[path]` is relative
+/// to the file's own directory, or an inline module.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Nesting {
+    FileTop,
+    Inline,
+}
+
+fn walk(tokens: TokenStream, directory: &Path, file: &Path, nesting: Nesting, visit: &mut Visit) {
     let tokens = tokens.into_iter().collect::<Vec<_>>();
     let mut index = 0;
     let mut attributes = Vec::new();
@@ -2085,13 +2071,13 @@ fn walk(tokens: TokenStream, directory: &Path, file: &Path, top_level: bool, vis
                             inline.stream(),
                             &directory.join(name.to_string()),
                             file,
-                            false,
+                            Nesting::Inline,
                             visit,
                         );
                     }
                     _ => {
                         let child = match path {
-                            Some(path) if top_level => {
+                            Some(path) if nesting == Nesting::FileTop => {
                                 file.parent().unwrap_or(directory).join(path)
                             }
                             Some(path) => directory.join(path),
@@ -2129,7 +2115,7 @@ fn walk(tokens: TokenStream, directory: &Path, file: &Path, top_level: bool, vis
         visit(file, Seen::Token(&tokens, index - 1));
         // Item bodies (`impl`, `fn`, blocks) skip their test-only items too.
         if let TokenTree::Group(group) = token {
-            walk(group.stream(), directory, file, false, visit);
+            walk(group.stream(), directory, file, Nesting::Inline, visit);
         }
     }
 }
@@ -2151,7 +2137,7 @@ fn walk_file(file: &Path, visit: &mut Visit) {
     } else {
         parent.join(stem.as_ref())
     };
-    walk(tokens, &directory, file, true, visit);
+    walk(tokens, &directory, file, Nesting::FileTop, visit);
 }
 
 /// Walk a crate root: it owns its directory, whatever its name (a binary's
@@ -2164,7 +2150,7 @@ fn walk_crate_root(file: &Path, visit: &mut Visit) {
         visit(file, Seen::Unreadable);
         return;
     };
-    walk(tokens, parent, file, true, visit);
+    walk(tokens, parent, file, Nesting::FileTop, visit);
 }
 
 /// The identifiers `marker` accepts in a walk, each with its file; a module
@@ -2379,7 +2365,7 @@ fn name_violations(members: &[Member]) -> Vec<String> {
     members
         .iter()
         .filter_map(|member| {
-            let expected = expected_name(&member.path, member.executable);
+            let expected = expected_name(&member.path);
             (member.name != expected).then(|| {
                 format!(
                     "{}: named {}, expected {expected}",
@@ -2402,11 +2388,18 @@ fn every_package_is_named_by_its_path() {
     );
 }
 
-fn member(path: &str, name: &str, executable: bool, dependencies: &[&str]) -> Member {
+/// What a test member builds: an executable or a library.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Built {
+    Executable,
+    Library,
+}
+
+fn member(path: &str, name: &str, built: Built, dependencies: &[&str]) -> Member {
     Member {
         path: path.to_owned(),
         name: name.to_owned(),
-        executable,
+        executable: built == Built::Executable,
         dependencies: dependencies.iter().map(|name| (*name).to_owned()).collect(),
         build_dependencies: BTreeSet::new(),
     }
@@ -2500,7 +2493,7 @@ embassy-sync = "1"
     let path = "protocols/ieee80211/runtime";
     let runtime = Member {
         dependencies: dependencies.clone(),
-        ..member(path, "oer-protocols-ieee80211-runtime", false, &[])
+        ..member(path, "oer-protocols-ieee80211-runtime", Built::Library, &[])
     };
     assert_eq!(
         external_crate_violations(&[runtime]).expect("runtime role"),
@@ -2519,7 +2512,7 @@ embassy-sync = "1"
         ..member(
             "protocols/ieee80211/core/roles/sta",
             "oer-protocols-ieee80211-core-roles-sta",
-            false,
+            Built::Library,
             &[],
         )
     };
@@ -2625,14 +2618,14 @@ tempfile = "3"
         ..member(
             "protocols/ieee80211/wire",
             "oer-protocols-ieee80211-wire",
-            false,
+            Built::Library,
             &[],
         )
     };
     let other = member(
         "protocols/ieee80211/core/roles/sta",
         "oer-protocols-ieee80211-core-roles-sta",
-        false,
+        Built::Library,
         &["zeroize"],
     );
     assert_eq!(
@@ -2680,7 +2673,7 @@ fn a_contract_edge_to_a_wire_or_core_is_found_and_portable_support_is_not() {
     let contract = member(
         "protocols/ieee80211/contracts/security",
         "oer-protocols-ieee80211-contracts-security",
-        false,
+        Built::Library,
         &[
             "oer-portable-wire",
             "oer-protocols-ieee80211-wire",
@@ -2743,7 +2736,7 @@ serde = "1"
         ..member(
             "protocols/ieee80211/runtime",
             "oer-protocols-ieee80211-runtime",
-            false,
+            Built::Library,
             &[],
         )
     };
@@ -2752,7 +2745,7 @@ serde = "1"
         ..member(
             "chips/esp32s31/radio/ieee80211/station",
             "oer-chips-esp32s31-radio-ieee80211-station",
-            false,
+            Built::Library,
             &[],
         )
     };
@@ -2841,19 +2834,26 @@ fn external_crate_homes_and_futures_exclusions_are_explicit() {
 
 /// Token paths, including a grouped `use bt_hci::{controller::...}`.
 /// Comments and strings do not count as uses of the async Controller API.
-fn bt_hci_controller(tokens: TokenStream, in_bt_hci: bool) -> bool {
+/// Where a token group stands: inside a `bt_hci::{…}` path, or elsewhere.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BtHci {
+    Inside,
+    Elsewhere,
+}
+
+fn bt_hci_controller(tokens: TokenStream, at: BtHci) -> bool {
     let tokens = tokens.into_iter().collect::<Vec<_>>();
-    (in_bt_hci
+    (at == BtHci::Inside
         && tokens.iter().any(|token| matches!(token, TokenTree::Ident(name) if name == "controller")))
         || tokens.iter().any(|token| {
-            matches!(token, TokenTree::Group(group) if bt_hci_controller(group.stream(), false))
+            matches!(token, TokenTree::Group(group) if bt_hci_controller(group.stream(), BtHci::Elsewhere))
         })
         || tokens.windows(4).any(|path| match path {
             [TokenTree::Ident(name), TokenTree::Punct(first), TokenTree::Punct(second), next]
                 if name == "bt_hci" && first.as_char() == ':' && second.as_char() == ':' => {
                 match next {
                     TokenTree::Ident(name) => name == "controller",
-                    TokenTree::Group(group) => bt_hci_controller(group.stream(), true),
+                    TokenTree::Group(group) => bt_hci_controller(group.stream(), BtHci::Inside),
                     _ => false,
                 }
             }
@@ -2876,7 +2876,7 @@ fn bt_hci_controller_sources(directory: &Path, found: &mut Vec<PathBuf>) -> Resu
             let tokens = source
                 .parse::<TokenStream>()
                 .map_err(|error| format!("{} does not tokenize: {error}", path.display()))?;
-            if bt_hci_controller(tokens, false) {
+            if bt_hci_controller(tokens, BtHci::Elsewhere) {
                 found.push(path);
             }
         }
@@ -2900,7 +2900,7 @@ fn bt_hci_controller_scan_checks_paths_and_grouped_imports_not_comments_or_strin
         "mod nested { use bt_hci::controller; }",
     ] {
         assert!(
-            bt_hci_controller(source.parse().unwrap(), false),
+            bt_hci_controller(source.parse().unwrap(), BtHci::Elsewhere),
             "{source}"
         );
     }
@@ -2911,7 +2911,7 @@ fn bt_hci_controller_scan_checks_paths_and_grouped_imports_not_comments_or_strin
         "mod controller {} use crate::controller::Command;",
     ] {
         assert!(
-            !bt_hci_controller(source.parse().unwrap(), false),
+            !bt_hci_controller(source.parse().unwrap(), BtHci::Elsewhere),
             "{source}"
         );
     }
@@ -2923,21 +2923,46 @@ fn the_name_rule_tells_libraries_from_programs_by_their_binary_targets() {
         member(
             "protocols/ieee80211/wire",
             "oer-protocols-ieee80211-wire",
-            false,
+            Built::Library,
             &[],
         ),
-        member("protocols/ieee80211/core/roles/sta", "oer-sta", false, &[]),
+        member(
+            "protocols/ieee80211/core/roles/sta",
+            "oer-sta",
+            Built::Library,
+            &[],
+        ),
         member(
             "hil/probes/esp32s31-boot-smoke",
             "oer-hil-probes-esp32s31-boot-smoke",
-            true,
+            Built::Executable,
             &[],
         ),
-        member("examples/example", "oer-apps-example", true, &[]),
-        member("tools/image/build", "oer-tools-image-build", false, &[]),
-        member("tools/image/cli", "oer-tools-image-cli", true, &[]),
-        member("tools/image/bundle", "oer-tool-image-bundle", false, &[]),
-        member("tools/pins", "oer-pins", true, &[]),
+        member(
+            "examples/example",
+            "oer-apps-example",
+            Built::Executable,
+            &[],
+        ),
+        member(
+            "tools/image/build",
+            "oer-tools-image-build",
+            Built::Library,
+            &[],
+        ),
+        member(
+            "tools/image/cli",
+            "oer-tools-image-cli",
+            Built::Executable,
+            &[],
+        ),
+        member(
+            "tools/image/bundle",
+            "oer-tool-image-bundle",
+            Built::Library,
+            &[],
+        ),
+        member("tools/pins", "oer-pins", Built::Executable, &[]),
     ];
     assert_eq!(
         name_violations(&members),
@@ -3100,7 +3125,7 @@ fn the_edge_rules_see_optional_target_and_aliased_dependencies_and_judge_by_path
         member(
             "chips/family/drivers/regi2c",
             "oer-chips-family-drivers-regi2c",
-            false,
+            Built::Library,
             &[],
         ),
         Member {
@@ -3117,35 +3142,45 @@ tool = { package = "oer-tool-pins", version = "1" }
             ..member(
                 "chips/family/platform/executor",
                 "oer-chips-family-platform-executor",
-                false,
+                Built::Library,
                 &[],
             )
         },
-        member("chips/esp32s31/hal", "oer-chips-esp32s31-hal", false, &[]),
+        member(
+            "chips/esp32s31/hal",
+            "oer-chips-esp32s31-hal",
+            Built::Library,
+            &[],
+        ),
         member(
             "hil/probes/esp32s31-radio-root",
             "oer-hil-probes-esp32s31-radio-root",
-            true,
+            Built::Executable,
             &[],
         ),
-        member("tools/pins", "oer-tool-pins", true, &[]),
-        member("tools/image/build", "oer-tools-image-build", false, &[]),
+        member("tools/pins", "oer-tool-pins", Built::Executable, &[]),
+        member(
+            "tools/image/build",
+            "oer-tools-image-build",
+            Built::Library,
+            &[],
+        ),
         member(
             "tools/image/checks",
             "oer-tools-image-checks",
-            false,
+            Built::Library,
             &["oer-tool-pins", "oer-tools-image-build"],
         ),
         member(
             "portable/time",
             "oer-portable-time",
-            false,
+            Built::Library,
             &["oer-protocols-ieee80211-wire", "oer-chips-esp32s31-hal"],
         ),
         member(
             "protocols/ieee80211/wire",
             "oer-protocols-ieee80211-wire",
-            false,
+            Built::Library,
             &[],
         ),
     ];
@@ -3196,24 +3231,34 @@ hal = { package = "oer-chips-esp32s31-hal", version = "1" }
             ..member(
                 "chips/family/platform/runtime",
                 "oer-chips-family-platform-runtime",
-                false,
+                Built::Library,
                 &[],
             )
         },
         member(
             "chips/family/platform/port",
             "oer-chips-family-platform-port",
-            false,
+            Built::Library,
             &[],
         ),
-        member("chips/family/facts", "oer-chips-family-facts", false, &[]),
+        member(
+            "chips/family/facts",
+            "oer-chips-family-facts",
+            Built::Library,
+            &[],
+        ),
         member(
             "chips/esp32s31/platform/layout",
             "oer-chips-esp32s31-platform-layout",
-            false,
+            Built::Library,
             &[],
         ),
-        member("chips/esp32s31/hal", "oer-chips-esp32s31-hal", false, &[]),
+        member(
+            "chips/esp32s31/hal",
+            "oer-chips-esp32s31-hal",
+            Built::Library,
+            &[],
+        ),
     ];
     assert!(forbidden_edges(&members, family_reaches_a_chip).is_empty());
     assert_eq!(
@@ -3697,20 +3742,20 @@ fn an_image_beside_the_application_entry_is_judged_and_one_without_it_is_not() {
         member(
             "hil/images/wifi-station",
             "image",
-            true,
+            Built::Executable,
             &["oer", "oer-chips-esp32s31-platform-runtime"],
         ),
         member(
             "hil/images/aes",
             "hand-built",
-            true,
+            Built::Executable,
             &["oer-chips-esp32s31-platform-runtime"],
         ),
-        member("oer", "oer", false, &[]),
+        member("oer", "oer", Built::Library, &[]),
         member(
             "chips/esp32s31/platform/runtime",
             "oer-chips-esp32s31-platform-runtime",
-            false,
+            Built::Library,
             &[],
         ),
     ];
@@ -3750,24 +3795,29 @@ fn every_hil_image_is_an_application_of_the_entry() {
 #[test]
 fn a_hil_image_without_the_entry_is_named_and_another_image_is_not() {
     let members = [
-        member("hil/images/wifi-station", "station", true, &["oer"]),
+        member(
+            "hil/images/wifi-station",
+            "station",
+            Built::Executable,
+            &["oer"],
+        ),
         member(
             "hil/images/aes",
             "hand-built",
-            true,
+            Built::Executable,
             &["oer-chips-esp32s31-platform-runtime"],
         ),
         member(
             "hil/probes/esp32s31-radio-root",
             "radio-root",
-            true,
+            Built::Executable,
             &["oer-chips-esp32s31-platform-runtime"],
         ),
-        member("oer", "oer", false, &[]),
+        member("oer", "oer", Built::Library, &[]),
         member(
             "chips/esp32s31/platform/runtime",
             "oer-chips-esp32s31-platform-runtime",
-            false,
+            Built::Library,
             &[],
         ),
     ];
@@ -3796,19 +3846,29 @@ phy = { package = "oer-chips-esp32s31-radio-phy", version = "1", optional = true
 adapter = { package = "oer-chips-esp32s31-radio-ieee80211-backend", version = "1" }
 "#,
             ),
-            ..member("chips/esp32s31/hal", "oer-chips-esp32s31-hal", false, &[])
+            ..member(
+                "chips/esp32s31/hal",
+                "oer-chips-esp32s31-hal",
+                Built::Library,
+                &[],
+            )
         },
-        member("chips/esp32s31/pac", "oer-chips-esp32s31-pac", false, &[]),
+        member(
+            "chips/esp32s31/pac",
+            "oer-chips-esp32s31-pac",
+            Built::Library,
+            &[],
+        ),
         member(
             "chips/esp32s31/radio/phy",
             "oer-chips-esp32s31-radio-phy",
-            false,
+            Built::Library,
             &[],
         ),
         member(
             "chips/esp32s31/radio/ieee80211/backend",
             "oer-chips-esp32s31-radio-ieee80211-backend",
-            false,
+            Built::Library,
             &[
                 "oer-protocols-ieee80211-runtime",
                 "oer-chips-esp32s31-radio-phy",
@@ -3817,13 +3877,13 @@ adapter = { package = "oer-chips-esp32s31-radio-ieee80211-backend", version = "1
         member(
             "protocols/ieee80211/runtime",
             "oer-protocols-ieee80211-runtime",
-            false,
+            Built::Library,
             &[],
         ),
         member(
             "chips/esp32s31/radio/ieee80211/station",
             "oer-chips-esp32s31-radio-ieee80211-station",
-            false,
+            Built::Library,
             &[
                 "oer-protocols-ieee80211-runtime",
                 "oer-chips-esp32s31-radio-ieee80211-backend",
@@ -3832,7 +3892,7 @@ adapter = { package = "oer-chips-esp32s31-radio-ieee80211-backend", version = "1
         member(
             "hil/images/aes",
             "oer-firmware-hil-esp32s31",
-            true,
+            Built::Executable,
             &[
                 "oer-chips-esp32s31-radio-ieee80211-station",
                 "oer-chips-esp32s31-hal",
@@ -3843,7 +3903,7 @@ adapter = { package = "oer-chips-esp32s31-radio-ieee80211-backend", version = "1
         member(
             "chips/esp32s31/unlisted",
             "oer-esp32s31-unlisted",
-            false,
+            Built::Library,
             &["oer-protocols-ieee80211-runtime"],
         ),
     ];
@@ -5145,13 +5205,13 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
     let model = member(
         "protocols/ieee80211/testing/model",
         "oer-protocols-ieee80211-testing-model",
-        false,
+        Built::Library,
         &["oer-protocols-ieee80211-testing-conformance"],
     );
     let mut runtime = member(
         "protocols/ieee80211/runtime",
         "oer-protocols-ieee80211-runtime",
-        false,
+        Built::Library,
         &["oer-protocols-ieee80211-contracts-port"],
     );
     runtime
@@ -5160,7 +5220,7 @@ fn a_product_edge_to_a_testing_package_is_found_and_one_between_them_is_not() {
     let core = member(
         "protocols/ieee80211/core/upper-mac",
         "oer-protocols-ieee80211-core-upper-mac",
-        false,
+        Built::Library,
         &["oer-protocols-ieee80211-testing-conformance"],
     );
     let roles = BTreeMap::from([
@@ -5284,7 +5344,7 @@ fn an_unlisted_network_package_and_a_contract_on_another_protocol_are_found() {
     let port = member(
         "protocols/network/port",
         "oer-protocols-network-port",
-        false,
+        Built::Library,
         &[
             "oer-protocols-network-wire",
             "oer-protocols-ieee80211-wire",
@@ -5294,10 +5354,15 @@ fn an_unlisted_network_package_and_a_contract_on_another_protocol_are_found() {
     let codec = member(
         "protocols/network/wire",
         "oer-protocols-network-wire",
-        false,
+        Built::Library,
         &["oer-portable-wire"],
     );
-    let stack = member("protocols/network/stack", "oer-network-stack", false, &[]);
+    let stack = member(
+        "protocols/network/stack",
+        "oer-network-stack",
+        Built::Library,
+        &[],
+    );
     let workspace = [
         "oer-protocols-network-wire",
         "oer-protocols-network-port",
@@ -7657,10 +7722,15 @@ fn the_rule_lists_name_their_removers() {
         COMPATIBILITY,
         RAW_REGISTERS,
         RAW_BYTES,
+        HIDDEN_FLAGS,
+        HIDDEN_BOOL_PARAMETERS,
     ] {
         for (entry, _, remover) in list {
             assert!(!remover.is_empty(), "{entry}");
         }
+    }
+    for (entry, remover) in OPTION_SLOTS {
+        assert!(!remover.is_empty(), "{entry}");
     }
     let hits = [
         ("a.rs".to_owned(), "x".to_owned()),
@@ -7782,3 +7852,2487 @@ fn t8c_print() {
         std::println!("];");
     }
 }
+
+// ---- K0: a state is a sum, and one function calls a port's transition -----
+
+/// K0's packages: the protocols, the Wi-Fi radio crates, the applications'
+/// entries and `oer`, but testing packages and models.
+fn state_code(path: &str) -> bool {
+    let wifi = path.starts_with("chips/") && path.contains("/radio/ieee80211");
+    let app = path.starts_with("chips/") && path.ends_with("/app");
+    (path.starts_with("protocols/") || wifi || app || path == "oer")
+        && !path.split('/').any(|part| part == "testing")
+        && !path.ends_with("/model")
+}
+
+/// The parts of `tokens` between top-level commas, the angle brackets of a
+/// type counted (an arrow's `>` is not one).
+fn comma_parts(tokens: &[TokenTree]) -> Vec<&[TokenTree]> {
+    let mut parts = Vec::new();
+    let mut depth = 0_i32;
+    let mut start = 0;
+    for (index, token) in tokens.iter().enumerate() {
+        if let TokenTree::Punct(punct) = token {
+            let arrow = index
+                .checked_sub(1)
+                .is_some_and(|before| punct_at(tokens, before, '-'));
+            match punct.as_char() {
+                '<' => depth += 1,
+                '>' if !arrow => depth -= 1,
+                ',' if depth == 0 => {
+                    parts.extend(tokens.get(start..index));
+                    start = index + 1;
+                }
+                _ => {}
+            }
+        }
+    }
+    if start < tokens.len() {
+        parts.extend(tokens.get(start..));
+    }
+    parts
+}
+
+/// The attributes and the visibility at the start of a field, a variant or
+/// a parameter, passed over: the index after them.
+fn past_attributes(part: &[TokenTree]) -> usize {
+    let mut at = 0;
+    loop {
+        match part.get(at) {
+            Some(TokenTree::Punct(hash)) if hash.as_char() == '#' => at += 2,
+            Some(TokenTree::Ident(word)) if word == "pub" || word == "mut" => {
+                at += 1;
+                if group_at(part, at, Delimiter::Parenthesis).is_some() {
+                    at += 1;
+                }
+            }
+            _ => return at,
+        }
+    }
+}
+
+/// A named field or a parameter: its name and its type's tokens.
+fn named_part(part: &[TokenTree]) -> Option<(String, &[TokenTree])> {
+    let at = past_attributes(part);
+    let name = ident_at(part, at)?;
+    (punct_at(part, at + 1, ':') && !punct_at(part, at + 2, ':'))
+        .then(|| (name, part.get(at + 2..).unwrap_or(&[])))
+}
+
+/// Whether a type's tokens are `bool`, the one spelling the lints count.
+fn is_bool(ty: &[TokenTree]) -> bool {
+    matches!(ty, [TokenTree::Ident(word)] if word == "bool")
+}
+
+/// Whether a type's tokens mention `bool` anywhere but as a function's
+/// result (after `->`): `bool`, `Option<bool>`, `Cell<bool>`, `[bool; N]`,
+/// a tuple with one. Groups are searched.
+fn mentions_bool(ty: &[TokenTree]) -> bool {
+    let mut depth = 0_i32;
+    let mut skip_from: Option<i32> = None;
+    for (index, token) in ty.iter().enumerate() {
+        match token {
+            TokenTree::Punct(punct) => {
+                let arrow = index
+                    .checked_sub(1)
+                    .is_some_and(|before| punct_at(ty, before, '-'));
+                match punct.as_char() {
+                    '>' if arrow => {
+                        skip_from.get_or_insert(depth);
+                    }
+                    '<' => depth += 1,
+                    '>' => {
+                        depth -= 1;
+                        if skip_from.is_some_and(|from| depth < from) {
+                            skip_from = None;
+                        }
+                    }
+                    ',' if skip_from == Some(depth) => skip_from = None,
+                    _ => {}
+                }
+            }
+            _ if skip_from.is_some() => {}
+            TokenTree::Ident(word) if word == "bool" => return true,
+            TokenTree::Group(group)
+                if mentions_bool(&group.stream().into_iter().collect::<Vec<_>>()) =>
+            {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Whether a type's tokens are an `Option<…>`.
+fn is_option(ty: &[TokenTree]) -> bool {
+    let words = ty
+        .iter()
+        .take_while(|token| !matches!(token, TokenTree::Punct(punct) if punct.as_char() == '<'))
+        .filter_map(|token| match token {
+            TokenTree::Ident(word) => Some(word.to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    words.last().is_some_and(|word| word == "Option")
+        && ty
+            .iter()
+            .any(|token| matches!(token, TokenTree::Punct(punct) if punct.as_char() == '<'))
+}
+
+/// The item named after the keyword `keyword` at `at`, and its first group
+/// after its name and generics, before a `;` or a body of another kind.
+fn item_group<'t>(
+    tokens: &'t [TokenTree],
+    at: usize,
+    keyword: &str,
+) -> Option<(String, &'t proc_macro2::Group)> {
+    if ident_at(tokens, at)? != keyword {
+        return None;
+    }
+    let name = ident_at(tokens, at + 1)?;
+    let mut index = at + 2;
+    while let Some(token) = tokens.get(index) {
+        match token {
+            TokenTree::Group(group)
+                if matches!(group.delimiter(), Delimiter::Brace | Delimiter::Parenthesis) =>
+            {
+                return Some((name, group));
+            }
+            TokenTree::Punct(punct) if punct.as_char() == ';' => return None,
+            _ => index += 1,
+        }
+    }
+    None
+}
+
+/// The fields of a body (a struct's or a variant's), named or not: each
+/// with its name (`0`, `1`, … for a tuple's) and its type.
+fn body_fields(body: &proc_macro2::Group) -> Vec<(String, Vec<TokenTree>)> {
+    let tokens = body.stream().into_iter().collect::<Vec<_>>();
+    comma_parts(&tokens)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, part)| match body.delimiter() {
+            Delimiter::Brace => named_part(part).map(|(name, ty)| (name, ty.to_vec())),
+            _ => Some((
+                index.to_string(),
+                part.get(past_attributes(part)..)?.to_vec(),
+            )),
+        })
+        .collect()
+}
+
+/// A struct's name and its fields.
+type Fields = (String, Vec<(String, Vec<TokenTree>)>);
+
+/// The fields of the struct at `at`, named or a tuple's.
+fn struct_fields(tokens: &[TokenTree], at: usize) -> Option<Fields> {
+    let (name, body) = item_group(tokens, at, "struct")?;
+    Some((name, body_fields(body)))
+}
+
+/// The number of a body's flags (fields whose type mentions `bool`), when
+/// no lint sees them: two or more, and at most one a plain `bool`
+/// (`struct_excessive_bools` counts plain `bool` fields of a struct, and
+/// sees no enum's variant).
+/// The body whose flags are counted: a struct's, whose plain `bool` fields
+/// the lint counts, or an enum variant's, which it does not see.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Body {
+    Struct,
+    Variant,
+}
+
+fn unseen_flags(fields: &[(String, Vec<TokenTree>)], body: Body) -> Option<usize> {
+    let flags = fields.iter().filter(|(_, ty)| mentions_bool(ty)).count();
+    let plain = fields.iter().filter(|(_, ty)| is_bool(ty)).count();
+    (flags >= 2 && !(body == Body::Struct && plain >= 2)).then_some(flags)
+}
+
+/// `STATE_FLAGS`: what `struct_excessive_bools` does not see of a state kept
+/// as flags: a struct's or an enum variant's fields that mention `bool`,
+/// two or more, as `Name N` or `Enum::Variant N`.
+fn state_flags_at(tokens: &[TokenTree], at: usize) -> Vec<String> {
+    if let Some((name, fields)) = struct_fields(tokens, at) {
+        return unseen_flags(&fields, Body::Struct)
+            .map(|flags| std::format!("{name} {flags}"))
+            .into_iter()
+            .collect();
+    }
+    let Some((name, body)) = item_group(tokens, at, "enum") else {
+        return Vec::new();
+    };
+    let variants = body.stream().into_iter().collect::<Vec<_>>();
+    comma_parts(&variants)
+        .into_iter()
+        .filter_map(|variant| {
+            let at = past_attributes(variant);
+            let variant_name = ident_at(variant, at)?;
+            let fields = match variant.get(at + 1) {
+                Some(TokenTree::Group(group)) => body_fields(group),
+                _ => return None,
+            };
+            unseen_flags(&fields, Body::Variant)
+                .map(|flags| std::format!("{name}::{variant_name} {flags}"))
+        })
+        .collect()
+}
+
+/// `BOOL_PARAMETERS`: what `fn_params_excessive_bools` does not see of a
+/// parameter that selects behaviour: one whose type mentions `bool` but is
+/// not a plain `bool`, as `name N`.
+fn bool_parameter_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let (name, parameters) = item_group(tokens, at, "fn")?;
+    if parameters.delimiter() != Delimiter::Parenthesis {
+        return None;
+    }
+    let parameters = parameters.stream().into_iter().collect::<Vec<_>>();
+    let unseen = comma_parts(&parameters)
+        .into_iter()
+        .filter_map(named_part)
+        .filter(|(_, ty)| mentions_bool(ty) && !is_bool(ty))
+        .count();
+    (unseen > 0).then(|| std::format!("{name} {unseen}"))
+}
+
+/// `bool_parameter_at`, as the counted scans read it.
+fn bool_parameters_at(tokens: &[TokenTree], at: usize) -> Vec<String> {
+    bool_parameter_at(tokens, at).into_iter().collect()
+}
+
+/// What a slot's use at `at` does to the field it names: `.field.take()`,
+/// `.replace(…)`, `.insert(…)`, `.get_or_insert…`; any assignment
+/// `.field = …`; and `&mut ….field`, what `mem::take`, `mem::replace` and an
+/// alias go through.
+fn slot_use_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    if punct_at(tokens, at, '&') && ident_at(tokens, at + 1).is_some_and(|word| word == "mut") {
+        // The place borrowed: its last field.
+        let mut index = at + 2;
+        let mut field = None;
+        while ident_at(tokens, index).is_some() {
+            if punct_at(tokens, index + 1, '.') {
+                index += 2;
+                field = ident_at(tokens, index).or(field);
+            } else {
+                break;
+            }
+        }
+        return field;
+    }
+    if !punct_at(tokens, at, '.') {
+        return None;
+    }
+    let field = ident_at(tokens, at + 1)?;
+    if punct_at(tokens, at + 2, '.') {
+        let method = ident_at(tokens, at + 3)?;
+        let fills = ["take", "replace", "insert"].contains(&method.as_str())
+            || method.starts_with("get_or_insert");
+        return (fills && group_at(tokens, at + 4, Delimiter::Parenthesis).is_some())
+            .then_some(field);
+    }
+    let assigns = matches!(
+        tokens.get(at + 2),
+        Some(TokenTree::Punct(equals)) if equals.as_char() == '='
+            && equals.spacing() == proc_macro2::Spacing::Alone
+    );
+    assigns.then_some(field)
+}
+
+/// The production code of the packages `select` takes, by crate: what
+/// `find` reports of each token, with its file below the root.
+fn crate_hits(select: &Select, find: &Finder) -> Vec<Vec<(String, String)>> {
+    let root = root();
+    let mut crates = Vec::new();
+    for (path, manifest) in packages(&root) {
+        if !select(&path) {
+            continue;
+        }
+        for crate_root in crate_roots(&root.join(&path), &manifest) {
+            let mut hits = Vec::new();
+            walk_crate_root(&crate_root, &mut |file: &Path, seen: Seen<'_>| {
+                let file = file.strip_prefix(&root).map_or_else(
+                    |_| file.display().to_string(),
+                    |file| file.display().to_string(),
+                );
+                if let Seen::Token(tokens, at) = seen
+                    && let Some(what) = find(tokens, at)
+                {
+                    hits.push((file, what));
+                }
+            });
+            crates.push(hits);
+        }
+    }
+    crates
+}
+
+/// `OPTION_SLOTS`: an `Option` field its own crate fills, takes, assigns or
+/// borrows `&mut`, as `file::Struct.field`.
+fn option_slots(select: &Select) -> BTreeSet<String> {
+    let fields: &Finder = &|tokens, at| {
+        let (name, fields) = struct_fields(tokens, at)?;
+        let options = fields
+            .iter()
+            .filter(|(_, ty)| is_option(ty))
+            .map(|(field, _)| field.as_str())
+            .collect::<Vec<_>>();
+        (!options.is_empty()).then(|| std::format!("{name} {}", options.join(" ")))
+    };
+    let uses: &Finder = &|tokens, at| slot_use_at(tokens, at).map(|field| std::format!(".{field}"));
+    let both: &Finder = &|tokens, at| fields(tokens, at).or_else(|| uses(tokens, at));
+    let mut slots = BTreeSet::new();
+    for hits in crate_hits(select, both) {
+        let used = hits
+            .iter()
+            .filter_map(|(_, what)| what.strip_prefix('.'))
+            .collect::<BTreeSet<_>>();
+        for (file, what) in &hits {
+            let mut words = what.split(' ');
+            let Some(name) = words.next().filter(|name| !name.starts_with('.')) else {
+                continue;
+            };
+            for field in words.filter(|field| used.contains(field)) {
+                slots.insert(std::format!("{file}::{name}.{field}"));
+            }
+        }
+    }
+    slots
+}
+
+/// The hits of a finder that reports `name N`, as `file::name` repeated `N`
+/// times: a list of paths with their counts, where a path gaining one
+/// fails as a file gaining a hit does.
+fn counted_paths(
+    select: &Select,
+    find: fn(&[TokenTree], usize) -> Vec<String>,
+) -> Vec<(String, String)> {
+    let finder: &Finder = &move |tokens, at| {
+        let found = find(tokens, at);
+        (!found.is_empty()).then(|| found.join("\n"))
+    };
+    let mut hits = Vec::new();
+    for (file, found) in scan_hits(select, finder, NO_ATTRIBUTE) {
+        for entry in found.lines() {
+            let Some((name, count)) = entry.rsplit_once(' ') else {
+                continue;
+            };
+            for _ in 0..count.parse::<usize>().unwrap_or(1) {
+                hits.push((std::format!("{file}::{name}"), String::new()));
+            }
+        }
+    }
+    hits
+}
+
+/// The paths of a scan against its list: a new one and an entry with no
+/// hit both fail.
+fn assert_paths(found: &BTreeSet<String>, list: &[(&str, &str)]) {
+    let listed = list.iter().map(|(path, _)| *path).collect::<BTreeSet<_>>();
+    let new = found
+        .iter()
+        .filter(|path| !listed.contains(path.as_str()))
+        .map(|path| std::format!("new: {path}"));
+    let gone = listed
+        .iter()
+        .filter(|path| !found.contains(**path))
+        .map(|path| std::format!("gone, remove its entry: {path}"));
+    let differences = new.chain(gone).collect::<Vec<_>>();
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+/// The two lints of the rule, spelled so that this file names neither.
+fn bool_lints() -> [String; 2] {
+    [
+        ["struct", "_excessive_bools"].concat(),
+        ["fn_params", "_excessive_bools"].concat(),
+    ]
+}
+
+/// The lints an attribute must not name: the two, and the one group of
+/// Clippy that holds them (`clippy-driver rustc -W help`, its lint groups:
+/// `clippy::pedantic` alone).
+fn bool_lint_names() -> [String; 3] {
+    let [structs, parameters] = bool_lints();
+    [
+        std::format!("clippy::{structs}"),
+        std::format!("clippy::{parameters}"),
+        ["clippy::", "pedantic"].concat(),
+    ]
+}
+
+/// Whether `source` holds an `allow`, `expect` or `warn` of one of the two
+/// lints or of their group, an attribute's or a `cfg_attr`'s, of an item or
+/// of a crate: each switches the denied lint off or lowers it.
+fn silences_a_bool_lint(source: &str) -> bool {
+    let names = bool_lint_names();
+    ["allow(", "expect(", "warn("].iter().any(|attribute| {
+        source.match_indices(attribute).any(|(at, _)| {
+            let inside = source
+                .get(at..)
+                .and_then(|rest| rest.split(')').next())
+                .unwrap_or("");
+            names.iter().any(|name| inside.contains(name.as_str()))
+        })
+    })
+}
+
+/// Every Rust file under `directory`, `target` and `.git` aside.
+fn rust_files(directory: &Path, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if ![".git", "target"].contains(&entry.file_name().to_string_lossy().as_ref()) {
+                rust_files(&path, found);
+            }
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            found.push(path);
+        }
+    }
+}
+
+/// The packages outside the two lints: the developer's machine
+/// (`tools/`), but the layer tests, which are the check and keep the rule.
+fn outside_the_bool_lints(path: &str) -> bool {
+    path.starts_with("tools/") && path != "tools/test/layers"
+}
+
+/// The packages at `max-fn-params-bools = 1`: those of the layer tests'
+/// roles `Pac`, `Hal` and `HardwareDriver`, where one `bool` parameter is
+/// a bit's value.
+fn bit_parameters(path: &str) -> bool {
+    matches!(
+        role(path),
+        Some(Role::Pac | Role::Hal | Role::HardwareDriver)
+    )
+}
+
+/// The Clippy configuration a package reads, as Clippy finds it: the
+/// nearest `clippy.toml` from the package's directory up to the root.
+fn clippy_config_of(path: &str) -> (PathBuf, toml::Value) {
+    let root = root();
+    let mut directory = root.join(path);
+    let file = loop {
+        let candidate = directory.join("clippy.toml");
+        if candidate.is_file() || directory == root {
+            break candidate;
+        }
+        match directory.parent() {
+            Some(parent) => directory = parent.to_path_buf(),
+            None => break root.join("clippy.toml"),
+        }
+    };
+    let config = read_toml(&file);
+    (file, config)
+}
+
+#[test]
+fn no_source_allows_or_expects_a_bool_lint() {
+    let root = root();
+    let mut files = Vec::new();
+    rust_files(&root, &mut files);
+    let silenced = files
+        .into_iter()
+        .filter(|file| {
+            std::fs::read_to_string(file).is_ok_and(|source| silences_a_bool_lint(&source))
+        })
+        .map(|file| {
+            file.strip_prefix(&root)
+                .unwrap_or(&file)
+                .display()
+                .to_string()
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        silenced.is_empty(),
+        "the bool lints are silenced in:\n{}",
+        silenced.join("\n")
+    );
+}
+
+#[test]
+fn a_bool_lint_silenced_by_any_spelling_is_found() {
+    let [structs, parameters] = bool_lints();
+    for source in [
+        std::format!("#[allow(clippy::{structs})]"),
+        std::format!("#[expect(clippy::{parameters}, reason = \"x\")]"),
+        std::format!("#![allow(clippy::{structs})]"),
+        std::format!("#[cfg_attr(test, allow(clippy::{parameters}))]"),
+        std::format!("#[expect(\n    clippy::{structs},\n    reason = \"x\"\n)]"),
+        std::format!("#[warn(clippy::{structs})]"),
+        ["#[allow(clippy::", "pedantic)]"].concat(),
+        ["#![warn(clippy::", "pedantic)]"].concat(),
+    ] {
+        assert!(silences_a_bool_lint(&source), "{source}");
+    }
+    assert!(!silences_a_bool_lint(
+        "#[allow(clippy::large_enum_variant)]"
+    ));
+}
+
+#[test]
+fn every_clippy_config_holds_the_rules_thresholds() {
+    let root = root();
+    let common = read_toml(&root.join("clippy.toml"));
+    let mut problems = Vec::new();
+    for (path, _) in packages(&root) {
+        let (file, config) = clippy_config_of(&path);
+        let (struct_bools, fn_bools) = if outside_the_bool_lints(&path) {
+            (255, 255)
+        } else {
+            (1, i64::from(bit_parameters(&path)))
+        };
+        // The file the package reads keeps every common ban, wherever it
+        // stands: one between the root and the package checks for each
+        // package below it.
+        let missing = missing_lints(&config, &common, "disallowed-methods");
+        if !missing.is_empty() {
+            problems.push(std::format!(
+                "{path}: {} lost common bans: {missing:?}",
+                file.display()
+            ));
+        }
+        if config
+            .get("max-struct-bools")
+            .and_then(toml::Value::as_integer)
+            != Some(struct_bools)
+        {
+            problems.push(std::format!(
+                "{path}: max-struct-bools is not {struct_bools} in {}",
+                file.display()
+            ));
+        }
+        if config
+            .get("max-fn-params-bools")
+            .and_then(toml::Value::as_integer)
+            != Some(fn_bools)
+        {
+            problems.push(std::format!(
+                "{path}: max-fn-params-bools is not {fn_bools} in {}",
+                file.display()
+            ));
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+#[test]
+fn every_package_inherits_the_workspace_lints_and_no_more() {
+    let wrong = packages(&root())
+        .into_iter()
+        .filter(|(_, manifest)| {
+            let lints = manifest.get("lints").and_then(toml::Value::as_table);
+            lints.is_none_or(|lints| {
+                lints.len() != 1
+                    || lints.get("workspace").and_then(toml::Value::as_bool) != Some(true)
+            })
+        })
+        .map(|(path, _)| path)
+        .collect::<Vec<_>>();
+    assert!(
+        wrong.is_empty(),
+        "not `[lints] workspace = true` alone:\n{}",
+        wrong.join("\n")
+    );
+}
+
+/// Whether `file` is a Clippy configuration the checks would not read: a
+/// `.clippy.toml`, which Clippy reads before a `clippy.toml` beside it.
+fn clippy_config_hidden(file: &Path) -> bool {
+    file.file_name().and_then(std::ffi::OsStr::to_str) == Some(".clippy.toml")
+}
+
+/// Whether a Cargo configuration names one of the two lints, a Clippy lint
+/// or group after `-A` or `-W`, or `cap-lints`.
+fn cargo_config_lowers_a_lint(source: &str) -> bool {
+    let [structs, parameters] = bool_lints();
+    source.contains(&structs)
+        || source.contains(&parameters)
+        || source.contains("cap-lints")
+        || ["-A", "-W"].iter().any(|flag| {
+            source.match_indices(flag).any(|(at, _)| {
+                source.get(at + flag.len()..).is_some_and(|rest| {
+                    rest.trim_start_matches([' ', '"', '\'', ','])
+                        .starts_with("clippy::")
+                })
+            })
+        })
+}
+
+/// Every file under `directory`, `target` and `.git` aside.
+fn every_file(directory: &Path, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if !["target", ".git"].contains(&entry.file_name().to_string_lossy().as_ref()) {
+                every_file(&path, found);
+            }
+        } else {
+            found.push(path);
+        }
+    }
+}
+
+#[test]
+fn no_clippy_configuration_hides_and_no_cargo_configuration_lowers_a_lint() {
+    let root = root();
+    let mut files = Vec::new();
+    every_file(&root, &mut files);
+    let relative = |file: &PathBuf| {
+        file.strip_prefix(&root)
+            .unwrap_or(file)
+            .display()
+            .to_string()
+    };
+    let hidden = files
+        .iter()
+        .filter(|file| clippy_config_hidden(file))
+        .map(relative)
+        .collect::<Vec<_>>();
+    assert!(
+        hidden.is_empty(),
+        "a `.clippy.toml`:\n{}",
+        hidden.join("\n")
+    );
+    let lowering = files
+        .iter()
+        .filter(|file| {
+            file.strip_prefix(&root)
+                .is_ok_and(|file| file.starts_with(".cargo"))
+        })
+        .filter(|file| {
+            std::fs::read_to_string(file).is_ok_and(|source| cargo_config_lowers_a_lint(&source))
+        })
+        .map(relative)
+        .collect::<Vec<_>>();
+    assert!(
+        lowering.is_empty(),
+        "a Cargo configuration lowers a lint:\n{}",
+        lowering.join("\n")
+    );
+}
+
+#[test]
+fn the_workspace_denies_both_bool_lints() {
+    let manifest = read_toml(&root().join("Cargo.toml"));
+    let table = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("lints"))
+        .and_then(|lints| lints.get("clippy"));
+    for lint in bool_lints() {
+        let level = table
+            .and_then(|table| table.get(lint.as_str()))
+            .and_then(|level| {
+                level
+                    .as_str()
+                    .or_else(|| level.get("level").and_then(toml::Value::as_str))
+            });
+        assert!(
+            matches!(level, Some("deny" | "forbid")),
+            "clippy::{lint} is {level:?} in the workspace's table"
+        );
+    }
+}
+
+#[test]
+fn a_hidden_or_lowering_configuration_is_found() {
+    assert!(clippy_config_hidden(Path::new("/r/a/b/.clippy.toml")));
+    assert!(clippy_config_hidden(Path::new("/r/.clippy.toml")));
+    assert!(!clippy_config_hidden(Path::new("/r/a/clippy.toml")));
+    let [structs, _] = bool_lints();
+    for source in [
+        std::format!("rustflags = [\"-A\", \"clippy::{structs}\"]"),
+        "rustflags = [\"-W\", \"clippy::pedantic\"]".to_owned(),
+        "rustflags = [\"-Wclippy::all\"]".to_owned(),
+        "rustflags = [\"--cap-lints\", \"warn\"]".to_owned(),
+    ] {
+        assert!(cargo_config_lowers_a_lint(&source), "{source}");
+    }
+    assert!(!cargo_config_lowers_a_lint(
+        "rustflags = [\"-C\", \"force-frame-pointers=yes\"]"
+    ));
+}
+
+#[test]
+fn hidden_flags_are_listed_and_only_shrink() {
+    assert_scan(&counted_paths(&state_code, state_flags_at), HIDDEN_FLAGS);
+}
+
+#[test]
+fn hidden_bool_parameters_are_listed_and_only_shrink() {
+    assert_scan(
+        &counted_paths(&state_code, bool_parameters_at),
+        HIDDEN_BOOL_PARAMETERS,
+    );
+}
+
+#[test]
+fn option_slots_are_listed_and_only_shrink() {
+    assert_paths(&option_slots(&state_code), OPTION_SLOTS);
+}
+
+/// The K0 finders on a source of each shape, its tests skipped.
+#[test]
+fn the_state_scans_find_their_shapes_and_skip_tests() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let source = directory.path().join("lib.rs");
+    std::fs::write(
+        &source,
+        r#"
+pub struct Plain { a: bool, b: bool }
+pub struct Hidden { running: Option<bool>, stopping: core::cell::Cell<bool>, one: bool }
+pub struct Tuple(bool, [bool; 2]);
+pub enum Phase { Idle, Busy { started: bool, stopped: Option<bool> }, Done(bool, (u8, bool)) }
+pub struct Calls { f: fn(u8) -> bool, g: Option<fn() -> bool> }
+pub struct Slots { taken: Option<u8>, set: Option<u8>, borrowed: Option<u8>, read: Option<u8> }
+fn f(this: &mut Slots, on: Option<bool>, plain: bool, cb: fn(u8) -> bool, v: Option<u8>) {
+    let _ = this.taken.take();
+    this.set = v;
+    let _ = core::mem::take(&mut this.borrowed);
+    let _ = this.read.as_ref();
+}
+#[cfg(test)]
+mod tests {
+    struct T { a: Option<bool>, b: Option<bool> }
+    fn t(x: Option<bool>) {}
+}
+"#,
+    )
+    .expect("source");
+    let mut flags = Vec::new();
+    let mut parameters = Vec::new();
+    let mut uses = Vec::new();
+    walk_file(&source, &mut |_: &Path, seen: Seen<'_>| {
+        if let Seen::Token(tokens, at) = seen {
+            flags.extend(state_flags_at(tokens, at));
+            parameters.extend(bool_parameter_at(tokens, at));
+            uses.extend(slot_use_at(tokens, at));
+        }
+    });
+    // `Plain` is the lint's; a function's result is no flag.
+    assert_eq!(
+        flags,
+        ["Hidden 3", "Tuple 2", "Phase::Busy 2", "Phase::Done 2"]
+    );
+    assert_eq!(parameters, ["f 1"]);
+    assert_eq!(uses, ["taken", "set", "borrowed"]);
+}
+
+#[test]
+#[ignore = "prints the K0 lists from the scans' hits"]
+fn k0_print() {
+    let counted = |name: &str, hits: Vec<(String, String)>| {
+        std::println!("const {name}: &[(&str, usize, &str)] = &[");
+        for (path, count) in by_file(&hits) {
+            std::println!("    ({path:?}, {count}, {}),", remover_name(&path));
+        }
+        std::println!("];");
+    };
+    counted("HIDDEN_FLAGS", counted_paths(&state_code, state_flags_at));
+    counted(
+        "HIDDEN_BOOL_PARAMETERS",
+        counted_paths(&state_code, bool_parameters_at),
+    );
+    std::println!("const OPTION_SLOTS: &[(&str, &str)] = &[");
+    for path in option_slots(&state_code) {
+        std::println!("    ({path:?}, {}),", remover_name(&path));
+    }
+    std::println!("];");
+}
+
+/// K0, `HIDDEN_FLAGS`: what `struct_excessive_bools` does not see of a state
+/// kept as flags (an enum variant's fields; a struct's fields whose type
+/// mentions `bool` without being it), by `file::Struct` or
+/// `file::Enum::Variant` with the number of flags. It misses a flag behind
+/// a type alias (`type Flag = bool`). The list only shrinks.
+const HIDDEN_FLAGS: &[(&str, usize, &str)] = &[
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs::HtAmpduTxStorage",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/observation.rs::RateClass::Ht",
+        2,
+        BY_P2,
+    ),
+    ("chips/family/app/src/observe/link.rs::Rate::Ht", 2, BY_NONE),
+    (
+        "protocols/ieee80211/contracts/port/src/contract.rs::MacRxMetadata",
+        3,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/rx.rs::RxMeta",
+        3,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::ApSaeFault::InvalidSession",
+        3,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::RxBlockAckEvent::Contained",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ApManagementRequest::Association",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaRequest",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/block_ack/frame.rs::BlockAckAction::AddbaResponse",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/he.rs::HeMuSigBNonMimoUser::Scheduled",
+        3,
+        BY_P3,
+    ),
+];
+
+/// K0, `HIDDEN_BOOL_PARAMETERS`: what `fn_params_excessive_bools` does not
+/// see of a parameter that selects behaviour (a type that mentions `bool`
+/// without being it), by `file::function` with their number. It misses a
+/// `bool` behind a type alias, and a closure's parameter. The list only
+/// shrinks.
+const HIDDEN_BOOL_PARAMETERS: &[(&str, usize, &str)] = &[
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/observation.rs::of",
+        1,
+        BY_P2,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/classification.rs::apply_wmm_admission",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::probe",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::commit_step_with",
+        1,
+        BY_P3,
+    ),
+];
+
+/// K0, `OPTION_SLOTS`: an `Option` field its own crate takes, replaces,
+/// inserts into, assigns or borrows `&mut`, by `file::Struct.field`: a slot
+/// filled and taken. It names a field by its name in the crate, so a field
+/// of another struct of that name counts it; it misses a slot filled
+/// through a method of the field's own type that takes `&mut self` (an
+/// `Option` wrapped in a newtype). The list only shrinks.
+const OPTION_SLOTS: &[(&str, &str)] = &[
+    (
+        "chips/esp32s31/app/src/lib.rs::Boot.access_point_device",
+        BY_P2,
+    ),
+    ("chips/esp32s31/app/src/lib.rs::Boot.app_alarm", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.boot_id", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.device", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.entropy", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.observe", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.radio", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.timer", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.timers", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Boot.urgent", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::GroupBoot.observe", BY_P2),
+    (
+        "chips/esp32s31/app/src/lib.rs::GroupPeripherals.access_point",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/app/src/lib.rs::GroupPeripherals.device",
+        BY_P2,
+    ),
+    ("chips/esp32s31/app/src/lib.rs::Handed.access_point", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Handed.device", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Pending.access_point", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Pending.datapath", BY_P2),
+    ("chips/esp32s31/app/src/lib.rs::Pending.station", BY_P2),
+    ("chips/esp32s31/app/src/observed.rs::Sampler.ended", BY_P2),
+    ("chips/esp32s31/app/src/wifi.rs::Device.network", BY_P2),
+    (
+        "chips/esp32s31/app/src/wifi/access_point.rs::AccessPoint.end",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.block_ack",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.completion",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.format",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.interface",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::Queue.named",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.access_point_tsf",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.active_reads",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.he",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.he_bss",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs::State.tbtt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::LowerMacCore.fault",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::LowerMacCore.tbtt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/ampdu.rs::AmpduBudget.he",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Chain.admission",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Esp32s31TxArena.fault",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Esp32s31TxArena.program",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::OnAir.retry",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::SingleRetry.air_rate",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs::CoreOwner.bank",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs::VacantView.bank",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/consumer.rs::IrqPublication.receive",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/model.rs::MacInterruptModel.fatal_assertion_raw",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/local_time.rs::MacTimeline.last",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rate/low.rs::MacLowRateSession.hardware",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx/pool.rs::NetworkRxFrame.times",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::HeAmpduTxConfig.trigger_based",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::HeTriggerBasedTxConfig.runtime_handoff_window_micros",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs::TxSlot.home",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs::HtAmpduTxStorage.trigger_publication_snapshot",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs::HtAmpduTxStorage.trigger_reservation",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs::RetainedDmaAmpduTx.dma",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs::RetainedDmaAmpduTx.storage",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx_cost.rs::TxCost.ppdu_micros",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxOwner.active",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxOwner.last_outcome",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxParked.last_outcome",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxReport.completion",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::Buffer.admission",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::Buffer.loan",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::Execution.beacon",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::NetworkBuffer.admission",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::NetworkBuffer.loan",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.active",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.actor",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.continuation",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.failed_retune",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.power",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.retune",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::StallOwner.after",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.arena",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.barrier",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.closing",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.configuring",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.observations",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.retained_group",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.air",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.beacon",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.try_work",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Sink.tbtt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.access_point_holding",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.access_point_since",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.deadline",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.fault",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.group_mutator",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.group_since",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.holding",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.receipt",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.waker",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::PortSettings.color",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::PortSettings.he",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/keys.rs::Removing.place",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::CallPlace.item",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::CallPlace.vacancy",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::Store.access_point_configure",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::Store.gate",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::Store.station_configure",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs::WifiRetunePending.immediate",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs::WifiRetunePending.pending",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs::WifiRxExhaustion.last_after_doorbell",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs::WifiRxExhaustion.next_after_doorbell",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxStallSnapshot.hardware",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs::RxStallSnapshot.mac",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs::Receiver.full_since",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs::RecycledProbe.wait",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.full_since",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_close_started",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_mask_started",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_settle",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/session.rs::ReceiveSession.port_stop_deadline",
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/chip.rs::Config.target",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/radio.rs::Platform.power",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Cleaned.removed",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Freed.removed",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Freed.unkept",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Returning.removed",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station.rs::StationEnd.lifecycle",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::EndHalves.datapath",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::EndHalves.lifecycle",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::FinishedLifecycleOf.late",
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::UnfinishedLifecycleOf.late",
+        BY_P2,
+    ),
+    (
+        "chips/family/app/src/observe/connect.rs::Connect.ended",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/connect.rs::Visit.ended",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/network.rs::TurnTally.publish",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/profile.rs::ProfileTally.began",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/profile.rs::ProfileTally.ended",
+        BY_NONE,
+    ),
+    (
+        "chips/family/app/src/observe/profile.rs::ProfileTally.gap",
+        BY_NONE,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs::StaRateControlAssociation.ampdu_runtime",
+        BY_P3,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_selection.rs::EspressifRateSelection.control",
+        BY_P3,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/acl.rs::LeHostAclPacket.in_flight_end",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/dtm.rs::LeDtmCommandCompleteEvent.packet_count",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/scanning.rs::LeLegacyScanningConfiguration.parameters",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/h4.rs::CommandReceiver.expected",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/bootstrap.rs::LeControllerBootstrap.host_buffers",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/bootstrap.rs::LeControllerBootstrap.requested_random_address",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Pending.admitted",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Pending.config",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service.lease",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service.pending",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service.response",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs::Service.retained",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnection.pending_channel_map",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnection.pending_connection_update",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionEventCompleted.connection_timing_transition",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionEventPrepared.connection_timing_transition",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs::LePeripheralConnectionRecurringEventProvisional.connection_timing_transition",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection/acknowledgement.rs::Acknowledgement.in_flight",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.data_length_request",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.local_version",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.peer_features",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.peer_version",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.remote_features_result",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.remote_version_result",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs::LePeripheralControl.termination",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/hil/agent/src/capture/collector.rs::State.failure",
+        BY_NONE,
+    ),
+    (
+        "protocols/hil/agent/src/capture/collector.rs::State.identity",
+        BY_NONE,
+    ),
+    (
+        "protocols/hil/protocol/src/base/image_keys.rs::ImageKeysCheck.previous",
+        BY_NONE,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiConfig.access_point",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiConfig.monitor",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiPlan.access_point",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/configuration.rs::WifiPlan.monitor",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/coordinator.rs::ChannelCoordinator.last_follow",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::AbsenceTerminal.then_leave",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.absence",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.cycle",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.next_id",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Arbiter.primary",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Lease.access_point",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.absence_end",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.absence_started",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.announce",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.leave",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.moved",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.primary_end",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.primary_started",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::Outbox.start",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::StationPlaceReturns.absence",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::StationPlaceReturns.lease",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/arbiter/src/lib.rs::StoppedArbiter.next_id",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs::EspNowPeerSlot.config",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs::EspNowEncryptedPeerSlot.state",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs::EspNowPmkOwner.key",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/installation/src/lib.rs::Machine.goal",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/beacon.rs::ApBeacon.channel_switch",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/beacon.rs::ApBeacon.next_publication",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/engine.rs::ApEngine.probe_after",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/engine.rs::ApEngine.tsf_epoch",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApAssociationCapabilities.ht",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.authenticator",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.ht",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.pmk",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.pmkid",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeer.wpa2_retry_alarm",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/ap/src/service.rs::ApPeerStatus.ht",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::ArenaBook.published",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::ArenaBook.right",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataLink.retry",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataPlane.link",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataPlane.rate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/events.rs::AggregateSettled.rate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/ftm.rs::FtmPartialResult.pending",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/ftm.rs::SessionData.last_measurement",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/ftm.rs::SessionData.pending",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::LinkHandover.data",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::LinkReturn.tids",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::RxLink.replay",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link.rs::TxNumbers.tids",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link_monitor.rs::StaBeaconMonitor.deadline",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/link_monitor.rs::StaBeaconMonitor.last_observation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.background",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.block_ack",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.confirmation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.report",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Connected.rsn",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.fault",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.management",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::ConnectedRsn.replay",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Handshake.management",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Handshake.supplicant",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Keys.group_permission",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Keys.stray",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::NewConnection.confirmation",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::NewHandshake.management",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::NewHandshake.supplicant",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.configuration",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.notice",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.profile",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Scan.access_point",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::StaConfig.tx_block_ack",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::StaConfigurationContext.epoch",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.absence",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.absence_place",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.configuration",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.epoch",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.place",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.profile",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::StationRestart.notice",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.absence",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.absence_place",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.configuration",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.epoch",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.place",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.profile",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/group_keys.rs::GroupKeys.current",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.group",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.request",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/management.rs::ManagementProtection.response",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::StaTxBlockAck.pending",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/tx_block_ack.rs::StaTxBlockAck.timing",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/modem_sleep.rs::PhaseTiming.deadline",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/request.rs::StationScanChannelOrderIter.preferred",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/sa_query.rs::ActiveSaQuery.next_retry",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/sa_query.rs::StationSaQuery.active",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator.rs::RsnAuthenticator.association_security_binding",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator.rs::RsnAuthenticator.pending_ptk",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.accepted_scalar",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.keys",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.own",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.peer_commit",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/authenticator/sae.rs::Session.stored_confirm",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/retry.rs::RsnRetry.pending",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/sae.rs::SaeComebackTokens.key_drawn",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs::RsnApState.latest_built",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnConnectedSupplicant.completed_group_message1",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnStaSupplicant.completed_message3",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/supplicant.rs::RsnStaSupplicant.ptk",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/aggregate.rs::AmpduRun.previous",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Bank.active",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Bank.free",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Header.association",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/originator.rs::Agreement.alarm",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/originator.rs::Agreement.due",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckNegotiation.inactivity",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckSession.gap",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/recipient.rs::RxBlockAckSession.inactivity",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/reorder.rs::RxReorderRelease.rejected",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/fragmentation/reassembly.rs::ReassemblySlot.identity",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/monitor.rs::MonitorFilter.any_address",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/monitor.rs::MonitorFilter.minimum_rssi_dbm",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/protection.rs::ProtectionPolicy.rts_length_threshold",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/tx.rs::PublicationReport.ack_snr_db",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/tx.rs::TxExchange.ack_snr_db",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacAmpduTxStatus.ack_snr_db",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacIndividualRetries.final_rate",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::ApRunner.starting",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::ApRunner.stopped",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.association",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.beacon",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.broken",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.configure",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.fault",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_pending",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_permission",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_slot",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.held",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.kept",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.nonce",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.returned",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.stopped_on",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unaccepted",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unkept",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unrecycled",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.armed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.end",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.group",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.held",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.held_back",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.link",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.pairwise",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.reply_out",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.retired",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.rx_later",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.sequence_hold",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.starting",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.stash",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Actor.stopped",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::DataTx.plane",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.gate",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.pairwise",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.retuned",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.sequence",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.started",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.stopped",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Owed.tbtt",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.completed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.group",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.link",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.link_return",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.pairwise",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.returned",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unaccepted",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unkept",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unrecycled",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Stage.group_terminal",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath.rs::Stage.tbtt",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/datapath/messages.rs::StopObserved.port",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.arbiter",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.armed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.confirmed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.end",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.ending",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.group",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.lesson",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.pairwise",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.rejected",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.reply",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.retune",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::LinkCustody.epoch",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.arbiter",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.confirmed",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.rejected",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle/inbox.rs::Answer.stopped",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/monitor/capture.rs::MonitorCaptureMetadata.channel",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/monitor/capture.rs::MonitorCaptureSink.channel",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/monitor/capture.rs::MonitorCaptureSink.snapshot_length",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/monitor/injection.rs::MonitorInjectionMailboxOwner.active",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.connect",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.disconnect",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.scan",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/control.rs::RunnerControl.endpoint",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/control.rs::Status.notice",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/reconnect.rs::Policy.next",
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ApAssociationSecurityObservation.rsn_ie",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/ap.rs::ApAssociationSecurityObservation.rsnxe",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::AddressFields.address3",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::AddressFields.address4",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::AddressFields.sequence_control",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::AddressFields.transmitter",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::DecodedHeader.address4",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::DecodedHeader.qos",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::MacHeader.address4",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/frame.rs::MacHeader.qos",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/sae.rs::SaeReceivedCommit.rejected_groups",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/sae.rs::SaeReceivedCommit.token",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ds_channel",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ht_capability_ie",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/scan.rs::ScanRecord.ht_operation_ie",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/security.rs::RsnAssociation.pmkid",
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/station_beacon.rs::StaBeaconProtection.he_txop_rts_threshold",
+        BY_P3,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.lease",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.link",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.owed",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/dhcp.rs::Client.sent",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Configuration.dhcp",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Configuration.ipv4",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Configuration.lease",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Kept.outcome",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Kept.tag",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Socket.port",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/machine.rs::Socket.prepared",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/owner.rs::Transmitted.ended",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/payload.rs::Payload.left",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/places.rs::Line.head",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/places.rs::Line.tail",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/core/src/places.rs::Place.next",
+        BY_PHASE_C,
+    ),
+    ("protocols/network/core/src/places.rs::Place.on", BY_PHASE_C),
+    (
+        "protocols/network/core/src/places.rs::Place.previous",
+        BY_PHASE_C,
+    ),
+    ("protocols/network/port/src/slot.rs::Slot.held", BY_PHASE_C),
+    (
+        "protocols/network/runtime/src/local.rs::Producer.at",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/local.rs::Producer.ends",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/local.rs::Producer.hold",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/local.rs::Producer.socket",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Bound.closing",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Bound.lent",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/service.rs::Bound.open",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::Inbound.stopped",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::LateSocket.loans",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/runtime/src/socket.rs::Socket.inbound",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/network/wire/src/checksum.rs::Checksum.odd",
+        BY_PHASE_C,
+    ),
+    (
+        "protocols/radio/port/src/pool/fifo.rs::Place.ticket",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/radio/port/src/slot.rs::SlotRegistration.invocation",
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/radio/port/src/slot.rs::SlotRegistration.owner",
+        BY_RADIO_SYSTEM,
+    ),
+];

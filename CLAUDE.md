@@ -72,6 +72,18 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   The measure is the image's copy and frame reports
   ([image checks](tools/image/checks/README.md)), not the source's shape:
   the compiler elides no move by contract.
+- **A state is a sum.** A state is an enum whose variant holds
+  exactly what exists in it: two fields that are not independent are one
+  enum, and a fact that can be derived is not stored. An `Option` is a
+  datum that may be absent, with one meaning; it is never a slot that is
+  filled and taken. A `bool` is one independent fact; a parameter or a
+  field that selects behaviour is an enum of two names. What answers at
+  once is asked inside a core's step, which is resumed with the answer;
+  only what comes later is an input, so neither a core nor its pump keeps
+  a book of what is in flight, and a pump has no field that is a state.
+  The order of a caller's requests is the caller's type: a permit the
+  request takes and its end returns. An existing flag or slot of these
+  kinds is debt to remove, never a precedent to repeat.
 - **Runtime panics.** Runtime code has zero panics; a change adds no runtime
   panic site. Compile-time panics and test assertions are allowed; a
   compile-time check is `const { if !cond { panic!("…") } }` as a const item

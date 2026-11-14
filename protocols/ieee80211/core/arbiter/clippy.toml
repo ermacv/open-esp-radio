@@ -428,3 +428,8 @@ disallowed-macros = [
     { path = "core::debug_assert_ne", reason = "retain invariants in closed types; dynamic refusals return their owners" },
     "oer_chips_family_radio_ieee802154_engine::engine::vendor_assert",
 ]
+
+# A state is a sum (CLAUDE.md): more than one `bool` field is a state kept
+# as flags; a `bool` parameter selects behaviour.
+max-struct-bools = 1
+max-fn-params-bools = 0
