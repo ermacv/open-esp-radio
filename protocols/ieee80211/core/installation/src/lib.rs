@@ -53,7 +53,7 @@ use core::marker::PhantomData;
 
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
-    Outstanding, ReinstallRefused, Retired, StartFailure, StopUnconfirmed, Stopped,
+    Outstanding, ReinstallRefused, Retired, StartFailure, StopCause, StopUnconfirmed, Stopped,
 };
 
 #[cfg(test)]
@@ -180,6 +180,12 @@ pub enum Waiting<'a, F> {
     },
     /// The unconsumed items: a sink refused them, and room is waited for.
     Unconsumed,
+    /// The cleanup: its next step could not run, or the hardware still
+    /// holds what it releases; it is asked again at the pump's next round.
+    Cleanup,
+    /// The cleanup: the port holds its fault; it is asked again once the
+    /// fault is taken back.
+    CleanupFault(&'a F),
     /// What is out: the retirement's refusal.
     Outstanding(&'a Outstanding<F>),
     /// A proof the port did not take: a stop gives the next.
@@ -240,8 +246,15 @@ pub enum Event<'a, 'id, C, F> {
     Ready,
     /// The unconsumed items were taken and the stopped port cleaned.
     Drained,
-    /// A sink refused an unconsumed item, or the cleanup did not finish.
+    /// A sink refused an unconsumed item.
     DrainRefused,
+    /// The cleanup's next step could not run, or the hardware still holds
+    /// what it releases (`Unavailable`, `Held`): asked again at
+    /// [`Event::Again`].
+    DrainLater,
+    /// The port holds its fault, so the cleanup wrote nothing (`Faulted`):
+    /// asked again once the fault is taken back.
+    DrainFaulted(&'a F),
     /// A sink that refused has room again.
     Room,
     /// The network stopped.
@@ -262,8 +275,9 @@ pub enum Event<'a, 'id, C, F> {
     Stale,
     /// The request's deadline the outbox named passed.
     Deadline,
-    /// A stop that failed may be asked again: the pump's retry time.
-    Retry,
+    /// The pump's next bounded round after an answer that said "later": a
+    /// stop that failed, a cleanup that could not run.
+    Again,
 }
 
 /// The kind of an [`Event`], as a report of one the machine has no
@@ -294,6 +308,10 @@ pub enum EventKind {
     Drained,
     /// [`Event::DrainRefused`].
     DrainRefused,
+    /// [`Event::DrainLater`].
+    DrainLater,
+    /// [`Event::DrainFaulted`].
+    DrainFaulted,
     /// [`Event::Room`].
     Room,
     /// [`Event::NetworkStopped`].
@@ -314,8 +332,8 @@ pub enum EventKind {
     Stale,
     /// [`Event::Deadline`].
     Deadline,
-    /// [`Event::Retry`].
-    Retry,
+    /// [`Event::Again`].
+    Again,
 }
 
 impl<C, F> Event<'_, '_, C, F> {
@@ -334,6 +352,8 @@ impl<C, F> Event<'_, '_, C, F> {
             Self::Ready => EventKind::Ready,
             Self::Drained => EventKind::Drained,
             Self::DrainRefused => EventKind::DrainRefused,
+            Self::DrainLater => EventKind::DrainLater,
+            Self::DrainFaulted(_) => EventKind::DrainFaulted,
             Self::Room => EventKind::Room,
             Self::NetworkStopped => EventKind::NetworkStopped,
             Self::Retired(_) => EventKind::Retired,
@@ -344,7 +364,7 @@ impl<C, F> Event<'_, '_, C, F> {
             Self::Released => EventKind::Released,
             Self::Stale => EventKind::Stale,
             Self::Deadline => EventKind::Deadline,
-            Self::Retry => EventKind::Retry,
+            Self::Again => EventKind::Again,
         }
     }
 }
@@ -483,6 +503,74 @@ struct Waits {
     returns: bool,
 }
 
+/// The asks of a stop and of a drain that have no answer yet: neither is
+/// asked twice.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+struct Flight {
+    stop: bool,
+    drain: bool,
+}
+
+/// The outbox a step's rules write into: a stop or a drain in flight is
+/// not asked again.
+struct Flighted<'o, O> {
+    out: &'o mut O,
+    flight: Flight,
+    /// The rules had no transition for the event.
+    not_expected: bool,
+}
+
+impl<'id, C, F, O: Outbox<'id, C, F>> Outbox<'id, C, F> for Flighted<'_, O> {
+    fn start(&mut self, stopped: Stopped<'id>, channel: C) {
+        self.out.start(stopped, channel);
+    }
+    fn stop(&mut self) {
+        if !self.flight.stop {
+            self.flight.stop = true;
+            self.out.stop();
+        }
+    }
+    fn stop_data(&mut self) {
+        self.out.stop_data();
+    }
+    fn end_tokens(&mut self) {
+        self.out.end_tokens();
+    }
+    fn drain(&mut self, stopped: &Stopped<'id>) {
+        if !self.flight.drain {
+            self.flight.drain = true;
+            self.out.drain(stopped);
+        }
+    }
+    fn stop_network(&mut self) {
+        self.out.stop_network();
+    }
+    fn retire(&mut self, stopped: Stopped<'id>) {
+        self.out.retire(stopped);
+    }
+    fn reinstall(&mut self, retired: Retired<'id>, epoch: u32) {
+        self.out.reinstall(retired, epoch);
+    }
+    fn release(&mut self, retired: Retired<'id>) {
+        self.out.release(retired);
+    }
+    fn refused(&mut self, request: Request<C>, phase: Phase) {
+        self.out.refused(request, phase);
+    }
+    fn ended(&mut self, end: Result<End, Unreached<'_, C, F>>) {
+        self.out.ended(end);
+    }
+    fn status(&mut self, status: Status<'_, F>) {
+        if matches!(status, Status::NotExpected { .. }) {
+            self.not_expected = true;
+        }
+        self.out.status(status);
+    }
+    fn deadline(&mut self, at: Option<Instant>) {
+        self.out.deadline(at);
+    }
+}
+
 impl Waits {
     const fn any(self) -> bool {
         self.ready || self.drained || self.returns
@@ -501,6 +589,7 @@ pub struct Machine<'id, C, F> {
     /// This installation's tokens and unconsumed items were asked for.
     ended: bool,
     waits: Waits,
+    flight: Flight,
     fault: PhantomData<fn() -> F>,
 }
 
@@ -522,6 +611,10 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 drained: false,
                 returns: false,
             },
+            flight: Flight {
+                stop: false,
+                drain: false,
+            },
             fault: PhantomData,
         })
     }
@@ -535,6 +628,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         self.net = Net::Idle;
         self.ended = false;
         self.waits = Waits::default();
+        self.flight = Flight::default();
     }
 
     /// The phase.
@@ -548,8 +642,35 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         core::mem::replace(&mut self.state, State::Released)
     }
 
-    /// One event.
+    /// One event: its rules, with a stop and a drain asked once while in
+    /// flight. An event the rules have no transition for changes nothing.
     pub fn step(&mut self, event: Event<'_, 'id, C, F>, out: &mut impl Outbox<'id, C, F>) {
+        let before = self.flight;
+        let mut flight = before;
+        match &event {
+            Event::Stopped(_) | Event::StopReleased => flight.stop = false,
+            Event::StopUnconfirmed(stop) => match stop.cause {
+                // The stop failed, or the port holds no installation.
+                StopCause::Device(_) | StopCause::Released => flight.stop = false,
+                // The stop goes on: still in flight.
+                StopCause::Deadline | StopCause::CoreEnabled => {}
+            },
+            Event::Drained | Event::DrainRefused | Event::DrainLater | Event::DrainFaulted(_) => {
+                flight.drain = false;
+            }
+            Event::Stale if self.phase() == Phase::Settling => flight.drain = false,
+            _ => {}
+        }
+        let mut out = Flighted {
+            out,
+            flight,
+            not_expected: false,
+        };
+        self.rules(event, &mut out);
+        self.flight = if out.not_expected { before } else { out.flight };
+    }
+
+    fn rules(&mut self, event: Event<'_, 'id, C, F>, out: &mut impl Outbox<'id, C, F>) {
         let phase = self.phase();
         let kind = event.kind();
         let not_expected = Status::NotExpected { event: kind, phase };
@@ -593,6 +714,29 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                     return out.status(not_expected);
                 }
                 out.status(Status::Held(Waiting::Unconsumed));
+            }
+            Event::DrainLater => {
+                if !self.waits.drained {
+                    return out.status(not_expected);
+                }
+                out.status(Status::Held(Waiting::Cleanup));
+            }
+            Event::DrainFaulted(fault) => {
+                if !self.waits.drained {
+                    return out.status(not_expected);
+                }
+                out.status(Status::Held(Waiting::CleanupFault(fault)));
+            }
+            Event::Again => {
+                // The pump's next round after an answer that said "later".
+                if phase == Phase::Stopping {
+                    out.stop();
+                }
+                if self.waits.drained
+                    && let State::Stopped(stopped) | State::Settling(stopped) = &self.state
+                {
+                    out.drain(stopped);
+                }
             }
             Event::Room => match &self.state {
                 State::Stopped(stopped) | State::Settling(stopped) if self.waits.drained => {
@@ -654,7 +798,6 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             Event::StopUnconfirmed(stop) if phase == Phase::Stopping => {
                 out.status(Status::Held(Waiting::Radio(stop)));
             }
-            Event::Retry if phase == Phase::Stopping => out.stop(),
             Event::Retired(retired) if phase == Phase::Retiring => {
                 self.after_retired(retired, out);
             }
@@ -903,6 +1046,13 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             self.state = State::Stopping;
             self.goal = None;
             return;
+        }
+        // A cleanup the fault refused is asked again.
+        if kept.is_none()
+            && self.waits.drained
+            && let State::Stopped(stopped) | State::Settling(stopped) = &self.state
+        {
+            out.drain(stopped);
         }
         match kept {
             Some((fault, outstanding)) => {

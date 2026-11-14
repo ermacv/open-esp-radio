@@ -20,8 +20,13 @@
 //! network's are answered at once, as no data plane or network runs here.
 //! At every turn the pump also reports what only it sees: a fault of the
 //! port with the port's answer, what came home after a refused
-//! retirement, room in the sink after a refused drain, and the retry time
-//! of a failed stop (the next turn).
+//! retirement, room in the sink after a refused drain, and its next round
+//! after an answer that said "later" (a failed stop, a cleanup that could
+//! not run).
+//!
+//! Each answer of the port maps to the machine's event by a `match` with
+//! no wildcard arm, one function a call (the design's section 7): a new
+//! variant of an answer does not compile until it has its event.
 //!
 //! - From a running port with traffic, a restart ends reinstalled and the
 //!   port runs again ([`Case::Restart`]).
@@ -35,9 +40,9 @@ use core::mem::MaybeUninit;
 use core::task::{Context, Poll};
 
 use oer_protocols_ieee80211_contracts_port::{
-    CleanupRefused, DataPort, Outstanding, ProofRefused, Recovery, ReinstallRefused, Retired,
-    RxPull, StartFailure, StartPoll, StartProof, StopCause, StopUnconfirmed, Stopped,
-    SupportedChannel, TxFacts, Unconsumed, outstanding::class,
+    CleanupRefused, DataPort, Outstanding, PortAnswer, ProofRefused, Recovery, ReinstallRefused,
+    Retired, RxPull, StaleProof, StartFailure, StartPoll, StartProof, Starting, StopCause,
+    StopUnconfirmed, Stopped, SupportedChannel, TxFacts, Unconsumed, outstanding::class,
 };
 use oer_protocols_ieee80211_core_installation::{
     End, Event, FaultAnswer, Machine, Network, Outbox, Phase, Request, Status, Unreached, Waiting,
@@ -64,6 +69,8 @@ enum Answer<'id, F> {
     Ready,
     Drained,
     DrainRefused,
+    DrainLater,
+    DrainFaulted(F),
     Room,
     NetworkStopped,
     Retired(Retired<'id>),
@@ -73,7 +80,167 @@ enum Answer<'id, F> {
     ReinstallRefused(Retired<'id>, ReinstallRefused),
     Released,
     Stale,
-    Retry,
+    Again,
+}
+
+impl<F> Answer<'_, F> {
+    /// The model's name of the event (the design's section 7).
+    pub(crate) fn model_event(&self) -> &'static str {
+        match self {
+            Self::Started => "start_ok",
+            Self::StartRefused(..) => "start_refused",
+            Self::StartUnstopped(..) => "start_unstopped",
+            Self::Stopped(_) => "stop_ok",
+            Self::StopUnconfirmed(stop) => match stop.cause {
+                StopCause::Deadline | StopCause::CoreEnabled => "stop_late",
+                StopCause::Device(_) => "stop_failed",
+                StopCause::Released => "stop_released",
+            },
+            Self::StopReleased => "stop_released",
+            Self::FaultTakenBack => "fault_recovered",
+            Self::FaultKept(..) => "fault_kept",
+            Self::DataStopped => "data_stopped",
+            Self::Ready => "ready",
+            Self::Drained => "drained",
+            Self::DrainRefused => "drain_refused",
+            Self::DrainLater => "drain_later",
+            Self::DrainFaulted(_) => "drain_faulted",
+            Self::Room => "room",
+            Self::NetworkStopped => "net_stopped",
+            Self::Retired(_) => "retired",
+            Self::RetireRefused(_, outstanding) if outstanding.fault.is_some() => {
+                "retire_refused_fault"
+            }
+            Self::RetireRefused(..) => "retire_refused",
+            Self::Returned => "returned",
+            Self::Reinstalled(_) => "reinstalled",
+            Self::ReinstallRefused(..) => "reinstall_refused",
+            Self::Released => "released",
+            Self::Stale => "stale",
+            Self::Again => "again",
+        }
+    }
+}
+
+/// What a start's poll answered: the start goes on with its proof, or an
+/// answer.
+pub(crate) enum StartAnswer<'id, F> {
+    Pending(Starting<'id>),
+    Answer(Answer<'id, F>),
+}
+
+/// `poll_start`'s answer, as the machine's event.
+pub(crate) fn start_answer<'id, F>(poll: StartPoll<'id, F>) -> StartAnswer<'id, F> {
+    StartAnswer::Answer(match poll {
+        StartPoll::Started => Answer::Started,
+        StartPoll::Pending(starting) => return StartAnswer::Pending(starting),
+        StartPoll::Refused(stopped, why) => Answer::StartRefused(stopped, why),
+        StartPoll::Unstopped { cause, stop } => Answer::StartUnstopped(cause, stop),
+        StartPoll::Stale(_) => Answer::Stale,
+    })
+}
+
+/// `poll_stop`'s answer, as the machine's event: none while it is pending.
+pub(crate) fn stop_answer<'id, F>(
+    poll: Poll<Result<Stopped<'id>, StopUnconfirmed<F>>>,
+) -> Option<Answer<'id, F>> {
+    match poll {
+        Poll::Pending => None,
+        Poll::Ready(Ok(stopped)) => Some(Answer::Stopped(stopped)),
+        Poll::Ready(Err(stop)) => Some(match stop.cause {
+            // The stop goes on: the ask stays in flight.
+            StopCause::Deadline | StopCause::CoreEnabled | StopCause::Device(_) => {
+                Answer::StopUnconfirmed(stop)
+            }
+            StopCause::Released => Answer::StopReleased,
+        }),
+    }
+}
+
+/// `take_unconsumed`'s answer: none when the drain goes on to the cleanup.
+pub(crate) fn unconsumed_answer<'id, F>(
+    taken: Result<Unconsumed, StaleProof<()>>,
+) -> Option<Answer<'id, F>> {
+    match taken {
+        Ok(Unconsumed::None) => None,
+        Ok(Unconsumed::Kept) => Some(Answer::DrainRefused),
+        Err(StaleProof { proof: () }) => Some(Answer::Stale),
+    }
+}
+
+/// `clean`'s answer, as the machine's event.
+pub(crate) fn clean_answer<'id, T, F>(
+    cleaned: PortAnswer<'id, T, (), Result<(), CleanupRefused<F>>>,
+) -> Answer<'id, F>
+where
+    T: oer_protocols_ieee80211_contracts_port::PortTypes<'id>,
+{
+    match cleaned {
+        Ok(cleaned) => cleanup_answer(cleaned),
+        // An item the sink refused.
+        Err(_) => Answer::DrainRefused,
+    }
+}
+
+/// The cleanup's own answer, as the machine's event.
+pub(crate) fn cleanup_answer<'id, F>(cleaned: Result<(), CleanupRefused<F>>) -> Answer<'id, F> {
+    match cleaned {
+        Ok(()) => Answer::Drained,
+        Err(CleanupRefused::Stale) => Answer::Stale,
+        Err(CleanupRefused::Faulted(fault)) => Answer::DrainFaulted(fault),
+        Err(CleanupRefused::Unavailable(_) | CleanupRefused::Held(_)) => Answer::DrainLater,
+    }
+}
+
+/// `retire`'s answer, as the machine's event.
+pub(crate) fn retire_answer<'id, F>(
+    retired: Result<Retired<'id>, ProofRefused<Stopped<'id>, Outstanding<F>>>,
+) -> Answer<'id, F> {
+    match retired {
+        Ok(retired) => Answer::Retired(retired),
+        Err(ProofRefused::Refused(stopped, outstanding)) => {
+            Answer::RetireRefused(stopped, outstanding)
+        }
+        Err(ProofRefused::Stale(_)) => Answer::Stale,
+    }
+}
+
+/// `reinstall`'s answer, as the machine's event.
+pub(crate) fn reinstall_answer<'id, F>(
+    reinstalled: Result<Stopped<'id>, ProofRefused<Retired<'id>, ReinstallRefused>>,
+) -> Answer<'id, F> {
+    match reinstalled {
+        Ok(stopped) => Answer::Reinstalled(stopped),
+        Err(ProofRefused::Refused(
+            retired,
+            why @ (ReinstallRefused::SameEpoch
+            | ReinstallRefused::ChannelUnset
+            | ReinstallRefused::Receipt
+            | ReinstallRefused::Resources),
+        )) => Answer::ReinstallRefused(retired, why),
+        Err(ProofRefused::Stale(_)) => Answer::Stale,
+    }
+}
+
+/// `release`'s answer, as the machine's event.
+pub(crate) fn release_answer<'id, R, F>(
+    released: Result<R, StaleProof<Retired<'id>>>,
+) -> Answer<'id, F> {
+    match released {
+        Ok(_) => Answer::Released,
+        Err(StaleProof { proof: _ }) => Answer::Stale,
+    }
+}
+
+/// `recover_for_stop`'s answer, as the machine's event: none without a
+/// fault.
+pub(crate) fn recovery_answer<'id, F>(recovery: Recovery<'id, F>) -> Option<Answer<'id, F>> {
+    match recovery {
+        Recovery::Clear => None,
+        // The pump drops the recovery's proof: no call takes it.
+        Recovery::Recovered(_) => Some(Answer::FaultTakenBack),
+        Recovery::Kept(fault, outstanding) => Some(Answer::FaultKept(fault, outstanding)),
+    }
 }
 
 /// The answers a step's asks can owe at once, and more.
@@ -108,6 +275,10 @@ pub enum Reported {
     HeldFault,
     /// Held: the unconsumed items.
     HeldUnconsumed,
+    /// Held: the cleanup, asked again at the next round.
+    HeldCleanup,
+    /// Held: the cleanup, refused by the port's fault.
+    HeldCleanupFault,
     /// Held: what is out, with its classes.
     HeldOutstanding(u32),
     /// Held: a stale proof.
@@ -130,8 +301,8 @@ struct State<'id, P: DataPort<'id>> {
     stopping: bool,
     /// A late stop was reported: not again until it ends.
     late: bool,
-    /// A failed stop waits for its retry time.
-    retry: bool,
+    /// An answer said "later": the next turn is the pump's next round.
+    again: bool,
     /// A drain was refused: room is reported once the sink has it.
     drain_refused: bool,
     /// The classes a refused retirement named.
@@ -181,7 +352,6 @@ impl<'id, H: DataPortHarness<'id>> Outbox<'id, Channel<'id, H::Port>, FaultOf<'i
         self.state.starting = None;
         self.state.stopping = true;
         self.state.late = false;
-        self.state.retry = false;
     }
     fn stop_data(&mut self) {
         self.state.owe(Answer::DataStopped);
@@ -192,21 +362,16 @@ impl<'id, H: DataPortHarness<'id>> Outbox<'id, Channel<'id, H::Port>, FaultOf<'i
     }
     fn drain(&mut self, stopped: &Stopped<'id>) {
         let (port, sink) = self.harness.parts();
-        let kept = match port.take_unconsumed(stopped, sink) {
-            Err(_) => return self.state.owe(Answer::Stale),
-            Ok(Unconsumed::Kept) => true,
-            Ok(Unconsumed::None) => false,
+        let answer = match unconsumed_answer(port.take_unconsumed(stopped, sink)) {
+            Some(answer) => answer,
+            None => clean_answer(port.clean(stopped, sink)),
         };
-        let cleaned = port.clean(stopped, sink);
         let _ended = self.harness.take_completed();
-        let answer = match cleaned {
-            Ok(Err(CleanupRefused::Stale)) => Answer::Stale,
-            Ok(Ok(())) if !kept => Answer::Drained,
-            _ => {
-                self.state.drain_refused = true;
-                Answer::DrainRefused
-            }
-        };
+        match answer {
+            Answer::DrainRefused => self.state.drain_refused = true,
+            Answer::DrainLater => self.state.again = true,
+            _ => {}
+        }
         self.state.owe(answer);
     }
     fn stop_network(&mut self) {
@@ -214,31 +379,20 @@ impl<'id, H: DataPortHarness<'id>> Outbox<'id, Channel<'id, H::Port>, FaultOf<'i
     }
     fn retire(&mut self, stopped: Stopped<'id>) {
         let (port, _) = self.harness.parts();
-        let answer = match port.retire(stopped) {
-            Ok(retired) => Answer::Retired(retired),
-            Err(ProofRefused::Refused(stopped, outstanding)) => {
-                self.state.refused = Some(outstanding.classes());
-                Answer::RetireRefused(stopped, outstanding)
-            }
-            Err(ProofRefused::Stale(_)) => Answer::Stale,
-        };
+        let answer = retire_answer(port.retire(stopped));
+        if let Answer::RetireRefused(_, outstanding) = &answer {
+            self.state.refused = Some(outstanding.classes());
+        }
         self.state.owe(answer);
     }
     fn reinstall(&mut self, retired: Retired<'id>, _epoch: u32) {
         // The harness keeps its own epochs, each new.
-        let answer = match self.harness.reinstall(retired) {
-            Ok(stopped) => Answer::Reinstalled(stopped),
-            Err(ProofRefused::Refused(retired, why)) => Answer::ReinstallRefused(retired, why),
-            Err(ProofRefused::Stale(_)) => Answer::Stale,
-        };
+        let answer = reinstall_answer(self.harness.reinstall(retired));
         self.state.owe(answer);
     }
     fn release(&mut self, retired: Retired<'id>) {
         let (port, _) = self.harness.parts();
-        let answer = match port.release(retired) {
-            Ok(_) => Answer::Released,
-            Err(_) => Answer::Stale,
-        };
+        let answer = release_answer(port.release(retired));
         self.state.owe(answer);
     }
     fn refused(&mut self, _: Request<Channel<'id, H::Port>>, _: Phase) {
@@ -265,6 +419,8 @@ impl<'id, H: DataPortHarness<'id>> Outbox<'id, Channel<'id, H::Port>, FaultOf<'i
             Status::Held(Waiting::Radio(_)) => Reported::HeldRadio,
             Status::Held(Waiting::Fault { .. }) => Reported::HeldFault,
             Status::Held(Waiting::Unconsumed) => Reported::HeldUnconsumed,
+            Status::Held(Waiting::Cleanup) => Reported::HeldCleanup,
+            Status::Held(Waiting::CleanupFault(_)) => Reported::HeldCleanupFault,
             Status::Held(Waiting::Outstanding(outstanding)) => {
                 Reported::HeldOutstanding(outstanding.classes())
             }
@@ -289,7 +445,7 @@ impl<'id, P: DataPort<'id>> Default for Pump<'id, P> {
                 starting: None,
                 stopping: false,
                 late: false,
-                retry: false,
+                again: false,
                 drain_refused: false,
                 refused: None,
                 fault_reported: false,
@@ -364,6 +520,10 @@ impl<'id, P: DataPort<'id>> Pump<'id, P> {
                 Answer::Ready => machine.step(Event::Ready, &mut carrier),
                 Answer::Drained => machine.step(Event::Drained, &mut carrier),
                 Answer::DrainRefused => machine.step(Event::DrainRefused, &mut carrier),
+                Answer::DrainLater => machine.step(Event::DrainLater, &mut carrier),
+                Answer::DrainFaulted(fault) => {
+                    machine.step(Event::DrainFaulted(&fault), &mut carrier);
+                }
                 Answer::Room => machine.step(Event::Room, &mut carrier),
                 Answer::NetworkStopped => machine.step(Event::NetworkStopped, &mut carrier),
                 Answer::Retired(retired) => machine.step(Event::Retired(retired), &mut carrier),
@@ -379,7 +539,7 @@ impl<'id, P: DataPort<'id>> Pump<'id, P> {
                 }
                 Answer::Released => machine.step(Event::Released, &mut carrier),
                 Answer::Stale => machine.step(Event::Stale, &mut carrier),
-                Answer::Retry => machine.step(Event::Retry, &mut carrier),
+                Answer::Again => machine.step(Event::Again, &mut carrier),
             }
         }
     }
@@ -398,32 +558,23 @@ impl<'id, P: DataPort<'id>> Pump<'id, P> {
         let state = &mut self.state;
         if let Some((proof, channel)) = state.starting.take() {
             let (port, _) = harness.parts();
-            match port.poll_start(&mut cx, proof, channel, now) {
-                StartPoll::Started => state.owe(Answer::Started),
-                StartPoll::Pending(starting) => state.starting = Some((starting.into(), channel)),
-                StartPoll::Refused(stopped, why) => state.owe(Answer::StartRefused(stopped, why)),
-                StartPoll::Unstopped { cause, stop } => {
-                    state.owe(Answer::StartUnstopped(cause, stop));
-                }
-                StartPoll::Stale(_) => state.owe(Answer::Stale),
+            match start_answer(port.poll_start(&mut cx, proof, channel, now)) {
+                StartAnswer::Pending(starting) => state.starting = Some((starting.into(), channel)),
+                StartAnswer::Answer(answer) => state.owe(answer),
             }
+        }
+        if core::mem::take(&mut state.again) {
+            state.owe(Answer::Again);
         }
         if state.stopping {
             let (port, _) = harness.parts();
-            match port.poll_stop(&mut cx, now) {
-                Poll::Ready(Ok(stopped)) => {
-                    state.stopping = false;
-                    state.owe(Answer::Stopped(stopped));
-                }
-                Poll::Ready(Err(stop)) => match stop.cause {
-                    StopCause::Released => {
+            match stop_answer(port.poll_stop(&mut cx, now)) {
+                None => {}
+                Some(Answer::StopUnconfirmed(stop)) => match stop.cause {
+                    // The stop failed: the next turn is the pump's next round.
+                    StopCause::Device(_) | StopCause::Released => {
                         state.stopping = false;
-                        state.owe(Answer::StopReleased);
-                    }
-                    StopCause::Device(_) => {
-                        // The stop failed: the next turn is its retry time.
-                        state.stopping = false;
-                        state.retry = true;
+                        state.again = true;
                         state.owe(Answer::StopUnconfirmed(stop));
                     }
                     StopCause::Deadline | StopCause::CoreEnabled if !state.late => {
@@ -432,10 +583,11 @@ impl<'id, P: DataPort<'id>> Pump<'id, P> {
                     }
                     StopCause::Deadline | StopCause::CoreEnabled => {}
                 },
-                Poll::Pending => {}
+                Some(answer) => {
+                    state.stopping = false;
+                    state.owe(answer);
+                }
             }
-        } else if core::mem::take(&mut state.retry) {
-            state.owe(Answer::Retry);
         }
         // A fault, with the port's answer to what a stop can do about it.
         let (port, _) = harness.parts();
@@ -443,12 +595,8 @@ impl<'id, P: DataPort<'id>> Pump<'id, P> {
             state.fault_reported = false;
         } else if !state.fault_reported {
             state.fault_reported = true;
-            match port.recover_for_stop() {
-                Recovery::Clear => {}
-                Recovery::Recovered(_) => state.owe(Answer::FaultTakenBack),
-                Recovery::Kept(fault, outstanding) => {
-                    state.owe(Answer::FaultKept(fault, outstanding));
-                }
+            if let Some(answer) = recovery_answer(port.recover_for_stop()) {
+                state.owe(answer);
             }
         }
         // What a refused retirement named came home: fewer classes out.
@@ -645,4 +793,161 @@ fn retire_held<'id, H: DataPortHarness<'id>>(
     }
     pump.until(machine, harness, Reported::Released)?;
     ended(machine, Phase::Released)
+}
+
+#[cfg(test)]
+mod tests {
+    //! The design's section 7: every variant of every answer of the
+    //! contract beside the model's event, through the pump's mapping.
+
+    use super::*;
+    use oer_protocols_ieee80211_contracts_port::{ArenaState, RunPhase, StateSerial};
+
+    type F = ();
+
+    fn stopped() -> Stopped<'static> {
+        Stopped::issue(StateSerial::FIRST)
+    }
+    fn retired() -> Retired<'static> {
+        Retired::issue(StateSerial::FIRST)
+    }
+    fn stop(cause: StopCause<F>) -> StopUnconfirmed<F> {
+        StopUnconfirmed {
+            cause,
+            outstanding: out(None),
+        }
+    }
+    fn out(fault: Option<F>) -> Outstanding<F> {
+        Outstanding {
+            phase: RunPhase::Stopped,
+            fault,
+            received: 1,
+            lent: 0,
+            removals: 0,
+            retained_groups: 0,
+            unconsumed: 0,
+            transmit_out: 0,
+            queued: [0; oer_protocols_ieee80211_contracts_port::ACCESS_CATEGORIES],
+            running: 0,
+            arenas: ArenaState::Returnable,
+        }
+    }
+    fn name(answer: Option<Answer<'static, F>>) -> &'static str {
+        answer.map_or("none", |answer| answer.model_event())
+    }
+
+    #[test]
+    fn every_answer_of_the_contract_has_the_models_event() {
+        let started = |poll| match start_answer::<F>(poll) {
+            StartAnswer::Pending(_) => "none",
+            StartAnswer::Answer(answer) => answer.model_event(),
+        };
+        assert_eq!(started(StartPoll::Started), "start_ok");
+        assert_eq!(
+            started(StartPoll::Pending(Starting::issue(StateSerial::FIRST))),
+            "none"
+        );
+        assert_eq!(
+            started(StartPoll::Refused(stopped(), StartFailure::Device)),
+            "start_refused"
+        );
+        assert_eq!(
+            started(StartPoll::Unstopped {
+                cause: StartFailure::Deadline,
+                stop: stop(StopCause::CoreEnabled),
+            }),
+            "start_unstopped"
+        );
+        assert_eq!(
+            started(StartPoll::Stale(StaleProof {
+                proof: stopped().into(),
+            })),
+            "stale"
+        );
+
+        assert_eq!(name(stop_answer::<F>(Poll::Pending)), "none");
+        assert_eq!(name(stop_answer(Poll::Ready(Ok(stopped())))), "stop_ok");
+        for (cause, event) in [
+            (StopCause::Deadline, "stop_late"),
+            (StopCause::CoreEnabled, "stop_late"),
+            (StopCause::Device(()), "stop_failed"),
+            (StopCause::Released, "stop_released"),
+        ] {
+            assert_eq!(name(stop_answer(Poll::Ready(Err(stop(cause))))), event);
+        }
+
+        assert_eq!(name(unconsumed_answer(Ok(Unconsumed::None))), "none");
+        assert_eq!(
+            name(unconsumed_answer(Ok(Unconsumed::Kept))),
+            "drain_refused"
+        );
+        assert_eq!(
+            name(unconsumed_answer(Err(StaleProof { proof: () }))),
+            "stale"
+        );
+
+        for (cleaned, event) in [
+            (Ok(()), "drained"),
+            (Err(CleanupRefused::Stale), "stale"),
+            (Err(CleanupRefused::Faulted(())), "drain_faulted"),
+            (Err(CleanupRefused::Unavailable(())), "drain_later"),
+            (Err(CleanupRefused::Held(())), "drain_later"),
+        ] {
+            assert_eq!(cleanup_answer::<F>(cleaned).model_event(), event);
+        }
+
+        assert_eq!(retire_answer::<F>(Ok(retired())).model_event(), "retired");
+        assert_eq!(
+            retire_answer(Err(ProofRefused::Refused(stopped(), out(Some(()))))).model_event(),
+            "retire_refused_fault"
+        );
+        assert_eq!(
+            retire_answer(Err(ProofRefused::Refused(stopped(), out(None)))).model_event(),
+            "retire_refused"
+        );
+        assert_eq!(
+            retire_answer::<F>(Err(ProofRefused::Stale(StaleProof { proof: stopped() })))
+                .model_event(),
+            "stale"
+        );
+
+        assert_eq!(
+            reinstall_answer::<F>(Ok(stopped())).model_event(),
+            "reinstalled"
+        );
+        for why in [
+            ReinstallRefused::SameEpoch,
+            ReinstallRefused::ChannelUnset,
+            ReinstallRefused::Receipt,
+            ReinstallRefused::Resources,
+        ] {
+            assert_eq!(
+                reinstall_answer::<F>(Err(ProofRefused::Refused(retired(), why))).model_event(),
+                "reinstall_refused"
+            );
+        }
+        assert_eq!(
+            reinstall_answer::<F>(Err(ProofRefused::Stale(StaleProof { proof: retired() })))
+                .model_event(),
+            "stale"
+        );
+
+        assert_eq!(release_answer::<(), F>(Ok(())).model_event(), "released");
+        assert_eq!(
+            release_answer::<(), F>(Err(StaleProof { proof: retired() })).model_event(),
+            "stale"
+        );
+
+        assert_eq!(name(recovery_answer::<F>(Recovery::Clear)), "none");
+        assert_eq!(
+            name(recovery_answer::<F>(Recovery::Recovered(
+                oer_protocols_ieee80211_contracts_port::Recovering::issue(StateSerial::FIRST)
+            ))),
+            "fault_recovered"
+        );
+        assert_eq!(
+            name(recovery_answer(Recovery::Kept((), out(Some(()))))),
+            "fault_kept"
+        );
+    }
 }

@@ -36,6 +36,7 @@ pub(crate) struct Key {
     net: Net,
     ended: bool,
     waits: Waits,
+    flight: Flight,
 }
 
 impl<'id, F> Machine<'id, Channel, F> {
@@ -47,6 +48,7 @@ impl<'id, F> Machine<'id, Channel, F> {
             net: self.net,
             ended: self.ended,
             waits: self.waits,
+            flight: self.flight,
         }
     }
 
@@ -71,6 +73,7 @@ impl<'id, F> Machine<'id, Channel, F> {
             net: key.net,
             ended: key.ended,
             waits: key.waits,
+            flight: key.flight,
             fault: PhantomData,
         }
     }
@@ -190,7 +193,13 @@ fn answers(ask: &str) -> &'static [&'static str] {
         "stop" => &["stop_ok", "stop_failed", "stop_released"],
         "stop_data" => &["data_stopped"],
         "end_tokens" => &["ready"],
-        "drain" => &["drained", "drain_refused", "stale"],
+        "drain" => &[
+            "drained",
+            "drain_refused",
+            "drain_later",
+            "drain_faulted",
+            "stale",
+        ],
         "stop_net" => &["net_stopped"],
         "retire" => &["retired", "retire_refused", "retire_refused_fault", "stale"],
         "reinstall" => &["reinstalled", "reinstall_refused", "stale"],
@@ -199,11 +208,13 @@ fn answers(ask: &str) -> &'static [&'static str] {
     }
 }
 
-const REFUSALS: [&str; 9] = [
+const REFUSALS: [&str; 11] = [
     "start_refused",
     "start_unstopped",
     "stop_failed",
     "drain_refused",
+    "drain_later",
+    "drain_faulted",
     "retire_refused",
     "reinstall_refused",
     "stale",
@@ -242,21 +253,31 @@ enum Blocks {
     Returns,
 }
 
+/// Why the last drain was refused, as the environment knows it: a sink
+/// full, a cleanup to ask later, a fault.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum Refused {
+    No,
+    Full,
+    Later,
+    Fault,
+}
+
 /// What the environment knows of the current installation: its tokens
-/// ended, its unconsumed items taken, a sink refused an item and has room
-/// again only later, and what blocks its retirement.
+/// ended, its unconsumed items taken, why its last drain was refused, and
+/// what blocks its retirement.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct Inst {
     tokens: bool,
     items: bool,
-    refused: bool,
+    refused: Refused,
     blocks: Blocks,
 }
 
 const FRESH: Inst = Inst {
     tokens: false,
     items: false,
-    refused: false,
+    refused: Refused::No,
     blocks: Blocks::Nothing,
 };
 
@@ -319,15 +340,18 @@ fn environment(env: &Env) -> Vec<(String, Option<&'static str>, Budget)> {
         ));
         events.push(("fault_kept".into(), None, (nreq, nfault - 1, nlate, nref)));
     }
-    if s.phase == Phase::Stopping && !env.pending.contains("stop") {
-        events.push(("retry".into(), None, env.budget));
-    }
-    if env.inst.refused
-        && has(s.phase) == Some("stopped")
-        && s.waits.drained
-        && !env.pending.contains("drain")
+    let drain_owed =
+        has(s.phase) == Some("stopped") && s.waits.drained && !env.pending.contains("drain");
+    if (s.phase == Phase::Stopping && !env.pending.contains("stop"))
+        || (env.inst.refused == Refused::Later && drain_owed)
     {
+        events.push(("again".into(), None, env.budget));
+    }
+    if env.inst.refused == Refused::Full && drain_owed {
         events.push(("room".into(), None, env.budget));
+    }
+    if env.inst.refused == Refused::Fault && drain_owed {
+        events.push(("fault_recovered".into(), None, env.budget));
     }
     if s.phase == Phase::Settling && s.waits.returns {
         match env.inst.blocks {
@@ -405,6 +429,8 @@ fn event(name: &str) -> Event<'static, 'static, Channel, Fault> {
         "ready" => Event::Ready,
         "drained" => Event::Drained,
         "drain_refused" => Event::DrainRefused,
+        "drain_later" => Event::DrainLater,
+        "drain_faulted" => Event::DrainFaulted(&FAULT),
         "net_stopped" => Event::NetworkStopped,
         "retired" => Event::Retired(retired()),
         "retire_refused" => Event::RetireRefused(stopped(), &OUT_HELD),
@@ -419,7 +445,7 @@ fn event(name: &str) -> Event<'static, 'static, Channel, Fault> {
             fault: &FAULT,
             outstanding: &OUT_HELD_FAULT,
         }),
-        "retry" => Event::Retry,
+        "again" => Event::Again,
         "room" => Event::Room,
         "deadline" => Event::Deadline,
         other => panic!("no event {other}"),
@@ -500,9 +526,11 @@ pub(crate) fn explore(budget: Budget, step: &dyn Fn(Key, &str) -> (Key, Recorder
                 "ready" => inst.tokens = true,
                 "drained" => {
                     inst.items = true;
-                    inst.refused = false;
+                    inst.refused = Refused::No;
                 }
-                "drain_refused" => inst.refused = true,
+                "drain_refused" => inst.refused = Refused::Full,
+                "drain_later" => inst.refused = Refused::Later,
+                "drain_faulted" => inst.refused = Refused::Fault,
                 "retire_refused_fault" => inst.blocks = Blocks::Fault,
                 "retire_refused" => inst.blocks = Blocks::Returns,
                 "fault_recovered" | "returned" => inst.blocks = Blocks::Nothing,
@@ -546,7 +574,7 @@ pub(crate) fn explore(budget: Budget, step: &dyn Fn(Key, &str) -> (Key, Recorder
                     held = None;
                 }
                 if *ask == "drain" {
-                    inst.refused = false;
+                    inst.refused = Refused::No;
                 }
                 if *ask == "retire"
                     && !(ns.data == Data::Stopped && !ns.waits.any() && inst.tokens && inst.items)
@@ -668,7 +696,7 @@ fn the_search_finds_every_property_of_the_model_held() {
     assert!(search.problems.is_empty(), "{:?}", search.problems);
     assert_eq!(search.dead, 0, "dead ends");
     // The model's own counts at these bounds.
-    assert_eq!((search.states, search.machine_states), (3544, 116));
+    assert_eq!((search.states, search.machine_states), (4184, 174));
 }
 
 #[test]
@@ -691,5 +719,5 @@ fn every_transition_is_the_models() {
         assert_eq!(rust, model);
     }
     assert_eq!(rust.lines().count(), MODEL_TABLE.lines().count());
-    assert_eq!(rust.lines().count(), 169);
+    assert_eq!(rust.lines().count(), 173);
 }

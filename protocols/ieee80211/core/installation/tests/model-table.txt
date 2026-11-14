@@ -75,17 +75,21 @@
 | running | req_restart | stopping | stop, stop_data | — |
 | running | req_retune | stopping | stop | — |
 | running | req_start | running | — | refused |
+| settling | again | settling | drain | — |
 | settling | data_stopped | retiring | retire | — |
 | settling | data_stopped | settling | — | — |
 | settling | data_stopped | stopped | — | — |
 | settling | data_stopped | stopped | — | halted |
 | settling | deadline | settling | — | held |
+| settling | drain_faulted | settling | — | held |
+| settling | drain_later | settling | — | held |
 | settling | drain_refused | settling | — | held |
 | settling | drained | retiring | retire | — |
 | settling | drained | settling | — | — |
 | settling | fault_kept | settling | — | held |
 | settling | fault_recovered | retiring | retire | — |
 | settling | fault_recovered | settling | — | — |
+| settling | fault_recovered | settling | drain | — |
 | settling | net_stopped | settling | — | — |
 | settling | ready | retiring | retire | — |
 | settling | ready | settling | — | — |
@@ -130,6 +134,7 @@
 | stopped | req_restart | settling | end_tokens, drain | — |
 | stopped | req_retune | stopped | — | refused |
 | stopped | req_start | starting | start | — |
+| stopping | again | stopping | stop | — |
 | stopping | data_stopped | stopping | — | — |
 | stopping | deadline | stopping | — | held |
 | stopping | fault_kept | stopping | — | held |
@@ -150,7 +155,6 @@
 | stopping | req_restart | stopping | — | superseded |
 | stopping | req_retune | stopping | — | refused |
 | stopping | req_start | stopping | — | refused |
-| stopping | retry | stopping | stop | — |
 | stopping | stop_failed | stopping | — | held |
 | stopping | stop_late | stopping | — | held |
 | stopping | stop_ok | retiring | retire | — |
