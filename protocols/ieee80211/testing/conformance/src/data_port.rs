@@ -19,7 +19,7 @@
 //!   ([`Case::RetryHistory`], [`RETRY_HISTORIES`]).
 
 use core::num::NonZeroU8;
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Waker};
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{

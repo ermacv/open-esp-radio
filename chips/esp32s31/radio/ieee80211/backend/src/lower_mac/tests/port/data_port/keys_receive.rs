@@ -544,7 +544,10 @@ fn a_fault_on_a_descriptor_keeps_the_port_quarantined() {
             step: PublishStep::Attach,
         };
         fixture.port.fault_for_test(fault);
-        assert!(!fixture.port.recover_for_stop());
+        assert!(!matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         assert_eq!(fixture.port.fault(), Some(fault));
     });
 }
@@ -729,7 +732,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// transmit buffers went home.
     fn stopped_release_refused(&mut self) -> bool {
         drop(core::mem::take(&mut self.buffers));
-        self.port.release().is_err()
+        self.release_now().is_err()
     }
 
     /// One service of the stopped port: its result as the port gave it.
@@ -742,8 +745,10 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     }
 
     /// The lifecycle owner's cleanup of the stopped port.
+    /// The stopped port's cleanup, with the fixture's stop's proof.
     fn clean(&mut self) -> Result<(), CleanupRefused<Fault>> {
-        self.port.clean_stopped(&mut self.outbox).unwrap()
+        let stopped = self.stopped.as_ref().expect("stopped");
+        self.port.clean(stopped, &mut self.outbox).unwrap()
     }
 }
 
@@ -751,7 +756,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
 /// went home, as every retire check needs.
 fn retires<Id: radio::SlotIdentity>(fixture: &mut Fixture<'_, Id>) {
     drop(core::mem::take(&mut fixture.buffers));
-    assert!(fixture.port.release().is_ok(), "the stopped port retires");
+    assert!(fixture.release_now().is_ok(), "the stopped port retires");
 }
 
 /// A replacement the hardware rejects and rolls back is a named fault with
@@ -804,7 +809,10 @@ fn a_gtk_replacement_the_hardware_rolls_back_comes_back_whole_beside_its_fault()
         assert!(fixture.group_terminals().is_empty(), "no terminal");
         assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
         // The stop takes the fault back and the stopped port retires.
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         fixture.stop();
         assert!(fixture.stopped_service().is_ok());
         assert!(fixture.group_terminals().is_empty());
@@ -842,13 +850,17 @@ fn a_gtk_replacement_whose_rollback_fails_returns_its_owners_through_the_stop_on
         );
         assert!(fixture.group_terminals().is_empty(), "no terminal");
         assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
-        // Before a confirmed stop the cleanup refuses and writes nothing.
+        // Before a confirmed stop there is no stop's proof to clean with,
+        // and nothing is written.
         let clears = fixture.observed.borrow().key_clears;
-        assert_eq!(fixture.clean(), Err(CleanupRefused::NotStopped));
+        assert!(fixture.stopped.is_none(), "no stop's proof to clean with");
         assert_eq!(fixture.observed.borrow().key_clears, clears);
         // The stop takes the fault back; the stopped port keeps the owners
         // until its cleanup.
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         fixture.stop();
         assert!(fixture.stopped_release_refused(), "the owners are retained");
         // The stopped service is not the cleanup: it neither frees the
@@ -889,7 +901,10 @@ fn a_failed_rollbacks_entry_is_cleared_once_and_then_only_read_until_it_reads_cl
             fixture.run_failed(replace),
             Err(CommandFailed::Taken(_))
         ));
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         fixture.stop();
         // The device's `hardware` records the clears earlier calls wrote.
         let observed = fixture.observed.clone();
@@ -958,7 +973,10 @@ fn a_cleanup_receipt_leaves_whole_to_its_caller_and_outlives_the_release() {
             fixture.run_failed(replace),
             Err(CommandFailed::Taken(_))
         ));
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         fixture.stop();
         assert!(fixture.clean().is_ok());
         let index = fixture
@@ -998,7 +1016,10 @@ fn a_faulted_stopped_port_refuses_its_cleanup_with_its_fault_and_clears_nothing(
             fixture.run_failed(replace),
             Err(CommandFailed::Taken(_))
         ));
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         fixture.stop();
         fixture.port.fault_for_test(Fault::Abandoned);
         let clears = fixture.observed.borrow().key_clears;
@@ -1042,10 +1063,16 @@ fn a_received_unit_keeps_its_bytes_and_owner_until_it_is_recycled() {
         assert_eq!(count(&fixture.released), 1, "recycled once");
         fixture.stop();
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_ok(), "nothing received is outstanding");
+        assert!(
+            super::release_stopped(&mut port, stopped).is_ok(),
+            "nothing received is outstanding"
+        );
     });
 }
 
@@ -1071,10 +1098,16 @@ fn a_lent_unit_lends_its_storage_and_its_drop_returns_it_to_the_ring() {
         assert_eq!(fixture.port.lent(), 0);
         fixture.stop();
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_ok(), "the returned unit retires");
+        assert!(
+            super::release_stopped(&mut port, stopped).is_ok(),
+            "the returned unit retires"
+        );
     });
 }
 
@@ -1095,7 +1128,10 @@ fn a_loss_past_the_held_count_settles_nothing_and_keeps_the_earlier_cause() {
         fixture.port.fault_for_test(earlier);
         fixture.port.lose_for_test(2);
         assert!(
-            !fixture.port.recover_for_stop(),
+            !matches!(
+                fixture.port.recover_for_stop(),
+                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            ),
             "no recovery follows a failed settlement"
         );
         assert_eq!(
@@ -1105,7 +1141,10 @@ fn a_loss_past_the_held_count_settles_nothing_and_keeps_the_earlier_cause() {
         );
         assert_eq!(fixture.port.held_for_test(), 1, "the held count stays");
         assert!(
-            !fixture.port.recover_for_stop(),
+            !matches!(
+                fixture.port.recover_for_stop(),
+                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            ),
             "the losses stay unsettled for the next look"
         );
         assert!(fixture.port.recycle(kept).is_ok());
@@ -1127,12 +1166,21 @@ fn a_loss_settles_exactly_the_units_it_read() {
             panic!("a received unit");
         };
         drop(lost);
-        assert!(fixture.port.recover_for_stop(), "the unit is back");
+        assert!(
+            matches!(
+                fixture.port.recover_for_stop(),
+                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            ),
+            "the unit is back"
+        );
         assert_eq!(fixture.port.held_for_test(), 1, "one unit left the count");
         // A loss after the settlement is the port's again, not erased by it.
         drop(later);
         assert_eq!(fixture.port.fault(), Some(Fault::ReceiveLost));
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         assert_eq!(fixture.port.held_for_test(), 0);
         assert_eq!(fixture.port.fault(), None);
     });
@@ -1230,14 +1278,26 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
         assert_eq!(count(&fixture.released), 2, "each unit returned once");
         // The stop's recovery takes the returned unit out of the held
         // count; the ordinary stop then confirms.
-        assert!(fixture.port.recover_for_stop(), "the unit is back");
+        assert!(
+            matches!(
+                fixture.port.recover_for_stop(),
+                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            ),
+            "the unit is back"
+        );
         assert_eq!(fixture.port.fault(), None);
         fixture.stop();
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_ok(), "the stopped port retires");
+        assert!(
+            super::release_stopped(&mut port, stopped).is_ok(),
+            "the stopped port retires"
+        );
     });
 }
 

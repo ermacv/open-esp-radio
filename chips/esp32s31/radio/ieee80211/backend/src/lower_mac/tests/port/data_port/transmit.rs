@@ -1788,6 +1788,10 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
         };
         assert_eq!(fixture.port.waiting_for_test(), (0, 2));
         fixture.port.confirm_stop_for_test();
+        // The stop the test confirmed gives the proof a stop gives.
+        fixture.stopped = Some(oer_protocols_ieee80211_contracts_port::Stopped::issue(
+            oer_protocols_ieee80211_contracts_port::DataPort::generation(&fixture.port),
+        ));
         // The first cleanup's first delivery is refused: it fills the
         // place and the other stays with the driver.
         fixture.outbox.refuse = 1;
@@ -1795,7 +1799,10 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
         let Err(Unkeeping {
             unkept: Unkept::Terminal(LowerMacTerminal::TxCompleted(TxCompleted::Single(held))),
             input: Input::Accepted(Ok(())),
-        }) = fixture.port.clean_stopped(&mut fixture.outbox)
+        }) = fixture.port.clean(
+            fixture.stopped.as_ref().expect("stopped"),
+            &mut fixture.outbox,
+        )
         else {
             panic!("the refused completion comes back beside the cleanup");
         };
@@ -1804,7 +1811,10 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
         fixture.outbox.refuse = 0;
         fixture.port.refuse_keeps_for_test(0);
         assert!(matches!(
-            fixture.port.clean_stopped(&mut fixture.outbox),
+            fixture.port.clean(
+                fixture.stopped.as_ref().expect("stopped"),
+                &mut fixture.outbox
+            ),
             Ok(Ok(()))
         ));
         assert_eq!(fixture.port.waiting_for_test(), (0, 0));
