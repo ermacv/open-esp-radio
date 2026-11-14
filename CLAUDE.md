@@ -28,9 +28,18 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   Only these owned partitions grant register access.
 - **Compile time first.** Every check that can run at compile time runs there;
   a runtime check stands only where that proof is impossible, and their number
-  tends to zero. A `const fn` alone does not enforce this: fixed values use
+  tends to zero. A runtime check answers what no build can know: the
+  hardware, the air, a peer, the host, the application's input, time and
+  load. What this repository's own code decides is not among them: a place
+  is handed out once by its owner's claim, never asked for and refused; a
+  checked value made from constants is built in a const item, by the
+  constructor that refuses the same value given at run time; a contract
+  between two of our modules is a type or a proof, never a violation
+  variant; a store with a slot for every token that can enter it cannot
+  refuse. A `const fn` alone does not enforce this: fixed values use
   const items or blocks, and generic geometry uses inline const checks at
-  monomorphization.
+  monomorphization. An existing runtime check of these kinds is debt to
+  remove, never a precedent to repeat.
 - **Errors stay errors.** An error never becomes a status, a dummy value or a
   success. A refusal for temporary unavailability exists only where it is
   needed and proven, and it names what comes next: a release event, a
@@ -48,6 +57,21 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   it returns the proof of the transition, or the value that names
   everything blocking it, and it changes nothing while it answers. A
   predicate of one fact inside its own module may be `bool`.
+- **State stays in its place.** An object with state larger than two
+  machine words (a machine, a driver, a table, a queue, an owner of memory)
+  is built where it will live and reached by reference from then on: no
+  constructor returns it to be moved into its place, no transition consumes
+  it, no function passes it on by value. Ownership crosses a function, a
+  task or a hart as at most two machine words: a small `Copy` value, a
+  proof, or the handle of the place the object stays in. A refusal leaves
+  its owner where it was: the callee is lent the place and takes the owner
+  at its acceptance point. Outside the rule are data kept between turns (a
+  payload, a stored block), whose copy names its reason at the site, and a
+  report made once an operation (a failure with its diagnostic path). An
+  existing move of state is debt to remove, never a precedent to repeat.
+  The measure is the image's copy and frame reports
+  ([image checks](tools/image/checks/README.md)), not the source's shape:
+  the compiler elides no move by contract.
 - **Runtime panics.** Runtime code has zero panics; a change adds no runtime
   panic site. Compile-time panics and test assertions are allowed; a
   compile-time check is `const { if !cond { panic!("…") } }` as a const item
