@@ -179,7 +179,7 @@ only once the port gave the room.
   matched to a home afterwards. A lease its buffer refuses back stays whole
   on the descriptor with its attempt beside it and what is known of the
   attempt (`Fault::ReturnRefused`, which lets a stop recover); after the
-  confirmed stop the cleanup (`clean_stopped`) gives it back to that
+  confirmed stop the cleanup (`clean`) gives it back to that
   attempt, which ends with its known result: a delivery stays delivered,
   one never published is withdrawn. A lease whose attempt is gone
   (`Fault::CompletionWithoutPending`) goes home by its own home once the

@@ -74,7 +74,7 @@ on the station: the MAC's queues").
   runs on. A replacement whose rollback fails keeps the command's owners in
   the port with both causes (`RollbackFailed`); the previous key is not
   live, and the port does not retire. After the confirmed stop the
-  lifecycle owner's cleanup (`DataPort::clean_stopped`) clears the entry
+  lifecycle owner's cleanup (`DataPort::clean`) clears the entry
   once, ever, and reads it back; the stopped port's `service_tx` does not
   run it. Read cleared: the key's removal (which writes the entry no more)
   returns the slot and the permission, once (`KeyRemoved`). Read valid:
@@ -480,7 +480,7 @@ completions meanwhile), after the first refusal the rest of a batch stays
 in the driver, waiting removals, the configuration and gate terminals, a
 key command (held) and the receive cut wait for the next call. A second
 item of one call never reaches a delivery, so none is dropped. The stopped
-port's cleanup (`clean_stopped`) first brings home the completions the
+port's cleanup (`clean`) first brings home the completions the
 driver still keeps, under the same right and without a hardware call; a
 refused one comes back beside the cleanup and the rest stay in the
 driver.

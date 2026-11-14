@@ -45,12 +45,13 @@ the radio has not confirmed a stop; after a confirmed stop only
 `DataPort::take_unconsumed` offers it, each once. The port signals nothing
 for what it keeps: the refusing sink registers its own wake for room and
 checks its room again before its task sleeps. After a confirmed stop the
-lifecycle owner that stopped the port calls `DataPort::clean_stopped`, once
-per call and whether or not the datapath actor still runs, for the cleanup
-the stop leaves to the backend (a hardware write that releases what a failed
-operation left in use); its result (`CleanupRefused`: not stopped, faulted,
-a step that could not run and wrote nothing, or held after its one write) is
-that owner's, and a port whose cleanup did not finish does not retire.
+lifecycle owner that stopped the port calls `DataPort::clean` with the
+stop's proof, once per call and whether or not the datapath actor still
+runs, for the cleanup the stop leaves to the backend (a hardware write that
+releases what a failed operation left in use); its result (`CleanupRefused`:
+a stale proof, faulted, a step that could not run and wrote nothing, or held
+after its one write) is that owner's, and a port whose cleanup did not
+finish does not retire.
 Nothing repeats the cleanup's write. `PortTypes` (module `types`) names
 the types the port's owners and terminals carry:
 
@@ -557,6 +558,46 @@ and a frame's retry counters (`RetryCounters`). A chip's
 contention, transmit-cost model and publication work are its own, as the
 S31 MAC's `edca::contention`, `tx_cost` and `tx_work`; its direct ordinary
 path takes a `MacTxPlan` from the S31 driver's `ordinary_tx`.
+
+## The installation's transitions
+
+An installation goes through start, stop, clean, retire, and then
+reinstall or release (module `installation`). Each transition takes the
+proof of the one before it and gives the next state's:
+
+| Call | Takes | Gives | Or |
+|---|---|---|---|
+| `poll_start` | `StartProof`: the stop's `Stopped`, or the start's `Starting` | `Started`, `Pending(Starting)`, `Refused(Stopped, why)` | `Unstopped` (the port is stopping), `Stale` |
+| `poll_stop` | — | `Stopped` | `StopUnconfirmed` with `Outstanding`; `StopCause::Released` on a released port |
+| `take_unconsumed`, `clean` | `&Stopped` | what the port kept; the cleanup | a stale proof |
+| `retire` | `Stopped` | `Retired` | the proof back with `Outstanding` |
+| `reinstall` | `Retired`, the TSF epoch, the installations | the next installation's `Stopped`, commands and tokens | the proof back with `ReinstallRefused` |
+| `release` | `Retired` | what the binding needs to give the radio up | a stale proof |
+| `recover_for_stop` | — | `Recovery`: `Clear`, `Recovered(Recovering)`, `Kept(fault, Outstanding)` | — |
+| `outstanding`, `fault` | — | the values | — |
+
+A call's answer is its acceptance point: a refusal leaves the port and the
+proof as they were and returns the proof; nothing consumes the port. A
+proof is one word, affine, under the brand of the port's installations: the
+port's `StateSerial` at its issue. The port raises its serial at every
+transition that ends a proof's state (a start beginning and ending, a stop
+beginning during a start, a stop confirming, a recovery of a running radio,
+a retirement, a reinstall, a release) and takes a proof only at its own
+serial, the one check of every call; no call reads the port's state to
+decide whether a proof holds. A stopped port answers each `poll_stop` with
+a proof it takes: its stop's, or, after a retirement, a new stop's (the
+port is stopped again and the retirement is asked again), so a dropped
+proof never leaves an installation without a way to its end. A released
+port holds no installation: its stop answers `StopCause::Released`, no
+proof. Only a port's implementation and tests issue a proof: the layer
+tests scan for every `*::issue` of the four proofs.
+
+`Outstanding` is what the installation still holds, by class: the run's
+phase, the fault, received and lent units, key removals, retained group
+keys, kept items, transmit buffers out of the port's bank, attempts queued
+by access category (`ACCESS_CATEGORIES`, EDCA's four) and running, and the
+arenas. A port retires only with every class empty; a queue that is no
+access category's is a class of its own.
 
 ## Shared backend conformance
 
