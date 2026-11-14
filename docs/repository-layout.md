@@ -149,7 +149,9 @@ A protocol leaf named `hil` takes its role from the list. A package under a prot
 `contracts/` is a protocol contract, which a backend may use, except
 `contracts/port`, which keeps the port's role; `testing/conformance` is a
 backend conformance suite and `testing/model` a reference model, and no
-product package depends on either; and
+product package depends on either; `testing/installation` joins the
+installation core with a port (the machine over a real port), and every
+package takes it as a dev-dependency only; and
 `protocols/bridges/*` are bridges, which stand only on the codecs they
 join. Each `protocols/network/*` package has an explicit layer in
 `oer-tools-test-layers`: the network codec stands on `oer-portable-wire` alone and the

@@ -1,0 +1,16 @@
+[package]
+name = "oer-protocols-ieee80211-core-installation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The installation machine: every transition of a port's installation, sans-IO"
+readme = "README.md"
+
+[dependencies]
+oer-protocols-ieee80211-contracts-port = { path = "../../contracts/port" }
+oer-portable-time = { path = "../../../../portable/time" }
+
+[lints]
+workspace = true

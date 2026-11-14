@@ -130,6 +130,9 @@ pub trait DataPortHarness<'id> {
     /// that leaves every owner whole when `whole`, one that holds owners no
     /// stop returns otherwise.
     fn fault(&mut self, whole: bool);
+    /// Fail the port's next stop poll with a fault of the device, once:
+    /// the stop after it goes on as before.
+    fn fail_next_stop(&mut self);
     /// Hold every start of the port before it ends, while `hold` is set:
     /// its poll answers that it goes on.
     fn hold_start(&mut self, hold: bool);
