@@ -1,0 +1,169 @@
+| reinstalling | deadline | reinstalling | — | held |
+| reinstalling | fault_kept | reinstalling | — | held |
+| reinstalling | fault_recovered | reinstalling | — | — |
+| reinstalling | net_stopped | reinstalling | — | — |
+| reinstalling | reinstall_refused | releasing | release | — |
+| reinstalling | reinstall_refused | retired | — | — |
+| reinstalling | reinstall_refused | retired | — | restart_refused |
+| reinstalling | reinstalled | settling | end_tokens, drain | — |
+| reinstalling | reinstalled | stopped | — | reinstalled |
+| reinstalling | req_halt | reinstalling | — | refused |
+| reinstalling | req_release_stays | reinstalling | — | refused |
+| reinstalling | req_release_stays | reinstalling | — | superseded |
+| reinstalling | req_release_stops | reinstalling | — | refused |
+| reinstalling | req_release_stops | reinstalling | stop_net | superseded |
+| reinstalling | req_restart | reinstalling | — | refused |
+| reinstalling | req_retune | reinstalling | — | refused |
+| reinstalling | req_start | reinstalling | — | refused |
+| reinstalling | stale | stopping | stop | held |
+| released | data_stopped | released | — | — |
+| released | net_stopped | released | — | — |
+| released | ready | released | — | — |
+| released | req_halt | released | — | refused |
+| released | req_release_stays | released | — | refused |
+| released | req_release_stops | released | — | refused |
+| released | req_restart | released | — | refused |
+| released | req_retune | released | — | refused |
+| released | req_start | released | — | refused |
+| releasing | deadline | releasing | — | held |
+| releasing | fault_kept | releasing | — | held |
+| releasing | fault_recovered | releasing | — | — |
+| releasing | released | released | — | released |
+| releasing | req_halt | releasing | — | refused |
+| releasing | req_release_stays | releasing | — | refused |
+| releasing | req_release_stops | releasing | — | refused |
+| releasing | req_restart | releasing | — | refused |
+| releasing | req_retune | releasing | — | refused |
+| releasing | req_start | releasing | — | refused |
+| releasing | stale | stopping | stop | held |
+| retired | deadline | retired | — | held |
+| retired | fault_kept | retired | — | held |
+| retired | fault_recovered | retired | — | — |
+| retired | net_stopped | releasing | release | — |
+| retired | req_halt | retired | — | refused |
+| retired | req_release_stays | releasing | release | — |
+| retired | req_release_stays | retired | — | refused |
+| retired | req_release_stops | retired | — | refused |
+| retired | req_release_stops | retired | stop_net | — |
+| retired | req_restart | reinstalling | reinstall | — |
+| retired | req_restart | retired | — | refused |
+| retired | req_retune | retired | — | refused |
+| retired | req_start | retired | — | refused |
+| retiring | deadline | retiring | — | held |
+| retiring | fault_kept | retiring | — | held |
+| retiring | fault_recovered | retiring | — | — |
+| retiring | net_stopped | retiring | — | — |
+| retiring | req_halt | retiring | — | refused |
+| retiring | req_release_stays | retiring | — | refused |
+| retiring | req_release_stays | retiring | — | superseded |
+| retiring | req_release_stops | retiring | — | refused |
+| retiring | req_release_stops | retiring | stop_net | superseded |
+| retiring | req_restart | retiring | — | refused |
+| retiring | req_retune | retiring | — | refused |
+| retiring | req_start | retiring | — | refused |
+| retiring | retire_refused | settling | — | held |
+| retiring | retire_refused_fault | settling | — | held |
+| retiring | retired | reinstalling | reinstall | — |
+| retiring | retired | releasing | release | — |
+| retiring | retired | retired | — | — |
+| retiring | stale | stopping | stop | held |
+| running | fault_kept | stopping | stop, stop_data | interrupted, held |
+| running | fault_recovered | stopping | stop, stop_data | interrupted |
+| running | req_halt | stopping | stop, stop_data | — |
+| running | req_release_stays | stopping | stop, stop_data | — |
+| running | req_release_stops | stopping | stop, stop_data | — |
+| running | req_restart | stopping | stop, stop_data | — |
+| running | req_retune | stopping | stop | — |
+| running | req_start | running | — | refused |
+| settling | data_stopped | retiring | retire | — |
+| settling | data_stopped | settling | — | — |
+| settling | data_stopped | stopped | — | — |
+| settling | data_stopped | stopped | — | halted |
+| settling | deadline | settling | — | held |
+| settling | drain_refused | settling | — | held |
+| settling | drained | retiring | retire | — |
+| settling | drained | settling | — | — |
+| settling | fault_kept | settling | — | held |
+| settling | fault_recovered | retiring | retire | — |
+| settling | fault_recovered | settling | — | — |
+| settling | net_stopped | settling | — | — |
+| settling | ready | retiring | retire | — |
+| settling | ready | settling | — | — |
+| settling | req_halt | settling | — | — |
+| settling | req_halt | settling | — | refused |
+| settling | req_release_stays | settling | — | refused |
+| settling | req_release_stays | settling | — | superseded |
+| settling | req_release_stays | settling | end_tokens, drain | — |
+| settling | req_release_stays | settling | end_tokens, drain | superseded |
+| settling | req_release_stops | settling | — | refused |
+| settling | req_release_stops | settling | end_tokens, drain, stop_net | — |
+| settling | req_release_stops | settling | end_tokens, drain, stop_net | superseded |
+| settling | req_release_stops | settling | stop_net | superseded |
+| settling | req_restart | settling | — | refused |
+| settling | req_restart | settling | end_tokens, drain | — |
+| settling | req_restart | settling | end_tokens, drain | superseded |
+| settling | req_retune | settling | — | refused |
+| settling | req_start | settling | — | refused |
+| settling | returned | retiring | retire | — |
+| settling | room | settling | drain | — |
+| settling | stale | stopping | stop | held |
+| starting | fault_kept | stopping | stop | interrupted, held, start_refused |
+| starting | fault_kept | stopping | stop, stop_data | interrupted, held, start_refused |
+| starting | fault_recovered | stopping | stop | interrupted, start_refused |
+| starting | fault_recovered | stopping | stop, stop_data | interrupted, start_refused |
+| starting | req_halt | stopping | stop | superseded |
+| starting | req_release_stays | stopping | stop | superseded |
+| starting | req_release_stops | stopping | stop | superseded |
+| starting | req_restart | stopping | stop | superseded |
+| starting | req_retune | starting | — | refused |
+| starting | req_start | starting | — | refused |
+| starting | stale | stopping | stop | held, start_refused |
+| starting | start_ok | running | — | started |
+| starting | start_refused | settling | stop_data | start_refused |
+| starting | start_refused | stopped | — | start_refused |
+| starting | start_unstopped | stopping | stop | start_refused |
+| stopped | fault_kept | stopped | — | held |
+| stopped | fault_recovered | stopped | — | — |
+| stopped | req_halt | stopped | — | halted |
+| stopped | req_release_stays | settling | end_tokens, drain | — |
+| stopped | req_release_stops | settling | end_tokens, drain, stop_net | — |
+| stopped | req_restart | settling | end_tokens, drain | — |
+| stopped | req_retune | stopped | — | refused |
+| stopped | req_start | starting | start | — |
+| stopping | data_stopped | stopping | — | — |
+| stopping | deadline | stopping | — | held |
+| stopping | fault_kept | stopping | — | held |
+| stopping | fault_recovered | stopping | — | — |
+| stopping | net_stopped | stopping | — | — |
+| stopping | ready | stopping | — | — |
+| stopping | req_halt | stopping | — | — |
+| stopping | req_halt | stopping | — | refused |
+| stopping | req_halt | stopping | — | superseded |
+| stopping | req_release_stays | stopping | — | — |
+| stopping | req_release_stays | stopping | — | refused |
+| stopping | req_release_stays | stopping | — | superseded |
+| stopping | req_release_stops | stopping | — | refused |
+| stopping | req_release_stops | stopping | stop_net | — |
+| stopping | req_release_stops | stopping | stop_net | superseded |
+| stopping | req_restart | stopping | — | — |
+| stopping | req_restart | stopping | — | refused |
+| stopping | req_restart | stopping | — | superseded |
+| stopping | req_retune | stopping | — | refused |
+| stopping | req_start | stopping | — | refused |
+| stopping | retry | stopping | stop | — |
+| stopping | stop_failed | stopping | — | held |
+| stopping | stop_late | stopping | — | held |
+| stopping | stop_ok | retiring | retire | — |
+| stopping | stop_ok | settling | — | — |
+| stopping | stop_ok | settling | drain | — |
+| stopping | stop_ok | settling | end_tokens, drain | — |
+| stopping | stop_ok | settling | end_tokens, drain, stop_net | — |
+| stopping | stop_ok | settling | stop_data | — |
+| stopping | stop_ok | settling | stop_data, end_tokens, drain | — |
+| stopping | stop_ok | settling | stop_data, end_tokens, drain, stop_net | — |
+| stopping | stop_ok | starting | start | — |
+| stopping | stop_ok | stopped | — | — |
+| stopping | stop_ok | stopped | — | halted |
+| stopping | stop_released | released | — | — |
+| stopping | stop_released | released | — | ended |
+| stopping | stop_released | released | — | released |

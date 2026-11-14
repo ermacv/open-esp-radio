@@ -2646,6 +2646,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-protocols-ieee80211-core-installation"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-time",
+ "oer-protocols-ieee80211-contracts-port",
+]
+
+[[package]]
 name = "oer-protocols-ieee80211-core-roles-ap"
 version = "0.1.0"
 dependencies = [
