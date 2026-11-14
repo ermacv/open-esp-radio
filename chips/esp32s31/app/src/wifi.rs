@@ -152,6 +152,16 @@ pub fn restart_cause_text(restarts: &wifi::Restarts, out: &mut [u8]) -> usize {
 /// line reads, written to `out`: `wifi-stop` and the stop error's variant
 /// path, or `wifi-stopped` after a stop that ended with it stopped; the
 /// bytes written.
+/// How the access point ended (`exit`, as [`AccessPoint::exit`] reads it)
+/// as its line reads, written to `out`: `wifi-ap-end` and the exit's
+/// variant path (`Ended/Stopped` once it stopped and its radio was
+/// released); the bytes written.
+#[cfg(feature = "access-point")]
+pub fn access_point_end_text(exit: &ApExit, out: &mut [u8]) -> usize {
+    let path = oer_portable_diagnostics::DiagPath::of(exit);
+    oer_chips_esp32s31_platform_runtime::diagnostic_text::write(b"wifi-ap-end", &path, out)
+}
+
 #[cfg(feature = "station")]
 pub fn end_text(ended: &Result<(), StopError>, out: &mut [u8]) -> usize {
     let (prefix, path): (&[u8], _) = match ended {

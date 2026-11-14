@@ -675,6 +675,6 @@ pub enum ReinstallCause {
 }
 #[cfg(any(test, target_arch = "riscv32"))]
 pub(crate) mod convert;
-mod path;
+pub(crate) mod path;
 #[cfg(test)]
 pub(crate) mod tests;

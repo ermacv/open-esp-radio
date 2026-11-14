@@ -485,7 +485,7 @@ impl DiagnosticPath for LifecycleFailure {
 
 /// A port's unconfirmed stop: its cause (the device's fault by name), then
 /// what it still held.
-fn stop_unconfirmed(
+pub(crate) fn stop_unconfirmed(
     unconfirmed: &oer_protocols_ieee80211_contracts_port::StopUnconfirmed<BackendFault>,
     path: &mut DiagPath,
 ) {
