@@ -46,6 +46,15 @@
 
 pub mod observation;
 
+pub mod idle;
+pub use idle::{Concurrent, IdleAccount, IdleReading};
+
+/// Each hart's idle account ([`idle`]): its thread-mode executor's wait for
+/// an interrupt keeps it.
+#[cfg(feature = "chip")]
+pub static IDLE: [IdleAccount; oer_chips_family_platform_port::HARTS] =
+    [const { IdleAccount::new() }; oer_chips_family_platform_port::HARTS];
+
 #[doc(hidden)]
 pub use oer_portable_trace as __trace;
 
