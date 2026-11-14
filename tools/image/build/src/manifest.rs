@@ -24,6 +24,63 @@ pub(crate) fn workspace_metadata(root: &Path) -> Result<Value> {
     Ok(serde_json::from_slice(&output.stdout)?)
 }
 
+/// The features a build of `package` enables: `features`, with its
+/// `default` when `default_features`, and every feature they name through
+/// the package's own feature table, each once (a dependency's feature, such
+/// as `oer/group`, is named and not followed).
+pub(crate) fn enabled_features(
+    metadata: &Value,
+    package: &str,
+    features: &[String],
+    default_features: bool,
+) -> std::collections::BTreeSet<String> {
+    let table = metadata
+        .get("packages")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|candidate| candidate.get("name").and_then(Value::as_str) == Some(package))
+        .and_then(|candidate| candidate.get("features"))
+        .and_then(Value::as_object);
+    let mut pending: Vec<String> = features.to_vec();
+    if default_features {
+        pending.push("default".to_owned());
+    }
+    let mut enabled = std::collections::BTreeSet::new();
+    while let Some(feature) = pending.pop() {
+        if !enabled.insert(feature.clone()) {
+            continue;
+        }
+        pending.extend(
+            table
+                .and_then(|table| table.get(&feature))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::to_owned),
+        );
+    }
+    enabled
+}
+
+/// The names in `package`'s own feature table.
+pub(crate) fn package_features(
+    metadata: &Value,
+    package: &str,
+) -> std::collections::BTreeSet<String> {
+    metadata
+        .get("packages")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|candidate| candidate.get("name").and_then(Value::as_str) == Some(package))
+        .and_then(|candidate| candidate.get("features"))
+        .and_then(Value::as_object)
+        .map(|table| table.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
 /// What `package` declares under `key` in `metadata`; `None` when it
 /// declares nothing.
 pub(crate) fn declared<'a>(

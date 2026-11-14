@@ -293,6 +293,7 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
                             profile_settings: String::new(),
                             features: vec![],
                             default_features: true,
+                            instrumentation: Vec::new(),
                             purpose: spec.purpose,
                             layout_seed: None,
                             configuration_sha256: BTreeMap::new(),

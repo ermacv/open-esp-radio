@@ -112,7 +112,7 @@ impl Application {
 pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
     let profile = profile(&spec.root, &spec.chip)?;
     let instrumentation =
-        instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
+        instrumentation::Instrumentation::declared(&spec.root, &spec.application)?;
     let task_stack_proven = task_stack::declared_proven(&spec.root, &spec.application.package)?;
     let critical_section_hart =
         critical_section::declared(&spec.root, &spec.application.package, &profile)?;
@@ -159,7 +159,7 @@ pub fn check(spec: &ImageSpec, check: RuntimeCheck) -> Result<()> {
     let harts = harts::declared(&spec.root, &spec.application, &profile)?;
     let policy = StackPolicy::load(&spec.root.join(&spec.stack_policy))?.for_image(&harts)?;
     let instrumentation =
-        instrumentation::Instrumentation::declared(&spec.root, &spec.application.package)?;
+        instrumentation::Instrumentation::declared(&spec.root, &spec.application)?;
     let cache = compile_cache(&spec.root, &instrumentation);
     // The image linker the flags name is this checkout's.
     let _cache = crate::compiler::lock_compile_cache(&cache)?;

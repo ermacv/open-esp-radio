@@ -475,7 +475,12 @@ fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
     let (device, link) = Device::new(7);
     thread::spawn(move || serve(device));
     let board = crate::fakes::FakeBoard::new(Vec::new());
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
+    let built = oer_tools_image_bundle::BuildChoice {
+        features: Vec::new(),
+        default_features: false,
+        instrumentation: Vec::new(),
+    };
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE).with_build(built.clone());
     let case = Case {
         name: "load",
         run: measured,
@@ -489,8 +494,11 @@ fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
             value: serde_json::json!({ "mbps": 42.5 }),
         }]
     );
-    let results = run::results(&SCENARIO, "s31-a", &ran.outcomes, &ran.measurements);
+    let results = run::results(&SCENARIO, "s31-a", &ran.outcomes, &ran.measurements, &built);
     assert_eq!(results["board"], "s31-a");
+    // What the image was built with: the measuring build, no instrumentation.
+    assert_eq!(results["build"]["default_features"], false);
+    assert_eq!(results["build"]["instrumentation"], serde_json::json!([]));
     assert_eq!(results["outcomes"][0]["verdict"], "fail");
     assert_eq!(results["measurements"][0]["case"], "load");
     assert_eq!(results["measurements"][0]["value"]["mbps"], 42.5);

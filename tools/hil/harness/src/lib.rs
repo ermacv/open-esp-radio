@@ -147,6 +147,13 @@ impl<'a> Cx<'a> {
         }
     }
 
+    /// What the run's image was built with: its features in Cargo's words
+    /// and the instrumentation they resulted in, from the bundle the
+    /// harness built and checked against the running image.
+    pub fn built(&self) -> &oer_tools_image_bundle::BuildChoice {
+        self.dut.built()
+    }
+
     fn link(&self) -> Result<&Link, Failure> {
         self.dut
             .link()
@@ -318,6 +325,12 @@ struct Arguments {
     /// Print the cases and exit.
     #[arg(long)]
     list: bool,
+    /// Build the image without its package's default features.
+    #[arg(long)]
+    no_default_features: bool,
+    /// Cargo features of the image package, comma-separated or repeated.
+    #[arg(long, value_delimiter = ',')]
+    features: Vec<String>,
 }
 
 /// Run `scenario`'s `cases` on the stand and exit with its verdict.
@@ -345,35 +358,42 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
     };
     let mut out = std::io::stdout();
     let mut measured = None;
-    let (outcomes, cleanup) = match stand::Session::open(scenario, arguments.board.as_deref()) {
-        Ok(mut session) => {
-            let link = session.take_link();
-            let (run, link) = {
-                let board = session.board();
-                let mut dut = dut::Dut::new(link, board, session.image_crc32());
-                let run = run::cases(&mut dut, scenario, &selected, &mut out);
-                (run, dut.into_link())
-            };
-            if !run.measurements.is_empty() {
-                measured = Some((
-                    session.root().to_owned(),
-                    session.board_id().to_owned(),
-                    run.measurements,
-                ));
-            }
-            let cleanup = session.finish(link, run.ending);
-            let cleanup = cleanup.released(session.release());
-            (run.outcomes, Some(cleanup))
-        }
-        Err(error) => {
-            let outcome = Outcome::stand(error.to_string());
-            run::print(&outcome, &mut out);
-            (vec![outcome], None)
-        }
+    let choice = stand::Choice {
+        features: arguments.features.clone(),
+        default_features: !arguments.no_default_features,
     };
+    let (outcomes, cleanup) =
+        match stand::Session::open(scenario, arguments.board.as_deref(), &choice) {
+            Ok(mut session) => {
+                let link = session.take_link();
+                let (run, link) = {
+                    let board = session.board();
+                    let mut dut = dut::Dut::new(link, board, session.image_crc32())
+                        .with_build(session.built().clone());
+                    let run = run::cases(&mut dut, scenario, &selected, &mut out);
+                    (run, dut.into_link())
+                };
+                if !run.measurements.is_empty() {
+                    measured = Some((
+                        session.root().to_owned(),
+                        session.board_id().to_owned(),
+                        run.measurements,
+                        session.built().clone(),
+                    ));
+                }
+                let cleanup = session.finish(link, run.ending);
+                let cleanup = cleanup.released(session.release());
+                (run.outcomes, Some(cleanup))
+            }
+            Err(error) => {
+                let outcome = Outcome::stand(error.to_string());
+                run::print(&outcome, &mut out);
+                (vec![outcome], None)
+            }
+        };
     let verdict = run::summary(scenario, &outcomes, cleanup.as_ref(), &mut out);
-    if let Some((root, board, measurements)) = measured {
-        let mut results = run::results(scenario, &board, &outcomes, &measurements);
+    if let Some((root, board, measurements, built)) = measured {
+        let mut results = run::results(scenario, &board, &outcomes, &measurements, &built);
         if let Some(object) = results.as_object_mut() {
             object.insert(
                 "cleanup".to_owned(),

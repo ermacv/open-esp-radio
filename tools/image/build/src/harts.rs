@@ -65,38 +65,9 @@ fn selects_a_group(
     features: &[String],
     default_features: bool,
 ) -> bool {
-    let Some(table) = metadata["packages"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|candidate| candidate["name"].as_str() == Some(package))
-        .and_then(|candidate| candidate["features"].as_object())
-    else {
-        return false;
-    };
-    let mut pending: Vec<String> = features.to_vec();
-    if default_features {
-        pending.push("default".to_owned());
-    }
-    let mut seen = std::collections::BTreeSet::new();
-    while let Some(feature) = pending.pop() {
-        if ["oer/group", "oer?/group"].contains(&feature.as_str()) {
-            return true;
-        }
-        if !seen.insert(feature.clone()) {
-            continue;
-        }
-        pending.extend(
-            table
-                .get(&feature)
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .map(str::to_owned),
-        );
-    }
-    false
+    crate::manifest::enabled_features(metadata, package, features, default_features)
+        .iter()
+        .any(|feature| ["oer/group", "oer?/group"].contains(&feature.as_str()))
 }
 
 /// The harts `package` declares in the workspace `metadata`, as [`declared`].

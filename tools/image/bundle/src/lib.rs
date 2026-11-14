@@ -153,6 +153,24 @@ pub struct ImageBundle {
     /// Every flash file's digest, in [`ImageBundle::segments`] order, as
     /// [`ImageBundle::publish`] recorded them.
     pub flash_files: Vec<FlashFile>,
+    /// What the application was built with: its features and the
+    /// instrumentation they resulted in.
+    #[serde(default)]
+    pub build: BuildChoice,
+}
+
+/// The features an image's application was built with, in Cargo's words,
+/// and the instrumentation classes they resulted in, by name.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BuildChoice {
+    /// The features asked for beside the defaults (`--features`).
+    pub features: Vec<String>,
+    /// Whether the package's default features were on
+    /// (`--no-default-features` when not).
+    pub default_features: bool,
+    /// The instrumentation classes the build compiled.
+    pub instrumentation: Vec<String>,
 }
 
 /// A flash file of a published bundle: what its bytes were when it was
@@ -287,6 +305,7 @@ impl ImageBundle {
             checks: Vec::new(),
             warnings: Vec::new(),
             flash_files: Vec::new(),
+            build: BuildChoice::default(),
         }
     }
 
@@ -533,6 +552,7 @@ impl ImageBundle {
             checks: Vec::new(),
             warnings: Vec::new(),
             flash_files: Vec::new(),
+            build: BuildChoice::default(),
         }
     }
 

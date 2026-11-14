@@ -20,6 +20,8 @@ pub(crate) struct Dut<'a> {
     seen: Option<u64>,
     board: &'a dyn Board,
     image_crc32: u32,
+    /// What the run's image was built with.
+    built: oer_tools_image_bundle::BuildChoice,
     hello: Duration,
 }
 
@@ -30,8 +32,15 @@ impl<'a> Dut<'a> {
             seen: None,
             board,
             image_crc32,
+            built: oer_tools_image_bundle::BuildChoice::default(),
             hello: RESET_HELLO,
         }
+    }
+
+    /// The device of an image built with `built`.
+    pub(crate) fn with_build(mut self, built: oer_tools_image_bundle::BuildChoice) -> Self {
+        self.built = built;
+        self
     }
 
     #[cfg(test)]
@@ -71,11 +80,17 @@ pub(crate) trait Device {
         &self,
         request: oer_tools_lab_client::protocol::RouterOperation,
     ) -> Result<serde_json::Value, String>;
+    /// What the image the device runs was built with.
+    fn built(&self) -> &oer_tools_image_bundle::BuildChoice;
 }
 
 impl Device for Dut<'_> {
     fn link(&self) -> Option<&Link> {
         self.link.as_ref()
+    }
+
+    fn built(&self) -> &oer_tools_image_bundle::BuildChoice {
+        &self.built
     }
 
     fn reset(&mut self) -> Result<Boot, String> {

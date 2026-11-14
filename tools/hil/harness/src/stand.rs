@@ -42,9 +42,18 @@ const WAITS: Waits = Waits {
 
 /// Declared in drop order: the link closes its console before the lease
 /// ends with the client.
+/// The features a scenario asks of its image, in Cargo's words.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct Choice {
+    pub(crate) features: Vec<String>,
+    pub(crate) default_features: bool,
+}
+
 pub(crate) struct Session {
     link: Option<Link>,
     image_crc32: u32,
+    /// What the image was built with, as its bundle records it.
+    built: oer_tools_image_bundle::BuildChoice,
     board: StandBoard,
     /// The checkout the scenario runs in, and the board's stand-file id.
     root: PathBuf,
@@ -57,13 +66,17 @@ impl Session {
     /// lease the board, write the image unless the board runs it, and open
     /// the link with a reset. A selection or an owner that cannot be
     /// resolved fails before the build.
-    pub(crate) fn open(scenario: &Scenario, selector: Option<&str>) -> Result<Self> {
+    pub(crate) fn open(
+        scenario: &Scenario,
+        selector: Option<&str>,
+        choice: &Choice,
+    ) -> Result<Self> {
         let root = oer_tools_os_process::Checkout::discover("HIL scenario")?.root;
         let stand = Stand::load(&oer_tools_lab_model::path()?)?;
         let (board, owner) = resolve(&stand, selector, || {
             Ok(oer_tools_lab_arbiter::owner::from_environment()?.to_string())
         })?;
-        let bundle = build(&root, scenario.image)?;
+        let bundle = build(&root, scenario.image, choice)?;
         let image_crc32 = bundle
             .staged
             .as_ref()
@@ -93,10 +106,16 @@ impl Session {
         Ok(Self {
             link: Some(link),
             image_crc32,
+            built: bundle.build.clone(),
             board: stand_board,
             root,
             board_id: board.id.clone(),
         })
+    }
+
+    /// What the image was built with.
+    pub(crate) fn built(&self) -> &oer_tools_image_bundle::BuildChoice {
+        &self.built
     }
 
     /// The checkout the scenario runs in.
@@ -281,9 +300,13 @@ fn claims(mac: &str, scenario: &Scenario) -> Vec<Claim> {
 }
 
 /// Build `image` through the image pipeline into its bundle.
-fn build(root: &Path, image: &str) -> Result<ImageBundle> {
+fn build(root: &Path, image: &str, choice: &Choice) -> Result<ImageBundle> {
     eprintln!("hil: building {image}");
-    let spec = images::spec(root, image, oer_tools_image_checks::Enforced::Reported)?;
+    let mut spec = images::spec(root, image, oer_tools_image_checks::Enforced::Reported)?;
+    spec.application
+        .features
+        .extend(choice.features.iter().cloned());
+    spec.application.default_features = choice.default_features;
     let bundle = oer_tools_image_build::build(&spec)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");

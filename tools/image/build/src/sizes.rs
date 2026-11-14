@@ -49,6 +49,10 @@ pub struct Provenance {
     pub profile_settings: String,
     pub features: Vec<String>,
     pub default_features: bool,
+    /// The instrumentation classes the build compiled, by name, from the
+    /// package's declaration and the features it enabled.
+    #[serde(default)]
+    pub instrumentation: Vec<String>,
     pub purpose: oer_tools_image_bundle::Purpose,
     pub layout_seed: Option<u32>,
     /// Values may contain stand credentials: record digests, never plaintext.
@@ -61,7 +65,11 @@ pub struct Provenance {
 }
 
 impl Summary {
-    pub(crate) fn new(spec: &ImageSpec, profile: &oer_tools_chip_profile::Profile) -> Result<Self> {
+    pub(crate) fn new(
+        spec: &ImageSpec,
+        profile: &oer_tools_chip_profile::Profile,
+        instrumentation: &crate::instrumentation::Instrumentation,
+    ) -> Result<Self> {
         let mut git = Command::new("git");
         git.current_dir(&spec.root).args(["rev-parse", "HEAD"]);
         let commit = capture(&mut git)?;
@@ -170,6 +178,10 @@ impl Summary {
                 profile_settings,
                 features,
                 default_features: spec.application.default_features,
+                instrumentation: instrumentation
+                    .classes()
+                    .map(|class| class.name().to_owned())
+                    .collect(),
                 purpose: spec.purpose,
                 layout_seed: spec.layout_seed.map(u32::from),
                 configuration_sha256,

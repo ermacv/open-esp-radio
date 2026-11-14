@@ -39,6 +39,9 @@ enum Command {
         /// Cargo features of the image package, comma-separated or repeated.
         #[arg(long, value_delimiter = ',')]
         features: Vec<String>,
+        /// Build without the image package's default features.
+        #[arg(long)]
+        no_default_features: bool,
     },
     /// Compare sizes.json files in two output directories; builds nothing.
     /// Exit 0 for same/report, 1 for incompatible provenance or unreadable input.
@@ -88,6 +91,9 @@ enum Command {
         /// Cargo features of the image package, comma-separated or repeated.
         #[arg(long, value_delimiter = ',')]
         features: Vec<String>,
+        /// Build without the image package's default features.
+        #[arg(long)]
+        no_default_features: bool,
     },
     /// Print a board's console without resetting it, or after a reset into
     /// its flashed image with `--start`. A board rests in its ROM's download
@@ -155,7 +161,17 @@ fn main() -> ExitCode {
                 bin,
                 diagnostic,
                 features,
-            } => command::build(&root, &image, bin.as_deref(), diagnostic, &features)?,
+                no_default_features,
+            } => command::build(
+                &root,
+                &image,
+                bin.as_deref(),
+                diagnostic,
+                &image::Choice {
+                    features,
+                    default_features: !no_default_features,
+                },
+            )?,
             Command::Sizes {
                 base,
                 head,
@@ -190,9 +206,19 @@ fn main() -> ExitCode {
                 board,
                 timeout,
                 features,
+                no_default_features,
             } => {
                 let timeout = timeout.unwrap_or(Duration::from_secs(30));
-                return command::run(&root, &image, &board, timeout, &features);
+                return command::run(
+                    &root,
+                    &image,
+                    &board,
+                    timeout,
+                    &image::Choice {
+                        features,
+                        default_features: !no_default_features,
+                    },
+                );
             }
             Command::Monitor { board, start } => command::monitor(&board, start)?,
             Command::Boards => command::list_boards()?,
@@ -272,6 +298,17 @@ mod tests {
         {
             Command::Run { features, .. } => assert_eq!(features, ["station"]),
             _ => panic!("a run"),
+        }
+        match parse("fw build wifi-station --no-default-features")
+            .unwrap()
+            .command
+        {
+            Command::Build {
+                no_default_features,
+                features,
+                ..
+            } => assert!(no_default_features && features.is_empty()),
+            _ => panic!("a build"),
         }
         assert!(matches!(
             parse("fw sizes base head").unwrap().command,

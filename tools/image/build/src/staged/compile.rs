@@ -26,7 +26,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
     // in its own cache.
     let cache = crate::compile_cache(root, instrumentation);
     let mut values = crate::large_values::Report::new(policy.max_move_bytes);
-    let mut sizes = crate::sizes::Summary::new(spec, profile)?;
+    let mut sizes = crate::sizes::Summary::new(spec, profile, instrumentation)?;
     crate::test_support::refuse(root, &spec.application.package, target)?;
 
     // Every image uplifts into the same `<target>/firmware` of the
