@@ -2080,7 +2080,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             lent: self.held.network.held(),
             removals: self.driver.removing.len(),
             retained_groups: 0,
-            unconsumed: self.kept.len() + self.held.events.len(),
+            unconsumed: self.kept.len().saturating_add(self.held.events.len()),
             transmit_out: self
                 .held
                 .transmit_out

@@ -98,7 +98,14 @@ pub mod class {
 impl<F> Outstanding<F> {
     /// The attempts queued in `category`.
     pub const fn queued_in(&self, category: WmmAccessCategory) -> usize {
-        self.queued[category as usize]
+        // One count a category, in the order of their discriminants.
+        let [best_effort, background, video, voice] = self.queued;
+        match category {
+            WmmAccessCategory::BestEffort => best_effort,
+            WmmAccessCategory::Background => background,
+            WmmAccessCategory::Video => video,
+            WmmAccessCategory::Voice => voice,
+        }
     }
 
     /// The count of `class` (one bit of [`class`]): units, keys, items,
