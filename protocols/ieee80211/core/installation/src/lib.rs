@@ -38,7 +38,9 @@
 //! It touches no port, no frame and no clock. A step takes one [`Event`]
 //! and writes what is to be done into the [`Outbox`] the pump lends: the
 //! asks of the port, the data plane, the controller and the network, and
-//! the [`Report`]s of the request it serves. The machine is the one holder
+//! the request's answer in its three kinds: a refusal, the one final
+//! outcome ([`End`] or [`Unreached`]), and the [`Status`] while it goes
+//! on. The machine is the one holder
 //! of the port's proofs: each phase that holds one holds it by type
 //! ([`Phase`]), and an ask that takes a proof takes it from the machine.
 //!
@@ -347,39 +349,39 @@ impl<C, F> Event<'_, '_, C, F> {
     }
 }
 
-/// What the machine reports of the request it serves, or of what it waits
-/// for.
-#[derive(Debug, Eq, PartialEq)]
-pub enum Report<'a, C, F> {
-    /// The request was refused at once, by the phase that refuses it.
-    Refused {
-        /// The request.
-        request: Request<C>,
-        /// The phase.
-        phase: Phase,
-    },
-    /// The goal in progress was replaced by a stronger ending: its request
-    /// is closed.
-    Superseded(Goal<C>),
+/// How an accepted request ended as asked.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum End {
     /// The radio runs.
     Started,
-    /// The start ended without the radio running.
-    StartRefused(StartEnd<'a, F>),
     /// The radio stopped and its data is home.
     Halted,
     /// The next installation is installed and stopped.
     Reinstalled,
+    /// The port released its installations.
+    Released,
+}
+
+/// How an accepted request ended otherwise.
+#[derive(Debug, Eq, PartialEq)]
+pub enum Unreached<'a, C, F> {
+    /// The start ended without the radio running.
+    StartRefused(StartEnd<'a, F>),
     /// The port refused the next installation; the machine holds the
     /// retired one.
     RestartRefused(ReinstallRefused),
-    /// The port released its installations.
+    /// A stronger ending took its place.
+    Superseded(Goal<C>),
+    /// The port turned out released: a stop answered so.
     Released,
-    /// The port answered a stop "released": the open request, not a
-    /// release, ends with the port.
-    EndedByRelease(Goal<C>),
+}
+
+/// What is true now, while a request goes on: never an answer.
+#[derive(Debug, Eq, PartialEq)]
+pub enum Status<'a, F> {
     /// A fault ended the run: the controller says what it wants next.
     Interrupted,
-    /// What the machine waits for; never an end.
+    /// What the machine waits for.
     Held(Waiting<'a, F>),
     /// The machine has no transition for the event in its phase: it changed
     /// nothing. The pump sent what no ask of the machine called for.
@@ -391,7 +393,8 @@ pub enum Report<'a, C, F> {
     },
 }
 
-/// What the pump lends a step: one method an ask, one for a report.
+/// What the pump lends a step: one method an ask, and one for each kind of
+/// report: a refusal, an outcome, a status.
 pub trait Outbox<'id, C, F> {
     /// Start the radio on `channel`, with the stop's proof.
     fn start(&mut self, stopped: Stopped<'id>, channel: C);
@@ -411,8 +414,12 @@ pub trait Outbox<'id, C, F> {
     fn reinstall(&mut self, retired: Retired<'id>, epoch: u32);
     /// Release the port's installations.
     fn release(&mut self, retired: Retired<'id>);
-    /// A report.
-    fn report(&mut self, report: Report<'_, C, F>);
+    /// A request was not accepted: nothing changed.
+    fn refused(&mut self, request: Request<C>, phase: Phase);
+    /// The one final answer of an accepted request.
+    fn ended(&mut self, end: Result<End, Unreached<'_, C, F>>);
+    /// What is true now, while a request goes on: never an answer.
+    fn status(&mut self, status: Status<'_, F>);
     /// When the pump sends [`Event::Deadline`]; `None`, never.
     fn deadline(&mut self, at: Option<Instant>);
 }
@@ -545,19 +552,19 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     pub fn step(&mut self, event: Event<'_, 'id, C, F>, out: &mut impl Outbox<'id, C, F>) {
         let phase = self.phase();
         let kind = event.kind();
-        let not_expected = Report::NotExpected { event: kind, phase };
+        let not_expected = Status::NotExpected { event: kind, phase };
         match event {
             Event::Request { request, deadline } => self.request(request, deadline, out),
             Event::DataStopped => {
                 if self.data != Data::Stopping {
-                    return out.report(not_expected);
+                    return out.status(not_expected);
                 }
                 self.data = Data::Stopped;
                 self.proceed(out);
             }
             Event::NetworkStopped => {
                 if self.net != Net::Stopping {
-                    return out.report(not_expected);
+                    return out.status(not_expected);
                 }
                 self.net = Net::Stopped;
                 if matches!(self.goal, Some(Goal::Release(_))) {
@@ -569,43 +576,43 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             }
             Event::Ready => {
                 if !self.waits.ready {
-                    return out.report(not_expected);
+                    return out.status(not_expected);
                 }
                 self.waits.ready = false;
                 self.proceed(out);
             }
             Event::Drained => {
                 if !self.waits.drained {
-                    return out.report(not_expected);
+                    return out.status(not_expected);
                 }
                 self.waits.drained = false;
                 self.proceed(out);
             }
             Event::DrainRefused => {
                 if !self.waits.drained {
-                    return out.report(not_expected);
+                    return out.status(not_expected);
                 }
-                out.report(Report::Held(Waiting::Unconsumed));
+                out.status(Status::Held(Waiting::Unconsumed));
             }
             Event::Room => match &self.state {
                 State::Stopped(stopped) | State::Settling(stopped) if self.waits.drained => {
                     out.drain(stopped);
                 }
-                _ => out.report(not_expected),
+                _ => out.status(not_expected),
             },
-            Event::Deadline => out.report(Report::Held(Waiting::Deadline(phase))),
+            Event::Deadline => out.status(Status::Held(Waiting::Deadline(phase))),
             Event::Fault(answer) => self.fault(answer, out),
             Event::Stale => self.stale(out),
             Event::Started if phase == Phase::Starting => {
                 self.state = State::Running;
                 self.goal = None;
                 self.data = Data::Running;
-                out.report(Report::Started);
+                out.ended(Ok(End::Started));
             }
             Event::StartRefused(stopped, failure) if phase == Phase::Starting => {
                 // The radio is stopped; after a retune the data still runs
                 // and stops now.
-                out.report(Report::StartRefused(StartEnd::Refused(failure)));
+                out.ended(Err(Unreached::StartRefused(StartEnd::Refused(failure))));
                 self.settle(stopped, None, out);
             }
             Event::StartUnstopped { cause, stop } if phase == Phase::Starting => {
@@ -613,7 +620,10 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 self.state = State::Stopping;
                 self.goal = None;
                 out.stop();
-                out.report(Report::StartRefused(StartEnd::Unstopped { cause, stop }));
+                out.ended(Err(Unreached::StartRefused(StartEnd::Unstopped {
+                    cause,
+                    stop,
+                })));
             }
             Event::Stopped(stopped) if phase == Phase::Stopping => {
                 if let Some(Goal::Run(channel)) = self.goal {
@@ -634,15 +644,15 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 // The port holds no installation: that is the machine's
                 // state too; the open request ends with it.
                 match self.goal {
-                    Some(Goal::Release(_)) => out.report(Report::Released),
-                    Some(goal) => out.report(Report::EndedByRelease(goal)),
+                    Some(Goal::Release(_)) => out.ended(Ok(End::Released)),
+                    Some(_) => out.ended(Err(Unreached::Released)),
                     None => {}
                 }
                 self.state = State::Released;
                 self.goal = None;
             }
             Event::StopUnconfirmed(stop) if phase == Phase::Stopping => {
-                out.report(Report::Held(Waiting::Radio(stop)));
+                out.status(Status::Held(Waiting::Radio(stop)));
             }
             Event::Retry if phase == Phase::Stopping => out.stop(),
             Event::Retired(retired) if phase == Phase::Retiring => {
@@ -651,11 +661,11 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             Event::RetireRefused(stopped, outstanding) if phase == Phase::Retiring => {
                 self.state = State::Settling(stopped);
                 self.waits.returns = true;
-                out.report(Report::Held(Waiting::Outstanding(outstanding)));
+                out.status(Status::Held(Waiting::Outstanding(outstanding)));
             }
             Event::Returned if phase == Phase::Settling => {
                 if !self.waits.returns {
-                    return out.report(not_expected);
+                    return out.status(not_expected);
                 }
                 self.waits.returns = false;
                 self.proceed(out);
@@ -665,7 +675,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 if let Some(Goal::Restart { .. }) = self.goal {
                     self.state = State::Stopped(stopped);
                     self.goal = None;
-                    out.report(Report::Reinstalled);
+                    out.ended(Ok(End::Reinstalled));
                     return;
                 }
                 // A release was asked meanwhile: the new installation ends
@@ -676,7 +686,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 if let Some(Goal::Restart { .. }) = self.goal {
                     self.state = State::Retired(retired);
                     self.goal = None;
-                    out.report(Report::RestartRefused(why));
+                    out.ended(Err(Unreached::RestartRefused(why)));
                     return;
                 }
                 self.after_retired(retired, out);
@@ -684,9 +694,9 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             Event::Released if phase == Phase::Releasing => {
                 self.state = State::Released;
                 self.goal = None;
-                out.report(Report::Released);
+                out.ended(Ok(End::Released));
             }
-            _ => out.report(not_expected),
+            _ => out.status(not_expected),
         }
     }
 
@@ -697,17 +707,17 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         out: &mut impl Outbox<'id, C, F>,
     ) {
         let phase = self.phase();
-        let refused = Report::Refused { request, phase };
+        let refused = (request, phase);
         if phase == Phase::Released {
-            return out.report(refused);
+            return out.refused(refused.0, refused.1);
         }
         let goal = match request {
             Request::Start(channel) => {
                 if !matches!(self.state, State::Stopped(_)) {
-                    return out.report(refused);
+                    return out.refused(refused.0, refused.1);
                 }
                 let State::Stopped(stopped) = self.take() else {
-                    return out.report(refused);
+                    return out.refused(refused.0, refused.1);
                 };
                 self.state = State::Starting;
                 self.goal = Some(Goal::Run(channel));
@@ -716,7 +726,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             }
             Request::Retune(channel) => {
                 if phase != Phase::Running {
-                    return out.report(refused);
+                    return out.refused(refused.0, refused.1);
                 }
                 self.state = State::Stopping;
                 self.goal = Some(Goal::Run(channel));
@@ -731,22 +741,22 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         // stronger takes its place.
         let superseded = match self.goal {
             Some(current) if goal.rank() <= current.rank() => {
-                return out.report(refused);
+                return out.refused(refused.0, refused.1);
             }
             current => current,
         };
         if phase == Phase::Releasing || (phase == Phase::Retired && matches!(goal, Goal::Halt)) {
-            return out.report(refused);
+            return out.refused(refused.0, refused.1);
         }
         if let Some(current) = superseded {
-            out.report(Report::Superseded(current));
+            out.ended(Err(Unreached::Superseded(current)));
         }
         out.deadline(deadline);
         match self.take() {
             State::Stopped(stopped) => {
                 if matches!(goal, Goal::Halt) {
                     self.state = State::Stopped(stopped);
-                    out.report(Report::Halted);
+                    out.ended(Ok(End::Halted));
                     return;
                 }
                 let _asked = self.settle(stopped, Some(goal), out);
@@ -838,7 +848,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             Some(Goal::Halt) => {
                 self.state = State::Stopped(stopped);
                 self.goal = None;
-                out.report(Report::Halted);
+                out.ended(Ok(End::Halted));
             }
             Some(_) if self.waits.any() => self.state = State::Settling(stopped),
             Some(_) => {
@@ -878,9 +888,9 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         };
         if matches!(phase, Phase::Starting | Phase::Running) {
             // The run, or the start, ends by a stop.
-            out.report(Report::Interrupted);
+            out.status(Status::Interrupted);
             if let Some((fault, outstanding)) = kept {
-                out.report(Report::Held(Waiting::Fault { fault, outstanding }));
+                out.status(Status::Held(Waiting::Fault { fault, outstanding }));
             }
             out.stop();
             if self.data == Data::Running {
@@ -888,7 +898,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 out.stop_data();
             }
             if phase == Phase::Starting {
-                out.report(Report::StartRefused(StartEnd::Fault));
+                out.ended(Err(Unreached::StartRefused(StartEnd::Fault)));
             }
             self.state = State::Stopping;
             self.goal = None;
@@ -896,7 +906,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         }
         match kept {
             Some((fault, outstanding)) => {
-                out.report(Report::Held(Waiting::Fault { fault, outstanding }));
+                out.status(Status::Held(Waiting::Fault { fault, outstanding }));
             }
             // The fault was what the retirement named: ask it again.
             None if phase == Phase::Settling && self.waits.returns => {
@@ -918,7 +928,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 | Phase::Reinstalling
                 | Phase::Releasing
         ) {
-            out.report(Report::NotExpected {
+            out.status(Status::NotExpected {
                 event: EventKind::Stale,
                 phase,
             });
@@ -926,10 +936,10 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         }
         // From a settling it is the drain's answer: the stop's proof the
         // machine still holds is the stale one, and goes.
-        out.report(Report::Held(Waiting::Stale));
+        out.status(Status::Held(Waiting::Stale));
         if matches!(self.goal, Some(Goal::Run(_))) {
             self.goal = None;
-            out.report(Report::StartRefused(StartEnd::Stale));
+            out.ended(Err(Unreached::StartRefused(StartEnd::Stale)));
         }
         self.state = State::Stopping;
         out.stop();

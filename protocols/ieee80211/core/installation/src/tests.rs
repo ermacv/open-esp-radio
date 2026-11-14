@@ -147,20 +147,26 @@ impl<'id> Outbox<'id, Channel, Fault> for Recorder {
     fn release(&mut self, _: Retired<'id>) {
         self.asks.push("release");
     }
-    fn report(&mut self, report: Report<'_, Channel, Fault>) {
-        self.reports.push(match report {
-            Report::Refused { .. } => "refused",
-            Report::Superseded(_) => "superseded",
-            Report::Started => "started",
-            Report::StartRefused(_) => "start_refused",
-            Report::Halted => "halted",
-            Report::Reinstalled => "reinstalled",
-            Report::RestartRefused(_) => "restart_refused",
-            Report::Released => "released",
-            Report::EndedByRelease(_) => "ended",
-            Report::Interrupted => "interrupted",
-            Report::Held(_) => "held",
-            Report::NotExpected { .. } => {
+    fn refused(&mut self, _: Request<Channel>, _: Phase) {
+        self.reports.push("refused");
+    }
+    fn ended(&mut self, end: Result<End, Unreached<'_, Channel, Fault>>) {
+        self.reports.push(match end {
+            Ok(End::Started) => "started",
+            Ok(End::Halted) => "halted",
+            Ok(End::Reinstalled) => "reinstalled",
+            Ok(End::Released) => "released",
+            Err(Unreached::StartRefused(_)) => "start_refused",
+            Err(Unreached::RestartRefused(_)) => "restart_refused",
+            Err(Unreached::Superseded(_)) => "superseded",
+            Err(Unreached::Released) => "ended",
+        });
+    }
+    fn status(&mut self, status: Status<'_, Fault>) {
+        self.reports.push(match status {
+            Status::Interrupted => "interrupted",
+            Status::Held(_) => "held",
+            Status::NotExpected { .. } => {
                 self.not_expected = true;
                 "not_expected"
             }

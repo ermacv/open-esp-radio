@@ -22,6 +22,7 @@ oer-protocols-radio-port = { path = "../../../radio/port" }
 oer-portable-time = { path = "../../../../portable/time" }
 
 [dev-dependencies]
+oer-protocols-ieee80211-testing-installation = { path = "../installation" }
 oer-portable-wire = { path = "../../../../portable/wire" }
 oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../core/upper-mac" }

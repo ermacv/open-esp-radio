@@ -674,6 +674,9 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
             self.air.allow_recovery();
         }
     }
+    fn fail_next_stop(&mut self) {
+        self.air.fail_next_stop();
+    }
     fn end_tokens(&mut self) {
         // Each token goes home to its pool as it drops.
         self.tickets.clear();
@@ -772,6 +775,16 @@ fn the_model_passes_every_data_port_case() {
     for case in Case::ALL {
         with_harness(|harness| {
             assert_eq!(cases::check(harness, case), Ok(()), "{case:?}");
+        });
+    }
+}
+
+#[test]
+fn the_installation_machine_ends_every_case_on_the_model() {
+    use oer_protocols_ieee80211_testing_installation as installation;
+    for case in installation::Case::ALL {
+        with_harness(|harness| {
+            assert_eq!(installation::check(harness, case), Ok(()), "{case:?}");
         });
     }
 }

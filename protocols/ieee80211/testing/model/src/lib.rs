@@ -1927,6 +1927,8 @@ pub struct ModelAir {
     unstop_enable: Cell<bool>,
     /// A start waits for this to clear before the MAC enables.
     hold_start: Cell<bool>,
+    /// The next stop poll fails with a fault of the device, once.
+    fail_stop: Cell<bool>,
     /// Stops the port confirmed.
     confirmed_stops: Cell<u32>,
     refuse_access_point: Cell<u8>,
@@ -2034,6 +2036,7 @@ impl ModelAir {
             disables: Default::default(),
             unstop_enable: Cell::new(false),
             hold_start: Cell::new(false),
+            fail_stop: Cell::new(false),
             fault_access_point: Cell::new(false),
             confirmed_stops: Cell::new(0),
             edca: Default::default(),
@@ -2609,6 +2612,17 @@ impl ModelAir {
     /// [`StartPoll::Pending`]: oer_protocols_ieee80211_contracts_port::StartPoll::Pending
     pub fn hold_start(&self, hold: bool) {
         self.hold_start.set(hold);
+    }
+
+    /// Fail the next stop poll with a fault of the device, once: the stop
+    /// after it goes on as before.
+    pub fn fail_next_stop(&self) {
+        self.fail_stop.set(true);
+    }
+
+    /// Whether this stop poll fails, as [`Self::fail_next_stop`] asked.
+    pub(crate) fn take_failed_stop(&self) -> bool {
+        self.fail_stop.replace(false)
     }
 
     /// Whether a start waits ([`Self::hold_start`]).

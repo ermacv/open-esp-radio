@@ -1977,6 +1977,14 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         if let Err(fault) = self.check(ModelPortCall::Stop) {
             return Poll::Ready(Err(self.unconfirmed(StopCause::Device(fault))));
         }
+        if self.air.take_failed_stop() {
+            // The device's stop failed this once; nothing of the port moved.
+            let fault = ModelPortFault::Quarantined {
+                call: ModelPortCall::Stop,
+                observation: self.observation(),
+            };
+            return Poll::Ready(Err(self.unconfirmed(StopCause::Device(fault))));
+        }
         if self.released {
             // No installation is left to stop, and no proof to give.
             return Poll::Ready(Err(self.unconfirmed(StopCause::Released)));

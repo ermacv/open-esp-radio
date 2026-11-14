@@ -846,6 +846,11 @@ enum ProtocolRole {
     /// A backend conformance suite under `testing/`: cases and observation
     /// checks over the port, which backends and models run.
     Conformance,
+    /// A testing package under `testing/` that joins a core with a port:
+    /// the installation machine over a real port. It may take the
+    /// installation core; the backends and the model take it as a
+    /// dev-dependency only.
+    CoreTesting,
     Model,
     Runtime,
 }
@@ -867,6 +872,7 @@ fn protocol_role(path: &str) -> Option<ProtocolRole> {
         (Some("contracts"), "port") => return Some(ProtocolRole::Port),
         (Some("contracts"), _) => return Some(ProtocolRole::Contract),
         (Some("testing"), "conformance") => return Some(ProtocolRole::Conformance),
+        (Some("testing"), "installation") => return Some(ProtocolRole::CoreTesting),
         _ => {}
     }
     Some(match leaf {
@@ -1334,6 +1340,7 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
             ("contracts/keys", ProtocolRole::Contract),
             ("contracts/port", ProtocolRole::Port),
             ("testing/conformance", ProtocolRole::Conformance),
+            ("testing/installation", ProtocolRole::CoreTesting),
             ("testing/model", ProtocolRole::Model),
             ("core/upper-mac", ProtocolRole::Core),
             ("core/security/cipher", ProtocolRole::Cipher),
@@ -5037,7 +5044,7 @@ fn the_hal_ratchet_fails_on_a_new_file_a_changed_count_and_a_gone_entry() {
 fn testing_role(role: Role) -> bool {
     matches!(
         role,
-        Role::Protocol(ProtocolRole::Conformance | ProtocolRole::Model)
+        Role::Protocol(ProtocolRole::Conformance | ProtocolRole::Model | ProtocolRole::CoreTesting)
     )
 }
 
@@ -5067,6 +5074,35 @@ fn no_product_package_depends_on_a_conformance_suite_or_a_model() {
             .any(|member| member.path == "protocols/ieee80211/testing/conformance")
     );
     let edges = testing_edges(&members, &workspace_roles());
+    assert!(edges.is_empty(), "{edges:?}");
+}
+
+/// The installation core over a real port joins a core with a port: no
+/// package takes it as a normal or build dependency, a model or a
+/// conformance suite included; the backends and the model run it as a
+/// dev-dependency.
+#[test]
+fn only_dev_dependencies_take_a_core_testing_package() {
+    let members = workspace_members();
+    let roles = workspace_roles();
+    assert!(
+        roles
+            .values()
+            .any(|role| *role == Role::Protocol(ProtocolRole::CoreTesting))
+    );
+    let edges: BTreeSet<Edge> = members
+        .iter()
+        .flat_map(|member| {
+            member
+                .dependencies
+                .iter()
+                .chain(&member.build_dependencies)
+                .filter(|dependency| {
+                    roles.get(*dependency) == Some(&Role::Protocol(ProtocolRole::CoreTesting))
+                })
+                .map(|dependency| (member.path.clone(), dependency.clone()))
+        })
+        .collect();
     assert!(edges.is_empty(), "{edges:?}");
 }
 

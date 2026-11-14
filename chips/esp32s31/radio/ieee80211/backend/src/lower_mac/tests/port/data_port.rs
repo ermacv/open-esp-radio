@@ -716,6 +716,9 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
             Fault::RemovalMismatch
         });
     }
+    fn fail_next_stop(&mut self) {
+        self.observed.borrow_mut().fail_stop = Some(Fault::ReceiveLost);
+    }
     fn end_tokens(&mut self) {
         // Each token goes home to the port's bank as it drops.
         drop(core::mem::take(&mut self.buffers));
@@ -777,6 +780,15 @@ fn a_refused_installation_returns_its_parts_mint_and_driver_whole() {
         let mut fixture = Fixture::new(installation, observed, timer);
         assert_eq!(cases::check(&mut fixture, Case::ALL[0]), Ok(()));
     }));
+}
+
+#[test]
+fn the_installation_machine_ends_every_case_on_the_s31_port() {
+    use oer_protocols_ieee80211_testing_installation as installation;
+    for case in installation::Case::ALL {
+        let result = with_fixture(|fixture| installation::check(fixture, case));
+        assert_eq!(result, Ok(()), "{case:?}");
+    }
 }
 
 #[test]
