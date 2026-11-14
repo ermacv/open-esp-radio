@@ -12,7 +12,8 @@ on the application entry names no chip: the build selects the board's chip
 cargo fw sizes <base-output-directory> <head-output-directory>
 cargo fw sizes <base-image> <new-composition> --add-base <second-base-image>
 cargo fw decode-console <console.raw.txt>
-cargo fw build <image>
+cargo fw build <image> [--no-default-features] [--features <a,b>]
+cargo fw cfgs <package> [--no-default-features] [--features <a,b>]
 cargo fw build <probe-image> --bin <binary> --diagnostic
 cargo fw flash <image> --board <id|MAC>
 cargo fw run <image> --board <id|MAC> [--timeout <duration>]
@@ -130,10 +131,18 @@ resets the board into its image, which stops what the command left running.
   in `tools/lab/router`). The board must leave USB while the port is off, or the
   port "did not cut power"; then it waits for the board to return.
 
+## Instrumentation cfgs
+
+`cfgs` prints the `--cfg` flags of the instrumentation classes a build of
+the package compiles (its own list and those of the features it enables),
+as `build` sets them, and builds nothing: CI type-checks each instrumented
+image's default build and its build without default features with them.
+
 ## Sizes
 
 `cargo fw sizes` compares `sizes.json` files without building: `same`/`report`
-exit 0, unreadable input or incompatible provenance exit 1. See the [summary format and
+exit 0, unreadable input or incompatible provenance exit 1; two builds of
+one image with different features or instrumentation are incompatible. See the [summary format and
 owner thresholds](../build/README.md#size-summaries-and-verdicts).
 
 With `--add-base`, each directory names one `sizes.json` bundle. This explicit
@@ -144,6 +153,6 @@ image, the allocation budget and the new composition; type/frame inventories
 remain reports. No input summary or provenance is rewritten.
 
 `cargo fw sizes-refresh INPUT OUTPUT --source-root CONFIGURATION` reanalyses
-saved ELF bundles into a separate schema-2 summary tree without compiling or
+saved ELF bundles into a separate schema-3 summary tree without compiling or
 linking. Inputs remain read-only; the source root must supply the original
 image configuration. See the [refresh workflow](../build/README.md#pr-size-table-for-an-agent).

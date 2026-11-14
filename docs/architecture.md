@@ -1444,11 +1444,19 @@ Retained storage uses plain atomic loads/stores; the recorder's read-modify-writ
 counters and global pointer/mask stay in ordinary atomic RAM.
 
 `trace` is the observation mechanism of chip and platform owners, including
-execution cost and CPU load. Under image cfg `oer_trace`, they emit event values through `observe!`;
+execution cost. Under image cfg `oer_trace`, they emit event values through `observe!`;
 only image collectors retain measurement counters and window state. Executor
 idle boundaries use the monotonic platform clock with interrupts masked through
-the second reading; whole-hart load is one minus the idle fraction. Executor
-work intervals include preemption and overlap. `debug-control` separately names
+the second reading. Executor work intervals include preemption and overlap.
+`cpu-load` is each hart's CPU load without the trace: under `oer_cpu_load`
+the thread-mode executor's wait for an interrupt adds its span to the hart's
+idle account (`IDLE`), two clock readings (the trace's idle boundaries take
+the same two) and three stores a wake, nothing a poll or a frame. The hart
+reads its own account (`Cpu0::idle`, `Cpu1::idle` of the entry), so the read
+never overlaps the write; whole-hart load is one minus the idle fraction.
+An image that declares neither class reads no clock in the wait. A hart's
+cycle, instruction and cache counters cost nothing unread and are no class:
+the entry hands them out in every build. `debug-control` separately names
 knobs that force paths under `oer_debug_control`, and `fault-injection` a
 one-shot fault on a real path under `oer_fault_injection`, which changes nothing
 else, so an image that measures can carry it; neither is an observer. Only

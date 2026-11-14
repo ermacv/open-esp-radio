@@ -268,7 +268,12 @@ mod tests {
             let output = output(directory.path(), image);
             let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
             std::fs::create_dir_all(&staging).unwrap();
-            let built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
+            let built = ImageBundle::new(
+                &staging,
+                &profile,
+                profile.facts.flash.clone().unwrap(),
+                crate::tests::package_build(),
+            );
             for segment in built.segments() {
                 std::fs::write(segment.file, b"fixture").unwrap();
             }

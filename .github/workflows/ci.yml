@@ -79,7 +79,7 @@ jobs:
           members=$(jq -r '.workspace_default_members as $members | .packages[]
             | select(.id as $id | $members | index($id))
             | .name + " " + (.manifest_path | rtrimstr("/Cargo.toml"))' <<<"$meta")
-          for cfg in oer_trace oer_debug_control; do
+          for cfg in oer_trace oer_debug_control oer_cpu_load; do
             packages=$(while read -r name directory; do
               if grep -rqE --include='*.rs' "cfg!?\(.*\b$cfg\b" "$directory"; then
                 echo "-p $name"
@@ -121,18 +121,15 @@ jobs:
           firmware() {
             jq -r '.packages[]
               | select(.manifest_path | test("/examples/|/hil/images/|/chips/(esp32s31/platform/(board|bootstrap)|family/platform/(runtime|bootstrap))/"))
-              | select(.metadata."open-radio".instrumentation == null)
+              | select(.metadata."open-radio" | (.instrumentation == null and .features == null))
               | "-p " + .name' <<<"$meta"
           }
-          # `<package> <target> <cfg flags>` of each other instrumented image.
+          # Each instrumented image: one that declares classes in its own
+          # list or a feature's table.
           instrumented() {
             jq -r '.packages[]
-              | select(.metadata."open-radio".instrumentation != null)
-              | [.name,
-                 "riscv32imafc-unknown-none-elf",
-                 (.metadata."open-radio".instrumentation
-                  | map("--cfg oer_" + gsub("-"; "_")) | join(" "))]
-              | join(" ")' <<<"$meta"
+              | select(.metadata."open-radio" | (.instrumentation != null or .features != null))
+              | .name' <<<"$meta"
           }
           # The crates that declare tasks take `type_alias_impl_trait`
           # through RUSTC_BOOTSTRAP in .cargo/config.toml; SDK images declare
@@ -140,11 +137,19 @@ jobs:
           # The image pipeline selects the chip of the application entry; a
           # type-check names it here.
           cargo clippy --locked --target riscv32imafc-unknown-none-elf --features oer/esp32s31 $(firmware)
-          # Each in a target directory of its own, as `cargo fw` keeps the
-          # plain cache free of the cfgs.
-          while read -r package target cfgs; do
-            RUSTFLAGS="$cfgs" CARGO_TARGET_DIR="target/instrumented/$package" \
-              cargo clippy --locked --target "$target" -p "$package" --features oer/esp32s31
+          # Its default build and its build without default features, each
+          # with the cfgs the image pipeline sets for it (`cargo fw cfgs`) and
+          # in a target directory of its own, as `cargo fw` keeps the plain
+          # cache free of the cfgs.
+          while read -r package; do
+            for build in default no-default; do
+              choice=()
+              [ "$build" = no-default ] && choice=(--no-default-features)
+              cfgs=$(cargo fw cfgs "$package" "${choice[@]}")
+              RUSTFLAGS="$cfgs" CARGO_TARGET_DIR="target/instrumented/$package-$build" \
+                cargo clippy --locked --target riscv32imafc-unknown-none-elf -p "$package" \
+                  "${choice[@]}" --features oer/esp32s31
+            done
           done < <(instrumented)
       - name: Firmware packages for the chip target
         run: |
@@ -157,7 +162,7 @@ jobs:
           firmware() {
             jq -r '.packages[]
               | select(.manifest_path | test("/examples/|/hil/images/|/chips/(esp32s31/platform/(board|bootstrap)|family/platform/(runtime|bootstrap))/"))
-              | select(.metadata."open-radio".instrumentation == null)
+              | select(.metadata."open-radio" | (.instrumentation == null and .features == null))
               | "-p " + .name' <<<"$meta"
           }
           cargo check --locked --target riscv32imafc-unknown-none-elf --features oer/esp32s31 $(firmware)

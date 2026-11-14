@@ -78,7 +78,16 @@ fn empty_bundle(directory: &Path) -> oer_tools_image_bundle::ImageBundle {
     let chip = oer_tools_chip_profile::supported(&root).unwrap().remove(0);
     let profile = profile(&root, &chip).unwrap();
     let flash = profile.facts.flash.clone().unwrap();
-    oer_tools_image_bundle::ImageBundle::new(directory, &profile, flash)
+    oer_tools_image_bundle::ImageBundle::new(directory, &profile, flash, package_build())
+}
+
+/// The build of a test's bundle: a package with its defaults.
+pub(crate) fn package_build() -> oer_tools_image_bundle::Build {
+    oer_tools_image_bundle::Build::Package(oer_tools_image_bundle::BuildChoice {
+        features: Vec::new(),
+        default_features: true,
+        instrumentation: Vec::new(),
+    })
 }
 
 fn outcome(results: &[(&str, CheckResult)]) -> CheckOutcome {

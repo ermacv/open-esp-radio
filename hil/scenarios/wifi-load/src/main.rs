@@ -52,7 +52,7 @@ use oer_hil_services_wifi_station::{
 };
 use oer_protocols_hil_agent::base::Service as _;
 use oer_tools_hil_harness::{
-    Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
+    BuildChoice, Case, Cx, Failure, RouterChannelWidth, RouterOperation, Scenario, check,
 };
 
 /// The image the scenario runs: the station on the network core.
@@ -267,20 +267,38 @@ fn device_address(cx: &mut Cx<'_>) -> Result<Ipv4Addr, Failure> {
 
 /// The report of `run` and its parts' window, once the image ended it.
 /// What the image kept of one run.
+/// What a run kept. The report, the boot hart's counters and hart 1's come
+/// from every build; the rest from the trace's observers, `None` from the
+/// measuring build, which answers [`oer_hil_services_load::LoadError::NotBuilt`] for them.
 struct Ended {
     report: Report,
-    parts: Vec<PartWindow>,
     counters: Counters,
+    hart1: Hart1Window,
+    traced: Option<Traced>,
+}
+
+/// What only the trace build reads.
+struct Traced {
+    parts: Vec<PartWindow>,
     link: Link,
     mac: Mac,
     positions: Positions,
-    hart1: Hart1Window,
     tracking: Tracking,
     stall: Stall,
     stall_mac: StallMac,
     network: NetworkTurns,
     addba: Addba,
     turn_profile: profile_turns::Profile,
+}
+
+/// The instrumentation class of the trace, as the bundle names it.
+const TRACE: &str = "trace";
+
+/// Whether the image the harness built has the trace: without it, the
+/// measuring build, a collection of the trace's counts is refused as
+/// [`oer_hil_services_load::LoadError::NotBuilt`], and only then.
+fn traced(built: &BuildChoice) -> bool {
+    built.instrumentation.iter().any(|class| class == TRACE)
 }
 
 fn collect(cx: &mut Cx<'_>, run: u32) -> Result<Ended, Failure> {
@@ -305,6 +323,39 @@ fn collect_report(cx: &mut Cx<'_>, run: u32) -> Result<Report, Failure> {
 }
 
 fn collect_ended(cx: &mut Cx<'_>, run: u32, report: Report) -> Result<Ended, Failure> {
+    let counters = match cx.call(CollectCounters { run }, CALL)? {
+        CountersCollected::Report(counters) => counters,
+        other => return Err(Failure::Fail(format!("the image's counters: {other:?}"))),
+    };
+    let hart1 = match cx.call(CollectHart1 { run }, CALL)? {
+        Hart1Collected::Report(hart1) => hart1,
+        other => return Err(Failure::Fail(format!("the image's hart 1: {other:?}"))),
+    };
+    received_readable(&report)?;
+    let traced = if traced(cx.built()) {
+        Some(collect_traced(cx, run)?)
+    } else {
+        // The measuring build refuses what it did not build: one such
+        // refusal confirms the image is the one the harness built.
+        match cx.call(CollectLink { run }, CALL)? {
+            LinkCollected::Refused(oer_hil_services_load::LoadError::NotBuilt) => None,
+            other => {
+                return Err(Failure::Fail(format!(
+                    "the measuring image's link: {other:?}, not NotBuilt"
+                )));
+            }
+        }
+    };
+    Ok(Ended {
+        report,
+        counters,
+        hart1,
+        traced,
+    })
+}
+
+/// What the trace build kept of run `run`.
+fn collect_traced(cx: &mut Cx<'_>, run: u32) -> Result<Traced, Failure> {
     let mut parts = Vec::new();
     loop {
         let from = u8::try_from(parts.len())
@@ -320,10 +371,6 @@ fn collect_ended(cx: &mut Cx<'_>, run: u32, report: Report) -> Result<Ended, Fai
             other => return Err(Failure::Fail(format!("the image's parts: {other:?}"))),
         }
     }
-    let counters = match cx.call(CollectCounters { run }, CALL)? {
-        CountersCollected::Report(counters) => counters,
-        other => return Err(Failure::Fail(format!("the image's counters: {other:?}"))),
-    };
     let link = match cx.call(CollectLink { run }, CALL)? {
         LinkCollected::Report(link) => link,
         other => return Err(Failure::Fail(format!("the image's link: {other:?}"))),
@@ -335,10 +382,6 @@ fn collect_ended(cx: &mut Cx<'_>, run: u32, report: Report) -> Result<Ended, Fai
     let positions = match cx.call(CollectPositions { run }, CALL)? {
         PositionsCollected::Report(positions) => positions,
         other => return Err(Failure::Fail(format!("the image's positions: {other:?}"))),
-    };
-    let hart1 = match cx.call(CollectHart1 { run }, CALL)? {
-        Hart1Collected::Report(hart1) => hart1,
-        other => return Err(Failure::Fail(format!("the image's hart 1: {other:?}"))),
     };
     let tracking = match cx.call(CollectTracking { run }, CALL)? {
         TrackingCollected::Report(tracking) => tracking,
@@ -360,7 +403,6 @@ fn collect_ended(cx: &mut Cx<'_>, run: u32, report: Report) -> Result<Ended, Fai
             )));
         }
     };
-    received_readable(&report)?;
     let mut turn_profile = profile_turns::Profile::default();
     for page in 0..PROFILE_PAGES {
         match cx.call(CollectProfile { run, page }, CALL)? {
@@ -375,14 +417,11 @@ fn collect_ended(cx: &mut Cx<'_>, run: u32, report: Report) -> Result<Ended, Fai
         }
     }
     match cx.call(CollectAddba { run }, CALL)? {
-        AddbaCollected::Report(addba) => Ok(Ended {
-            report,
+        AddbaCollected::Report(addba) => Ok(Traced {
             parts,
-            counters,
             link,
             mac,
             positions,
-            hart1,
             tracking,
             stall,
             stall_mac,
@@ -438,46 +477,50 @@ fn positions_counts(positions: &Positions) -> serde_json::Value {
 
 /// What the image's periodic PHY tracking did over a window; its one-line
 /// summary is printed as `name`'s.
-fn tracking_measurement(name: &str, ended: &Ended) -> serde_json::Value {
-    println!("  tracking {name}: {}", tracking::summary(&ended.tracking));
-    tracking::window(&ended.tracking)
+fn tracking_measurement(name: &str, traced: &Traced) -> serde_json::Value {
+    println!("  tracking {name}: {}", tracking::summary(&traced.tracking));
+    tracking::window(&traced.tracking)
 }
 
 /// The ADDBA Requests the station took since boot, at the window's end; its
 /// one-line summary is printed as `name`'s.
-fn addba_measurement(name: &str, ended: &Ended) -> serde_json::Value {
-    println!("  addba {name}: {}", addba::summary(&ended.addba));
-    addba::window(&ended.addba)
+fn addba_measurement(name: &str, traced: &Traced) -> serde_json::Value {
+    println!("  addba {name}: {}", addba::summary(&traced.addba));
+    addba::window(&traced.addba)
 }
 
 /// Where the receive path last moved and the radio owner's snapshot at the
 /// window's end; its one-line summary is printed as `name`'s.
-fn stall_measurement(name: &str, ended: &Ended) -> serde_json::Value {
-    let (report, stall, mac) = (&ended.report, &ended.stall, &ended.stall_mac);
+fn stall_measurement(name: &str, report: &Report, traced: &Traced) -> serde_json::Value {
+    let (stall, mac) = (&traced.stall, &traced.stall_mac);
     println!("  stall {name}: {}", stall::summary(report, stall, mac));
     stall::window(report, stall, mac)
 }
 
 /// What the network core's turns did over a window; its one-line summary
 /// is printed as `name`'s.
-fn turns_measurement(name: &str, ended: &Ended) -> serde_json::Value {
-    println!("  network turns {name}: {}", turns::summary(&ended.network));
-    turns::window(&ended.network)
+fn turns_measurement(name: &str, traced: &Traced) -> serde_json::Value {
+    println!(
+        "  network turns {name}: {}",
+        turns::summary(&traced.network)
+    );
+    turns::window(&traced.network)
 }
 
 /// The network core's turn profile over a window; its one-line summary is
 /// printed as `name`'s.
-fn profile_measurement(name: &str, ended: &Ended) -> serde_json::Value {
+fn profile_measurement(name: &str, traced: &Traced) -> serde_json::Value {
     println!(
         "  turn profile {name}: {}",
-        profile_turns::summary(&ended.turn_profile)
+        profile_turns::summary(&traced.turn_profile)
     );
-    profile_turns::window(&ended.turn_profile)
+    profile_turns::window(&traced.turn_profile)
 }
 
 /// What the link ran over a window: the access point's view between
-/// `before` and `after`, `span` apart, and the image's counts in `ended`;
-/// its one-line summary is printed as `name`'s.
+/// `before` and `after`, `span` apart, and the image's counts in `ended`
+/// where its build keeps them (`null` from the measuring build); its
+/// one-line summary is printed as `name`'s.
 fn link_measurement(
     name: &str,
     before: &link::Reading,
@@ -486,9 +529,14 @@ fn link_measurement(
     ended: &Ended,
 ) -> serde_json::Value {
     let router = link::router_window(before, after, span);
-    let device = link::device(&ended.link);
-    println!("  link {name}: {}", link::summary(&router, &device));
-    serde_json::json!({ "router": router, "device": device })
+    match &ended.traced {
+        Some(traced) => {
+            let device = link::device(&traced.link);
+            println!("  link {name}: {}", link::summary(&router, &device));
+            serde_json::json!({ "router": router, "device": device })
+        }
+        None => serde_json::json!({ "router": router, "device": null }),
+    }
 }
 
 /// The highest total a level may offer: far above any 2.4 GHz link, and
@@ -717,10 +765,14 @@ fn counters(counters: &Counters, window_us: u64) -> serde_json::Value {
 }
 
 /// The transmit path's counts: the station's settled aggregates with their
-/// mean subframes (null without one) beside the image's counts.
+/// mean subframes (null without one) beside the image's counts; null from
+/// the measuring build, which keeps none.
 fn tx_counts(counters: &Counters) -> serde_json::Value {
-    let ampdu = &counters.tx.ampdu;
-    let mut value = serde_json::json!(counters.tx);
+    let Some(tx) = &counters.tx else {
+        return serde_json::Value::Null;
+    };
+    let ampdu = &tx.ampdu;
+    let mut value = serde_json::json!(tx);
     value["ampdu"]["average_subframes"] = serde_json::json!(
         (ampdu.aggregates != 0)
             .then(|| round(f64::from(ampdu.subframes) / f64::from(ampdu.aggregates)))
@@ -893,12 +945,15 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         he20: width == RouterChannelWidth::He20,
     };
     let joined = cx.call(join, JOIN_TIMEOUT)?;
-    println!("connect: {}", cx.call(GetConnectTimes, REPORT_TIMEOUT)?);
-    println!("connect: {}", ScanVisit::HEADER);
-    let mut index = 0;
-    while let ScanVisitAnswer(Some(visit)) = cx.call(GetScanVisit { index }, REPORT_TIMEOUT)? {
-        println!("connect: {visit}");
-        index += 1;
+    // The connect's timeline is the trace's: the measuring build keeps none.
+    if traced(cx.built()) {
+        println!("connect: {}", cx.call(GetConnectTimes, REPORT_TIMEOUT)?);
+        println!("connect: {}", ScanVisit::HEADER);
+        let mut index = 0;
+        while let ScanVisitAnswer(Some(visit)) = cx.call(GetScanVisit { index }, REPORT_TIMEOUT)? {
+            println!("connect: {visit}");
+            index += 1;
+        }
     }
     let (bssid, linked) = match joined {
         Joined::Linked {
@@ -1049,9 +1104,12 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     let window = window_us(&idle.report);
     let mut cpu = utilisation(&idle.report.cpu_start, &idle.report.cpu_end);
     if let Some(object) = cpu.as_object_mut() {
-        object.insert("parts".to_owned(), polls(&idle.parts, window));
+        if let Some(traced) = &idle.traced {
+            object.insert("parts".to_owned(), polls(&traced.parts, window));
+        }
         object.insert("counters".to_owned(), counters(&idle.counters, window));
         object.insert("hart1".to_owned(), hart1(&idle.hart1, window));
+        object.insert("build".to_owned(), build(cx.built()));
     }
     cx.measure("idle cpu", cpu);
     cx.measure(
@@ -1060,9 +1118,11 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
     );
     let link = link_measurement("idle", &before, &after, span, &idle);
     cx.measure("idle link", link);
-    let tracking = tracking_measurement("idle", &idle);
-    cx.measure("idle tracking", tracking);
-    cx.measure("idle addba", addba_measurement("idle", &idle));
+    if let Some(traced) = &idle.traced {
+        let tracking = tracking_measurement("idle", traced);
+        cx.measure("idle tracking", tracking);
+        cx.measure("idle addba", addba_measurement("idle", traced));
+    }
     Ok(())
 }
 
@@ -1685,6 +1745,8 @@ fn measured_level(
     let name = &offer.name;
     let mut value = measurement(offer, &sent, &received, &ended);
     if let Some(object) = value.as_object_mut() {
+        // What the harness built and checked against the running image.
+        object.insert("build".to_owned(), build(cx.built()));
         object.insert("start_boundary".to_owned(), serde_json::json!({
             "protocol": "armed-flow-begin",
             "host_clock": "endpoint monotonic microseconds; not synchronised with device",
@@ -1712,14 +1774,17 @@ fn measured_level(
         }
         let link = link_measurement(name, &before, &after, span, &ended);
         object.insert("link".to_owned(), link);
-        let tracking = tracking_measurement(name, &ended);
-        object.insert("tracking".to_owned(), tracking);
-        object.insert("stall".to_owned(), stall_measurement(name, &ended));
-        let turns = turns_measurement(name, &ended);
-        object.insert("network_turns".to_owned(), turns);
-        let profile = profile_measurement(name, &ended);
-        object.insert("turn_profile".to_owned(), profile);
-        object.insert("addba".to_owned(), addba_measurement(name, &ended));
+        if let Some(traced) = &ended.traced {
+            let tracking = tracking_measurement(name, traced);
+            object.insert("tracking".to_owned(), tracking);
+            let stall = stall_measurement(name, &ended.report, traced);
+            object.insert("stall".to_owned(), stall);
+            let turns = turns_measurement(name, traced);
+            object.insert("network_turns".to_owned(), turns);
+            let profile = profile_measurement(name, traced);
+            object.insert("turn_profile".to_owned(), profile);
+            object.insert("addba".to_owned(), addba_measurement(name, traced));
+        }
         if let Some(diagnosed) = &diagnosed {
             println!("  diagnostics {name}: {}", diagnostics::summary(diagnosed));
             object.insert(
@@ -1749,6 +1814,16 @@ fn measured_level(
     }
     cx.measure(name.clone(), value);
     Ok(echoes.unwrap_or_default())
+}
+
+/// The build of the image a window ran on: its features and the
+/// instrumentation they compiled, from the bundle the harness built.
+fn build(built: &BuildChoice) -> serde_json::Value {
+    serde_json::json!({
+        "features": built.features,
+        "default_features": built.default_features,
+        "instrumentation": built.instrumentation,
+    })
 }
 
 /// Only device-clock boundaries are compared. Host send stamps have their
@@ -1794,10 +1869,10 @@ fn measurement(
         "window_s": round(window),
         "rtt": rtt(&received.echoes),
         "cpu": utilisation(&report.cpu_start, &report.cpu_end),
-        "polls": polls(&ended.parts, window_us(report)),
+        "polls": ended.traced.as_ref().map(|traced| polls(&traced.parts, window_us(report))),
         "counters": counters(&ended.counters, window_us(report)),
-        "mac": mac_counts(&ended.mac),
-        "positions": positions_counts(&ended.positions),
+        "mac": ended.traced.as_ref().map(|traced| mac_counts(&traced.mac)),
+        "positions": ended.traced.as_ref().map(|traced| positions_counts(&traced.positions)),
         "hart1": hart1(&ended.hart1, window_us(report)),
     });
     let mut sides = serde_json::Map::new();
@@ -2098,14 +2173,11 @@ mod tests {
             elapsed: Duration::from_secs(5),
             ..Default::default()
         };
-        let ended = Ended {
-            report,
+        let traced = Traced {
             parts: Vec::new(),
-            counters: Counters::default(),
             link: Link::default(),
             mac: Mac::default(),
             positions: Positions::default(),
-            hart1: Hart1Window::default(),
             tracking: Tracking::default(),
             stall: Stall::default(),
             stall_mac: StallMac::default(),
@@ -2113,11 +2185,51 @@ mod tests {
             addba: Addba::default(),
             turn_profile: profile_turns::Profile::default(),
         };
+        let mut ended = Ended {
+            report,
+            counters: Counters::default(),
+            hart1: Hart1Window::default(),
+            traced: Some(traced),
+        };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
         let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);
         assert_eq!(value["window_s"], 5.0);
         assert_eq!(value["rx"]["device_received_mbps"], 13.0);
         assert!(value.get("tx").is_none());
+        assert!(!value["mac"].is_null());
+
+        // The measuring build's window: the same rates and counters, and
+        // no count of the trace's.
+        ended.traced = None;
+        let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);
+        assert_eq!(value["rx"]["device_received_mbps"], 13.0);
+        assert!(value["counters"].is_object());
+        assert!(value["polls"].is_null());
+        assert!(value["mac"].is_null());
+        assert!(value["positions"].is_null());
+    }
+
+    #[test]
+    fn only_a_build_without_the_trace_class_is_the_measuring_one() {
+        let mut built = BuildChoice {
+            features: Vec::new(),
+            default_features: true,
+            instrumentation: vec![
+                "trace".to_owned(),
+                "fault-injection".to_owned(),
+                "cpu-load".to_owned(),
+            ],
+        };
+        assert!(traced(&built));
+        // The measuring build: its idle account and nothing of the trace.
+        built.default_features = false;
+        built.instrumentation = vec!["cpu-load".to_owned()];
+        assert!(!traced(&built));
+        built.instrumentation.push("fault-injection".to_owned());
+        assert!(!traced(&built));
+        let value = build(&built);
+        assert_eq!(value["default_features"], false);
+        assert_eq!(value["instrumentation"][0], "cpu-load");
     }
 
     /// Hart 1's window between two ends of (cycles, instructions).
@@ -2192,20 +2304,12 @@ mod tests {
             elapsed: Duration::from_secs(1),
             ..Default::default()
         };
+        // Hart 1's counters come from both builds: the measuring one's.
         let ended = Ended {
             report,
-            parts: Vec::new(),
             counters: Counters::default(),
-            link: Link::default(),
-            mac: Mac::default(),
-            positions: Positions::default(),
             hart1: window((0, 0), (320_000_000, 3_000_000)),
-            tracking: Tracking::default(),
-            stall: Stall::default(),
-            stall_mac: StallMac::default(),
-            network: NetworkTurns::default(),
-            addba: Addba::default(),
-            turn_profile: profile_turns::Profile::default(),
+            traced: None,
         };
         let offer = Offer::level(Mode::Rx, 65, true).unwrap();
         let value = measurement(&offer, &sent, &traffic::Received::default(), &ended);
@@ -2261,21 +2365,30 @@ mod tests {
         assert_eq!(value["cycles_per_us"], 320.0);
         assert_eq!(value["instructions_per_cycle"], 0.3);
         assert_eq!(value["instructions_per_stack_frame"], 960_000.0);
+        let traced = Counters {
+            rx: Some(oer_hil_services_load::RxCounts::default()),
+            tx: Some(oer_hil_services_load::TxCounts::default()),
+            ..Counters::default()
+        };
+        let zeros = counters(&traced, 5_000_000);
+        assert_eq!(zeros["rx"]["driver"]["available"], false);
+        assert_eq!(zeros["rx"]["station"]["agreement_window"], 0);
+        assert_eq!(zeros["tx"]["ampdu"]["aggregates"], 0);
+        assert!(zeros["tx"]["ampdu"]["average_subframes"].is_null());
+        // The measuring build counts neither path: no count, not zeros.
         let none = counters(&Counters::default(), 5_000_000);
-        assert_eq!(none["rx"]["driver"]["available"], false);
-        assert_eq!(none["rx"]["station"]["agreement_window"], 0);
-        assert_eq!(none["tx"]["ampdu"]["aggregates"], 0);
-        assert!(none["tx"]["ampdu"]["average_subframes"].is_null());
+        assert!(none["rx"].is_null());
+        assert!(none["tx"].is_null());
         let sent = counters(
             &Counters {
-                tx: oer_hil_services_load::TxCounts {
+                tx: Some(oer_hil_services_load::TxCounts {
                     ampdu: oer_hil_services_load::TxAmpdu {
                         aggregates: 4,
                         subframes: 90,
                         subframes_17_32: 3,
                         ..oer_hil_services_load::TxAmpdu::default()
                     },
-                },
+                }),
                 ..Counters::default()
             },
             5_000_000,

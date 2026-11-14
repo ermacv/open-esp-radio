@@ -19,6 +19,25 @@ and counters cross the HIL link. RX and TX are named from the image's side.
 | `sparse` | Each shape both ways at once with a `ping` beside it and no RTT probes: 1 and 2 datagrams every 100 ms, 1 every 1 ms, bursts of 8 every 20 ms and of 32 every 50 ms, and 8 of 200 bytes every 20 ms. Fails above a median ping of 3 ms; a shape's ping of fewer than 30 replies leaves the case incomplete. The ping's 113 ms, a prime number of milliseconds, is no divisor or multiple of any shape's period, so its requests meet each shape at changing phases (13 ms further each in a 20, 50 or 100 ms period), not always at one |
 | `stop` | Leaves 2 s into an RX run of 65 Mbit/s and records how long the leave took. Fails unless the station answers `Down`: the network stops and closes the load socket, every lent receive buffer returns by the stop's 2 s deadline, and the radio retires; the run itself ends at its time without the socket. Runs last, because the image serves no station after a leave |
 
+## Two builds
+
+The scenario runs on either build of `hil-wifi-station`: the default one
+with the trace, or the measuring one (`cargo hil run wifi-load
+--no-default-features`, no instrumentation linked). Every window records
+`build`: the features and the instrumentation of the bundle the harness
+built and checked against the running image. On the measuring build each
+window keeps the host's and the image's datagram counts and rates, each
+hart's busy share from its idle account, both harts' cycles and retired
+instructions, the boot hart's cache counts and the network's frames; the
+counts the trace feeds (`polls`, `mac`, `positions`, the counters' `rx` and
+`tx`, `link.device`, `tracking`, `stall`, `network_turns`, `turn_profile`,
+`addba`, each executor's work) are null or absent, and the scenario takes
+the image's `NotBuilt` for them only when the bundle has no `trace` class.
+A profile (`OER_WIFI_LOAD_PROFILE_US`), a tune (`OER_WIFI_LOAD_TUNES`) or
+diagnostics need the trace build: the measuring image refuses them.
+
+## Load
+
 Each load case offers 10, 30, 50 and 65 Mbit/s in total (1472-byte
 datagrams); `OER_WIFI_LOAD_MBPS=10,65,100` replaces the levels (and `OER_WIFI_LOAD_WIDTH=ht20` the 40 MHz channel the path case asks the router for), e.g. to
 overload. Level 0 means no pacing, in every direction the case has: the host
@@ -86,7 +105,7 @@ there, so the idle baseline's rate is the executor's wakes alone; with a
 debugger attached the executor does not wait in `wfi`, and its spin counts.
 
 `rx` holds the window's differences of the receive path, counted only by
-a trace build (zeros otherwise). `driver` is the S31 receive driver's
+a trace build (null from the measuring build). `driver` is the S31 receive driver's
 `WifiRxCounters` (`available` false when they were not readable at both
 ends): `mac_irqs`, staged `units` and `bytes`, `overload_drops` (bulk
 units dropped, after the hardware acknowledged them, with only the
@@ -110,7 +129,8 @@ agreement's negotiated `agreement_window` at the window's end, and
 `rsn_inputs_dropped`.
 
 `tx.ampdu` holds the window's differences of the station's transmit
-agreements, also counted only by a trace build: data `aggregates` settled
+agreements, also counted only by a trace build (`tx` null from the
+measuring build): data `aggregates` settled
 (by a terminal, or `refused` before the port), their `subframes` and
 `average_subframes` (null without an aggregate), the aggregates by
 subframes `subframes_1`, `subframes_2`, `subframes_3_4`, `subframes_5_8`,
@@ -165,7 +185,8 @@ station for want of room (`held_bursts`, `held`).
 
 Each level's `network_turns` records what the network core's service did
 in its turns over the window, and prints one line (`network turns
-<level>:`); only a trace build counts them (`available` false otherwise). `requests` counts the requests
+<level>:`); only a trace build counts them (absent from the measuring
+build's window). `requests` counts the requests
 the turns took from the sockets' lanes by kind, with `reserve_per_send`.
 One reservation asks for several blocks: `reserve_blocks` counts the blocks
 the reservations asked for, `blocks_per_reserve` their mean and
@@ -229,7 +250,7 @@ transmissions per MPDU. RX and TX stay the image's.
   older LAB service's), `queues` is `{"unavailable": [why, …]}`, one reason
   per read, and no value is made up.
 - `device` is the image's count over its window, from its trace build
-  (zeros otherwise). `rx`: the data MPDUs addressed to the station that
+  (null from the measuring build). `rx`: the data MPDUs addressed to the station that
   reached its port, by their PPDU's rate as the receive metadata decodes
   it (`mpdus`: `total`, every nonzero `rates` entry, e.g. `HT40 SGI MCS7`,
   with its `count` and `percent`, and `ht40_percent`, `short_gi_percent`,

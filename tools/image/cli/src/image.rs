@@ -8,16 +8,25 @@ pub use oer_tools_image_build::images::{CHIP, bundle, package};
 use oer_tools_image_build::{Enforced, Result, images};
 use oer_tools_image_bundle::ImageBundle;
 
+/// The features a build asks of the image package, in Cargo's words.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Choice {
+    /// `--features`: beside the defaults.
+    pub features: Vec<String>,
+    /// The package's default features, off with `--no-default-features`.
+    pub default_features: bool,
+}
+
 /// Build `image` into its bundle.
 pub fn build(
     root: &Path,
     image: &str,
     enforced: Enforced,
     binary: Option<&str>,
-    features: &[String],
+    choice: &Choice,
 ) -> Result<ImageBundle> {
     let bundle =
-        oer_tools_image_build::build(&specification(root, image, enforced, binary, features)?)?;
+        oer_tools_image_build::build(&specification(root, image, enforced, binary, choice)?)?;
     for warning in &bundle.warnings {
         eprintln!("warning: {warning}");
     }
@@ -26,13 +35,13 @@ pub fn build(
 }
 
 /// The pipeline's spec of `image`: its package's `binary` instead of the
-/// default one, and its default features plus `features`.
+/// default one, and the features of `choice`.
 fn specification(
     root: &Path,
     image: &str,
     enforced: Enforced,
     binary: Option<&str>,
-    features: &[String],
+    choice: &Choice,
 ) -> Result<oer_tools_image_build::ImageSpec> {
     let mut specification = images::spec(root, image, enforced)?;
     if let Some(binary) = binary {
@@ -41,7 +50,8 @@ fn specification(
     specification
         .application
         .features
-        .extend(features.iter().cloned());
+        .extend(choice.features.iter().cloned());
+    specification.application.default_features = choice.default_features;
     Ok(specification)
 }
 
@@ -107,7 +117,10 @@ mod tests {
             "esp32s31-boot-smoke",
             Enforced::Reported,
             None,
-            &features,
+            &Choice {
+                features: features.to_vec(),
+                default_features: true,
+            },
         )
         .unwrap();
         assert_eq!(spec.application.features, features);
@@ -117,10 +130,37 @@ mod tests {
             "esp32s31-boot-smoke",
             Enforced::Reported,
             None,
-            &[],
+            &Choice {
+                features: Vec::new(),
+                default_features: true,
+            },
         )
         .unwrap();
         assert!(plain.application.features.is_empty());
+        let measuring = specification(
+            directory.path(),
+            "esp32s31-boot-smoke",
+            Enforced::Reported,
+            None,
+            &Choice {
+                features: Vec::new(),
+                default_features: false,
+            },
+        )
+        .unwrap();
+        assert!(
+            !measuring.application.default_features,
+            "--no-default-features"
+        );
+    }
+
+    /// The build of a test's bundle: a package with its defaults.
+    fn package_build() -> oer_tools_image_bundle::Build {
+        oer_tools_image_bundle::Build::Package(oer_tools_image_bundle::BuildChoice {
+            features: Vec::new(),
+            default_features: true,
+            instrumentation: Vec::new(),
+        })
     }
 
     #[test]
@@ -131,6 +171,7 @@ mod tests {
             directory.path(),
             &profile,
             profile.facts.flash.clone().unwrap(),
+            package_build(),
         );
         for (name, text) in [
             ("runtime-frames.txt", "4097\tover limit\truntime::large"),
@@ -174,7 +215,12 @@ mod tests {
         let output = output(root, "esp32s31-boot-smoke");
         let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
         std::fs::create_dir_all(&staging).unwrap();
-        let mut built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
+        let mut built = ImageBundle::new(
+            &staging,
+            &profile,
+            profile.facts.flash.clone().unwrap(),
+            package_build(),
+        );
         for segment in built.segments() {
             std::fs::write(segment.file, b"fixture").unwrap();
         }
@@ -198,8 +244,12 @@ mod tests {
         let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
         for purpose in [Purpose::Analysis, Purpose::Flash] {
             std::fs::create_dir_all(&staging).unwrap();
-            let mut built =
-                ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
+            let mut built = ImageBundle::new(
+                &staging,
+                &profile,
+                profile.facts.flash.clone().unwrap(),
+                package_build(),
+            );
             built.purpose = purpose;
             for segment in built.segments() {
                 std::fs::write(segment.file, b"fixture").unwrap();

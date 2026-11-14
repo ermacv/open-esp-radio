@@ -213,10 +213,10 @@ pub fn run(
     image: &str,
     selector: &str,
     timeout: Duration,
-    features: &[String],
+    choice: &image::Choice,
 ) -> Result<ExitCode> {
     let board = board(selector)?;
-    image::build(root, image, Enforced::Reported, None, features)?;
+    image::build(root, image, Enforced::Reported, None, choice)?;
     let mut client = lease(&board)?;
     write_image(root, image, &board, &mut client)?;
     let run = root
@@ -358,14 +358,14 @@ pub fn build(
     image_name: &str,
     binary: Option<&str>,
     diagnostic: bool,
-    features: &[String],
+    choice: &image::Choice,
 ) -> Result<()> {
     let bundle = image::build(
         root,
         image_name,
         build_enforcement(&image::package(root, image_name)?, diagnostic)?,
         binary,
-        features,
+        choice,
     )?;
     for segment in bundle.segments() {
         eprintln!(

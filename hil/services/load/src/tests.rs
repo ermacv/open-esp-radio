@@ -150,8 +150,8 @@ fn the_largest_reports_fit_one_response() {
         stack_received: u32::MAX,
         cache: full_cache(),
         cache_geometry: full_geometry(),
-        rx: full_rx(),
-        tx: TxCounts {
+        rx: Some(full_rx()),
+        tx: Some(TxCounts {
             ampdu: TxAmpdu {
                 aggregates: u32::MAX,
                 refused: u32::MAX,
@@ -167,7 +167,7 @@ fn the_largest_reports_fit_one_response() {
                 dropped: u32::MAX,
                 block_ack_requests: u32::MAX,
             },
-        },
+        }),
     });
     assert!(postcard::to_slice(&counters, &mut buffer).unwrap().len() <= 512);
     let samples = SamplesCollected::Page(Samples {
@@ -465,7 +465,7 @@ fn the_window_s_cache_counts_and_geometry_round_trip() {
         CountersCollected::Report(Counters {
             cache: full_cache(),
             cache_geometry: full_geometry(),
-            rx: full_rx(),
+            rx: Some(full_rx()),
             ..counters
         }),
     ] {

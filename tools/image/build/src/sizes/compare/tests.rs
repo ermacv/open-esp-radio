@@ -19,6 +19,7 @@ fn summary() -> Summary {
             profile_settings: "opt-level=3".into(),
             features: vec![],
             default_features: false,
+            instrumentation: Vec::new(),
             purpose: oer_tools_image_bundle::Purpose::Analysis,
             layout_seed: None,
             configuration_sha256: BTreeMap::new(),
@@ -167,7 +168,15 @@ fn a_new_hole_is_reported_and_an_equal_count_cannot_hide_a_different_one() {
 fn incompatible_origins_are_errors() {
     let a = summary();
     for field in [
-        "image", "target", "profile", "config", "compiler", "features", "flags",
+        "image",
+        "target",
+        "profile",
+        "config",
+        "compiler",
+        "features",
+        "default-features",
+        "instrumentation",
+        "flags",
     ] {
         let mut b = a.clone();
         match field {
@@ -181,6 +190,8 @@ fn incompatible_origins_are_errors() {
             }
             "compiler" => b.provenance.rustc = "other".into(),
             "features" => b.provenance.features.push("different".into()),
+            "default-features" => b.provenance.default_features = !b.provenance.default_features,
+            "instrumentation" => b.provenance.instrumentation.push("trace".into()),
             _ => {
                 b.provenance.flags.insert(
                     "runtime".into(),
@@ -464,6 +475,23 @@ fn old_or_mixed_schemas_are_errors() {
             .to_string()
             .contains("incompatible sizes schema")
     );
+}
+
+#[test]
+fn a_current_summary_without_its_instrumentation_is_refused() {
+    let mut value = serde_json::to_value(summary()).unwrap();
+    value["provenance"]
+        .as_object_mut()
+        .unwrap()
+        .remove("instrumentation");
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(
+        directory.path().join(super::super::FILE),
+        serde_json::to_vec(&value).unwrap(),
+    )
+    .unwrap();
+    let error = Summary::read(directory.path()).unwrap_err().to_string();
+    assert!(error.contains("missing field `instrumentation`"), "{error}");
 }
 
 #[test]

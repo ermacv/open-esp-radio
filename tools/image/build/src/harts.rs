@@ -36,7 +36,7 @@ pub(crate) fn declared(
             &application.package,
             &application.features,
             application.default_features,
-        )
+        )?
     {
         let interrupts = profile
             .facts
@@ -59,44 +59,21 @@ pub(crate) fn declared(
 /// Whether the build's `features` of `package` (with its defaults when
 /// `default_features`) reach the application entry's `group` feature
 /// through the package's own features.
+///
+/// # Errors
+///
+/// The metadata has no such package or no feature table of it.
 fn selects_a_group(
     metadata: &Value,
     package: &str,
     features: &[String],
     default_features: bool,
-) -> bool {
-    let Some(table) = metadata["packages"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|candidate| candidate["name"].as_str() == Some(package))
-        .and_then(|candidate| candidate["features"].as_object())
-    else {
-        return false;
-    };
-    let mut pending: Vec<String> = features.to_vec();
-    if default_features {
-        pending.push("default".to_owned());
-    }
-    let mut seen = std::collections::BTreeSet::new();
-    while let Some(feature) = pending.pop() {
-        if ["oer/group", "oer?/group"].contains(&feature.as_str()) {
-            return true;
-        }
-        if !seen.insert(feature.clone()) {
-            continue;
-        }
-        pending.extend(
-            table
-                .get(&feature)
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .map(str::to_owned),
-        );
-    }
-    false
+) -> Result<bool> {
+    Ok(
+        crate::manifest::enabled_features(metadata, package, features, default_features)?
+            .iter()
+            .any(|feature| ["oer/group", "oer?/group"].contains(&feature.as_str())),
+    )
 }
 
 /// The harts `package` declares in the workspace `metadata`, as [`declared`].
@@ -228,19 +205,24 @@ mod tests {
             "name": "image",
             "features": {"station": ["oer/station", "oer/group"], "default": []},
         }]});
-        assert!(selects_a_group(
-            &metadata,
-            "image",
-            &["station".to_owned()],
-            true
-        ));
-        assert!(!selects_a_group(&metadata, "image", &[], true));
-        assert!(!selects_a_group(
-            &metadata,
-            "other",
-            &["station".to_owned()],
-            true
-        ));
+        assert!(selects_a_group(&metadata, "image", &["station".to_owned()], true).unwrap());
+        assert!(!selects_a_group(&metadata, "image", &[], true).unwrap());
+        // A package the metadata does not hold is an error, not "no group".
+        let missing = selects_a_group(&metadata, "other", &["station".to_owned()], true);
+        assert!(
+            missing
+                .unwrap_err()
+                .to_string()
+                .contains("no package other")
+        );
+        let tableless = serde_json::json!({"packages": [{"name": "image"}]});
+        let tableless = selects_a_group(&tableless, "image", &[], true);
+        assert!(
+            tableless
+                .unwrap_err()
+                .to_string()
+                .contains("no feature table")
+        );
     }
 
     #[test]

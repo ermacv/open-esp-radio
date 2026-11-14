@@ -277,6 +277,7 @@ fn compatible(a: &Provenance, b: &Provenance) -> bool {
         && a.profile_settings == b.profile_settings
         && a.features == b.features
         && a.default_features == b.default_features
+        && a.instrumentation == b.instrumentation
         && a.purpose == b.purpose
         && a.layout_seed == b.layout_seed
         && a.configuration_sha256 == b.configuration_sha256

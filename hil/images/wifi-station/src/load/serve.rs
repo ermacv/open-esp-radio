@@ -20,17 +20,20 @@ use core::pin::pin;
 
 use embassy_futures::select::{Either, select};
 use embassy_futures::yield_now;
+#[cfg(feature = "trace")]
 use oer::observe;
+#[cfg(feature = "trace")]
 use oer::observe::parts::{PARTS, PartReading};
+#[cfg(feature = "trace")]
 use oer::observe::tracking::TrackingSample;
 use oer::time::{Instant, Timer};
 use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
-    Addba, AddbaCollected, Begun, Collected, Counters, CountersCollected, Diagnosed,
-    DiagnosticsCollected, Hart1Collected, Hart1Window, Link, LinkCollected, Load, LoadError, Mac,
-    MacCollected, NetworkCollected, PartsCollected, Positions, PositionsCollected,
+    Addba, AddbaCollected, Begun, Collected, Counters, CountersCollected, CpuRead, Diagnosed,
+    DiagnosticsCollected, Hart1Collected, Hart1Window, HartLoad, Link, LinkCollected, Load,
+    LoadError, Mac, MacCollected, NetworkCollected, PartsCollected, Positions, PositionsCollected,
     ProfileCollected, Report, Request, SamplesCollected, Sent, Stall, StallCollected, StallMac,
     StallMacCollected, Start, Started, Tracking, TrackingCollected, Transmit,
 };
@@ -45,6 +48,7 @@ use super::relay::{self, Client};
 use super::report::{self, Snapshot, Windows};
 use crate::udp::{self, Attempt, Network, Peer, Receiving, Run, Sending};
 
+#[cfg(feature = "trace")]
 const _: () = if oer_hil_services_load::TUNE_KNOBS != oer_portable_trace::tune::KNOBS
     || oer_hil_services_load::TUNE_UNSET != oer_portable_trace::tune::UNSET
 {
@@ -87,8 +91,9 @@ pub(crate) enum Answer {
     Addba(AddbaCollected),
     Profile(ProfileCollected),
     Samples(SamplesCollected),
-    Cpu(Load),
+    Cpu(CpuRead),
     /// The boot hart's relay answers it: a page of samples.
+    #[cfg(feature = "trace")]
     Relayed,
 }
 
@@ -116,6 +121,7 @@ impl Answer {
             Self::Profile(profile) => answer(identity, &profile),
             Self::Samples(samples) => answer(identity, &samples),
             Self::Cpu(load) => answer(identity, &load),
+            #[cfg(feature = "trace")]
             Self::Relayed => {}
         }
     }
@@ -128,7 +134,7 @@ pub(crate) async fn serve(
     net: &Network,
     mut requests: Requests,
     mut hart0: Client,
-    mut hart1: observe::Hart1,
+    mut hart1: crate::measure::Hart1,
     tally: RunTally,
 ) -> Infallible {
     // A run the barrier never released keeps its refusal.
@@ -142,6 +148,7 @@ pub(crate) async fn serve(
             Action::Start(start) => {
                 match sampled(&start, &mut hart0)
                     .await
+                    .and_then(|()| tunable(&start))
                     .and_then(|()| udp::open(net, &start))
                 {
                     Ok(socket) => {
@@ -166,8 +173,8 @@ pub(crate) async fn serve(
             }
             Action::Answer(decided) => decided_answer(decided),
             Action::Begin { .. } => Answer::Begun(Begun::Refused(LoadError::UnknownRun)),
-            Action::Cpu => Answer::Cpu(cpu_load().await),
-            Action::Diagnose(diagnose) => Answer::Diagnosed(udp::diagnose(diagnose)),
+            Action::Cpu => Answer::Cpu(CpuRead::Report(cpu_load(&mut hart0, &mut hart1).await)),
+            Action::Diagnose(diagnose) => Answer::Diagnosed(diagnosed(diagnose)),
             Action::Kept(kind) => match &kept {
                 Some((_, Ok(ended))) => {
                     kept_answer(ended, kind, identity, net, &mut hart0, &mut hart1).await
@@ -187,10 +194,19 @@ async fn kept_answer(
     identity: RequestIdentity,
     net: &Network,
     hart0: &mut Client,
-    hart1: &mut observe::Hart1,
+    hart1: &mut crate::measure::Hart1,
 ) -> Answer {
+    // The measuring build keeps the report, the boot hart's counters and
+    // hart 1's: every other collection reads what it did not build.
+    #[cfg(not(feature = "trace"))]
+    if !matches!(kind, Kept::Report | Kept::Counters | Kept::Hart1) {
+        return refused(kind, LoadError::NotBuilt);
+    }
+    #[cfg(not(feature = "trace"))]
+    let _ = (identity, net, &hart0, &hart1, &ended.parts, &ended.sampled);
     match kind {
         Kept::Report => Answer::Collected(Collected::Report(ended.report.clone())),
+        #[cfg(feature = "trace")]
         Kept::Parts { from } => {
             Answer::Parts(PartsCollected::Report(report::page(&ended.parts, from)))
         }
@@ -204,10 +220,20 @@ async fn kept_answer(
         Kept::StallMac => Answer::StallMac(StallMacCollected::Report(ended.stall_mac)),
         // The kept run's window, which the network holds until the next one
         // closes.
+        #[cfg(feature = "trace")]
         Kept::Network => Answer::Network(NetworkCollected::Report(udp::network_window(net))),
+        #[cfg(feature = "trace")]
         Kept::Diagnostics => Answer::Diagnostics(udp::diagnostics_window(net)),
         Kept::Addba => Answer::Addba(AddbaCollected::Report(ended.addba)),
+        #[cfg(feature = "trace")]
         Kept::Profile { page } => Answer::Profile(udp::profile_page(net, page)),
+        #[cfg(not(feature = "trace"))]
+        Kept::Parts { .. }
+        | Kept::Network
+        | Kept::Diagnostics
+        | Kept::Profile { .. }
+        | Kept::Samples { .. } => refused(kind, LoadError::NotBuilt),
+        #[cfg(feature = "trace")]
         Kept::Samples { from, hart } => match ended.sampled.get(usize::from(hart)) {
             // Hart 0's samples are in the boot hart's buffer: its relay
             // answers with the page.
@@ -215,6 +241,7 @@ async fn kept_answer(
                 relay::page_of(hart0, identity, from).await;
                 Answer::Relayed
             }
+            #[cfg(feature = "trace")]
             Some(Some(Ok(()))) => Answer::Samples(hart1_page(hart1, from)),
             Some(Some(Err(error))) => Answer::Samples(SamplesCollected::Refused(*error)),
             Some(None) => Answer::Samples(SamplesCollected::Refused(LoadError::NotSampled)),
@@ -224,8 +251,9 @@ async fn kept_answer(
 }
 
 /// Hart 1's last session's page from the sample numbered `from`.
-fn hart1_page(hart1: &mut observe::Hart1, from: u16) -> SamplesCollected {
-    let sampler = hart1.sampler();
+#[cfg(feature = "trace")]
+fn hart1_page(hart1: &mut crate::measure::Hart1, from: u16) -> SamplesCollected {
+    let sampler = hart1.observe.sampler();
     let page = sampler.session().and_then(|session| {
         sampler.samples(|buffer| {
             report::samples(buffer, from, session.ticks, session.stray, session.cut)
@@ -240,10 +268,41 @@ fn hart1_page(hart1: &mut observe::Hart1, from: u16) -> SamplesCollected {
 /// Whether the image can sample `start`: a run that asks for samples
 /// needs the boot hart's sampler disarmed; hart 1's refusal leaves only
 /// hart 1 unsampled.
+#[cfg(feature = "trace")]
 async fn sampled(start: &Start, hart0: &mut Client) -> Result<(), LoadError> {
     match start.profile {
         Some(_) => relay::sampler_available(hart0).await,
         None => Ok(()),
+    }
+}
+
+/// The measuring build has no sampler: a run that asks for samples is
+/// refused before it starts.
+#[cfg(not(feature = "trace"))]
+async fn sampled(start: &Start, _hart0: &mut Client) -> Result<(), LoadError> {
+    match start.profile {
+        Some(_) => Err(LoadError::NoSampler),
+        None => Ok(()),
+    }
+}
+
+/// Whether the image can set `start`'s tune: the trace build sets every
+/// knob, the measuring build has none and refuses a run that names one.
+#[cfg(feature = "trace")]
+fn tunable(_start: &Start) -> Result<(), LoadError> {
+    Ok(())
+}
+
+#[cfg(not(feature = "trace"))]
+fn tunable(start: &Start) -> Result<(), LoadError> {
+    if start
+        .tune
+        .iter()
+        .all(|knob| *knob == oer_hil_services_load::TUNE_UNSET)
+    {
+        Ok(())
+    } else {
+        Err(LoadError::NotBuilt)
     }
 }
 
@@ -364,7 +423,7 @@ async fn run(
     tally: &mut Tally<TALLY_WORDS>,
     net: &Network,
     hart0: &mut Client,
-    hart1: &mut observe::Hart1,
+    hart1: &mut crate::measure::Hart1,
 ) -> Result<Ended, LoadError> {
     tally.clear();
     let window = Window {
@@ -438,11 +497,12 @@ async fn run(
                                 };
                             Answer::Begun(begun)
                         }
-                        Action::Cpu => Answer::Cpu(cpu_load().await),
+                        // The run's measurement holds both harts' readers.
+                        Action::Cpu => Answer::Cpu(CpuRead::Running),
                         // A running server starts nothing and keeps no report.
                         Action::Start(_) => Answer::Started(Started::Refused(LoadError::Busy)),
                         Action::Kept(kind) => decided_answer(Decided::Running(kind)),
-                        Action::Diagnose(diagnose) => Answer::Diagnosed(udp::diagnose(diagnose)),
+                        Action::Diagnose(diagnose) => Answer::Diagnosed(diagnosed(diagnose)),
                     };
                     requests.send(answer).await;
                     if let Some(ends) = completed {
@@ -527,8 +587,9 @@ async fn measure(
     sent: &mut Sent,
     net: &Network,
     hart0: &mut Client,
-    hart1: &mut observe::Hart1,
+    hart1: &mut crate::measure::Hart1,
 ) -> Result<Ends, LoadError> {
+    #[cfg(feature = "trace")]
     oer_portable_trace::tune::set(start.tune);
     // The request loop polls this sibling again after a Begin. A release
     // that never came ends the run at its bound, without a window.
@@ -537,47 +598,62 @@ async fn measure(
         .released(wait_until(window.barrier.deadline()))
         .await?;
     wait_until(triggered_us.saturating_add(millis(start.delay_ms))).await;
-    let cpu_start = cpu_load().await;
+    let cpu_start = cpu_load(hart0, hart1).await;
     let (parts_start, tracking_start) = readings(true).await;
     let counters_start = snapshot(hart0, true, net).await;
+    #[cfg(feature = "trace")]
     udp::open_turns(net);
-    let hart1_start = report::hart_count(hart1.counters());
+    let hart1_start = report::hart_count(hart1.cpu.counters());
     let start_us = now_us();
     // Preparation can await the other hart. Preserve the requested window
     // duration from its actual opening, rather than shortening its tail.
     let planned_end = start_us.saturating_add(millis(start.duration_ms));
     window.start_us.set(Some(start_us));
+    #[cfg(feature = "trace")]
     let sampling = match start.profile {
         Some(profile) => Some(relay::start_sampler(hart0, profile.period_us).await),
         None => None,
     };
+    #[cfg(feature = "trace")]
     let sampling1 = start.profile.map(|profile| {
         hart1
+            .observe
             .sampler()
             .start(profile.period_us)
             .map_err(|_| LoadError::NoSampler)
     });
+    // The measuring build refused a sampled run before it started.
+    #[cfg(not(feature = "trace"))]
+    let [sampling, sampling1]: Sampled = [None, None];
     if let Some(transmit) = start.transmit {
         send(socket, start.run, transmit, start_us, planned_end, sent).await;
     }
     wait_until(planned_end).await;
     let end_us = now_us();
-    let hart1_end = report::hart_count(hart1.counters());
+    let hart1_end = report::hart_count(hart1.cpu.counters());
     window.end_us.set(Some(end_us));
     // Before the first await: the service keeps turning while it runs.
+    #[cfg(feature = "trace")]
     udp::close_turns(net);
+    #[cfg(feature = "trace")]
     relay::request_stop(hart0).await;
-    hart1.sampler().request_stop();
-    let cpu_end = cpu_load().await;
+    #[cfg(feature = "trace")]
+    hart1.observe.sampler().request_stop();
+    let cpu_end = cpu_load(hart0, hart1).await;
     let (parts_end, tracking_end) = readings(false).await;
     let counters_end = snapshot(hart0, false, net).await;
+    #[cfg(feature = "trace")]
     let sampled = match sampling {
         Some(Ok(())) => Some(relay::stop_sampler(hart0).await),
         other => other,
     };
+    #[cfg(not(feature = "trace"))]
+    let sampled = sampling;
+    #[cfg(feature = "trace")]
     let sampled1 = match sampling1 {
         Some(Ok(())) => Some(
             hart1
+                .observe
                 .sampler()
                 .stop()
                 .await
@@ -585,6 +661,8 @@ async fn measure(
         ),
         other => other,
     };
+    #[cfg(not(feature = "trace"))]
+    let sampled1 = sampling1;
     // After every reading of the window: the snapshot's own turn must not
     // move them.
     let socket_last_us = window.socket.last();
@@ -608,7 +686,7 @@ async fn measure(
         end_us,
         cpu_start,
         cpu_end,
-        parts: report::parts(&parts_start, &parts_end),
+        parts: parts_window(&parts_start, &parts_end),
         counters: report::counters(&counters_start, &counters_end),
         link: report::link_window(&counters_start, &counters_end),
         mac: report::mac_window(&counters_start, &counters_end),
@@ -617,7 +695,7 @@ async fn measure(
             start: hart1_start,
             end: hart1_end,
         },
-        tracking: report::tracking(&tracking_start, &tracking_end),
+        tracking: tracking_window(&tracking_start, &tracking_end),
         stall,
         stall_mac,
         addba: counters_end.addba,
@@ -638,6 +716,7 @@ async fn snapshot(hart0: &mut Client, start: bool, net: &Network) -> Snapshot {
 
 /// Every part's polls and the tracking ticks now, in the current epoch of
 /// the longest polls and ticks; with `begin`, a new epoch starts after them.
+#[cfg(feature = "trace")]
 async fn readings(begin: bool) -> ([PartReading; PARTS], TrackingSample) {
     let parts = observe::parts().await;
     let tracking = observe::tracking().await;
@@ -647,10 +726,67 @@ async fn readings(begin: bool) -> ([PartReading; PARTS], TrackingSample) {
     (parts, tracking)
 }
 
-/// The CPU report now.
-async fn cpu_load() -> Load {
-    let samples = observe::executors().await;
-    report::load(now_us(), &samples)
+/// The measuring build reads no part and no tracking tick.
+#[cfg(not(feature = "trace"))]
+async fn readings(_begin: bool) -> ((), ()) {
+    ((), ())
+}
+
+#[cfg(feature = "trace")]
+fn parts_window(start: &[PartReading; PARTS], end: &[PartReading; PARTS]) -> Windows {
+    report::parts(start, end)
+}
+
+#[cfg(not(feature = "trace"))]
+fn parts_window(_start: &(), _end: &()) -> Windows {
+    Windows::new()
+}
+
+#[cfg(feature = "trace")]
+fn tracking_window(start: &TrackingSample, end: &TrackingSample) -> Tracking {
+    report::tracking(start, end)
+}
+
+#[cfg(not(feature = "trace"))]
+fn tracking_window(_start: &(), _end: &()) -> Tracking {
+    Tracking::default()
+}
+
+/// The CPU report now: each hart's busy share from its idle account
+/// (`cpu-load`), the boot hart's read there through its relay `hart0` and
+/// hart 1's here with `hart1`, and in the trace build each executor's work
+/// from its observer beside it.
+async fn cpu_load(hart0: &mut Client, hart1: &mut crate::measure::Hart1) -> Load {
+    #[cfg(feature = "trace")]
+    let mut load = report::load(now_us(), &observe::executors().await);
+    #[cfg(not(feature = "trace"))]
+    let mut load = Load {
+        now_us: now_us(),
+        ..Load::default()
+    };
+    let row = |hart, reading: oer::cpu::IdleReading| HartLoad {
+        hart,
+        idle_us: reading.idle_us,
+        wakes: reading.wakes,
+    };
+    let boot_hart = relay::idle(hart0).await.map(|reading| row(0, reading));
+    load.harts = report::idle_harts([boot_hart, Some(row(1, hart1.cpu.idle()))]);
+    load
+}
+
+/// A Diagnose's answer: the network's switchable diagnostics, which the
+/// measuring build does not link.
+#[cfg(feature = "trace")]
+fn diagnosed(diagnose: oer_hil_services_load::Diagnose) -> Diagnosed {
+    udp::diagnose(diagnose)
+}
+
+#[cfg(not(feature = "trace"))]
+fn diagnosed(_diagnose: oer_hil_services_load::Diagnose) -> Diagnosed {
+    Diagnosed {
+        was_on: false,
+        reset: oer_hil_services_load::Reset::NotBuilt,
+    }
 }
 
 fn millis(ms: u32) -> u64 {

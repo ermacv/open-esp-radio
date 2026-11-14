@@ -16,13 +16,27 @@ fn profile() -> oer_tools_chip_profile::Profile {
         .unwrap()
 }
 
+/// The build of a package without its default features.
+fn measuring() -> Build {
+    Build::Package(BuildChoice {
+        features: vec!["oer/esp32s31".to_owned()],
+        default_features: false,
+        instrumentation: Vec::new(),
+    })
+}
+
 /// A bundle staged for `output` whose application holds `application`.
 fn staged(output: &Path, application: &[u8]) -> ImageBundle {
     let profile = profile();
     let staging = staging_directory(output).unwrap();
     remove_directory(&staging).unwrap();
     std::fs::create_dir_all(&staging).unwrap();
-    let mut bundle = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
+    let mut bundle = ImageBundle::new(
+        &staging,
+        &profile,
+        profile.facts.flash.clone().unwrap(),
+        measuring(),
+    );
     bundle.otadata = true;
     for (file, bytes) in [
         (bundle.bootloader(), &b"boot"[..]),
@@ -120,7 +134,7 @@ fn purpose_round_trips_and_the_shared_flash_reader_refuses_analysis() {
         let published = bundle.publish(&output).unwrap();
         let manifest: serde_json::Value =
             serde_json::from_slice(&std::fs::read(output.join(MANIFEST)).unwrap()).unwrap();
-        assert_eq!(manifest["schema"], 8);
+        assert_eq!(manifest["schema"], 9);
         assert_eq!(manifest["purpose"], format!("{purpose:?}"));
         let loaded = ImageBundle::load(&output).unwrap();
         assert_eq!(loaded, published);
@@ -162,11 +176,40 @@ fn schema_six_and_missing_purpose_cannot_default_to_flash() {
     std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     let error = ImageBundle::load(&output).unwrap_err().to_string();
     assert!(
-        error.contains("has schema 6") && error.contains("reads schema 8"),
+        error.contains("has schema 6") && error.contains("reads schema 9"),
         "{error}"
     );
     manifest["schema"] = SCHEMA.into();
     std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
     let error = ImageBundle::load(&output).unwrap_err().to_string();
     assert!(error.contains("missing field `purpose`"), "{error}");
+}
+
+#[test]
+fn a_bundle_says_what_it_was_built_from_and_one_that_does_not_is_refused() {
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("bundle");
+    staged(&output, b"app").publish(&output).unwrap();
+    assert_eq!(ImageBundle::load(&output).unwrap().build, measuring());
+
+    let path = output.join(MANIFEST);
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    // A catalog project's bundle says so, with no choice of features.
+    manifest["build"] = serde_json::json!("esp-idf");
+    std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    assert_eq!(ImageBundle::load(&output).unwrap().build, Build::EspIdf);
+
+    // A schema-9 bundle without its build is refused, not read as no
+    // features: the field has no default.
+    manifest.as_object_mut().unwrap().remove("build");
+    std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let error = ImageBundle::load(&output).unwrap_err().to_string();
+    assert!(error.contains("missing field `build`"), "{error}");
+
+    // So is a bundle of schema 8, written before bundles said it.
+    manifest["schema"] = 8.into();
+    std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let error = ImageBundle::load(&output).unwrap_err().to_string();
+    assert!(error.contains("has schema 8"), "{error}");
 }

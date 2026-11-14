@@ -125,16 +125,30 @@ The chip profile's boot kind selects the pipeline:
 
 An application package may declare instrumentation classes in its manifest,
 `[package.metadata.open-radio] instrumentation = ["trace"]`: `trace` (what
-happened and execution cost: values and events collected by the image) and
-`debug-control` (knobs that force execution paths) or `fault-injection` (a
-one-shot fault on a real path, nothing else). The
+happened and execution cost: values and events collected by the image),
+`debug-control` (knobs that force execution paths), `fault-injection` (a
+one-shot fault on a real path, nothing else) and `cpu-load` (each hart's
+idle account: two clock reads and three stores a wake, nothing a poll or a
+frame). The
 pipeline reads the declaration with `cargo metadata` and compiles the
 runtime and the bootstrap with the classes' cfgs (`oer_trace`,
-`oer_debug_control`, `oer_fault_injection`) in a compile cache of their own
+`oer_debug_control`, `oer_fault_injection`, `oer_cpu_load`) in a compile cache of their own
 (`target/fw/cargo-<class>-…`); an image that declares none compiles none, in
 `target/fw/cargo`. Probes are no class: `cargo fw probe` sets
 `cfg(oer_probe)` for its own builds alone, no production crate reads it, no
 crate has a probe feature, and production has no item only a probe uses.
+
+A feature of the application package may bring classes of its own, in a
+table of its name beside the package's list:
+`[package.metadata.open-radio.features.<feature>] instrumentation = [...]`.
+The build's classes are the package's list and those of every feature the
+build enables (`manifest::enabled_features`: the asked ones, the defaults
+unless `--no-default-features`, and what each enables of the package's own
+features, transitively). A class the pipeline does not know, in the
+package's list or a feature's, fails the build with its name and where it
+was declared. The bundle's provenance records the enabled features and the
+resulting classes (`BuildChoice`), and two summaries whose choices differ
+are incompatible: `cargo fw sizes` refuses to compare them.
 
 An image build fills an `ImageBundle` (format and contents:
 [`oer-tools-image-bundle`](../bundle/README.md)) with the files below the bundle's
@@ -554,4 +568,7 @@ and its unchanged budgets. `--source-root` defaults to the current checkout;
 it must supply the original chip configuration and stack policy (recorded
 policy hashes must match). A separate checkout or an exported source tree can
 supply historical configuration. Existing analysis reports are neither parsed
-nor changed. Schemas 1 and 2 can be refreshed; comparison accepts schema 2 only.
+nor changed. Schemas 1 to 3 can be refreshed; comparison accepts schema 3 only.
+Schema 3 records the build's instrumentation classes; a refresh of a schema 1
+or 2 summary, which did not, takes them from the source root's manifest for
+the recorded package and features.

@@ -10,8 +10,12 @@ use crate::{Boot, Result};
 pub enum BootFiles<'a> {
     /// A staged image: the bootloader is encoded from an ELF of the
     /// application (its bytes do not depend on the ELF's code), the
-    /// partition table from the chip's CSV, and the OTA selection beside them.
-    Encode { elf: &'a Path },
+    /// partition table from the chip's CSV, and the OTA selection beside them;
+    /// `build` is what the archived application was built with.
+    Encode {
+        elf: &'a Path,
+        build: oer_tools_image_bundle::Build,
+    },
     /// A catalog image the ESP-IDF bootloader loads: the bootloader and
     /// partition table of its own build ([`Boot::EspIdfBootloader`]).
     Given {
@@ -40,9 +44,9 @@ pub fn around(
         .clone()
         .ok_or("the chip names no flash map")?;
     match boot {
-        BootFiles::Encode { elf } => {
+        BootFiles::Encode { elf, build } => {
             let staging = crate::exclusion::Staging::begin(output)?;
-            let mut bundle = ImageBundle::new(staging.directory(), &profile, flash);
+            let mut bundle = ImageBundle::new(staging.directory(), &profile, flash, build);
             std::fs::copy(application, bundle.application())?;
             crate::staged::encode_boot_files(root, &profile, &std::fs::read(elf)?, &mut bundle)?;
             staging.publish(bundle)
@@ -100,6 +104,7 @@ pub fn esp_idf(
         chip.rust_target,
         Boot::EspIdfBootloader,
         chip.flash.clone(),
+        oer_tools_image_bundle::Build::EspIdf,
     );
     std::fs::copy(application, bundle.application())?;
     std::fs::copy(bootloader, bundle.bootloader())?;

@@ -216,6 +216,7 @@ pub(crate) fn results(
     board: &str,
     outcomes: &[Outcome],
     measurements: &[Measurement],
+    built: &oer_tools_image_bundle::BuildChoice,
 ) -> serde_json::Value {
     let unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -223,6 +224,7 @@ pub(crate) fn results(
     serde_json::json!({
         "scenario": scenario.name,
         "image": scenario.image,
+        "build": built,
         "board": board,
         "unix": unix,
         "outcomes": outcomes.iter().map(|outcome| {

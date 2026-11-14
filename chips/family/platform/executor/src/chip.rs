@@ -137,12 +137,18 @@ pub(crate) const fn alarm_source<P: ExecutorPlatform>(
 pub(crate) fn wait_for_interrupt<B: Binding, T: crate::Tasks<Binding = B>>() {
     let _: core::marker::PhantomData<T> = core::marker::PhantomData;
     if !PortOf::<B>::debugger_connected(current_hart::<B>()) {
-        #[cfg(oer_trace)]
+        #[cfg(any(oer_trace, oer_cpu_load))]
         let started = now::<B>() as u32;
         oer_portable_riscv::wait_for_interrupt();
+        #[cfg(any(oer_trace, oer_cpu_load))]
+        let ended = now::<B>() as u32;
+        // The hart's idle account (`cpu-load`): this wait's span.
+        #[cfg(oer_cpu_load)]
+        if let Some(account) = crate::IDLE.get(current_core::<B>()) {
+            account.record(ended.wrapping_sub(started));
+        }
         #[cfg(oer_trace)]
         {
-            let ended = now::<B>() as u32;
             let observer = T::observer();
             // Publish both edges after the wait, while still masked: observer
             // work is busy time, and the waking handler has not run yet.

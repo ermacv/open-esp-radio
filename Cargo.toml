@@ -371,7 +371,8 @@ unsafe_op_in_unsafe_fn = "deny"
 # reads it. `oer_trace` (what happened: values and
 # events and execution cost collected by the image) and
 # `oer_debug_control` (knobs that force execution paths) and
-# `oer_fault_injection` (a one-shot fault on a real path, nothing else) are set by
+# `oer_fault_injection` (a one-shot fault on a real path, nothing else) and
+# `oer_cpu_load` (each hart's idle account: two clock reads a wake) are set by
 # `cargo fw` for an image that declares the class in its manifest
 # (`[package.metadata.open-radio] instrumentation`), also in a target
 # directory of their own.
@@ -380,6 +381,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     "cfg(oer_trace)",
     "cfg(oer_debug_control)",
     "cfg(oer_fault_injection)",
+    "cfg(oer_cpu_load)",
 ] }
 
 [workspace.lints.clippy]
