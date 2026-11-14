@@ -2016,19 +2016,25 @@ fn path_attribute(attribute: &TokenStream) -> Option<String> {
 /// follows a path's `::` after another one.
 type Marker = dyn Fn(&str) -> bool;
 
-/// Production tokens of one module body: items configured for tests are
-/// skipped; out-of-line production modules are followed from `directory`.
-/// A `#[path]` at the top of a file is relative to the file's own directory,
-/// inside an inline module to that module's directory. Each identifier that
-/// `marker` accepts is reported with its file.
-fn production_markers(
-    tokens: TokenStream,
-    directory: &Path,
-    file: &Path,
-    top_level: bool,
-    marker: &Marker,
-    found: &mut Vec<String>,
-) {
+/// What a walk of production code shows its visitor: a token at its index
+/// in its group, the attribute of a production item, or a module file it
+/// could not read.
+enum Seen<'a> {
+    Token(&'a [TokenTree], usize),
+    Attribute(&'a TokenStream),
+    Unreadable,
+}
+
+/// A walk's visitor: what it was shown, with the file it is in.
+type Visit<'v> = dyn FnMut(&Path, Seen<'_>) + 'v;
+
+/// Walk the production tokens of one module body: items configured for
+/// tests are skipped; out-of-line production modules are followed from
+/// `directory`. A `#[path]` at the top of a file is relative to the file's
+/// own directory, inside an inline module to that module's directory. Each
+/// token is shown to `visit` before its group is walked, and each attribute
+/// of a production item before the item.
+fn walk(tokens: TokenStream, directory: &Path, file: &Path, top_level: bool, visit: &mut Visit) {
     let tokens = tokens.into_iter().collect::<Vec<_>>();
     let mut index = 0;
     let mut attributes = Vec::new();
@@ -2068,13 +2074,12 @@ fn production_markers(
                 }
                 match body {
                     TokenTree::Group(inline) if inline.delimiter() == Delimiter::Brace => {
-                        production_markers(
+                        walk(
                             inline.stream(),
                             &directory.join(name.to_string()),
                             file,
                             false,
-                            marker,
-                            found,
+                            visit,
                         );
                     }
                     _ => {
@@ -2088,7 +2093,7 @@ fn production_markers(
                             }
                             None => directory.join(name.to_string()).join("mod.rs"),
                         };
-                        production_file_markers(&child, marker, found);
+                        walk_file(&child, visit);
                     }
                 }
                 continue;
@@ -2110,63 +2115,27 @@ fn production_markers(
             attributes.clear();
             continue;
         }
+        for attribute in &attributes {
+            visit(file, Seen::Attribute(attribute));
+        }
         attributes.clear();
-        // The path's last two segments, when `word` follows `Type::`.
-        let qualified = match (
-            index.checked_sub(4).and_then(|at| tokens.get(at)),
-            index.checked_sub(3).and_then(|at| tokens.get(at)),
-            index.checked_sub(2).and_then(|at| tokens.get(at)),
-            token,
-        ) {
-            (
-                Some(TokenTree::Ident(owner)),
-                Some(TokenTree::Punct(first)),
-                Some(TokenTree::Punct(second)),
-                TokenTree::Ident(word),
-            ) if first.as_char() == ':' && second.as_char() == ':' => {
-                Some(format!("{owner}::{word}"))
-            }
-            _ => None,
-        };
-        match token {
-            TokenTree::Ident(word) if marker(&word.to_string()) => {
-                found.push(format!("{}: {word}", file.display()));
-            }
-            TokenTree::Ident(_) if qualified.as_deref().is_some_and(marker) => {
-                let qualified = qualified.unwrap_or_default();
-                found.push(format!("{}: {qualified}", file.display()));
-            }
-            // Item bodies (`impl`, `fn`, blocks) skip their test-only items too.
-            TokenTree::Group(group) => {
-                production_markers(group.stream(), directory, file, false, marker, found);
-            }
-            _ => {}
+        visit(file, Seen::Token(&tokens, index - 1));
+        // Item bodies (`impl`, `fn`, blocks) skip their test-only items too.
+        if let TokenTree::Group(group) = token {
+            walk(group.stream(), directory, file, false, visit);
         }
     }
 }
 
-/// A crate root: it owns its directory, whatever its name (a binary's
-/// `src/hardware.rs` declares its modules beside it).
-fn crate_root_markers(file: &Path, marker: &Marker, found: &mut Vec<String>) {
-    let tokens = std::fs::read_to_string(file)
-        .ok()
-        .and_then(|source| source.parse::<TokenStream>().ok());
-    let (Some(tokens), Some(parent)) = (tokens, file.parent()) else {
-        found.push(format!("{}: unreadable module", file.display()));
-        return;
-    };
-    production_markers(tokens, parent, file, true, marker, found);
-}
-
-/// A module file: `lib.rs` and `mod.rs` own their directory; another file
-/// `name.rs` owns `name/`.
-fn production_file_markers(file: &Path, marker: &Marker, found: &mut Vec<String>) {
+/// Walk a module file: `lib.rs` and `mod.rs` own their directory; another
+/// file `name.rs` owns `name/`.
+fn walk_file(file: &Path, visit: &mut Visit) {
     let tokens = std::fs::read_to_string(file)
         .ok()
         .and_then(|source| source.parse::<TokenStream>().ok());
     let (Some(tokens), Some(stem), Some(parent)) = (tokens, file.file_stem(), file.parent()) else {
         // A module the scan cannot read is reported, never skipped.
-        found.push(format!("{}: unreadable module", file.display()));
+        visit(file, Seen::Unreadable);
         return;
     };
     let stem = stem.to_string_lossy();
@@ -2175,7 +2144,72 @@ fn production_file_markers(file: &Path, marker: &Marker, found: &mut Vec<String>
     } else {
         parent.join(stem.as_ref())
     };
-    production_markers(tokens, &directory, file, true, marker, found);
+    walk(tokens, &directory, file, true, visit);
+}
+
+/// Walk a crate root: it owns its directory, whatever its name (a binary's
+/// `src/hardware.rs` declares its modules beside it).
+fn walk_crate_root(file: &Path, visit: &mut Visit) {
+    let tokens = std::fs::read_to_string(file)
+        .ok()
+        .and_then(|source| source.parse::<TokenStream>().ok());
+    let (Some(tokens), Some(parent)) = (tokens, file.parent()) else {
+        visit(file, Seen::Unreadable);
+        return;
+    };
+    walk(tokens, parent, file, true, visit);
+}
+
+/// The identifiers `marker` accepts in a walk, each with its file; a module
+/// the walk could not read is reported, never skipped.
+fn markers<'m>(marker: &'m Marker, found: &'m mut Vec<String>) -> impl FnMut(&Path, Seen<'_>) + 'm {
+    move |file, seen| match seen {
+        Seen::Unreadable => found.push(format!("{}: unreadable module", file.display())),
+        Seen::Attribute(_) => {}
+        Seen::Token(tokens, at) => {
+            let Some(token) = tokens.get(at) else {
+                return;
+            };
+            // The path's last two segments, when `word` follows `Type::`.
+            let qualified = match (
+                at.checked_sub(3).and_then(|at| tokens.get(at)),
+                at.checked_sub(2).and_then(|at| tokens.get(at)),
+                at.checked_sub(1).and_then(|at| tokens.get(at)),
+                token,
+            ) {
+                (
+                    Some(TokenTree::Ident(owner)),
+                    Some(TokenTree::Punct(first)),
+                    Some(TokenTree::Punct(second)),
+                    TokenTree::Ident(word),
+                ) if first.as_char() == ':' && second.as_char() == ':' => {
+                    Some(format!("{owner}::{word}"))
+                }
+                _ => None,
+            };
+            match token {
+                TokenTree::Ident(word) if marker(&word.to_string()) => {
+                    found.push(format!("{}: {word}", file.display()));
+                }
+                TokenTree::Ident(_) if qualified.as_deref().is_some_and(marker) => {
+                    let qualified = qualified.unwrap_or_default();
+                    found.push(format!("{}: {qualified}", file.display()));
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// The identifiers `marker` accepts in the production module `file` and the
+/// modules it reaches.
+fn production_file_markers(file: &Path, marker: &Marker, found: &mut Vec<String>) {
+    walk_file(file, &mut markers(marker, found));
+}
+
+/// The identifiers `marker` accepts from a crate root.
+fn crate_root_markers(file: &Path, marker: &Marker, found: &mut Vec<String>) {
+    walk_crate_root(file, &mut markers(marker, found));
 }
 
 fn waiting(word: &str) -> bool {
@@ -5246,4 +5280,1821 @@ fn an_unlisted_network_package_and_a_contract_on_another_protocol_are_found() {
         )]
         .into()
     );
+}
+
+// ---- T8c: the rules without a check get a list that only shrinks ----------
+
+/// A finder of one scan: what the token at `at` of `tokens` is, when the
+/// scan takes it.
+type Finder = dyn Fn(&[TokenTree], usize) -> Option<String>;
+/// A finder of attributes.
+type AttributeFinder = dyn Fn(&TokenStream) -> Option<String>;
+/// A package selector.
+type Select = dyn Fn(&str) -> bool;
+/// One scan: its list's name, its packages, its finders.
+type Scan<'s> = (&'s str, &'s Select, &'s Finder, &'s AttributeFinder);
+
+/// Every hit of `find` and `attribute` in the production code of the
+/// packages `select` takes, each with its file below the root.
+fn scan_hits(
+    select: &dyn Fn(&str) -> bool,
+    find: &Finder,
+    attribute: &AttributeFinder,
+) -> Vec<(String, String)> {
+    let root = root();
+    let mut hits = Vec::new();
+    let mut unreadable = Vec::new();
+    for (path, manifest) in packages(&root) {
+        if !select(&path) {
+            continue;
+        }
+        for crate_root in crate_roots(&root.join(&path), &manifest) {
+            walk_crate_root(&crate_root, &mut |file: &Path, seen: Seen<'_>| {
+                let file = file.strip_prefix(&root).map_or_else(
+                    |_| file.display().to_string(),
+                    |file| file.display().to_string(),
+                );
+                if file.ends_with("generated.rs") {
+                    return;
+                }
+                match seen {
+                    Seen::Unreadable => unreadable.push(file),
+                    Seen::Attribute(tokens) => {
+                        if let Some(what) = attribute(tokens) {
+                            hits.push((file, what));
+                        }
+                    }
+                    Seen::Token(tokens, at) => {
+                        if let Some(what) = find(tokens, at) {
+                            hits.push((file, what));
+                        }
+                    }
+                }
+            });
+        }
+    }
+    assert!(unreadable.is_empty(), "{unreadable:?}");
+    hits
+}
+
+fn ident_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    match tokens.get(at) {
+        Some(TokenTree::Ident(word)) => Some(word.to_string()),
+        _ => None,
+    }
+}
+
+fn punct_at(tokens: &[TokenTree], at: usize, character: char) -> bool {
+    matches!(tokens.get(at), Some(TokenTree::Punct(punct)) if punct.as_char() == character)
+}
+
+fn group_at(tokens: &[TokenTree], at: usize, delimiter: Delimiter) -> Option<&proc_macro2::Group> {
+    match tokens.get(at) {
+        Some(TokenTree::Group(group)) if group.delimiter() == delimiter => Some(group),
+        _ => None,
+    }
+}
+
+/// `Owner::word` ending at `at`.
+fn path_owner(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let owner = ident_at(tokens, at.checked_sub(3)?)?;
+    (punct_at(tokens, at - 2, ':') && punct_at(tokens, at - 1, ':')).then_some(owner)
+}
+
+/// The packages of the scans of production code: `protocols/`, `chips/`,
+/// `portable/` and the entry, but testing packages and models.
+fn product_code(path: &str) -> bool {
+    (["protocols/", "chips/", "portable/"]
+        .iter()
+        .any(|prefix| path.starts_with(prefix))
+        || path == "oer")
+        && !path.split('/').any(|part| part == "testing")
+        && !path.ends_with("/model")
+}
+
+/// An enum at `at` (`enum Name … { … }`): its name and its variants' names.
+fn enum_at(tokens: &[TokenTree], at: usize) -> Option<(String, Vec<String>)> {
+    if ident_at(tokens, at)? != "enum" {
+        return None;
+    }
+    let name = ident_at(tokens, at + 1)?;
+    let body = tokens
+        .iter()
+        .skip(at + 2)
+        .take_while(|token| !matches!(token, TokenTree::Punct(end) if end.as_char() == ';'))
+        .find_map(|token| match token {
+            TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => Some(group),
+            _ => None,
+        })?;
+    let body = body.stream().into_iter().collect::<Vec<_>>();
+    let mut variants = Vec::new();
+    let mut start = true;
+    let mut index = 0;
+    while let Some(token) = body.get(index) {
+        match token {
+            TokenTree::Punct(hash) if hash.as_char() == '#' => index += 1,
+            TokenTree::Punct(comma) if comma.as_char() == ',' => start = true,
+            TokenTree::Ident(word) if start => {
+                variants.push(word.to_string());
+                start = false;
+            }
+            _ => start = false,
+        }
+        index += 1;
+    }
+    Some((name, variants))
+}
+
+/// S1: the packages of the claims, the entry and the facade.
+fn claims_scope(path: &str) -> bool {
+    [
+        "chips/esp32s31/app",
+        "chips/esp32s31/radio/ieee80211/station",
+    ]
+    .contains(&path)
+}
+
+/// S1: a place claimed at run time: `try_take`, `try_init`, `try_uninit`
+/// called, or an option's `take()` answered by a refusal (`ok_or`,
+/// `ok_or_else`, or a `let … else`).
+fn claim_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let word = ident_at(tokens, at)?;
+    let called = group_at(tokens, at + 1, Delimiter::Parenthesis).is_some();
+    if ["try_take", "try_init", "try_uninit"].contains(&word.as_str()) && called {
+        return Some(word);
+    }
+    if word == "take"
+        && punct_at(tokens, at.checked_sub(1)?, '.')
+        && group_at(tokens, at + 1, Delimiter::Parenthesis)
+            .is_some_and(|args| args.stream().is_empty())
+    {
+        let refused = (punct_at(tokens, at + 2, '.')
+            && ident_at(tokens, at + 3)
+                .is_some_and(|next| next == "ok_or" || next == "ok_or_else"))
+            || ident_at(tokens, at + 2).is_some_and(|next| next == "else");
+        return refused.then(|| "take refused".to_owned());
+    }
+    None
+}
+
+/// S2: the runtime's violation enums.
+const VIOLATIONS: [&str; 3] = ["ActorViolation", "LifecycleViolation", "ApContract"];
+
+/// S2: a site that makes or matches a violation: `Enum::Variant`.
+fn violation_site_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let owner = path_owner(tokens, at)?;
+    VIOLATIONS
+        .contains(&owner.as_str())
+        .then(|| format!("{owner}::{}", ident_at(tokens, at).unwrap_or_default()))
+}
+
+/// S3: a name of an error type.
+fn error_name(name: &str) -> bool {
+    [
+        "Error",
+        "Refused",
+        "Refusal",
+        "Failure",
+        "Fault",
+        "Unavailable",
+    ]
+    .iter()
+    .any(|end| name.ends_with(end))
+}
+
+/// S3: a variant that names the caller's state.
+fn caller_state(variant: &str) -> bool {
+    variant.starts_with("Already")
+        || [
+            "Stopped",
+            "Started",
+            "Running",
+            "Connected",
+            "Installed",
+            "Registered",
+        ]
+        .iter()
+        .any(|state| variant.strip_prefix("Not") == Some(state))
+        || ["Running", "Stopped", "Closed", "Open", "Active"].contains(&variant)
+}
+
+/// S3: an error enum with variants that name the caller's state.
+fn error_state_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let (name, variants) = enum_at(tokens, at)?;
+    let states = variants
+        .iter()
+        .filter(|variant| caller_state(variant))
+        .cloned()
+        .collect::<Vec<_>>();
+    (error_name(&name) && !states.is_empty()).then(|| format!("{name}: {}", states.join(" ")))
+}
+
+/// S4: a name of a status.
+fn status_name(name: &str) -> bool {
+    [
+        "Step",
+        "Phase",
+        "State",
+        "Progress",
+        "Poll",
+        "Collected",
+        "Selection",
+    ]
+    .iter()
+    .any(|end| name.ends_with(end))
+}
+
+/// S4: a variant that is a failure.
+fn failure_variant(variant: &str) -> bool {
+    [
+        "Error",
+        "Failed",
+        "Failure",
+        "Fault",
+        "Refused",
+        "Invalid",
+        "Timeout",
+        "TimedOut",
+        "Rejected",
+        "Violation",
+        "Lost",
+        "Corrupt",
+        "Unsupported",
+        "Denied",
+        "Aborted",
+        "Overflow",
+        "Unconfirmed",
+        "Mismatch",
+        "Broken",
+        "Missing",
+        "Unavailable",
+    ]
+    .iter()
+    .any(|word| variant.contains(word))
+}
+
+/// S4: a status enum with a failure among its variants.
+fn status_failure_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let (name, variants) = enum_at(tokens, at)?;
+    let failures = variants
+        .iter()
+        .filter(|variant| failure_variant(variant))
+        .cloned()
+        .collect::<Vec<_>>();
+    (status_name(&name) && !error_name(&name) && !failures.is_empty())
+        .then(|| format!("{name}: {}", failures.join(" ")))
+}
+
+/// S5: a result dropped or replaced: a statement `.ok();`, an
+/// `unwrap_or_default()`, an `unwrap_or_else(|_| …)`.
+fn dropped_result_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let word = ident_at(tokens, at)?;
+    let args = group_at(tokens, at + 1, Delimiter::Parenthesis)?;
+    let empty = args.stream().is_empty();
+    match word.as_str() {
+        "ok" if empty
+            && punct_at(tokens, at.checked_sub(1)?, '.')
+            && punct_at(tokens, at + 2, ';') =>
+        {
+            Some(".ok();".to_owned())
+        }
+        "unwrap_or_default" if empty => Some(word),
+        "unwrap_or_else" => {
+            let mut inner = args.stream().into_iter();
+            let closure = matches!(
+                (inner.next(), inner.next(), inner.next()),
+                (Some(TokenTree::Punct(a)), Some(TokenTree::Ident(underscore)), Some(TokenTree::Punct(b)))
+                    if a.as_char() == '|' && underscore == "_" && b.as_char() == '|'
+            );
+            closure.then(|| "unwrap_or_else(|_|".to_owned())
+        }
+        _ => None,
+    }
+}
+
+/// S6: memory kept out of its owner, and a quarantine by name.
+fn kept_out_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let word = ident_at(tokens, at)?;
+    let owner = path_owner(tokens, at);
+    let found = word == "ManuallyDrop"
+        || (word == "forget" && owner.as_deref() == Some("mem"))
+        || (word == "leak" && owner.as_deref() == Some("Box"))
+        || ["Poison", "Quarantin", "ResetRequired", "Unfinished"]
+            .iter()
+            .any(|prefix| word.starts_with(prefix));
+    found.then_some(word)
+}
+
+/// S7: a compatibility layer: a renamed re-export, `pub use … as …`.
+fn compatibility_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    if ident_at(tokens, at)? != "use" {
+        return None;
+    }
+    let public = ident_at(tokens, at.checked_sub(1)?).is_some_and(|word| word == "pub")
+        || (group_at(tokens, at - 1, Delimiter::Parenthesis).is_some()
+            && at >= 2
+            && ident_at(tokens, at - 2).is_some_and(|word| word == "pub"));
+    if !public {
+        return None;
+    }
+    let renamed = tokens
+        .iter()
+        .skip(at + 1)
+        .take_while(|token| !matches!(token, TokenTree::Punct(end) if end.as_char() == ';'))
+        .any(|token| {
+            fn has_as(token: &TokenTree) -> bool {
+                match token {
+                    TokenTree::Ident(word) => word == "as",
+                    TokenTree::Group(group) => group.stream().into_iter().any(|t| has_as(&t)),
+                    _ => false,
+                }
+            }
+            has_as(token)
+        });
+    renamed.then(|| "pub use … as".to_owned())
+}
+
+/// S7: a compatibility attribute: `serde(default)`, `serde(alias)`,
+/// `deprecated`.
+fn compatibility_attribute(attribute: &TokenStream) -> Option<String> {
+    let mut tokens = attribute.clone().into_iter();
+    match (tokens.next(), tokens.next()) {
+        (Some(TokenTree::Ident(word)), _) if word == "deprecated" => Some("deprecated".to_owned()),
+        (Some(TokenTree::Ident(word)), Some(TokenTree::Group(args))) if word == "serde" => {
+            args.stream().into_iter().find_map(|token| match token {
+                TokenTree::Ident(word) if word == "default" || word == "alias" => {
+                    Some(format!("serde({word})"))
+                }
+                _ => None,
+            })
+        }
+        _ => None,
+    }
+}
+
+/// S8: the HAL's register and table files and the wire crates.
+fn bit_files(path: &str) -> bool {
+    path == "chips/esp32s31/hal" || (path.starts_with("protocols/") && path.ends_with("/wire"))
+}
+
+/// S8: a hand-written shift by a literal, or a hexadecimal mask beside a
+/// bit operator.
+fn hand_bits_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    match tokens.get(at)? {
+        TokenTree::Punct(first)
+            if (first.as_char() == '<' || first.as_char() == '>')
+                && first.spacing() == proc_macro2::Spacing::Joint =>
+        {
+            let same = matches!(tokens.get(at + 1), Some(TokenTree::Punct(second)) if second.as_char() == first.as_char());
+            let literal = matches!(tokens.get(at + 2), Some(TokenTree::Literal(_)));
+            let after_value = matches!(
+                tokens.get(at.checked_sub(1)?),
+                Some(TokenTree::Ident(_) | TokenTree::Literal(_) | TokenTree::Group(_))
+            );
+            (same && literal && after_value).then(|| "shift".to_owned())
+        }
+        TokenTree::Literal(literal) if literal.to_string().starts_with("0x") => {
+            let operator = |at: Option<usize>| {
+                at.and_then(|at| tokens.get(at)).is_some_and(|token| {
+                    matches!(token, TokenTree::Punct(op) if ['&', '|', '^', '!'].contains(&op.as_char()))
+                })
+            };
+            (operator(at.checked_sub(1)) || operator(Some(at + 1))).then(|| "mask".to_owned())
+        }
+        _ => None,
+    }
+}
+
+/// Hits by file.
+fn by_file(hits: &[(String, String)]) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for (file, _) in hits {
+        *counts.entry(file.clone()).or_insert(0) += 1;
+    }
+    counts
+}
+
+/// What removes a list's entry, by where it is.
+const BY_P2: &str = "P2, the installation machine and the composition";
+const BY_P3: &str = "P3, the engine";
+const BY_PHY: &str = "the PHY, after the Wi-Fi path";
+const BY_RADIO_SYSTEM: &str = "no package yet: the radio system and Bluetooth";
+const BY_PHASE_C: &str = "phase C, the network owner in the network runtime";
+const BY_NONE: &str = "no package yet";
+
+/// The package that removes a list's entry in `file`, by its place: the
+/// first assignment, which a package that removes one corrects.
+fn remover(file: &str) -> &'static str {
+    let starts = |prefixes: &[&str]| prefixes.iter().any(|prefix| file.starts_with(prefix));
+    if starts(&[
+        "chips/esp32s31/hal/src/radio/phy",
+        "chips/esp32s31/hal/src/radio/domain",
+        "chips/esp32s31/radio/phy/",
+        "chips/family/radio/phy",
+    ]) {
+        BY_PHY
+    } else if file.contains("bluetooth")
+        || file.contains("coex")
+        || starts(&[
+            "chips/esp32s31/hal/src/radio/modem",
+            "chips/esp32s31/hal/src/radio.rs",
+            "chips/esp32s31/radio/system/",
+            "chips/esp32s31/radio/client/",
+            "chips/family/radio/modem-clock/",
+            "chips/family/radio/power/",
+            "protocols/radio/",
+        ])
+    {
+        BY_RADIO_SYSTEM
+    } else if starts(&[
+        "protocols/ieee80211/runtime/",
+        "chips/esp32s31/radio/ieee80211/station/",
+        "chips/esp32s31/app/",
+        "oer/",
+    ]) {
+        BY_P2
+    } else if starts(&[
+        "chips/esp32s31/radio/ieee80211/",
+        "chips/family/radio/ieee80211/",
+        "protocols/ieee80211/",
+        "chips/esp32s31/hal/src/radio/ieee80211/",
+    ]) {
+        BY_P3
+    } else if starts(&["protocols/network/"]) {
+        BY_PHASE_C
+    } else {
+        BY_NONE
+    }
+}
+
+fn remover_name(file: &str) -> &'static str {
+    match remover(file) {
+        BY_P2 => "BY_P2",
+        BY_P3 => "BY_P3",
+        BY_PHY => "BY_PHY",
+        BY_RADIO_SYSTEM => "BY_RADIO_SYSTEM",
+        BY_PHASE_C => "BY_PHASE_C",
+        _ => "BY_NONE",
+    }
+}
+
+/// S8's files: the HAL's register and PHY files, and the wire crates.
+fn bit_file(file: &str) -> bool {
+    !file.starts_with("chips/esp32s31/hal/")
+        || file.contains("/registers")
+        || file.contains("/radio/phy/")
+}
+
+/// S1: places claimed at run time in the entry and the facade (`try_take`,
+/// `try_init`, `try_uninit`, an option's `take()` answered by a refusal), by
+/// file with their count. The list only shrinks.
+const CLAIMS: &[(&str, usize, &str)] = &[
+    ("chips/esp32s31/app/src/lib.rs", 1, BY_P2),
+    ("chips/esp32s31/app/src/observed.rs", 3, BY_P2),
+    ("chips/esp32s31/app/src/wifi.rs", 7, BY_P2),
+    ("chips/esp32s31/app/src/wifi/access_point.rs", 1, BY_P2),
+    ("chips/esp32s31/app/src/wifi/network.rs", 1, BY_P2),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/chip.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/dma.rs",
+        9,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/lib.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/radio.rs",
+        5,
+        BY_P2,
+    ),
+];
+/// S3: error types that name the caller's state (an enum named `…Error`,
+/// `…Refused`, `…Refusal`, `…Failure`, `…Fault` or `…Unavailable` with a
+/// variant `Already…`, `Not…` of a state, `Running`, `Stopped`, `Closed`,
+/// `Open` or `Active`), by file with their count of such variants. The list
+/// only shrinks.
+const ERROR_STATES: &[(&str, usize, &str)] = &[
+    ("chips/esp32s31/app/src/lib.rs", 1, BY_P2),
+    ("chips/esp32s31/app/src/wifi/station.rs", 1, BY_P2),
+    ("chips/esp32s31/hal/src/power/radio.rs", 1, BY_NONE),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/controller_time.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/live.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/owner.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/executor.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/interrupt.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/esp32s31/hal/src/radio/coex.rs", 2, BY_RADIO_SYSTEM),
+    ("chips/esp32s31/hal/src/radio/domain.rs", 3, BY_PHY),
+    ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 2, BY_PHY),
+    ("chips/esp32s31/hal/src/radio/phy/temperature.rs", 1, BY_PHY),
+    ("chips/esp32s31/hal/src/system/cores.rs", 2, BY_NONE),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/interrupt/gate.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/frontier/state.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/failure.rs",
+        5,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/analog/crystal_duty.rs",
+        5,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/analog/dcode.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/analog/frequency.rs",
+        4,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/analog/i2c.rs", 7, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/analog/pbus.rs", 3, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/analog/pbus/memory.rs",
+        2,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/analog/temperature.rs",
+        1,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/baseband.rs",
+        2,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/bluetooth.rs",
+        2,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/cold.rs",
+        3,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/estimator.rs",
+        1,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/registration.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/channel.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/concurrent.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/lifecycle.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/rx/dc_offset.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/rx/iq.rs", 7, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/rx/saturation.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/rx/signal_power.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/calibration.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/tracking/i2c.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/parameters.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/tracking/power.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/tracking/rfpll.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/rfpll/search.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/tx/calibration.rs", 5, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/tx/dc_offset.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tx/dc_power_detector.rs",
+        2,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/tx/iq.rs", 6, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/tx/power.rs", 2, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tx/power_detector.rs",
+        2,
+        BY_PHY,
+    ),
+    ("chips/family/drivers/regi2c/src/lib.rs", 1, BY_NONE),
+    ("chips/family/radio/power/src/domain.rs", 2, BY_RADIO_SYSTEM),
+    (
+        "chips/family/radio/power/src/membership.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/family/radio/power/src/modem.rs", 1, BY_RADIO_SYSTEM),
+    ("portable/memory/src/waking_spsc/closing.rs", 1, BY_NONE),
+    ("portable/time/src/connected_tasks.rs", 1, BY_NONE),
+    ("portable/time/src/deadline.rs", 1, BY_NONE),
+    (
+        "protocols/ieee80211/contracts/port/src/installation.rs",
+        1,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/core/arbiter/src/lib.rs", 1, BY_P3),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/commands.rs",
+        1,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/runtime/src/datapath.rs", 1, BY_P2),
+    (
+        "protocols/ieee80211/runtime/src/monitor/injection.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/contract.rs",
+        2,
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/control.rs",
+        1,
+        BY_P2,
+    ),
+    ("protocols/ieee802154/port/src/work.rs", 1, BY_NONE),
+    ("protocols/network/runtime/src/local.rs", 1, BY_PHASE_C),
+    ("protocols/network/runtime/src/returns.rs", 1, BY_PHASE_C),
+    ("protocols/network/runtime/src/socket.rs", 1, BY_PHASE_C),
+];
+/// S4: statuses that hold a failure and are no outcome (an enum named
+/// `…Step`, `…Phase`, `…State`, `…Progress`, `…Poll`, `…Collected` or
+/// `…Selection` with a failure among its variants), by file with their
+/// count of failure variants. The list only shrinks.
+const STATUS_FAILURES: &[(&str, usize, &str)] = &[
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/controller_time.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/radio.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/analog/crystal_duty.rs",
+        5,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/analog/dcode.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/analog/frequency.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/analog/temperature.rs",
+        1,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/baseband.rs",
+        2,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/bluetooth.rs",
+        3,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/estimator.rs",
+        1,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/calibration/registration.rs",
+        2,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/channel.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/executor/step.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/rx/dc_offset.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/rx/iq.rs", 6, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/rx/signal_power.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/calibration.rs",
+        1,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/observation/health.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/tx/calibration.rs", 5, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/tx/dc_offset.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tx/dc_power_detector.rs",
+        2,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/tx/iq.rs", 5, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/tx/power.rs", 2, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tx/power_detector.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/family/app/src/observe/connect.rs", 1, BY_NONE),
+    ("chips/family/drivers/regi2c/src/lib.rs", 2, BY_NONE),
+    (
+        "chips/family/platform/executor/src/observation/timer.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/family/radio/ieee80211/policy/src/rate_control.rs",
+        1,
+        BY_P3,
+    ),
+    ("portable/memory/src/rx_external_handoff.rs", 1, BY_NONE),
+    (
+        "protocols/bluetooth/le/ll/src/security.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/access_point.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/data_port.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/contracts/port/src/installation.rs",
+        1,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/core/roles/sta/src/ftm.rs", 1, BY_P3),
+    (
+        "protocols/ieee80211/core/roles/sta/src/join/association.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/sa_query.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/authenticator.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/state/supplicant.rs",
+        1,
+        BY_P3,
+    ),
+    ("protocols/radio/port/src/slot.rs", 1, BY_RADIO_SYSTEM),
+];
+/// S5: results dropped or replaced (a statement `.ok();`, an
+/// `unwrap_or_default()`, an `unwrap_or_else(|_| …)`), by file with their
+/// count. The list only shrinks; each site is read by the inventory.
+const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
+    ("chips/esp32s31/app/src/wifi.rs", 1, BY_P2),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm/codec.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/executor/live.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_dma/model.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/exception.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/port/lifecycle.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters/stall.rs",
+        3,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
+        2,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/chip.rs",
+        3,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/supply.rs",
+        1,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/tx/dc_power_detector.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/family/facts/src/generate.rs", 1, BY_NONE),
+    ("chips/family/facts/src/layers.rs", 1, BY_NONE),
+    ("chips/family/platform/bootstrap/src/startup.rs", 3, BY_NONE),
+    ("chips/family/platform/executor/src/executor.rs", 2, BY_NONE),
+    ("chips/family/platform/runtime/src/panic.rs", 2, BY_NONE),
+    ("portable/memory/src/pinned_tx.rs", 2, BY_NONE),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/monitor.rs",
+        1,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/runtime/src/datapath/turn.rs", 1, BY_P2),
+    ("protocols/ieee802154/port/src/link_metrics.rs", 1, BY_NONE),
+    ("protocols/network/core/src/block.rs", 1, BY_PHASE_C),
+    ("protocols/network/core/src/dhcp.rs", 1, BY_PHASE_C),
+    ("protocols/network/runtime/src/service.rs", 1, BY_PHASE_C),
+];
+/// S6: memory kept out of its owner and quarantines by name
+/// (`ManuallyDrop`, `mem::forget`, `Box::leak`, a name `Poison…`,
+/// `Quarantin…`, `ResetRequired…`, `Unfinished…`), mentions by file. The
+/// list only shrinks.
+const KEPT_OUT: &[(&str, usize, &str)] = &[
+    ("chips/esp32s31/app/src/wifi/station.rs", 1, BY_P2),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/access.rs",
+        7,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/finished.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/live.rs",
+        13,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/owner.rs",
+        6,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler/interrupt.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/esp32s31/hal/src/radio/domain.rs", 4, BY_PHY),
+    (
+        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
+        9,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_ring.rs",
+        13,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_storage.rs",
+        7,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_storage/buffers.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
+        11,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
+        12,
+        BY_P3,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/temperature.rs", 3, BY_PHY),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/port.rs",
+        4,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/port/lifecycle.rs",
+        13,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/port/mailbox.rs",
+        8,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/port/owned.rs",
+        6,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/roles.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/client/src/bluetooth.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/client/src/lib.rs",
+        14,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/client/src/poison.rs",
+        8,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/client/src/poison/diagnostic_path.rs",
+        6,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs",
+        8,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs",
+        4,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/keys.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/epoch.rs",
+        7,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx/prefix.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs",
+        4,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/lifecycle.rs",
+        5,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/ampdu/owner.rs",
+        18,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/test_support.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs",
+        7,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/control.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/counters.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/access_point.rs",
+        9,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/access_point_end.rs",
+        15,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/failure.rs",
+        7,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/failure/convert.rs",
+        21,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/failure/path.rs",
+        2,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/lib.rs",
+        6,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/radio.rs",
+        8,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station.rs",
+        10,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs",
+        14,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/unfinished.rs",
+        2,
+        BY_P2,
+    ),
+    (
+        "chips/esp32s31/radio/ieee802154/backend/src/engine.rs",
+        8,
+        BY_NONE,
+    ),
+    ("chips/esp32s31/radio/phy/src/concurrent.rs", 22, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/diagnostic_path.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/target_port/concurrent.rs",
+        9,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/radio/system/src/actor_core.rs",
+        13,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/system/src/bluetooth.rs",
+        5,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/system/src/esp32s31.rs",
+        44,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/system/src/esp32s31/bluetooth.rs",
+        31,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/system/src/lib.rs",
+        35,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/family/platform/executor/src/fault.rs", 4, BY_NONE),
+    ("chips/family/platform/executor/src/task.rs", 6, BY_NONE),
+    (
+        "chips/family/platform/interrupt-table/src/binding.rs",
+        12,
+        BY_NONE,
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/lib.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/router.rs",
+        5,
+        BY_NONE,
+    ),
+    (
+        "chips/family/platform/interrupt-table/src/signal.rs",
+        7,
+        BY_NONE,
+    ),
+    (
+        "chips/family/platform/runtime/src/interrupts.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/family/platform/runtime/src/retained_fault.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/family/radio/modem-clock/src/execution.rs",
+        4,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/family/radio/modem-clock/src/lib.rs",
+        12,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/family/radio/power/src/modem.rs", 8, BY_RADIO_SYSTEM),
+    ("portable/memory/src/indexed_custody.rs", 7, BY_NONE),
+    ("portable/memory/src/init_in_place.rs", 1, BY_NONE),
+    ("portable/memory/src/lib.rs", 1, BY_NONE),
+    ("portable/memory/src/placed.rs", 2, BY_NONE),
+    ("portable/memory/src/request_slot.rs", 4, BY_NONE),
+    ("portable/time/src/connected_tasks.rs", 3, BY_NONE),
+    ("portable/waker/src/lib.rs", 4, BY_NONE),
+    (
+        "protocols/bluetooth/le/controller/src/dtm.rs",
+        9,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/port/src/conformance.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    ("protocols/bluetooth/le/port/src/lib.rs", 1, BY_RADIO_SYSTEM),
+    (
+        "protocols/bluetooth/le/runtime/src/host.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    ("protocols/ieee80211/contracts/port/src/arena.rs", 1, BY_P3),
+    ("protocols/ieee80211/contracts/port/src/lib.rs", 1, BY_P3),
+    ("protocols/ieee80211/runtime/src/datapath/data.rs", 2, BY_P2),
+    (
+        "protocols/ieee80211/runtime/src/lifecycle/inbox.rs",
+        3,
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/network_return.rs",
+        2,
+        BY_P2,
+    ),
+    (
+        "protocols/ieee80211/runtime/src/station/local_tx.rs",
+        1,
+        BY_P2,
+    ),
+    ("protocols/ieee802154/port/src/config.rs", 1, BY_NONE),
+    ("protocols/ieee802154/port/src/lib.rs", 1, BY_NONE),
+    ("protocols/ieee802154/port/src/owner.rs", 6, BY_NONE),
+    (
+        "protocols/radio/port/src/conformance/registration.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    ("protocols/radio/port/src/lib.rs", 3, BY_RADIO_SYSTEM),
+    ("protocols/radio/port/src/lifecycle.rs", 24, BY_RADIO_SYSTEM),
+    ("protocols/radio/port/src/slot.rs", 21, BY_RADIO_SYSTEM),
+];
+/// S7: compatibility layers (`#[serde(default)]`, `#[serde(alias)]`,
+/// `#[deprecated]`, a renamed re-export `pub use … as …`), by file with
+/// their count. The list only shrinks.
+const COMPATIBILITY: &[(&str, usize, &str)] = &[
+    ("chips/esp32s31/app/src/console.rs", 1, BY_P2),
+    ("chips/esp32s31/app/src/cpu.rs", 1, BY_P2),
+    ("chips/esp32s31/app/src/lib.rs", 2, BY_P2),
+    ("chips/esp32s31/app/src/wifi/network.rs", 1, BY_P2),
+    ("chips/esp32s31/app/src/wifi/station.rs", 1, BY_P2),
+    ("chips/esp32s31/hal/src/peripherals/aes.rs", 1, BY_NONE),
+    (
+        "chips/esp32s31/hal/src/radio/domain/transaction.rs",
+        1,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
+        1,
+        BY_P3,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/i2c.rs", 1, BY_PHY),
+    (
+        "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/station/src/observation.rs",
+        1,
+        BY_P2,
+    ),
+    ("chips/esp32s31/radio/phy/src/lib.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/target_port.rs", 1, BY_PHY),
+    ("chips/esp32s31/radio/phy/src/tracking.rs", 2, BY_PHY),
+    (
+        "chips/esp32s31/radio/phy/src/tracking/rfpll/search.rs",
+        1,
+        BY_PHY,
+    ),
+    ("chips/family/facts/src/lib.rs", 19, BY_NONE),
+    ("chips/family/facts/src/model.rs", 27, BY_NONE),
+    (
+        "chips/family/platform/executor/src/installations.rs",
+        1,
+        BY_NONE,
+    ),
+    ("chips/family/platform/executor/src/lib.rs", 1, BY_NONE),
+    ("chips/family/platform/runtime/src/lib.rs", 4, BY_NONE),
+    ("oer/src/print.rs", 1, BY_P2),
+    ("portable/trace-recorder/src/lib.rs", 1, BY_NONE),
+    ("protocols/hil/agent/src/lib.rs", 1, BY_NONE),
+    ("protocols/hil/protocol/src/base/boot.rs", 3, BY_NONE),
+    ("protocols/hil/protocol/src/lib.rs", 2, BY_NONE),
+    ("protocols/ieee80211/core/roles/ap/src/engine.rs", 1, BY_P3),
+    ("protocols/ieee80211/runtime/src/lib.rs", 1, BY_P2),
+    ("protocols/network/core/src/lib.rs", 1, BY_PHASE_C),
+];
+/// S8: hand-written bits (a shift by a literal, a hexadecimal mask beside a
+/// bit operator) in the HAL's register and PHY files and in the wire
+/// crates, by file with their count. It misses a shift or a mask by a named
+/// value, and counts arithmetic that is no register access (a checksum, a
+/// timer's carry). The list only shrinks.
+const HAND_BITS: &[(&str, usize, &str)] = &[
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/controller/init.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/interrupt.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/phy.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/block_ack.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/beamforming.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init_suffix.rs",
+        3,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/phy_rate.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/rx/statistics.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/tsf.rs",
+        5,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx.rs",
+        5,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx/power_init.rs",
+        3,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/phy/baseband/ops.rs",
+        1,
+        BY_PHY,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
+        4,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/memory/ops.rs", 47, BY_PHY),
+    ("chips/esp32s31/hal/src/radio/phy/pbus/ops.rs", 2, BY_PHY),
+    (
+        "protocols/bluetooth/le/wire/src/channel.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/wire/src/connection.rs",
+        12,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/wire/src/control.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/wire/src/data_header.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    ("protocols/bluetooth/le/wire/src/dtm.rs", 1, BY_RADIO_SYSTEM),
+    ("protocols/ieee80211/wire/src/beacon.rs", 1, BY_P3),
+    ("protocols/ieee80211/wire/src/bip.rs", 1, BY_P3),
+    ("protocols/ieee80211/wire/src/block_ack/frame.rs", 1, BY_P3),
+    ("protocols/ieee80211/wire/src/ccmp.rs", 1, BY_P3),
+    (
+        "protocols/ieee80211/wire/src/extensions/espressif/esp_now.rs",
+        6,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/ftm.rs", 1, BY_P3),
+    ("protocols/ieee80211/wire/src/fuzz.rs", 4, BY_P3),
+    ("protocols/ieee80211/wire/src/he.rs", 1, BY_P3),
+    ("protocols/ieee80211/wire/src/ht.rs", 4, BY_P3),
+    (
+        "protocols/ieee80211/wire/src/management_protection.rs",
+        7,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/station_beacon.rs", 1, BY_P3),
+    ("protocols/ieee80211/wire/src/trigger.rs", 4, BY_P3),
+    ("protocols/ieee802154/wire/src/csl.rs", 1, BY_NONE),
+    ("protocols/ieee802154/wire/src/enhanced_ack.rs", 11, BY_NONE),
+    ("protocols/ieee802154/wire/src/header.rs", 1, BY_NONE),
+    ("protocols/ieee802154/wire/src/link_metrics.rs", 2, BY_NONE),
+    ("protocols/network/wire/src/checksum.rs", 7, BY_PHASE_C),
+];
+/// S2: the variants of the runtime's violation enums, each with the count of
+/// the production sites that make or match it, and what removes it by what
+/// it guards. The list only shrinks; a variant without an entry fails.
+const VIOLATION_VARIANTS: &[(&str, usize, &str)] = &[
+    ("ActorViolation::OutboxFull", 2, BY_P3),
+    ("ActorViolation::LifecycleClosed", 7, BY_P2),
+    ("ActorViolation::ArenaClaim", 3, BY_P3),
+    ("ActorViolation::ArenaCompletion", 2, BY_P3),
+    ("ActorViolation::LinkMailbox", 3, BY_P2),
+    ("ActorViolation::ParcelMissing", 1, BY_P3),
+    ("ActorViolation::RetireRunning", 1, BY_P2),
+    ("ActorViolation::LinkReturn", 1, BY_P2),
+    ("ActorViolation::PairwiseCustody", 5, BY_P2),
+    ("ActorViolation::ReorderOverflow", 1, BY_P3),
+    ("LifecycleViolation::Returned", 12, BY_P2),
+    ("LifecycleViolation::Missing", 8, BY_P2),
+    ("LifecycleViolation::QueueFull", 1, BY_P2),
+    ("LifecycleViolation::ActorClosed", 3, BY_P2),
+    ("LifecycleViolation::RetuneWithoutRequest", 2, BY_P2),
+    ("ApContract::UnknownTicket", 9, BY_P3),
+    ("ApContract::BufferClass", 10, BY_P3),
+    ("ApContract::ForeignKey", 14, BY_P3),
+    ("ApContract::Engine", 1, BY_P3),
+    ("ApContract::CommandRefused", 2, BY_P3),
+    ("ApContract::Permission", 6, BY_P3),
+    ("ApContract::CutUnits", 1, BY_P3),
+    ("ApContract::NetworkAdmission", 4, BY_P3),
+];
+
+/// The hits of a scan against its list: a new file, a grown count and an
+/// entry whose file has no hits all fail.
+fn scan_differences(hits: &[(String, String)], list: &[(&str, usize, &str)]) -> Vec<String> {
+    let known = list
+        .iter()
+        .map(|(file, count, _)| (*file, *count))
+        .collect::<Vec<_>>();
+    count_differences(&by_file(hits), &known)
+}
+
+fn assert_scan(hits: &[(String, String)], list: &[(&str, usize, &str)]) {
+    let differences = scan_differences(hits, list);
+    assert!(differences.is_empty(), "{}", differences.join("\n"));
+}
+
+const NO_ATTRIBUTE: &AttributeFinder = &|_| None;
+
+#[test]
+fn places_claimed_at_run_time_are_listed_and_only_shrink() {
+    assert_scan(&scan_hits(&claims_scope, &claim_at, NO_ATTRIBUTE), CLAIMS);
+}
+
+#[test]
+fn violation_variants_and_their_sites_are_listed_and_only_shrink() {
+    let mut sites = BTreeMap::<String, usize>::new();
+    for (_, site) in scan_hits(&product_code, &violation_site_at, NO_ATTRIBUTE) {
+        *sites.entry(site).or_insert(0) += 1;
+    }
+    // Every variant has an entry, with no site too.
+    for (_, definition) in scan_hits(
+        &|path| path == "protocols/ieee80211/runtime",
+        &|tokens, at| {
+            let (name, variants) = enum_at(tokens, at)?;
+            VIOLATIONS.contains(&name.as_str()).then(|| {
+                variants
+                    .iter()
+                    .map(|variant| format!("{name}::{variant}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+        },
+        NO_ATTRIBUTE,
+    ) {
+        for variant in definition.split(' ') {
+            sites.entry(variant.to_owned()).or_insert(0);
+        }
+    }
+    let known = VIOLATION_VARIANTS
+        .iter()
+        .map(|(variant, count, _)| ((*variant).to_owned(), *count))
+        .collect::<BTreeMap<_, _>>();
+    let new = sites
+        .keys()
+        .filter(|variant| !known.contains_key(*variant))
+        .collect::<Vec<_>>();
+    let grown = sites
+        .iter()
+        .filter(|(variant, count)| known.get(*variant).is_some_and(|known| *count > known))
+        .collect::<Vec<_>>();
+    let lower = sites
+        .iter()
+        .filter(|(variant, count)| known.get(*variant).is_some_and(|known| *count < known))
+        .collect::<Vec<_>>();
+    let gone = known
+        .keys()
+        .filter(|variant| !sites.contains_key(*variant))
+        .collect::<Vec<_>>();
+    assert!(
+        new.is_empty() && grown.is_empty() && lower.is_empty() && gone.is_empty(),
+        "new {new:?}, grown {grown:?}, lower the entry {lower:?}, gone {gone:?}"
+    );
+}
+
+#[test]
+fn error_types_that_name_the_callers_state_are_listed_and_only_shrink() {
+    assert_scan(
+        &scan_hits(&product_code, &error_state_at, NO_ATTRIBUTE),
+        ERROR_STATES,
+    );
+}
+
+#[test]
+fn statuses_that_hold_a_failure_are_listed_and_only_shrink() {
+    assert_scan(
+        &scan_hits(&product_code, &status_failure_at, NO_ATTRIBUTE),
+        STATUS_FAILURES,
+    );
+}
+
+#[test]
+fn results_dropped_or_replaced_are_listed_and_only_shrink() {
+    assert_scan(
+        &scan_hits(&product_code, &dropped_result_at, NO_ATTRIBUTE),
+        DROPPED_RESULTS,
+    );
+}
+
+#[test]
+fn memory_kept_out_and_quarantines_are_listed_and_only_shrink() {
+    assert_scan(
+        &scan_hits(&product_code, &kept_out_at, NO_ATTRIBUTE),
+        KEPT_OUT,
+    );
+}
+
+#[test]
+fn compatibility_layers_are_listed_and_only_shrink() {
+    assert_scan(
+        &scan_hits(&product_code, &compatibility_at, &compatibility_attribute),
+        COMPATIBILITY,
+    );
+}
+
+#[test]
+fn hand_written_bits_are_listed_and_only_shrink() {
+    let mut hits = scan_hits(&bit_files, &hand_bits_at, NO_ATTRIBUTE);
+    hits.retain(|(file, _)| bit_file(file));
+    assert_scan(&hits, HAND_BITS);
+}
+
+/// Every entry of the lists names what removes it, and the scan's
+/// differences name each kind.
+#[test]
+fn the_rule_lists_name_their_removers() {
+    for list in [
+        CLAIMS,
+        VIOLATION_VARIANTS,
+        ERROR_STATES,
+        STATUS_FAILURES,
+        DROPPED_RESULTS,
+        KEPT_OUT,
+        COMPATIBILITY,
+        HAND_BITS,
+    ] {
+        for (entry, _, remover) in list {
+            assert!(!remover.is_empty(), "{entry}");
+        }
+    }
+    let hits = [
+        ("a.rs".to_owned(), "x".to_owned()),
+        ("b.rs".to_owned(), "y".to_owned()),
+    ];
+    assert_eq!(
+        scan_differences(&hits, &[("a.rs", 2, BY_NONE), ("c.rs", 1, BY_NONE)]),
+        [
+            "lower the entry: a.rs (2 -> 1)",
+            "new: b.rs (1)",
+            "gone, drop the entry: c.rs"
+        ]
+    );
+}
+
+/// The finders take their shapes in production code and skip what tests
+/// hold.
+#[test]
+fn the_rule_scans_find_their_shapes_and_skip_tests() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let source = directory.path().join("lib.rs");
+    std::fs::write(
+        &source,
+        r#"
+pub enum StartError { AlreadyRunning, NotStarted, Device }
+pub enum PollStep { Done, Failed }
+pub enum Quiet { Running }
+pub use inner::Thing as Other;
+#[serde(default)]
+pub struct Config { #[deprecated] old: u8 }
+fn f(cell: &mut Option<u8>, r: Result<u8, ()>) -> Result<u8, ()> {
+    let _claimed = place.try_take();
+    let value = cell.take().ok_or(())?;
+    r.ok();
+    let _ = r.unwrap_or_default();
+    let _ = r.unwrap_or_else(|_| 0);
+    let _kept = core::mem::ManuallyDrop::new(value);
+    let _gone = Box::leak(Box::new(1));
+    let _bits = (value << 4) & 0xF0;
+    Ok(value)
+}
+#[cfg(test)]
+mod tests {
+    pub enum TestError { AlreadyRunning }
+    fn t(r: Result<u8, ()>) { r.ok(); }
+}
+"#,
+    )
+    .expect("source");
+    let mut found = BTreeMap::<&str, Vec<String>>::new();
+    let finders: [(&str, &Finder); 7] = [
+        ("claims", &claim_at),
+        ("errors", &error_state_at),
+        ("statuses", &status_failure_at),
+        ("dropped", &dropped_result_at),
+        ("kept", &kept_out_at),
+        ("compatibility", &compatibility_at),
+        ("bits", &hand_bits_at),
+    ];
+    walk_file(&source, &mut |_: &Path, seen: Seen<'_>| match seen {
+        Seen::Token(tokens, at) => {
+            for (name, find) in &finders {
+                if let Some(hit) = find(tokens, at) {
+                    found.entry(name).or_default().push(hit);
+                }
+            }
+        }
+        Seen::Attribute(attribute) => {
+            if let Some(hit) = compatibility_attribute(attribute) {
+                found.entry("compatibility").or_default().push(hit);
+            }
+        }
+        Seen::Unreadable => panic!("readable"),
+    });
+    assert_eq!(found["claims"], ["try_take", "take refused"]);
+    assert_eq!(found["errors"], ["StartError: AlreadyRunning NotStarted"]);
+    assert_eq!(found["statuses"], ["PollStep: Failed"]);
+    assert_eq!(
+        found["dropped"],
+        [".ok();", "unwrap_or_default", "unwrap_or_else(|_|"]
+    );
+    assert_eq!(found["kept"], ["ManuallyDrop", "leak"]);
+    assert_eq!(
+        found["compatibility"],
+        ["pub use … as", "serde(default)", "deprecated"]
+    );
+    assert_eq!(found["bits"], ["shift", "mask"]);
+}
+
+#[test]
+#[ignore = "prints the T8c lists from the scans' hits"]
+fn t8c_print() {
+    let none: &AttributeFinder = &|_| None;
+    let scans: [Scan<'_>; 8] = [
+        ("CLAIMS", &claims_scope, &claim_at, none),
+        ("VIOLATION_SITES", &product_code, &violation_site_at, none),
+        ("ERROR_STATES", &product_code, &error_state_at, none),
+        ("STATUS_FAILURES", &product_code, &status_failure_at, none),
+        ("DROPPED_RESULTS", &product_code, &dropped_result_at, none),
+        ("KEPT_OUT", &product_code, &kept_out_at, none),
+        (
+            "COMPATIBILITY",
+            &product_code,
+            &compatibility_at,
+            &compatibility_attribute,
+        ),
+        ("HAND_BITS", &bit_files, &hand_bits_at, none),
+    ];
+    for (name, select, find, attribute) in scans {
+        let mut hits = scan_hits(select, find, attribute);
+        if name == "HAND_BITS" {
+            hits.retain(|(file, _)| bit_file(file));
+        }
+        std::println!("const {name}: &[(&str, usize, &str)] = &[");
+        for (file, count) in by_file(&hits) {
+            std::println!("    (\"{file}\", {count}, {}),", remover_name(&file));
+        }
+        std::println!("];");
+    }
 }
