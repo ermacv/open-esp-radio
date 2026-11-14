@@ -304,18 +304,26 @@ pub type ActorLinkKey<'id, D> =
 /// The station's link on the port of `D`, while the actor holds it.
 pub type ActorLink<'id, D> = LinkHandover<'id, ActorEpochPath<'id, D>, ActorLinkKey<'id, D>>;
 
-/// Why the actor's port did not retire, reinstall or release; `F` is the
-/// port's fault. Nothing was taken: the actor keeps the proof it held.
+/// Why a stopped port did not retire for its owner (the station's actor,
+/// the access point's runner); `F` is the port's fault. Nothing was taken:
+/// the owner keeps the proof it held.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ActorReinstallRefused<F> {
-    /// The radio's stop did not confirm: the actor holds no stop's proof.
+pub enum RetireRefused<F> {
+    /// The radio's stop did not confirm: the owner holds no stop's proof.
     NotStopped,
     /// The port did not retire: what it has out.
     Held(Outstanding<F>),
-    /// The actor's proof is of another installation than the port's: a
+    /// The owner's proof is of another installation than the port's: a
     /// proof's brand is the port's lifetime, which a `'static` port shares
     /// with every other, so its generation is checked.
     Stale(InstallationGeneration),
+}
+
+/// Why the actor's port did not reinstall; `F` is the port's fault.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ActorReinstallRefused<F> {
+    /// The port did not retire: the actor keeps its stop's proof.
+    Retire(RetireRefused<F>),
     /// The port retired and refused the next installation: why. The actor
     /// keeps the retired installation for a release.
     Refused(ReinstallRefused),
@@ -824,7 +832,7 @@ where
         <D::Port as DataPort<'id>>::Installed,
         ActorReinstallRefused<<D::Port as DataPort<'id>>::Fault>,
     > {
-        let retired = self.retire()?;
+        let retired = self.retire().map_err(ActorReinstallRefused::Retire)?;
         match self.port.reinstall(retired, tsf_epoch, installations) {
             Ok((stopped, installed)) => {
                 self.reinstalled();
@@ -835,9 +843,9 @@ where
                 self.retired = Some(retired);
                 Err(ActorReinstallRefused::Refused(refused))
             }
-            Err(ProofRefused::Stale(stale)) => {
-                Err(ActorReinstallRefused::Stale(stale.installation))
-            }
+            Err(ProofRefused::Stale(stale)) => Err(ActorReinstallRefused::Retire(
+                RetireRefused::Stale(stale.installation),
+            )),
         }
     }
 
@@ -846,40 +854,35 @@ where
     ///
     /// # Errors
     ///
-    /// What blocks it ([`ActorReinstallRefused`] but
-    /// [`ActorReinstallRefused::Refused`]); the actor keeps its proof.
+    /// What blocks it; the actor keeps its proof.
     pub fn release(
         &mut self,
     ) -> Result<
         <D::Port as DataPort<'id>>::Released<'_>,
-        ActorReinstallRefused<<D::Port as DataPort<'id>>::Fault>,
+        RetireRefused<<D::Port as DataPort<'id>>::Fault>,
     > {
         let retired = self.retire()?;
         self.port
             .release(retired)
-            .map_err(|stale| ActorReinstallRefused::Stale(stale.installation))
+            .map_err(|stale| RetireRefused::Stale(stale.installation))
     }
 
     /// The retired installation's proof: the one a refused reinstall left,
     /// or the stopped port's retirement.
-    fn retire(
-        &mut self,
-    ) -> Result<Retired<'id>, ActorReinstallRefused<<D::Port as DataPort<'id>>::Fault>> {
+    fn retire(&mut self) -> Result<Retired<'id>, RetireRefused<<D::Port as DataPort<'id>>::Fault>> {
         if let Some(retired) = self.retired.take() {
             return Ok(retired);
         }
         let Some(stopped) = self.stopped.take() else {
-            return Err(ActorReinstallRefused::NotStopped);
+            return Err(RetireRefused::NotStopped);
         };
         match self.port.retire(stopped) {
             Ok(retired) => Ok(retired),
             Err(ProofRefused::Refused(stopped, outstanding)) => {
                 self.stopped = Some(stopped);
-                Err(ActorReinstallRefused::Held(outstanding))
+                Err(RetireRefused::Held(outstanding))
             }
-            Err(ProofRefused::Stale(stale)) => {
-                Err(ActorReinstallRefused::Stale(stale.installation))
-            }
+            Err(ProofRefused::Stale(stale)) => Err(RetireRefused::Stale(stale.installation)),
         }
     }
 

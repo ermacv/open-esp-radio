@@ -1157,10 +1157,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     }
 
     /// The stop's refusal for `cause`, with what the port has out.
-    fn unconfirmed(
-        &self,
-        cause: StopCause<ModelPortFault>,
-    ) -> StopUnconfirmed<ModelPortFault> {
+    fn unconfirmed(&self, cause: StopCause<ModelPortFault>) -> StopUnconfirmed<ModelPortFault> {
         StopUnconfirmed {
             cause,
             outstanding: DataPort::outstanding(self),

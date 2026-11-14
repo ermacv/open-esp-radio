@@ -4612,7 +4612,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("Count::on", "predicate: the switchable diagnostics are on"),
     ("CounterLatch::valid", SAMPLED_BIT),
     ("DataPort::lend_room", P3),
-    ("DataPort::recover_for_stop", P1),
     ("DataPortHarness::publish_held_arena", HARNESS),
     ("DataPortHarness::take_configured", HARNESS),
     ("Device::cut_held_by_units", P3),

@@ -176,9 +176,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         }
     }
 
-    fn poll_stop_now(
-        &mut self,
-    ) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
+    fn poll_stop_now(&mut self) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         let waker = self.waker();
         let now = self.now();
         match self.port.poll_stop(&mut Context::from_waker(&waker), now) {
@@ -196,10 +194,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn stop_keeping(
         &mut self,
         step: Duration,
-    ) -> (
-        Result<(), StopUnconfirmed<Fault>>,
-        Vec<Completed<'id, Id>>,
-    ) {
+    ) -> (Result<(), StopUnconfirmed<Fault>>, Vec<Completed<'id, Id>>) {
         let mut ended = Vec::new();
         for _ in 0..64 {
             match self.poll_stop_now() {

@@ -147,6 +147,10 @@ const fn crypto_key_error_name(error: CryptoKeyError) -> &'static str {
 fn cleanup_path(cause: CleanupCause, path: &mut DiagPath) {
     match cause {
         CleanupCause::NotStopped => path.name("NotStopped"),
+        CleanupCause::Stale(installation) => {
+            path.name("Stale");
+            path.word(installation.get().get());
+        }
         CleanupCause::Faulted(fault) => {
             path.name("Faulted");
             fault.push_path(path);
@@ -461,7 +465,9 @@ impl DiagnosticPath for LifecycleFailure {
             Self::Reinstall(cause) => {
                 path.name("Reinstall");
                 path.name(match cause {
+                    ReinstallCause::NotStopped => "NotStopped",
                     ReinstallCause::NotRetired(_) => "NotRetired",
+                    ReinstallCause::Stale(_) => "Stale",
                     ReinstallCause::SameEpoch => "SameEpoch",
                     ReinstallCause::ChannelUnset => "ChannelUnset",
                     ReinstallCause::Receipt => "Receipt",
@@ -474,6 +480,9 @@ impl DiagnosticPath for LifecycleFailure {
                 }
                 if let ReinstallCause::NotRetired(outstanding) = cause {
                     outstanding_path(outstanding, path);
+                }
+                if let ReinstallCause::Stale(installation) = cause {
+                    path.word(installation.get().get());
                 }
             }
             Self::Mailbox => path.name("Mailbox"),
@@ -498,11 +507,7 @@ pub(crate) fn stop_unconfirmed(
         }
         StopCause::CoreEnabled => path.name("CoreEnabled"),
     }
-    let observations = unconfirmed.observations;
-    path.word(u32::from(observations.arena_on_air));
-    path.word(u32::from(observations.published));
-    path.word(u32::from(observations.queued));
-    path.word(u32::from(observations.configuring));
+    outstanding_path(&unconfirmed.outstanding, path);
 }
 
 fn actor_violation(
@@ -540,6 +545,10 @@ impl DiagnosticPath for ReleaseCause {
     fn push_path(&self, path: &mut DiagPath) {
         match self {
             Self::StopUnconfirmed => path.name("StopUnconfirmed"),
+            Self::Stale(installation) => {
+                path.name("Stale");
+                path.word(installation.get().get());
+            }
             Self::Held(outstanding) => {
                 path.name("Held");
                 outstanding_path(outstanding, path);
@@ -571,6 +580,10 @@ impl DiagnosticPath for ReleaseCause {
                 path.name("Cleanup");
                 match cause {
                     CleanupCause::NotStopped => path.name("NotStopped"),
+                    CleanupCause::Stale(installation) => {
+                        path.name("Stale");
+                        path.word(installation.get().get());
+                    }
                     CleanupCause::Faulted(fault) => {
                         path.name("Faulted");
                         fault.push_path(path);

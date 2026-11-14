@@ -457,11 +457,12 @@ pub enum DatapathEnd<W: Binding> {
 }
 
 impl<W: Binding> crate::station_end::Installation for PlacedActor<W> {
-    type Port = Port<W>;
+    // The actor: it holds the port with its installation's proofs.
+    type Port = ActorOf<W>;
     type Unkept = Unkept<'static, <Port<W> as DataPort<'static>>::Types>;
     type Unaccepted = <Port<W> as DataPort<'static>>::Admitted;
-    fn port_mut(&mut self) -> &mut Port<W> {
-        Actor::port_mut(self)
+    fn port_mut(&mut self) -> &mut ActorOf<W> {
+        self
     }
     fn take_unkept(&mut self) -> Option<Self::Unkept> {
         Actor::take_unkept(self)
@@ -677,6 +678,7 @@ pub(crate) async fn drive<W: Binding>(
         port,
         commands,
         resources,
+        stopped,
     } = match Port::<W>::install(parts, minted, driver) {
         Ok(installation) => installation,
         Err((parts, minted, driver)) => {
@@ -709,6 +711,7 @@ pub(crate) async fn drive<W: Binding>(
     let mut actor: PlacedActor<W> = ActorOf::<W>::init_in_place(
         place.uninit(),
         port,
+        stopped,
         crate::station::Rates(EspressifRateSelection::new(), observer),
         receive,
         ActorSink(sink),
@@ -767,7 +770,7 @@ pub(crate) async fn drive<W: Binding>(
                 // finish keeps its owners and does not reinstall.
                 match crate::station_end::reinstalled(actor, |actor: &mut PlacedActor<W>| {
                     actor
-                        .reinstall_in_place(|port| port.reinstall(&mut installations, next))
+                        .reinstall_in_place(next, &mut installations)
                         .map(|(commands, resources)| {
                             // The actor keeps its receive agreements'
                             // storage; the new installation's slots stay
@@ -855,6 +858,13 @@ pub(crate) struct StoppedRadio {
 pub(crate) const RELEASE_RETRY: Duration = Duration::from_millis(1);
 
 impl StoppedRadio {
+    /// The stopped radio a released port's device gives up: none while its
+    /// radio frontier is live or failed.
+    pub(crate) fn of<W: Binding>(device: &mut Device<W>) -> Option<Self> {
+        let (stopped, cell) = device.0.take_stopped()?;
+        Some(Self { stopped, cell })
+    }
+
     /// Leave the radio system: confirm the MAC stopped, then post the
     /// leave and wait for its answer, however late. A refusal before the
     /// post returns the radio; once posted, the leave is never posted
@@ -916,35 +926,34 @@ pub(crate) fn he_power(
     .map_err(|_| InitializationError::HePower)
 }
 
-/// Take the retired port's stopped radio.
+/// Take the retired port's stopped radio from its actor.
 ///
 /// # Errors
 ///
 /// The port has not confirmed its stop; or it did and still holds owners
-/// (it is not retirable); or it released them and its device holds a live
-/// or failed radio frontier: nothing was taken
-/// ([`crate::release::stopped_radio`]).
+/// (it does not retire); or it released them and its device holds a live
+/// or failed radio frontier: nothing was taken.
 pub(crate) fn take_stopped<W: Binding>(
-    port: &mut Port<W>,
+    actor: &mut ActorOf<W>,
 ) -> Result<StoppedRadio, crate::release::Unreleased> {
-    let confirmed = port.stop_confirmed();
-    let (stopped, cell) = crate::release::stopped_radio(
-        confirmed,
-        || {
-            port.release().map_err(|outstanding| {
-                outstanding.map_fault(crate::failure::convert::backend_fault)
-            })
-        },
-        |device| device.0.take_stopped(),
-    )?;
-    Ok(StoppedRadio { stopped, cell })
+    use crate::release::Unreleased;
+    use oer_protocols_ieee80211_runtime::datapath::RetireRefused;
+    let device = actor.release().map_err(|refused| match refused {
+        RetireRefused::NotStopped => Unreleased::StopUnconfirmed,
+        RetireRefused::Held(outstanding) => {
+            Unreleased::Held(outstanding.map_fault(crate::failure::convert::backend_fault))
+        }
+        RetireRefused::Stale(installation) => Unreleased::Stale(installation),
+    })?;
+    StoppedRadio::of(device).ok_or(Unreleased::FrontierHeld)
 }
 
-impl<W: Binding> crate::release::Stopped for Port<W> {
+impl<W: Binding> crate::release::Stopped for ActorOf<W> {
     type Receipt = Freed<W>;
     type Radio = StoppedRadio;
     fn clean(&mut self) -> crate::release::Cleaned<Freed<W>> {
-        crate::release::clean(self)
+        let (port, stopped) = self.stopped_port();
+        crate::release::clean(port, stopped)
     }
     fn take_stopped(&mut self) -> Result<StoppedRadio, crate::release::Unreleased> {
         take_stopped::<W>(self)

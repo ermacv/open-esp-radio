@@ -251,13 +251,16 @@ fn a_phy_refusal_keeps_its_name_through_the_conversion() {
 fn an_unconfirmed_stop_keeps_the_device_fault_it_met_in_its_path() {
     use oer_chips_esp32s31_radio_ieee80211_backend::port::Fault;
     use oer_portable_diagnostics::DiagPath;
-    use oer_protocols_ieee80211_contracts_port::{StopCause, StopObservations, StopUnconfirmed};
+    use oer_protocols_ieee80211_contracts_port::outstanding::class;
+    use oer_protocols_ieee80211_contracts_port::{RunPhase, StopCause, StopUnconfirmed};
     let port = StopUnconfirmed {
         cause: StopCause::Device(Fault::ReceiveLost),
-        observations: StopObservations {
-            published: 2,
-            ..StopObservations::default()
-        },
+        outstanding: oer_protocols_ieee80211_contracts_port::Outstanding {
+            phase: RunPhase::Stopping,
+            transmit_out: 2,
+            ..nothing_out()
+        }
+        .map_fault(|_| Fault::ReceiveLost),
     };
     let observed =
         super::convert::stop_observed(oer_protocols_ieee80211_runtime::datapath::StopObserved {
@@ -281,7 +284,21 @@ fn an_unconfirmed_stop_keeps_the_device_fault_it_met_in_its_path() {
     assert_eq!(path.names().first(), Some(&"RetuneUnconfirmed"));
     assert_eq!(path.names().get(1), Some(&"Device"));
     assert_eq!(path.names().get(2..), Some(fault.names()));
-    assert_eq!(path.words().get(1), Some(&2), "the observations follow");
+    // What the port had out follows the fault: the stopping phase and its
+    // two transmissions.
+    assert_eq!(
+        path.words().get(fault.words().len()..),
+        Some([class::PHASE | class::TRANSMIT_OUT | 4 << 16, 2 << 16, 0, 0].as_slice()),
+        "what was out follows"
+    );
+}
+
+/// A stopped port with nothing out.
+pub(crate) fn nothing_out() -> super::Outstanding {
+    super::Outstanding {
+        transmit_out: 0,
+        ..held()
+    }
 }
 
 /// What a stopped port holds in the cases: the installation's transmit
@@ -297,7 +314,7 @@ pub(crate) fn held() -> super::Outstanding {
         retained_groups: 0,
         unconsumed: 0,
         transmit_out: 4,
-        queued: [0; super::TX_QUEUES],
+        queued: [0; oer_protocols_ieee80211_contracts_port::ACCESS_CATEGORIES],
         running: 0,
         arenas: ArenaState::Returnable,
     }

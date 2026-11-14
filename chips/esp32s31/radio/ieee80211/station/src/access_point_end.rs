@@ -7,7 +7,7 @@
 use core::{cell::Cell, future::Future};
 
 use oer_portable_time::{Duration, Timer};
-use oer_protocols_ieee80211_contracts_port::{ReceiveAccounting, StopObservations};
+use oer_protocols_ieee80211_contracts_port::ReceiveAccounting;
 use oer_protocols_ieee80211_runtime::access_point::{ApUnsupported, StopWatch};
 
 use crate::release::{Leave, Stopped};
@@ -137,7 +137,7 @@ pub enum ApExitOf<E> {
         /// The fault the stop's own answer named.
         fault: crate::failure::BackendFault,
         /// What the port held then.
-        observations: StopObservations,
+        outstanding: crate::failure::Outstanding,
     },
     /// It ended for its cause holding an attempt the port did not accept
     /// for want of its right, and no item a port call could not keep: no
@@ -369,10 +369,7 @@ where
                     }
                     // The stop's answer named a device fault: the retire
                     // ends here, every owner with the runner.
-                    Ok(StopWatch::DeviceFailed {
-                        fault,
-                        observations,
-                    }) => {
+                    Ok(StopWatch::DeviceFailed { fault, outstanding }) => {
                         take_into(&mut unkept, &mut runner);
                         let unaccepted = runner.take_unaccepted();
                         return Retired::Unfinished(Unfinished {
@@ -383,7 +380,7 @@ where
                             cause: ApExitOf::StopDeviceFailed {
                                 ended,
                                 fault,
-                                observations,
+                                outstanding,
                             },
                             phase: Phase::Stopping,
                         });

@@ -574,7 +574,7 @@ struct Ends<T: 'static> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Reinstalled {
     Cleanup(crate::failure::CleanupCause),
-    Refused(port::ReinstallRefused),
+    Refused(oer_protocols_ieee80211_runtime::datapath::ActorReinstallRefused<port::Fault>),
 }
 
 impl<T: 'static> Default for Ends<T> {
@@ -854,6 +854,7 @@ fn joined_with<T: 'static>(
             port: data_port,
             commands: _commands,
             resources,
+            stopped,
         } = installation;
         let (block_acks, tokens) = resources.into_station();
         // This lifecycle sends no frame of its own: its buffers go home,
@@ -924,6 +925,7 @@ fn joined_with<T: 'static>(
         let mut actor = Actor::<P<'_>, _, _>::init_in_place(
             Box::leak(Box::new(MaybeUninit::uninit())),
             data_port,
+            stopped,
             EspressifRateSelection::<Caps>::new(),
             block_ack_storage.view(),
             Quiet,
@@ -1006,12 +1008,12 @@ fn joined_with<T: 'static>(
             if let ActorEnd::Reinstall = end {
                 // The facade's datapath task: the stopped port's cleanup,
                 // then its reinstall in place under the next TSF epoch.
-                let cleaned = crate::release::clean(actor.port_mut());
+                let (port, stopped) = actor.stopped_port();
+                let cleaned = crate::release::clean(port, stopped);
                 ends.reinstalled = Some(match cleaned.result {
                     Err(cause) => Err(Reinstalled::Cleanup(cause)),
                     Ok(()) => actor
-                        .port_mut()
-                        .reinstall(&mut installations, 2)
+                        .reinstall_in_place(2, &mut installations)
                         .map(drop)
                         .map_err(Reinstalled::Refused),
                 });
@@ -1021,12 +1023,9 @@ fn joined_with<T: 'static>(
             // The facade's `release`: the stopped port's cleanup, then the
             // port's release.
             // Its receipt, if one, stays here past the release.
-            let cleaned = crate::release::clean(actor.port_mut());
-            match cleaned
-                .result
-                .ok()
-                .and_then(|()| actor.port_mut().release().ok())
-            {
+            let (port, stopped) = actor.stopped_port();
+            let cleaned = crate::release::clean(port, stopped);
+            match cleaned.result.ok().and_then(|()| actor.release().ok()) {
                 Some(device) => {
                     ends.released = Some(true);
                     ends.frontier = device.take_stopped().map(|(frontier, ())| frontier);
@@ -2076,8 +2075,11 @@ fn a_restart_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_reinstall
             bench.ends.borrow().reinstalled.is_some()
         });
         let ends = bench.ends.borrow();
-        let Some(Err(Reinstalled::Refused(port::ReinstallRefused::NotRetired(outstanding)))) =
-            ends.reinstalled
+        let Some(Err(Reinstalled::Refused(
+            oer_protocols_ieee80211_runtime::datapath::ActorReinstallRefused::Retire(
+                oer_protocols_ieee80211_runtime::datapath::RetireRefused::Held(outstanding),
+            ),
+        ))) = ends.reinstalled
         else {
             panic!("refused as not retired: {:?}", ends.reinstalled);
         };

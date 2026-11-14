@@ -101,6 +101,7 @@ use core::num::NonZeroU8;
 use core::ops::ControlFlow;
 use core::task::{Context, Poll};
 
+use crate::datapath::RetireRefused;
 use embassy_futures::select::{Either, Either4, select, select4};
 use oer_portable_time::{Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
@@ -116,10 +117,8 @@ use oer_protocols_ieee80211_contracts_port::{
     TxBufferMemory, TxBufferPool, TxCompleted, TxFacts, TxMpdu, TxNetworkPool, TxOperation,
     TxOutcome, TxPower, TxProtection, TxSource,
 };
-use oer_protocols_ieee80211_contracts_port::{
-    InstallationGeneration, Outstanding, ProofRefused, Recovery, Retired,
-};
 use oer_protocols_ieee80211_contracts_port::{NetworkFrames, NetworkTxBuffer};
+use oer_protocols_ieee80211_contracts_port::{Outstanding, ProofRefused, Recovery, Retired};
 use oer_protocols_ieee80211_core_roles_ap::{
     AP_MAX_CLIENTS, ApAssociationIdentity, ApEapolTransmit, ApEapolTxContext,
     ApGroupKeyInstallation, ApGroupTransmitKey,
@@ -440,20 +439,6 @@ pub enum StopWatch<F> {
     /// ([`DataPort::deadline`]), as the S31 port does until its stop is
     /// served.
     Unkept,
-}
-
-/// Why the runner's port did not retire and release; `F` is the port's
-/// fault. Nothing was taken: the runner keeps its stop's proof.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ApReleaseRefused<F> {
-    /// The radio's stop did not confirm: the runner holds no stop's proof.
-    NotStopped,
-    /// The port did not retire: what it has out.
-    Held(Outstanding<F>),
-    /// The runner's proof is of another installation than the port's: a
-    /// proof's brand is the port's lifetime, which a `'static` port shares
-    /// with every other, so its generation is checked.
-    Stale(InstallationGeneration),
 }
 
 /// Why a watch of the radio's stop ended before the port confirmed it; `F`
@@ -2862,23 +2847,23 @@ where
     /// What blocks it; the runner keeps its stop's proof.
     pub fn release(
         &mut self,
-    ) -> Result<<P as DataPort<'id>>::Released<'_>, ApReleaseRefused<PortFault<'id, P>>> {
+    ) -> Result<<P as DataPort<'id>>::Released<'_>, RetireRefused<PortFault<'id, P>>> {
         let Some(stopped) = self.stopped.take() else {
-            return Err(ApReleaseRefused::NotStopped);
+            return Err(RetireRefused::NotStopped);
         };
         let retired: Retired<'id> = match self.port.retire(stopped) {
             Ok(retired) => retired,
             Err(ProofRefused::Refused(stopped, outstanding)) => {
                 self.stopped = Some(stopped);
-                return Err(ApReleaseRefused::Held(outstanding));
+                return Err(RetireRefused::Held(outstanding));
             }
             Err(ProofRefused::Stale(stale)) => {
-                return Err(ApReleaseRefused::Stale(stale.installation));
+                return Err(RetireRefused::Stale(stale.installation));
             }
         };
         self.port
             .release(retired)
-            .map_err(|stale| ApReleaseRefused::Stale(stale.installation))
+            .map_err(|stale| RetireRefused::Stale(stale.installation))
     }
 
     /// The access point's status now.
