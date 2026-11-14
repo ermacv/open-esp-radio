@@ -937,7 +937,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             retained_groups: usize::from(self.driver.retained_group.is_some()),
             unconsumed: self.unconsumed.len(),
             transmit_out: self.shared.returned.out(),
-            queued: self.driver.queues.each_ref().map(heapless::Deque::len),
+            // By access category: each category's queue at its hardware place.
+            queued: oer_protocols_ieee80211_wire::qos::WmmAccessCategory::ALL.map(|category| {
+                self.driver
+                    .queues
+                    .get(driver::queue(category))
+                    .map_or(0, heapless::Deque::len)
+            }),
             running: self
                 .driver
                 .running
@@ -2667,7 +2673,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         buffer::Execution<Id>,
         Esp32s31Caps<B>,
     >;
-    type Outstanding = PortOutstanding;
     type Installations = Installations<Id, InstallationPools>;
     type Installed = (
         Esp32s31Commands<'id, Id, D, B, O>,
@@ -2959,7 +2964,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         stopped: Stopped<'id>,
         channel: SupportedChannel<Self::Caps>,
         now: Instant,
-    ) -> StartPoll<'id, Fault, PortOutstanding> {
+    ) -> StartPoll<'id, Fault> {
         self.now = now;
         if !self.ours(stopped.generation()) {
             return StartPoll::Stale(self.stale(stopped));
@@ -3032,7 +3037,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<Fault, PortOutstanding>>> {
+    ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<Fault>>> {
         self.now = now;
         let since = match self.state {
             PortState::Stopped => {
@@ -3094,7 +3099,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
     }
 
-    fn recover_for_stop(&mut self) -> Recovery<'id, Fault, PortOutstanding> {
+    fn recover_for_stop(&mut self) -> Recovery<'id, Fault> {
         // A faulted port keeps no command: the call that faulted returned
         // it to its caller.
         // Units of buffers dropped unrecycled are back in the ring: they
@@ -3233,7 +3238,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         stopped: Stopped<'id>,
         refused: StartFailure<Fault>,
         now: Instant,
-    ) -> StartPoll<'id, Fault, PortOutstanding> {
+    ) -> StartPoll<'id, Fault> {
         if !core_views::disabled::<Id, D, B>(self.driver.core.view()) {
             // The stop's own service disables the core.
             self.state = PortState::Stopping { since: now };
@@ -3270,7 +3275,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         since: Instant,
         refused: StartFailure<Fault>,
         now: Instant,
-    ) -> StartPoll<'id, Fault, PortOutstanding> {
+    ) -> StartPoll<'id, Fault> {
         let unstopped = |port: &mut Self, cause: StopCause<Fault>| {
             port.state = PortState::Stopping { since };
             StartPoll::Unstopped {

@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn a_class_counts_what_is_out_and_nothing_else() {
         use crate::outstanding::class;
-        let mut outstanding = crate::Outstanding::<(), 2> {
+        let mut outstanding = crate::Outstanding::<()> {
             phase: crate::RunPhase::Stopped,
             fault: None,
             received: 0,
@@ -257,12 +257,16 @@ mod tests {
             retained_groups: 0,
             unconsumed: 0,
             transmit_out: 0,
-            queued: [0; 2],
+            queued: [0; crate::ACCESS_CATEGORIES],
             running: 0,
             arenas: crate::ArenaState::Returnable,
         };
-        assert_eq!(OutstandingClasses::classes(&outstanding), 0);
-        outstanding.queued = [2, 1];
+        assert_eq!(outstanding.classes(), 0);
+        outstanding.queued = [2, 1, 0, 0];
+        assert_eq!(
+            outstanding.queued_in(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::Background),
+            1
+        );
         outstanding.fault = Some(());
         assert_eq!(outstanding.count(class::QUEUED), 3);
         assert_eq!(outstanding.count(class::FAULT), 1);

@@ -8,7 +8,7 @@ use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaFormat, ArenaPublication, TxArena,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    OutstandingClasses, ProofRefused, ReinstallRefused, Retired, Stopped, Unconsumed, outstanding,
+    ProofRefused, ReinstallRefused, Retired, Stopped, Unconsumed, outstanding,
 };
 use oer_protocols_ieee80211_testing_conformance::data_port::{
     self as cases, Case, DataPortHarness,

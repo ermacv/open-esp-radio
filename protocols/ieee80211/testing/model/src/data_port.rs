@@ -446,8 +446,16 @@ pub struct ModelInstall<
     pub stopped: Stopped<'id>,
 }
 
-/// What the model port has out, by class, over its four transmit queues.
-pub type ModelOutstanding = Outstanding<ModelPortFault, { WmmAccessCategory::ALL.len() }>;
+/// What the model port has out, by class; its transmit queues are EDCA's,
+/// one an access category.
+pub type ModelOutstanding = Outstanding<ModelPortFault>;
+
+// The driver's queues are the contract's access categories, in their order.
+const _: () = {
+    if WmmAccessCategory::ALL.len() != oer_protocols_ieee80211_contracts_port::ACCESS_CATEGORIES {
+        panic!("one model queue an access category");
+    }
+};
 
 /// The model's radio as a data port, owned by one actor.
 pub struct ModelPort<
@@ -1152,7 +1160,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn unconfirmed(
         &self,
         cause: StopCause<ModelPortFault>,
-    ) -> StopUnconfirmed<ModelPortFault, ModelOutstanding> {
+    ) -> StopUnconfirmed<ModelPortFault> {
         StopUnconfirmed {
             cause,
             outstanding: DataPort::outstanding(self),
@@ -1306,7 +1314,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     type Types = ModelTypes<Backend<Id, C, X>>;
     type Fault = ModelPortFault;
     type Admitted = ModelAdmitted<Id, C, X>;
-    type Outstanding = ModelOutstanding;
     type Installations = Installations<Id, ModelPools>;
     type Installed = (
         ModelCommands<'id, Id, C, X>,
@@ -1897,7 +1904,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         stopped: Stopped<'id>,
         channel: SupportedChannel<C>,
         now: Instant,
-    ) -> StartPoll<'id, ModelPortFault, ModelOutstanding> {
+    ) -> StartPoll<'id, ModelPortFault> {
         if !self.ours(stopped.generation()) {
             return StartPoll::Stale(StaleProof {
                 proof: stopped,
@@ -1932,7 +1939,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<ModelPortFault, ModelOutstanding>>> {
+    ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<ModelPortFault>>> {
         if let Err(fault) = self.check(ModelPortCall::Stop) {
             return Poll::Ready(Err(self.unconfirmed(StopCause::Device(fault))));
         }
@@ -1982,7 +1989,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         Poll::Pending
     }
 
-    fn recover_for_stop(&mut self) -> Recovery<'id, ModelPortFault, ModelOutstanding> {
+    fn recover_for_stop(&mut self) -> Recovery<'id, ModelPortFault> {
         let Some(fault) = self.fault.or_else(|| {
             self.air.failed().then(|| ModelPortFault::Quarantined {
                 call: ModelPortCall::Retire,
@@ -2007,7 +2014,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     }
 
     fn outstanding(&self) -> ModelOutstanding {
-        let mut queued = [0; WmmAccessCategory::ALL.len()];
+        let mut queued = [0; oer_protocols_ieee80211_contracts_port::ACCESS_CATEGORIES];
         for (count, queue) in queued.iter_mut().zip(self.driver.queues.iter()) {
             *count = queue.waiting.len();
         }

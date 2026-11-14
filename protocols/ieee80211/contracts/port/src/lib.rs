@@ -173,10 +173,10 @@ pub use owner::{
 pub mod installation;
 pub mod outstanding;
 pub use installation::{
-    InstallationGeneration, OutstandingClasses, ProofRefused, Recovering, Recovery,
+    InstallationGeneration, ProofRefused, Recovering, Recovery,
     ReinstallRefused, Retired, StaleProof, StartPoll, StartRefused, StopUnconfirmed, Stopped,
 };
-pub use outstanding::{ArenaState, Outstanding, RunPhase};
+pub use outstanding::{ACCESS_CATEGORIES, ArenaState, Outstanding, RunPhase};
 mod interface_commands;
 pub use interface_commands::{
     ConfigurePermission, Configured, InterfaceCommandPool, InterfaceGrant, InterfacePermissions,

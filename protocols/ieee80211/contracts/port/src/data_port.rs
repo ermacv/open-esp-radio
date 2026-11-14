@@ -570,9 +570,6 @@ pub trait DataPort<'id> {
     /// A station MPDU the port accepted from its sealed attempt
     /// ([`Self::admit`]), carrying no borrow of the port.
     type Admitted;
-    /// Everything the installation has out, by class
-    /// ([`Outstanding`](crate::Outstanding)).
-    type Outstanding: crate::OutstandingClasses + Copy + core::fmt::Debug + Eq;
     /// What a reinstall takes beside the epoch: the port's installations.
     type Installations;
     /// What a reinstall gives: the next installation's commands and tokens.
@@ -784,7 +781,7 @@ pub trait DataPort<'id> {
 
     /// Everything the installation has out, read whole; it changes
     /// nothing.
-    fn outstanding(&self) -> Self::Outstanding;
+    fn outstanding(&self) -> crate::Outstanding<Self::Fault>;
 
     /// The backend's contract fault the port holds, which every later call
     /// answers with.
@@ -804,7 +801,7 @@ pub trait DataPort<'id> {
         stopped: crate::Stopped<'id>,
         channel: SupportedChannel<Self::Caps>,
         now: Instant,
-    ) -> crate::StartPoll<'id, Self::Fault, Self::Outstanding>;
+    ) -> crate::StartPoll<'id, Self::Fault>;
 
     /// Stop the radio: queued attempts end withdrawn, a published one is
     /// waited for, then the MAC, its DMA and interrupt work stop, within
@@ -815,7 +812,7 @@ pub trait DataPort<'id> {
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<crate::Stopped<'id>, crate::StopUnconfirmed<Self::Fault, Self::Outstanding>>>;
+    ) -> Poll<Result<crate::Stopped<'id>, crate::StopUnconfirmed<Self::Fault>>>;
 
     /// Offer what a sink refused and the port keeps to `sink`, oldest
     /// first, each once, until the sink refuses one again, which stays with
@@ -865,7 +862,7 @@ pub trait DataPort<'id> {
     fn retire(
         &mut self,
         stopped: crate::Stopped<'id>,
-    ) -> Result<crate::Retired<'id>, crate::ProofRefused<crate::Stopped<'id>, Self::Outstanding>>;
+    ) -> Result<crate::Retired<'id>, crate::ProofRefused<crate::Stopped<'id>, crate::Outstanding<Self::Fault>>>;
 
     /// Install the next installation in place, from `installations`, with
     /// TSF epoch `tsf_epoch`: its stop's proof (an installation starts
@@ -902,7 +899,7 @@ pub trait DataPort<'id> {
     /// what it leaves out. From a recovery on the port admits and publishes
     /// nothing new, as a stopping port does, however late the stop comes;
     /// only its service of what is out goes on.
-    fn recover_for_stop(&mut self) -> crate::Recovery<'id, Self::Fault, Self::Outstanding>;
+    fn recover_for_stop(&mut self) -> crate::Recovery<'id, Self::Fault>;
 
     /// A reading of the port's radio clock.
     ///

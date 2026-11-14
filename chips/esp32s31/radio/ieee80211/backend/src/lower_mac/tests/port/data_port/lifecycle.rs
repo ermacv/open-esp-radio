@@ -134,7 +134,7 @@ enum Start {
     Refused(StartFailure<Fault>),
     Unstopped {
         cause: StartFailure<Fault>,
-        stop: StopUnconfirmed<Fault, crate::port::PortOutstanding>,
+        stop: StopUnconfirmed<Fault>,
     },
     /// The fixture holds no stop's proof: the radio is not stopped.
     NoProof,
@@ -178,7 +178,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
 
     fn poll_stop_now(
         &mut self,
-    ) -> Poll<Result<(), StopUnconfirmed<Fault, crate::port::PortOutstanding>>> {
+    ) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         let waker = self.waker();
         let now = self.now();
         match self.port.poll_stop(&mut Context::from_waker(&waker), now) {
@@ -197,7 +197,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         &mut self,
         step: Duration,
     ) -> (
-        Result<(), StopUnconfirmed<Fault, crate::port::PortOutstanding>>,
+        Result<(), StopUnconfirmed<Fault>>,
         Vec<Completed<'id, Id>>,
     ) {
         let mut ended = Vec::new();
@@ -1468,7 +1468,7 @@ fn a_stop_the_device_holds_wakes_at_the_devices_own_settle() {
 fn stop_answers<'id, Id: radio::SlotIdentity + 'id>(
     fixture: &mut Fixture<'id, Id>,
     polls: usize,
-) -> Vec<Result<(), StopUnconfirmed<Fault, crate::port::PortOutstanding>>> {
+) -> Vec<Result<(), StopUnconfirmed<Fault>>> {
     let mut answers = Vec::new();
     for _ in 0..64 {
         if let Poll::Ready(answer) = fixture.poll_stop_now() {
