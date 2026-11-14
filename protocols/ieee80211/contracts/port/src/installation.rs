@@ -135,9 +135,9 @@ impl<P, R> ProofRefused<P, R> {
 }
 
 /// The answer of a start's poll, which takes the stop's proof. `F` is the
-/// port's fault, `O` its [`Outstanding`](crate::Outstanding).
+/// port's fault.
 #[derive(Debug, Eq, PartialEq)]
-pub enum StartPoll<'id, F, O> {
+pub enum StartPoll<'id, F> {
     /// The radio runs: the stop's proof ended with the start.
     Started,
     /// The start goes on: the proof, for the next poll.
@@ -152,7 +152,7 @@ pub enum StartPoll<'id, F, O> {
         /// Why the start failed.
         cause: crate::StartFailure<F>,
         /// What the stop of the begun start observed.
-        stop: StopUnconfirmed<F, O>,
+        stop: StopUnconfirmed<F>,
     },
     /// The proof is not of the port's installation: nothing started.
     Stale(StaleProof<Stopped<'id>>),
@@ -174,21 +174,52 @@ pub enum ReinstallRefused {
     Resources,
 }
 
+/// Why a start did not leave the radio running, as the layers above the
+/// port carry it once the stop's proof came back ([`StartPoll`]): `F` is
+/// the port's fault, `O` its [`Outstanding`](crate::Outstanding).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StartRefused<F> {
+    /// The radio front end did not tune the channel, for the port's cause.
+    Retune(F),
+    /// The start did not end within the backend's command bound.
+    Deadline,
+    /// The device refused the start.
+    Device,
+    /// The start began and failed for `cause`, and the stop of what it
+    /// began did not confirm (`stop`): the port is stopping.
+    Unstopped {
+        /// Why the start failed.
+        cause: crate::StartFailure<F>,
+        /// What the stop of the begun start observed.
+        stop: StopUnconfirmed<F>,
+    },
+}
+
+impl<F> From<crate::StartFailure<F>> for StartRefused<F> {
+    fn from(failure: crate::StartFailure<F>) -> Self {
+        match failure {
+            crate::StartFailure::Retune(cause) => Self::Retune(cause),
+            crate::StartFailure::Deadline => Self::Deadline,
+            crate::StartFailure::Device => Self::Device,
+        }
+    }
+}
+
 /// A stop that did not confirm: why, and everything the port still has
 /// out (`O`, its [`Outstanding`](crate::Outstanding)).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StopUnconfirmed<F, O> {
+pub struct StopUnconfirmed<F> {
     /// Why the stop ended unconfirmed.
     pub cause: crate::StopCause<F>,
     /// What the port has out.
-    pub outstanding: O,
+    pub outstanding: crate::Outstanding<F>,
 }
 
 /// What a stop can do about a port's fault, as
 /// [`DataPort::recover_for_stop`](crate::DataPort::recover_for_stop)
 /// answers it.
 #[derive(Debug, Eq, PartialEq)]
-pub enum Recovery<'id, F, O> {
+pub enum Recovery<'id, F> {
     /// The port holds no fault: there is nothing to take back.
     Clear,
     /// The fault leaves every owner whole: the port took it back, and its
@@ -196,45 +227,7 @@ pub enum Recovery<'id, F, O> {
     Recovered(Recovering<'id>),
     /// The fault holds owners no stop returns: the fault, and what it
     /// leaves out (`O`). The port keeps it.
-    Kept(F, O),
-}
-
-/// The classes of what an installation has out, read whole: what a
-/// conformance ledger compares with its own count.
-pub trait OutstandingClasses {
-    /// The classes that are out, one bit each
-    /// ([`outstanding::class`](crate::outstanding::class)).
-    fn classes(&self) -> u32;
-
-    /// The count of `class` (one bit of
-    /// [`outstanding::class`](crate::outstanding::class)): units, keys,
-    /// items, buffers or attempts; one for an out class without a count
-    /// (the phase, the fault, the arenas), zero for a class not out.
-    fn count(&self, class: u32) -> usize;
-}
-
-impl<F, const QUEUES: usize> OutstandingClasses for crate::Outstanding<F, QUEUES> {
-    fn classes(&self) -> u32 {
-        crate::Outstanding::classes(self)
-    }
-
-    fn count(&self, class: u32) -> usize {
-        use crate::outstanding::class as c;
-        let flag = |out: bool| usize::from(out);
-        match class {
-            c::PHASE => flag(self.phase != crate::RunPhase::Stopped),
-            c::FAULT => flag(self.fault.is_some()),
-            c::RECEIVED => self.received,
-            c::REMOVALS => self.removals,
-            c::RETAINED_GROUPS => self.retained_groups,
-            c::UNCONSUMED => self.unconsumed,
-            c::TRANSMIT_OUT => self.transmit_out,
-            c::QUEUED => self.queued.iter().sum(),
-            c::RUNNING => self.running,
-            c::ARENAS => flag(self.arenas != crate::ArenaState::Returnable),
-            _ => 0,
-        }
-    }
+    Kept(F, crate::Outstanding<F>),
 }
 
 #[cfg(test)]

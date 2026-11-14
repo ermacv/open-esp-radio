@@ -31,11 +31,18 @@ pub enum ArenaState {
     Absent,
 }
 
-/// What an installation still holds, by class, with `QUEUES` transmit
-/// queues. Each count is what the port counts; a class is out when its
-/// count is not zero (or its phase, fault or arenas say so).
+use oer_protocols_ieee80211_wire::qos::WmmAccessCategory;
+
+/// The transmit queues an installation counts: EDCA's, one an access
+/// category (IEEE Std 802.11-2020, 10.2.3.2). A queue that is no access
+/// category's is a class of its own.
+pub const ACCESS_CATEGORIES: usize = WmmAccessCategory::ALL.len();
+
+/// What an installation still holds, by class. Each count is what the port
+/// counts; a class is out when its count is not zero (or its phase, fault
+/// or arenas say so).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Outstanding<F, const QUEUES: usize> {
+pub struct Outstanding<F> {
     /// The radio run's phase.
     pub phase: RunPhase,
     /// The port's recorded contract fault, the value itself.
@@ -55,8 +62,8 @@ pub struct Outstanding<F, const QUEUES: usize> {
     pub unconsumed: usize,
     /// Transmit buffers of the installation out of the port's bank.
     pub transmit_out: usize,
-    /// Attempts queued, by transmit queue.
-    pub queued: [usize; QUEUES],
+    /// Attempts queued, by access category ([`Self::queued_in`]).
+    pub queued: [usize; ACCESS_CATEGORIES],
     /// Attempts running on the hardware.
     pub running: usize,
     /// The aggregate arenas.
@@ -88,7 +95,32 @@ pub mod class {
     pub const ARENAS: u32 = 1 << 9;
 }
 
-impl<F, const QUEUES: usize> Outstanding<F, QUEUES> {
+impl<F> Outstanding<F> {
+    /// The attempts queued in `category`.
+    pub const fn queued_in(&self, category: WmmAccessCategory) -> usize {
+        self.queued[category as usize]
+    }
+
+    /// The count of `class` (one bit of [`class`]): units, keys, items,
+    /// buffers or attempts; one for an out class without a count (the
+    /// phase, the fault, the arenas), zero for a class not out.
+    pub fn count(&self, class: u32) -> usize {
+        let flag = |out: bool| usize::from(out);
+        match class {
+            class::PHASE => flag(self.phase != RunPhase::Stopped),
+            class::FAULT => flag(self.fault.is_some()),
+            class::RECEIVED => self.received,
+            class::REMOVALS => self.removals,
+            class::RETAINED_GROUPS => self.retained_groups,
+            class::UNCONSUMED => self.unconsumed,
+            class::TRANSMIT_OUT => self.transmit_out,
+            class::QUEUED => self.queued.iter().sum(),
+            class::RUNNING => self.running,
+            class::ARENAS => flag(self.arenas != ArenaState::Returnable),
+            _ => 0,
+        }
+    }
+
     /// The classes that are out, one bit each ([`class`]). Lent units are
     /// no class: they do not hold the installation.
     pub fn classes(&self) -> u32 {
@@ -117,7 +149,7 @@ impl<F, const QUEUES: usize> Outstanding<F, QUEUES> {
     }
 
     /// The same value with its fault mapped by `map`.
-    pub fn map_fault<G>(self, map: impl FnOnce(F) -> G) -> Outstanding<G, QUEUES> {
+    pub fn map_fault<G>(self, map: impl FnOnce(F) -> G) -> Outstanding<G> {
         Outstanding {
             phase: self.phase,
             fault: self.fault.map(map),
@@ -138,7 +170,7 @@ impl<F, const QUEUES: usize> Outstanding<F, QUEUES> {
 mod tests {
     use super::*;
 
-    fn empty() -> Outstanding<u8, 4> {
+    fn empty() -> Outstanding<u8> {
         Outstanding {
             phase: RunPhase::Stopped,
             fault: None,
@@ -160,7 +192,7 @@ mod tests {
         assert!(empty().is_empty());
         let lent = Outstanding { lent: 3, ..empty() };
         assert!(lent.is_empty(), "lent units do not hold the installation");
-        let cases: [(Outstanding<u8, 4>, u32); 10] = [
+        let cases: [(Outstanding<u8>, u32); 10] = [
             (
                 Outstanding {
                     phase: RunPhase::Recovering,

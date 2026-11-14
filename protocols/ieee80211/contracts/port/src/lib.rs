@@ -174,7 +174,7 @@ pub mod installation;
 pub mod outstanding;
 pub use installation::{
     InstallationGeneration, OutstandingClasses, ProofRefused, Recovering, Recovery,
-    ReinstallRefused, Retired, StaleProof, StartPoll, StopUnconfirmed, Stopped,
+    ReinstallRefused, Retired, StaleProof, StartPoll, StartRefused, StopUnconfirmed, Stopped,
 };
 pub use outstanding::{ArenaState, Outstanding, RunPhase};
 mod interface_commands;
