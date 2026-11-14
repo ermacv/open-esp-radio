@@ -60,7 +60,16 @@ is gone both fail, so every list only shrinks:
   family onto a chip, from portable support onto a protocol or chip;
 - `FIRMWARE_SOURCES_INCLUDED`: `#[path]` inclusions of `firmware/` sources
   from any other root;
-- `HAL_SEQUENCES`: HAL files that wait.
+- `HAL_SEQUENCES`: HAL files that wait;
+- `WAITING_DEVIATIONS`: files of a protocol package that must not wait and
+  still does;
+- `HAL_DECISIONS`: HAL files and directories that decide, by production
+  lines;
+- `TRAIT_OBJECTS`: files of library code that hold `dyn`, product code
+  with the change that removes it, code no image reaches with why it stays;
+- `BOOL_TRAIT_METHODS`: trait methods of `protocols/` and `chips/` that
+  answer a bare `bool`, each a predicate of one fact or a decision with its
+  package.
 
 - `EXTERNAL_ASYNC_CRATES`: the direct normal `embassy-sync` edge of the
   HIL agent.
@@ -179,6 +188,29 @@ a reset, or that its observations justify impossibility. Formatting and
 line shifts preserve keys; file moves, enclosing-item changes and changes
 to the site itself require reviewed registry updates. Do not
 regenerate classifications without checking their cause and owner.
+
+## Scans of production code
+
+Each scan reads the production modules of its packages from their crate
+roots, as the HAL scan below does, and compares what it finds with its list:
+
+- `protocol_cores_never_wait_outside_their_tests`: the identifiers `async`,
+  `Future`, `Poll`, `Waker` and `Context` in every package under
+  `protocols/` whose leaf is not `runtime`, `port`, `model` or `agent`, not
+  under `testing/` and not `protocols/radio/port` (`must_not_wait`): the set
+  is computed, so a new core is covered when it appears;
+  `WAITING_DEVIATIONS` lists the files that still wait.
+- `hal_code_that_decides_is_listed_and_only_shrinks`: the production lines
+  of each `HAL_DECISIONS` entry, a file or a directory whose production files
+  count together; under `radio/ieee80211/dma/` every production file is an
+  entry of its own, so no new file joins there.
+- `library_code_holds_no_trait_object`: the keyword `dyn` in every package
+  under `portable/`, `protocols/`, `chips/`, `hil/images`, `hil/services`
+  and in `oer` and `hil/agent`, build scripts aside (`TRAIT_OBJECTS`).
+- `contracts_answer_no_bare_yes_or_no`: each method of a `trait` in
+  `protocols/` and `chips/` whose return type is `bool`
+  (`BOOL_TRAIT_METHODS`). A `Result<bool, _>`, a free function and an
+  `impl` are not taken.
 
 ## HAL atoms
 
