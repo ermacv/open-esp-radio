@@ -718,7 +718,9 @@ fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         TestKey,
         CcmpPacketNumberStep::ONE,
     ));
-    world.arena.set_key(true);
+    world
+        .arena
+        .set_key(oer_protocols_ieee80211_testing_model::ModelArenaKey::Installed);
     world.taken(1, BE);
     let (plan, frames) = world.publish();
     assert_eq!(plan.kind, PpduKind::Single);

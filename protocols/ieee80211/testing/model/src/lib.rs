@@ -144,8 +144,8 @@ use air_time::{AirWorld, Medium};
 pub mod arena;
 pub use arena::{
     MODEL_ARENA_CHANNEL, MODEL_ARENA_FRAMES, MODEL_ARENA_TIMEOUT, MODEL_PUBLICATION_COST,
-    ModelArena, ModelArenaAnswer, ModelArenaFault, ModelArenaPublication, ModelArenas,
-    ModelDataArena,
+    ModelArena, ModelArenaAnswer, ModelArenaFault, ModelArenaKey, ModelArenaPublication,
+    ModelArenas, ModelDataArena,
 };
 mod loan;
 mod owned;

@@ -623,7 +623,11 @@ fn the_association_carries_the_response_s_color_over_the_scan_s() {
         assert_eq!(scanned.get().0, BssColor::new(27).unwrap());
         assert_eq!(
             association.color().get(),
-            (BssColor::new(5).unwrap(), true, false)
+            (
+                BssColor::new(5).unwrap(),
+                oer_protocols_ieee80211_contracts_port::BssColorUse::Enabled,
+                oer_protocols_ieee80211_contracts_port::BssColorScope::Full
+            )
         );
         assert_eq!(world.station.peer().unwrap().associated.he_bss_color, 5);
     });
