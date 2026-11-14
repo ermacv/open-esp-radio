@@ -7,7 +7,15 @@ use std::{
 /// Only build outputs and Git internals are skipped.
 const SKIPPED: [&str; 2] = ["target", ".git"];
 
-fn dependency_uses(name: &str, spec: &toml::Value, host: bool) -> usize {
+/// Where a manifest's package builds: the developer's machine allows the
+/// host tools' image-format dependency.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Host,
+    Target,
+}
+
+fn dependency_uses(name: &str, spec: &toml::Value, side: Side) -> usize {
     let package = spec
         .get("package")
         .and_then(toml::Value::as_str)
@@ -20,11 +28,11 @@ fn dependency_uses(name: &str, spec: &toml::Value, host: bool) -> usize {
         package.starts_with("esp-")
             || package.starts_with("esp32")
             || from_fork
-            || (package == "espflash" && !host),
+            || (package == "espflash" && side == Side::Target),
     )
 }
 
-fn manifest_uses(value: &toml::Value, host: bool) -> usize {
+fn manifest_uses(value: &toml::Value, side: Side) -> usize {
     let Some(table) = value.as_table() else {
         return 0;
     };
@@ -34,18 +42,18 @@ fn manifest_uses(value: &toml::Value, host: bool) -> usize {
             ("dependencies" | "dev-dependencies" | "build-dependencies", Some(dependencies)) => {
                 count += dependencies
                     .iter()
-                    .map(|(name, spec)| dependency_uses(name, spec, host))
+                    .map(|(name, spec)| dependency_uses(name, spec, side))
                     .sum::<usize>();
             }
             ("patch", Some(sources)) => {
                 for patches in sources.values().filter_map(toml::Value::as_table) {
                     count += patches
                         .iter()
-                        .map(|(name, spec)| dependency_uses(name, spec, host))
+                        .map(|(name, spec)| dependency_uses(name, spec, side))
                         .sum::<usize>();
                 }
             }
-            _ => count += manifest_uses(child, host),
+            _ => count += manifest_uses(child, side),
         }
     }
     count
@@ -74,13 +82,14 @@ fn scan(root: &Path) -> BTreeMap<String, usize> {
         .into_iter()
         .filter_map(|path| {
             let text = std::fs::read_to_string(&path).ok()?;
-            let host = path
+            let tools = path
                 .strip_prefix(root)
                 .expect("file is below root")
                 .starts_with("tools");
+            let side = if tools { Side::Host } else { Side::Target };
             let count = manifest_uses(
                 &toml::from_str::<toml::Value>(&text).expect("manifest parses"),
-                host,
+                side,
             );
             let relative = path.strip_prefix(root).expect("file is below root");
             (count != 0).then(|| (relative.to_string_lossy().into_owned(), count))
@@ -113,7 +122,7 @@ other = { git = "https://github.com/ermacv/esp-pacs" }
 "#,
     )
     .expect("manifest");
-    assert_eq!(manifest_uses(&manifest, true), 4);
+    assert_eq!(manifest_uses(&manifest, Side::Host), 4);
 }
 
 #[test]
@@ -126,14 +135,14 @@ oer-chips-family-boot = { path = "boot" }
 "#,
     )
     .expect("manifest");
-    assert_eq!(manifest_uses(&manifest, true), 0);
+    assert_eq!(manifest_uses(&manifest, Side::Host), 0);
 }
 
 #[test]
 fn espflash_is_a_host_tool_only() {
     let manifest: toml::Value =
         toml::from_str("[dependencies]\nespflash = \"4\"\n").expect("manifest");
-    assert_eq!(manifest_uses(&manifest, false), 1);
+    assert_eq!(manifest_uses(&manifest, Side::Target), 1);
 }
 
 #[test]

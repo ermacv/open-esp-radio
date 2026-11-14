@@ -1,4 +1,15 @@
 disallowed-methods = [
+    # The door: the data port's transitions, which only the installation
+    # machine's `drive` (the runtime's `src/installation.rs`), the port's
+    # implementations and the testing packages call.
+    { path = "oer_protocols_ieee80211_contracts_port::DataPort::poll_start", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
+    { path = "oer_protocols_ieee80211_contracts_port::DataPort::poll_stop", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
+    { path = "oer_protocols_ieee80211_contracts_port::DataPort::take_unconsumed", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
+    { path = "oer_protocols_ieee80211_contracts_port::DataPort::clean", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
+    { path = "oer_protocols_ieee80211_contracts_port::DataPort::retire", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
+    { path = "oer_protocols_ieee80211_contracts_port::DataPort::reinstall", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
+    { path = "oer_protocols_ieee80211_contracts_port::DataPort::release", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
+    { path = "oer_protocols_ieee80211_contracts_port::DataPort::recover_for_stop", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
     "slice::split_at",
     "slice::split_at_mut",
     "slice::copy_from_slice",
@@ -431,3 +442,8 @@ disallowed-macros = [
     "core::debug_assert_ne",
     "oer_chips_family_radio_ieee802154_engine::engine::vendor_assert",
 ]
+
+# A state is a sum (CLAUDE.md): more than one `bool` field is a state kept
+# as flags; a `bool` parameter selects behaviour.
+max-struct-bools = 1
+max-fn-params-bools = 0

@@ -691,9 +691,12 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   Neither side keeps a ticket, a flag "asked" or a slot for an answer; the
   pump is a loop of one `match` with no field. A request's order is the
   caller's type, a permit the request takes and its end returns, so a core
-  has no refusal for "not now, you already asked". The layer tests list
-  what is not yet so (`STATE_FLAGS`, `OPTION_SLOTS`, `BOOL_PARAMETERS`) and
-  who calls a port's transition outside the one function that may.
+  has no refusal for "not now, you already asked". Clippy's
+  `struct_excessive_bools` and `fn_params_excessive_bools` are errors
+  with no `allow` or `expect`; the layer tests list what no lint sees
+  (`HIDDEN_FLAGS`, `HIDDEN_BOOL_PARAMETERS`, `OPTION_SLOTS`), and the
+  data port's transitions are `disallowed-methods` of every package but
+  the runtime, the port's implementations and the testing packages.
 - A guarantee is written down only with what enforces it: a type with a
   compile-fail test, or a stated run-time check. A type-level mechanism names
   the bug it prevents.

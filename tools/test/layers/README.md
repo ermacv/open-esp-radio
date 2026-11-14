@@ -100,20 +100,28 @@ is gone both fail, so every list only shrinks:
     protocol packages, the `wire` crates among them. It misses an index of a
     slice of bytes named otherwise.
 
-- A state is a sum (`CLAUDE.md`). Over the protocols, the Wi-Fi radio
-  crates, the applications' entries and `oer`, lists that only shrink,
-  each entry a path so that a new one in a listed file still fails:
-  - `STATE_FLAGS`: a struct with two or more `bool` fields;
+- A state is a sum (`CLAUDE.md`). Clippy's `struct_excessive_bools` and
+  `fn_params_excessive_bools` are errors in the whole workspace, at
+  `max-struct-bools = 1` and `max-fn-params-bools = 0` (1 in the packages
+  of the roles `Pac`, `Hal` and `HardwareDriver`, where one `bool`
+  parameter is a bit's value); `every_clippy_config_holds_the_rules_thresholds_and_the_door`
+  holds every configuration to them, and
+  `no_source_allows_or_expects_a_bool_lint` refuses any `allow` or
+  `expect` of the two, in production and in tests. Over the protocols, the
+  Wi-Fi radio crates, the applications' entries and `oer`, lists that only
+  shrink keep what no lint sees:
+  - `HIDDEN_FLAGS`: an enum variant's fields, or a struct's, whose types
+    mention `bool` without being it (`Option<bool>`, `Cell<bool>`,
+    `[bool; N]`, a tuple), two or more, by `file::Struct` or
+    `file::Enum::Variant` with their number;
+  - `HIDDEN_BOOL_PARAMETERS`: a parameter whose type mentions `bool`
+    without being it, by `file::function` with their number;
   - `OPTION_SLOTS`: an `Option` field its own crate takes, replaces,
-    inserts into or assigns `Some`/`None` to (`file::Struct.field`, the
-    field found by its name in the crate);
-  - `BOOL_PARAMETERS`: a function with a `bool` parameter.
-- `DOOR_CALLERS`: calls of a data port's transitions (`poll_start`,
-  `poll_stop`, `take_unconsumed`, `clean`, `retire`, `reinstall`,
-  `release`, `recover_for_stop`) by method name, in the Wi-Fi packages but
-  the S31 backend that implements the port, by file with their count. Only
-  the port, its tests and suite, and the installation's `drive` call them;
-  every other caller is listed and only shrinks.
+    inserts into, assigns or borrows `&mut` (`file::Struct.field`, the
+    field found by its name in the crate).
+- The door: the eight transitions of `DataPort` are `disallowed-methods`
+  of every package's Clippy configuration but the runtime's, the S31
+  backend's (the port's implementation) and the testing packages'.
 
 - `EXTERNAL_ASYNC_CRATES`: the direct normal `embassy-sync` edge of the
   HIL agent.
