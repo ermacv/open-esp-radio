@@ -80,7 +80,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn stale_command(&self, command: &ModelAccessPointCommand<'id, Id, C, X>) -> Option<u32> {
         let generations = Self::command_generations(command);
         let named: Vec<u32> = generations.into_iter().flatten().collect();
-        first_stale(self.installation.generation(), &named)
+        first_stale(self.generation, &named)
     }
 
     /// Run one access-point command.
@@ -291,7 +291,7 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
                     command,
                     AccessPointRefusal::StalePermission {
                         issued,
-                        installation: self.installation.generation(),
+                        installation: self.generation,
                     },
                 ));
             }

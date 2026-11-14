@@ -11,7 +11,9 @@ use oer_portable_time::Duration;
 use oer_protocols_ieee80211_contracts_port::arena::{
     AttemptEnd, FrameMask, PublishError, PublishRefused,
 };
-use oer_protocols_ieee80211_contracts_port::{CommandFailed, StartFailure, SupportedBlockAck};
+use oer_protocols_ieee80211_contracts_port::{
+    CommandFailed, ProofRefused, StartFailure, StartPoll, SupportedBlockAck,
+};
 use oer_protocols_ieee80211_wire::phy::{
     FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
 };
@@ -123,21 +125,70 @@ impl Returned {
     }
 }
 
+/// A start's answer as the lifecycle tests read it; the fixture keeps the
+/// stop's proof it gives back.
+#[derive(Debug, Eq, PartialEq)]
+enum Start {
+    Started,
+    Pending,
+    Refused(StartFailure<Fault>),
+    Unstopped {
+        cause: StartFailure<Fault>,
+        stop: StopUnconfirmed<Fault>,
+    },
+    /// The fixture holds no stop's proof: the radio is not stopped.
+    NoProof,
+}
+
+impl Start {
+    fn is_pending(&self) -> bool {
+        *self == Self::Pending
+    }
+}
+
 impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn poll_start_on(
         &mut self,
         wifi: oer_protocols_ieee80211_wire::channel::Ghz2_4Channel,
-    ) -> Poll<Result<(), StartRefused<Fault>>> {
+    ) -> Start {
         let waker = self.waker();
         let now = self.now();
-        self.port
-            .poll_start(&mut Context::from_waker(&waker), supported(wifi), now)
+        let proof = match (self.starting.take(), self.stopped.take()) {
+            (Some(starting), _) => starting.into(),
+            (None, Some(stopped)) => stopped.into(),
+            (None, None) => return Start::NoProof,
+        };
+        match self.port.poll_start(
+            &mut Context::from_waker(&waker),
+            proof,
+            supported(wifi),
+            now,
+        ) {
+            StartPoll::Started => Start::Started,
+            StartPoll::Pending(starting) => {
+                self.starting = Some(starting);
+                Start::Pending
+            }
+            StartPoll::Refused(stopped, failure) => {
+                self.stopped = Some(stopped);
+                Start::Refused(failure)
+            }
+            StartPoll::Unstopped { cause, stop } => Start::Unstopped { cause, stop },
+            StartPoll::Stale(stale) => panic!("the fixture's own proof: {stale:?}"),
+        }
     }
 
     fn poll_stop_now(&mut self) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         let waker = self.waker();
         let now = self.now();
-        self.port.poll_stop(&mut Context::from_waker(&waker), now)
+        match self.port.poll_stop(&mut Context::from_waker(&waker), now) {
+            Poll::Ready(Ok(stopped)) => {
+                self.stopped = Some(stopped);
+                Poll::Ready(Ok(()))
+            }
+            Poll::Ready(Err(unconfirmed)) => Poll::Ready(Err(unconfirmed)),
+            Poll::Pending => Poll::Pending,
+        }
     }
 
     /// Stop the port, serving a turn and moving time on by `step` between
@@ -359,20 +410,32 @@ pub(super) fn reinstall<'id, Id: radio::SlotIdentity + 'id>(
         timer,
         buffers,
         tickets,
+        stopped,
         ..
     } = fixture;
     drop((outbox, buffers, tickets));
-    match port.reinstall(installations, 18) {
-        Ok((commands, resources)) => Ok(Fixture::new(
+    let retired = port
+        .retire(stopped.expect("stopped"))
+        .ok()
+        .expect("the stopped fixture retires");
+    match port.reinstall(retired, 18, installations) {
+        Ok((stopped, (commands, resources))) => Ok(Fixture::new(
             PortInstallation {
                 port,
                 commands,
                 resources,
+                stopped,
             },
             observed,
             timer,
         )),
-        Err(refused) => Err((refused, port.fault())),
+        Err(refused) => {
+            let refused = match refused {
+                ProofRefused::Refused(_, refused) => refused,
+                ProofRefused::Stale(stale) => panic!("the fixture's own proof: {stale:?}"),
+            };
+            Err((refused, port.fault()))
+        }
     }
 }
 
@@ -714,7 +777,10 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
             Some(Fault::Unpublished(crate::port::Unpublished::Key))
         );
 
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         // The key is still missing: the next service withdraws the MPDU
         // instead of publishing it, so the refusal cannot recur.
         let _ = fixture.turn();
@@ -787,7 +853,10 @@ fn a_publication_refused_with_its_key_installed_restarts_into_a_working_port() {
             fixture.port.fault(),
             Some(Fault::Unpublished(crate::port::Unpublished::Key))
         );
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         let _ = fixture.turn();
         assert_eq!(fixture.port.fault(), None);
         fixture.advance(crate::port::COMMAND_BOUND);
@@ -891,14 +960,14 @@ fn a_frame_left_in_an_arena_refuses_the_reinstall_as_not_retired_until_withdrawn
         assert_eq!(fixture.observed.borrow().publications, 0);
         // The retire checks see the frame: a handled refusal, no fault.
         assert_eq!(
-            not_retired(fixture.port.reinstall(installations, 18).err()),
+            fixture.unretired(),
             oer_protocols_ieee80211_contracts_port::outstanding::class::ARENAS
                 | oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT,
             "the frame holds its arena, and the fixture its buffers"
         );
         assert_eq!(fixture.port.fault(), None);
         assert!(
-            fixture.port.release().is_err(),
+            fixture.release_now().is_err(),
             "the release runs the same checks"
         );
         assert!(!fixture.observed.borrow().detached);
@@ -1102,11 +1171,13 @@ fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
         assert_eq!(returned.tags(), [40, 41, 42]);
         fixture.stop();
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         drop(buffers);
-        let device = port
-            .release()
+        let device = super::release_stopped(&mut port, stopped)
             .expect("the stopped port releases its device");
         assert_eq!(device.hardware.he.len(), 1, "one HE SU program");
         assert!(device.hardware.ht.is_empty());
@@ -1133,11 +1204,13 @@ fn he_after(
         }
         fixture.stop();
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         drop(buffers);
-        let device = port
-            .release()
+        let device = super::release_stopped(&mut port, stopped)
             .expect("the stopped port releases its device");
         held = Some(device.hardware.he_association);
     });
@@ -1342,8 +1415,8 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
             StopCause::Device(Fault::RemovalMismatch),
             "the stop names the fault it met"
         );
-        assert_eq!(unconfirmed.observations.published, 1);
-        assert_eq!(unconfirmed.observations.queued, 1);
+        assert_eq!(unconfirmed.outstanding.running, 1);
+        assert_eq!(unconfirmed.outstanding.queued.iter().sum::<usize>(), 1);
         assert_eq!(fixture.now(), now, "no time passed for the answer");
         assert_eq!(
             fixture.observed.borrow().stops,
@@ -1352,7 +1425,7 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         );
         // Nothing the quarantine holds is issued again.
         assert_eq!(
-            not_retired(fixture.port.reinstall(installations, 18).err()),
+            fixture.unretired(),
             oer_protocols_ieee80211_contracts_port::outstanding::class::PHASE
                 | oer_protocols_ieee80211_contracts_port::outstanding::class::FAULT
                 | oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT
@@ -1360,7 +1433,7 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
                 | oer_protocols_ieee80211_contracts_port::outstanding::class::RUNNING,
             "the fault, the unconfirmed stop, the queued and the published MPDU, the fixture's buffers"
         );
-        assert!(fixture.port.release().is_err());
+        assert!(fixture.release_now().is_err());
         assert!(!fixture.observed.borrow().detached);
         assert_eq!(dropped.get(), 0);
     });
@@ -1468,7 +1541,14 @@ fn a_stop_past_its_bound_is_unconfirmed_and_the_port_neither_reinstalls_nor_rele
             panic!("the stop expires");
         };
         assert_eq!(unconfirmed.cause, StopCause::Deadline);
-        assert_eq!(unconfirmed.observations, StopObservations::default());
+        assert_eq!(
+            unconfirmed.outstanding.classes()
+                & (oer_protocols_ieee80211_contracts_port::outstanding::class::RUNNING
+                    | oer_protocols_ieee80211_contracts_port::outstanding::class::QUEUED
+                    | oer_protocols_ieee80211_contracts_port::outstanding::class::ARENAS),
+            0,
+            "nothing on the air or queued"
+        );
         assert!(fixture.now().saturating_duration_since(began) >= COMMAND_BOUND);
         assert_eq!(
             fixture.take_completed(),
@@ -1477,12 +1557,12 @@ fn a_stop_past_its_bound_is_unconfirmed_and_the_port_neither_reinstalls_nor_rele
         );
         // Nothing comes back from a port whose stop is unconfirmed.
         assert_eq!(
-            not_retired(fixture.port.reinstall(installations, 18).err()),
+            fixture.unretired(),
             oer_protocols_ieee80211_contracts_port::outstanding::class::PHASE
                 | oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT,
             "the stop is unconfirmed, and the fixture holds its buffers"
         );
-        assert!(fixture.port.release().is_err());
+        assert!(fixture.release_now().is_err());
         assert!(!fixture.observed.borrow().detached);
         drop(gate);
     });
@@ -1503,7 +1583,7 @@ fn an_installation_missing_a_pool_buffer_is_quarantined_and_never_starts() {
         assert_eq!(fixture.port.fault(), Some(Fault::InstallationResources));
         assert_eq!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Device))
+            Start::Refused(StartFailure::Device)
         );
         assert_eq!(fixture.observed.borrow().starts, 0, "no radio start");
         drop(withheld);
@@ -1541,12 +1621,12 @@ fn a_port_that_transmitted_reinstalls_with_every_owner_home_and_transmits_again(
 fn the_last_started_channel_survives_a_stop_and_reinstall() {
     with_installations(|mut fixture, installations| {
         let tuned = Channel::from_ghz2_4_channel(channel(11));
-        assert_eq!(fixture.poll_start_on(channel(11)), Poll::Ready(Ok(())));
+        assert_eq!(fixture.poll_start_on(channel(11)), Start::Started);
         assert_eq!(DataPort::channel(&fixture.port), tuned);
         fixture.stop();
         let mut fixture = reinstall(fixture, installations).expect("reinstalled");
         assert_eq!(DataPort::channel(&fixture.port), tuned);
-        assert_eq!(fixture.poll_start_on(channel(11)), Poll::Ready(Ok(())));
+        assert_eq!(fixture.poll_start_on(channel(11)), Start::Started);
         assert_eq!(
             fixture.observed.borrow().start_channels,
             [channel(11), channel(11)]
@@ -1583,7 +1663,7 @@ fn a_refused_retune_refuses_the_start_with_its_cause_and_leaves_the_port_stopped
             fixture.observed.borrow_mut().fail_start = Some(cause);
             assert_eq!(
                 fixture.poll_start_on(channel(1)),
-                Poll::Ready(Err(StartRefused::Retune(cause))),
+                Start::Refused(StartFailure::Retune(cause)),
                 "{cause:?}: the refusal keeps its cause"
             );
             assert_eq!(fixture.port.fault(), None, "a refused start is no fault");
@@ -1599,7 +1679,7 @@ fn a_refused_retune_refuses_the_start_with_its_cause_and_leaves_the_port_stopped
                 "the port stayed stopped"
             );
             assert_eq!(fixture.take_completed(), 1);
-            assert_eq!(fixture.poll_start_on(channel(1)), Poll::Ready(Ok(())));
+            assert_eq!(fixture.poll_start_on(channel(1)), Start::Started);
             assert_eq!(
                 fixture.observed.borrow().start_channels,
                 [channel(6), channel(1)]
@@ -1621,7 +1701,7 @@ fn a_start_the_device_began_and_refused_stops_its_receive_path_before_the_refusa
         fixture.observed.borrow_mut().fail_start = Some(cause);
         assert_eq!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Device))
+            Start::Refused(StartFailure::Device)
         );
         assert_eq!(fixture.observed.borrow().stops, stops, "nothing began");
         // One whose receive path began stops it first.
@@ -1632,7 +1712,7 @@ fn a_start_the_device_began_and_refused_stops_its_receive_path_before_the_refusa
         }
         assert_eq!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Device))
+            Start::Refused(StartFailure::Device)
         );
         assert_eq!(fixture.observed.borrow().stops, stops + 1, "rolled back");
         assert_eq!(fixture.port.fault(), None);
@@ -1646,11 +1726,11 @@ fn a_start_the_device_began_and_refused_stops_its_receive_path_before_the_refusa
         fixture.observed.borrow_mut().hold_stop = false;
         assert_eq!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Device))
+            Start::Refused(StartFailure::Device)
         );
         assert_eq!(fixture.observed.borrow().stops, stops + 2);
         fixture.observed.borrow_mut().begin_start = false;
-        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        assert_eq!(fixture.poll_start_on(channel(6)), Start::Started);
         fixture.stop();
     });
 }
@@ -1670,7 +1750,7 @@ fn a_started_device_whose_start_expires_stops_before_the_deadline_refusal() {
         fixture.advance(COMMAND_BOUND);
         assert_eq!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Deadline))
+            Start::Refused(StartFailure::Deadline)
         );
         assert_eq!(fixture.observed.borrow().stops, stops + 1);
         // A rollback the device never confirms leaves the port stopping: the
@@ -1684,17 +1764,17 @@ fn a_started_device_whose_start_expires_stops_before_the_deadline_refusal() {
         fixture.advance(COMMAND_BOUND);
         assert!(matches!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Unstopped {
+            Start::Unstopped {
                 cause: StartFailure::Deadline,
                 stop: StopUnconfirmed {
                     cause: StopCause::Deadline,
                     ..
                 },
-            }))
+            }
         ));
         assert_eq!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Running)),
+            Start::NoProof,
             "the port is not stopped"
         );
         assert_eq!(fixture.port.fault(), None);
@@ -1705,7 +1785,7 @@ fn a_started_device_whose_start_expires_stops_before_the_deadline_refusal() {
             observed.begin_start = false;
         }
         fixture.stop();
-        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        assert_eq!(fixture.poll_start_on(channel(6)), Start::Started);
         fixture.stop();
     });
 }
@@ -1726,20 +1806,17 @@ fn a_rollback_the_device_refuses_is_unstopped_with_the_start_cause_and_the_stop_
         fixture.advance(COMMAND_BOUND);
         assert!(matches!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Unstopped {
+            Start::Unstopped {
                 cause: StartFailure::Device,
                 stop: StopUnconfirmed {
                     cause: StopCause::Deadline,
                     ..
                 },
-            }))
+            }
         ));
         // No start runs before the stop confirms, and nothing retires.
-        assert_eq!(
-            fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Running))
-        );
-        assert!(fixture.port.release().is_err());
+        assert_eq!(fixture.poll_start_on(channel(6)), Start::NoProof);
+        assert!(fixture.release_now().is_err());
         assert_eq!(fixture.port.fault(), None);
         {
             let mut observed = fixture.observed.borrow_mut();
@@ -1747,7 +1824,7 @@ fn a_rollback_the_device_refuses_is_unstopped_with_the_start_cause_and_the_stop_
             observed.begin_start = false;
         }
         fixture.stop();
-        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        assert_eq!(fixture.poll_start_on(channel(6)), Start::Started);
         fixture.stop();
     });
 }
@@ -1773,27 +1850,27 @@ fn a_start_whose_block_ack_programming_fails_after_the_core_enabled_ends_unstopp
         // the refusal says the stop has not run yet.
         assert!(matches!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Unstopped {
+            Start::Unstopped {
                 cause: StartFailure::Device,
                 stop: StopUnconfirmed {
                     cause: StopCause::CoreEnabled,
                     ..
                 },
-            }))
+            }
         ));
         assert_eq!(fixture.port.fault(), None, "a refused start is no fault");
         assert_eq!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Running)),
+            Start::NoProof,
             "no start before the stop confirms"
         );
-        assert!(fixture.port.release().is_err(), "the radio is not stopped");
+        assert!(fixture.release_now().is_err(), "the radio is not stopped");
         // The ordinary stop disables the core in the next service and then
         // stops the device.
         fixture.stop();
         assert_eq!(fixture.observed.borrow().stops, stops + 1);
         fixture.observed.borrow_mut().reject_rx_block_acks = false;
-        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        assert_eq!(fixture.poll_start_on(channel(6)), Start::Started);
         fixture.stop();
         let slot = fixture.port.remove_block_ack(agreement);
         fixture.block_acks.push(slot);
@@ -1825,7 +1902,10 @@ fn a_station_command_offered_to_a_faulted_port_comes_back_and_the_port_recovers(
         fixture.configure = Some(permission);
         assert!(fixture.outbox.terminals.is_empty(), "it did not run");
         // The port keeps no command: the fault yields to the stop.
-        assert!(fixture.port.recover_for_stop());
+        assert!(matches!(
+            fixture.port.recover_for_stop(),
+            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+        ));
         assert_eq!(fixture.port.fault(), None);
         fixture.stop();
     });
@@ -1856,7 +1936,7 @@ fn a_held_retune_starts_once_the_radio_answers_within_its_bound_and_is_refused_p
         );
         assert_eq!(fixture.port.fault(), None);
         fixture.observed.borrow_mut().hold_start = false;
-        assert_eq!(fixture.poll_start_on(channel(1)), Poll::Ready(Ok(())));
+        assert_eq!(fixture.poll_start_on(channel(1)), Start::Started);
         assert_eq!(
             fixture.observed.borrow().start_channels,
             [channel(6), channel(1)]
@@ -1869,11 +1949,11 @@ fn a_held_retune_starts_once_the_radio_answers_within_its_bound_and_is_refused_p
         fixture.advance(COMMAND_BOUND);
         assert_eq!(
             fixture.poll_start_on(channel(6)),
-            Poll::Ready(Err(StartRefused::Deadline))
+            Start::Refused(StartFailure::Deadline)
         );
         assert_eq!(fixture.port.fault(), None);
         fixture.observed.borrow_mut().hold_start = false;
-        assert_eq!(fixture.poll_start_on(channel(6)), Poll::Ready(Ok(())));
+        assert_eq!(fixture.poll_start_on(channel(6)), Start::Started);
         fixture.stop();
     });
 }
@@ -1992,7 +2072,7 @@ fn late_removal_receipt(after_stop: bool) {
         assert!(fixture.port.removal_waits_for_test());
         if after_stop {
             assert!(
-                fixture.port.release().is_err(),
+                fixture.release_now().is_err(),
                 "a waiting removal holds the port"
             );
         }
@@ -2021,10 +2101,16 @@ fn late_removal_receipt(after_stop: bool) {
             fixture.stop();
         }
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_ok(), "the stopped port retires");
+        assert!(
+            super::release_stopped(&mut port, stopped).is_ok(),
+            "the stopped port retires"
+        );
     });
 }
 
@@ -2116,10 +2202,16 @@ fn a_removal_beside_a_waiting_one_ends_with_its_own_rights_and_the_waiting_one_w
         assert!(!fixture.port.removal_waits_for_test());
         fixture.stop();
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_ok(), "the stopped port retires");
+        assert!(
+            super::release_stopped(&mut port, stopped).is_ok(),
+            "the stopped port retires"
+        );
     });
 }
 
@@ -2152,7 +2244,13 @@ fn a_publication_the_registers_refuse_ends_once_at_the_stop_with_its_owners() {
         fixture.observed.borrow_mut().hardware_unavailable = false;
         let published = fixture.observed.borrow().publications;
         let stops = fixture.observed.borrow().stops;
-        assert!(fixture.port.recover_for_stop(), "every owner is whole");
+        assert!(
+            matches!(
+                fixture.port.recover_for_stop(),
+                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            ),
+            "every owner is whole"
+        );
         fixture.stop();
         assert!(
             fixture.observed.borrow().stops > stops,
@@ -2339,13 +2437,15 @@ fn last_outcome<'id, Id: radio::SlotIdentity + 'id>(
 }
 
 /// The attempts a faulted port's stop reports: queued, then published.
-fn stop_counts<'id, Id: radio::SlotIdentity + 'id>(fixture: &mut Fixture<'id, Id>) -> (u8, u8) {
+fn stop_counts<'id, Id: radio::SlotIdentity + 'id>(
+    fixture: &mut Fixture<'id, Id>,
+) -> (usize, usize) {
     let Poll::Ready(Err(unconfirmed)) = fixture.poll_stop_now() else {
         panic!("a faulted port's stop is unconfirmed");
     };
     (
-        unconfirmed.observations.queued,
-        unconfirmed.observations.published,
+        unconfirmed.outstanding.queued.iter().sum(),
+        unconfirmed.outstanding.running,
     )
 }
 
@@ -2480,7 +2580,13 @@ fn a_refused_return_s_lease_goes_home_at_the_cleanup_and_the_port_reinstalls() {
             fixture.port.fault(),
             Some(Fault::ReturnRefused { .. })
         ));
-        assert!(fixture.port.recover_for_stop(), "every owner stays whole");
+        assert!(
+            matches!(
+                fixture.port.recover_for_stop(),
+                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            ),
+            "every owner stays whole"
+        );
         fixture.stop();
         assert_eq!(
             fixture.take_completed(),
@@ -2488,7 +2594,10 @@ fn a_refused_return_s_lease_goes_home_at_the_cleanup_and_the_port_reinstalls() {
             "the attempt waits beside its lease"
         );
         assert!(matches!(
-            fixture.port.clean_stopped(&mut fixture.outbox),
+            fixture.port.clean(
+                fixture.stopped.as_ref().expect("stopped"),
+                &mut fixture.outbox
+            ),
             Ok(Ok(()))
         ));
         let [LowerMacTerminal::TxCompleted(TxCompleted::Single(completed))] =
@@ -2529,10 +2638,19 @@ fn a_completion_without_its_attempt_returns_a_bank_lease_to_its_place() {
             fixture.port.fault(),
             Some(Fault::CompletionWithoutPending { .. })
         ));
-        assert!(fixture.port.recover_for_stop(), "every owner is home");
+        assert!(
+            matches!(
+                fixture.port.recover_for_stop(),
+                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            ),
+            "every owner is home"
+        );
         fixture.stop();
         assert!(matches!(
-            fixture.port.clean_stopped(&mut fixture.outbox),
+            fixture.port.clean(
+                fixture.stopped.as_ref().expect("stopped"),
+                &mut fixture.outbox
+            ),
             Ok(Ok(()))
         ));
         assert!(

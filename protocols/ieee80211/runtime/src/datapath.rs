@@ -89,10 +89,10 @@ use oer_portable_memory::{
 use oer_portable_time::{Duration, Instant, Timer};
 use oer_protocols_ieee80211_contracts_port::{
     CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, GateClosed,
-    GateOpen, Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, PortBlockAckSlot,
-    PortCommand, PortSingleOutcome, PortSink, PortTypes, RecycleRefused, RxBuffer, StartRefused,
-    StopUnconfirmed, SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool,
-    TxFacts,
+    GateOpen, Ieee80211Capabilities, KeyTypes, LentRxBuffer, LowerMacTerminal, Outstanding,
+    PortBlockAckSlot, PortCommand, PortSingleOutcome, PortSink, PortTypes, ProofRefused,
+    RecycleRefused, ReinstallRefused, Retired, RxBuffer, StartRefused, StopUnconfirmed, Stopped,
+    SupportedBlockAck, SupportedChannel, TbttEvent, TxBufferClass, TxBufferPool, TxFacts,
 };
 use oer_protocols_ieee80211_core_roles_sta::data::EthernetFrame;
 use oer_protocols_ieee80211_core_roles_sta::data::plane::{DataPlane, OutboundMsdu, TxWindow};
@@ -302,6 +302,31 @@ pub type ActorLinkKey<'id, D> =
     InstalledCcmpTxKey<<<Ty<'id, D> as PortTypes<'id>>::StationKeys as KeyTypes<'id>>::PairwiseKey>;
 /// The station's link on the port of `D`, while the actor holds it.
 pub type ActorLink<'id, D> = LinkHandover<'id, ActorEpochPath<'id, D>, ActorLinkKey<'id, D>>;
+
+/// Why a stopped port did not retire for its owner (the station's actor,
+/// the access point's runner); `F` is the port's fault. Nothing was taken:
+/// the owner keeps the proof it held.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RetireRefused<F> {
+    /// The radio's stop did not confirm: the owner holds no stop's proof.
+    NotStopped,
+    /// The port did not retire: what it has out.
+    Held(Outstanding<F>),
+    /// The owner's proof is not of the port's state: the port moved since
+    /// its issue, or it is another installation's (a `'static` port shares
+    /// its brand with every other), so its serial is checked.
+    Stale,
+}
+
+/// Why the actor's port did not reinstall; `F` is the port's fault.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ActorReinstallRefused<F> {
+    /// The port did not retire: the actor keeps its stop's proof.
+    Retire(RetireRefused<F>),
+    /// The port retired and refused the next installation: why. The actor
+    /// keeps the retired installation for a release.
+    Refused(ReinstallRefused),
+}
 
 /// The radio's state as the actor drives it.
 #[derive(Clone, Copy)]
@@ -528,6 +553,14 @@ pub struct Actor<'id, D: DatapathPort<'id>, S, O> {
     /// The last stop or retune's stop ended unconfirmed: the halted radio
     /// may still hold what it ran, until a start begins.
     stop_unconfirmed: bool,
+    /// The proof of the port's confirmed stop, while the radio is stopped:
+    /// a start spends it, and a confirmed stop gives the next.
+    stopped: Option<Stopped<'id>>,
+    /// The proof of the port's retirement, when its reinstall was refused:
+    /// a release takes it.
+    retired: Option<Retired<'id>>,
+    /// The proof of the port's start going on.
+    starting: Option<oer_protocols_ieee80211_contracts_port::Starting<'id>>,
 }
 
 /// Owners a broken contract leaves with the actor.
@@ -566,9 +599,16 @@ where
         }
     };
 
-    /// The actor of a fresh installation's `port`, its frames at the rates
-    /// `rates` selects, its receive agreements in `receive`'s storage.
-    pub fn new(port: D::Port, rates: S, receive: RxBlockAckView<'id, D::Types>, events: O) -> Self {
+    /// The actor of a fresh installation's `port`, stopped as `stopped`
+    /// proves, its frames at the rates `rates` selects, its receive
+    /// agreements in `receive`'s storage.
+    pub fn new(
+        port: D::Port,
+        stopped: Stopped<'id>,
+        rates: S,
+        receive: RxBlockAckView<'id, D::Types>,
+        events: O,
+    ) -> Self {
         let () = Self::HOLDS_THE_LANE;
         Self {
             port,
@@ -622,6 +662,9 @@ where
             end: None,
             recovering: false,
             stop_unconfirmed: false,
+            stopped: Some(stopped),
+            retired: None,
+            starting: None,
         }
     }
 
@@ -631,6 +674,7 @@ where
     pub fn init_in_place<'s>(
         storage: &'s mut core::mem::MaybeUninit<Self>,
         port: D::Port,
+        stopped: Stopped<'id>,
         rates: S,
         receive: RxBlockAckView<'id, D::Types>,
         events: O,
@@ -692,7 +736,10 @@ where
                 },
                 end: None,
                 recovering: false,
-            stop_unconfirmed: false,
+                stop_unconfirmed: false,
+                stopped: Some(stopped),
+                retired: None,
+                starting: None,
             })
         })
     }
@@ -763,49 +810,79 @@ where
         &self.events
     }
 
-    /// Replace the port with the next installation's, keeping the data
-    /// plane's state and the network's memory: `reinstall` takes the
-    /// stopped port and gives the new one, or the old one back.
-    ///
-    /// # Errors
-    ///
-    /// The actor, unchanged but for the port `reinstall` gave back, with
-    /// its refusal.
-    #[expect(
-        clippy::result_large_err,
-        reason = "the actor comes back by value: it lives in its owner's placed storage"
-    )]
-    pub fn reinstall<E>(
-        mut self,
-        reinstall: impl FnOnce(D::Port) -> Result<D::Port, (D::Port, E)>,
-    ) -> Result<Self, (Self, E)> {
-        let Self { port, .. } = self;
-        let port = match reinstall(port) {
-            Ok(port) => port,
-            Err((port, error)) => {
-                self = Self { port, ..self };
-                return Err((self, error));
-            }
-        };
-        let mut next = Self { port, ..self };
-        next.reinstalled();
-        Ok(next)
+    /// The stopped port with its confirmed stop's proof, for its owner's
+    /// cleanup once the run ended: no proof while the radio's stop did not
+    /// confirm.
+    pub fn stopped_port(&mut self) -> (&mut D::Port, Option<&Stopped<'id>>) {
+        (&mut self.port, self.stopped.as_ref())
     }
 
-    /// Replace the port in place with the next installation's, keeping the
-    /// data plane's state and the network's memory: `reinstall` turns the
-    /// stopped port into the new one, or refuses and leaves it.
+    /// Retire the stopped port and install its next installation in
+    /// place, at `tsf_epoch` from `installations`, keeping the data plane's
+    /// state and the network's memory: the installation's commands and
+    /// tokens, and the actor holds the new installation's stop.
     ///
     /// # Errors
     ///
-    /// `reinstall`'s refusal; the actor stays as it was.
-    pub fn reinstall_in_place<R, E>(
+    /// What blocks it ([`ActorReinstallRefused`]); the actor keeps the
+    /// proof it held, or the retired installation's when the port refused
+    /// the next one.
+    pub fn reinstall_in_place(
         &mut self,
-        reinstall: impl FnOnce(&mut D::Port) -> Result<R, E>,
-    ) -> Result<R, E> {
-        let installed = reinstall(&mut self.port)?;
-        self.reinstalled();
-        Ok(installed)
+        tsf_epoch: u32,
+        installations: &mut <D::Port as DataPort<'id>>::Installations,
+    ) -> Result<
+        <D::Port as DataPort<'id>>::Installed,
+        ActorReinstallRefused<<D::Port as DataPort<'id>>::Fault>,
+    > {
+        let retired = self.retire().map_err(ActorReinstallRefused::Retire)?;
+        match self.port.reinstall(retired, tsf_epoch, installations) {
+            Ok((stopped, installed)) => {
+                self.reinstalled();
+                self.stopped = Some(stopped);
+                Ok(installed)
+            }
+            Err(ProofRefused::Refused(retired, refused)) => {
+                self.retired = Some(retired);
+                Err(ActorReinstallRefused::Refused(refused))
+            }
+            Err(ProofRefused::Stale(_)) => Err(ActorReinstallRefused::Retire(RetireRefused::Stale)),
+        }
+    }
+
+    /// Release the retired port, once its run ended: what the binding
+    /// needs to give the radio up. A stopped port retires first.
+    ///
+    /// # Errors
+    ///
+    /// What blocks it; the actor keeps its proof.
+    pub fn release(
+        &mut self,
+    ) -> Result<
+        <D::Port as DataPort<'id>>::Released<'_>,
+        RetireRefused<<D::Port as DataPort<'id>>::Fault>,
+    > {
+        let retired = self.retire()?;
+        self.port.release(retired).map_err(|_| RetireRefused::Stale)
+    }
+
+    /// The retired installation's proof: the one a refused reinstall left,
+    /// or the stopped port's retirement.
+    fn retire(&mut self) -> Result<Retired<'id>, RetireRefused<<D::Port as DataPort<'id>>::Fault>> {
+        if let Some(retired) = self.retired.take() {
+            return Ok(retired);
+        }
+        let Some(stopped) = self.stopped.take() else {
+            return Err(RetireRefused::NotStopped);
+        };
+        match self.port.retire(stopped) {
+            Ok(retired) => Ok(retired),
+            Err(ProofRefused::Refused(stopped, outstanding)) => {
+                self.stopped = Some(stopped);
+                Err(RetireRefused::Held(outstanding))
+            }
+            Err(ProofRefused::Stale(_)) => Err(RetireRefused::Stale),
+        }
     }
 
     /// The state a new installation starts from: it lends new arenas, so

@@ -794,6 +794,7 @@ impl<W: Binding> AccessPointRunner<W> {
             port,
             commands,
             resources,
+            stopped,
         } = match Port::<W>::install(parts, minted, driver) {
             Ok(installation) => installation,
             Err((parts, minted, driver)) => {
@@ -871,6 +872,7 @@ impl<W: Binding> AccessPointRunner<W> {
         let runner = oer_portable_memory::Placed::init(active.uninit(), |place| {
             place.write(ApRunner::new(
                 port,
+                stopped,
                 commands,
                 ap_resources,
                 engine,
@@ -948,8 +950,30 @@ pub type ApRunnerOf<W> = ApRunner<
     Ch<<W as Binding>::Notifies>,
 >;
 
+impl<W: Binding> crate::release::Stopped for ApRunnerOf<W> {
+    type Receipt = crate::radio::Freed<W>;
+    type Radio = crate::radio::StoppedRadio;
+    fn clean(&mut self) -> crate::release::Cleaned<crate::radio::Freed<W>> {
+        let (port, stopped) = self.stopped_port();
+        crate::release::clean(port, stopped)
+    }
+    fn take_stopped(&mut self) -> Result<crate::radio::StoppedRadio, crate::release::Unreleased> {
+        use crate::release::Unreleased;
+        use oer_protocols_ieee80211_runtime::datapath::RetireRefused;
+        let device = self.release().map_err(|refused| match refused {
+            RetireRefused::NotStopped => Unreleased::StopUnconfirmed,
+            RetireRefused::Held(outstanding) => {
+                Unreleased::Held(outstanding.map_fault(crate::failure::convert::backend_fault))
+            }
+            RetireRefused::Stale => Unreleased::Stale,
+        })?;
+        crate::radio::StoppedRadio::of(device).ok_or(Unreleased::FrontierHeld)
+    }
+}
+
 impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
-    type Port = Port<W>;
+    // The runner: it holds the port with its installation's proofs.
+    type Port = ApRunnerOf<W>;
     type Unkept = oer_protocols_ieee80211_contracts_port::Unkept<
         'static,
         <Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Types,
@@ -984,18 +1008,15 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
                     fault: fault.map(crate::failure::convert::backend_fault),
                     observed: crate::failure::convert::stop_unconfirmed(observed),
                 },
-                StopWatch::DeviceFailed {
-                    fault,
-                    observations,
-                } => StopWatch::DeviceFailed {
+                StopWatch::DeviceFailed { fault, outstanding } => StopWatch::DeviceFailed {
                     fault: crate::failure::convert::backend_fault(fault),
-                    observations,
+                    outstanding: outstanding.map_fault(crate::failure::convert::backend_fault),
                 },
             })
         }
     }
-    fn port_mut(&mut self) -> &mut Port<W> {
-        ApRunner::port_mut(self)
+    fn port_mut(&mut self) -> &mut ApRunnerOf<W> {
+        self
     }
     fn take_unkept(&mut self) -> Option<Self::Unkept> {
         ApRunner::take_unkept(self)

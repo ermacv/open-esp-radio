@@ -37,6 +37,7 @@ fn alone(first: First, check: impl for<'s> FnOnce(Completed<'s>, Vec<Returned<'s
             port,
             commands,
             resources,
+            stopped: _,
         } = install;
         let (parts, _storage, spare) = lifecycle_spare::<2>(open(), resources, commands);
         let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();
@@ -211,6 +212,7 @@ fn a_closed_actor_reception_ends_the_lifecycle_named_and_keeps_its_message() {
             port,
             commands,
             resources,
+            stopped: _,
         } = install;
         let (parts, _storage, _spare) = lifecycle_spare::<2>(open(), resources, commands);
         let mut to_queue = ClosingSpscQueue::<ToActor<'_, P<'_>>, TO>::new();

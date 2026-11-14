@@ -27,10 +27,11 @@ use oer_protocols_ieee80211_contracts_port::arena::{
 use oer_protocols_ieee80211_contracts_port::{
     CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input,
     PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed, PortCommands,
-    PortCompleted, PortRxBuffer, PortRxPull, PortSink, ReceiveAccounting, ReceiveOperation,
-    RecycleRefused, RxPull, StartFailure, StartRefused, StationSubmission, StopCause,
-    StopObservations, StopUnconfirmed, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts,
-    Unconsumed, UnconsumedRefused, Unkeeping,
+    PortCompleted, PortRxBuffer, PortRxPull, PortSink, ProofRefused, ReceiveAccounting,
+    ReceiveOperation, Recovering, Recovery, RecycleRefused, ReinstallRefused, Retired, RxPull,
+    StaleProof, StartFailure, StartPoll, StartProof, Starting, StateSerial, StationSubmission,
+    StopCause, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts,
+    Unconsumed, Unkeeping,
 };
 use oer_protocols_radio_port::{Installation as Receipt, Installations, Minted};
 
@@ -294,25 +295,6 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortDriver
     }
 }
 
-/// Why [`Esp32s31Port::reinstall`] installed nothing.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ReinstallRefused {
-    /// The port runs, faulted, or holds admitted work, a received unit or
-    /// a transmit allocation: what it still holds, each class with its
-    /// count. It stays as it was.
-    NotRetired(PortOutstanding),
-    /// The next installation's TSF epoch repeats the current one.
-    SameEpoch,
-    /// The port's channel names no Wi-Fi channel.
-    ChannelUnset,
-    /// The receipt is gone or names another installation, or the
-    /// generations are used up: the port stays as it was.
-    Receipt,
-    /// The retired driver kept its transmitter or a descriptor: the port
-    /// keeps its fault and the new receipt.
-    Resources,
-}
-
 /// One installation's port, its command issuer and its resources.
 pub struct PortInstallation<
     'id,
@@ -327,6 +309,8 @@ pub struct PortInstallation<
     pub commands: Esp32s31Commands<'id, Id, D, B, O>,
     /// The installation's tokens, under the brand its tasks share.
     pub resources: Resources<'id, Id, D, B, O>,
+    /// The installation's stop: it starts stopped.
+    pub stopped: Stopped<'id>,
 }
 
 /// The S31 radio of one installation as a [`DataPort`].
@@ -376,6 +360,13 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     stop_served: bool,
     /// The core disabled for the stop.
     core_disabled: bool,
+    /// The serial of the port's state: raised at every transition that
+    /// ends a proof's state, the one value a proof is checked against.
+    serial: StateSerial,
+    /// The serial of the last stop: a stopped port's answer to a stop.
+    stop_serial: StateSerial,
+    /// The port released its installations: it holds none.
+    released: bool,
     /// The caller's waker from its last [`DataPort::poll_facts`]: a held
     /// receive cut registers the caller's own task with the receive session,
     /// so the image keeps one waker vtable.
@@ -688,12 +679,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             reopen: false,
             stop_served: false,
             core_disabled: false,
+            serial: StateSerial::FIRST,
+            stop_serial: StateSerial::FIRST,
+            released: false,
             waker: None,
             fault: prepared.err(),
             unconsumed: unconsumed::Store::new(),
             unkept: unconsumed::CallPlace::new(),
         };
         PortInstallation {
+            stopped: Stopped::issue(StateSerial::FIRST),
             port,
             commands,
             resources,
@@ -701,8 +696,8 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     }
 
     /// Install the next installation in place, on the same device, driver
-    /// and allocations, with a distinct TSF epoch, once the stopped port
-    /// passed its retire checks: no admitted work, no received unit held,
+    /// and allocations, with a distinct TSF epoch, after the retirement
+    /// ([`DataPort::reinstall`]): no admitted work, no received unit held,
     /// every transmit allocation home. Units the network still holds stay
     /// counted by the lend credit and rejoin the new ring when it drops
     /// them; the reinstall neither waits for them nor resets the chip.
@@ -712,21 +707,20 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// Why nothing was installed; every refusal but
     /// [`ReinstallRefused::Resources`] leaves the port as it was.
     #[inline(never)]
-    pub fn reinstall(
+    fn reinstalled(
         &mut self,
         installations: &mut Installations<Id, InstallationPools>,
         tsf_epoch: u32,
     ) -> Result<
         (
-            Esp32s31Commands<'id, Id, D, B, O>,
-            Resources<'id, Id, D, B, O>,
+            Stopped<'id>,
+            (
+                Esp32s31Commands<'id, Id, D, B, O>,
+                Resources<'id, Id, D, B, O>,
+            ),
         ),
         ReinstallRefused,
     > {
-        let outstanding = self.settled_outstanding();
-        if !outstanding.is_empty() {
-            return Err(ReinstallRefused::NotRetired(outstanding));
-        }
         if tsf_epoch == self.config.tsf_epoch {
             return Err(ReinstallRefused::SameEpoch);
         }
@@ -787,7 +781,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.stop_served = false;
         self.core_disabled = false;
         self.fault = prepared.err();
-        Ok((commands, resources))
+        Ok((self.stop_proof(), (commands, resources)))
     }
 
     /// The MSDUs that expired before publication in this installation.
@@ -797,7 +791,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
 
     /// The installation's first contract fault, or the loss of a received
     /// buffer, which every later call answers with.
-    pub fn fault(&self) -> Option<Fault> {
+    fn recorded_fault(&self) -> Option<Fault> {
         self.check().err()
     }
 
@@ -927,7 +921,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// received units count less the lends not yet settled, as the next
     /// pull would settle them, and lends the held count cannot hold name
     /// [`Fault::ReceiveAccounting`] unless a fault is recorded already.
-    pub fn outstanding(&self) -> PortOutstanding {
+    fn held_out(&self) -> PortOutstanding {
         let received = self
             .rx_out
             .get()
@@ -950,7 +944,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             retained_groups: usize::from(self.driver.retained_group.is_some()),
             unconsumed: self.unconsumed.len(),
             transmit_out: self.shared.returned.out(),
-            queued: self.driver.queues.each_ref().map(heapless::Deque::len),
+            // By access category: each category's queue at its hardware place.
+            queued: oer_protocols_ieee80211_wire::qos::WmmAccessCategory::ALL.map(|category| {
+                self.driver
+                    .queues
+                    .get(driver::queue(category))
+                    .map_or(0, heapless::Deque::len)
+            }),
             running: self
                 .driver
                 .running
@@ -968,7 +968,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         if let Err(fault) = settle_lent(&self.shared.network, &self.rx_out, self.device) {
             self.record(fault);
         }
-        self.outstanding()
+        self.held_out()
     }
 
     /// End every removal its command left waiting whose key the core
@@ -1059,26 +1059,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         reusable
     }
 
-    /// Whether the port confirmed its radio's stop: its last stop ended
-    /// confirmed and nothing started it again.
-    pub fn stop_confirmed(&self) -> bool {
-        self.state == PortState::Stopped
+    /// The next state: its serial, which ends every proof of the last.
+    fn raise(&mut self) -> StateSerial {
+        self.serial = self.serial.raised();
+        self.serial
     }
 
-    /// End the stopped port's installations after the retire checks: its
-    /// device, for the owner's release. The port then holds no installation
-    /// a later call could run.
-    ///
-    /// # Errors
-    /// What the installation still holds ([`Self::outstanding`]): nothing
-    /// was released.
-    pub fn release(&mut self) -> Result<&mut D, PortOutstanding> {
-        let outstanding = self.settled_outstanding();
-        if !outstanding.is_empty() {
-            return Err(outstanding);
-        }
-        let _reusable = self.retire_driver();
-        Ok(&mut *self.device)
+    /// The radio stopped: the new state's proof, which a stopped port's
+    /// stop answers with until the port moves again.
+    fn stop_proof(&mut self) -> Stopped<'id> {
+        self.stop_serial = self.raise();
+        Stopped::issue(self.stop_serial)
     }
 
     fn check(&self) -> Result<(), Fault> {
@@ -1117,9 +1108,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// Mark the radio's stop confirmed, as a stop whose core disable left
     /// completions with the driver ends.
     #[cfg(test)]
-    pub(crate) fn confirm_stop_for_test(&mut self) {
+    pub(crate) fn confirm_stop_for_test(&mut self) -> Stopped<'id> {
         self.state = PortState::Stopped;
         self.recompute_deadline();
+        self.stop_proof()
     }
 
     /// How many attempts wait in the queues, and how many completions a
@@ -2644,9 +2636,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         sink: &mut impl PortSink<'id, <Self as DataPort<'id>>::Types>,
     ) -> Result<(), CleanupRefused<<Self as DataPort<'id>>::Fault>> {
-        if self.state != PortState::Stopped {
-            return Err(CleanupRefused::NotStopped);
-        }
+        // Its caller's proof held: the port is stopped.
         self.check().map_err(CleanupRefused::Faulted)?;
         // Completions a halted call left with the driver go home first,
         // each under the place's right: software only, no hardware call. A
@@ -2684,6 +2674,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         buffer::Execution<Id>,
         Esp32s31Caps<B>,
     >;
+    type Installations = Installations<Id, InstallationPools>;
+    type Installed = (
+        Esp32s31Commands<'id, Id, D, B, O>,
+        Resources<'id, Id, D, B, O>,
+    );
+    type Released<'a>
+        = &'a mut D
+    where
+        Self: 'a;
     type Arena<'t>
         = Esp32s31Arena<'t, 'id, Id, D, B, O>
     where
@@ -2963,15 +2962,21 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     fn poll_start(
         &mut self,
         cx: &mut Context<'_>,
+        proof: StartProof<'id>,
         channel: SupportedChannel<Self::Caps>,
         now: Instant,
-    ) -> Poll<Result<(), StartRefused<Fault>>> {
+    ) -> StartPoll<'id, Fault> {
         self.now = now;
+        if !proof.is_of(self.serial) {
+            return StartPoll::Stale(StaleProof { proof });
+        }
+        // The proof holds: it is the stop's of a stopped port or the
+        // start's of a start going on, as every transition out of either
+        // state raised the serial. It ends here; the answer gives the next.
         let since = match self.state {
-            PortState::Running | PortState::Recovering | PortState::Stopping { .. } => {
-                return Poll::Ready(Err(StartRefused::Running));
-            }
             PortState::Stopped => {
+                // The start begins: every proof of the stopped port ends.
+                self.raise();
                 self.state = PortState::Starting { since: now };
                 now
             }
@@ -2979,10 +2984,16 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             PortState::RollingBack { since, refused } => {
                 return self.poll_roll_back(cx, since, refused, now);
             }
+            // No proof holds in these states: each began with a raise
+            // (a start's end, a recovery) after its last proof's issue.
+            PortState::Running | PortState::Recovering | PortState::Stopping { .. } => {
+                return StartPoll::Stale(StaleProof { proof });
+            }
         };
+        drop(proof);
         if self.check().is_err() {
             self.state = PortState::Stopped;
-            return Poll::Ready(Err(StartRefused::Device));
+            return StartPoll::Refused(self.stop_proof(), StartFailure::Device);
         }
         if now.saturating_duration_since(since) >= COMMAND_BOUND {
             // What the device began of the start stops first.
@@ -2990,12 +3001,15 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
         let Some(wifi) = channel.channel().ghz2_4_channel() else {
             self.state = PortState::Stopped;
-            return Poll::Ready(Err(StartRefused::Retune(Fault::ChannelUnsupported)));
+            return StartPoll::Refused(
+                self.stop_proof(),
+                StartFailure::Retune(Fault::ChannelUnsupported),
+            );
         };
         let started = match self.device.poll_start(cx, wifi) {
             Poll::Pending => {
                 self.recompute_deadline();
-                return Poll::Pending;
+                return StartPoll::Pending(Starting::issue(self.serial));
             }
             Poll::Ready(started) => started,
         };
@@ -3014,12 +3028,14 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         let tuned = tuned.and_then(|()| self.apply_settings());
         let refused = match tuned {
             Ok(()) => {
+                // The start's proof ends with it.
+                self.raise();
                 self.state = PortState::Running;
                 self.channel = channel.channel();
                 self.stop_served = false;
                 self.core_disabled = false;
                 self.recompute_deadline();
-                return Poll::Ready(Ok(()));
+                return StartPoll::Started;
             }
             Err(cause @ (Fault::Retune(_) | Fault::ChannelNotPermitted)) => {
                 StartFailure::Retune(cause)
@@ -3033,11 +3049,33 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
+    ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<Fault>>> {
         self.now = now;
+        if self.released {
+            // No installation is left to stop, and no proof to give.
+            return Poll::Ready(Err(StopUnconfirmed {
+                cause: StopCause::Released,
+                outstanding: self.held_out(),
+            }));
+        }
         let since = match self.state {
-            PortState::Stopped => return Poll::Ready(Ok(())),
-            PortState::Starting { .. } | PortState::RollingBack { .. } | PortState::Running => {
+            // The stop's proof while nothing moved the port since; after a
+            // retirement the port is stopped again under a new serial, so
+            // its answer is always a proof it takes.
+            PortState::Stopped if self.serial == self.stop_serial => {
+                return Poll::Ready(Ok(Stopped::issue(self.stop_serial)));
+            }
+            PortState::Stopped => return Poll::Ready(Ok(self.stop_proof())),
+            PortState::Starting { .. } | PortState::RollingBack { .. } => {
+                // The stop ends the start: its proof ends with it.
+                self.raise();
+                self.state = PortState::Stopping { since: now };
+                self.stop_served = false;
+                self.forget_held();
+                self.recompute_deadline();
+                now
+            }
+            PortState::Running => {
                 self.state = PortState::Stopping { since: now };
                 self.stop_served = false;
                 // A stopping port refuses the held command back to its
@@ -3056,7 +3094,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         let unconfirmed = |port: &mut Self, cause: StopCause<Fault>| {
             Poll::Ready(Err(StopUnconfirmed {
                 cause,
-                observations: port.stop_observations(),
+                outstanding: port.held_out(),
             }))
         };
         if let Err(fault) = self.check() {
@@ -3074,7 +3112,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             Poll::Ready(Ok(())) => {
                 self.state = PortState::Stopped;
                 self.recompute_deadline();
-                Poll::Ready(Ok(()))
+                Poll::Ready(Ok(self.stop_proof()))
             }
             // A mask the line's handler has not confirmed within its bound
             // is a stop not confirmed yet: the handler may still serve it,
@@ -3093,7 +3131,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
     }
 
-    fn recover_for_stop(&mut self) -> bool {
+    fn recover_for_stop(&mut self) -> Recovery<'id, Fault> {
         // A faulted port keeps no command: the call that faulted returned
         // it to its caller.
         // Units of buffers dropped unrecycled are back in the ring: they
@@ -3115,42 +3153,102 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 // Excluded by the count above. Nothing is settled: the
                 // held and lost counts and the port's cause stay as they
                 // were, and no recovery follows a failed settlement.
-                return false;
+                return match self.fault {
+                    Some(fault) => Recovery::Kept(fault, self.held_out()),
+                    None => Recovery::Clear,
+                };
             };
             self.rx_out.set(held);
             self.shared.settle_lost(lost);
             self.device.returned();
             self.record(Fault::ReceiveLost);
         }
-        let recoverable = self.fault.is_some_and(|fault| fault.leaves_owners_whole());
-        if recoverable {
-            self.fault = None;
-            if matches!(self.state, PortState::Starting { .. } | PortState::Running) {
-                self.state = PortState::Recovering;
-                self.stop_served = false;
-                self.forget_held();
-                self.recompute_deadline();
-            }
+        let Some(fault) = self.fault else {
+            return Recovery::Clear;
+        };
+        if !fault.leaves_owners_whole() {
+            return Recovery::Kept(fault, self.held_out());
         }
-        recoverable
+        self.fault = None;
+        if matches!(self.state, PortState::Starting { .. } | PortState::Running) {
+            // The start's proof, if one, ends with the run.
+            self.raise();
+            self.state = PortState::Recovering;
+            self.stop_served = false;
+            self.forget_held();
+            self.recompute_deadline();
+        }
+        Recovery::Recovered(Recovering::issue(self.serial))
     }
 
-    fn clean_stopped(
+    fn clean(
         &mut self,
+        stopped: &Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
     ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
-        let cleaned = self.cleaned(sink);
+        let cleaned = if stopped.is_of(self.serial) {
+            self.cleaned(sink)
+        } else {
+            Err(CleanupRefused::Stale)
+        };
         self.answer(cleaned)
     }
 
     fn take_unconsumed(
         &mut self,
+        stopped: &Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<Unconsumed, UnconsumedRefused> {
-        if self.state != PortState::Stopped {
-            return Err(UnconsumedRefused::NotStopped);
+    ) -> Result<Unconsumed, StaleProof<()>> {
+        if !stopped.is_of(self.serial) {
+            return Err(StaleProof { proof: () });
         }
         Ok(self.unconsumed.offer(sink))
+    }
+
+    fn outstanding(&self) -> PortOutstanding {
+        self.held_out()
+    }
+
+    fn fault(&self) -> Option<Fault> {
+        self.recorded_fault()
+    }
+
+    fn retire(
+        &mut self,
+        stopped: Stopped<'id>,
+    ) -> Result<Retired<'id>, ProofRefused<Stopped<'id>, PortOutstanding>> {
+        if !stopped.is_of(self.serial) {
+            return Err(ProofRefused::Stale(StaleProof { proof: stopped }));
+        }
+        let outstanding = self.settled_outstanding();
+        if outstanding.is_empty() {
+            Ok(Retired::issue(self.raise()))
+        } else {
+            Err(ProofRefused::Refused(stopped, outstanding))
+        }
+    }
+
+    fn reinstall(
+        &mut self,
+        retired: Retired<'id>,
+        tsf_epoch: u32,
+        installations: &mut Installations<Id, InstallationPools>,
+    ) -> Result<(Stopped<'id>, Self::Installed), ProofRefused<Retired<'id>, ReinstallRefused>> {
+        if !retired.is_of(self.serial) {
+            return Err(ProofRefused::Stale(StaleProof { proof: retired }));
+        }
+        self.reinstalled(installations, tsf_epoch)
+            .map_err(|refused| ProofRefused::Refused(retired, refused))
+    }
+
+    fn release(&mut self, retired: Retired<'id>) -> Result<&mut D, StaleProof<Retired<'id>>> {
+        if !retired.is_of(self.serial) {
+            return Err(StaleProof { proof: retired });
+        }
+        self.raise();
+        self.released = true;
+        let _reusable = self.retire_driver();
+        Ok(&mut *self.device)
     }
 
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError> {
@@ -3171,20 +3269,22 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         cx: &mut Context<'_>,
         refused: StartFailure<Fault>,
         now: Instant,
-    ) -> Poll<Result<(), StartRefused<Fault>>> {
+    ) -> StartPoll<'id, Fault> {
         if !core_views::disabled::<Id, D, B>(self.driver.core.view()) {
-            // The stop's own service disables the core.
+            // The stop's own service disables the core; the start's proof
+            // ends with the start.
+            self.raise();
             self.state = PortState::Stopping { since: now };
             self.stop_served = false;
             self.core_disabled = false;
             self.recompute_deadline();
-            return Poll::Ready(Err(StartRefused::Unstopped {
+            return StartPoll::Unstopped {
                 cause: refused,
                 stop: StopUnconfirmed {
                     cause: StopCause::CoreEnabled,
-                    observations: self.stop_observations(),
+                    outstanding: self.held_out(),
                 },
-            }));
+            };
         }
         self.state = PortState::RollingBack {
             since: now,
@@ -3207,21 +3307,23 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         since: Instant,
         refused: StartFailure<Fault>,
         now: Instant,
-    ) -> Poll<Result<(), StartRefused<Fault>>> {
+    ) -> StartPoll<'id, Fault> {
         let unstopped = |port: &mut Self, cause: StopCause<Fault>| {
+            // The start's proof ends with the start.
+            port.raise();
             port.state = PortState::Stopping { since };
-            Err(StartRefused::Unstopped {
+            StartPoll::Unstopped {
                 cause: refused,
                 stop: StopUnconfirmed {
                     cause,
-                    observations: port.stop_observations(),
+                    outstanding: port.held_out(),
                 },
-            })
+            }
         };
-        let result = match self.device.poll_stop(cx) {
+        let answer = match self.device.poll_stop(cx) {
             Poll::Ready(Ok(())) => {
                 self.state = PortState::Stopped;
-                Err(refused.into())
+                StartPoll::Refused(self.stop_proof(), refused)
             }
             Poll::Ready(Err(fault)) => unstopped(self, StopCause::Device(fault)),
             Poll::Pending if now.saturating_duration_since(since) >= COMMAND_BOUND => {
@@ -3229,22 +3331,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             }
             Poll::Pending => {
                 self.recompute_deadline();
-                return Poll::Pending;
+                return StartPoll::Pending(Starting::issue(self.serial));
             }
         };
         self.recompute_deadline();
-        Poll::Ready(result)
-    }
-
-    /// What the port held when its stop gave up.
-    fn stop_observations(&mut self) -> StopObservations {
-        let count = |count: usize| u8::try_from(count).unwrap_or(u8::MAX);
-        StopObservations {
-            arena_on_air: self.driver.arena_on_air(),
-            published: count(self.driver.running.iter().flatten().count()),
-            queued: count(self.driver.queues.iter().map(heapless::Deque::len).sum()),
-            configuring: self.driver.configuring.is_some(),
-        }
+        answer
     }
 
     fn set_block_ack(&mut self, index: u8, agreement: Option<SupportedBlockAck<Esp32s31Caps<B>>>) {

@@ -139,6 +139,7 @@ fn on_the_s31_port(
             port,
             commands,
             resources,
+            stopped,
         } = Esp32s31Port::install(parts, minted, driver)
             .ok()
             .expect("install");
@@ -227,6 +228,7 @@ fn on_the_s31_port(
         });
         let mut runner = ApRunner::new(
             port,
+            stopped,
             commands,
             ap_resources,
             engine,
@@ -319,16 +321,16 @@ fn on_the_s31_port(
             // The cleanup, then the release with the runner's tickets and
             // buffers still held; then the facade's retire: they end first,
             // and the release follows.
-            let cleaned = crate::release::clean(runner.port_mut());
+            let (port, stopped) = runner.stopped_port();
+            let cleaned = crate::release::clean(port, stopped);
             macro_rules! release {
                 () => {
                     match &cleaned.result {
                         Err(cause) => Err(std::format!("cleanup: {cause:?}")),
                         Ok(()) => runner
-                            .port_mut()
                             .release()
                             .map(drop)
-                            .map_err(|outstanding| std::format!("{outstanding:?}")),
+                            .map_err(|refused| std::format!("{refused:?}")),
                     }
                 };
             }

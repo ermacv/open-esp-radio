@@ -390,6 +390,10 @@ impl<T> Bounded<T> {
     fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
+
+    fn len(&self) -> usize {
+        self.items.len()
+    }
 }
 
 /// The kind of the model's transmit tickets.
@@ -443,10 +447,34 @@ pub enum ModelBlockAcks {}
 /// [`ModelNetworkClass`], which has none.
 pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
     slot: Option<ModelBufferSlot<'id, B, C>>,
+    /// The installation's count of its buffers out, which this one is in
+    /// while it lives; none for a network's memory.
+    out: Option<BufferOut>,
     loan: Option<BodyLoan<'id, B::Identity, B>>,
     memory: C::Memory,
     admitted_at: Option<RadioInstant<Ieee80211Radio>>,
     admitted: Option<Instant>,
+}
+
+/// One transmit buffer of an installation counted out while it lives: the
+/// model's count of [`Outstanding::transmit_out`], as the S31 port counts
+/// the buffers whose return its bank still waits for.
+///
+/// [`Outstanding::transmit_out`]: oer_protocols_ieee80211_contracts_port::Outstanding::transmit_out
+pub(crate) struct BufferOut(alloc::sync::Arc<core::sync::atomic::AtomicUsize>);
+
+impl BufferOut {
+    /// One more buffer out of `count`.
+    pub(crate) fn of(count: &alloc::sync::Arc<core::sync::atomic::AtomicUsize>) -> Self {
+        count.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        Self(count.clone())
+    }
+}
+
+impl Drop for BufferOut {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// The slot of a model buffer of the class `C`.
@@ -1897,6 +1925,8 @@ pub struct ModelAir {
     /// The next enable fails after the MAC began it, its stop not
     /// confirmed: the port answers `StartRefused::Unstopped` and stops.
     unstop_enable: Cell<bool>,
+    /// A start waits for this to clear before the MAC enables.
+    hold_start: Cell<bool>,
     /// Stops the port confirmed.
     confirmed_stops: Cell<u32>,
     refuse_access_point: Cell<u8>,
@@ -2003,6 +2033,7 @@ impl ModelAir {
             recovery_asks: Cell::new(0),
             disables: Default::default(),
             unstop_enable: Cell::new(false),
+            hold_start: Cell::new(false),
             fault_access_point: Cell::new(false),
             confirmed_stops: Cell::new(0),
             edca: Default::default(),
@@ -2572,6 +2603,19 @@ impl ModelAir {
         self.unstop_enable.set(true);
     }
 
+    /// Hold every start before the MAC enables, while `hold` is set: the
+    /// port's start goes on ([`StartPoll::Pending`]) until it clears.
+    ///
+    /// [`StartPoll::Pending`]: oer_protocols_ieee80211_contracts_port::StartPoll::Pending
+    pub fn hold_start(&self, hold: bool) {
+        self.hold_start.set(hold);
+    }
+
+    /// Whether a start waits ([`Self::hold_start`]).
+    pub(crate) fn start_held(&self) -> bool {
+        self.hold_start.get()
+    }
+
     /// Whether this enable fails unstopped, as [`Self::unstop_enable`]
     /// asked.
     pub(crate) fn take_unstopped_enable(&self) -> bool {
@@ -3043,6 +3087,8 @@ pub struct ModelHeld<'id, B: ModelComposition> {
     quarantined: Bounded<Work<'id, B>>,
     /// The receive buffers out with the caller, queued or held.
     rx_out: Cell<usize>,
+    /// The installation's transmit buffers out ([`BufferOut`]).
+    transmit_out: alloc::sync::Arc<core::sync::atomic::AtomicUsize>,
     /// The receive buffers lent to the network.
     network: alloc::sync::Arc<ModelNetwork>,
     /// The backend alone attests the hardware barrier with the one gate place.
@@ -3125,8 +3171,8 @@ mod data_port;
 pub use data_port::{
     MODEL_HELD_COMMAND_BOUND, MODEL_STOP_BOUND, ModelAccessPointGroupInstall,
     ModelAccessPointPairwiseInstall, ModelAdmitted, ModelCommands, ModelGroupInstall, ModelInstall,
-    ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall, ModelPortFault,
-    ModelPortObservation, ModelReinstallRefused, ModelUnkeep,
+    ModelOutstanding, ModelPairwiseInstall, ModelPort, ModelPortArena, ModelPortCall,
+    ModelPortFault, ModelPortObservation, ModelUnkeep,
 };
 
 /// The composition's initial software depth for each access category.
@@ -4190,6 +4236,7 @@ impl<'id, B: ModelComposition> ModelBuffer<'id, B, ModelNetworkClass> {
     pub(crate) fn network(memory: ModelNetworkMemory, loan: BodyLoan<'id, B::Identity, B>) -> Self {
         Self {
             slot: None,
+            out: None,
             loan: Some(loan),
             memory,
             admitted_at: None,

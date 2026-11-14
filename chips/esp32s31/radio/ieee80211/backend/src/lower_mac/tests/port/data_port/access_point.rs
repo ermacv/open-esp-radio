@@ -386,6 +386,12 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> AccessPointHarness<'id> for ApFixtu
         let fixture = self.f();
         (&mut fixture.port, &mut fixture.outbox)
     }
+    fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>> {
+        self.f().stopped.take()
+    }
+    fn keep_stopped(&mut self, stopped: oer_protocols_ieee80211_contracts_port::Stopped<'id>) {
+        self.f().stopped = Some(stopped);
+    }
     fn now(&self) -> Instant {
         self.fr().now()
     }
@@ -862,7 +868,7 @@ fn expired_group_install<Id: radio::SlotIdentity>(
     drop(refused);
     // The fixture's transmit buffers go home before the retire checks.
     drop(core::mem::take(&mut harness.f().buffers));
-    if harness.f().port.release().is_err() {
+    if harness.f().release_now().is_err() {
         return Err(CaseViolation::Lifecycle);
     }
     Ok(())
@@ -1017,7 +1023,11 @@ fn returned_access_point_command<Id: radio::SlotIdentity>(
         return Err(CaseViolation::Owners);
     }
     AccessPointHarness::restore(harness, command);
-    if !harness.f().port.recover_for_stop() || harness.f().port.fault().is_some() {
+    if !matches!(
+        harness.f().port.recover_for_stop(),
+        oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+    ) || harness.f().port.fault().is_some()
+    {
         return Err(CaseViolation::Owners);
     }
     ap_cases::stop(harness)?;

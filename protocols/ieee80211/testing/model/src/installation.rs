@@ -75,6 +75,7 @@ pub(super) fn installation_parts<B: ModelComposition>(
     air.receive_agreements.take().clear();
     air.associations.set(InterfaceAssociations::default());
     let network = alloc::sync::Arc::<ModelNetwork>::default();
+    let transmit_out = alloc::sync::Arc::<core::sync::atomic::AtomicUsize>::default();
     air.rx_network.set(Some(network.clone()));
     let held = ModelHeld {
         air: air.clone(),
@@ -83,6 +84,7 @@ pub(super) fn installation_parts<B: ModelComposition>(
         events: Bounded::new(MODEL_TERMINALS + MODEL_RX_HELD_MAX, "event"),
         quarantined: Bounded::new(1, "answer shape rejection"),
         rx_out: Cell::new(0),
+        transmit_out: transmit_out.clone(),
         network,
         gate_issuer,
         draining: Cell::new(false),
@@ -98,6 +100,7 @@ pub(super) fn installation_parts<B: ModelComposition>(
                 .into_iter()
                 .map(|slot| ModelBuffer {
                     slot: Some(slot),
+                    out: Some(BufferOut::of(&transmit_out)),
                     loan: None,
                     memory: Box::new([0; ModelSmall::CAPACITY]),
                     admitted_at: None,
@@ -108,6 +111,7 @@ pub(super) fn installation_parts<B: ModelComposition>(
                 .into_iter()
                 .map(|slot| ModelBuffer {
                     slot: Some(slot),
+                    out: Some(BufferOut::of(&transmit_out)),
                     loan: None,
                     memory: Box::new([0; ModelLarge::CAPACITY]),
                     admitted_at: None,

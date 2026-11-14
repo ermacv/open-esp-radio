@@ -7,7 +7,9 @@ use crate::port::{PortDriver, PortInstallation};
 use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaFormat, ArenaPublication, TxArena,
 };
-use oer_protocols_ieee80211_contracts_port::{Unconsumed, UnconsumedRefused, outstanding};
+use oer_protocols_ieee80211_contracts_port::{
+    ProofRefused, ReinstallRefused, Retired, Stopped, Unconsumed, outstanding,
+};
 use oer_protocols_ieee80211_testing_conformance::data_port::{
     self as cases, Case, DataPortHarness,
 };
@@ -150,6 +152,22 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
     access_point: Option<access_point::ApResources<'id, Id>>,
     /// The receive Block Ack slots.
     block_acks: Vec<oer_protocols_ieee80211_contracts_port::PortBlockAckSlot<'id, Family<Id>>>,
+    /// The installation's stop, while the radio is stopped.
+    stopped: Option<Stopped<'id>>,
+    /// The proof of a start going on.
+    starting: Option<oer_protocols_ieee80211_contracts_port::Starting<'id>>,
+    /// The installations, when the fixture reinstalls its port, with the
+    /// TSF epoch of its last reinstall.
+    installations: Option<(Installations<Id, InstallationPools>, u32)>,
+}
+
+/// Why the fixture's port did not retire.
+#[derive(Debug, Eq, PartialEq)]
+pub(super) enum Unretired {
+    /// The fixture holds no stop's proof: the radio is not stopped.
+    NoProof,
+    /// The classes still out (`outstanding::class`).
+    Out(u32),
 }
 
 fn supported(
@@ -180,6 +198,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             port,
             commands,
             resources,
+            stopped,
         } = installation;
         let tickets = resources.tickets.into_iter().collect();
         let buffers = resources.buffers.into_iter().collect();
@@ -222,6 +241,67 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                 beacon: resources.access_point_beacon,
             }),
             block_acks: resources.block_acks.into_iter().collect(),
+            stopped: Some(stopped),
+            starting: None,
+            installations: None,
+        }
+    }
+
+    /// Retire the stopped port, its proof back with the fixture on a
+    /// refusal.
+    pub(super) fn retire(&mut self) -> Result<Retired<'id>, Unretired> {
+        let stopped = self.stopped.take().ok_or(Unretired::NoProof)?;
+        match self.port.retire(stopped) {
+            Ok(retired) => Ok(retired),
+            Err(ProofRefused::Refused(stopped, outstanding)) => {
+                self.stopped = Some(stopped);
+                Err(Unretired::Out(outstanding.classes()))
+            }
+            Err(ProofRefused::Stale(stale)) => panic!("the fixture's own proof: {stale:?}"),
+        }
+    }
+
+    /// Retire and release the port: its device.
+    pub(super) fn release_now(&mut self) -> Result<&mut TestDevice, Unretired> {
+        let retired = self.retire()?;
+        Ok(self
+            .port
+            .release(retired)
+            .ok()
+            .expect("the port's own proof"))
+    }
+
+    /// The classes that keep the port from retiring: a retirement's
+    /// refusal, or, without a stop's proof, what it has out.
+    pub(super) fn unretired(&mut self) -> u32 {
+        match self.retire() {
+            Err(Unretired::Out(classes)) => classes,
+            Err(Unretired::NoProof) => self.port.outstanding().classes(),
+            Ok(_) => panic!("the port retired"),
+        }
+    }
+
+    /// Retire and reinstall the port in place with TSF epoch `epoch`: the
+    /// next installation's commands and resources.
+    pub(super) fn reinstall_in_place(
+        &mut self,
+        installations: &mut Installations<Id, InstallationPools>,
+        epoch: u32,
+    ) -> Result<
+        (
+            crate::port::Esp32s31Commands<'id, Id, TestDevice, 512, Draws>,
+            crate::port::Resources<'id, Id, TestDevice, 512, Draws>,
+        ),
+        ReinstallRefused,
+    > {
+        let retired = self.retire().expect("retired");
+        match self.port.reinstall(retired, epoch, installations) {
+            Ok((stopped, installed)) => {
+                self.stopped = Some(stopped);
+                Ok(installed)
+            }
+            Err(ProofRefused::Refused(_, refused)) => Err(refused),
+            Err(ProofRefused::Stale(stale)) => panic!("the fixture's own proof: {stale:?}"),
         }
     }
 
@@ -388,6 +468,12 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
 
     fn parts(&mut self) -> (&mut Self::Port, &mut Self::Sink) {
         (&mut self.port, &mut self.outbox)
+    }
+    fn take_stopped(&mut self) -> Option<Stopped<'id>> {
+        self.stopped.take()
+    }
+    fn keep_stopped(&mut self, stopped: Stopped<'id>) {
+        self.stopped = Some(stopped);
     }
     fn now(&self) -> Instant {
         self.timer.now()
@@ -608,6 +694,49 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
         };
         Some(cases::StationSent { end, retry })
     }
+    fn hold_start(&mut self, hold: bool) {
+        self.observed.borrow_mut().hold_start = hold;
+    }
+    fn hold_stop(&mut self, hold: bool) {
+        self.observed.borrow_mut().hold_stop = hold;
+    }
+    fn buffers_held(&self) -> usize {
+        self.buffers.len() + usize::from(self.station.is_some())
+    }
+    fn refuse(&mut self, count: usize) {
+        self.outbox.refuse = count;
+    }
+    fn refusals_left(&self) -> usize {
+        self.outbox.refuse
+    }
+    fn fault(&mut self, whole: bool) {
+        self.observed.borrow_mut().fail_poll = Some(if whole {
+            Fault::ReceiveLost
+        } else {
+            Fault::RemovalMismatch
+        });
+    }
+    fn end_tokens(&mut self) {
+        // Each token goes home to the port's bank as it drops.
+        drop(core::mem::take(&mut self.buffers));
+        drop(core::mem::take(&mut self.tickets));
+        self.station = None;
+    }
+    fn reinstall(
+        &mut self,
+        retired: oer_protocols_ieee80211_contracts_port::Retired<'id>,
+    ) -> Result<
+        Stopped<'id>,
+        ProofRefused<oer_protocols_ieee80211_contracts_port::Retired<'id>, ReinstallRefused>,
+    > {
+        let Some((installations, epoch)) = self.installations.as_mut() else {
+            return Err(ProofRefused::Refused(retired, ReinstallRefused::Receipt));
+        };
+        *epoch = epoch.wrapping_add(1);
+        // The new installation's commands and tokens end here.
+        let (stopped, _installed) = self.port.reinstall(retired, *epoch, installations)?;
+        Ok(stopped)
+    }
 }
 
 /// Run `test` on a fresh installed fixture of a local identity.
@@ -619,6 +748,7 @@ fn with_fixture<R>(test: impl for<'id> FnOnce(&mut Fixture<'id, radio::LocalId<'
         let driver = Box::leak(Box::new(PortDriver::vacant()));
         let installation = Port::install(parts, minted, driver).ok().expect("install");
         let mut fixture = Fixture::new(installation, observed, timer);
+        fixture.installations = Some((installations, 1));
         test(&mut fixture)
     }))
 }
@@ -657,15 +787,21 @@ fn every_data_port_case_passes_on_the_s31_port() {
     }
 }
 
-/// Run `test` on a fresh fixture, with the installation authority beside it.
-/// The classes a reinstall refused as not retired names; any other answer
-/// fails the case.
-pub(super) fn not_retired(refused: Option<crate::port::ReinstallRefused>) -> u32 {
-    match refused {
-        Some(crate::port::ReinstallRefused::NotRetired(outstanding)) => outstanding.classes(),
-        other => panic!("refused as not retired: {other:?}"),
-    }
+/// Retire the destructured fixture's stopped `port` with its proof
+/// `stopped`, and release it: its device.
+pub(super) fn release_stopped<'a, 'id, Id: radio::SlotIdentity + 'id>(
+    port: &'a mut Port<'id, Id>,
+    stopped: Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>>,
+) -> Result<&'a mut TestDevice, Unretired> {
+    let stopped = stopped.ok_or(Unretired::NoProof)?;
+    let retired = port.retire(stopped).map_err(|refused| match refused {
+        ProofRefused::Refused(_, outstanding) => Unretired::Out(outstanding.classes()),
+        ProofRefused::Stale(stale) => panic!("the fixture's own proof: {stale:?}"),
+    })?;
+    Ok(port.release(retired).ok().expect("the port's own proof"))
 }
+
+/// Run `test` on a fresh fixture, with the installation authority beside it.
 
 fn with_installations<R>(
     test: impl for<'id> FnOnce(
@@ -724,7 +860,10 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             let waker = self.waker();
             let now = self.now();
             match self.port.poll_stop(&mut Context::from_waker(&waker), now) {
-                Poll::Ready(Ok(())) => return,
+                Poll::Ready(Ok(stopped)) => {
+                    self.stopped = Some(stopped);
+                    return;
+                }
                 Poll::Ready(Err(unconfirmed)) => panic!("stop unconfirmed: {unconfirmed:?}"),
                 Poll::Pending => {
                     let _ = self.turn();
@@ -1283,17 +1422,24 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
             observed,
             timer,
             buffers,
+            stopped,
             ..
         } = fixture;
         // The fixture's transmit buffers go home before the retire checks.
         drop(buffers);
-        let (commands, resources) = port
-            .reinstall(installations, 18)
+        let retired = port
+            .retire(stopped.expect("stopped"))
+            .ok()
+            .expect("retired without waiting for the network");
+        let (stopped, (commands, resources)) = port
+            .reinstall(retired, 18, installations)
+            .ok()
             .expect("reinstalled without waiting for the network");
         let installation = PortInstallation {
             port,
             commands,
             resources,
+            stopped,
         };
         let mut second = Fixture::new(installation, observed, timer);
         assert_eq!(
@@ -1321,7 +1467,7 @@ fn a_running_port_refuses_its_reinstall_and_keeps_running() {
     with_installations(|mut fixture, installations| {
         fixture.start();
         assert_eq!(
-            not_retired(fixture.port.reinstall(installations, 18).err()),
+            fixture.unretired(),
             outstanding::class::PHASE | outstanding::class::TRANSMIT_OUT,
             "the radio runs, and the fixture holds its buffers"
         );
@@ -1376,11 +1522,8 @@ fn a_terminal_the_sink_refuses_is_kept_whole_and_offered_again_first_on_the_s31_
         // What the port keeps makes nothing due: the sink owns the wake.
         let now = fixture.now();
         assert!(fixture.port.deadline().is_none_or(|at| at > now));
-        // Before a confirmed stop the port offers it itself.
-        assert_eq!(
-            fixture.port.take_unconsumed(&mut fixture.outbox),
-            Err(UnconsumedRefused::NotStopped)
-        );
+        // Before a confirmed stop the port offers it itself: no stop's
+        // proof exists to take it otherwise.
         let second = fixture.station_mpdu().expect("attempt");
         let second_ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&second);
         // The next call with a sink offers the kept terminal before its own.
@@ -1427,16 +1570,24 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
         // confirmed stop that holds an owner, not an unconfirmed one.
         let _ = fixture.turn();
         assert!(fixture.outbox.terminals.is_empty());
-        assert!(fixture.port.stop_confirmed());
-        assert!(fixture.port.release().is_err());
+        assert!(
+            matches!(fixture.retire(), Err(Unretired::Out(classes)) if classes & outstanding::class::UNCONSUMED != 0),
+            "the kept terminal holds the port"
+        );
         // Refused again, it stays; then it leaves once, with its outcome.
         fixture.outbox.refuse = 1;
         assert_eq!(
-            fixture.port.take_unconsumed(&mut fixture.outbox),
+            fixture.port.take_unconsumed(
+                fixture.stopped.as_ref().expect("stopped"),
+                &mut fixture.outbox
+            ),
             Ok(Unconsumed::Kept)
         );
         assert_eq!(
-            fixture.port.take_unconsumed(&mut fixture.outbox),
+            fixture.port.take_unconsumed(
+                fixture.stopped.as_ref().expect("stopped"),
+                &mut fixture.outbox
+            ),
             Ok(Unconsumed::None)
         );
         assert_eq!(completed_tickets(&fixture), [ticket]);
@@ -1446,15 +1597,25 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
                 if matches!(completed.outcome(), TxOutcome::Ended(SingleEnd::Delivered { .. }))
         ));
         assert_eq!(
-            fixture.port.take_unconsumed(&mut fixture.outbox),
+            fixture.port.take_unconsumed(
+                fixture.stopped.as_ref().expect("stopped"),
+                &mut fixture.outbox
+            ),
             Ok(Unconsumed::None)
         );
         assert_eq!(fixture.take_completed(), 1);
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_ok(), "nothing is kept: the port retires");
+        let retired = port
+            .retire(stopped.expect("stopped"))
+            .ok()
+            .expect("nothing is kept: the port retires");
+        assert!(port.release(retired).is_ok());
     });
 }
 
@@ -1462,15 +1623,23 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
 fn only_a_stopped_port_releases_its_device() {
     with_installations(|mut fixture, _| {
         fixture.start();
-        assert!(!fixture.port.stop_confirmed(), "a running port");
-        assert!(fixture.port.release().is_err());
+        // A running port gave its stop's proof to the start: nothing it
+        // could retire or release with.
+        assert!(fixture.stopped.is_none(), "a running port");
+        assert_eq!(fixture.retire().err(), Some(Unretired::NoProof));
         fixture.stop();
-        assert!(fixture.port.stop_confirmed());
         let Fixture {
-            mut port, buffers, ..
+            mut port,
+            buffers,
+            stopped,
+            ..
         } = fixture;
         // The fixture's transmit buffers go home before the retire checks.
         drop(buffers);
-        assert!(port.release().is_ok());
+        let retired = port
+            .retire(stopped.expect("stopped"))
+            .ok()
+            .expect("retired");
+        assert!(port.release(retired).is_ok());
     });
 }

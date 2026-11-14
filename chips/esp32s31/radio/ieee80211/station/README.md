@@ -132,7 +132,8 @@ the station and its arbiter again on the new tokens, with the
 configuration and callbacks the retired station gives back; no reset
 follows. A refused reinstall is `Failed(Reinstall)`. Before a reinstall or
 a release the actor's task runs the stopped port's cleanup once
-(`DataPort::clean_stopped`); one that did not finish, a group key entry
+(`DataPort::clean`, with the stop's proof the actor holds); one that did
+not finish, a group key entry
 the hardware still holds among them, keeps the port stopped with its
 owners and is `Reinstall(Cleanup)` or `ReleaseFailed(Cleanup)`, and
 nothing runs it again. The cleanup's sink takes only the removal receipt:

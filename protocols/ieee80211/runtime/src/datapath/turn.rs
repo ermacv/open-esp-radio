@@ -2,7 +2,7 @@
 //! lifecycle's messages and the radio's start, move and stop.
 
 use super::*;
-use oer_protocols_ieee80211_contracts_port::{Input, PortCompleted, RecycleRefused};
+use oer_protocols_ieee80211_contracts_port::{Input, PortCompleted, RecycleRefused, StartPoll};
 use oer_protocols_ieee80211_core_upper_mac::block_ack::RxBlockAckRefused;
 
 /// What [`Actor::collect`] found.
@@ -572,7 +572,11 @@ where
                 stage: &mut self.stage,
                 grouped: self.group.is_some(),
             };
-            if self.port.take_unconsumed(&mut outbox).is_ok() {
+            // Only a confirmed stop's proof offers it; before one the
+            // service does.
+            if let Some(stopped) = self.stopped.as_ref()
+                && self.port.take_unconsumed(stopped, &mut outbox).is_ok()
+            {
                 self.staged(lifecycle, network)?;
             }
         }
@@ -786,7 +790,9 @@ where
     ) -> Result<(), Failed<'id, D>> {
         match message {
             ToActor::Start(channel) => match self.radio {
-                Radio::Stopped | Radio::Halted => {
+                // A start takes the confirmed stop's proof: a halted radio
+                // whose stop did not confirm has none.
+                Radio::Stopped | Radio::Halted if self.stopped.is_some() => {
                     self.radio = Radio::Starting(channel);
                     self.stop_unconfirmed = false;
                     self.drive_radio(cx)?;
@@ -1241,7 +1247,7 @@ where
     fn drive_radio(&mut self, cx: &mut Context<'_>) -> Result<(), Failed<'id, D>> {
         let now = self.now;
         match self.radio {
-            Radio::Starting(channel) => match self.port.poll_start(cx, channel, now) {
+            Radio::Starting(channel) => match self.poll_start(cx, channel) {
                 Poll::Ready(Ok(())) => {
                     self.radio = Radio::Running;
                     self.running()?;
@@ -1257,7 +1263,8 @@ where
                 channel,
                 stopped: false,
             } => match self.port.poll_stop(cx, now) {
-                Poll::Ready(Ok(())) => {
+                Poll::Ready(Ok(stopped)) => {
+                    self.stopped = Some(stopped);
                     self.radio = Radio::Retuning {
                         channel,
                         stopped: true,
@@ -1274,7 +1281,7 @@ where
             Radio::Retuning {
                 channel,
                 stopped: true,
-            } => match self.port.poll_start(cx, channel, now) {
+            } => match self.poll_start(cx, channel) {
                 Poll::Ready(Ok(())) => {
                     self.radio = Radio::Running;
                     self.running()?;
@@ -1296,7 +1303,8 @@ where
                     // The radio stopped: the run's owners are back once the
                     // data arena's end settled and the lifecycle sent its
                     // frames back.
-                    Poll::Ready(Ok(())) => {
+                    Poll::Ready(Ok(stopped)) => {
+                        self.stopped = Some(stopped);
                         let observed = self.observed(None, late);
                         let data_home = !observed.arena_on_air && observed.frames_out == 0;
                         if data_home && self.network_settled() {
@@ -1515,7 +1523,10 @@ where
             )
             && self.retained.unkept.is_none()
             && self.retained.unaccepted.is_none()
-            && self.port.recover_for_stop()
+            && matches!(
+                self.port.recover_for_stop(),
+                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            )
             && lifecycle
                 .from_actor
                 .try_send(FromActor::Recovering(fault))
@@ -1526,6 +1537,50 @@ where
         }
         let _told = lifecycle.from_actor.try_send(FromActor::Faulted(fault));
         self.end = Some(ActorEnd::Faulted(fault));
+    }
+}
+
+impl<'id, D: DatapathPort<'id>, S, O> Actor<'id, D, S, O>
+where
+    S: RateSelection<
+            ActorRxMeta<'id, D>,
+            <Ty<'id, D> as PortTypes<'id>>::AckEvidence,
+            <Ty<'id, D> as PortTypes<'id>>::BlockAckEvidence,
+        >,
+    O: ActorEvents,
+{
+    /// Poll the port's start on `channel` with the stop's proof the actor
+    /// holds: the proof goes back to the actor while the start is pending
+    /// or once it is refused, and is spent once it started. Without a
+    /// proof (a stop that did not confirm) or with a stale one, the start
+    /// is refused as one of a radio not stopped.
+    fn poll_start(
+        &mut self,
+        cx: &mut Context<'_>,
+        channel: SupportedChannel<D::Caps>,
+    ) -> Poll<Result<(), StartRefused<PortFault<'id, D>>>> {
+        // The start's own proof goes on with it; the stop's begins it.
+        let proof: oer_protocols_ieee80211_contracts_port::StartProof<'id> =
+            match (self.starting.take(), self.stopped.take()) {
+                (Some(starting), _) => starting.into(),
+                (None, Some(stopped)) => stopped.into(),
+                (None, None) => return Poll::Ready(Err(StartRefused::Running)),
+            };
+        match self.port.poll_start(cx, proof, channel, self.now) {
+            StartPoll::Started => Poll::Ready(Ok(())),
+            StartPoll::Pending(starting) => {
+                self.starting = Some(starting);
+                Poll::Pending
+            }
+            StartPoll::Refused(stopped, failure) => {
+                self.stopped = Some(stopped);
+                Poll::Ready(Err(failure.into()))
+            }
+            StartPoll::Unstopped { cause, stop } => {
+                Poll::Ready(Err(StartRefused::Unstopped { cause, stop }))
+            }
+            StartPoll::Stale(_) => Poll::Ready(Err(StartRefused::Running)),
+        }
     }
 }
 

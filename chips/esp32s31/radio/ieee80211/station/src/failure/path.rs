@@ -147,6 +147,7 @@ const fn crypto_key_error_name(error: CryptoKeyError) -> &'static str {
 fn cleanup_path(cause: CleanupCause, path: &mut DiagPath) {
     match cause {
         CleanupCause::NotStopped => path.name("NotStopped"),
+        CleanupCause::Stale => path.name("Stale"),
         CleanupCause::Faulted(fault) => {
             path.name("Faulted");
             fault.push_path(path);
@@ -461,7 +462,9 @@ impl DiagnosticPath for LifecycleFailure {
             Self::Reinstall(cause) => {
                 path.name("Reinstall");
                 path.name(match cause {
+                    ReinstallCause::NotStopped => "NotStopped",
                     ReinstallCause::NotRetired(_) => "NotRetired",
+                    ReinstallCause::Stale => "Stale",
                     ReinstallCause::SameEpoch => "SameEpoch",
                     ReinstallCause::ChannelUnset => "ChannelUnset",
                     ReinstallCause::Receipt => "Receipt",
@@ -497,12 +500,9 @@ pub(crate) fn stop_unconfirmed(
             fault.push_path(path);
         }
         StopCause::CoreEnabled => path.name("CoreEnabled"),
+        StopCause::Released => path.name("Released"),
     }
-    let observations = unconfirmed.observations;
-    path.word(u32::from(observations.arena_on_air));
-    path.word(u32::from(observations.published));
-    path.word(u32::from(observations.queued));
-    path.word(u32::from(observations.configuring));
+    outstanding_path(&unconfirmed.outstanding, path);
 }
 
 fn actor_violation(
@@ -540,6 +540,7 @@ impl DiagnosticPath for ReleaseCause {
     fn push_path(&self, path: &mut DiagPath) {
         match self {
             Self::StopUnconfirmed => path.name("StopUnconfirmed"),
+            Self::Stale => path.name("Stale"),
             Self::Held(outstanding) => {
                 path.name("Held");
                 outstanding_path(outstanding, path);
@@ -571,6 +572,7 @@ impl DiagnosticPath for ReleaseCause {
                 path.name("Cleanup");
                 match cause {
                     CleanupCause::NotStopped => path.name("NotStopped"),
+                    CleanupCause::Stale => path.name("Stale"),
                     CleanupCause::Faulted(fault) => {
                         path.name("Faulted");
                         fault.push_path(path);

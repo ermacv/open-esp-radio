@@ -346,65 +346,32 @@ pub(super) fn station_frame<'s>(
 }
 
 /// Stop the started port of `harness` and reinstall it: the next
-/// installation's port and resources, with the earlier installation's
-/// tokens still with the caller.
+/// installation's port and resources. The earlier installation's tickets
+/// and buffers go home first, as a retirement needs, and the harness takes
+/// the next installation's; its other tokens stay with the caller.
 pub(super) fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelResources<'s, B<'s>>) {
     let waker = harness.waker();
     let now = harness.clock.now();
-    assert!(matches!(
+    assert!(harness.poll_stopped(&mut Context::from_waker(&waker), now));
+    <Harness<'s> as DataPortHarness<'s>>::end_tokens(&mut harness);
+    let retired = harness
+        .port
+        .retire(harness.stopped.take().unwrap())
+        .unwrap();
+    let Ok((stopped, (commands, resources))) =
         harness
             .port
-            .poll_stop(&mut Context::from_waker(&waker), now),
-        Poll::Ready(Ok(()))
-    ));
-    let Harness {
-        clock,
-        air,
-        port,
-        mut installations,
-        commands: _,
-        sink,
-        tickets,
-        small,
-        terminal_access,
-        configure,
-        gate,
-        group,
-        arenas,
-        counter,
-        access_point,
-        station,
-    } = harness;
-    let Ok(ModelInstall {
-        port,
-        commands,
-        resources,
-    }) = port.reinstall(&mut installations)
+            .reinstall(retired, 1, &mut harness.installations)
     else {
         panic!("a retired port reinstalls");
     };
-    assert_eq!(port.generation(), 1);
-    (
-        Harness {
-            clock,
-            air,
-            installations,
-            port,
-            commands,
-            sink,
-            tickets,
-            small,
-            terminal_access,
-            configure,
-            gate,
-            group,
-            arenas,
-            counter,
-            access_point,
-            station,
-        },
-        resources,
-    )
+    assert_eq!(harness.port.installation_count(), 1);
+    let mut resources = resources;
+    harness.tickets = core::mem::take(&mut resources.shared.tickets);
+    harness.small = core::mem::take(&mut resources.shared.small);
+    harness.commands = commands;
+    harness.stopped = Some(stopped);
+    (harness, resources)
 }
 
 use oer_protocols_ieee80211_testing_conformance::access_point::{
@@ -533,7 +500,7 @@ impl<'s> ApHarness<'s> {
 
     /// The tokens of the installation `generation`.
     fn of(&mut self, generation: u32) -> &mut ApTokens<'s> {
-        if generation == self.hr().port.generation() {
+        if generation == self.hr().port.installation_count() {
             &mut self.current
         } else {
             &mut self.earlier
@@ -589,6 +556,12 @@ impl<'s> AccessPointHarness<'s> for ApHarness<'s> {
     fn parts(&mut self) -> (&mut Port<'s>, &mut Sink<'s>) {
         let harness = self.h();
         (&mut harness.port, &mut harness.sink)
+    }
+    fn take_stopped(&mut self) -> Option<Stopped<'s>> {
+        self.h().stopped.take()
+    }
+    fn keep_stopped(&mut self, stopped: Stopped<'s>) {
+        self.h().stopped = Some(stopped);
     }
     fn now(&self) -> Instant {
         self.hr().clock.now()

@@ -444,6 +444,7 @@ fn bench_then(
             port,
             commands,
             resources,
+            stopped,
         } = install;
         let ModelResources {
             shared:
@@ -472,6 +473,7 @@ fn bench_then(
         let mut actor = Actor::<P<'_>, _, _>::init_in_place(
             Box::leak(Box::new(core::mem::MaybeUninit::uninit())),
             port,
+            stopped,
             EspressifRateSelection::<ModelCaps24>::new(),
             storage.view(),
             events.clone(),
@@ -1796,7 +1798,7 @@ fn message_sizes() {
 }
 
 #[test]
-fn a_stopped_port_reinstalls_under_the_same_actor_without_a_reset() {
+fn a_stopped_port_reinstalls_in_place_under_the_same_actor_without_a_reset() {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Rc::new(VirtualClock::<4>::new());
         let mut installations = Installations::claim(claim);
@@ -1811,36 +1813,38 @@ fn a_stopped_port_reinstalls_under_the_same_actor_without_a_reset() {
         )
         .unwrap();
         let ModelInstall {
-            port, resources, ..
+            port,
+            stopped,
+            resources,
+            ..
         } = install;
+        // The installation's other tokens go home: a retirement needs its
+        // tickets and buffers back.
+        let block_acks = {
+            let resources = resources;
+            resources.shared.block_acks
+        };
         let storage = Box::leak(Box::new(
             crate::station::RxBlockAckStorage::<Types<'_>, 2, 4>::new(
-                resources.shared.block_acks,
+                block_acks,
                 oer_portable_time::Duration::from_millis(100),
             ),
         ));
-        let actor = Actor::<P<'_>, _, _>::new(
+        let mut actor = Actor::<P<'_>, _, _>::init_in_place(
+            Box::leak(Box::new(core::mem::MaybeUninit::uninit())),
             port,
+            stopped,
             EspressifRateSelection::<ModelCaps24>::new(),
             storage.view(),
             Recorder::default(),
         );
-        let generation = actor.port().generation();
+        let generation = actor.port().installation_count();
         // The radio never ran; the network keeps no unit: the installation
-        // retires and the next one takes its place under the same actor.
-        #[expect(
-            clippy::result_large_err,
-            reason = "the model's refusal returns its port"
-        )]
-        let actor = actor
-            .reinstall(|port| {
-                port.reinstall(&mut installations)
-                    .map(|install| install.port)
-                    .map_err(|refused| *refused)
-            })
-            .ok()
-            .unwrap();
-        assert_eq!(actor.port().generation(), generation + 1);
+        // retires and the next one takes its place under the same actor,
+        // which holds the new installation's stop.
+        assert!(actor.reinstall_in_place(1, &mut installations).is_ok());
+        assert_eq!(actor.port().installation_count(), generation + 1);
+        assert!(actor.stopped_port().1.is_some(), "the next stop's proof");
         assert_eq!(air.disable_calls(), 0, "no stop, no reset");
     }));
 }
@@ -1903,7 +1907,7 @@ fn a_due_port_deadline_reposts_a_bounded_number_of_turns_then_the_actor_sleeps()
 }
 
 #[test]
-fn a_reinstall_in_place_runs_on_the_placed_port_and_a_refusal_leaves_the_actor() {
+fn a_refused_reinstall_names_its_reason_and_the_retired_installation_reinstalls_later() {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Rc::new(VirtualClock::<4>::new());
         let mut installations = Installations::claim(claim);
@@ -1918,31 +1922,45 @@ fn a_reinstall_in_place_runs_on_the_placed_port_and_a_refusal_leaves_the_actor()
         )
         .unwrap();
         let ModelInstall {
-            port, resources, ..
+            port,
+            stopped,
+            resources,
+            ..
         } = install;
+        // The installation's other tokens go home: a retirement needs its
+        // tickets and buffers back.
+        let block_acks = {
+            let resources = resources;
+            resources.shared.block_acks
+        };
         let storage = Box::leak(Box::new(
             crate::station::RxBlockAckStorage::<Types<'_>, 2, 4>::new(
-                resources.shared.block_acks,
+                block_acks,
                 oer_portable_time::Duration::from_millis(100),
             ),
         ));
         let mut actor = Actor::<P<'_>, _, _>::init_in_place(
             Box::leak(Box::new(core::mem::MaybeUninit::uninit())),
             port,
+            stopped,
             EspressifRateSelection::<ModelCaps24>::new(),
             storage.view(),
             Recorder::default(),
         );
-        let mut seen = 0;
-        assert_eq!(
-            actor.reinstall_in_place(|_| {
-                seen += 1;
-                Err::<(), _>("refused")
-            }),
-            Err("refused")
-        );
-        assert_eq!(actor.reinstall_in_place(|_| Ok::<(), ()>(())), Ok(()));
-        assert_eq!(seen, 1);
+        assert!(actor.reinstall_in_place(1, &mut installations).is_ok());
+        let generation = actor.port().installation_count();
+        // The same epoch again: the port retired and refused the next
+        // installation, by name; it stays the one it was.
+        assert!(matches!(
+            actor.reinstall_in_place(1, &mut installations),
+            Err(ActorReinstallRefused::Refused(ReinstallRefused::SameEpoch))
+        ));
+        assert_eq!(actor.port().installation_count(), generation);
+        assert!(actor.stopped_port().1.is_none(), "retired, not stopped");
+        // The retired installation the actor kept reinstalls at the next
+        // epoch.
+        assert!(actor.reinstall_in_place(2, &mut installations).is_ok());
+        assert_eq!(actor.port().installation_count(), generation + 1);
     }));
 }
 
@@ -2408,9 +2426,12 @@ fn a_terminal_kept_through_the_confirmed_stop_comes_once_and_the_port_retires() 
             assert_eq!(bench.end, Some(ActorEnd::Retired));
         },
         |actor, _| {
+            // The bench's lifecycle still holds the installation's transmit
+            // tokens, which end with it; nothing else stays with the port.
             assert_eq!(
-                actor.port().retirable(),
-                Ok(()),
+                actor.port().outstanding().classes()
+                    & !oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT,
+                0,
                 "nothing stays with the port"
             );
         },

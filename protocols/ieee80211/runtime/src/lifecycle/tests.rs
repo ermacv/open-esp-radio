@@ -990,6 +990,7 @@ fn pair_with<const G: usize>(
             port,
             commands,
             resources,
+            stopped,
         } = install;
         let (first, storage) = lifecycle::<G>(config(), resources, commands);
         let mut life = Some(first);
@@ -999,6 +1000,7 @@ fn pair_with<const G: usize>(
         let completions = Rc::new(RefCell::new(Vec::new()));
         let mut actor = Some(Actor::<P<'_>, _, _>::new(
             port,
+            stopped,
             TestRates {
                 inner: EspressifRateSelection::<ModelCaps24>::new(),
                 refuse: refuse_rate.clone(),
@@ -1198,32 +1200,15 @@ fn pair_with<const G: usize>(
             if restart && next.is_some() {
                 // The next installation under the same actor, and the
                 // service built again on its resources.
-                let mut minted = None;
-                #[expect(
-                    clippy::result_large_err,
-                    reason = "the model's refusal returns its port"
-                )]
-                let reinstalled = actor_now.reinstall(|port| {
-                    port.reinstall(&mut installations)
-                        .map(|install| {
-                            let ModelInstall {
-                                port,
-                                commands,
-                                resources,
-                            } = install;
-                            minted = Some((commands, resources));
-                            port
-                        })
-                        .map_err(|refused| {
-                            let (port, reason) = *refused;
-                            (port, reason)
-                        })
-                });
-                let actor_next = match reinstalled {
-                    Ok(actor) => actor,
-                    Err((_, reason)) => panic!("the stopped port reinstalls: {reason:?}"),
-                };
-                let (commands, resources) = minted.unwrap();
+                // Each installation's epoch is the count of the ends before
+                // it: a new one each time.
+                let mut actor_next = actor_now;
+                let epoch = u32::try_from(ends.len()).unwrap();
+                let (commands, resources) =
+                    match actor_next.reinstall_in_place(epoch, &mut installations) {
+                        Ok(minted) => minted,
+                        Err(reason) => panic!("the stopped port reinstalls: {reason:?}"),
+                    };
                 let (next_life, storage) = lifecycle::<G>(config(), resources, commands);
                 // The actor keeps its receive agreements' storage; the new
                 // installation's stays owned.

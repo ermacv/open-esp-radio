@@ -44,7 +44,6 @@ mod engines;
 pub use engines::{
     AccessPointGroupInstall, AccessPointPairwiseInstall, Esp32s31Arena, Esp32s31Commands,
     Esp32s31Port, GroupInstall, InstallRefused, PairwiseInstall, PortDriver, PortInstallation,
-    ReinstallRefused,
 };
 mod keys;
 mod lent;
@@ -456,10 +455,16 @@ pub enum GroupReplacement {
 }
 
 /// What an installation of the S31 port still holds
-/// ([`Esp32s31Port::outstanding`]): its fault, and one count per transmit
-/// queue.
-pub type PortOutstanding =
-    oer_protocols_ieee80211_contracts_port::Outstanding<Fault, { driver::TX_QUEUES }>;
+/// ([`Esp32s31Port::outstanding`]): its fault, and one count per access
+/// category's queue.
+pub type PortOutstanding = oer_protocols_ieee80211_contracts_port::Outstanding<Fault>;
+
+// The installation's transmit queues are the contract's access categories.
+const _: () = {
+    if driver::TX_QUEUES != oer_protocols_ieee80211_contracts_port::ACCESS_CATEGORIES {
+        panic!("one transmit queue an access category");
+    }
+};
 pub use driver::TX_QUEUES;
 
 /// The one-shot fault of a diagnostic image.

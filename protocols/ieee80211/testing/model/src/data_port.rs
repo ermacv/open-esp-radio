@@ -30,13 +30,14 @@ use oer_protocols_ieee80211_contracts_port::{
     TsfControl, first_stale,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AccessPointCommandFailed, AdmittedTxParts, CleanupRefused, CommandFailed, CommandKind,
-    CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input, LendRefusal,
-    LendRefused, PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed,
-    PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink, Removed, RemovedKey, RxPull,
-    StartFailure, StartRefused, StationSubmission, StopCause, StopObservations, StopUnconfirmed,
-    SubmitAnswer, SubmitHalt, SubmitRefusal, TxFacts, Unconsumed, UnconsumedRefused, Unkeeping,
-    Unkept,
+    AccessPointCommandFailed, AdmittedTxParts, ArenaState, CleanupRefused, CommandFailed,
+    CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input,
+    LendRefusal, LendRefused, Outstanding, PairwiseIssue, PortAnswer, PortArena, PortCommand,
+    PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
+    ProofRefused, Recovering, Recovery, ReinstallRefused, Removed, RemovedKey, Retired, RunPhase,
+    RxPull, StaleProof, StartFailure, StartPoll, StartProof, Starting, StateSerial,
+    StationSubmission, StopCause, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt,
+    SubmitRefusal, TxFacts, Unconsumed, Unkeeping, Unkept,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
@@ -283,6 +284,8 @@ pub enum ModelPortCall {
     Command,
     /// [`DataPort::poll_stop`].
     Stop,
+    /// [`DataPort::outstanding`] or a retirement.
+    Retire,
 }
 
 /// The generations of the installation tokens a station command names:
@@ -403,6 +406,8 @@ pub type ModelAdmitted<Id, C, X> = AdmittedTxParts<
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Radio {
     Stopped,
+    /// A start waits for the MAC's enable ([`ModelAir::hold_start`]).
+    Starting,
     Running,
     /// A fault was taken back: nothing new goes out until the stop.
     Recovering,
@@ -439,18 +444,20 @@ pub struct ModelInstall<
     pub commands: ModelCommands<'id, Id, C, X>,
     /// The installation's tokens.
     pub resources: ModelResources<'id, Backend<Id, C, X>>,
+    /// The installation's stop: it starts stopped.
+    pub stopped: Stopped<'id>,
 }
 
-/// Why [`ModelPort::reinstall`] did not reinstall; the port comes back.
-#[derive(Debug, Eq, PartialEq)]
-pub enum ModelReinstallRefused {
-    /// The radio runs, or work, a terminal or a received unit is still out.
-    NotRetired,
-    /// The installation authority refused the receipt.
-    Receipt,
-    /// The port faulted.
-    Faulted,
-}
+/// What the model port has out, by class; its transmit queues are EDCA's,
+/// one an access category.
+pub type ModelOutstanding = Outstanding<ModelPortFault>;
+
+// The driver's queues are the contract's access categories, in their order.
+const _: () = {
+    if WmmAccessCategory::ALL.len() != oer_protocols_ieee80211_contracts_port::ACCESS_CATEGORIES {
+        panic!("one model queue an access category");
+    }
+};
 
 /// The model's radio as a data port, owned by one actor.
 pub struct ModelPort<
@@ -462,7 +469,19 @@ pub struct ModelPort<
     air: Rc<ModelAir>,
     held: ModelHeld<'static, Backend<Id, C, X>>,
     driver: Driver<'static, Backend<Id, C, X>>,
-    installation: Installation<Id, ModelPools>,
+    /// The installation's receipt, out only while a reinstall reminted it.
+    installation: Option<Installation<Id, ModelPools>>,
+    /// The installation's generation, as its receipt names it.
+    generation: u32,
+    /// The serial of the port's state: raised at every transition that
+    /// ends a proof's state, the one value a proof is checked against.
+    serial: StateSerial,
+    /// The serial of the last stop: a stopped port's answer to a stop.
+    stop_serial: StateSerial,
+    /// The port released its installations: it holds none.
+    released: bool,
+    /// The TSF epoch the last reinstall named.
+    tsf_epoch: Option<u32>,
     loan: BodyLoan<'id, Id, Backend<Id, C, X>>,
     channel: Channel,
     addresses: [IndividualAddress; 2],
@@ -540,17 +559,23 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     ) -> ModelInstall<'id, Id, C, X> {
         let Minted { mint, installation } = minted;
         let loan: BodyLoan<'id, Id, Backend<Id, C, X>> = installation.loan();
-        let (mut held, resources) =
-            installation::installation_parts(&air, mint, installation.generation());
+        let generation = installation.generation();
+        let (mut held, resources) = installation::installation_parts(&air, mint, generation);
         // Units the network still holds count against this installation's
         // lend limit until it drops them.
         held.network = network;
         ModelInstall {
+            stopped: Stopped::issue(StateSerial::FIRST),
             port: Self {
                 air: air.clone(),
                 held,
                 driver: Driver::new(),
-                installation,
+                installation: Some(installation),
+                generation,
+                serial: StateSerial::FIRST,
+                stop_serial: StateSerial::FIRST,
+                released: false,
+                tsf_epoch: None,
                 loan,
                 channel,
                 addresses,
@@ -569,101 +594,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }
     }
 
-    /// The next installation on the same modeled world, after the retire
-    /// checks: the radio stopped, no work, terminal or received unit out.
-    /// Units the network holds stay lent; their credit carries over.
-    ///
-    /// # Errors
-    ///
-    /// The port, unchanged, with why it did not reinstall.
-    pub fn reinstall(
-        self,
-        installations: &mut Installations<Id, ModelPools>,
-    ) -> Result<ModelInstall<'id, Id, C, X>, Box<(Self, ModelReinstallRefused)>> {
-        if let Err(refused) = self.retirable() {
-            return Err(Box::new((self, refused)));
-        }
-        let Self {
-            air,
-            held,
-            mut driver,
-            installation,
-            channel,
-            addresses,
-            ..
-        } = self;
-        match installations.remint(installation) {
-            Ok(minted) => {
-                // The installed keys end with their installation.
-                for key in driver.keys.drain(..) {
-                    air.remove_key_material(&key);
-                }
-                Ok(Self::from_mint(
-                    minted,
-                    channel,
-                    addresses,
-                    air,
-                    held.network.clone(),
-                ))
-            }
-            Err(RemintRefused::Foreign(installation) | RemintRefused::Exhausted(installation)) => {
-                let loan: BodyLoan<'id, Id, Backend<Id, C, X>> = installation.loan();
-                Err(Box::new((
-                    Self {
-                        air,
-                        held,
-                        driver,
-                        installation,
-                        loan,
-                        channel,
-                        addresses,
-                        radio: Radio::Stopped,
-                        deadline: None,
-                        held_since: None,
-                        held_key: None,
-                        access_point_held_since: None,
-                        access_point_held_key: None,
-                        kept: alloc::collections::VecDeque::new(),
-                        unkept: None,
-                        fault: None,
-                    },
-                    ModelReinstallRefused::Receipt,
-                )))
-            }
-        }
-    }
-
-    /// The retire checks [`Self::reinstall`] makes, without reinstalling:
-    /// no fault, the radio stopped, no work, terminal or received unit out.
-    ///
-    /// # Errors
-    ///
-    /// Why the port does not retire.
-    pub fn retirable(&self) -> Result<(), ModelReinstallRefused> {
-        if self.fault.is_some() || self.air.failed() {
-            return Err(ModelReinstallRefused::Faulted);
-        }
-        let retired = self.radio == Radio::Stopped
-            && self.idle()
-            && self.held.events.is_empty()
-            && self.kept.is_empty()
-            && self.held.rx_out.get() == 0
-            && self.driver.removing.is_empty();
-        if retired {
-            Ok(())
-        } else {
-            Err(ModelReinstallRefused::NotRetired)
-        }
-    }
-
     /// The air this port plays on.
     pub fn air(&self) -> &Rc<ModelAir> {
         &self.air
-    }
-
-    /// The installation's generation.
-    pub fn generation(&self) -> u32 {
-        self.installation.generation()
     }
 
     /// The fault the port recorded, if any.
@@ -1235,14 +1168,31 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         });
     }
 
-    fn stop_observations(&self) -> StopObservations {
-        let observation = self.observation();
-        StopObservations {
-            arena_on_air: observation.arena_on_air,
-            published: observation.published,
-            queued: observation.queued,
-            configuring: self.held.configuring_station.get(),
+    /// The stop's refusal for `cause`, with what the port has out.
+    fn unconfirmed(&self, cause: StopCause<ModelPortFault>) -> StopUnconfirmed<ModelPortFault> {
+        StopUnconfirmed {
+            cause,
+            outstanding: DataPort::outstanding(self),
         }
+    }
+
+    /// The installation the port runs, counted from zero by its
+    /// installations: the model's own count, which no proof carries.
+    pub const fn installation_count(&self) -> u32 {
+        self.generation
+    }
+
+    /// The next state: its serial, which ends every proof of the last.
+    fn raise(&mut self) -> StateSerial {
+        self.serial = self.serial.raised();
+        self.serial
+    }
+
+    /// The radio stopped: the new state's serial, which a stopped port's
+    /// stop answers with.
+    fn stop_proof(&mut self) -> Stopped<'id> {
+        self.stop_serial = self.raise();
+        Stopped::issue(self.stop_serial)
     }
 }
 
@@ -1382,6 +1332,15 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     type Types = ModelTypes<Backend<Id, C, X>>;
     type Fault = ModelPortFault;
     type Admitted = ModelAdmitted<Id, C, X>;
+    type Installations = Installations<Id, ModelPools>;
+    type Installed = (
+        ModelCommands<'id, Id, C, X>,
+        ModelResources<'id, Backend<Id, C, X>>,
+    );
+    type Released<'a>
+        = ()
+    where
+        Self: 'a;
     type Arena<'t>
         = ModelPortArena<'t, 'id, Id, C, X>
     where
@@ -1443,30 +1402,27 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
 
     fn take_unconsumed(
         &mut self,
+        stopped: &Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<Unconsumed, UnconsumedRefused> {
-        if self.radio != Radio::Stopped {
-            return Err(UnconsumedRefused::NotStopped);
+    ) -> Result<Unconsumed, StaleProof<()>> {
+        if !stopped.is_of(self.serial) {
+            return Err(StaleProof { proof: () });
         }
         self.keep_posted();
         Ok(self.offer_kept(sink))
     }
 
     /// The model's stop leaves no cleanup: a stopped port has finished.
-    fn clean_stopped(
+    fn clean(
         &mut self,
+        stopped: &Stopped<'id>,
         _sink: &mut impl PortSink<'id, Self::Types>,
     ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
-        #[allow(
-            clippy::redundant_closure_call,
-            reason = "the call's own answer, then its unkept item"
-        )]
-        let answer = (|| -> Result<(), CleanupRefused<Self::Fault>> {
-            if self.radio != Radio::Stopped {
-                return Err(CleanupRefused::NotStopped);
-            }
+        let answer = if stopped.is_of(self.serial) {
             Ok(())
-        })();
+        } else {
+            Err(CleanupRefused::Stale)
+        };
         self.answer(answer)
     }
 
@@ -1584,7 +1540,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             // installation is refused for good, with its owners, before the
             // radio's own state is asked.
             {
-                let installation = self.installation.generation();
+                let installation = self.generation;
                 let named = [
                     attempt
                         .execution
@@ -1611,7 +1567,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 }
             }
             let refusal = match self.radio {
-                Radio::Stopped => Some(SubmitRefusal::NotEnabled),
+                Radio::Stopped | Radio::Starting => Some(SubmitRefusal::NotEnabled),
                 Radio::Stopping { .. } | Radio::Recovering => Some(SubmitRefusal::Stopping),
                 Radio::Running if self.fault.is_some() || self.air.admission_closed() => {
                     Some(SubmitRefusal::Stopping)
@@ -1888,7 +1844,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                     .into_iter()
                     .flatten()
                     .collect();
-                let installation = self.installation.generation();
+                let installation = self.generation;
                 if let Some(issued) = first_stale(installation, &named) {
                     return Ok(CommandProgress::Refused(
                         command,
@@ -1960,15 +1916,38 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn poll_start(
         &mut self,
         _: &mut Context<'_>,
+        proof: StartProof<'id>,
         channel: SupportedChannel<C>,
         now: Instant,
-    ) -> Poll<Result<(), StartRefused<ModelPortFault>>> {
-        if self.radio != Radio::Stopped {
-            return Poll::Ready(Err(StartRefused::Running));
+    ) -> StartPoll<'id, ModelPortFault> {
+        if !proof.is_of(self.serial) {
+            return StartPoll::Stale(StaleProof { proof });
         }
-        if self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal() {
-            return Poll::Ready(Err(StartRefused::Device));
+        // A start's own proof goes on with it; a stop's begins it. A refusal
+        // before it began leaves the port, and its proof, as they were; one
+        // of a start going on ends it stopped, with a new stop's proof.
+        let refused =
+            self.fault.is_some() || self.air.admission_closed() || self.air.take_enable_refusal();
+        match proof {
+            StartProof::Stopped(stopped) if refused => {
+                return StartPoll::Refused(stopped, StartFailure::Device);
+            }
+            StartProof::Starting(_) if refused => {
+                self.radio = Radio::Stopped;
+                return StartPoll::Refused(self.stop_proof(), StartFailure::Device);
+            }
+            StartProof::Stopped(_) => {
+                // The start begins: every proof of the stopped port ends.
+                self.raise();
+                self.radio = Radio::Starting;
+            }
+            StartProof::Starting(_) => {}
         }
+        if self.air.start_held() {
+            return StartPoll::Pending(Starting::issue(self.serial));
+        }
+        // The start ends here, and its proof with it.
+        self.raise();
         if self.air.take_unstopped_enable() {
             // The MAC began the start: its stop begins now and goes on in
             // `poll_stop`.
@@ -1979,33 +1958,42 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             self.refresh_deadline(now);
             // The MAC the start enabled is still on: the stop is not done
             // yet, and no fault names it.
-            return Poll::Ready(Err(StartRefused::Unstopped {
+            return StartPoll::Unstopped {
                 cause: StartFailure::Device,
-                stop: StopUnconfirmed {
-                    cause: StopCause::CoreEnabled,
-                    observations: self.stop_observations(),
-                },
-            }));
+                stop: self.unconfirmed(StopCause::CoreEnabled),
+            };
         }
         self.channel = channel.channel();
         self.radio = Radio::Running;
         self.refresh_deadline(now);
-        Poll::Ready(Ok(()))
+        StartPoll::Started
     }
 
     fn poll_stop(
         &mut self,
         cx: &mut Context<'_>,
         now: Instant,
-    ) -> Poll<Result<(), StopUnconfirmed<ModelPortFault>>> {
+    ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<ModelPortFault>>> {
         if let Err(fault) = self.check(ModelPortCall::Stop) {
-            return Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Device(fault),
-                observations: self.stop_observations(),
-            }));
+            return Poll::Ready(Err(self.unconfirmed(StopCause::Device(fault))));
+        }
+        if self.released {
+            // No installation is left to stop, and no proof to give.
+            return Poll::Ready(Err(self.unconfirmed(StopCause::Released)));
         }
         let since = match self.radio {
-            Radio::Stopped => return Poll::Ready(Ok(())),
+            // The stop's proof while nothing moved the port since; after a
+            // retirement the port is stopped again under a new serial.
+            Radio::Stopped if self.serial == self.stop_serial => {
+                return Poll::Ready(Ok(Stopped::issue(self.stop_serial)));
+            }
+            Radio::Stopped => return Poll::Ready(Ok(self.stop_proof())),
+            // The stop ends the start, and its proof with it; the MAC never
+            // enabled.
+            Radio::Starting => {
+                self.raise();
+                now
+            }
             Radio::Running | Radio::Recovering => {
                 self.air
                     .disables
@@ -2034,14 +2022,11 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 .access_point
                 .set(ModelAccessPointInterface::default());
             self.refresh_deadline(now);
-            return Poll::Ready(Ok(()));
+            return Poll::Ready(Ok(self.stop_proof()));
         }
         if now.saturating_duration_since(since) >= MODEL_STOP_BOUND {
             self.refresh_deadline(now);
-            return Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Deadline,
-                observations: self.stop_observations(),
-            }));
+            return Poll::Ready(Err(self.unconfirmed(StopCause::Deadline)));
         }
         // The air's world wakes the actor; the stop's terminals and the
         // aborted arena come from the next service, which the deadline asks
@@ -2051,16 +2036,158 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         Poll::Pending
     }
 
-    fn recover_for_stop(&mut self) -> bool {
-        let recovered = self.air.recover();
-        if recovered {
-            self.fault = None;
-            if self.radio == Radio::Running {
-                self.radio = Radio::Recovering;
-                self.held.draining.set(true);
-            }
+    fn recover_for_stop(&mut self) -> Recovery<'id, ModelPortFault> {
+        let Some(fault) = self.fault.or_else(|| {
+            self.air.failed().then(|| ModelPortFault::Quarantined {
+                call: ModelPortCall::Retire,
+                observation: self.observation(),
+            })
+        }) else {
+            return Recovery::Clear;
+        };
+        if !self.air.recover() {
+            return Recovery::Kept(fault, DataPort::outstanding(self));
         }
-        recovered
+        self.fault = None;
+        if self.radio == Radio::Running {
+            self.radio = Radio::Recovering;
+            self.held.draining.set(true);
+            self.raise();
+        }
+        Recovery::Recovered(Recovering::issue(self.serial))
+    }
+
+    fn outstanding(&self) -> ModelOutstanding {
+        let mut queued = [0; oer_protocols_ieee80211_contracts_port::ACCESS_CATEGORIES];
+        for (count, queue) in queued.iter_mut().zip(self.driver.queues.iter()) {
+            *count = queue.waiting.len();
+        }
+        Outstanding {
+            phase: match self.radio {
+                Radio::Stopped => RunPhase::Stopped,
+                Radio::Starting => RunPhase::Starting,
+                Radio::Running => RunPhase::Running,
+                Radio::Recovering => RunPhase::Recovering,
+                Radio::Stopping { .. } => RunPhase::Stopping,
+            },
+            fault: self.fault.or_else(|| {
+                self.air.failed().then(|| ModelPortFault::Quarantined {
+                    call: ModelPortCall::Retire,
+                    observation: self.observation(),
+                })
+            }),
+            received: self.held.rx_out.get(),
+            lent: self.held.network.held(),
+            removals: self.driver.removing.len(),
+            retained_groups: 0,
+            unconsumed: self.kept.len().saturating_add(self.held.events.len()),
+            transmit_out: self
+                .held
+                .transmit_out
+                .load(core::sync::atomic::Ordering::Relaxed),
+            queued,
+            running: self
+                .driver
+                .queues
+                .iter()
+                .filter(|queue| queue.air.is_some())
+                .count(),
+            arenas: if self.arena_on_air() {
+                ArenaState::Held
+            } else {
+                ArenaState::Returnable
+            },
+        }
+    }
+
+    fn fault(&self) -> Option<ModelPortFault> {
+        self.fault
+    }
+
+    fn retire(
+        &mut self,
+        stopped: Stopped<'id>,
+    ) -> Result<Retired<'id>, ProofRefused<Stopped<'id>, ModelOutstanding>> {
+        if !stopped.is_of(self.serial) {
+            return Err(ProofRefused::Stale(StaleProof { proof: stopped }));
+        }
+        let outstanding = DataPort::outstanding(self);
+        if outstanding.is_empty() {
+            Ok(Retired::issue(self.raise()))
+        } else {
+            Err(ProofRefused::Refused(stopped, outstanding))
+        }
+    }
+
+    fn reinstall(
+        &mut self,
+        retired: Retired<'id>,
+        tsf_epoch: u32,
+        installations: &mut Installations<Id, ModelPools>,
+    ) -> Result<
+        (
+            Stopped<'id>,
+            (
+                ModelCommands<'id, Id, C, X>,
+                ModelResources<'id, Backend<Id, C, X>>,
+            ),
+        ),
+        ProofRefused<Retired<'id>, ReinstallRefused>,
+    > {
+        if !retired.is_of(self.serial) {
+            return Err(ProofRefused::Stale(StaleProof { proof: retired }));
+        }
+        if self.tsf_epoch == Some(tsf_epoch) {
+            return Err(ProofRefused::Refused(retired, ReinstallRefused::SameEpoch));
+        }
+        let Some(installation) = self.installation.take() else {
+            return Err(ProofRefused::Refused(retired, ReinstallRefused::Receipt));
+        };
+        let Minted { mint, installation } = match installations.remint(installation) {
+            Ok(minted) => minted,
+            Err(RemintRefused::Foreign(installation) | RemintRefused::Exhausted(installation)) => {
+                self.installation = Some(installation);
+                return Err(ProofRefused::Refused(retired, ReinstallRefused::Receipt));
+            }
+        };
+        // The installed keys end with their installation.
+        for key in self.driver.keys.drain(..) {
+            self.air.remove_key_material(&key);
+        }
+        self.loan = installation.loan();
+        self.generation = installation.generation();
+        let (mut held, resources) =
+            installation::installation_parts(&self.air, mint, self.generation);
+        // Units the network still holds stay lent; their credit carries over.
+        held.network = self.held.network.clone();
+        self.held = held;
+        self.driver = Driver::new();
+        self.installation = Some(installation);
+        self.tsf_epoch = Some(tsf_epoch);
+        self.radio = Radio::Stopped;
+        self.deadline = None;
+        self.held_since = None;
+        self.held_key = None;
+        self.access_point_held_since = None;
+        self.access_point_held_key = None;
+        self.kept.clear();
+        self.unkept = None;
+        self.fault = None;
+        let commands = ModelCommands {
+            air: self.air.clone(),
+            loan: self.loan,
+        };
+        Ok((self.stop_proof(), (commands, resources.lend(&self.loan))))
+    }
+
+    fn release(&mut self, retired: Retired<'id>) -> Result<(), StaleProof<Retired<'id>>> {
+        if retired.is_of(self.serial) {
+            self.raise();
+            self.released = true;
+            Ok(())
+        } else {
+            Err(StaleProof { proof: retired })
+        }
     }
 
     fn sample_clock(&mut self) -> Result<Ieee80211Instant, ClockError> {

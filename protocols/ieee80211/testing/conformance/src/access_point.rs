@@ -164,6 +164,12 @@ pub trait AccessPointHarness<'id> {
 
     /// The port and the sink, borrowed together for one call.
     fn parts(&mut self) -> (&mut Self::Port, &mut Self::Sink);
+    /// Take the stop's proof the harness keeps: the port's installation
+    /// starts stopped, so the harness holds one until a start takes it.
+    fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>>;
+    /// Keep the stop's proof `stopped` for the next start, clean or
+    /// retirement.
+    fn keep_stopped(&mut self, stopped: oer_protocols_ieee80211_contracts_port::Stopped<'id>);
     /// The fixture's virtual time.
     fn now(&self) -> Instant;
     /// Move virtual time on by `by`.
@@ -337,11 +343,15 @@ pub enum Case {
     /// The shared stop ends the work of both roles once, an access-point
     /// frame on the air among it, and the access point's interface.
     SharedStopFrames,
+    /// A key removal waiting at the stop: what the port has out is the
+    /// suite's ledger after every call, and the removal and the frame it
+    /// waits for both end.
+    RemovalAtStop,
 }
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::SharedPort,
         Self::StationConfigureApart,
         Self::ConfigureBarrier,
@@ -361,6 +371,7 @@ impl Case {
         Self::SharedStop,
         Self::StopsAloneFrames,
         Self::SharedStopFrames,
+        Self::RemovalAtStop,
     ];
 }
 
@@ -421,6 +432,7 @@ pub fn check<'id, H: AccessPointHarness<'id>>(
         Case::SharedStop => shared_stop(harness, Behind::Beacon),
         Case::StopsAloneFrames => stops_alone(harness, Behind::Frame),
         Case::SharedStopFrames => shared_stop(harness, Behind::Frame),
+        Case::RemovalAtStop => removal_at_stop(harness),
     }
 }
 
@@ -431,16 +443,39 @@ pub fn check<'id, H: AccessPointHarness<'id>>(
 /// [`Violation::Lifecycle`] when it does not start.
 pub fn start<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
     let channel = harness.channel();
+    let Some(stopped) = harness.take_stopped() else {
+        return Err(Violation::Lifecycle);
+    };
+    let mut proof = oer_protocols_ieee80211_contracts_port::StartProof::from(stopped);
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
         let (port, _) = harness.parts();
-        match port.poll_start(&mut Context::from_waker(&waker), channel, now) {
-            Poll::Ready(Ok(())) => return Ok(()),
-            Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
-            Poll::Pending => harness.settle(),
+        match port.poll_start(&mut Context::from_waker(&waker), proof, channel, now) {
+            oer_protocols_ieee80211_contracts_port::StartPoll::Started => return Ok(()),
+            oer_protocols_ieee80211_contracts_port::StartPoll::Pending(starting) => {
+                proof = starting.into();
+                harness.settle();
+            }
+            oer_protocols_ieee80211_contracts_port::StartPoll::Refused(proof, _) => {
+                harness.keep_stopped(proof);
+                return Err(Violation::Lifecycle);
+            }
+            oer_protocols_ieee80211_contracts_port::StartPoll::Stale(stale) => {
+                if let oer_protocols_ieee80211_contracts_port::StartProof::Stopped(stopped) =
+                    stale.proof
+                {
+                    harness.keep_stopped(stopped);
+                }
+                return Err(Violation::Lifecycle);
+            }
+            oer_protocols_ieee80211_contracts_port::StartPoll::Unstopped { .. } => {
+                return Err(Violation::Lifecycle);
+            }
         }
     }
+    // A start still going on after the case's steps: its proof ends here.
+    drop(proof);
     Err(Violation::Lifecycle)
 }
 
@@ -1407,7 +1442,10 @@ pub fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Viol
         let now = harness.now();
         let (port, _) = harness.parts();
         match port.poll_stop(&mut Context::from_waker(&waker), now) {
-            Poll::Ready(Ok(())) => return Ok(()),
+            Poll::Ready(Ok(stopped)) => {
+                harness.keep_stopped(stopped);
+                return Ok(());
+            }
             Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
             Poll::Pending => {
                 service(harness)?;
@@ -1535,4 +1573,96 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(
         }
         AccessPointProgress::Done => Err(Violation::Refusal),
     }
+}
+
+/// The suite's ledger of a [`Case::RemovalAtStop`]: frames it submitted
+/// whose end it has not taken, and removals the port accepted whose
+/// terminal it has not taken.
+#[derive(Clone, Copy, Default)]
+struct RemovalLedger {
+    in_flight: usize,
+    removals: usize,
+}
+
+impl RemovalLedger {
+    fn check<'id, H: AccessPointHarness<'id>>(&self, harness: &mut H) -> Result<(), Violation> {
+        use oer_protocols_ieee80211_contracts_port::outstanding::class;
+        let (port, _) = harness.parts();
+        let out = port.outstanding();
+        if out.count(class::QUEUED) + out.running != self.in_flight || out.removals != self.removals
+        {
+            return Err(Violation::Owners);
+        }
+        Ok(())
+    }
+
+    /// Take what ended: the frames' ends and the removal's terminal.
+    fn take<'id, H: AccessPointHarness<'id>>(&mut self, harness: &mut H) {
+        let ended = harness.take_ends().as_ref().len();
+        self.in_flight = self.in_flight.saturating_sub(ended);
+        while let Some(terminal) = harness.take_terminal() {
+            if matches!(terminal, Terminal::PairwiseRemoved(_)) {
+                self.removals = self.removals.saturating_sub(1);
+            }
+        }
+    }
+}
+
+fn removal_at_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+    start(harness)?;
+    install_keys(harness, 0)?;
+    let mut ledger = RemovalLedger::default();
+    ledger.check(harness)?;
+    // A frame under the pairwise key on the air.
+    harness.hold(BEACON_QUEUE, true);
+    let frame = harness.access_point_frame(Some(Issued::Current), BEACON_QUEUE);
+    submit(harness, frame)?;
+    ledger.in_flight += 1;
+    service(harness)?;
+    ledger.check(harness)?;
+    // The key's removal waits for the frame: the port took it and owes its
+    // terminal, or holds it at its barrier with the caller.
+    let remove = harness.remove_pairwise(Issued::Current, Issued::Current);
+    let held = match run(harness, remove)? {
+        AccessPointProgress::Done => {
+            ledger.removals += 1;
+            None
+        }
+        AccessPointProgress::Held(command) => Some(command),
+        AccessPointProgress::Refused(command, _) => {
+            harness.restore(command);
+            return Err(Violation::Refusal);
+        }
+    };
+    ledger.take(harness);
+    ledger.check(harness)?;
+    // The stop begins with the removal waiting.
+    let waker = harness.waker();
+    let now = harness.now();
+    let (port, _) = harness.parts();
+    let _begun = port.poll_stop(&mut Context::from_waker(&waker), now);
+    ledger.take(harness);
+    ledger.check(harness)?;
+    harness.hold(BEACON_QUEUE, false);
+    stop(harness)?;
+    ledger.take(harness);
+    ledger.check(harness)?;
+    if ledger.in_flight != 0 || ledger.removals != 0 {
+        return Err(Violation::Ends);
+    }
+    // A removal held with the caller is refused by the stopped port, its
+    // owners back.
+    if let Some(command) = held {
+        match run(harness, Some(command))? {
+            AccessPointProgress::Refused(command, AccessPointRefusal::NotEnabled) => {
+                harness.restore(command);
+            }
+            AccessPointProgress::Refused(command, _) | AccessPointProgress::Held(command) => {
+                harness.restore(command);
+                return Err(Violation::Refusal);
+            }
+            AccessPointProgress::Done => return Err(Violation::Refusal),
+        }
+    }
+    ledger.check(harness)
 }

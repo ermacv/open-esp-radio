@@ -941,12 +941,14 @@ async fn run<'s, T: 'static>(
         port,
         commands: issuer,
         resources,
+        stopped,
     } = install;
     let observed = Observed::default();
     let (lifecycle, storage) = lifecycle_on(station_config(), resources, issuer, observed.clone());
     let block_ack_storage = Box::leak(Box::new(storage));
     let mut actor = Actor::<P<'s>, _, _>::new(
         port,
+        stopped,
         EspressifRateSelection::<ModelCaps24>::new(),
         block_ack_storage.view(),
         observed.clone(),
@@ -1078,32 +1080,11 @@ async fn run<'s, T: 'static>(
         if index != 0 {
             // The next installation under the same actor, and a station on
             // its tokens with the retired station's configuration.
-            let mut minted = None;
-            #[expect(
-                clippy::result_large_err,
-                reason = "the model's refusal returns its port"
-            )]
-            let reinstalled = actor.reinstall(|port| {
-                port.reinstall(&mut installations)
-                    .map(|install| {
-                        let ModelInstall {
-                            port,
-                            commands,
-                            resources,
-                        } = install;
-                        minted = Some((commands, resources));
-                        port
-                    })
-                    .map_err(|refused| {
-                        let (port, reason) = *refused;
-                        (port, reason)
-                    })
-            });
-            actor = match reinstalled {
-                Ok(actor) => actor,
-                Err((_, reason)) => panic!("the stopped port reinstalls: {reason:?}"),
+            let epoch = u32::try_from(index).expect("few sessions");
+            let (issuer, resources) = match actor.reinstall_in_place(epoch, &mut installations) {
+                Ok(minted) => minted,
+                Err(reason) => panic!("the stopped port reinstalls: {reason:?}"),
             };
-            let (issuer, resources) = minted.expect("the new installation");
             let config = retired_config
                 .take()
                 .expect("the retired station's configuration");

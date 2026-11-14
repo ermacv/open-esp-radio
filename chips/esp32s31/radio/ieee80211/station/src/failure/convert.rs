@@ -112,8 +112,9 @@ pub(crate) fn stop_unconfirmed(
             Source::Deadline => Source::Deadline,
             Source::Device(fault) => Source::Device(backend_fault(fault)),
             Source::CoreEnabled => Source::CoreEnabled,
+            Source::Released => Source::Released,
         },
-        observations: value.observations,
+        outstanding: value.outstanding.map_fault(backend_fault),
     }
 }
 
@@ -883,26 +884,33 @@ pub(crate) fn cleanup(
 ) -> CleanupCause {
     use oer_protocols_ieee80211_contracts_port::CleanupRefused as Source;
     match refused {
-        Source::NotStopped => CleanupCause::NotStopped,
+        Source::Stale => CleanupCause::Stale,
         Source::Faulted(fault) => CleanupCause::Faulted(backend_fault(fault)),
         Source::Unavailable(fault) => CleanupCause::Unavailable(backend_fault(fault)),
         Source::Held(fault) => CleanupCause::Held(backend_fault(fault)),
     }
 }
 
-/// Why the port did not reinstall.
+/// Why the actor's port did not reinstall.
 #[cfg(target_arch = "riscv32")]
 pub(crate) fn reinstall(
-    refused: oer_chips_esp32s31_radio_ieee80211_backend::port::ReinstallRefused,
+    refused: oer_protocols_ieee80211_runtime::datapath::ActorReinstallRefused<
+        oer_chips_esp32s31_radio_ieee80211_backend::port::Fault,
+    >,
 ) -> ReinstallCause {
-    use oer_chips_esp32s31_radio_ieee80211_backend::port::ReinstallRefused as Source;
+    use oer_protocols_ieee80211_contracts_port::ReinstallRefused as Port;
+    use oer_protocols_ieee80211_runtime::datapath::{
+        ActorReinstallRefused as Source, RetireRefused as Retire,
+    };
     match refused {
-        Source::NotRetired(outstanding) => {
+        Source::Retire(Retire::NotStopped) => ReinstallCause::NotStopped,
+        Source::Retire(Retire::Held(outstanding)) => {
             ReinstallCause::NotRetired(outstanding.map_fault(backend_fault))
         }
-        Source::SameEpoch => ReinstallCause::SameEpoch,
-        Source::ChannelUnset => ReinstallCause::ChannelUnset,
-        Source::Receipt => ReinstallCause::Receipt,
-        Source::Resources => ReinstallCause::Resources,
+        Source::Retire(Retire::Stale) => ReinstallCause::Stale,
+        Source::Refused(Port::SameEpoch) => ReinstallCause::SameEpoch,
+        Source::Refused(Port::ChannelUnset) => ReinstallCause::ChannelUnset,
+        Source::Refused(Port::Receipt) => ReinstallCause::Receipt,
+        Source::Refused(Port::Resources) => ReinstallCause::Resources,
     }
 }

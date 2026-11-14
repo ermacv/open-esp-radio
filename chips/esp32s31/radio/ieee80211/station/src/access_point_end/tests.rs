@@ -67,7 +67,7 @@ impl<'a> Retiring for TestRunner<'a, '_> {
                 oer_protocols_ieee80211_contracts_port::StopCause::Device(fault) => {
                     Some(StopWatch::DeviceFailed {
                         fault,
-                        observations: observed.observations,
+                        outstanding: observed.outstanding,
                     })
                 }
                 _ => None,
@@ -259,7 +259,7 @@ fn an_unconfirmed_stop_is_published_then_watched_before_the_release() {
     };
     let observed = StopUnconfirmed {
         cause: oer_protocols_ieee80211_contracts_port::StopCause::Deadline,
-        observations: Default::default(),
+        outstanding: crate::failure::tests::nothing_out(),
     };
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let left = retired(
@@ -516,7 +516,7 @@ fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
 fn a_kept_fault_ends_the_retire_unfinished_in_the_stopping_phase_with_every_owner() {
     let observed = StopUnconfirmed {
         cause: oer_protocols_ieee80211_contracts_port::StopCause::Device(BackendFault::Abandoned),
-        observations: Default::default(),
+        outstanding: crate::failure::tests::nothing_out(),
     };
     let (ends, item, attempt) = (Cell::new(0), Cell::new(0), Cell::new(0));
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
@@ -593,7 +593,7 @@ fn a_device_fault_the_stop_named_first_ends_the_retire_unfinished_and_named() {
     let met = BackendFault::QueueFull { queue: 3 };
     let observed = StopUnconfirmed {
         cause: oer_protocols_ieee80211_contracts_port::StopCause::Device(met),
-        observations: Default::default(),
+        outstanding: crate::failure::tests::nothing_out(),
     };
     let (ends, attempt) = (Cell::new(0), Cell::new(0));
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
@@ -620,7 +620,7 @@ fn a_device_fault_the_stop_named_first_ends_the_retire_unfinished_and_named() {
         ApExitOf::StopDeviceFailed {
             ended,
             fault: met,
-            observations: observed.observations,
+            outstanding: observed.outstanding,
         }
     );
     let Some(mut unfinished) = left.unfinished else {

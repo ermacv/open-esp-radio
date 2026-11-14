@@ -557,6 +557,9 @@ pub enum ReleaseCause {
     /// The port has not confirmed its radio's stop: nothing was released,
     /// and the port keeps the radio and every owner.
     StopUnconfirmed,
+    /// The proof was not of the port's state (the port moved since its
+    /// issue): nothing was released.
+    Stale,
     /// The port confirmed its radio's stop and still holds owners (admitted
     /// work, a received unit, an item a sink refused, a removal waiting),
     /// each class with its count: nothing was released, and the port keeps
@@ -591,8 +594,11 @@ pub enum ReleaseCause {
 /// [`DataPort::clean_stopped`]: oer_protocols_ieee80211_contracts_port::DataPort::clean_stopped
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CleanupCause {
-    /// The radio had not confirmed a stop.
+    /// The radio had not confirmed a stop: no stop's proof to clean with.
     NotStopped,
+    /// The stop's proof was not of the port's state (the port moved since
+    /// its issue): nothing was cleaned.
+    Stale,
     /// The port holds its contract fault.
     Faulted(BackendFault),
     /// The cleanup's next step could not run and wrote nothing.
@@ -642,24 +648,20 @@ pub enum LifecycleFailure {
 }
 /// What an installation of the S31 port still holds, its fault as the
 /// facade names it ([`oer_protocols_ieee80211_contracts_port::Outstanding`]).
-pub type Outstanding = oer_protocols_ieee80211_contracts_port::Outstanding<BackendFault, TX_QUEUES>;
-
-/// The S31 port's transmit queues, as [`Outstanding`] counts them: the
-/// backend's, which a build that has it checks.
-pub const TX_QUEUES: usize = 4;
-#[cfg(any(test, target_arch = "riscv32"))]
-const _: () = {
-    if TX_QUEUES != oer_chips_esp32s31_radio_ieee80211_backend::port::TX_QUEUES {
-        panic!("the facade counts the backend's transmit queues");
-    }
-};
+pub type Outstanding = oer_protocols_ieee80211_contracts_port::Outstanding<BackendFault>;
 
 /// Why the port did not reinstall after the station's restart.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReinstallCause {
-    /// The stopped port still ran, faulted or held work: what it still
-    /// holds, each class with its count.
+    /// The radio's stop did not confirm: there was no stop's proof to
+    /// retire the port with.
+    NotStopped,
+    /// The stopped port faulted or held work: what it still holds, each
+    /// class with its count.
     NotRetired(Outstanding),
+    /// The proof was not of the port's state (the port moved since its
+    /// issue).
+    Stale,
     /// The TSF epoch repeated.
     SameEpoch,
     /// The port's channel named no Wi-Fi channel.
