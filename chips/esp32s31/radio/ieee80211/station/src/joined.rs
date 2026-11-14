@@ -2089,3 +2089,30 @@ fn a_restart_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_reinstall
         );
     });
 }
+
+/// The application's stop in the real composition: the lifecycle's half
+/// keeps its installation's transmit buffers until the radio's release
+/// answers, as the facade's `station.rs` keeps the retired station whole.
+/// The release finds them out of the port's bank and refuses.
+#[test]
+fn a_stop_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_release() {
+    struct Network;
+    joined_with::<Network>(0, Setup::ConnectedHoldingBuffers, |bench| {
+        one_datagram_out(bench);
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stops,
+        });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        bench.send(ToActor::Retire);
+        bench.until("the actor ends", |bench| {
+            bench.ends.borrow().released.is_some()
+        });
+        assert_eq!(
+            bench.ends.borrow().released,
+            Some(false),
+            "the release refuses"
+        );
+    });
+}
