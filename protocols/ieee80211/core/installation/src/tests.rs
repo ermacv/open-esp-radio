@@ -118,36 +118,37 @@ fn goal_name(goal: Option<Goal<Channel>>) -> Option<&'static str> {
 struct Recorder {
     asks: Vec<&'static str>,
     reports: Vec<&'static str>,
-    /// A report of an event the machine had no transition for.
-    not_expected: bool,
 }
 
 impl<'id> Outbox<'id, Channel, Fault> for Recorder {
-    fn start(&mut self, _: Stopped<'id>, _: Channel) {
+    fn start(&mut self, _: Asked<Start>, _: Stopped<'id>, _: Channel) {
         self.asks.push("start");
     }
-    fn stop(&mut self) {
+    fn cancel_start(&mut self) -> Asked<Start> {
+        Asked::new()
+    }
+    fn stop(&mut self, _: Asked<Stop>) {
         self.asks.push("stop");
     }
-    fn stop_data(&mut self) {
+    fn stop_data(&mut self, _: Asked<StopData>) {
         self.asks.push("stop_data");
     }
-    fn end_tokens(&mut self) {
+    fn end_tokens(&mut self, _: Asked<EndTokens>) {
         self.asks.push("end_tokens");
     }
-    fn drain(&mut self, _: &Stopped<'id>) {
+    fn drain(&mut self, _: Asked<Drain>, _: &Stopped<'id>) {
         self.asks.push("drain");
     }
-    fn stop_network(&mut self) {
+    fn stop_network(&mut self, _: Asked<StopNetwork>) {
         self.asks.push("stop_net");
     }
-    fn retire(&mut self, _: Stopped<'id>) {
+    fn retire(&mut self, _: Asked<Retire>, _: Stopped<'id>) {
         self.asks.push("retire");
     }
-    fn reinstall(&mut self, _: Retired<'id>, _: u32) {
+    fn reinstall(&mut self, _: Asked<Reinstall>, _: Retired<'id>, _: u32) {
         self.asks.push("reinstall");
     }
-    fn release(&mut self, _: Retired<'id>) {
+    fn release(&mut self, _: Asked<Release>, _: Retired<'id>) {
         self.asks.push("release");
     }
     fn refused(&mut self, _: Request<Channel>, _: Phase) {
@@ -169,10 +170,6 @@ impl<'id> Outbox<'id, Channel, Fault> for Recorder {
         self.reports.push(match status {
             Status::Interrupted => "interrupted",
             Status::Held(_) => "held",
-            Status::NotExpected { .. } => {
-                self.not_expected = true;
-                "not_expected"
-            }
         });
     }
     fn deadline(&mut self, _: Option<Instant>) {}
@@ -363,6 +360,13 @@ fn environment(env: &Env) -> Vec<(String, Option<&'static str>, Budget)> {
     if nlate > 0 && !matches!(goal_name(s.goal), None | Some("run")) {
         events.push(("deadline".into(), None, (nreq, nfault, nlate - 1, nref)));
     }
+    if nlate > 0 && s.phase != Phase::Released {
+        // A wake says only "look again": these may come when nothing is
+        // owed.
+        for look in ["room", "returned", "again"] {
+            events.push((look.into(), None, (nreq, nfault, nlate - 1, nref)));
+        }
+    }
     events
 }
 
@@ -400,55 +404,78 @@ static OUT_HELD: Outstanding<Fault> = OUT;
 static OUT_HELD_FAULT: Outstanding<Fault> = OUT_FAULT;
 static FAULT: Fault = ();
 
-/// The machine's event for the model's `name`.
-fn event(name: &str) -> Event<'static, 'static, Channel, Fault> {
+/// The stop's ticket a stop that goes on borrows.
+static STOP_TICKET: Asked<Stop> = Asked::new();
+
+/// The machine's event for the model's `name`, answering `ask`.
+fn event(name: &str, ask: Option<&str>) -> Event<'static, 'static, Channel, Fault> {
     let stopped = || Stopped::issue(StateSerial::FIRST);
     let retired = || Retired::issue(StateSerial::FIRST);
     let request = |request| Event::Request {
         request,
         deadline: None,
     };
-    match name {
-        "req_start" => request(Request::Start(6)),
-        "req_retune" => request(Request::Retune(11)),
-        "req_halt" => request(Request::Halt),
-        "req_restart" => request(Request::Restart { epoch: 2 }),
-        "req_release_stays" => request(Request::Release(Network::Stays)),
-        "req_release_stops" => request(Request::Release(Network::Stops)),
-        "start_ok" => Event::Started,
-        "start_refused" => Event::StartRefused(stopped(), StartFailure::Device),
-        "start_unstopped" => Event::StartUnstopped {
-            cause: StartFailure::Device,
-            stop: &START_UNSTOPPED,
-        },
-        "stop_ok" => Event::Stopped(stopped()),
-        "stop_failed" => Event::StopUnconfirmed(&STOP_FAILED),
-        "stop_late" => Event::StopUnconfirmed(&STOP_LATE),
-        "stop_released" => Event::StopReleased,
-        "data_stopped" => Event::DataStopped,
-        "ready" => Event::Ready,
-        "drained" => Event::Drained,
-        "drain_refused" => Event::DrainRefused,
-        "drain_later" => Event::DrainLater,
-        "drain_faulted" => Event::DrainFaulted(&FAULT),
-        "net_stopped" => Event::NetworkStopped,
-        "retired" => Event::Retired(retired()),
-        "retire_refused" => Event::RetireRefused(stopped(), &OUT_HELD),
-        "retire_refused_fault" => Event::RetireRefused(stopped(), &OUT_HELD_FAULT),
-        "returned" => Event::Returned,
-        "reinstalled" => Event::Reinstalled(stopped()),
-        "reinstall_refused" => Event::ReinstallRefused(retired(), ReinstallRefused::SameEpoch),
-        "released" => Event::Released,
-        "stale" => Event::Stale,
-        "fault_recovered" => Event::Fault(FaultAnswer::TakenBack),
-        "fault_kept" => Event::Fault(FaultAnswer::Kept {
+    match (name, ask) {
+        ("req_start", _) => request(Request::Start(6)),
+        ("req_retune", _) => request(Request::Retune(11)),
+        ("req_halt", _) => request(Request::Halt),
+        ("req_restart", _) => request(Request::Restart { epoch: 2 }),
+        ("req_release_stays", _) => request(Request::Release(Network::Stays)),
+        ("req_release_stops", _) => request(Request::Release(Network::Stops)),
+        ("start_ok", _) => Event::Start(Asked::new(), StartAnswer::Started),
+        ("start_refused", _) => Event::Start(
+            Asked::new(),
+            StartAnswer::Refused(stopped(), StartFailure::Device),
+        ),
+        ("start_unstopped", _) => Event::Start(
+            Asked::new(),
+            StartAnswer::Unstopped {
+                cause: StartFailure::Device,
+                stop: &START_UNSTOPPED,
+            },
+        ),
+        ("stale", Some("start")) => Event::Start(Asked::new(), StartAnswer::Stale),
+        ("stale", Some("drain")) => Event::Drain(Asked::new(), DrainAnswer::Stale),
+        ("stale", Some("retire")) => Event::Retire(Asked::new(), RetireAnswer::Stale),
+        ("stale", Some("reinstall")) => Event::Reinstall(Asked::new(), ReinstallAnswer::Stale),
+        ("stale", Some("release")) => Event::Release(Asked::new(), ReleaseAnswer::Stale),
+        ("stop_ok", _) => Event::Stop(Asked::new(), StopAnswer::Stopped(stopped())),
+        ("stop_failed", _) => Event::Stop(Asked::new(), StopAnswer::Failed(&STOP_FAILED)),
+        ("stop_released", _) => Event::Stop(Asked::new(), StopAnswer::Released),
+        ("stop_late", _) => Event::StopGoesOn(&STOP_TICKET, &STOP_LATE),
+        ("data_stopped", _) => Event::DataStopped(Asked::new()),
+        ("ready", _) => Event::Ready(Asked::new()),
+        ("drained", _) => Event::Drain(Asked::new(), DrainAnswer::Drained),
+        ("drain_refused", _) => Event::Drain(Asked::new(), DrainAnswer::Refused),
+        ("drain_later", _) => Event::Drain(Asked::new(), DrainAnswer::Later),
+        ("drain_faulted", _) => Event::Drain(Asked::new(), DrainAnswer::Faulted(&FAULT)),
+        ("net_stopped", _) => Event::NetworkStopped(Asked::new()),
+        ("retired", _) => Event::Retire(Asked::new(), RetireAnswer::Retired(retired())),
+        ("retire_refused", _) => {
+            Event::Retire(Asked::new(), RetireAnswer::Refused(stopped(), &OUT_HELD))
+        }
+        ("retire_refused_fault", _) => Event::Retire(
+            Asked::new(),
+            RetireAnswer::Refused(stopped(), &OUT_HELD_FAULT),
+        ),
+        ("reinstalled", _) => {
+            Event::Reinstall(Asked::new(), ReinstallAnswer::Reinstalled(stopped()))
+        }
+        ("reinstall_refused", _) => Event::Reinstall(
+            Asked::new(),
+            ReinstallAnswer::Refused(retired(), ReinstallRefused::SameEpoch),
+        ),
+        ("released", _) => Event::Release(Asked::new(), ReleaseAnswer::Released),
+        ("fault_recovered", _) => Event::Fault(FaultAnswer::TakenBack),
+        ("fault_kept", _) => Event::Fault(FaultAnswer::Kept {
             fault: &FAULT,
             outstanding: &OUT_HELD_FAULT,
         }),
-        "again" => Event::Again,
-        "room" => Event::Room,
-        "deadline" => Event::Deadline,
-        other => panic!("no event {other}"),
+        ("returned", _) => Event::Returned,
+        ("again", _) => Event::Again,
+        ("room", _) => Event::Room,
+        ("deadline", _) => Event::Deadline,
+        (other, ask) => panic!("no event {other} answering {ask:?}"),
     }
 }
 
@@ -489,7 +516,10 @@ impl Search {
 }
 
 /// The model's search over the Rust machine, within `budget`.
-pub(crate) fn explore(budget: Budget, step: &dyn Fn(Key, &str) -> (Key, Recorder)) -> Search {
+pub(crate) fn explore(
+    budget: Budget,
+    step: &dyn Fn(Key, &str, Option<&str>) -> (Key, Recorder),
+) -> Search {
     let start = Env {
         s: Machine::<Channel, Fault>::place(
             &mut core::mem::MaybeUninit::uninit(),
@@ -515,11 +545,7 @@ pub(crate) fn explore(budget: Budget, step: &dyn Fn(Key, &str) -> (Key, Recorder
             if let Some(answered) = answered {
                 pending.remove(answered);
             }
-            let (ns, recorded) = step(s, &name);
-            if recorded.not_expected {
-                problem("undefined");
-                continue;
-            }
+            let (ns, recorded) = step(s, &name, answered);
             let (asks, reports) = (recorded.asks, recorded.reports);
             let mut inst = env.inst;
             match name.as_str() {
@@ -679,10 +705,10 @@ pub(crate) fn explore(budget: Budget, step: &dyn Fn(Key, &str) -> (Key, Recorder
 }
 
 /// One step of the Rust machine from the state `key`.
-fn machine_step(key: Key, name: &str) -> (Key, Recorder) {
+fn machine_step(key: Key, name: &str, ask: Option<&str>) -> (Key, Recorder) {
     let mut machine = Machine::<Channel, Fault>::of_key(key);
     let mut recorder = Recorder::default();
-    machine.step(event(name), &mut recorder);
+    machine.step(event(name, ask), &mut recorder);
     (machine.key(), recorder)
 }
 
@@ -696,7 +722,7 @@ fn the_search_finds_every_property_of_the_model_held() {
     assert!(search.problems.is_empty(), "{:?}", search.problems);
     assert_eq!(search.dead, 0, "dead ends");
     // The model's own counts at these bounds.
-    assert_eq!((search.states, search.machine_states), (4184, 174));
+    assert_eq!((search.states, search.machine_states), (4190, 174));
 }
 
 #[test]
@@ -719,5 +745,5 @@ fn every_transition_is_the_models() {
         assert_eq!(rust, model);
     }
     assert_eq!(rust.lines().count(), MODEL_TABLE.lines().count());
-    assert_eq!(rust.lines().count(), 173);
+    assert_eq!(rust.lines().count(), 200);
 }

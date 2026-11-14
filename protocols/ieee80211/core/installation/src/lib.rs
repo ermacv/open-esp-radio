@@ -53,7 +53,7 @@ use core::marker::PhantomData;
 
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::{
-    Outstanding, ReinstallRefused, Retired, StartFailure, StopCause, StopUnconfirmed, Stopped,
+    Outstanding, ReinstallRefused, Retired, StartFailure, StopUnconfirmed, Stopped,
 };
 
 #[cfg(test)]
@@ -210,10 +210,177 @@ pub enum FaultAnswer<'a, F> {
     },
 }
 
-/// One event of the machine. What is larger than two words comes by
+/// The ticket of one ask of kind `K`: handed to the pump with the ask, and
+/// carried back by the ask's answer. It is affine and of no size, and only
+/// the machine makes one, so an answer without its ask, and a second answer
+/// to one ask, cannot be written.
+#[derive(Debug)]
+pub struct Asked<K>(PhantomData<fn() -> K>);
+
+impl<K> Asked<K> {
+    /// A ticket: the machine's alone.
+    const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+/// The ask of a start.
+#[derive(Debug)]
+pub enum Start {}
+/// The ask of a stop.
+#[derive(Debug)]
+pub enum Stop {}
+/// The ask of the data plane's stop.
+#[derive(Debug)]
+pub enum StopData {}
+/// The ask of the controller's tokens.
+#[derive(Debug)]
+pub enum EndTokens {}
+/// The ask of a drain: what a sink refused, then the cleanup.
+#[derive(Debug)]
+pub enum Drain {}
+/// The ask of the network's stop.
+#[derive(Debug)]
+pub enum StopNetwork {}
+/// The ask of a retirement.
+#[derive(Debug)]
+pub enum Retire {}
+/// The ask of a reinstall.
+#[derive(Debug)]
+pub enum Reinstall {}
+/// The ask of a release.
+#[derive(Debug)]
+pub enum Release {}
+
+/// The port's answer to a start (`poll_start`, the design's section 7).
+#[derive(Debug)]
+pub enum StartAnswer<'a, 'id, F> {
+    /// The radio runs.
+    Started,
+    /// The port refused it: the stop's proof back, with why.
+    Refused(Stopped<'id>, StartFailure<F>),
+    /// It began and failed, and its stop did not confirm.
+    Unstopped {
+        /// Why it failed.
+        cause: StartFailure<F>,
+        /// What the stop of the begun start observed.
+        stop: &'a StopUnconfirmed<F>,
+    },
+    /// The port did not take the proof.
+    Stale,
+}
+
+/// The port's final answer to a stop (`poll_stop`); one that goes on is
+/// [`Event::StopGoesOn`].
+#[derive(Debug)]
+pub enum StopAnswer<'a, 'id, F> {
+    /// The stop confirmed.
+    Stopped(Stopped<'id>),
+    /// It failed for the device's fault: asked again at [`Event::Again`].
+    Failed(&'a StopUnconfirmed<F>),
+    /// The port holds no installation.
+    Released,
+}
+
+/// The port's answer to a drain (`take_unconsumed`, then `clean`).
+#[derive(Debug)]
+pub enum DrainAnswer<'a, F> {
+    /// Nothing is kept and the stopped port is clean.
+    Drained,
+    /// A sink refused an item: asked again at [`Event::Room`].
+    Refused,
+    /// The cleanup's next step could not run, or the hardware still holds
+    /// what it releases (`Unavailable`, `Held`): asked again at
+    /// [`Event::Again`].
+    Later,
+    /// The port holds its fault (`Faulted`): asked again once the fault is
+    /// taken back.
+    Faulted(&'a F),
+    /// The port did not take the proof the drain borrowed.
+    Stale,
+}
+
+/// The port's answer to a retirement.
+#[derive(Debug)]
+pub enum RetireAnswer<'a, 'id, F> {
+    /// The retirement's proof.
+    Retired(Retired<'id>),
+    /// Refused: the stop's proof back, with what is out.
+    Refused(Stopped<'id>, &'a Outstanding<F>),
+    /// The port did not take the proof.
+    Stale,
+}
+
+/// The port's answer to a reinstall.
+#[derive(Debug)]
+pub enum ReinstallAnswer<'id> {
+    /// The next installation's stop.
+    Reinstalled(Stopped<'id>),
+    /// Refused: the retirement's proof back, with why.
+    Refused(Retired<'id>, ReinstallRefused),
+    /// The port did not take the proof.
+    Stale,
+}
+
+/// The port's answer to a release.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReleaseAnswer {
+    /// The port released its installations.
+    Released,
+    /// The port did not take the proof.
+    Stale,
+}
+
+/// One event of the machine: a request, an answer with its ask's ticket,
+/// a fault, or "look again". What is larger than two words comes by
 /// reference.
 #[derive(Debug)]
 pub enum Event<'a, 'id, C, F> {
+    /// A controller's request, with the deadline of its ending.
+    Request {
+        /// The request.
+        request: Request<C>,
+        /// When the machine reports `held` for want of progress.
+        deadline: Option<Instant>,
+    },
+    /// The start's answer.
+    Start(Asked<Start>, StartAnswer<'a, 'id, F>),
+    /// The stop's final answer.
+    Stop(Asked<Stop>, StopAnswer<'a, 'id, F>),
+    /// The stop goes on (`Deadline`, `CoreEnabled`): it borrows the stop's
+    /// ticket, which a final answer spends.
+    StopGoesOn(&'a Asked<Stop>, &'a StopUnconfirmed<F>),
+    /// The data plane stopped.
+    DataStopped(Asked<StopData>),
+    /// The controller ended its tokens.
+    Ready(Asked<EndTokens>),
+    /// The drain's answer.
+    Drain(Asked<Drain>, DrainAnswer<'a, F>),
+    /// The network stopped.
+    NetworkStopped(Asked<StopNetwork>),
+    /// The retirement's answer.
+    Retire(Asked<Retire>, RetireAnswer<'a, 'id, F>),
+    /// The reinstall's answer.
+    Reinstall(Asked<Reinstall>, ReinstallAnswer<'id>),
+    /// The release's answer.
+    Release(Asked<Release>, ReleaseAnswer),
+    /// A fault of the port, with what a stop can do about it.
+    Fault(FaultAnswer<'a, F>),
+    /// Look again: a sink that refused may have room.
+    Room,
+    /// Look again: something a refused retirement named may be home.
+    Returned,
+    /// Look again: the pump's next bounded round after an answer that said
+    /// "later".
+    Again,
+    /// The request's deadline the outbox named passed.
+    Deadline,
+}
+
+/// One event as the rules take it: the public [`Event`] with its ticket
+/// spent.
+#[derive(Debug)]
+enum Ev<'a, 'id, C, F> {
     /// A controller's request, with the deadline of its ending.
     Request {
         /// The request.
@@ -280,95 +447,6 @@ pub enum Event<'a, 'id, C, F> {
     Again,
 }
 
-/// The kind of an [`Event`], as a report of one the machine has no
-/// transition for names it.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum EventKind {
-    /// [`Event::Request`].
-    Request,
-    /// [`Event::Started`].
-    Started,
-    /// [`Event::StartRefused`].
-    StartRefused,
-    /// [`Event::StartUnstopped`].
-    StartUnstopped,
-    /// [`Event::Stopped`].
-    Stopped,
-    /// [`Event::StopUnconfirmed`].
-    StopUnconfirmed,
-    /// [`Event::StopReleased`].
-    StopReleased,
-    /// [`Event::Fault`].
-    Fault,
-    /// [`Event::DataStopped`].
-    DataStopped,
-    /// [`Event::Ready`].
-    Ready,
-    /// [`Event::Drained`].
-    Drained,
-    /// [`Event::DrainRefused`].
-    DrainRefused,
-    /// [`Event::DrainLater`].
-    DrainLater,
-    /// [`Event::DrainFaulted`].
-    DrainFaulted,
-    /// [`Event::Room`].
-    Room,
-    /// [`Event::NetworkStopped`].
-    NetworkStopped,
-    /// [`Event::Retired`].
-    Retired,
-    /// [`Event::RetireRefused`].
-    RetireRefused,
-    /// [`Event::Returned`].
-    Returned,
-    /// [`Event::Reinstalled`].
-    Reinstalled,
-    /// [`Event::ReinstallRefused`].
-    ReinstallRefused,
-    /// [`Event::Released`].
-    Released,
-    /// [`Event::Stale`].
-    Stale,
-    /// [`Event::Deadline`].
-    Deadline,
-    /// [`Event::Again`].
-    Again,
-}
-
-impl<C, F> Event<'_, '_, C, F> {
-    /// Its kind.
-    pub const fn kind(&self) -> EventKind {
-        match self {
-            Self::Request { .. } => EventKind::Request,
-            Self::Started => EventKind::Started,
-            Self::StartRefused(..) => EventKind::StartRefused,
-            Self::StartUnstopped { .. } => EventKind::StartUnstopped,
-            Self::Stopped(_) => EventKind::Stopped,
-            Self::StopUnconfirmed(_) => EventKind::StopUnconfirmed,
-            Self::StopReleased => EventKind::StopReleased,
-            Self::Fault(_) => EventKind::Fault,
-            Self::DataStopped => EventKind::DataStopped,
-            Self::Ready => EventKind::Ready,
-            Self::Drained => EventKind::Drained,
-            Self::DrainRefused => EventKind::DrainRefused,
-            Self::DrainLater => EventKind::DrainLater,
-            Self::DrainFaulted(_) => EventKind::DrainFaulted,
-            Self::Room => EventKind::Room,
-            Self::NetworkStopped => EventKind::NetworkStopped,
-            Self::Retired(_) => EventKind::Retired,
-            Self::RetireRefused(..) => EventKind::RetireRefused,
-            Self::Returned => EventKind::Returned,
-            Self::Reinstalled(_) => EventKind::Reinstalled,
-            Self::ReinstallRefused(..) => EventKind::ReinstallRefused,
-            Self::Released => EventKind::Released,
-            Self::Stale => EventKind::Stale,
-            Self::Deadline => EventKind::Deadline,
-            Self::Again => EventKind::Again,
-        }
-    }
-}
-
 /// How an accepted request ended as asked.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum End {
@@ -403,19 +481,11 @@ pub enum Status<'a, F> {
     Interrupted,
     /// What the machine waits for.
     Held(Waiting<'a, F>),
-    /// The machine has no transition for the event in its phase: it changed
-    /// nothing. The pump sent what no ask of the machine called for.
-    NotExpected {
-        /// The event.
-        event: EventKind,
-        /// The phase.
-        phase: Phase,
-    },
 }
 
-/// What the pump lends a step: one method an ask, and one for each kind of
-/// report: a refusal, an outcome, a status.
-pub trait Outbox<'id, C, F> {
+/// What a step's rules write: one method an ask, and one for each kind of
+/// report. The machine turns it into the [`Outbox`] with the asks' tickets.
+trait Asks<'id, C, F> {
     /// Start the radio on `channel`, with the stop's proof.
     fn start(&mut self, stopped: Stopped<'id>, channel: C);
     /// Stop the radio.
@@ -434,6 +504,40 @@ pub trait Outbox<'id, C, F> {
     fn reinstall(&mut self, retired: Retired<'id>, epoch: u32);
     /// Release the port's installations.
     fn release(&mut self, retired: Retired<'id>);
+    /// A request was not accepted: nothing changed.
+    fn refused(&mut self, request: Request<C>, phase: Phase);
+    /// The one final answer of an accepted request.
+    fn ended(&mut self, end: Result<End, Unreached<'_, C, F>>);
+    /// What is true now, while a request goes on: never an answer.
+    fn status(&mut self, status: Status<'_, F>);
+    /// When the pump sends [`Event::Deadline`]; `None`, never.
+    fn deadline(&mut self, at: Option<Instant>);
+}
+
+/// What the pump lends a step: one method an ask, each with its ticket, and
+/// one for each kind of report: a refusal, an outcome, a status.
+pub trait Outbox<'id, C, F> {
+    /// Start the radio on `channel`, with the stop's proof.
+    fn start(&mut self, asked: Asked<Start>, stopped: Stopped<'id>, channel: C);
+    /// A stop ends the start in progress: its ticket back, so no answer of
+    /// it is left to give.
+    fn cancel_start(&mut self) -> Asked<Start>;
+    /// Stop the radio.
+    fn stop(&mut self, asked: Asked<Stop>);
+    /// Stop the data plane.
+    fn stop_data(&mut self, asked: Asked<StopData>);
+    /// End the controller's tokens.
+    fn end_tokens(&mut self, asked: Asked<EndTokens>);
+    /// Take what a sink refused, then clean the stopped port.
+    fn drain(&mut self, asked: Asked<Drain>, stopped: &Stopped<'id>);
+    /// Stop the network.
+    fn stop_network(&mut self, asked: Asked<StopNetwork>);
+    /// Retire the stopped port.
+    fn retire(&mut self, asked: Asked<Retire>, stopped: Stopped<'id>);
+    /// Install the next installation at `epoch`.
+    fn reinstall(&mut self, asked: Asked<Reinstall>, retired: Retired<'id>, epoch: u32);
+    /// Release the port's installations.
+    fn release(&mut self, asked: Asked<Release>, retired: Retired<'id>);
     /// A request was not accepted: nothing changed.
     fn refused(&mut self, request: Request<C>, phase: Phase);
     /// The one final answer of an accepted request.
@@ -503,56 +607,59 @@ struct Waits {
     returns: bool,
 }
 
-/// The asks of a stop and of a drain that have no answer yet: neither is
-/// asked twice.
+/// The asks in flight whose tickets the pump holds: a start (a stop takes
+/// its ticket back), a stop and a drain (neither is asked twice).
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 struct Flight {
+    start: bool,
     stop: bool,
     drain: bool,
 }
 
-/// The outbox a step's rules write into: a stop or a drain in flight is
-/// not asked again.
+/// The rules' asks, with their tickets, into the pump's outbox.
 struct Flighted<'o, O> {
     out: &'o mut O,
     flight: Flight,
-    /// The rules had no transition for the event.
-    not_expected: bool,
 }
 
-impl<'id, C, F, O: Outbox<'id, C, F>> Outbox<'id, C, F> for Flighted<'_, O> {
+impl<'id, C, F, O: Outbox<'id, C, F>> Asks<'id, C, F> for Flighted<'_, O> {
     fn start(&mut self, stopped: Stopped<'id>, channel: C) {
-        self.out.start(stopped, channel);
+        self.flight.start = true;
+        self.out.start(Asked::new(), stopped, channel);
     }
     fn stop(&mut self) {
+        // A stop ends a start in progress: no answer of it is left to come.
+        if core::mem::take(&mut self.flight.start) {
+            let Asked(_) = self.out.cancel_start();
+        }
         if !self.flight.stop {
             self.flight.stop = true;
-            self.out.stop();
+            self.out.stop(Asked::new());
         }
     }
     fn stop_data(&mut self) {
-        self.out.stop_data();
+        self.out.stop_data(Asked::new());
     }
     fn end_tokens(&mut self) {
-        self.out.end_tokens();
+        self.out.end_tokens(Asked::new());
     }
     fn drain(&mut self, stopped: &Stopped<'id>) {
         if !self.flight.drain {
             self.flight.drain = true;
-            self.out.drain(stopped);
+            self.out.drain(Asked::new(), stopped);
         }
     }
     fn stop_network(&mut self) {
-        self.out.stop_network();
+        self.out.stop_network(Asked::new());
     }
     fn retire(&mut self, stopped: Stopped<'id>) {
-        self.out.retire(stopped);
+        self.out.retire(Asked::new(), stopped);
     }
     fn reinstall(&mut self, retired: Retired<'id>, epoch: u32) {
-        self.out.reinstall(retired, epoch);
+        self.out.reinstall(Asked::new(), retired, epoch);
     }
     fn release(&mut self, retired: Retired<'id>) {
-        self.out.release(retired);
+        self.out.release(Asked::new(), retired);
     }
     fn refused(&mut self, request: Request<C>, phase: Phase) {
         self.out.refused(request, phase);
@@ -561,9 +668,6 @@ impl<'id, C, F, O: Outbox<'id, C, F>> Outbox<'id, C, F> for Flighted<'_, O> {
         self.out.ended(end);
     }
     fn status(&mut self, status: Status<'_, F>) {
-        if matches!(status, Status::NotExpected { .. }) {
-            self.not_expected = true;
-        }
         self.out.status(status);
     }
     fn deadline(&mut self, at: Option<Instant>) {
@@ -612,6 +716,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 returns: false,
             },
             flight: Flight {
+                start: false,
                 stop: false,
                 drain: false,
             },
@@ -642,51 +747,82 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         core::mem::replace(&mut self.state, State::Released)
     }
 
-    /// One event: its rules, with a stop and a drain asked once while in
-    /// flight. An event the rules have no transition for changes nothing.
+    /// One event. An answer spends its ask's ticket; a stop and a drain in
+    /// flight are not asked again, and a stop takes a start's ticket back.
     pub fn step(&mut self, event: Event<'_, 'id, C, F>, out: &mut impl Outbox<'id, C, F>) {
-        let before = self.flight;
-        let mut flight = before;
-        match &event {
-            Event::Stopped(_) | Event::StopReleased => flight.stop = false,
-            Event::StopUnconfirmed(stop) => match stop.cause {
-                // The stop failed, or the port holds no installation.
-                StopCause::Device(_) | StopCause::Released => flight.stop = false,
-                // The stop goes on: still in flight.
-                StopCause::Deadline | StopCause::CoreEnabled => {}
-            },
-            Event::Drained | Event::DrainRefused | Event::DrainLater | Event::DrainFaulted(_) => {
-                flight.drain = false;
+        let mut flight = self.flight;
+        let ev = match event {
+            Event::Request { request, deadline } => Ev::Request { request, deadline },
+            Event::Start(Asked(_), answer) => {
+                flight.start = false;
+                match answer {
+                    StartAnswer::Started => Ev::Started,
+                    StartAnswer::Refused(stopped, why) => Ev::StartRefused(stopped, why),
+                    StartAnswer::Unstopped { cause, stop } => Ev::StartUnstopped { cause, stop },
+                    StartAnswer::Stale => Ev::Stale,
+                }
             }
-            Event::Stale if self.phase() == Phase::Settling => flight.drain = false,
-            _ => {}
-        }
-        let mut out = Flighted {
-            out,
-            flight,
-            not_expected: false,
+            Event::Stop(Asked(_), answer) => {
+                flight.stop = false;
+                match answer {
+                    StopAnswer::Stopped(stopped) => Ev::Stopped(stopped),
+                    StopAnswer::Failed(stop) => Ev::StopUnconfirmed(stop),
+                    StopAnswer::Released => Ev::StopReleased,
+                }
+            }
+            // The stop goes on, still in flight.
+            Event::StopGoesOn(Asked(_), stop) => Ev::StopUnconfirmed(stop),
+            Event::DataStopped(Asked(_)) => Ev::DataStopped,
+            Event::Ready(Asked(_)) => Ev::Ready,
+            Event::Drain(Asked(_), answer) => {
+                flight.drain = false;
+                match answer {
+                    DrainAnswer::Drained => Ev::Drained,
+                    DrainAnswer::Refused => Ev::DrainRefused,
+                    DrainAnswer::Later => Ev::DrainLater,
+                    DrainAnswer::Faulted(fault) => Ev::DrainFaulted(fault),
+                    DrainAnswer::Stale => Ev::Stale,
+                }
+            }
+            Event::NetworkStopped(Asked(_)) => Ev::NetworkStopped,
+            Event::Retire(Asked(_), answer) => match answer {
+                RetireAnswer::Retired(retired) => Ev::Retired(retired),
+                RetireAnswer::Refused(stopped, outstanding) => {
+                    Ev::RetireRefused(stopped, outstanding)
+                }
+                RetireAnswer::Stale => Ev::Stale,
+            },
+            Event::Reinstall(Asked(_), answer) => match answer {
+                ReinstallAnswer::Reinstalled(stopped) => Ev::Reinstalled(stopped),
+                ReinstallAnswer::Refused(retired, why) => Ev::ReinstallRefused(retired, why),
+                ReinstallAnswer::Stale => Ev::Stale,
+            },
+            Event::Release(Asked(_), answer) => match answer {
+                ReleaseAnswer::Released => Ev::Released,
+                ReleaseAnswer::Stale => Ev::Stale,
+            },
+            Event::Fault(answer) => Ev::Fault(answer),
+            Event::Room => Ev::Room,
+            Event::Returned => Ev::Returned,
+            Event::Again => Ev::Again,
+            Event::Deadline => Ev::Deadline,
         };
-        self.rules(event, &mut out);
-        self.flight = if out.not_expected { before } else { out.flight };
+        let mut out = Flighted { out, flight };
+        self.rules(ev, &mut out);
+        self.flight = out.flight;
     }
 
-    fn rules(&mut self, event: Event<'_, 'id, C, F>, out: &mut impl Outbox<'id, C, F>) {
+    fn rules(&mut self, event: Ev<'_, 'id, C, F>, out: &mut impl Asks<'id, C, F>) {
+        // Each answer comes with its ask's ticket: the phase that asked it
+        // is the phase it finds.
         let phase = self.phase();
-        let kind = event.kind();
-        let not_expected = Status::NotExpected { event: kind, phase };
         match event {
-            Event::Request { request, deadline } => self.request(request, deadline, out),
-            Event::DataStopped => {
-                if self.data != Data::Stopping {
-                    return out.status(not_expected);
-                }
+            Ev::Request { request, deadline } => self.request(request, deadline, out),
+            Ev::DataStopped => {
                 self.data = Data::Stopped;
                 self.proceed(out);
             }
-            Event::NetworkStopped => {
-                if self.net != Net::Stopping {
-                    return out.status(not_expected);
-                }
+            Ev::NetworkStopped => {
                 self.net = Net::Stopped;
                 if matches!(self.goal, Some(Goal::Release(_))) {
                     match self.take() {
@@ -695,39 +831,24 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                     }
                 }
             }
-            Event::Ready => {
-                if !self.waits.ready {
-                    return out.status(not_expected);
-                }
+            Ev::Ready => {
                 self.waits.ready = false;
                 self.proceed(out);
             }
-            Event::Drained => {
-                if !self.waits.drained {
-                    return out.status(not_expected);
-                }
+            Ev::Drained => {
                 self.waits.drained = false;
                 self.proceed(out);
             }
-            Event::DrainRefused => {
-                if !self.waits.drained {
-                    return out.status(not_expected);
-                }
+            Ev::DrainRefused => {
                 out.status(Status::Held(Waiting::Unconsumed));
             }
-            Event::DrainLater => {
-                if !self.waits.drained {
-                    return out.status(not_expected);
-                }
+            Ev::DrainLater => {
                 out.status(Status::Held(Waiting::Cleanup));
             }
-            Event::DrainFaulted(fault) => {
-                if !self.waits.drained {
-                    return out.status(not_expected);
-                }
+            Ev::DrainFaulted(fault) => {
                 out.status(Status::Held(Waiting::CleanupFault(fault)));
             }
-            Event::Again => {
+            Ev::Again => {
                 // The pump's next round after an answer that said "later".
                 if phase == Phase::Stopping {
                     out.stop();
@@ -738,28 +859,29 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                     out.drain(stopped);
                 }
             }
-            Event::Room => match &self.state {
+            // Look again: nothing is done when no drain waits.
+            Ev::Room => match &self.state {
                 State::Stopped(stopped) | State::Settling(stopped) if self.waits.drained => {
                     out.drain(stopped);
                 }
-                _ => out.status(not_expected),
+                _ => {}
             },
-            Event::Deadline => out.status(Status::Held(Waiting::Deadline(phase))),
-            Event::Fault(answer) => self.fault(answer, out),
-            Event::Stale => self.stale(out),
-            Event::Started if phase == Phase::Starting => {
+            Ev::Deadline => out.status(Status::Held(Waiting::Deadline(phase))),
+            Ev::Fault(answer) => self.fault(answer, out),
+            Ev::Stale => self.stale(out),
+            Ev::Started => {
                 self.state = State::Running;
                 self.goal = None;
                 self.data = Data::Running;
                 out.ended(Ok(End::Started));
             }
-            Event::StartRefused(stopped, failure) if phase == Phase::Starting => {
+            Ev::StartRefused(stopped, failure) => {
                 // The radio is stopped; after a retune the data still runs
                 // and stops now.
                 out.ended(Err(Unreached::StartRefused(StartEnd::Refused(failure))));
                 self.settle(stopped, None, out);
             }
-            Event::StartUnstopped { cause, stop } if phase == Phase::Starting => {
+            Ev::StartUnstopped { cause, stop } => {
                 // The port is stopping and gave no proof: the stop goes on.
                 self.state = State::Stopping;
                 self.goal = None;
@@ -769,7 +891,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                     stop,
                 })));
             }
-            Event::Stopped(stopped) if phase == Phase::Stopping => {
+            Ev::Stopped(stopped) => {
                 if let Some(Goal::Run(channel)) = self.goal {
                     self.state = State::Starting;
                     out.start(stopped, channel);
@@ -784,7 +906,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                     out.drain(stopped);
                 }
             }
-            Event::StopReleased if phase == Phase::Stopping => {
+            Ev::StopReleased => {
                 // The port holds no installation: that is the machine's
                 // state too; the open request ends with it.
                 match self.goal {
@@ -795,25 +917,25 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 self.state = State::Released;
                 self.goal = None;
             }
-            Event::StopUnconfirmed(stop) if phase == Phase::Stopping => {
+            Ev::StopUnconfirmed(stop) => {
                 out.status(Status::Held(Waiting::Radio(stop)));
             }
-            Event::Retired(retired) if phase == Phase::Retiring => {
+            Ev::Retired(retired) => {
                 self.after_retired(retired, out);
             }
-            Event::RetireRefused(stopped, outstanding) if phase == Phase::Retiring => {
+            Ev::RetireRefused(stopped, outstanding) => {
                 self.state = State::Settling(stopped);
                 self.waits.returns = true;
                 out.status(Status::Held(Waiting::Outstanding(outstanding)));
             }
-            Event::Returned if phase == Phase::Settling => {
-                if !self.waits.returns {
-                    return out.status(not_expected);
+            // Look again: nothing is done when no retirement waits.
+            Ev::Returned => {
+                if phase == Phase::Settling && self.waits.returns {
+                    self.waits.returns = false;
+                    self.proceed(out);
                 }
-                self.waits.returns = false;
-                self.proceed(out);
             }
-            Event::Reinstalled(stopped) if phase == Phase::Reinstalling => {
+            Ev::Reinstalled(stopped) => {
                 self.ended = false;
                 if let Some(Goal::Restart { .. }) = self.goal {
                     self.state = State::Stopped(stopped);
@@ -825,7 +947,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 // too.
                 let _asked = self.settle(stopped, self.goal, out);
             }
-            Event::ReinstallRefused(retired, why) if phase == Phase::Reinstalling => {
+            Ev::ReinstallRefused(retired, why) => {
                 if let Some(Goal::Restart { .. }) = self.goal {
                     self.state = State::Retired(retired);
                     self.goal = None;
@@ -834,12 +956,11 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 }
                 self.after_retired(retired, out);
             }
-            Event::Released if phase == Phase::Releasing => {
+            Ev::Released => {
                 self.state = State::Released;
                 self.goal = None;
                 out.ended(Ok(End::Released));
             }
-            _ => out.status(not_expected),
         }
     }
 
@@ -847,7 +968,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         &mut self,
         request: Request<C>,
         deadline: Option<Instant>,
-        out: &mut impl Outbox<'id, C, F>,
+        out: &mut impl Asks<'id, C, F>,
     ) {
         let phase = self.phase();
         let refused = (request, phase);
@@ -941,7 +1062,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// A release that stops the network asks its stop once.
-    fn want_network(&mut self, goal: Goal<C>, out: &mut impl Outbox<'id, C, F>) {
+    fn want_network(&mut self, goal: Goal<C>, out: &mut impl Asks<'id, C, F>) {
         if matches!(goal, Goal::Release(Network::Stops)) && self.net == Net::Idle {
             out.stop_network();
             self.net = Net::Stopping;
@@ -954,7 +1075,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         &mut self,
         stopped: Stopped<'id>,
         goal: Option<Goal<C>>,
-        out: &mut impl Outbox<'id, C, F>,
+        out: &mut impl Asks<'id, C, F>,
     ) -> bool {
         if self.data == Data::Running {
             self.data = Data::Stopping;
@@ -979,7 +1100,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// A settling state goes on once nothing it waits for is left.
-    fn proceed(&mut self, out: &mut impl Outbox<'id, C, F>) {
+    fn proceed(&mut self, out: &mut impl Asks<'id, C, F>) {
         if !matches!(self.state, State::Settling(_)) || self.data != Data::Stopped {
             return;
         }
@@ -1002,7 +1123,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// Holding the retirement's proof: reinstall, release, or wait.
-    fn after_retired(&mut self, retired: Retired<'id>, out: &mut impl Outbox<'id, C, F>) {
+    fn after_retired(&mut self, retired: Retired<'id>, out: &mut impl Asks<'id, C, F>) {
         match self.goal {
             Some(Goal::Restart { epoch }) => {
                 self.state = State::Reinstalling;
@@ -1023,7 +1144,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// A fault of the port, in any phase.
-    fn fault(&mut self, answer: FaultAnswer<'_, F>, out: &mut impl Outbox<'id, C, F>) {
+    fn fault(&mut self, answer: FaultAnswer<'_, F>, out: &mut impl Asks<'id, C, F>) {
         let phase = self.phase();
         let kept = match answer {
             FaultAnswer::TakenBack => None,
@@ -1068,22 +1189,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// A proof the port did not take: it is gone, a stop gives the next.
-    fn stale(&mut self, out: &mut impl Outbox<'id, C, F>) {
-        let phase = self.phase();
-        if !matches!(
-            phase,
-            Phase::Starting
-                | Phase::Settling
-                | Phase::Retiring
-                | Phase::Reinstalling
-                | Phase::Releasing
-        ) {
-            out.status(Status::NotExpected {
-                event: EventKind::Stale,
-                phase,
-            });
-            return;
-        }
+    fn stale(&mut self, out: &mut impl Asks<'id, C, F>) {
         // From a settling it is the drain's answer: the stop's proof the
         // machine still holds is the stale one, and goes.
         out.status(Status::Held(Waiting::Stale));

@@ -1,3 +1,4 @@
+| reinstalling | again | reinstalling | — | — |
 | reinstalling | deadline | reinstalling | — | held |
 | reinstalling | fault_kept | reinstalling | — | held |
 | reinstalling | fault_recovered | reinstalling | — | — |
@@ -15,6 +16,8 @@
 | reinstalling | req_restart | reinstalling | — | refused |
 | reinstalling | req_retune | reinstalling | — | refused |
 | reinstalling | req_start | reinstalling | — | refused |
+| reinstalling | returned | reinstalling | — | — |
+| reinstalling | room | reinstalling | — | — |
 | reinstalling | stale | stopping | stop | held |
 | released | data_stopped | released | — | — |
 | released | net_stopped | released | — | — |
@@ -25,6 +28,7 @@
 | released | req_restart | released | — | refused |
 | released | req_retune | released | — | refused |
 | released | req_start | released | — | refused |
+| releasing | again | releasing | — | — |
 | releasing | deadline | releasing | — | held |
 | releasing | fault_kept | releasing | — | held |
 | releasing | fault_recovered | releasing | — | — |
@@ -35,7 +39,10 @@
 | releasing | req_restart | releasing | — | refused |
 | releasing | req_retune | releasing | — | refused |
 | releasing | req_start | releasing | — | refused |
+| releasing | returned | releasing | — | — |
+| releasing | room | releasing | — | — |
 | releasing | stale | stopping | stop | held |
+| retired | again | retired | — | — |
 | retired | deadline | retired | — | held |
 | retired | fault_kept | retired | — | held |
 | retired | fault_recovered | retired | — | — |
@@ -49,6 +56,9 @@
 | retired | req_restart | retired | — | refused |
 | retired | req_retune | retired | — | refused |
 | retired | req_start | retired | — | refused |
+| retired | returned | retired | — | — |
+| retired | room | retired | — | — |
+| retiring | again | retiring | — | — |
 | retiring | deadline | retiring | — | held |
 | retiring | fault_kept | retiring | — | held |
 | retiring | fault_recovered | retiring | — | — |
@@ -66,7 +76,10 @@
 | retiring | retired | reinstalling | reinstall | — |
 | retiring | retired | releasing | release | — |
 | retiring | retired | retired | — | — |
+| retiring | returned | retiring | — | — |
+| retiring | room | retiring | — | — |
 | retiring | stale | stopping | stop | held |
+| running | again | running | — | — |
 | running | fault_kept | stopping | stop, stop_data | interrupted, held |
 | running | fault_recovered | stopping | stop, stop_data | interrupted |
 | running | req_halt | stopping | stop, stop_data | — |
@@ -75,6 +88,9 @@
 | running | req_restart | stopping | stop, stop_data | — |
 | running | req_retune | stopping | stop | — |
 | running | req_start | running | — | refused |
+| running | returned | running | — | — |
+| running | room | running | — | — |
+| settling | again | settling | — | — |
 | settling | again | settling | drain | — |
 | settling | data_stopped | retiring | retire | — |
 | settling | data_stopped | settling | — | — |
@@ -109,8 +125,11 @@
 | settling | req_retune | settling | — | refused |
 | settling | req_start | settling | — | refused |
 | settling | returned | retiring | retire | — |
+| settling | returned | settling | — | — |
+| settling | room | settling | — | — |
 | settling | room | settling | drain | — |
 | settling | stale | stopping | stop | held |
+| starting | again | starting | — | — |
 | starting | fault_kept | stopping | stop | interrupted, held, start_refused |
 | starting | fault_kept | stopping | stop, stop_data | interrupted, held, start_refused |
 | starting | fault_recovered | stopping | stop | interrupted, start_refused |
@@ -121,11 +140,14 @@
 | starting | req_restart | stopping | stop | superseded |
 | starting | req_retune | starting | — | refused |
 | starting | req_start | starting | — | refused |
+| starting | returned | starting | — | — |
+| starting | room | starting | — | — |
 | starting | stale | stopping | stop | held, start_refused |
 | starting | start_ok | running | — | started |
 | starting | start_refused | settling | stop_data | start_refused |
 | starting | start_refused | stopped | — | start_refused |
 | starting | start_unstopped | stopping | stop | start_refused |
+| stopped | again | stopped | — | — |
 | stopped | fault_kept | stopped | — | held |
 | stopped | fault_recovered | stopped | — | — |
 | stopped | req_halt | stopped | — | halted |
@@ -134,6 +156,9 @@
 | stopped | req_restart | settling | end_tokens, drain | — |
 | stopped | req_retune | stopped | — | refused |
 | stopped | req_start | starting | start | — |
+| stopped | returned | stopped | — | — |
+| stopped | room | stopped | — | — |
+| stopping | again | stopping | — | — |
 | stopping | again | stopping | stop | — |
 | stopping | data_stopped | stopping | — | — |
 | stopping | deadline | stopping | — | held |
@@ -155,6 +180,8 @@
 | stopping | req_restart | stopping | — | superseded |
 | stopping | req_retune | stopping | — | refused |
 | stopping | req_start | stopping | — | refused |
+| stopping | returned | stopping | — | — |
+| stopping | room | stopping | — | — |
 | stopping | stop_failed | stopping | — | held |
 | stopping | stop_late | stopping | — | held |
 | stopping | stop_ok | retiring | retire | — |
