@@ -7,6 +7,7 @@ impl<'p, B: ModelComposition, C: ModelClass> ModelBuffer<'p, B, C> {
     fn into_owned(self, loan: &BodyLoan<'p, B::Identity, B>) -> ModelBuffer<'static, B, C> {
         ModelBuffer {
             slot: self.slot.map(|slot| loan.reclaim_slot(slot)),
+            out: self.out,
             loan: None,
             memory: self.memory,
             admitted_at: self.admitted_at,
@@ -18,6 +19,7 @@ impl<B: ModelComposition, C: ModelClass> ModelBuffer<'static, B, C> {
     fn lend<'p>(self, loan: &BodyLoan<'p, B::Identity, B>) -> ModelBuffer<'p, B, C> {
         ModelBuffer {
             slot: self.slot.map(|slot| loan.lend_slot(slot)),
+            out: self.out,
             loan: Some(*loan),
             memory: self.memory,
             admitted_at: self.admitted_at,

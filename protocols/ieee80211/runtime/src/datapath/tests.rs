@@ -1818,9 +1818,15 @@ fn a_stopped_port_reinstalls_in_place_under_the_same_actor_without_a_reset() {
             resources,
             ..
         } = install;
+        // The installation's other tokens go home: a retirement needs its
+        // tickets and buffers back.
+        let block_acks = {
+            let resources = resources;
+            resources.shared.block_acks
+        };
         let storage = Box::leak(Box::new(
             crate::station::RxBlockAckStorage::<Types<'_>, 2, 4>::new(
-                resources.shared.block_acks,
+                block_acks,
                 oer_portable_time::Duration::from_millis(100),
             ),
         ));
@@ -1921,9 +1927,15 @@ fn a_refused_reinstall_names_its_reason_and_the_retired_installation_reinstalls_
             resources,
             ..
         } = install;
+        // The installation's other tokens go home: a retirement needs its
+        // tickets and buffers back.
+        let block_acks = {
+            let resources = resources;
+            resources.shared.block_acks
+        };
         let storage = Box::leak(Box::new(
             crate::station::RxBlockAckStorage::<Types<'_>, 2, 4>::new(
-                resources.shared.block_acks,
+                block_acks,
                 oer_portable_time::Duration::from_millis(100),
             ),
         ));
@@ -2414,8 +2426,11 @@ fn a_terminal_kept_through_the_confirmed_stop_comes_once_and_the_port_retires() 
             assert_eq!(bench.end, Some(ActorEnd::Retired));
         },
         |actor, _| {
+            // The bench's lifecycle still holds the installation's transmit
+            // tokens, which end with it; nothing else stays with the port.
             assert_eq!(
-                actor.port().outstanding().classes(),
+                actor.port().outstanding().classes()
+                    & !oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT,
                 0,
                 "nothing stays with the port"
             );

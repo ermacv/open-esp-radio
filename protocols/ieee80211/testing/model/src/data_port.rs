@@ -2048,7 +2048,10 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             removals: self.driver.removing.len(),
             retained_groups: 0,
             unconsumed: self.kept.len() + self.held.events.len(),
-            transmit_out: 0,
+            transmit_out: self
+                .held
+                .transmit_out
+                .load(core::sync::atomic::Ordering::Relaxed),
             queued,
             running: self
                 .driver

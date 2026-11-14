@@ -346,12 +346,14 @@ pub(super) fn station_frame<'s>(
 }
 
 /// Stop the started port of `harness` and reinstall it: the next
-/// installation's port and resources, with the earlier installation's
-/// tokens still with the caller.
+/// installation's port and resources. The earlier installation's tickets
+/// and buffers go home first, as a retirement needs, and the harness takes
+/// the next installation's; its other tokens stay with the caller.
 pub(super) fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelResources<'s, B<'s>>) {
     let waker = harness.waker();
     let now = harness.clock.now();
     assert!(harness.poll_stopped(&mut Context::from_waker(&waker), now));
+    <Harness<'s> as DataPortHarness<'s>>::end_tokens(&mut harness);
     let retired = harness
         .port
         .retire(harness.stopped.take().unwrap())
@@ -364,6 +366,9 @@ pub(super) fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelReso
         panic!("a retired port reinstalls");
     };
     assert_eq!(harness.port.installation_count(), 1);
+    let mut resources = resources;
+    harness.tickets = core::mem::take(&mut resources.shared.tickets);
+    harness.small = core::mem::take(&mut resources.shared.small);
     harness.commands = commands;
     harness.stopped = Some(stopped);
     (harness, resources)

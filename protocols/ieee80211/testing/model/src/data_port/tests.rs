@@ -1582,6 +1582,9 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         assert_eq!(harness.take_completed(), 1);
         assert!(harness.poll_stopped(&mut cx, now));
         assert_eq!(harness.air.disable_calls(), 1);
+        // The installation's tickets and buffers go home, as a retirement
+        // needs; the lent unit stays lent.
+        harness.end_tokens();
         let retired = harness
             .port
             .retire(harness.stopped.take().unwrap())
@@ -1618,14 +1621,18 @@ fn a_retirement_with_a_unit_out_names_its_class_and_changes_nothing() {
         let Err(ProofRefused::Refused(stopped, outstanding)) = harness.port.retire(stopped) else {
             panic!("a port with a unit out does not retire");
         };
+        // The fixture's own tickets and buffers are out too.
         assert_eq!(
             outstanding.classes(),
             oer_protocols_ieee80211_contracts_port::outstanding::class::RECEIVED
+                | oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT
         );
         assert_eq!(outstanding.received, 1);
+        assert_eq!(outstanding.transmit_out, harness.small.len());
         assert_eq!(harness.port.installation_count(), 0);
-        // The unit home, the same proof retires.
+        // The unit and the buffers home, the same proof retires.
         assert!(harness.port.recycle(frame).is_ok());
+        harness.end_tokens();
         assert!(harness.port.retire(stopped).is_ok());
     });
 }

@@ -320,11 +320,12 @@ fn a_station_frame_under_a_key_of_an_earlier_installation_is_refused_at_submit()
         let association = ModelKeys::<B<'_>, Station>::begin_association(start, Spp::NotNegotiated);
         let (key, _group, _permission) =
             install_keys(&mut harness, &association, slot, group_slot, permission);
-        // The frame is prepared and sealed under the first installation.
-        let sealed = station_frame(&mut harness, &key, 1);
-        let ticket = sealed.operation.ticket().index();
         let (mut harness, _resources) = reinstall(harness);
         harness.start();
+        // A frame of the current installation's ticket and buffer, sealed
+        // under the earlier installation's key.
+        let sealed = station_frame(&mut harness, &key, 1);
+        let ticket = sealed.operation.ticket().index();
         let now = harness.clock.now();
         assert_eq!(
             harness.port.submit(sealed, now, &mut harness.sink).unwrap(),
@@ -368,10 +369,9 @@ fn a_frame_under_an_earlier_key_is_refused_as_stale_while_the_radio_is_stopped()
         // Not started. The current installation's ticket and buffer, the
         // earlier installation's key: the stale refusal comes first, as no
         // start answers it.
-        let mut tickets = resources.shared.tickets;
-        let mut small = resources.shared.small;
-        let ticket = tickets.pop().unwrap();
-        let buffer = small.pop().unwrap();
+        drop(resources);
+        let ticket = harness.tickets.pop().unwrap();
+        let buffer = harness.small.pop().unwrap();
         let attempt = harness.admitted_under_number(ticket, buffer, &key, 1);
         let ticket = attempt.operation.ticket().index();
         let now = harness.clock.now();
@@ -385,8 +385,6 @@ fn a_frame_under_an_earlier_key_is_refused_as_stale_while_the_radio_is_stopped()
                 installation: 1,
             })
         );
-        harness.tickets = tickets;
-        harness.small = small;
         let mut beacon = None;
         assert_eq!(
             settle(&mut harness, &mut beacon),

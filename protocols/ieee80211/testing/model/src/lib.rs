@@ -447,10 +447,34 @@ pub enum ModelBlockAcks {}
 /// [`ModelNetworkClass`], which has none.
 pub struct ModelBuffer<'id, B: ModelComposition, C: ModelClass> {
     slot: Option<ModelBufferSlot<'id, B, C>>,
+    /// The installation's count of its buffers out, which this one is in
+    /// while it lives; none for a network's memory.
+    out: Option<BufferOut>,
     loan: Option<BodyLoan<'id, B::Identity, B>>,
     memory: C::Memory,
     admitted_at: Option<RadioInstant<Ieee80211Radio>>,
     admitted: Option<Instant>,
+}
+
+/// One transmit buffer of an installation counted out while it lives: the
+/// model's count of [`Outstanding::transmit_out`], as the S31 port counts
+/// the buffers whose return its bank still waits for.
+///
+/// [`Outstanding::transmit_out`]: oer_protocols_ieee80211_contracts_port::Outstanding::transmit_out
+pub(crate) struct BufferOut(alloc::sync::Arc<core::sync::atomic::AtomicUsize>);
+
+impl BufferOut {
+    /// One more buffer out of `count`.
+    pub(crate) fn of(count: &alloc::sync::Arc<core::sync::atomic::AtomicUsize>) -> Self {
+        count.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        Self(count.clone())
+    }
+}
+
+impl Drop for BufferOut {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 /// The slot of a model buffer of the class `C`.
@@ -3047,6 +3071,8 @@ pub struct ModelHeld<'id, B: ModelComposition> {
     quarantined: Bounded<Work<'id, B>>,
     /// The receive buffers out with the caller, queued or held.
     rx_out: Cell<usize>,
+    /// The installation's transmit buffers out ([`BufferOut`]).
+    transmit_out: alloc::sync::Arc<core::sync::atomic::AtomicUsize>,
     /// The receive buffers lent to the network.
     network: alloc::sync::Arc<ModelNetwork>,
     /// The backend alone attests the hardware barrier with the one gate place.
@@ -4194,6 +4220,7 @@ impl<'id, B: ModelComposition> ModelBuffer<'id, B, ModelNetworkClass> {
     pub(crate) fn network(memory: ModelNetworkMemory, loan: BodyLoan<'id, B::Identity, B>) -> Self {
         Self {
             slot: None,
+            out: None,
             loan: Some(loan),
             memory,
             admitted_at: None,
