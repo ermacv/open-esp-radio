@@ -46,12 +46,12 @@ const fn capabilities(interfaces: MacInterfaceCapabilities) -> MacServiceCapabil
 const ALL_INTERFACES: MacInterfaceCapabilities = MacInterfaceCapabilities {
     station_interfaces: 1,
     access_point_interfaces: 1,
-    simultaneous_station_access_point: true,
-    standalone_monitor: true,
-    monitor_with_interfaces: true,
-    raw_monitor_tap: false,
-    normalized_monitor_tap: true,
-    protocol_validated_monitor_tap: false,
+    simultaneous_station_access_point: oer_protocols_ieee80211_contracts_port::Support::Supported,
+    standalone_monitor: oer_protocols_ieee80211_contracts_port::Support::Supported,
+    monitor_with_interfaces: oer_protocols_ieee80211_contracts_port::Support::Supported,
+    raw_monitor_tap: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
+    normalized_monitor_tap: oer_protocols_ieee80211_contracts_port::Support::Supported,
+    protocol_validated_monitor_tap: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 };
 
 fn address(last: u8) -> IndividualAddress {

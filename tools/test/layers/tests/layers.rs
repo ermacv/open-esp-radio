@@ -6074,11 +6074,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
     ("portable/memory/src/waking_spsc/closing.rs", 1, BY_NONE),
     ("portable/time/src/connected_tasks.rs", 1, BY_NONE),
     ("portable/time/src/deadline.rs", 1, BY_NONE),
-    (
-        "protocols/ieee80211/contracts/port/src/installation.rs",
-        1,
-        BY_P3,
-    ),
     ("protocols/ieee80211/core/arbiter/src/lib.rs", 1, BY_P3),
     (
         "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs",
@@ -6232,11 +6227,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
     ),
     (
         "protocols/ieee80211/contracts/port/src/data_port.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/contracts/port/src/installation.rs",
         1,
         BY_P3,
     ),

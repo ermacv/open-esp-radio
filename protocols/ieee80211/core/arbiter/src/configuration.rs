@@ -186,7 +186,10 @@ impl WifiConfig {
         }
         if self.station.is_some()
             && self.access_point.is_some()
-            && !capabilities.interfaces.simultaneous_station_access_point
+            && !capabilities
+                .interfaces
+                .simultaneous_station_access_point
+                .is_supported()
         {
             return Err(WifiConfigError::UnsupportedStationAccessPoint);
         }
@@ -198,11 +201,17 @@ impl WifiConfig {
         let has_interface = self.station.is_some() || self.access_point.is_some();
         if self.monitor.is_some()
             && has_interface
-            && !capabilities.interfaces.monitor_with_interfaces
+            && !capabilities
+                .interfaces
+                .monitor_with_interfaces
+                .is_supported()
         {
             return Err(WifiConfigError::UnsupportedMonitorWithInterfaces);
         }
-        if self.monitor.is_some() && !has_interface && !capabilities.interfaces.standalone_monitor {
+        if self.monitor.is_some()
+            && !has_interface
+            && !capabilities.interfaces.standalone_monitor.is_supported()
+        {
             return Err(WifiConfigError::UnsupportedStandaloneMonitor);
         }
         if let (Some(station), Some(access_point)) = (self.station, self.access_point)

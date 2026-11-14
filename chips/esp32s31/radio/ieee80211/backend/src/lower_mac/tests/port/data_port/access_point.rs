@@ -386,6 +386,15 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> AccessPointHarness<'id> for ApFixtu
         let fixture = self.f();
         (&mut fixture.port, &mut fixture.outbox)
     }
+    fn stop_parts(
+        &mut self,
+    ) -> (
+        &mut Self::Port,
+        &mut oer_protocols_ieee80211_contracts_port::StopRight<'id>,
+    ) {
+        let fixture = self.f();
+        (&mut fixture.port, &mut fixture.stop_right)
+    }
     fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>> {
         self.f().stopped.take()
     }
@@ -423,11 +432,15 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> AccessPointHarness<'id> for ApFixtu
     fn publication_bound(&self) -> oer_portable_time::Duration {
         crate::port::PUBLICATION_BOUND
     }
-    fn hold(&mut self, category: WmmAccessCategory, hold: bool) {
-        self.f().observed.borrow_mut().held_queues[queue_of(category)] = hold;
+    fn hold(
+        &mut self,
+        category: WmmAccessCategory,
+        hold: oer_protocols_ieee80211_testing_conformance::Hold,
+    ) {
+        self.f().observed.borrow_mut().held_queues[queue_of(category)] = hold.is_held();
     }
-    fn hold_group_commands(&mut self, hold: bool) {
-        self.f().observed.borrow_mut().hold_cut = hold;
+    fn hold_group_commands(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
+        self.f().observed.borrow_mut().hold_cut = hold.is_held();
     }
     fn access_point_frame(
         &mut self,
@@ -439,9 +452,12 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> AccessPointHarness<'id> for ApFixtu
     fn station_frame(
         &mut self,
         category: WmmAccessCategory,
-        keyed: bool,
+        keying: oer_protocols_ieee80211_testing_conformance::Keying,
     ) -> Option<Admitted<'id, Id>> {
-        self.station_mpdu(category, keyed)
+        self.station_mpdu(
+            category,
+            keying == oer_protocols_ieee80211_testing_conformance::Keying::Keyed,
+        )
     }
     fn beacon(&mut self, of: Issued, deadline: Instant) -> Option<Admitted<'id, Id>> {
         self.beacon_mpdu(of, deadline)
@@ -691,8 +707,16 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> AccessPointHarness<'id> for ApFixtu
     fn interface(&self) -> Interface {
         let observed = *self.interface.borrow();
         Interface {
-            receives: observed.policy.is_some(),
-            tsf_running: observed.tsf_running,
+            reception: if observed.policy.is_some() {
+                oer_protocols_ieee80211_testing_conformance::access_point::Reception::On
+            } else {
+                oer_protocols_ieee80211_testing_conformance::access_point::Reception::Off
+            },
+            tsf: if observed.tsf_running {
+                oer_protocols_ieee80211_testing_conformance::access_point::TsfClock::Running
+            } else {
+                oer_protocols_ieee80211_testing_conformance::access_point::TsfClock::Stopped
+            },
         }
     }
     fn key_writes(&self) -> usize {
@@ -817,7 +841,7 @@ fn expired_group_install<Id: radio::SlotIdentity>(
     harness: &mut ApFixture<'_, '_, Id>,
 ) -> Result<(), CaseViolation> {
     ap_cases::start(harness)?;
-    harness.hold_group_commands(true);
+    harness.hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Held);
     let install = harness
         .install_group(Issued::Current, Issued::Current, Issued::Current)
         .ok_or(CaseViolation::Fixture)?;
@@ -860,7 +884,7 @@ fn expired_group_install<Id: radio::SlotIdentity>(
         return Err(CaseViolation::Barrier);
     }
     drop(observed);
-    harness.hold_group_commands(false);
+    harness.hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Released);
     ap_cases::stop(harness)?;
     if !harness.idle() {
         return Err(CaseViolation::Owners);
@@ -921,8 +945,14 @@ fn unpublishable_during_station_configure<Id: radio::SlotIdentity>(
 ) -> Result<(), CaseViolation> {
     ap_cases::start(harness)?;
     // A station frame on the air holds the station's configuration.
-    harness.hold(ap_cases::STATION_QUEUE, true);
-    let first = harness.station_frame(ap_cases::STATION_QUEUE, false);
+    harness.hold(
+        ap_cases::STATION_QUEUE,
+        oer_protocols_ieee80211_testing_conformance::Hold::Held,
+    );
+    let first = harness.station_frame(
+        ap_cases::STATION_QUEUE,
+        oer_protocols_ieee80211_testing_conformance::Keying::Open,
+    );
     let first = ap_cases::submit(harness, first)?;
     ap_cases::service(harness)?;
     let configure = harness.station_configure();
@@ -955,7 +985,10 @@ fn unpublishable_during_station_configure<Id: radio::SlotIdentity>(
     if harness.take_ends() != [CaseEnded::Frame(next, CaseEnd::Delivered)] {
         return Err(CaseViolation::Ends);
     }
-    harness.hold(ap_cases::STATION_QUEUE, false);
+    harness.hold(
+        ap_cases::STATION_QUEUE,
+        oer_protocols_ieee80211_testing_conformance::Hold::Released,
+    );
     let (mut first_ended, mut configured) = (false, false);
     for _ in 0..16 {
         ap_cases::service(harness)?;
@@ -1024,7 +1057,10 @@ fn returned_access_point_command<Id: radio::SlotIdentity>(
     }
     AccessPointHarness::restore(harness, command);
     if !matches!(
-        harness.f().port.recover_for_stop(),
+        {
+            let fixture = harness.f();
+            fixture.port.recover_for_stop(&mut fixture.stop_right)
+        },
         oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
     ) || harness.f().port.fault().is_some()
     {

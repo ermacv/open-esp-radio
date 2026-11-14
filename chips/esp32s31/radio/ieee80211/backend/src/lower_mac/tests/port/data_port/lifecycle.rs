@@ -181,7 +181,10 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn poll_stop_now(&mut self) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         let waker = self.waker();
         let now = self.now();
-        match self.port.poll_stop(&mut Context::from_waker(&waker), now) {
+        match self
+            .port
+            .poll_stop(&mut self.stop_right, &mut Context::from_waker(&waker), now)
+        {
             Poll::Ready(Ok(stopped)) => {
                 self.stopped = Some(stopped);
                 Poll::Ready(Ok(()))
@@ -258,7 +261,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         self.start();
         let [first, second] = self.arenas();
         self.fill(&first, &[10], plain);
-        self.hold_air(true);
+        self.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         self.observed.borrow_mut().taken_by_air = true;
         self.publish_single(first, 3);
         assert!(self.turn().is_none(), "the queue holds the frame");
@@ -405,6 +408,7 @@ pub(super) fn reinstall<'id, Id: radio::SlotIdentity + 'id>(
 ) -> Result<Fixture<'id, Id>, (ReinstallRefused, Option<Fault>)> {
     let Fixture {
         mut port,
+        stop_right,
         outbox,
         observed,
         timer,
@@ -425,6 +429,7 @@ pub(super) fn reinstall<'id, Id: radio::SlotIdentity + 'id>(
                 commands,
                 resources,
                 stopped,
+                stop_right,
             },
             observed,
             timer,
@@ -513,7 +518,10 @@ fn an_edca_change_reaches_the_aggregate_after_it() {
         fixture.start();
         let [first, second] = fixture.arenas();
         let _first = aggregate_round(fixture, first, &[10, 11, 12]);
-        let table = parameters(VifRole::AccessPoint, false);
+        let table = parameters(
+            VifRole::AccessPoint,
+            oer_protocols_ieee80211_testing_conformance::edca::Table::First,
+        );
         let edca = SupportedEdca::new(table).expect("EDCA");
         assert!(matches!(
             fixture.run(PortCommand::SetEdca(edca)),
@@ -565,7 +573,7 @@ fn a_single_mpdu_waits_while_an_arena_holds_its_access_category() {
         fixture.start();
         let [first, _second] = fixture.arenas();
         fixture.fill(&first, &[10], plain);
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         fixture.publish_single(first, 1);
         let attempt = fixture.station_mpdu().expect("attempt");
         fixture.submit_now(attempt);
@@ -577,7 +585,7 @@ fn a_single_mpdu_waits_while_an_arena_holds_its_access_category() {
             1,
             "the MPDU waits behind the arena on the air"
         );
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         let mut order = Vec::new();
         let mut ended = None;
         for _ in 0..16 {
@@ -778,7 +786,7 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         );
 
         assert!(matches!(
-            fixture.port.recover_for_stop(),
+            fixture.port.recover_for_stop(&mut fixture.stop_right),
             oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
         ));
         // The key is still missing: the next service withdraws the MPDU
@@ -854,7 +862,7 @@ fn a_publication_refused_with_its_key_installed_restarts_into_a_working_port() {
             Some(Fault::Unpublished(crate::port::Unpublished::Key))
         );
         assert!(matches!(
-            fixture.port.recover_for_stop(),
+            fixture.port.recover_for_stop(&mut fixture.stop_right),
             oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
         ));
         let _ = fixture.turn();
@@ -1295,7 +1303,7 @@ fn a_completion_without_effect_keeps_the_arena_watchdog_whose_expiry_cancels_the
 fn an_arena_the_cancel_finds_on_the_air_ends_by_its_completion() {
     with_fixture(|fixture| {
         let _second = fixture.cancel_on_the_air();
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         let done = fixture.arena_end();
         assert!(matches!(done.end(), AttemptEnd::Acked { .. }));
         let mut returned = Returned::default();
@@ -1343,9 +1351,9 @@ fn a_retransmission_after_a_cancel_on_the_air_has_a_cancel_of_its_own() {
         // lets go when its watchdog cancels it.
         fixture.observed.borrow_mut().statuses = std::vec![(5, 0)];
         fixture.observed.borrow_mut().taken_by_air = false;
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         assert!(fixture.turn().is_none(), "the plan sends it again");
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         assert!(fixture.turn().is_none(), "the queue holds it again");
         assert_eq!(fixture.observed.borrow().publications, 2);
         let watchdog = fixture.port.arena().deadline().expect("a new watchdog");
@@ -1913,7 +1921,7 @@ fn a_station_command_offered_to_a_faulted_port_comes_back_and_the_port_recovers(
         assert!(fixture.outbox.terminals.is_empty(), "it did not run");
         // The port keeps no command: the fault yields to the stop.
         assert!(matches!(
-            fixture.port.recover_for_stop(),
+            fixture.port.recover_for_stop(&mut fixture.stop_right),
             oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
         ));
         assert_eq!(fixture.port.fault(), None);
@@ -2261,7 +2269,7 @@ fn a_publication_the_registers_refuse_ends_once_at_the_stop_with_its_owners() {
         let stops = fixture.observed.borrow().stops;
         assert!(
             matches!(
-                fixture.port.recover_for_stop(),
+                fixture.port.recover_for_stop(&mut fixture.stop_right),
                 oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
             ),
             "every owner is whole"
@@ -2498,7 +2506,7 @@ fn a_refused_publication_its_queue_cannot_take_back_ends_withdrawn_beside_the_fa
         fixture.start();
         let key = installed_pairwise(fixture);
         // The first MPDU holds the queue; the second waits behind it.
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let first = fixture.station_mpdu().expect("first");
         fixture.submit_now(first);
         let second = fixture.protected_mpdu(&key).expect("second");
@@ -2509,7 +2517,7 @@ fn a_refused_publication_its_queue_cannot_take_back_ends_withdrawn_beside_the_fa
         fixture
             .port
             .refuse_for_test(crate::port::TestRefusal::QueuePush);
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         serve_once(fixture);
         serve_once(fixture);
         assert!(matches!(
@@ -2597,7 +2605,7 @@ fn a_refused_return_s_lease_goes_home_at_the_cleanup_and_the_port_reinstalls() {
         ));
         assert!(
             matches!(
-                fixture.port.recover_for_stop(),
+                fixture.port.recover_for_stop(&mut fixture.stop_right),
                 oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
             ),
             "every owner stays whole"
@@ -2655,7 +2663,7 @@ fn a_completion_without_its_attempt_returns_a_bank_lease_to_its_place() {
         ));
         assert!(
             matches!(
-                fixture.port.recover_for_stop(),
+                fixture.port.recover_for_stop(&mut fixture.stop_right),
                 oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
             ),
             "every owner is home"
@@ -2717,7 +2725,7 @@ fn a_completion_ahead_of_a_faulting_queue_in_one_service_still_comes_back() {
     with_fixture(|fixture| {
         fixture.start();
         fixture.observed.borrow_mut().statuses = std::vec![SUCCESS, (9, 0)];
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let one = core::num::NonZeroU8::MIN;
         let first = fixture
             .mpdu_in(None, one, WmmAccessCategory::Voice)
@@ -2727,7 +2735,7 @@ fn a_completion_ahead_of_a_faulting_queue_in_one_service_still_comes_back() {
             .mpdu_in(None, one, WmmAccessCategory::Background)
             .expect("second");
         fixture.submit_now(second);
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         // Both completions latch before the one service reads them.
         let waker = fixture.waker();
         let _ = fixture.port.poll_facts(&mut Context::from_waker(&waker));

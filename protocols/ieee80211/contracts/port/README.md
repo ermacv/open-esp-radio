@@ -567,13 +567,13 @@ proof of the one before it and gives the next state's:
 
 | Call | Takes | Gives | Or |
 |---|---|---|---|
-| `poll_start` | `StartProof`: the stop's `Stopped`, or the start's `Starting` | `Started`, `Pending(Starting)`, `Refused(Stopped, why)` | `Unstopped` (the port is stopping), `Stale` |
-| `poll_stop` | — | `Stopped` | `StopUnconfirmed` with `Outstanding`; `StopCause::Released` on a released port |
+| `poll_start` | `StartProof`: the stop's `Stopped`, or the start's `Starting` | `Ok(StartProgress)`: `Started`, `Pending(Starting)` | `Err(StartRefused)`: `Refused(Stopped, why)`, `Unstopped` (the port is stopping), `Stale` |
+| `poll_stop` | `&mut StopRight` | `Stopped` | `StopUnconfirmed` with `Outstanding`; `StopCause::Released` on a released port |
 | `take_unconsumed`, `clean` | `&Stopped` | what the port kept; the cleanup | a stale proof |
 | `retire` | `Stopped` | `Retired` | the proof back with `Outstanding` |
-| `reinstall` | `Retired`, the TSF epoch, the installations | the next installation's `Stopped`, commands and tokens | the proof back with `ReinstallRefused` |
+| `reinstall` | `Retired`, the installations | the next installation's `Stopped`, commands and tokens, under the TSF epoch the port raises | the proof back with `ReinstallRefused` (`Epochs` when the epoch cannot be raised) |
 | `release` | `Retired` | what the binding needs to give the radio up | a stale proof |
-| `recover_for_stop` | — | `Recovery`: `Clear`, `Recovered(Recovering)`, `Kept(fault, Outstanding)` | — |
+| `recover_for_stop` | `&mut StopRight` | `Recovery`: `Clear`, `TakenBack`, `Kept(fault, Outstanding)` | — |
 | `outstanding`, `fault` | — | the values | — |
 
 A call's answer is its acceptance point: a refusal leaves the port and the
@@ -589,8 +589,15 @@ a proof it takes: its stop's, or, after a retirement, a new stop's (the
 port is stopped again and the retirement is asked again), so a dropped
 proof never leaves an installation without a way to its end. A released
 port holds no installation: its stop answers `StopCause::Released`, no
-proof. Only a port's implementation and tests issue a proof: the layer
-tests scan for every `*::issue` of the four proofs.
+proof.
+
+The two transitions that take no proof, `poll_stop` and `recover_for_stop`,
+take the stop's right (`StopRight`): of no size, affine and branded as the
+proofs are. The port gives it once, beside the first installation's
+`Stopped`; a reinstall gives none, and its holder lends it to each call, so
+whoever does not hold it asks no stop. Only a port's implementation and
+tests issue a proof or the right: the layer tests scan for every `*::issue`
+of the three proofs and the right.
 
 `Outstanding` is what the installation still holds, by class: the run's
 phase, the fault, received and lent units, key removals, retained group

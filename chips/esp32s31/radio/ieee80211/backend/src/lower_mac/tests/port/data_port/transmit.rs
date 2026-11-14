@@ -760,7 +760,7 @@ fn a_network_lease_without_its_attempt_goes_to_the_port_s_owner_once() {
     type Network<Id> = NetworkFrames<Family<Id>>;
     with_access(|fixture, _access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let mut memory =
             crate::mac::tx::test_support::model_backing::<512>().expect("model memory");
         let at = memory.stable_dma_region().into_mut_slice().as_ptr();
@@ -814,7 +814,7 @@ fn a_network_lease_without_its_attempt_goes_to_the_port_s_owner_once() {
             "the hardware holds it"
         );
         fixture.port.forget_published_for_test();
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         for _ in 0..4 {
             let _ = serve_once(fixture);
         }
@@ -841,7 +841,7 @@ fn a_collided_mpdu_withdrawn_behind_a_gate_goes_again_without_the_retry_bit() {
     with_access(|fixture, access| {
         fixture.observed.borrow_mut().statuses = std::vec![COLLISION, SUCCESS];
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         fixture.submit_mpdu(Spec {
             transmissions: 2,
             ..Spec::open(96)
@@ -856,7 +856,7 @@ fn a_collided_mpdu_withdrawn_behind_a_gate_goes_again_without_the_retry_bit() {
                 .unwrap(),
             Ok(CommandProgress::Done)
         ));
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         let mut events = fixture.until(access, 2);
         let Some(Event::GateClosed(closed)) = events.pop() else {
             panic!("the gate's terminal");
@@ -935,7 +935,7 @@ fn a_key_the_hardware_refuses_ends_its_attempt_without_a_retry() {
 fn settings_during_a_configuration_wait_for_its_end() {
     with_access(|fixture, access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         fixture.submit_mpdu(Spec::open(1));
         fixture.turns(1);
         let now = fixture.now();
@@ -960,7 +960,7 @@ fn settings_during_a_configuration_wait_for_its_end() {
         ));
         fixture.turns(2);
         assert_eq!(fixture.port.fault(), None);
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         fixture.until(access, 2);
         assert_eq!(fixture.port.fault(), None);
     });
@@ -1033,7 +1033,7 @@ enum Barrier {
 fn barrier_order(barrier: Barrier) {
     with_access(|fixture, access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let head = fixture.submit_mpdu(Spec::open(1));
         assert_eq!(fixture.publications(), 0, "the device reports at its poll");
         fixture.turns(1);
@@ -1060,7 +1060,7 @@ fn barrier_order(barrier: Barrier) {
             fixture.outbox.terminals.is_empty(),
             "{barrier:?}: neither a queued tail nor its barrier overtakes the published head"
         );
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         let events = fixture.until(access, 4);
         let cause = match barrier {
             Barrier::CloseGate => WithdrawCause::GateClosed,
@@ -1122,7 +1122,7 @@ fn withdrawal_order(kind: Withdrawal) {
         }
         fixture.start();
         let (association, key) = fixture.pairwise(7);
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let head = fixture.submit_mpdu(Spec {
             key: (kind == Withdrawal::RemoveWithHead).then_some(&key),
             transmissions: if kind == Withdrawal::RemoveBehindRetryingHead {
@@ -1149,14 +1149,22 @@ fn withdrawal_order(kind: Withdrawal) {
             assert!(
                 fixture
                     .port
-                    .poll_stop(&mut Context::from_waker(&waker), now)
+                    .poll_stop(
+                        &mut fixture.stop_right,
+                        &mut Context::from_waker(&waker),
+                        now
+                    )
                     .is_pending()
             );
             fixture.turns(4);
             assert!(
                 fixture
                     .port
-                    .poll_stop(&mut Context::from_waker(&waker), now)
+                    .poll_stop(
+                        &mut fixture.stop_right,
+                        &mut Context::from_waker(&waker),
+                        now
+                    )
                     .is_pending(),
                 "the stop waits for the published head"
             );
@@ -1181,12 +1189,12 @@ fn withdrawal_order(kind: Withdrawal) {
                 fixture.outbox.terminals.is_empty(),
                 "{kind:?}: a tail cannot overtake a published head on its AC"
             );
-            fixture.hold_air(false);
+            fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
             assert!(matches!(fixture.run(removal), Ok(CommandProgress::Done)));
             WithdrawCause::KeyRemoved
         };
         if kind == Withdrawal::Stop {
-            fixture.hold_air(false);
+            fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
             fixture.stop();
         }
         let events = fixture.until(access, 3);
@@ -1248,7 +1256,7 @@ fn a_sent_mpdu_retransmitted_after_reopening_runs_its_own_plan() {
         fixture.observed.borrow_mut().statuses = std::vec![(5, 0); 3];
         fixture.start();
         let (association, key) = fixture.pairwise(7);
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let head = fixture.submit_mpdu(Spec {
             key: Some(&key),
             transmissions: 2,
@@ -1269,7 +1277,7 @@ fn a_sent_mpdu_retransmitted_after_reopening_runs_its_own_plan() {
                 .unwrap(),
             Ok(CommandProgress::Done)
         ));
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         let mut events = fixture.until(access, 3);
         assert_eq!(
             shapes(&events),
@@ -1360,7 +1368,11 @@ fn a_held_best_effort_head_keeps_its_queue_while_voice_and_video_complete() {
                 assert!(
                     fixture
                         .port
-                        .poll_stop(&mut Context::from_waker(&waker), now)
+                        .poll_stop(
+                            &mut fixture.stop_right,
+                            &mut Context::from_waker(&waker),
+                            now
+                        )
                         .is_pending()
                 );
             } else {
@@ -1432,7 +1444,7 @@ fn a_publication_past_its_bound_without_a_timeout_edge_ends_and_returns_its_owne
     // frame, a handled end, and the port goes on.
     with_access(|fixture, access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         fixture.submit_mpdu(Spec::open(1));
         fixture.turns(1);
         assert_eq!(fixture.publications(), 1);
@@ -1454,7 +1466,7 @@ fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keep
     // its quarantine and answers every later call with a named fault.
     with_access(|fixture, access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         fixture.observed.borrow_mut().taken_by_air = true;
         fixture.submit_mpdu(Spec::open(1));
         fixture.turns(1);
@@ -1502,7 +1514,7 @@ fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keep
         assert!(matches!(
             fixture
                 .port
-                .poll_stop(&mut Context::from_waker(&waker), now),
+                .poll_stop(&mut fixture.stop_right, &mut Context::from_waker(&waker), now),
             Poll::Ready(Err(StopUnconfirmed {
                 cause: StopCause::Device(found),
                 ..
@@ -1611,7 +1623,7 @@ fn serve_once<'id, Id: radio::SlotIdentity + 'id>(
 fn a_terminal_the_port_cannot_keep_halts_the_service_and_the_rest_wait_for_the_next_call() {
     with_access(|fixture, _access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let head = fixture.submit_mpdu(Spec::open(1));
         fixture.turns(1);
         assert_eq!(fixture.publications(), 1);
@@ -1622,10 +1634,14 @@ fn a_terminal_the_port_cannot_keep_halts_the_service_and_the_rest_wait_for_the_n
         assert!(
             fixture
                 .port
-                .poll_stop(&mut Context::from_waker(&waker), now)
+                .poll_stop(
+                    &mut fixture.stop_right,
+                    &mut Context::from_waker(&waker),
+                    now
+                )
                 .is_pending()
         );
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         fixture.outbox.refuse = 1;
         fixture.port.refuse_keeps_for_test(1);
         let mut halted = None;
@@ -1688,7 +1704,7 @@ fn a_terminal_the_port_cannot_keep_halts_the_service_and_the_rest_wait_for_the_n
 fn a_completion_the_halted_call_took_waits_in_the_driver_and_comes_home_first() {
     with_access(|fixture, _access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let best_effort = fixture.submit_mpdu(Spec::open(1));
         let voice = fixture.submit_mpdu(Spec {
             category: WmmAccessCategory::Voice,
@@ -1696,7 +1712,7 @@ fn a_completion_the_halted_call_took_waits_in_the_driver_and_comes_home_first() 
         });
         fixture.turns(1);
         assert_eq!(fixture.publications(), 2);
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         fixture.outbox.refuse = 1;
         fixture.port.refuse_keeps_for_test(1);
         let mut halted = None;
@@ -1752,7 +1768,7 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
     use oer_protocols_ieee80211_contracts_port::{Input, Unkeeping, Unkept};
     with_access(|fixture, _access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let sent = [
             fixture.submit_mpdu(Spec::open(1)),
             fixture.submit_mpdu(Spec {
@@ -1766,7 +1782,7 @@ fn a_stopped_ports_cleanup_collects_what_the_driver_kept() {
         ];
         fixture.turns(1);
         assert_eq!(fixture.publications(), 3);
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         fixture.outbox.refuse = 3;
         fixture.port.refuse_keeps_for_test(3);
         let mut halted = None;
@@ -1881,7 +1897,7 @@ fn a_submission_without_the_places_right_comes_back_whole_and_no_call_makes_one(
 fn a_third_item_of_a_halted_call_stays_with_the_driver() {
     with_access(|fixture, _access| {
         fixture.start();
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let best_effort = fixture.submit_mpdu(Spec::open(1));
         let voice = fixture.submit_mpdu(Spec {
             category: WmmAccessCategory::Voice,
@@ -1893,7 +1909,7 @@ fn a_third_item_of_a_halted_call_stays_with_the_driver() {
         });
         fixture.turns(1);
         assert_eq!(fixture.publications(), 3);
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         fixture.outbox.refuse = 3;
         fixture.port.refuse_keeps_for_test(3);
         let mut halted = None;
