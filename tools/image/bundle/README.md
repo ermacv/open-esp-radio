@@ -25,10 +25,16 @@ An `ImageBundle` is one directory with a `bundle.json` and these files:
 | `large-values.json`, `large-values.txt` | Compiler values above the move limit and workspace coverage |
 | `build.log` | Every step's standard error |
 
-The manifest uses schema 7 and records `purpose: Flash` or `Analysis`, the
+The manifest uses schema 9 and records `purpose: Flash` or `Analysis`, the
 chip, the boot kind, the flash map, every requested check of every ELF with its
-result (`CheckRecord`, `CheckResult`, `CheckedElf`) and the gate warnings. Older
-schemas must be rebuilt; a missing purpose never defaults to `Flash`.
+result (`CheckRecord`, `CheckResult`, `CheckedElf`), the gate warnings and what
+the application was built from (`build`): a package of the workspace with its
+choice (`Build::Package(BuildChoice)`: the features asked for, whether the
+defaults were on, the instrumentation classes they compiled), or an ESP-IDF
+catalog project (`Build::EspIdf`), which has no such choice. A constructor
+takes it; `with_application` keeps the original's. Older schemas must be
+rebuilt; a missing purpose never defaults to `Flash`, and a missing build is
+refused, never read as an empty choice.
 
 ## Reading
 
@@ -41,7 +47,7 @@ receipt and writes over USB or JTAG. The shared snapshot reader refuses
 application at the flash map's offsets, the OTA selection last. Board support
 writes these files and encodes nothing. `with_application` makes the bundle of
 an application archived earlier around this bundle's boot files; the copy keeps
-the original purpose.
+the original purpose and build.
 
 ## Publication
 

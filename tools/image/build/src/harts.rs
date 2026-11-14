@@ -36,7 +36,7 @@ pub(crate) fn declared(
             &application.package,
             &application.features,
             application.default_features,
-        )
+        )?
     {
         let interrupts = profile
             .facts
@@ -59,15 +59,21 @@ pub(crate) fn declared(
 /// Whether the build's `features` of `package` (with its defaults when
 /// `default_features`) reach the application entry's `group` feature
 /// through the package's own features.
+///
+/// # Errors
+///
+/// The metadata has no such package or no feature table of it.
 fn selects_a_group(
     metadata: &Value,
     package: &str,
     features: &[String],
     default_features: bool,
-) -> bool {
-    crate::manifest::enabled_features(metadata, package, features, default_features)
-        .iter()
-        .any(|feature| ["oer/group", "oer?/group"].contains(&feature.as_str()))
+) -> Result<bool> {
+    Ok(
+        crate::manifest::enabled_features(metadata, package, features, default_features)?
+            .iter()
+            .any(|feature| ["oer/group", "oer?/group"].contains(&feature.as_str())),
+    )
 }
 
 /// The harts `package` declares in the workspace `metadata`, as [`declared`].
@@ -199,19 +205,24 @@ mod tests {
             "name": "image",
             "features": {"station": ["oer/station", "oer/group"], "default": []},
         }]});
-        assert!(selects_a_group(
-            &metadata,
-            "image",
-            &["station".to_owned()],
-            true
-        ));
-        assert!(!selects_a_group(&metadata, "image", &[], true));
-        assert!(!selects_a_group(
-            &metadata,
-            "other",
-            &["station".to_owned()],
-            true
-        ));
+        assert!(selects_a_group(&metadata, "image", &["station".to_owned()], true).unwrap());
+        assert!(!selects_a_group(&metadata, "image", &[], true).unwrap());
+        // A package the metadata does not hold is an error, not "no group".
+        let missing = selects_a_group(&metadata, "other", &["station".to_owned()], true);
+        assert!(
+            missing
+                .unwrap_err()
+                .to_string()
+                .contains("no package other")
+        );
+        let tableless = serde_json::json!({"packages": [{"name": "image"}]});
+        let tableless = selects_a_group(&tableless, "image", &[], true);
+        assert!(
+            tableless
+                .unwrap_err()
+                .to_string()
+                .contains("no feature table")
+        );
     }
 
     #[test]

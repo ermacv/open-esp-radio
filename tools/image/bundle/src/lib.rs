@@ -38,7 +38,7 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 /// The bundle's description, beside its files.
 pub const MANIFEST: &str = "bundle.json";
 /// Format of [`MANIFEST`].
-pub const SCHEMA: u32 = 8;
+pub const SCHEMA: u32 = 9;
 
 /// Whether a bundle may be written to a board.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -153,15 +153,25 @@ pub struct ImageBundle {
     /// Every flash file's digest, in [`ImageBundle::segments`] order, as
     /// [`ImageBundle::publish`] recorded them.
     pub flash_files: Vec<FlashFile>,
-    /// What the application was built with: its features and the
-    /// instrumentation they resulted in.
-    #[serde(default)]
-    pub build: BuildChoice,
+    /// What the application was built from and with.
+    pub build: Build,
+}
+
+/// What a bundle's application was built from.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub enum Build {
+    /// A package of this workspace, built by the image pipeline with its
+    /// choice of features.
+    Package(BuildChoice),
+    /// An ESP-IDF catalog project, built by its own toolchain: it has no
+    /// Cargo features and compiles no instrumentation class.
+    EspIdf,
 }
 
 /// The features an image's application was built with, in Cargo's words,
 /// and the instrumentation classes they resulted in, by name.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BuildChoice {
     /// The features asked for beside the defaults (`--features`).
@@ -263,12 +273,13 @@ pub struct Segment {
 }
 
 impl ImageBundle {
-    /// An empty bundle of `profile`'s chip in `directory`, which a pipeline
-    /// fills: no files yet, no gate run.
+    /// An empty bundle of `profile`'s chip in `directory` of an application
+    /// built as `build`, which a pipeline fills: no files yet, no gate run.
     pub fn new(
         directory: &Path,
         profile: &oer_tools_chip_profile::Profile,
         flash: FlashMap,
+        build: Build,
     ) -> Self {
         Self::from_parts(
             directory,
@@ -276,17 +287,19 @@ impl ImageBundle {
             &profile.facts.rust_target,
             profile.facts.boot,
             flash,
+            build,
         )
     }
 
-    /// An empty bundle of the chip `chip` in `directory`, which a pipeline
-    /// fills: no files yet, no gate run.
+    /// An empty bundle of the chip `chip` in `directory` of an application
+    /// built as `build`, which a pipeline fills: no files yet, no gate run.
     pub fn from_parts(
         directory: &Path,
         chip: &str,
         rust_target: &str,
         boot: Boot,
         flash: FlashMap,
+        build: Build,
     ) -> Self {
         Self {
             schema: SCHEMA,
@@ -305,7 +318,7 @@ impl ImageBundle {
             checks: Vec::new(),
             warnings: Vec::new(),
             flash_files: Vec::new(),
-            build: BuildChoice::default(),
+            build,
         }
     }
 
@@ -552,7 +565,7 @@ impl ImageBundle {
             checks: Vec::new(),
             warnings: Vec::new(),
             flash_files: Vec::new(),
-            build: BuildChoice::default(),
+            build: other.build.clone(),
         }
     }
 

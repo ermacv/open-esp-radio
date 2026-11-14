@@ -154,6 +154,15 @@ mod tests {
         );
     }
 
+    /// The build of a test's bundle: a package with its defaults.
+    fn package_build() -> oer_tools_image_bundle::Build {
+        oer_tools_image_bundle::Build::Package(oer_tools_image_bundle::BuildChoice {
+            features: Vec::new(),
+            default_features: true,
+            instrumentation: Vec::new(),
+        })
+    }
+
     #[test]
     fn frame_and_panic_reports_print_locations_for_both_elfs() {
         let directory = repository();
@@ -162,6 +171,7 @@ mod tests {
             directory.path(),
             &profile,
             profile.facts.flash.clone().unwrap(),
+            package_build(),
         );
         for (name, text) in [
             ("runtime-frames.txt", "4097\tover limit\truntime::large"),
@@ -205,7 +215,12 @@ mod tests {
         let output = output(root, "esp32s31-boot-smoke");
         let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
         std::fs::create_dir_all(&staging).unwrap();
-        let mut built = ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
+        let mut built = ImageBundle::new(
+            &staging,
+            &profile,
+            profile.facts.flash.clone().unwrap(),
+            package_build(),
+        );
         for segment in built.segments() {
             std::fs::write(segment.file, b"fixture").unwrap();
         }
@@ -229,8 +244,12 @@ mod tests {
         let staging = oer_tools_image_bundle::staging_directory(&output).unwrap();
         for purpose in [Purpose::Analysis, Purpose::Flash] {
             std::fs::create_dir_all(&staging).unwrap();
-            let mut built =
-                ImageBundle::new(&staging, &profile, profile.facts.flash.clone().unwrap());
+            let mut built = ImageBundle::new(
+                &staging,
+                &profile,
+                profile.facts.flash.clone().unwrap(),
+                package_build(),
+            );
             built.purpose = purpose;
             for segment in built.segments() {
                 std::fs::write(segment.file, b"fixture").unwrap();

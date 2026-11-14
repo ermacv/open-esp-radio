@@ -566,4 +566,7 @@ and its unchanged budgets. `--source-root` defaults to the current checkout;
 it must supply the original chip configuration and stack policy (recorded
 policy hashes must match). A separate checkout or an exported source tree can
 supply historical configuration. Existing analysis reports are neither parsed
-nor changed. Schemas 1 and 2 can be refreshed; comparison accepts schema 2 only.
+nor changed. Schemas 1 to 3 can be refreshed; comparison accepts schema 3 only.
+Schema 3 records the build's instrumentation classes; a refresh of a schema 1
+or 2 summary, which did not, takes them from the source root's manifest for
+the recorded package and features.

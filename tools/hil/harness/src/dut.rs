@@ -26,21 +26,22 @@ pub(crate) struct Dut<'a> {
 }
 
 impl<'a> Dut<'a> {
-    pub(crate) fn new(link: Option<Link>, board: &'a dyn Board, image_crc32: u32) -> Self {
+    /// The device on `link` of `board`, running the image of `image_crc32`
+    /// built with `built`.
+    pub(crate) fn new(
+        link: Option<Link>,
+        board: &'a dyn Board,
+        image_crc32: u32,
+        built: oer_tools_image_bundle::BuildChoice,
+    ) -> Self {
         Self {
             link,
             seen: None,
             board,
             image_crc32,
-            built: oer_tools_image_bundle::BuildChoice::default(),
+            built,
             hello: RESET_HELLO,
         }
-    }
-
-    /// The device of an image built with `built`.
-    pub(crate) fn with_build(mut self, built: oer_tools_image_bundle::BuildChoice) -> Self {
-        self.built = built;
-        self
     }
 
     #[cfg(test)]

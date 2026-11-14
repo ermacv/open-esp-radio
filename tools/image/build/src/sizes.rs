@@ -10,7 +10,7 @@ pub use compare::{Comparison, Verdict, compare_composition, compare_directories}
 pub use refresh::refresh;
 
 pub const FILE: &str = "sizes.json";
-pub const SCHEMA: u32 = 2;
+pub const SCHEMA: u32 = 3;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -50,8 +50,8 @@ pub struct Provenance {
     pub features: Vec<String>,
     pub default_features: bool,
     /// The instrumentation classes the build compiled, by name, from the
-    /// package's declaration and the features it enabled.
-    #[serde(default)]
+    /// package's declaration and the features it enabled. Schema 3 has it;
+    /// a refresh of an older summary derives it from the source root.
     pub instrumentation: Vec<String>,
     pub purpose: oer_tools_image_bundle::Purpose,
     pub layout_seed: Option<u32>,

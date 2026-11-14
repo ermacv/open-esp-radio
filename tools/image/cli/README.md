@@ -145,6 +145,6 @@ image, the allocation budget and the new composition; type/frame inventories
 remain reports. No input summary or provenance is rewritten.
 
 `cargo fw sizes-refresh INPUT OUTPUT --source-root CONFIGURATION` reanalyses
-saved ELF bundles into a separate schema-2 summary tree without compiling or
+saved ELF bundles into a separate schema-3 summary tree without compiling or
 linking. Inputs remain read-only; the source root must supply the original
 image configuration. See the [refresh workflow](../build/README.md#pr-size-table-for-an-agent).

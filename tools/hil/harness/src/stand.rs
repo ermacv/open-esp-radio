@@ -60,6 +60,24 @@ pub(crate) struct Session {
     board_id: String,
 }
 
+/// The choice a scenario's image was built with: a HIL image is a
+/// package of this workspace.
+///
+/// # Errors
+///
+/// The bundle is an ESP-IDF catalog build, which has no choice of features.
+pub(crate) fn package_choice(
+    build: &oer_tools_image_bundle::Build,
+) -> Result<oer_tools_image_bundle::BuildChoice> {
+    match build {
+        oer_tools_image_bundle::Build::Package(choice) => Ok(choice.clone()),
+        oer_tools_image_bundle::Build::EspIdf => Err(
+            "the scenario's image is an ESP-IDF catalog build, not a package of this workspace"
+                .into(),
+        ),
+    }
+}
+
 impl Session {
     /// Resolve the board `selector` names (or the one device under test of
     /// the image's chip) and the stand owner, then build `scenario`'s image,
@@ -77,6 +95,7 @@ impl Session {
             Ok(oer_tools_lab_arbiter::owner::from_environment()?.to_string())
         })?;
         let bundle = build(&root, scenario.image, choice)?;
+        let built = package_choice(&bundle.build)?;
         let image_crc32 = bundle
             .staged
             .as_ref()
@@ -106,7 +125,7 @@ impl Session {
         Ok(Self {
             link: Some(link),
             image_crc32,
-            built: bundle.build.clone(),
+            built,
             board: stand_board,
             root,
             board_id: board.id.clone(),

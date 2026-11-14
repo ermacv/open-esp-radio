@@ -113,7 +113,10 @@ fn an_esp_idf_bundle_takes_its_catalog_boot_files_and_has_no_ota_selection() {
             &root,
             &application_chip(),
             &application,
-            BootFiles::Encode { elf: &elf },
+            BootFiles::Encode {
+                elf: &elf,
+                build: crate::tests::package_build(),
+            },
             &directory.path().join("other"),
         )
         .is_err()
@@ -195,7 +198,10 @@ fn a_failed_rebuild_leaves_the_published_bundle_untouched() {
             &root,
             &application_chip(),
             &replacement,
-            BootFiles::Encode { elf: &elf },
+            BootFiles::Encode {
+                elf: &elf,
+                build: crate::tests::package_build(),
+            },
             &output,
         )
         .is_err()

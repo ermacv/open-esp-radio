@@ -67,17 +67,17 @@ pub(crate) fn build(
     // only once the whole build succeeded.
     let staging = Staging::begin(&spec.output)?;
     let output = staging.directory().to_owned();
-    let mut bundle = ImageBundle::new(&output, profile, flash);
-    bundle.purpose = spec.purpose;
-    bundle.layout_seed = spec.layout_seed;
-    bundle.build = oer_tools_image_bundle::BuildChoice {
+    let build = oer_tools_image_bundle::Build::Package(oer_tools_image_bundle::BuildChoice {
         features: spec.application.features.clone(),
         default_features: spec.application.default_features,
         instrumentation: instrumentation
             .classes()
             .map(|class| class.name().to_owned())
             .collect(),
-    };
+    });
+    let mut bundle = ImageBundle::new(&output, profile, flash, build);
+    bundle.purpose = spec.purpose;
+    bundle.layout_seed = spec.layout_seed;
     let log = BuildLog::create(&output.join(files::BUILD_LOG))?;
     // The image's declared harts resolve the policy's launch templates.
     let policy = StackPolicy::load(&root.join(&spec.stack_policy))?.for_image(harts)?;

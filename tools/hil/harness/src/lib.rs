@@ -369,8 +369,8 @@ pub fn main(scenario: &Scenario, cases: &[Case]) -> ExitCode {
                 let link = session.take_link();
                 let (run, link) = {
                     let board = session.board();
-                    let mut dut = dut::Dut::new(link, board, session.image_crc32())
-                        .with_build(session.built().clone());
+                    let mut dut =
+                        dut::Dut::new(link, board, session.image_crc32(), session.built().clone());
                     let run = run::cases(&mut dut, scenario, &selected, &mut out);
                     (run, dut.into_link())
                 };

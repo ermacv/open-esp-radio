@@ -478,6 +478,23 @@ fn old_or_mixed_schemas_are_errors() {
 }
 
 #[test]
+fn a_current_summary_without_its_instrumentation_is_refused() {
+    let mut value = serde_json::to_value(summary()).unwrap();
+    value["provenance"]
+        .as_object_mut()
+        .unwrap()
+        .remove("instrumentation");
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(
+        directory.path().join(super::super::FILE),
+        serde_json::to_vec(&value).unwrap(),
+    )
+    .unwrap();
+    let error = Summary::read(directory.path()).unwrap_err().to_string();
+    assert!(error.contains("missing field `instrumentation`"), "{error}");
+}
+
+#[test]
 fn embedded_copy_is_identified_by_bytes_not_section_name() {
     use object::{Architecture, BinaryFormat, Endianness, SectionKind, write::Object};
     let directory = tempfile::tempdir().unwrap();

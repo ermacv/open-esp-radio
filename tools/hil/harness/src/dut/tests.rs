@@ -2,13 +2,22 @@ use super::{Device, Dut};
 use crate::fakes::{FakeBoard, HELLO, IMAGE, rts, unmoved};
 use crate::finish::Board;
 
+/// The build of a test's image: the package's defaults.
+fn defaults() -> oer_tools_image_bundle::BuildChoice {
+    oer_tools_image_bundle::BuildChoice {
+        features: Vec::new(),
+        default_features: true,
+        instrumentation: Vec::new(),
+    }
+}
+
 #[test]
 fn a_reset_counts_only_when_another_boot_answers() {
     let board = FakeBoard::new(vec![unmoved(rts(true, true))]);
     board.image_up.set(true);
     let link = board.connect().unwrap();
     assert_eq!(link.boot(HELLO).unwrap().boot_id, 100);
-    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(HELLO);
+    let mut dut = Dut::new(Some(link), &board, IMAGE, defaults()).with_hello(HELLO);
     let refused = dut.reset();
     assert!(
         refused
@@ -29,7 +38,7 @@ fn a_reset_into_a_new_boot_of_the_image_continues_on_it() {
     let board = FakeBoard::new(vec![rts(true, true)]);
     board.image_up.set(true);
     let link = board.connect().unwrap();
-    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(HELLO);
+    let mut dut = Dut::new(Some(link), &board, IMAGE, defaults()).with_hello(HELLO);
     assert_eq!(dut.reset().map(|boot| boot.boot_id), Ok(101));
 }
 
@@ -39,7 +48,7 @@ fn a_failed_reset_keeps_the_boot_a_later_reset_must_leave() {
     board.image_up.set(true);
     let link = board.connect().unwrap();
     assert_eq!(link.boot(HELLO).unwrap().boot_id, 100);
-    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(HELLO);
+    let mut dut = Dut::new(Some(link), &board, IMAGE, defaults()).with_hello(HELLO);
     // The console stays silent past the wait: the reset fails without a link.
     board.image_up.set(false);
     assert!(dut.reset().is_err());
@@ -61,7 +70,7 @@ fn a_boot_seen_without_its_hello_is_the_one_a_later_reset_must_leave() {
     board.image_up.set(true);
     let link = board.connect().unwrap();
     assert_eq!(link.boot(HELLO).unwrap().boot_id, 100);
-    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(HELLO);
+    let mut dut = Dut::new(Some(link), &board, IMAGE, defaults()).with_hello(HELLO);
     // The device restarts into boot 101 during the reset, whose Hello is lost.
     board.boots.set(101);
     board.hellos_lost.set(1);
@@ -83,7 +92,7 @@ fn a_restart_of_the_device_continues_on_its_new_boot_without_a_board_reset() {
     board.image_up.set(true);
     let link = board.connect().unwrap();
     assert_eq!(link.boot(HELLO).unwrap().boot_id, 100);
-    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(HELLO);
+    let mut dut = Dut::new(Some(link), &board, IMAGE, defaults()).with_hello(HELLO);
     // The device restarts by itself into boot 101.
     board.boots.set(101);
     assert_eq!(dut.follow_restart().map(|boot| boot.boot_id), Ok(101));
@@ -96,7 +105,7 @@ fn a_device_that_did_not_restart_keeps_its_boot_and_link() {
     board.image_up.set(true);
     let link = board.connect().unwrap();
     assert_eq!(link.boot(HELLO).unwrap().boot_id, 100);
-    let mut dut = Dut::new(Some(link), &board, IMAGE).with_hello(HELLO);
+    let mut dut = Dut::new(Some(link), &board, IMAGE, defaults()).with_hello(HELLO);
     let refused = dut.follow_restart();
     assert!(
         refused

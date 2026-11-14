@@ -1,5 +1,14 @@
 use std::{thread, time::Duration};
 
+/// The build of a test's image: the package's defaults.
+fn defaults() -> oer_tools_image_bundle::BuildChoice {
+    oer_tools_image_bundle::BuildChoice {
+        features: Vec::new(),
+        default_features: true,
+        instrumentation: Vec::new(),
+    }
+}
+
 use oer_protocols_hil_protocol::{
     Endpoint, Key, Message, WireKind,
     base::{
@@ -34,7 +43,7 @@ const SCENARIO: Scenario = Scenario::new("test", "test-image", &[SERVICE]);
 /// Run `cases` on the device behind `link`.
 fn run_cases(link: oer_tools_hil_link::Link, cases: &[&Case]) -> Vec<Outcome> {
     let board = crate::fakes::FakeBoard::new(Vec::new());
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE, defaults());
     run::cases(&mut dut, &SCENARIO, cases, &mut Vec::new()).outcomes
 }
 
@@ -159,7 +168,7 @@ fn a_reboot_prints_how_the_previous_boot_ended() {
     }];
     let selected = cases.iter().collect::<Vec<_>>();
     let board = crate::fakes::FakeBoard::new(Vec::new());
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE, defaults());
     let mut out = Vec::new();
     run::cases(&mut dut, &SCENARIO, &selected, &mut out);
     let out = String::from_utf8(out).unwrap();
@@ -447,7 +456,7 @@ fn a_case_runs_router_operations_and_an_unanswered_router_leaves_it_incomplete()
         RouterOperation::VerifyRuntime => Ok(serde_json::Value::Null),
         _ => Err("ssh refused".to_owned()),
     };
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE);
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE, defaults());
     let case = Case {
         name: "router",
         run: probe,
@@ -480,7 +489,7 @@ fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
         default_features: false,
         instrumentation: Vec::new(),
     };
-    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE).with_build(built.clone());
+    let mut dut = crate::dut::Dut::new(Some(link), &board, IMAGE, built.clone());
     let case = Case {
         name: "load",
         run: measured,
@@ -502,4 +511,17 @@ fn a_case_s_measurements_reach_the_results_with_its_name_and_never_decide_it() {
     assert_eq!(results["outcomes"][0]["verdict"], "fail");
     assert_eq!(results["measurements"][0]["case"], "load");
     assert_eq!(results["measurements"][0]["value"]["mbps"], 42.5);
+}
+
+#[test]
+fn a_scenario_s_image_is_a_package_build_and_a_catalog_build_is_refused() {
+    assert_eq!(
+        crate::stand::package_choice(&oer_tools_image_bundle::Build::Package(defaults())).unwrap(),
+        defaults()
+    );
+    let error = crate::stand::package_choice(&oer_tools_image_bundle::Build::EspIdf).unwrap_err();
+    assert!(
+        error.to_string().contains("ESP-IDF catalog build"),
+        "{error}"
+    );
 }

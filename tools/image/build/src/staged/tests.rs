@@ -102,7 +102,10 @@ fn the_boot_files_are_encoded_into_the_bundle() {
             &root,
             &profile.facts.id,
             &application,
-            BootFiles::Encode { elf: &elf_path },
+            BootFiles::Encode {
+                elf: &elf_path,
+                build: crate::tests::package_build(),
+            },
             &output,
         )
         .unwrap();
@@ -439,6 +442,7 @@ fn the_shared_script_encodes_two_read_only_mappings_and_the_loader_rejects_one()
             directory.path(),
             &profile,
             profile.facts.flash.clone().unwrap(),
+            crate::tests::package_build(),
         );
         let result = encode_application(root, &profile, &bytes, &bundle);
         if split {

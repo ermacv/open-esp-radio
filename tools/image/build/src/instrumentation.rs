@@ -107,9 +107,9 @@ impl Instrumentation {
         let tables = tables.as_object().ok_or_else(|| {
             format!("{package}: `features` is a table of the package's features, not {tables}")
         })?;
-        let package_features = crate::manifest::package_features(metadata, package);
+        let package_features = crate::manifest::package_features(metadata, package)?;
         let enabled =
-            crate::manifest::enabled_features(metadata, package, features, default_features);
+            crate::manifest::enabled_features(metadata, package, features, default_features)?;
         for (feature, table) in tables {
             if !package_features.contains(feature) {
                 return Err(
