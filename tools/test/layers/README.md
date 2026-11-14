@@ -91,10 +91,14 @@ is gone both fail, so every list only shrinks:
     `Poison…`, `Quarantin…`, `ResetRequired…`, `Unfinished…`;
   - `COMPATIBILITY`: `#[serde(default)]`, `#[serde(alias)]`,
     `#[deprecated]`, a renamed re-export `pub use … as …`;
-  - `HAND_BITS`: a shift by a literal or a hexadecimal mask beside a bit
-    operator, in the HAL's register and PHY files and the wire crates. It
-    misses a shift or a mask by a named value and counts arithmetic that is
-    no register access.
+  - `RAW_REGISTERS`: calls of the PAC's raw conversions and word accessors
+    outside the PAC (`from_bits`, `.bits()`, `set_bits_…`, `with_bits_…`,
+    `read_word_…`, `modify_word_…`, `write_word_…`) in the HAL, the radio
+    crates and the platform;
+  - `RAW_BYTES`: byte conversions (`from_le_bytes`, `from_be_bytes`,
+    `to_le_bytes`, `to_be_bytes`) and indexing of bytes by name in the
+    protocol packages, the `wire` crates among them. It misses an index of a
+    slice of bytes named otherwise.
 
 - `EXTERNAL_ASYNC_CRATES`: the direct normal `embassy-sync` edge of the
   HIL agent.
