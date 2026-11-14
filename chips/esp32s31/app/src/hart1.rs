@@ -101,7 +101,7 @@ pub struct Hart1Parts {
     alarm: AlarmGrant<Esp32s31, 1, Hart1AlarmToken>,
     #[cfg(feature = "observe")]
     sampler: Sampler1,
-    handed: GroupPeripherals,
+    handed: super::Handed,
 }
 
 /// Hart 1's PC sampler's timer and table entry, which hart 1 binds.
@@ -130,7 +130,7 @@ pub(crate) fn launch(
     mailbox: &'static Mailbox<Hart1Grant, Hart1Parts>,
     timers: (TimeDriverReady<Esp32s31>, SystimerAlarm2),
     launch: Launch,
-    handed: GroupPeripherals,
+    handed: super::Handed,
 ) -> Running<Port, 1> {
     let (mut ready, comparator) = timers;
     let alarm = oer_chips_family_platform_executor::grant::<Esp32s31, 1, _>(
@@ -202,6 +202,8 @@ pub fn hart1_main<H: GroupStarted>(
             group.observe = Some(super::observed::hart1(timer, router, token));
         }
     }
+    // Hart 1's counters are made here, on the hart they count.
+    let handed = handed.into_peripherals(super::cpu::Cpu1::new());
     let (net, second) = boot1(handed, group)
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();

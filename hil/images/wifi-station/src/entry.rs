@@ -87,7 +87,7 @@ fn boot(p: Peripherals, mut boot: Boot) -> Result<impl Started, Error> {
         links: LINK_WAITS.application(&mut boot)?,
     };
     let hart0 = measure::Hart0 {
-        cpu: boot.cpu()?,
+        cpu: p.cpu,
         #[cfg(feature = "trace")]
         observe: boot.observe()?,
     };
@@ -124,10 +124,13 @@ async fn application(
 
 /// The group: the network over the station's device, its answers to the
 /// worker and the load server on it.
-fn network(p: GroupPeripherals, mut boot: GroupBoot) -> Result<impl GroupStarted, Error> {
+fn network(p: GroupPeripherals, boot: GroupBoot) -> Result<impl GroupStarted, Error> {
+    // The trace build takes hart 1's sampler from it.
+    #[cfg(feature = "trace")]
+    let mut boot = boot;
     let device = p.device.ok_or(Error::NoDevice)?;
     let hart1 = measure::Hart1 {
-        cpu: boot.cpu().ok_or(Error::CpuTaken)?,
+        cpu: p.cpu,
         #[cfg(feature = "trace")]
         observe: boot.observe().ok_or(Error::ObserveTaken)?,
     };

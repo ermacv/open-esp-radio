@@ -15,12 +15,12 @@ use oer::observe::parts::{PARTS, PartReading};
 #[cfg(feature = "trace")]
 use oer::observe::tracking::TrackingSample;
 use oer_hil_services_load::{
-    Addba, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, InstructionBus, Link, Load,
+    Addba, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, HartLoad, InstructionBus, Link,
     Mac, PartWindow, Positions, RxCounts, StationRx, TxAmpdu, TxCounts,
 };
 #[cfg(feature = "trace")]
 use oer_hil_services_load::{
-    AddbaOutcome, AddbaRequest, ExecutorLoad, HartLoad, MAX_PAGE_SAMPLES, MAX_PARTS, Parts, Rates,
+    AddbaOutcome, AddbaRequest, ExecutorLoad, Load, MAX_PAGE_SAMPLES, MAX_PARTS, Parts, Rates,
     RxLink, Sample, Samples, StallBoundary, Tracking, TxLink,
 };
 #[cfg(feature = "trace")]
@@ -257,6 +257,25 @@ fn data_window(start: &DataBus, end: &DataBus) -> DataBus {
         next_level_writes: end.next_level_writes.wrapping_sub(start.next_level_writes),
         overflowed: start.overflowed || end.overflowed,
     }
+}
+
+/// The harts' rows of a CPU report from each hart's idle account, in
+/// order: a hart whose account was not read (`None`) has no row. They
+/// replace the executors' own idle time, so both builds report one source.
+pub(crate) fn idle_harts(
+    harts: [Option<HartLoad>; 2],
+) -> heapless::Vec<HartLoad, { oer_hil_services_load::MAX_HARTS }> {
+    const {
+        if oer_hil_services_load::MAX_HARTS < 2 {
+            panic!("the report holds both harts' rows");
+        }
+    }
+    let mut rows = heapless::Vec::new();
+    for hart in harts.into_iter().flatten() {
+        // Room for both, checked above.
+        let _room = rows.push(hart);
+    }
+    rows
 }
 
 /// The counts between the window's ends `start` and `end`; the cache's

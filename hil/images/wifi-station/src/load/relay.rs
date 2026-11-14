@@ -48,6 +48,8 @@ pub(crate) enum Command {
     /// one numbered `from`: no reply.
     #[cfg(feature = "trace")]
     Page(RequestIdentity, u16),
+    /// The boot hart's idle account, read there.
+    Idle,
     /// Ask the radio device for a stall snapshot and wait for it and its
     /// facts after the turn's receive pull, at most [`STALL_WAIT_MS`].
     Stall,
@@ -67,6 +69,8 @@ pub(crate) enum Reply {
     /// The radio device's stall snapshot, `None` when it took none in
     /// time, and the MAC's banks it read.
     Stall(Option<RxSnapshot>, StallMac),
+    /// The boot hart's idle account.
+    Idle(oer::cpu::IdleReading),
 }
 
 /// The relay's channel: replies to hart 1, commands back.
@@ -117,6 +121,7 @@ pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
                 let (snapshot, mac) = stall(&mut hart0).await;
                 Reply::Stall(snapshot, mac)
             }
+            Command::Idle => Reply::Idle(hart0.cpu.idle()),
         };
         relay.send(reply).await;
     }
@@ -133,6 +138,7 @@ pub(crate) async fn serve(mut relay: Relay, mut hart0: Hart0) -> Infallible {
                 Reply::Counters(super::report::cpu_snapshot(hart0.cpu.counters(start)))
             }
             Command::Stall => Reply::Stall(None, StallMac::default()),
+            Command::Idle => Reply::Idle(hart0.cpu.idle()),
         };
         relay.send(reply).await;
     }
@@ -247,7 +253,7 @@ pub(crate) async fn counters(client: &mut Client, start: bool) -> Option<Snapsho
         Reply::Counters(snapshot) => Some(snapshot),
         #[cfg(feature = "trace")]
         Reply::Sampler(_) => None,
-        Reply::Stall(..) => None,
+        Reply::Stall(..) | Reply::Idle(_) => None,
     }
 }
 
@@ -258,7 +264,18 @@ pub(crate) async fn stall_snapshot(client: &mut Client) -> Option<(Option<RxSnap
         Reply::Stall(snapshot, mac) => Some((snapshot, mac)),
         #[cfg(feature = "trace")]
         Reply::Sampler(_) => None,
-        Reply::Counters(_) => None,
+        Reply::Counters(_) | Reply::Idle(_) => None,
+    }
+}
+
+/// The boot hart's idle account, read there now; `None` when the relay
+/// answered otherwise, which it does not.
+pub(crate) async fn idle(client: &mut Client) -> Option<oer::cpu::IdleReading> {
+    match call(client, Command::Idle).await {
+        Reply::Idle(reading) => Some(reading),
+        #[cfg(feature = "trace")]
+        Reply::Sampler(_) => None,
+        Reply::Counters(_) | Reply::Stall(..) => None,
     }
 }
 
@@ -274,6 +291,6 @@ pub(crate) async fn page_of(client: &mut Client, identity: RequestIdentity, from
 fn sampler(reply: Reply) -> Result<(), LoadError> {
     match reply {
         Reply::Sampler(result) => result,
-        Reply::Counters(_) | Reply::Stall(..) => Err(LoadError::NoSampler),
+        Reply::Counters(_) | Reply::Stall(..) | Reply::Idle(_) => Err(LoadError::NoSampler),
     }
 }

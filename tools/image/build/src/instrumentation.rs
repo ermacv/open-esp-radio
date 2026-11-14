@@ -6,6 +6,7 @@
 //! | `trace` | events and execution cost, collected by the image | `oer_trace` |
 //! | `debug-control` | knobs that force execution paths | `oer_debug_control` |
 //! | `fault-injection` | a one-shot fault on a real path, nothing else | `oer_fault_injection` |
+//! | `cpu-load` | each hart's idle account: two clock reads and three stores a wake, nothing a poll or a frame | `oer_cpu_load` |
 //!
 //! An application package declares them as
 //! `[package.metadata.open-radio] instrumentation = ["trace"]` (what holds
@@ -31,10 +32,16 @@ pub enum Class {
     Trace,
     DebugControl,
     FaultInjection,
+    CpuLoad,
 }
 
 impl Class {
-    const ALL: [Self; 3] = [Self::Trace, Self::DebugControl, Self::FaultInjection];
+    const ALL: [Self; 4] = [
+        Self::Trace,
+        Self::DebugControl,
+        Self::FaultInjection,
+        Self::CpuLoad,
+    ];
 
     /// The class's name in a manifest.
     pub const fn name(self) -> &'static str {
@@ -42,6 +49,7 @@ impl Class {
             Self::Trace => "trace",
             Self::DebugControl => "debug-control",
             Self::FaultInjection => "fault-injection",
+            Self::CpuLoad => "cpu-load",
         }
     }
 
@@ -51,6 +59,7 @@ impl Class {
             Self::Trace => "oer_trace",
             Self::DebugControl => "oer_debug_control",
             Self::FaultInjection => "oer_fault_injection",
+            Self::CpuLoad => "oer_cpu_load",
         }
     }
 
@@ -225,6 +234,23 @@ mod tests {
             declared.rustflags().collect::<Vec<_>>(),
             ["--cfg oer_trace", "--cfg oer_fault_injection"]
         );
+    }
+
+    #[test]
+    fn the_cpu_load_is_a_class_of_its_own_beside_the_trace() {
+        let declared = Instrumentation::of_metadata(
+            &metadata(serde_json::json!(["cpu-load"])),
+            "image",
+            &[],
+            true,
+        )
+        .unwrap();
+        assert_eq!(declared.classes().collect::<Vec<_>>(), [Class::CpuLoad]);
+        assert_eq!(
+            declared.rustflags().collect::<Vec<_>>(),
+            ["--cfg oer_cpu_load"]
+        );
+        assert_eq!(declared.cache_name(), "cargo-cpu-load");
     }
 
     #[test]

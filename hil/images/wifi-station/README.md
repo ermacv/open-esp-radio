@@ -27,7 +27,9 @@ nothing the SDK places.
 
 ## Two builds
 
-The image's features name its instrumentation, both in `default`:
+Every build of the image declares `cpu-load` (the package's own list): each
+hart's idle account. Its features name the rest of its instrumentation,
+both in `default`:
 
 | Feature | Brings | Class |
 | --- | --- | --- |
@@ -36,7 +38,7 @@ The image's features name its instrumentation, both in `default`:
 
 The build without default features (`--no-default-features`) is the
 measuring one: no `oer_trace`, no `oer_fault_injection`, and nothing of
-either linked. It serves the SDK station, Wi-Fi station and load services,
+either linked; its bundle records `instrumentation: ["cpu-load"]`. It serves the SDK station, Wi-Fi station and load services,
 not the fault service, so the `wifi-station` scenario cannot run on it and
 `wifi-load` can. At a window's two ends it reads each hart's cycle and
 instruction counters, the boot hart's cache counters (`oer::cpu`), the
@@ -48,14 +50,18 @@ answers every collection fed by the trace (`CollectParts`, `CollectLink`,
 `Diagnose` with `Reset::NotBuilt`, a `Start` that names a tune knob with
 `NotBuilt` and one with a profile with `NoSampler`; its counters' `rx` and
 `tx` are absent. The connect timeline (`GetConnectTimes`,
-`GetScanVisit`) is empty: no stage, no visit.
+`GetScanVisit`) is empty: no stage, no visit; the `wifi-load` scenario
+asks for it only from a trace build.
 
-Each hart's busy share comes from its idle account in both builds (the
-executor's wait for an interrupt reads the platform's microseconds at its
+Each hart's busy share comes from its idle account in both builds (`cpu-load`:
+the executor's wait for an interrupt reads the platform's microseconds at its
 two edges,
-[executor](../../../chips/family/platform/executor/README.md)): `GetCpu`
-and the window's ends report a hart row each from it, and the trace build
-adds each executor's work from its observer.
+[executor](../../../chips/family/platform/executor/README.md)). Each hart
+reads its own: the boot hart's relay with `Cpu0::idle`, the load server on
+hart 1 with `Cpu1::idle`. The window's ends report a hart row each from
+them, and the trace build adds each executor's work from its observer.
+`GetCpu` answers `Report` between runs and `Running` while a run measures:
+the run holds both harts' readers.
 
 | Service | Handler |
 | --- | --- |
@@ -154,9 +160,9 @@ Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
   1 ms between batches; a full socket's datagram is `refused`, what was
   due at the window's end `missed`), or as fast as the socket takes them at
   rate 0.
-- **CPU** (`GetCpu` and the window's ends): each executor's work and idle
-  since boot (`observe::executors`): one hart row per hart with idle time,
-  one executor row per executor with work.
+- **CPU** (`GetCpu` between runs, and the window's ends): one hart row per
+  hart from its idle account since boot, and from a trace build one
+  executor row per executor with its work (`observe::executors`).
 - **Parts:** the library's (`application`, `watchdog`, `station`,
   `datapath`, `radio-actor`, `ip`, `group` and the datapath actor's spans
   `turn`, `transmit`, `receive`, `intake`, `messages`) and the

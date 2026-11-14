@@ -243,13 +243,14 @@ image translates them into whatever reports them:
 | `GroupBoot::observe` (`group`) | hart 1's handle (`Hart1`, `!Send`): its PC sampler on TIMG1 T1, once; each hart's sampler keeps 1024 samples |
 
 What a hart counts of its own work is apart from these, in `oer::cpu`,
-with or without `observe`: it hooks no poll and no frame.
+with or without `observe`: it hooks no poll and no frame. The entry hands
+each hart's reader to the code that runs there; each stays on its hart.
 
 | Reader | What |
 | --- | --- |
-| `Boot::cpu` | the boot hart's `Cpu0`, once (`Error::CpuTaken` after): `counters(start)` reads its cycles, retired instructions and the L1 cache's counters, with `start` the cache's cleared and running first |
-| `GroupBoot::cpu` (`group`) | hart 1's `Cpu1`, once: `counters()` reads its cycles and retired instructions |
-| `cpu::idle(hart)` | the hart's idle account: its microseconds in the executor's wait for an interrupt since boot and its wakes, or `Concurrent` while the hart writes it (read again) |
+| `Peripherals::cpu` | the boot hart's `Cpu0`: `counters(start)` reads its cycles, retired instructions and the L1 cache's counters, with `start` the cache's cleared and running first |
+| `GroupPeripherals::cpu` (`group`) | hart 1's `Cpu1`, made on hart 1: `counters()` reads its cycles and retired instructions |
+| `Cpu0::idle`, `Cpu1::idle` (`cpu-load` class) | the hart's idle account: its microseconds in the executor's wait for an interrupt since boot and its wakes, read on the hart that writes it |
 
 `start_epoch()` starts a new epoch of the longest polls and the extremes.
 Each counter has one writer; a reader in thread mode on either hart takes a

@@ -1,8 +1,11 @@
 //! What a hart counts of its own work, read at a window's two ends: its
-//! cycles and retired instructions, the boot hart's L1 cache counters, and
-//! each hart's idle account, which its executor's wait for an interrupt
-//! keeps at the wait's two edges. Nothing here hooks a poll or a frame, and
-//! every build has it.
+//! cycles and retired instructions and the boot hart's L1 cache counters,
+//! in every build (unread, they cost nothing), and with the `cpu-load`
+//! instrumentation class (`oer_cpu_load`) its idle account, which its
+//! executor's wait for an interrupt keeps at the wait's two edges. Nothing
+//! here hooks a poll or a frame. The entry hands `Cpu0` to the boot
+//! (`Peripherals::cpu`) and `Cpu1` to the group on hart 1
+//! (`GroupPeripherals::cpu`); each stays on its hart.
 
 use core::marker::PhantomData;
 
@@ -12,7 +15,8 @@ pub use oer_chips_esp32s31_hal::peripherals::cache_counters::{
     DataBus, Geometry as CacheGeometry, InstructionBus, Level as CacheLevel,
     Snapshot as CacheSnapshot,
 };
-pub use oer_chips_family_platform_executor::{Concurrent, IdleReading};
+#[cfg(oer_cpu_load)]
+pub use oer_chips_family_platform_executor::IdleReading;
 
 /// The boot hart's counters and the L1 cache's. It stays on the boot hart.
 pub struct Cpu0 {
@@ -52,6 +56,15 @@ impl Cpu0 {
             cache_geometry: self.cache.geometry(),
         }
     }
+
+    /// The boot hart's idle account now: its microseconds in the wait for an
+    /// interrupt since boot, and its wakes. Read on the hart that writes it,
+    /// it never overlaps the write.
+    #[cfg(oer_cpu_load)]
+    pub fn idle(&mut self) -> IdleReading {
+        let [hart0, ..] = &oer_chips_family_platform_executor::IDLE;
+        hart0.read()
+    }
 }
 
 /// Hart 1's counters. It stays on hart 1.
@@ -80,15 +93,11 @@ impl Cpu1 {
             instructions: oer_portable_riscv::instret64(),
         }
     }
-}
 
-/// Hart `hart`'s idle account now: its microseconds in the wait for an
-/// interrupt since boot, and its wakes. `None` for no such hart.
-///
-/// # Errors
-/// [`Concurrent`]: the hart wrote its account meanwhile; read again.
-pub fn idle(hart: usize) -> Option<Result<IdleReading, Concurrent>> {
-    oer_chips_family_platform_executor::IDLE
-        .get(hart)
-        .map(oer_chips_family_platform_executor::IdleAccount::read)
+    /// Hart 1's idle account now, as [`Cpu0::idle`] reads the boot hart's.
+    #[cfg(oer_cpu_load)]
+    pub fn idle(&mut self) -> IdleReading {
+        let [_, hart1, ..] = &oer_chips_family_platform_executor::IDLE;
+        hart1.read()
+    }
 }

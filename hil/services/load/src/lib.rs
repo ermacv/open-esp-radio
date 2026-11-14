@@ -63,8 +63,8 @@ oer_protocols_hil_protocol::messages! {
     topic Begun = "load/begun";
     endpoint Collect = "load/collect" => Collected;
     topic Collected = "load/collected";
-    endpoint GetCpu = "load/cpu" => Load;
-    topic Load = "load/cpu-report";
+    endpoint GetCpu = "load/cpu" => CpuRead;
+    topic CpuRead = "load/cpu-report";
     endpoint CollectParts = "load/parts" => PartsCollected;
     topic PartsCollected = "load/parts-report";
     endpoint CollectCounters = "load/counters" => CountersCollected;
@@ -284,6 +284,17 @@ pub struct Sent {
 pub struct GetCpu;
 
 /// The answer to [`GetCpu`].
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub enum CpuRead {
+    /// The CPU now.
+    Report(Load),
+    /// A run is measuring: its window's ends read the CPU, and the server
+    /// reads it again once the run ended.
+    Running,
+}
+
+/// The image's CPU at one instant: each hart's idle account and, from a
+/// trace build, each executor's work.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Load {
     /// The image's monotonic microseconds now.

@@ -171,6 +171,8 @@ pub struct Peripherals {
     /// The USB Serial/JTAG console: [`Console::open`] takes it.
     #[cfg(feature = "console")]
     pub console: ConsolePeripheral,
+    /// The boot hart's cycle, instruction and cache counters ([`cpu::Cpu0`]).
+    pub cpu: cpu::Cpu0,
 }
 
 /// The AES accelerator's owner.
@@ -212,22 +214,12 @@ pub struct Boot {
     /// What only the boot hart observes, until the boot takes it.
     #[cfg(feature = "observe")]
     observe: Option<observed::Hart0>,
-    /// The boot hart's counters, until the boot takes them.
-    cpu: Option<cpu::Cpu0>,
 }
 
 /// No network: the group started none.
 pub struct NoNet;
 
 impl Boot {
-    /// The boot hart's counters and the cache's, once.
-    ///
-    /// # Errors
-    /// [`Error::CpuTaken`] when the boot took them before.
-    pub fn cpu(&mut self) -> Result<cpu::Cpu0, Error> {
-        self.cpu.take().ok_or(Error::CpuTaken)
-    }
-
     pub(crate) fn router(
         &mut self,
     ) -> &mut oer_chips_family_platform_interrupt_table::Router<InterruptController, 0> {
@@ -344,8 +336,8 @@ where
     }
 }
 
-/// What the boot hands the group: each role's network device when the boot
-/// started that role.
+/// What the group owns: each role's network device when the boot started
+/// that role, and with `group` hart 1's counters.
 pub struct GroupPeripherals {
     /// The station's network device, which [`wifi::Network::start`] takes.
     #[cfg(feature = "station")]
@@ -354,6 +346,43 @@ pub struct GroupPeripherals {
     /// takes.
     #[cfg(feature = "access-point")]
     pub access_point: Option<wifi::Device>,
+    /// Hart 1's cycle and instruction counters ([`cpu::Cpu1`]).
+    #[cfg(feature = "group")]
+    pub cpu: cpu::Cpu1,
+}
+
+/// What the boot hands the group, on its way to the group's hart: each
+/// role's network device. The group's hart adds its own counters.
+pub(crate) struct Handed {
+    #[cfg(feature = "station")]
+    device: Option<wifi::Device>,
+    #[cfg(feature = "access-point")]
+    access_point: Option<wifi::Device>,
+}
+
+impl Handed {
+    /// The group's peripherals, on the hart the group runs on.
+    #[cfg(not(feature = "group"))]
+    fn into_peripherals(self) -> GroupPeripherals {
+        GroupPeripherals {
+            #[cfg(feature = "station")]
+            device: self.device,
+            #[cfg(feature = "access-point")]
+            access_point: self.access_point,
+        }
+    }
+
+    /// The group's peripherals on hart 1, with its counters `cpu`.
+    #[cfg(feature = "group")]
+    pub(crate) fn into_peripherals(self, cpu: cpu::Cpu1) -> GroupPeripherals {
+        GroupPeripherals {
+            #[cfg(feature = "station")]
+            device: self.device,
+            #[cfg(feature = "access-point")]
+            access_point: self.access_point,
+            cpu,
+        }
+    }
 }
 
 /// The group's context: `entry!(boot, group = boot1)` calls `boot1`
@@ -370,9 +399,6 @@ pub struct GroupBoot<N = NoNet> {
     /// What hart 1 observes only there, bound at its start.
     #[cfg(all(feature = "observe", feature = "group"))]
     observe: Option<observed::Hart1>,
-    /// Hart 1's counters, until the group takes them.
-    #[cfg(feature = "group")]
-    cpu: Option<cpu::Cpu1>,
 }
 
 impl GroupBoot {
@@ -382,8 +408,6 @@ impl GroupBoot {
             net: NoNet,
             #[cfg(all(feature = "observe", feature = "group"))]
             observe: None,
-            #[cfg(feature = "group")]
-            cpu: Some(cpu::Cpu1::new()),
         }
     }
 }
@@ -396,17 +420,7 @@ impl<N> GroupBoot<N> {
             net: (self.net, net),
             #[cfg(all(feature = "observe", feature = "group"))]
             observe: self.observe,
-            #[cfg(feature = "group")]
-            cpu: self.cpu,
         }
-    }
-}
-
-#[cfg(feature = "group")]
-impl<N> GroupBoot<N> {
-    /// Hart 1's counters, once.
-    pub fn cpu(&mut self) -> Option<cpu::Cpu1> {
-        self.cpu.take()
     }
 }
 
@@ -642,8 +656,6 @@ pub enum Error {
     /// The boot took what the boot hart observes before.
     #[cfg(feature = "observe")]
     ObserveTaken,
-    /// The boot took its hart's counters before.
-    CpuTaken,
 }
 
 #[cfg(feature = "wifi")]
@@ -684,7 +696,6 @@ impl Error {
             Self::ImageParts => oer_portable_diagnostics::name!("sdk-image-parts"; 32),
             #[cfg(feature = "observe")]
             Self::ObserveTaken => oer_portable_diagnostics::name!("sdk-observe-taken"; 32),
-            Self::CpuTaken => oer_portable_diagnostics::name!("sdk-cpu-taken"; 32),
         }
     }
 }
@@ -809,7 +820,6 @@ pub fn start<S: Started, H: GroupStarted>(
         timers: None,
         #[cfg(feature = "observe")]
         observe: None,
-        cpu: Some(cpu::Cpu0::new(hardware.cache_counters)),
     };
     #[cfg(feature = "observe")]
     {
@@ -822,11 +832,12 @@ pub fn start<S: Started, H: GroupStarted>(
         wifi: hardware.wifi,
         #[cfg(feature = "console")]
         console: ConsolePeripheral(interrupts.console_usb),
+        cpu: cpu::Cpu0::new(hardware.cache_counters),
     };
     let (mut setup, app) = boot(peripherals, setup)
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
-    let handed = GroupPeripherals {
+    let handed = Handed {
         #[cfg(feature = "station")]
         device: setup.device.take(),
         #[cfg(feature = "access-point")]
@@ -834,7 +845,7 @@ pub fn start<S: Started, H: GroupStarted>(
     };
     // On hart 0 the group runs here; with `group` on hart 1, below.
     #[cfg(not(feature = "group"))]
-    let (net, second) = hart1(handed, GroupBoot::new())
+    let (net, second) = hart1(handed.into_peripherals(), GroupBoot::new())
         .unwrap_or_else(|error| fail(error.name()))
         .into_parts();
     #[cfg(feature = "group")]

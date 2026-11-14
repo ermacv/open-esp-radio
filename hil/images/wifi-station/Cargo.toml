@@ -69,9 +69,10 @@ workspace = true
 critical-section-hart = "boot"
 # Every task stack of this image is fully analysed: an unresolved path fails `cargo fw build`.
 task-stack = "proven"
-# Nothing holds in every build: the trace and the fault service each bring
-# their class with their feature.
-instrumentation = []
+# Every build keeps each hart's idle account (`cpu-load`): the load
+# service's busy share. The trace and the fault service bring their class
+# with their feature.
+instrumentation = ["cpu-load"]
 
 # The SDK's observations (`observe`) report through the executors', the
 # station's, the RF actor's and the network's observers, which only

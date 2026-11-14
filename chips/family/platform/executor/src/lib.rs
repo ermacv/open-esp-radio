@@ -47,11 +47,11 @@
 pub mod observation;
 
 pub mod idle;
-pub use idle::{Concurrent, IdleAccount, IdleReading};
+pub use idle::{IdleAccount, IdleReading};
 
 /// Each hart's idle account ([`idle`]): its thread-mode executor's wait for
-/// an interrupt keeps it.
-#[cfg(feature = "chip")]
+/// an interrupt keeps it, in a build of the `cpu-load` class alone.
+#[cfg(all(feature = "chip", oer_cpu_load))]
 pub static IDLE: [IdleAccount; oer_chips_family_platform_port::HARTS] =
     [const { IdleAccount::new() }; oer_chips_family_platform_port::HARTS];
 

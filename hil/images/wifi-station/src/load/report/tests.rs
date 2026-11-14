@@ -384,3 +384,16 @@ fn the_addba_requests_keep_each_tid_s_record_and_the_counts_as_read() {
         (2, 1, 4, 3)
     );
 }
+
+#[test]
+fn each_hart_s_row_comes_from_its_account_and_an_unread_one_has_none() {
+    let row = |hart, idle_us| HartLoad {
+        hart,
+        idle_us,
+        wakes: 3,
+    };
+    let both = idle_harts([Some(row(0, 10)), Some(row(1, 20))]);
+    assert_eq!(both.as_slice(), [row(0, 10), row(1, 20)]);
+    let hart1 = idle_harts([None, Some(row(1, 20))]);
+    assert_eq!(hart1.as_slice(), [row(1, 20)]);
+}

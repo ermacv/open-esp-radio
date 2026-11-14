@@ -137,10 +137,13 @@ pub(crate) const fn alarm_source<P: ExecutorPlatform>(
 pub(crate) fn wait_for_interrupt<B: Binding, T: crate::Tasks<Binding = B>>() {
     let _: core::marker::PhantomData<T> = core::marker::PhantomData;
     if !PortOf::<B>::debugger_connected(current_hart::<B>()) {
+        #[cfg(any(oer_trace, oer_cpu_load))]
         let started = now::<B>() as u32;
         oer_portable_riscv::wait_for_interrupt();
+        #[cfg(any(oer_trace, oer_cpu_load))]
         let ended = now::<B>() as u32;
-        // The hart's idle account: this wait's span, in every build.
+        // The hart's idle account (`cpu-load`): this wait's span.
+        #[cfg(oer_cpu_load)]
         if let Some(account) = crate::IDLE.get(current_core::<B>()) {
             account.record(ended.wrapping_sub(started));
         }

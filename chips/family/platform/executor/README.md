@@ -235,15 +235,16 @@ access remains confined to the receiving execution context.
 
 ## Idle account
 
-Every build keeps each hart's time in its thread-mode executor's wait for an
-interrupt and its wakes (`IDLE`, one `idle::IdleAccount` a hart, under
-`chip`). The wait reads the platform's monotonic microseconds at its two
-edges, with interrupts masked, and adds the span: two clock reads and a few
-stores a wake, nothing a poll or a frame. The hart's thread mode is the one
-writer; a reader on either hart takes the account whole
-(`IdleAccount::read`) or is answered `Concurrent` and reads again. Totals
-wrap; a reader takes differences between two reads. The trace's idle
-boundaries below reuse the same two readings.
+A build of the `cpu-load` instrumentation class (`oer_cpu_load`) keeps each
+hart's time in its thread-mode executor's wait for an interrupt and its
+wakes (`IDLE`, one `idle::IdleAccount` a hart, under `chip`). The wait reads
+the platform's monotonic microseconds at its two edges, with interrupts
+masked, and adds the span: two clock reads and three stores a wake, nothing a
+poll or a frame. The hart's thread mode is the one writer and the same hart
+the one reader (the entry's `Cpu0`, `Cpu1`), so a read never overlaps a
+write. Totals wrap; a reader takes differences between two reads. The
+trace's idle boundaries below take the same two readings; a build of
+neither class reads no clock in the wait.
 
 ## Trace observations
 

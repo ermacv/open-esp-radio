@@ -31,7 +31,7 @@ use oer::{Channel, GroupEnd};
 use oer_hil_services_load::header::Header;
 use oer_hil_services_load::tally::Tally;
 use oer_hil_services_load::{
-    Addba, AddbaCollected, Begun, Collected, Counters, CountersCollected, Diagnosed,
+    Addba, AddbaCollected, Begun, Collected, Counters, CountersCollected, CpuRead, Diagnosed,
     DiagnosticsCollected, Hart1Collected, Hart1Window, HartLoad, Link, LinkCollected, Load,
     LoadError, Mac, MacCollected, NetworkCollected, PartsCollected, Positions, PositionsCollected,
     ProfileCollected, Report, Request, SamplesCollected, Sent, Stall, StallCollected, StallMac,
@@ -91,7 +91,7 @@ pub(crate) enum Answer {
     Addba(AddbaCollected),
     Profile(ProfileCollected),
     Samples(SamplesCollected),
-    Cpu(Load),
+    Cpu(CpuRead),
     /// The boot hart's relay answers it: a page of samples.
     #[cfg(feature = "trace")]
     Relayed,
@@ -173,7 +173,7 @@ pub(crate) async fn serve(
             }
             Action::Answer(decided) => decided_answer(decided),
             Action::Begin { .. } => Answer::Begun(Begun::Refused(LoadError::UnknownRun)),
-            Action::Cpu => Answer::Cpu(cpu_load().await),
+            Action::Cpu => Answer::Cpu(CpuRead::Report(cpu_load(&mut hart0, &mut hart1).await)),
             Action::Diagnose(diagnose) => Answer::Diagnosed(diagnosed(diagnose)),
             Action::Kept(kind) => match &kept {
                 Some((_, Ok(ended))) => {
@@ -497,7 +497,8 @@ async fn run(
                                 };
                             Answer::Begun(begun)
                         }
-                        Action::Cpu => Answer::Cpu(cpu_load().await),
+                        // The run's measurement holds both harts' readers.
+                        Action::Cpu => Answer::Cpu(CpuRead::Running),
                         // A running server starts nothing and keeps no report.
                         Action::Start(_) => Answer::Started(Started::Refused(LoadError::Busy)),
                         Action::Kept(kind) => decided_answer(Decided::Running(kind)),
@@ -597,7 +598,7 @@ async fn measure(
         .released(wait_until(window.barrier.deadline()))
         .await?;
     wait_until(triggered_us.saturating_add(millis(start.delay_ms))).await;
-    let cpu_start = cpu_load().await;
+    let cpu_start = cpu_load(hart0, hart1).await;
     let (parts_start, tracking_start) = readings(true).await;
     let counters_start = snapshot(hart0, true, net).await;
     #[cfg(feature = "trace")]
@@ -623,8 +624,7 @@ async fn measure(
     });
     // The measuring build refused a sampled run before it started.
     #[cfg(not(feature = "trace"))]
-    let (sampling, sampling1): (Option<Result<(), LoadError>>, Option<Result<(), LoadError>>) =
-        (None, None);
+    let [sampling, sampling1]: Sampled = [None, None];
     if let Some(transmit) = start.transmit {
         send(socket, start.run, transmit, start_us, planned_end, sent).await;
     }
@@ -639,7 +639,7 @@ async fn measure(
     relay::request_stop(hart0).await;
     #[cfg(feature = "trace")]
     hart1.observe.sampler().request_stop();
-    let cpu_end = cpu_load().await;
+    let cpu_end = cpu_load(hart0, hart1).await;
     let (parts_end, tracking_end) = readings(false).await;
     let counters_end = snapshot(hart0, false, net).await;
     #[cfg(feature = "trace")]
@@ -752,10 +752,11 @@ fn tracking_window(_start: &(), _end: &()) -> Tracking {
     Tracking::default()
 }
 
-/// The CPU report now: each hart's busy share from its idle account, in
-/// both builds, and in the trace build each executor's work from its
-/// observer beside it.
-async fn cpu_load() -> Load {
+/// The CPU report now: each hart's busy share from its idle account
+/// (`cpu-load`), the boot hart's read there through its relay `hart0` and
+/// hart 1's here with `hart1`, and in the trace build each executor's work
+/// from its observer beside it.
+async fn cpu_load(hart0: &mut Client, hart1: &mut crate::measure::Hart1) -> Load {
     #[cfg(feature = "trace")]
     let mut load = report::load(now_us(), &observe::executors().await);
     #[cfg(not(feature = "trace"))]
@@ -763,37 +764,14 @@ async fn cpu_load() -> Load {
         now_us: now_us(),
         ..Load::default()
     };
-    load.harts = idle_harts().await;
+    let row = |hart, reading: oer::cpu::IdleReading| HartLoad {
+        hart,
+        idle_us: reading.idle_us,
+        wakes: reading.wakes,
+    };
+    let boot_hart = relay::idle(hart0).await.map(|reading| row(0, reading));
+    load.harts = report::idle_harts([boot_hart, Some(row(1, hart1.cpu.idle()))]);
     load
-}
-
-/// Each hart's busy share: its microseconds in the wait for an interrupt
-/// and its wakes since boot, from the account its executor's wait keeps in
-/// every build, each read until no write of its hart overlaps. They
-/// replace the executors' own idle time, so both builds report one source;
-/// only differences between two reports count.
-async fn idle_harts() -> heapless::Vec<HartLoad, { oer_hil_services_load::MAX_HARTS }> {
-    let mut harts = heapless::Vec::new();
-    for hart in 0..2_u8 {
-        loop {
-            match oer::cpu::idle(usize::from(hart)) {
-                Some(Ok(reading)) => {
-                    // The chip's two harts fit the report's.
-                    let _room = harts.push(HartLoad {
-                        hart,
-                        idle_us: reading.idle_us,
-                        wakes: reading.wakes,
-                    });
-                    break;
-                }
-                // The hart wrote its account meanwhile: read it again at
-                // the next poll.
-                Some(Err(oer::cpu::Concurrent)) => yield_now().await,
-                None => break,
-            }
-        }
-    }
-    harts
 }
 
 /// A Diagnose's answer: the network's switchable diagnostics, which the

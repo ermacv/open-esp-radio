@@ -945,12 +945,15 @@ fn path(cx: &mut Cx<'_>) -> Result<(), Failure> {
         he20: width == RouterChannelWidth::He20,
     };
     let joined = cx.call(join, JOIN_TIMEOUT)?;
-    println!("connect: {}", cx.call(GetConnectTimes, REPORT_TIMEOUT)?);
-    println!("connect: {}", ScanVisit::HEADER);
-    let mut index = 0;
-    while let ScanVisitAnswer(Some(visit)) = cx.call(GetScanVisit { index }, REPORT_TIMEOUT)? {
-        println!("connect: {visit}");
-        index += 1;
+    // The connect's timeline is the trace's: the measuring build keeps none.
+    if traced(cx.built()) {
+        println!("connect: {}", cx.call(GetConnectTimes, REPORT_TIMEOUT)?);
+        println!("connect: {}", ScanVisit::HEADER);
+        let mut index = 0;
+        while let ScanVisitAnswer(Some(visit)) = cx.call(GetScanVisit { index }, REPORT_TIMEOUT)? {
+            println!("connect: {visit}");
+            index += 1;
+        }
     }
     let (bssid, linked) = match joined {
         Joined::Linked {
@@ -1741,9 +1744,9 @@ fn measured_level(
     received.echoes.sent = probes;
     let name = &offer.name;
     let mut value = measurement(offer, &sent, &received, &ended);
-    // What the harness built and checked against the running image.
-    value["build"] = build(cx.built());
     if let Some(object) = value.as_object_mut() {
+        // What the harness built and checked against the running image.
+        object.insert("build".to_owned(), build(cx.built()));
         object.insert("start_boundary".to_owned(), serde_json::json!({
             "protocol": "armed-flow-begin",
             "host_clock": "endpoint monotonic microseconds; not synchronised with device",
@@ -2211,17 +2214,22 @@ mod tests {
         let mut built = BuildChoice {
             features: Vec::new(),
             default_features: true,
-            instrumentation: vec!["fault-injection".to_owned(), "trace".to_owned()],
+            instrumentation: vec![
+                "trace".to_owned(),
+                "fault-injection".to_owned(),
+                "cpu-load".to_owned(),
+            ],
         };
         assert!(traced(&built));
+        // The measuring build: its idle account and nothing of the trace.
         built.default_features = false;
-        built.instrumentation.clear();
+        built.instrumentation = vec!["cpu-load".to_owned()];
         assert!(!traced(&built));
         built.instrumentation.push("fault-injection".to_owned());
         assert!(!traced(&built));
         let value = build(&built);
         assert_eq!(value["default_features"], false);
-        assert_eq!(value["instrumentation"][0], "fault-injection");
+        assert_eq!(value["instrumentation"][0], "cpu-load");
     }
 
     /// Hart 1's window between two ends of (cycles, instructions).
