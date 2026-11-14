@@ -37,6 +37,11 @@ impl ApNonces for Nonces {
 struct Seen {
     running: bool,
     ended: Option<std::string::String>,
+    /// After the run: the stopped port's cleanup and its release with the
+    /// runner holding its transmit tokens (the order before the
+    /// contract), then the release the facade's retire asks once the
+    /// runner ended them; what the port still held when it refused.
+    released: Option<[Result<(), std::string::String>; 2]>,
 }
 
 /// Run the bench until `done` holds, given the shared status and the run's
@@ -45,7 +50,7 @@ type Until<'u> = &'u mut dyn FnMut(&str, &mut dyn FnMut(&ApShared, Option<&str>)
 
 /// Start the access point over the real S31 port and run `script` on it,
 /// with the bench's register model and clock.
-fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) {
+fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked, &RefCell<Seen>)) {
     embassy_futures::block_on(with_local_slot(async |claim| {
         let clock = Clocked::new();
         let reader = clock.clock.clone();
@@ -244,6 +249,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
         let seen = RefCell::new(Seen {
             running: false,
             ended: None,
+            released: None,
         });
         let airy = Airy {
             clock: clock.clone(),
@@ -299,6 +305,28 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
                     });
                 }
             }
+            // The cleanup, then the release with the runner's tickets and
+            // buffers still held; then the facade's retire: they end first,
+            // and the release follows.
+            let cleaned = crate::release::clean(runner.port_mut());
+            macro_rules! release {
+                () => {
+                    match &cleaned.result {
+                        Err(cause) => Err(std::format!("cleanup: {cause:?}")),
+                        Ok(()) => runner
+                            .port_mut()
+                            .release()
+                            .map(drop)
+                            .map_err(|outstanding| std::format!("{outstanding:?}")),
+                    }
+                };
+            }
+            let holding = release!();
+            let _ended = runner.end_transmit_tokens();
+            assert_eq!(runner.transmit_tokens(), 0);
+            let ended = release!();
+            drop(cleaned.removed);
+            seen.borrow_mut().released = Some([holding, ended]);
         });
         std::println!(
             "sizes: run with its bench {} B",
@@ -336,7 +364,7 @@ fn on_the_s31_port(script: impl FnOnce(Until<'_>, &ApShared, &Atoms, &Clocked)) 
             }
             panic!("{what}: {PASSES} passes without an end");
         };
-        script(&mut until, &shared, &atoms, &clock);
+        script(&mut until, &shared, &atoms, &clock, &seen);
         let _held = &seen;
     }));
 }
@@ -374,7 +402,7 @@ fn the_access_point_over_the_s31_port_is_refused_unsupported_before_the_radio_st
         serves_beacons::<Caps>(),
         Err(ApUnsupported::BeaconTimestamp)
     );
-    on_the_s31_port(|until, shared, atoms, _| {
+    on_the_s31_port(|until, shared, atoms, _, _| {
         until("the run ends unsupported", &mut |shared, ended| {
             assert!(!atoms.running(), "the MAC runtime never runs");
             assert!(!shared.status().running, "the access point never runs");
@@ -387,5 +415,27 @@ fn the_access_point_over_the_s31_port_is_refused_unsupported_before_the_radio_st
             }
         });
         assert_eq!(shared.status().beacons, 0);
+    });
+}
+
+/// The access point's retire over the real S31 port: the runner holds its
+/// own tickets and transmit buffers, and a release asked while it holds
+/// them finds the buffers out of the port's bank; the facade's retire ends
+/// them first, and the release succeeds.
+#[test]
+fn the_access_point_s_release_finds_its_buffers_home_once_its_runner_ended_them() {
+    on_the_s31_port(|until, _, _, _, seen| {
+        until("the run ends and the release answers", &mut |_, ended| {
+            ended.is_some()
+        });
+        let [holding, ended] = seen
+            .borrow()
+            .released
+            .clone()
+            .expect("the release answered");
+        std::println!("the access point's release, holding: {holding:?}");
+        let holding = holding.expect_err("refused while the runner holds them");
+        assert!(holding.contains("transmit_out: 8"), "{holding}");
+        assert_eq!(ended, Ok(()), "released once the runner ended them");
     });
 }

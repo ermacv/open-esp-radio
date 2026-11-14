@@ -954,6 +954,11 @@ impl<W: Binding> crate::access_point_end::Retiring for ApRunnerOf<W> {
         'static,
         <Port<W> as oer_protocols_ieee80211_contracts_port::DataPort<'static>>::Types,
     >;
+    fn end_transmit_tokens(
+        &mut self,
+    ) -> oer_protocols_ieee80211_runtime::datapath::TransmitTokensEnded {
+        ApRunner::end_transmit_tokens(self)
+    }
     fn finish_stop(
         &mut self,
         mut unconfirmed: impl FnMut(

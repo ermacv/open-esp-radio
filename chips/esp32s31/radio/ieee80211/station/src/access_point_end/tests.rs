@@ -18,6 +18,9 @@ use oer_portable_time_virtual::VirtualClock;
 /// did.
 struct TestRunner<'a, 'b> {
     port: TestPort<'a>,
+    /// The runner ended its transmit tokens: until then the port's release
+    /// finds them out of its bank and refuses, as the S31 port does.
+    tokens_ended: bool,
     /// Another owner of the port, which ends with the runner.
     other: Option<Receipt<'a>>,
     watched: &'b Cell<u8>,
@@ -40,6 +43,12 @@ struct TestRunner<'a, 'b> {
 impl<'a> Retiring for TestRunner<'a, '_> {
     type Port = TestPort<'a>;
     type Unkept = Receipt<'a>;
+    fn end_transmit_tokens(
+        &mut self,
+    ) -> oer_protocols_ieee80211_runtime::datapath::TransmitTokensEnded {
+        self.tokens_ended = true;
+        oer_protocols_ieee80211_runtime::datapath::TransmitTokensEnded::played()
+    }
     fn finish_stop(
         &mut self,
         _unconfirmed: impl FnMut(StopUnconfirmed),
@@ -82,6 +91,9 @@ impl<'a> Retiring for TestRunner<'a, '_> {
         })
     }
     fn port_mut(&mut self) -> &mut TestPort<'a> {
+        if !self.tokens_ended {
+            self.port.stopped = Err(Unreleased::Held(crate::failure::tests::held()));
+        }
         &mut self.port
     }
     fn take_unkept(&mut self) -> Option<Receipt<'a>> {
@@ -158,6 +170,7 @@ fn retired<'a, 'b: 'a>(
     confirmed: &'b Cell<bool>,
 ) -> Left<'a, 'b> {
     let runner = TestRunner {
+        tokens_ended: false,
         port,
         other: None,
         watched,
@@ -325,6 +338,7 @@ fn an_unkept_item_leaves_with_every_other_owner_of_the_unreleased_port() {
     let other = Cell::new(0);
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let runner = TestRunner {
+        tokens_ended: false,
         port: TestPort {
             cleanup: Ok(()),
             receipt: None,
@@ -367,6 +381,7 @@ fn a_stop_that_needs_a_service_goes_on_once_the_unkept_item_is_taken() {
     let other = Cell::new(0);
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let runner = TestRunner {
+        tokens_ended: false,
         port: TestPort {
             cleanup: Ok(()),
             receipt: None,
@@ -408,6 +423,7 @@ fn items_the_stop_finds_fill_the_home_then_the_next_stays_with_the_runner() {
     let ends = Cell::new(0);
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let runner = TestRunner {
+        tokens_ended: false,
         port: TestPort {
             cleanup: Ok(()),
             receipt: None,
@@ -456,6 +472,7 @@ fn an_unaccepted_attempt_comes_back_with_the_unreleased_runner() {
     let other = Cell::new(0);
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let runner = TestRunner {
+        tokens_ended: false,
         port: TestPort {
             cleanup: Ok(()),
             receipt: None,
@@ -504,6 +521,7 @@ fn a_kept_fault_ends_the_retire_unfinished_in_the_stopping_phase_with_every_owne
     let (ends, item, attempt) = (Cell::new(0), Cell::new(0), Cell::new(0));
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let runner = TestRunner {
+        tokens_ended: false,
         port: TestPort {
             cleanup: Ok(()),
             receipt: Some(Receipt(&ends)),
@@ -545,6 +563,7 @@ fn a_kept_fault_ends_the_retire_unfinished_in_the_stopping_phase_with_every_owne
     // A stop the port confirmed before the retire is not watched again.
     let (ends, watched, confirmed) = (Cell::new(0), Cell::new(0), Cell::new(false));
     let runner = TestRunner {
+        tokens_ended: false,
         port: TestPort {
             cleanup: Ok(()),
             receipt: Some(Receipt(&ends)),
@@ -579,6 +598,7 @@ fn a_device_fault_the_stop_named_first_ends_the_retire_unfinished_and_named() {
     let (ends, attempt) = (Cell::new(0), Cell::new(0));
     let (watched, confirmed) = (Cell::new(0), Cell::new(false));
     let runner = TestRunner {
+        tokens_ended: false,
         port: TestPort {
             cleanup: Ok(()),
             receipt: Some(Receipt(&ends)),

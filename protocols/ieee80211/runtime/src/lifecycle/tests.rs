@@ -1146,15 +1146,18 @@ fn pair_with<const G: usize>(
                         .unwrap()
                         .run(&mut lifecycle_ends, &mut io, &clock, observed.clone())
                         .await;
-                    // A restart ends the retired station's transmit tokens,
-                    // then asks the actor for the next installation.
-                    if let LifecycleEnd::Restart(_) = ended.end {
-                        let tokens = ended.retired.end_transmit_tokens();
-                        assert_eq!(ended.retired.station.transmit_tokens(), 0);
-                        lifecycle_ends
-                            .ask_reinstall(tokens)
-                            .await
-                            .expect("the actor is asked");
+                    // The composition: the retired station's transmit
+                    // tokens end, then the actor is asked for the port's
+                    // retirement the end names.
+                    let LifecycleCompleted { end, retired } = &mut ended;
+                    let asked = lifecycle_ends.ask_retirement(end, retired).await;
+                    assert_eq!(
+                        asked.map(|asked| asked.is_some()),
+                        Ok(end.retirement().is_some()),
+                        "an end that retires the actor asks it once"
+                    );
+                    if end.retirement().is_some() {
+                        assert_eq!(retired.station.transmit_tokens(), 0);
                     }
                     *completed.borrow_mut() = Some(ended);
                 };

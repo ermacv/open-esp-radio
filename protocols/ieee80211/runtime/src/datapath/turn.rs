@@ -929,7 +929,7 @@ where
                 deadline,
                 network: end,
             } => self.stop(deadline, end, lifecycle, network)?,
-            ToActor::Retire if matches!(self.radio, Radio::Returning) => {
+            ToActor::Retire(_) if matches!(self.radio, Radio::Returning) => {
                 self.finishing = true;
                 if self.pairwise.is_some() {
                     return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
@@ -938,7 +938,7 @@ where
                 // return came.
                 self.retiring = true;
             }
-            ToActor::Retire | ToActor::Reinstall => {
+            ToActor::Retire(_) | ToActor::Reinstall(_) => {
                 self.finishing = true;
                 if !matches!(self.radio, Radio::Halted | Radio::Stopped) {
                     // Only a stopped radio retires: the lifecycle stops it
@@ -949,7 +949,7 @@ where
                     // The key goes back before the actor ends.
                     return Err(ActorFault::Contract(ActorViolation::PairwiseCustody));
                 }
-                self.end = Some(if matches!(message, ToActor::Reinstall) {
+                self.end = Some(if matches!(message, ToActor::Reinstall(_)) {
                     ActorEnd::Reinstall
                 } else {
                     ActorEnd::Retired

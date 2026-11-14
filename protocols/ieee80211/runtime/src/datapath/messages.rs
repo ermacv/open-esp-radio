@@ -129,11 +129,40 @@ pub enum ToActor<'id, D: DatapathPort<'id>> {
         network: NetworkEnd,
     },
     /// End the actor's run: the radio is stopped and the installation
-    /// retires.
-    Retire,
+    /// retires. It carries the proof that the installation's transmit
+    /// tokens ended, so the port's release finds them home.
+    Retire(TransmitTokensEnded),
     /// End the actor's run for the next installation: the radio is stopped,
-    /// and its owner reinstalls the port under the same actor.
-    Reinstall,
+    /// and its owner reinstalls the port under the same actor. It carries
+    /// the proof that the installation's transmit tokens ended, so the
+    /// port's reinstall finds them home.
+    Reinstall(TransmitTokensEnded),
+}
+
+/// The proof that an installation's transmit tokens (its tickets and its
+/// buffers) ended, each home to the port that minted it: the one value
+/// that asks for the port's retirement, a release ([`ToActor::Retire`])
+/// or a reinstall ([`ToActor::Reinstall`]). The station's lifecycle gives
+/// it once its retired station ended them
+/// ([`crate::lifecycle::RetiredLifecycle::end_transmit_tokens`]), the
+/// access point's runner once it ended its own
+/// ([`crate::access_point::ApRunner::end_transmit_tokens`]).
+#[must_use = "the proof asks for the port's retirement"]
+#[derive(Debug, Eq, PartialEq)]
+pub struct TransmitTokensEnded(());
+
+impl TransmitTokensEnded {
+    /// The proof, from the one place in this crate that ended the tokens.
+    pub(crate) const fn ended() -> Self {
+        Self(())
+    }
+
+    /// The proof for a host bench that plays the lifecycle and ends (or,
+    /// for its case, keeps) the tokens itself.
+    #[cfg(any(test, feature = "test-support"))]
+    pub const fn played() -> Self {
+        Self(())
+    }
 }
 
 /// A message too large for the lifecycle's queue: it waits in the parcel

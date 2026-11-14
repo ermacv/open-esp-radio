@@ -92,8 +92,8 @@ use oer_protocols_ieee80211_runtime::{
     datapath::{
         Actor, ActorEnd, ActorEpochPath, ActorEvent, ActorLink, ActorSpan, DUE_REPOSTS,
         DatapathPort, FromActor, GroupPending, LIFECYCLE_FRAMES, LifecycleEnds, NetworkEnd,
-        NetworkEnds, PARCELS, Parcel, Returned, StopOutcome, ToActor, from_actor_depth,
-        returns_depth,
+        NetworkEnds, PARCELS, Parcel, Returned, StopOutcome, ToActor, TransmitTokensEnded,
+        from_actor_depth, returns_depth,
     },
     station::{self as runtime, RxBlockAckStorage, ServiceEvent},
 };
@@ -617,6 +617,9 @@ struct Bench<'b, 's, T: 'static> {
     stage: &'static RxStagePool<Q, B>,
     actor: Task<'b>,
     service: Task<'b>,
+    /// End the lifecycle's transmit tokens it holds, as the composition
+    /// does before it asks the port's retirement.
+    end_tokens: Box<dyn FnMut() + 'b>,
     to_actor: ClosingSpscSender<'b, ToActor<'s, P<'s>>, TO>,
     from_actor: ClosingSpscReceiver<'b, FromActor<'s, P<'s>>, FROM>,
     returns: ClosingSpscReceiver<'b, Returned<'s, P<'s>>, RETURNS>,
@@ -861,7 +864,7 @@ fn joined_with<T: 'static>(
             station_commands,
             ..
         } = tokens;
-        let buffers = (setup == Setup::ConnectedHoldingBuffers).then_some(buffers);
+        let buffers = RefCell::new((setup == Setup::ConnectedHoldingBuffers).then_some(buffers));
 
         // The station's channels, as the facade's `station` splits them.
         let network_tx = NetworkTx::claim(pool, crate::supply::PORT_BUFFERS)
@@ -1066,6 +1069,7 @@ fn joined_with<T: 'static>(
             commands_back: 0,
             poll_micros,
             start_took: Duration::from_micros(0),
+            end_tokens: Box::new(|| drop(buffers.borrow_mut().take())),
         };
         if setup == Setup::ReturnsFull {
             let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
@@ -1093,7 +1097,7 @@ fn joined_with<T: 'static>(
             bench.settle();
         }
         test(&mut bench);
-        let _held = (control, tickets, buffers);
+        let _held = (control, tickets);
     }));
 }
 
@@ -1564,7 +1568,7 @@ fn a_terminal_the_s31_port_keeps_through_the_confirmed_stop_comes_once_and_the_p
         }
         assert_eq!(bench.configured, 1, "it comes once");
         assert!(bench.returns.try_receive().is_none(), "nothing comes again");
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         bench.until("the actor ends", |bench| {
             bench.ends.borrow().actor.is_some()
         });
@@ -1723,7 +1727,7 @@ fn stop_with_work_in_flight<T: 'static>(
 /// Retire the stopped radio and account for every owner of a confirmed stop.
 fn account_for_every_owner<T: 'static>(bench: &mut Bench<'_, '_, T>, held: NetDatagram<T>) {
     assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
-    bench.send(ToActor::Retire);
+    bench.send(ToActor::Retire(TransmitTokensEnded::played()));
     bench.until("the actor ends", |bench| {
         bench.ends.borrow().actor.is_some()
     });
@@ -2041,7 +2045,7 @@ fn a_restart_after_traffic_reinstalls_the_stopped_port() {
         });
         bench.until("the stop answers", |bench| bench.stopped.is_some());
         assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
-        bench.send(ToActor::Reinstall);
+        bench.send(ToActor::Reinstall(TransmitTokensEnded::played()));
         bench.until("the actor ends", |bench| {
             bench.ends.borrow().reinstalled.is_some()
         });
@@ -2067,7 +2071,7 @@ fn a_restart_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_reinstall
         });
         bench.until("the stop answers", |bench| bench.stopped.is_some());
         assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
-        bench.send(ToActor::Reinstall);
+        bench.send(ToActor::Reinstall(TransmitTokensEnded::played()));
         bench.until("the actor ends", |bench| {
             bench.ends.borrow().reinstalled.is_some()
         });
@@ -2105,7 +2109,7 @@ fn a_stop_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_release() {
             network: NetworkEnd::Stops,
         });
         bench.until("the stop answers", |bench| bench.stopped.is_some());
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         bench.until("the actor ends", |bench| {
             bench.ends.borrow().released.is_some()
         });
@@ -2114,5 +2118,44 @@ fn a_stop_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_release() {
             Some(false),
             "the release refuses"
         );
+    });
+}
+
+/// Each retirement of the port, asked as the composition asks it: the
+/// lifecycle's half held its installation's transmit buffers and ends them
+/// before the message, so the port's release (a stop, the network staying
+/// or stopping) and its reinstall (a restart) find them home.
+#[test]
+fn every_retirement_asked_after_the_tokens_ended_finds_them_home() {
+    struct Stops;
+    struct Stays;
+    struct Restarts;
+    retirement_after_the_tokens_ended::<Stops>(NetworkEnd::Stops, false);
+    retirement_after_the_tokens_ended::<Stays>(NetworkEnd::Stays, false);
+    retirement_after_the_tokens_ended::<Restarts>(NetworkEnd::Stays, true);
+}
+
+/// One retirement of [`every_retirement_asked_after_the_tokens_ended_finds_them_home`].
+fn retirement_after_the_tokens_ended<T: 'static>(network: NetworkEnd, reinstall: bool) {
+    joined_with::<T>(0, Setup::ConnectedHoldingBuffers, |bench| {
+        one_datagram_out(bench);
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop { deadline, network });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
+        (bench.end_tokens)();
+        if reinstall {
+            bench.send(ToActor::Reinstall(TransmitTokensEnded::played()));
+            bench.until("the actor ends", |bench| {
+                bench.ends.borrow().reinstalled.is_some()
+            });
+            assert_eq!(bench.ends.borrow().reinstalled, Some(Ok(())), "{network:?}");
+        } else {
+            bench.send(ToActor::Retire(TransmitTokensEnded::played()));
+            bench.until("the actor ends", |bench| {
+                bench.ends.borrow().released.is_some()
+            });
+            assert_eq!(bench.ends.borrow().released, Some(true), "{network:?}");
+        }
     });
 }

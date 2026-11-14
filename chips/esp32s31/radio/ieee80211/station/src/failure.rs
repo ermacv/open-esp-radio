@@ -607,7 +607,8 @@ pub enum CleanupCause {
 }
 /// Why the station's lifecycle, or the datapath actor under it, ended on a
 /// failure. Nothing resets for it: the installation comes back whole, both
-/// halves ([`crate::unfinished`]). A restart of the station never ends
+/// halves ([`crate::unfinished`]), but for the transmit tokens of an
+/// installation whose retirement was asked, which ended before it. A restart of the station never ends
 /// here: it reinstalls the port and builds the service again.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LifecycleFailure {

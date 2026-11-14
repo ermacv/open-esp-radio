@@ -150,7 +150,9 @@ pub(crate) async fn datapath(datapath: Datapath) {
 /// stays inside the facade. Every other end keeps its typed cause with the
 /// control ([`Station::stop`]) and resets nothing: an installation that
 /// did not retire comes back whole, the lifecycle's half from here and
-/// the actor's from the datapath task ([`Station::installation_half`]).
+/// the actor's from the datapath task ([`Station::installation_half`]);
+/// the transmit tokens (tickets and buffers) of one whose retirement was
+/// asked ended before it, and come back with neither half.
 pub(crate) async fn serve_station(start: StationStart) {
     let StationStart {
         runner,

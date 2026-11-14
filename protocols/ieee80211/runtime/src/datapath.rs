@@ -73,7 +73,8 @@ mod turn;
 pub use messages::{
     ActorEnd, ActorEvent, ActorEvents, ActorFault, ActorViolation, FromActor, GroupPending,
     LifecycleEnds, NetworkEnd, NetworkEnds, Parcel, RetuneFailed, ReturnObserved, Returned,
-    StationTx, StopObserved, StopOutcome, ToActor, from_actor_depth, returns_depth,
+    StationTx, StopObserved, StopOutcome, ToActor, TransmitTokensEnded, from_actor_depth,
+    returns_depth,
 };
 
 use core::future::{Future, poll_fn};

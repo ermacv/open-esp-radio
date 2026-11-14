@@ -327,33 +327,27 @@ where
             self.inner.end = Some(LifecycleEnd::StopUnconfirmed(observed));
             return Answer::of(Messages::None);
         }
-        let (message, end) = match (why, outcome) {
+        // The confirmed stop ends the lifecycle; the actor waits for the
+        // message that asks the port's retirement, which follows the end of
+        // the retired station's transmit tokens
+        // ([`super::ActorEnds::ask_retirement`]).
+        let end = match (why, outcome) {
             // The radio stopped; the actor retires once the network's late
             // return came.
             (Ending::Stop, StopOutcome::Returning(observed)) => {
-                (ToActor::Retire, LifecycleEnd::StoppedReturning(observed))
+                LifecycleEnd::StoppedReturning(observed)
             }
             // The radio stopped and the network's owners are back; only its
             // stop was never confirmed.
             (Ending::Stop, StopOutcome::NetworkLost(observed)) => {
-                (ToActor::Retire, LifecycleEnd::StoppedNetworkLost(observed))
+                LifecycleEnd::StoppedNetworkLost(observed)
             }
-            (Ending::Stop, _) => (ToActor::Retire, LifecycleEnd::Stopped),
-            (Ending::StartRefused(refused), _) => {
-                (ToActor::Retire, LifecycleEnd::StartRefused(refused))
-            }
-            // A restart asks for the next installation only once the
-            // retired station's transmit tokens ended
-            // ([`super::ActorEnds::ask_reinstall`]): the actor waits.
-            (Ending::Restart(failure), _) => {
-                return Answer {
-                    messages: Messages::None,
-                    stopped: Some(LifecycleEnd::Restart(failure)),
-                };
-            }
+            (Ending::Stop, _) => LifecycleEnd::Stopped,
+            (Ending::StartRefused(refused), _) => LifecycleEnd::StartRefused(refused),
+            (Ending::Restart(failure), _) => LifecycleEnd::Restart(failure),
         };
         Answer {
-            messages: Messages::One(Unsent::ToActor(message)),
+            messages: Messages::None,
             stopped: Some(end),
         }
     }

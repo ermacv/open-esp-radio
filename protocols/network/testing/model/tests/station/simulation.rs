@@ -1233,7 +1233,13 @@ async fn run<'s, T: 'static>(
                 station_done.raise();
             };
             let lifecycle_task = async {
-                let completed = running.run(&mut lifecycle_ends, &mut io, &*clock).await;
+                let mut completed = running.run(&mut lifecycle_ends, &mut io, &*clock).await;
+                // The composition: the retired station's transmit tokens
+                // end, then the actor is asked for the retirement its end
+                // names.
+                let _asked = lifecycle_ends
+                    .ask_retirement(&completed.end, &mut completed.retired)
+                    .await;
                 *lifecycle_end.borrow_mut() = Some(completed);
             };
             let network_task = async {

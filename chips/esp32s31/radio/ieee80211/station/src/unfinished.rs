@@ -66,7 +66,9 @@ impl Phase {
     }
 }
 
-/// An installation that did not end in a completed retire, whole.
+/// An installation that did not end in a completed retire, whole but for
+/// its transmit tokens (tickets and buffers), which ended before its
+/// retirement was asked.
 ///
 /// `O` is the actor or runner, which owns the port and every owner it did
 /// not hand out; `K` the items a port call could neither give it nor keep;

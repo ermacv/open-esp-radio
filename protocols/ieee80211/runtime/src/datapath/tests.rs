@@ -1288,7 +1288,7 @@ fn a_fault_after_the_lifecycles_last_message_ends_the_actor_without_a_recovery()
         bench.start();
         while bench.next().is_some() {}
         bench.air.allow_recovery();
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         assert_eq!(
             bench.end,
             Some(ActorEnd::Faulted(ActorFault::Contract(
@@ -1375,7 +1375,7 @@ fn a_stop_returns_the_networks_frames_and_confirms() {
             bench.next(),
             Some(FromActor::Stopped(StopOutcome::Confirmed))
         ));
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
@@ -1481,7 +1481,7 @@ fn a_lost_network_participant_ends_the_stop_with_the_loss_and_the_radio_stopped(
             }
             _ => panic!("a lost participant ends the stop with the loss"),
         }
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
@@ -1521,7 +1521,7 @@ fn a_lost_network_participant_holding_a_lent_unit_ends_the_stop_and_counts_it() 
         drop(held);
         bench.settle();
         assert!(bench.next().is_none(), "a late return answers nothing");
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
@@ -1544,7 +1544,7 @@ fn a_network_that_stops_late_ends_the_wait_returning_and_retires_after_it() {
             }
             _ => panic!("a stopped radio whose network is late is returning"),
         }
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         bench.settle();
         assert!(bench.end.is_none(), "the retirement waits for the network");
         bench.network.answer.set(Some(Ok(())));
@@ -1567,7 +1567,7 @@ fn a_network_lost_after_the_deadline_retires_the_actor_with_the_loss() {
             bench.next(),
             Some(FromActor::Stopped(StopOutcome::Returning(_)))
         ));
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         bench.settle();
         assert!(bench.end.is_none());
         bench
@@ -2263,7 +2263,7 @@ fn a_lost_network_settles_only_once_every_ended_frame_s_memory_went_home() {
             home += 1;
         }
         assert_eq!(home, total, "every MSDU's memory is home");
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         assert_eq!(bench.end, Some(ActorEnd::Retired));
     });
 }
@@ -2404,7 +2404,7 @@ fn a_terminal_kept_through_the_confirmed_stop_comes_once_and_the_port_retires() 
                 bench.settle();
             }
             assert!(bench.returns.try_receive().is_none(), "nothing comes again");
-            bench.send(ToActor::Retire);
+            bench.send(ToActor::Retire(TransmitTokensEnded::played()));
             assert_eq!(bench.end, Some(ActorEnd::Retired));
         },
         |actor, _| {
