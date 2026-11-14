@@ -19,6 +19,7 @@ use super::keys::{
 };
 use super::*;
 use crate::lower_mac::arena::{ArenaFault, ArenaPort};
+use oer_protocols_ieee80211_contracts_port::RunPhase;
 use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, PublishRefused,
     Settlement, TxArena,
@@ -297,8 +298,9 @@ impl<Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> PortDriver
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReinstallRefused {
     /// The port runs, faulted, or holds admitted work, a received unit or
-    /// a transmit allocation: it stays as it was.
-    NotRetired,
+    /// a transmit allocation: what it still holds, each class with its
+    /// count. It stays as it was.
+    NotRetired(PortOutstanding),
     /// The next installation's TSF epoch repeats the current one.
     SameEpoch,
     /// The port's channel names no Wi-Fi channel.
@@ -721,8 +723,9 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         ),
         ReinstallRefused,
     > {
-        if !self.retirable() {
-            return Err(ReinstallRefused::NotRetired);
+        let outstanding = self.settled_outstanding();
+        if !outstanding.is_empty() {
+            return Err(ReinstallRefused::NotRetired(outstanding));
         }
         if tsf_epoch == self.config.tsf_epoch {
             return Err(ReinstallRefused::SameEpoch);
@@ -796,6 +799,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// buffer, which every later call answers with.
     pub fn fault(&self) -> Option<Fault> {
         self.check().err()
+    }
+
+    /// Refuse the next publication as a missing key, with its key
+    /// installed: the image's one-shot fault.
+    #[cfg(test)]
+    pub(crate) fn refuse_publication_for_test(&mut self) {
+        self.driver.refuse_publication_for_test = true;
     }
 
     /// Refuse the next publication past its buffer's attachment.
@@ -913,22 +923,52 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// admitted work, no received unit held, every transmit allocation
     /// home. Units the network still holds stay counted by the lend
     /// credit, which the next installation keeps.
-    fn retirable(&mut self) -> bool {
-        // Units the caller lent leave its count here, as at its next pull.
+    /// What the installation still holds, read without changing anything:
+    /// received units count less the lends not yet settled, as the next
+    /// pull would settle them, and lends the held count cannot hold name
+    /// [`Fault::ReceiveAccounting`] unless a fault is recorded already.
+    pub fn outstanding(&self) -> PortOutstanding {
+        let received = self
+            .rx_out
+            .get()
+            .checked_sub(self.shared.network.transferred());
+        oer_protocols_ieee80211_contracts_port::Outstanding {
+            phase: match self.state {
+                PortState::Stopped => RunPhase::Stopped,
+                PortState::Starting { .. } => RunPhase::Starting,
+                PortState::Running => RunPhase::Running,
+                PortState::Recovering => RunPhase::Recovering,
+                PortState::Stopping { .. } => RunPhase::Stopping,
+                PortState::RollingBack { .. } => RunPhase::RollingBack,
+            },
+            fault: self
+                .fault
+                .or(received.is_none().then_some(Fault::ReceiveAccounting)),
+            received: received.unwrap_or(self.rx_out.get()),
+            lent: self.shared.network.held(),
+            removals: self.driver.removals_waiting(),
+            retained_groups: usize::from(self.driver.retained_group.is_some()),
+            unconsumed: self.unconsumed.len(),
+            transmit_out: self.shared.returned.out(),
+            queued: self.driver.queues.each_ref().map(heapless::Deque::len),
+            running: self
+                .driver
+                .running
+                .iter()
+                .filter(|running| running.is_some())
+                .count(),
+            arenas: self.driver.arena_state(),
+        }
+    }
+
+    /// Settle the units the caller lent, as at its next pull, then read
+    /// what the installation still holds: a settlement that fails records
+    /// its fault, which the value carries.
+    fn settled_outstanding(&mut self) -> PortOutstanding {
         if let Err(fault) = settle_lent(&self.shared.network, &self.rx_out, self.device) {
             self.record(fault);
-            return false;
         }
-        self.state == PortState::Stopped
-            && self.fault.is_none()
-            && self.rx_out.get() == 0
-            && !self.driver.removal_waits()
-            && self.driver.retained_group.is_none()
-            && self.unconsumed.is_empty()
-            && self.shared.returned.none_out()
-            && self.driver.queues.iter().all(|queue| queue.is_empty())
-            && self.driver.running.iter().all(Option::is_none)
-            && self.driver.arenas_returnable()
+        self.outstanding()
     }
 
     /// End every removal its command left waiting whose key the core
@@ -1028,12 +1068,17 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// End the stopped port's installations after the retire checks: its
     /// device, for the owner's release. The port then holds no installation
     /// a later call could run.
-    pub fn release(&mut self) -> Option<&mut D> {
-        if !self.retirable() {
-            return None;
+    ///
+    /// # Errors
+    /// What the installation still holds ([`Self::outstanding`]): nothing
+    /// was released.
+    pub fn release(&mut self) -> Result<&mut D, PortOutstanding> {
+        let outstanding = self.settled_outstanding();
+        if !outstanding.is_empty() {
+            return Err(outstanding);
         }
         let _reusable = self.retire_driver();
-        Some(&mut *self.device)
+        Ok(&mut *self.device)
     }
 
     fn check(&self) -> Result<(), Fault> {

@@ -1141,12 +1141,25 @@ fn pair_with<const G: usize>(
                         Some(actor_now.run(&mut actor_ends, &mut network, &*clock).await);
                 };
                 let lifecycle_task = async {
-                    *completed.borrow_mut() = Some(
-                        life.take()
-                            .unwrap()
-                            .run(&mut lifecycle_ends, &mut io, &clock, observed.clone())
-                            .await,
+                    let mut ended = life
+                        .take()
+                        .unwrap()
+                        .run(&mut lifecycle_ends, &mut io, &clock, observed.clone())
+                        .await;
+                    // The composition: the retired station's transmit
+                    // tokens end, then the actor is asked for the port's
+                    // retirement the end names.
+                    let LifecycleCompleted { end, retired } = &mut ended;
+                    let asked = lifecycle_ends.ask_retirement(end, retired).await;
+                    assert_eq!(
+                        asked.map(|asked| asked.is_some()),
+                        Ok(end.retirement().is_some()),
+                        "an end that retires the actor asks it once"
                     );
+                    if end.retirement().is_some() {
+                        assert_eq!(retired.station.transmit_tokens(), 0);
+                    }
+                    *completed.borrow_mut() = Some(ended);
                 };
                 let script_task = script(&world);
                 let mut actor_task = core::pin::pin!(actor_task);

@@ -59,7 +59,10 @@ impl<'a> Stopped for TestPort<'a> {
         }
     }
     fn take_stopped(&mut self) -> Result<Radio, Unreleased> {
-        core::mem::replace(&mut self.stopped, Err(Unreleased::Held))
+        core::mem::replace(
+            &mut self.stopped,
+            Err(Unreleased::Held(crate::failure::tests::held())),
+        )
     }
 }
 
@@ -184,7 +187,11 @@ fn a_refused_release_returns_the_whole_installation_to_the_actor_task_caller() {
             ReleaseCause::StopUnconfirmed,
         ),
         // A confirmed stop whose port still holds owners.
-        (Ok(()), Err(Unreleased::Held), ReleaseCause::Held),
+        (
+            Ok(()),
+            Err(Unreleased::Held(crate::failure::tests::held())),
+            ReleaseCause::Held(crate::failure::tests::held()),
+        ),
         // A confirmed stop whose device has not paused its frontier.
         (
             Ok(()),
@@ -337,7 +344,7 @@ fn a_faulted_actor_returns_every_owner_beside_its_cause() {
 #[test]
 fn news_out_of_order_names_the_mailbox() {
     let news: TestNews = News::Released {
-        result: Err(ReleaseCause::Held),
+        result: Err(ReleaseCause::Held(crate::failure::tests::held())),
         network_lost: false,
     };
     assert_eq!(
@@ -439,9 +446,15 @@ fn only_a_completed_release_retires_the_lifecycle_half() {
         (StationExitOf::StoppedNetworkLost, LifecycleHalf::Retired)
     );
     assert_eq!(
-        settled(released(Err(ReleaseCause::Held), false), None),
+        settled(
+            released(
+                Err(ReleaseCause::Held(crate::failure::tests::held())),
+                false
+            ),
+            None
+        ),
         (
-            StationExitOf::ReleaseFailed(ReleaseCause::Held),
+            StationExitOf::ReleaseFailed(ReleaseCause::Held(crate::failure::tests::held())),
             LifecycleHalf::Unfinished
         )
     );
@@ -465,7 +478,13 @@ fn only_a_completed_release_retires_the_lifecycle_half() {
         (StationExitOf::Failed(refused), LifecycleHalf::Retired)
     );
     assert_eq!(
-        settled(released(Err(ReleaseCause::Held), false), Some(refused)),
+        settled(
+            released(
+                Err(ReleaseCause::Held(crate::failure::tests::held())),
+                false
+            ),
+            Some(refused)
+        ),
         (StationExitOf::Failed(refused), LifecycleHalf::Unfinished)
     );
 }
@@ -487,12 +506,12 @@ fn a_settled_release_keeps_the_end_its_news_told() {
     use oer_protocols_ieee80211_contracts_port::StartRefused;
     let held = || {
         Some(TestNews::Released {
-            result: Err(ReleaseCause::Held),
+            result: Err(ReleaseCause::Held(crate::failure::tests::held())),
             network_lost: false,
         })
     };
     let told = Some(LateEnd::Ended(StationExitOf::ReleaseFailed(
-        ReleaseCause::Held,
+        ReleaseCause::Held(crate::failure::tests::held()),
     )));
     assert_eq!(release_settled(held(), None).2, told);
     let refused = LifecycleFailure::StartRefused(StartRefused::Deadline);
@@ -1233,4 +1252,67 @@ fn the_lifecycle_half_goes_out_before_the_datapath_end_it_lets_come() {
         panic!("both ends came out, the lifecycle's first");
     };
     assert_eq!(half.late_end(), LateRead::Ended(LateEnd::Abandoned));
+}
+
+/// A start refusal of the test's own, with its path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Refusal;
+
+impl oer_portable_diagnostics::DiagnosticPath for Refusal {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
+        path.name("Refusal");
+    }
+}
+
+/// Each end of the station is its own stop error, its value unchanged, and
+/// its path names that end and then its cause.
+#[test]
+fn each_exit_of_the_station_is_its_own_stop_error_with_its_value() {
+    use oer_portable_diagnostics::DiagPath;
+    let failure = LifecycleFailure::Reinstall(ReinstallCause::Epochs);
+    let unavailable = Unavailable {
+        cause: Refusal,
+        cleanup: Err(ReleaseCause::Deadline),
+    };
+    let cases: [(Result<StationExitOf<Refusal>, crate::RunnerLost>, _); 6] = [
+        (Ok(StationExitOf::Stopped), Ok(())),
+        (
+            Ok(StationExitOf::StoppedNetworkLost),
+            Err(StopErrorOf::NetworkLost),
+        ),
+        (
+            Ok(StationExitOf::Failed(failure)),
+            Err(StopErrorOf::Failed(failure)),
+        ),
+        (
+            Ok(StationExitOf::ReleaseFailed(ReleaseCause::Held(
+                crate::failure::tests::held(),
+            ))),
+            Err(StopErrorOf::ReleaseFailed(ReleaseCause::Held(
+                crate::failure::tests::held(),
+            ))),
+        ),
+        (
+            Ok(StationExitOf::Unavailable(unavailable)),
+            Err(StopErrorOf::Unavailable(unavailable)),
+        ),
+        (Err(crate::RunnerLost), Err(StopErrorOf::RunnerLost)),
+    ];
+    let paths: [&[&str]; 5] = [
+        &["NetworkLost"],
+        &["Failed", "Reinstall", "Epochs"],
+        &["ReleaseFailed", "Held"],
+        &["Unavailable", "Refusal", "Cleanup", "Deadline"],
+        &["RunnerLost"],
+    ];
+    let mut errors = 0;
+    for (exit, expected) in cases {
+        let result = stop_result(exit);
+        assert_eq!(result, expected);
+        if let Err(error) = result {
+            assert_eq!(DiagPath::of(&error).names(), paths[errors]);
+            errors += 1;
+        }
+    }
+    assert_eq!(errors, paths.len());
 }

@@ -75,11 +75,17 @@ The Wi-Fi station service's requests go to the same station:
   setting: `Linked` names the channel the station found. A failure answers
   `Refused` with the same codes as the SDK station service's `Connect`.
 - **GetStatus** answers the station's address, the access point and channel
-  while the link is up (`Station::linked`) and the network's address.
+  while the link is up (`Station::linked`), the network's address, and,
+  once the station ended, how (`Station::ended` as its line reads:
+  `wifi-stop` and the stop error's variant path, or `wifi-stopped`).
 - **Leave** stops the station (`Station::stop`): the network returns its
   receive buffers within the default drain of two seconds, the radio
-  retires, and the answer is `Left::Down`. Every later request of either
-  station service finds the station stopped.
+  retires, and the answer is `Left::Down`. A station that had ended before
+  the stop answers `Left::Ended` with its end (`Failed`, `Unavailable` or
+  `RunnerLost` and its cause), a radio release that failed
+  `Left::ReleaseFailed` with its cause, a network whose stop was never
+  confirmed `Left::DownNetworkLost`. Every later request of either station
+  service finds the station stopped.
 
 ## Load
 

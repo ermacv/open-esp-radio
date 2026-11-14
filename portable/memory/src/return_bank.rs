@@ -87,9 +87,15 @@ impl<T, const N: usize> ReturnBank<T, N> {
     /// Whether no place's value is out: each seeded place is available,
     /// and a place never seeded holds nothing to return.
     pub fn none_out(&self) -> bool {
+        self.out() == 0
+    }
+
+    /// How many places' values are out, each with its return token.
+    pub fn out(&self) -> usize {
         self.cells
             .iter()
-            .all(|cell| cell.state.load(Ordering::Acquire) != OUT)
+            .filter(|cell| cell.state.load(Ordering::Acquire) == OUT)
+            .count()
     }
 }
 

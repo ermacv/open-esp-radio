@@ -41,6 +41,15 @@ use serde::{Deserialize, Serialize};
 pub const MAX_SSID: usize = 32;
 /// The longest WPA2 passphrase (IEEE 802.11-2020 J.4.1).
 pub const MAX_PASSPHRASE: usize = 63;
+/// The longest end of the station as its console line reads (`wifi-stop`
+/// and the end's variant path).
+pub const MAX_END: usize = 96;
+
+/// How the station ended, as its console line reads: `wifi-stop` and the
+/// variant path of the product's stop error (`Failed/...`,
+/// `Unavailable/...`, `RunnerLost`, `ReleaseFailed/...`, `NetworkLost`),
+/// or `wifi-stopped` after a stop that ended with it stopped.
+pub type End = heapless::String<MAX_END>;
 
 pub use connect::{
     ConnectTimes, GetConnectTimes, GetScanVisit, ProbeState, ScanVisit, ScanVisitAnswer,
@@ -98,7 +107,7 @@ pub enum Phy {
 pub struct GetStatus;
 
 /// The answer to [`GetStatus`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Status {
     /// The station's own address.
     pub address: [u8; 6],
@@ -106,6 +115,8 @@ pub struct Status {
     pub link: Option<Link>,
     /// The IPv4 configuration DHCP gave it; none before a lease.
     pub ipv4: Option<Ipv4>,
+    /// How the station ended, once it did ([`End`]); none while it runs.
+    pub ended: Option<End>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
@@ -127,7 +138,7 @@ pub struct Ipv4 {
 pub struct Leave;
 
 /// The answer to [`Leave`].
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub enum Left {
     /// The link is down and the station stopped.
     Down,
@@ -135,6 +146,13 @@ pub enum Left {
     /// network's stop participant was lost: the network never confirmed its
     /// stop. A handled software error; nothing was reset.
     DownNetworkLost,
+    /// The station had ended before the stop, by this end ([`End`]:
+    /// `Failed`, `Unavailable` or `RunnerLost` and its cause); nothing was
+    /// reset.
+    Ended(End),
+    /// The station stopped, and its radio's release failed for this cause
+    /// ([`End`]: `ReleaseFailed` and its cause); nothing was reset.
+    ReleaseFailed(End),
     Refused(StationError),
 }
 

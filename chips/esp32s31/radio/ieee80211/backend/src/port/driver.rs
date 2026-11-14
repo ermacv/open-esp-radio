@@ -207,6 +207,8 @@ pub(super) trait DriverEnv<'id, Id: SlotIdentity, D: Device<B>, const B: usize, 
 /// published attempt holds one of the installation's [`TX_TICKETS`]
 /// tickets, so a queue that holds them all never refuses a push.
 pub(super) const QUEUE_DEPTH: usize = TX_TICKETS;
+/// The transmit queues an installation keeps, one per access category.
+pub const TX_QUEUES: usize = 4;
 const _: () = {
     if QUEUE_DEPTH < TX_TICKETS {
         panic!("each transmit queue holds every ticket's attempt");
@@ -403,14 +405,18 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     /// Refuse the next publication's values, past its buffer's attachment.
     #[cfg(test)]
     pub(super) refuse_values_for_test: bool,
+    /// Refuse the next publication as a missing key, on the path the
+    /// image's one-shot fault takes, with the key installed.
+    #[cfg(test)]
+    pub(super) refuse_publication_for_test: bool,
     /// Refuse the next step of this kind, which the counts exclude.
     #[cfg(test)]
     pub(super) refuse_for_test: Option<TestRefusal>,
     /// The queue places at home, each at its own place with its
     /// descriptor.
     pub(super) free: QueueHomes<'id, Id, B>,
-    pub(super) queues: [heapless::Deque<Pending<'id, Id, D, B, O>, QUEUE_DEPTH>; 4],
-    pub(super) running: [Option<Pending<'id, Id, D, B, O>>; 4],
+    pub(super) queues: [heapless::Deque<Pending<'id, Id, D, B, O>, QUEUE_DEPTH>; TX_QUEUES],
+    pub(super) running: [Option<Pending<'id, Id, D, B, O>>; TX_QUEUES],
     /// What is known of each attempt that waits in `running` beside the
     /// lease its buffer refused back ([`Self::strand`]): the cleanup after
     /// the confirmed stop ends it with this, never with a guess.
@@ -491,6 +497,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             tickets: crate::lower_mac::TicketBank::empty(),
             #[cfg(test)]
             refuse_values_for_test: false,
+            #[cfg(test)]
+            refuse_publication_for_test: false,
             #[cfg(test)]
             refuse_for_test: None,
             free: QueueHomes::empty(),
@@ -1227,6 +1235,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         #[cfg(oer_fault_injection)]
         let checked = checked.and_then(|checked| {
             if super::debug::publication_refused() {
+                Err(Unpublished::Key)
+            } else {
+                Ok(checked)
+            }
+        });
+        #[cfg(test)]
+        let checked = checked.and_then(|checked| {
+            if core::mem::take(&mut self.refuse_publication_for_test) {
                 Err(Unpublished::Key)
             } else {
                 Ok(checked)
@@ -2118,9 +2134,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     }
     /// Whether a removal its command left waits in the key table.
     pub(super) fn removal_waits(&self) -> bool {
+        self.removals_waiting() != 0
+    }
+    /// The key removals waiting for the core to clear their keys.
+    pub(super) fn removals_waiting(&self) -> usize {
         self.keys
             .iter()
-            .any(|place| matches!(place, Some(KeyPlace::Removing(_))))
+            .filter(|place| matches!(place, Some(KeyPlace::Removing(_))))
+            .count()
     }
     /// Run a station group mutation whose cut drained.
     ///

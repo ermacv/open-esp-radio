@@ -897,7 +897,9 @@ pub(crate) fn reinstall(
 ) -> ReinstallCause {
     use oer_chips_esp32s31_radio_ieee80211_backend::port::ReinstallRefused as Source;
     match refused {
-        Source::NotRetired => ReinstallCause::NotRetired,
+        Source::NotRetired(outstanding) => {
+            ReinstallCause::NotRetired(outstanding.map_fault(backend_fault))
+        }
         Source::SameEpoch => ReinstallCause::SameEpoch,
         Source::ChannelUnset => ReinstallCause::ChannelUnset,
         Source::Receipt => ReinstallCause::Receipt,

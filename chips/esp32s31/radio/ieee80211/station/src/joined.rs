@@ -92,8 +92,8 @@ use oer_protocols_ieee80211_runtime::{
     datapath::{
         Actor, ActorEnd, ActorEpochPath, ActorEvent, ActorLink, ActorSpan, DUE_REPOSTS,
         DatapathPort, FromActor, GroupPending, LIFECYCLE_FRAMES, LifecycleEnds, NetworkEnd,
-        NetworkEnds, PARCELS, Parcel, Returned, StopOutcome, ToActor, from_actor_depth,
-        returns_depth,
+        NetworkEnds, PARCELS, Parcel, Returned, StopOutcome, ToActor, TransmitTokensEnded,
+        from_actor_depth, returns_depth,
     },
     station::{self as runtime, RxBlockAckStorage, ServiceEvent},
 };
@@ -565,6 +565,16 @@ struct Ends<T: 'static> {
     /// The device came back from the retired port, and its frontier.
     released: Option<bool>,
     frontier: Option<ModelFrontier>,
+    /// After a reinstall end: the stopped port's cleanup and its reinstall,
+    /// as the facade's datapath task runs them.
+    reinstalled: Option<Result<(), Reinstalled>>,
+}
+
+/// Why the facade's reinstall of the stopped port refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Reinstalled {
+    Cleanup(crate::failure::CleanupCause),
+    Refused(port::ReinstallRefused),
 }
 
 impl<T: 'static> Default for Ends<T> {
@@ -575,6 +585,7 @@ impl<T: 'static> Default for Ends<T> {
             actor: None,
             released: None,
             frontier: None,
+            reinstalled: None,
         }
     }
 }
@@ -606,6 +617,9 @@ struct Bench<'b, 's, T: 'static> {
     stage: &'static RxStagePool<Q, B>,
     actor: Task<'b>,
     service: Task<'b>,
+    /// End the lifecycle's transmit tokens it holds, as the composition
+    /// does before it asks the port's retirement.
+    end_tokens: Box<dyn FnMut() + 'b>,
     to_actor: ClosingSpscSender<'b, ToActor<'s, P<'s>>, TO>,
     from_actor: ClosingSpscReceiver<'b, FromActor<'s, P<'s>>, FROM>,
     returns: ClosingSpscReceiver<'b, Returned<'s, P<'s>>, RETURNS>,
@@ -736,6 +750,10 @@ fn joined_at<T: 'static>(poll_micros: u64, test: impl for<'b, 's> FnOnce(&mut Be
 enum Setup {
     /// Started, configured and connected.
     Connected,
+    /// Connected, and the lifecycle holds its installation's transmit
+    /// buffers for the whole case, as the station core's retired half
+    /// does until the facade's reinstall answers (`station.rs`).
+    ConnectedHoldingBuffers,
     /// The lifecycle reads none of its returns: before the start, commands
     /// the stopped port refuses fill the return queue; then the radio
     /// starts and the station's configuration is asked, whose terminal the
@@ -838,14 +856,15 @@ fn joined_with<T: 'static>(
             resources,
         } = installation;
         let (block_acks, tokens) = resources.into_station();
-        // This lifecycle sends no frame of its own: its buffers go home.
+        // This lifecycle sends no frame of its own: its buffers go home,
+        // unless the case holds them as the retired station does.
         let port::StationTokens {
             tickets,
             buffers,
             station_commands,
             ..
         } = tokens;
-        drop(buffers);
+        let buffers = RefCell::new((setup == Setup::ConnectedHoldingBuffers).then_some(buffers));
 
         // The station's channels, as the facade's `station` splits them.
         let network_tx = NetworkTx::claim(pool, crate::supply::PORT_BUFFERS)
@@ -984,6 +1003,21 @@ fn joined_with<T: 'static>(
                 ActorEnd::Reinstall => ActorEndSeen::Reinstall,
                 ActorEnd::Faulted(_) => ActorEndSeen::Faulted,
             });
+            if let ActorEnd::Reinstall = end {
+                // The facade's datapath task: the stopped port's cleanup,
+                // then its reinstall in place under the next TSF epoch.
+                let cleaned = crate::release::clean(actor.port_mut());
+                ends.reinstalled = Some(match cleaned.result {
+                    Err(cause) => Err(Reinstalled::Cleanup(cause)),
+                    Ok(()) => actor
+                        .port_mut()
+                        .reinstall(&mut installations, 2)
+                        .map(drop)
+                        .map_err(Reinstalled::Refused),
+                });
+                drop(cleaned.removed);
+                return;
+            }
             // The facade's `release`: the stopped port's cleanup, then the
             // port's release.
             // Its receipt, if one, stays here past the release.
@@ -991,7 +1025,7 @@ fn joined_with<T: 'static>(
             match cleaned
                 .result
                 .ok()
-                .and_then(|()| actor.port_mut().release())
+                .and_then(|()| actor.port_mut().release().ok())
             {
                 Some(device) => {
                     ends.released = Some(true);
@@ -1035,6 +1069,7 @@ fn joined_with<T: 'static>(
             commands_back: 0,
             poll_micros,
             start_took: Duration::from_micros(0),
+            end_tokens: Box::new(|| drop(buffers.borrow_mut().take())),
         };
         if setup == Setup::ReturnsFull {
             let color = oer_protocols_ieee80211_contracts_port::BssColor::new(1).unwrap();
@@ -1055,7 +1090,7 @@ fn joined_with<T: 'static>(
                 filter: SupportedFilter::new(ReceiveFilter::BSS_MEMBER).unwrap(),
             },
         }));
-        if setup == Setup::Connected {
+        if matches!(setup, Setup::Connected | Setup::ConnectedHoldingBuffers) {
             bench.until("the station is configured", |bench| bench.configured == 1);
             bench.connect();
         } else {
@@ -1533,7 +1568,7 @@ fn a_terminal_the_s31_port_keeps_through_the_confirmed_stop_comes_once_and_the_p
         }
         assert_eq!(bench.configured, 1, "it comes once");
         assert!(bench.returns.try_receive().is_none(), "nothing comes again");
-        bench.send(ToActor::Retire);
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
         bench.until("the actor ends", |bench| {
             bench.ends.borrow().actor.is_some()
         });
@@ -1692,7 +1727,7 @@ fn stop_with_work_in_flight<T: 'static>(
 /// Retire the stopped radio and account for every owner of a confirmed stop.
 fn account_for_every_owner<T: 'static>(bench: &mut Bench<'_, '_, T>, held: NetDatagram<T>) {
     assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
-    bench.send(ToActor::Retire);
+    bench.send(ToActor::Retire(TransmitTokensEnded::played()));
     bench.until("the actor ends", |bench| {
         bench.ends.borrow().actor.is_some()
     });
@@ -1981,5 +2016,146 @@ fn a_completion_after_turns_that_took_none_puts_the_prepared_ppdu_on_the_air() {
             "the completion's turn published the prepared PPDU"
         );
         assert_eq!(bench.atoms.rule_breaks(), []);
+    });
+}
+
+/// A restart of the station, as the facade runs it after a refused
+/// publication: the lifecycle stops the radio with the network staying,
+/// then asks the actor to reinstall; the stopped port's cleanup and its
+/// reinstall in place follow. With the network's traffic through it before
+/// the stop, the port is retirable and the next installation comes.
+#[test]
+fn a_restart_after_traffic_reinstalls_the_stopped_port() {
+    struct Network;
+    joined::<Network>(|bench| {
+        one_datagram_out(bench);
+        bench.land_from_peer(&udp_from_peer(b"in before the restart"));
+        let datagram = bench.receive_datagram();
+        let mut socket = bench.socket.take().unwrap();
+        socket
+            .release(datagram.block)
+            .ok()
+            .expect("the block goes home");
+        bench.socket = Some(socket);
+        bench.settle();
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
+        bench.send(ToActor::Reinstall(TransmitTokensEnded::played()));
+        bench.until("the actor ends", |bench| {
+            bench.ends.borrow().reinstalled.is_some()
+        });
+        let ends = bench.ends.borrow();
+        assert_eq!(ends.actor, Some(ActorEndSeen::Reinstall));
+        assert_eq!(ends.reinstalled, Some(Ok(())), "the next installation");
+    });
+}
+
+/// A restart in the real composition: the lifecycle's half keeps its
+/// installation's transmit buffers until the reinstall answers, as the
+/// facade's `station.rs` keeps the retired station whole. The reinstall
+/// finds them out of the port's bank.
+#[test]
+fn a_restart_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_reinstall() {
+    struct Network;
+    joined_with::<Network>(0, Setup::ConnectedHoldingBuffers, |bench| {
+        one_datagram_out(bench);
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stays,
+        });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
+        bench.send(ToActor::Reinstall(TransmitTokensEnded::played()));
+        bench.until("the actor ends", |bench| {
+            bench.ends.borrow().reinstalled.is_some()
+        });
+        let ends = bench.ends.borrow();
+        let Some(Err(Reinstalled::Refused(port::ReinstallRefused::NotRetired(outstanding)))) =
+            ends.reinstalled
+        else {
+            panic!("refused as not retired: {:?}", ends.reinstalled);
+        };
+        std::println!("what the installation still holds: {outstanding:?}");
+        assert_eq!(
+            outstanding.classes(),
+            oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT,
+            "only the transmit buffers the lifecycle holds: {outstanding:?}"
+        );
+        assert_eq!(
+            outstanding.transmit_out,
+            usize::from(crate::supply::PORT_BUFFERS)
+        );
+    });
+}
+
+/// The application's stop in the real composition: the lifecycle's half
+/// keeps its installation's transmit buffers until the radio's release
+/// answers, as the facade's `station.rs` keeps the retired station whole.
+/// The release finds them out of the port's bank and refuses.
+#[test]
+fn a_stop_whose_lifecycle_holds_its_transmit_buffers_is_refused_its_release() {
+    struct Network;
+    joined_with::<Network>(0, Setup::ConnectedHoldingBuffers, |bench| {
+        one_datagram_out(bench);
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop {
+            deadline,
+            network: NetworkEnd::Stops,
+        });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        bench.send(ToActor::Retire(TransmitTokensEnded::played()));
+        bench.until("the actor ends", |bench| {
+            bench.ends.borrow().released.is_some()
+        });
+        assert_eq!(
+            bench.ends.borrow().released,
+            Some(false),
+            "the release refuses"
+        );
+    });
+}
+
+/// Each retirement of the port, asked as the composition asks it: the
+/// lifecycle's half held its installation's transmit buffers and ends them
+/// before the message, so the port's release (a stop, the network staying
+/// or stopping) and its reinstall (a restart) find them home.
+#[test]
+fn every_retirement_asked_after_the_tokens_ended_finds_them_home() {
+    struct Stops;
+    struct Stays;
+    struct Restarts;
+    retirement_after_the_tokens_ended::<Stops>(NetworkEnd::Stops, false);
+    retirement_after_the_tokens_ended::<Stays>(NetworkEnd::Stays, false);
+    retirement_after_the_tokens_ended::<Restarts>(NetworkEnd::Stays, true);
+}
+
+/// One retirement of [`every_retirement_asked_after_the_tokens_ended_finds_them_home`].
+fn retirement_after_the_tokens_ended<T: 'static>(network: NetworkEnd, reinstall: bool) {
+    joined_with::<T>(0, Setup::ConnectedHoldingBuffers, |bench| {
+        one_datagram_out(bench);
+        let deadline = bench.clock.now().saturating_add(STOP_BOUND);
+        bench.send(ToActor::Stop { deadline, network });
+        bench.until("the stop answers", |bench| bench.stopped.is_some());
+        assert_eq!(bench.stopped, Some(StopOutcome::Confirmed));
+        (bench.end_tokens)();
+        if reinstall {
+            bench.send(ToActor::Reinstall(TransmitTokensEnded::played()));
+            bench.until("the actor ends", |bench| {
+                bench.ends.borrow().reinstalled.is_some()
+            });
+            assert_eq!(bench.ends.borrow().reinstalled, Some(Ok(())), "{network:?}");
+        } else {
+            bench.send(ToActor::Retire(TransmitTokensEnded::played()));
+            bench.until("the actor ends", |bench| {
+                bench.ends.borrow().released.is_some()
+            });
+            assert_eq!(bench.ends.borrow().released, Some(true), "{network:?}");
+        }
     });
 }

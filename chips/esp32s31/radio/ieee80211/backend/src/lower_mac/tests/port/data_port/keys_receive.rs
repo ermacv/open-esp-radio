@@ -729,7 +729,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// transmit buffers went home.
     fn stopped_release_refused(&mut self) -> bool {
         drop(core::mem::take(&mut self.buffers));
-        self.port.release().is_none()
+        self.port.release().is_err()
     }
 
     /// One service of the stopped port: its result as the port gave it.
@@ -751,7 +751,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
 /// went home, as every retire check needs.
 fn retires<Id: radio::SlotIdentity>(fixture: &mut Fixture<'_, Id>) {
     drop(core::mem::take(&mut fixture.buffers));
-    assert!(fixture.port.release().is_some(), "the stopped port retires");
+    assert!(fixture.port.release().is_ok(), "the stopped port retires");
 }
 
 /// A replacement the hardware rejects and rolls back is a named fault with
@@ -1045,7 +1045,7 @@ fn a_received_unit_keeps_its_bytes_and_owner_until_it_is_recycled() {
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_some(), "nothing received is outstanding");
+        assert!(port.release().is_ok(), "nothing received is outstanding");
     });
 }
 
@@ -1074,7 +1074,7 @@ fn a_lent_unit_lends_its_storage_and_its_drop_returns_it_to_the_ring() {
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_some(), "the returned unit retires");
+        assert!(port.release().is_ok(), "the returned unit retires");
     });
 }
 
@@ -1237,7 +1237,7 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_some(), "the stopped port retires");
+        assert!(port.release().is_ok(), "the stopped port retires");
     });
 }
 

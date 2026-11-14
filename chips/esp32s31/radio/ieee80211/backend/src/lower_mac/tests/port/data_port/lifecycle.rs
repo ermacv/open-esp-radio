@@ -756,6 +756,64 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
     });
 }
 
+/// The image's one-shot fault: a publication refused as a missing key with
+/// its key still installed, as the station's restart on the stand meets
+/// it. The refused MPDU goes back to its queue; the stop and the retired
+/// port's reinstall follow, and the new installation publishes.
+#[test]
+fn a_publication_refused_with_its_key_installed_restarts_into_a_working_port() {
+    with_installations(|mut fixture, installations| {
+        fixture.start();
+        let (association, _, slot) = fixture.association();
+        let (install, _) = fixture.commands.install_pairwise(
+            &association,
+            slot,
+            IndividualAddress::new(BSSID).expect("peer"),
+            group_key(3),
+        );
+        assert!(matches!(fixture.run(install), Ok(CommandProgress::Done)));
+        let key = match fixture.outbox.terminals.pop() {
+            Some(LowerMacTerminal::PairwiseKeyInstalled(InstalledPairwise::Station(key))) => key,
+            _ => panic!("the installation terminal returns the key"),
+        };
+        let attempt = fixture.protected_mpdu(&key).expect("attempt");
+        fixture.port.refuse_publication_for_test();
+        let now = fixture.now();
+        let _ = fixture
+            .port
+            .submit(attempt, now, &mut fixture.outbox)
+            .unwrap();
+        assert_eq!(
+            fixture.port.fault(),
+            Some(Fault::Unpublished(crate::port::Unpublished::Key))
+        );
+        assert!(fixture.port.recover_for_stop());
+        let _ = fixture.turn();
+        assert_eq!(fixture.port.fault(), None);
+        fixture.advance(crate::port::COMMAND_BOUND);
+        fixture.advance(crate::port::COMMAND_BOUND);
+        fixture.stop();
+        assert_eq!(fixture.port.fault(), None);
+        assert_eq!(fixture.take_completed(), 1, "the refused MPDU came back");
+        drop(key);
+        let mut second = reinstall(fixture, installations)
+            .ok()
+            .expect("every owner came home");
+        second.start();
+        let attempt = second.mpdu(None).expect("attempt");
+        let now = second.now();
+        second
+            .port
+            .submit(attempt, now, &mut second.outbox)
+            .unwrap()
+            .ok()
+            .expect("the new installation publishes");
+        let _ = second.turn();
+        assert_eq!(second.take_completed(), 1, "and its frame completes");
+        second.stop();
+    });
+}
+
 #[test]
 fn a_publication_refused_past_its_attachment_ends_withdrawn_with_every_owner_and_no_fault() {
     with_installations(|mut fixture, installations| {
@@ -833,12 +891,14 @@ fn a_frame_left_in_an_arena_refuses_the_reinstall_as_not_retired_until_withdrawn
         assert_eq!(fixture.observed.borrow().publications, 0);
         // The retire checks see the frame: a handled refusal, no fault.
         assert_eq!(
-            fixture.port.reinstall(installations, 18).err(),
-            Some(ReinstallRefused::NotRetired)
+            not_retired(fixture.port.reinstall(installations, 18).err()),
+            oer_protocols_ieee80211_contracts_port::outstanding::class::ARENAS
+                | oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT,
+            "the frame holds its arena, and the fixture its buffers"
         );
         assert_eq!(fixture.port.fault(), None);
         assert!(
-            fixture.port.release().is_none(),
+            fixture.port.release().is_err(),
             "the release runs the same checks"
         );
         assert!(!fixture.observed.borrow().detached);
@@ -1292,10 +1352,15 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         );
         // Nothing the quarantine holds is issued again.
         assert_eq!(
-            fixture.port.reinstall(installations, 18).err(),
-            Some(ReinstallRefused::NotRetired)
+            not_retired(fixture.port.reinstall(installations, 18).err()),
+            oer_protocols_ieee80211_contracts_port::outstanding::class::PHASE
+                | oer_protocols_ieee80211_contracts_port::outstanding::class::FAULT
+                | oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT
+                | oer_protocols_ieee80211_contracts_port::outstanding::class::QUEUED
+                | oer_protocols_ieee80211_contracts_port::outstanding::class::RUNNING,
+            "the fault, the unconfirmed stop, the queued and the published MPDU, the fixture's buffers"
         );
-        assert!(fixture.port.release().is_none());
+        assert!(fixture.port.release().is_err());
         assert!(!fixture.observed.borrow().detached);
         assert_eq!(dropped.get(), 0);
     });
@@ -1412,10 +1477,12 @@ fn a_stop_past_its_bound_is_unconfirmed_and_the_port_neither_reinstalls_nor_rele
         );
         // Nothing comes back from a port whose stop is unconfirmed.
         assert_eq!(
-            fixture.port.reinstall(installations, 18).err(),
-            Some(ReinstallRefused::NotRetired)
+            not_retired(fixture.port.reinstall(installations, 18).err()),
+            oer_protocols_ieee80211_contracts_port::outstanding::class::PHASE
+                | oer_protocols_ieee80211_contracts_port::outstanding::class::TRANSMIT_OUT,
+            "the stop is unconfirmed, and the fixture holds its buffers"
         );
-        assert!(fixture.port.release().is_none());
+        assert!(fixture.port.release().is_err());
         assert!(!fixture.observed.borrow().detached);
         drop(gate);
     });
@@ -1672,7 +1739,7 @@ fn a_rollback_the_device_refuses_is_unstopped_with_the_start_cause_and_the_stop_
             fixture.poll_start_on(channel(6)),
             Poll::Ready(Err(StartRefused::Running))
         );
-        assert!(fixture.port.release().is_none());
+        assert!(fixture.port.release().is_err());
         assert_eq!(fixture.port.fault(), None);
         {
             let mut observed = fixture.observed.borrow_mut();
@@ -1720,7 +1787,7 @@ fn a_start_whose_block_ack_programming_fails_after_the_core_enabled_ends_unstopp
             Poll::Ready(Err(StartRefused::Running)),
             "no start before the stop confirms"
         );
-        assert!(fixture.port.release().is_none(), "the radio is not stopped");
+        assert!(fixture.port.release().is_err(), "the radio is not stopped");
         // The ordinary stop disables the core in the next service and then
         // stops the device.
         fixture.stop();
@@ -1925,7 +1992,7 @@ fn late_removal_receipt(after_stop: bool) {
         assert!(fixture.port.removal_waits_for_test());
         if after_stop {
             assert!(
-                fixture.port.release().is_none(),
+                fixture.port.release().is_err(),
                 "a waiting removal holds the port"
             );
         }
@@ -1957,7 +2024,7 @@ fn late_removal_receipt(after_stop: bool) {
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_some(), "the stopped port retires");
+        assert!(port.release().is_ok(), "the stopped port retires");
     });
 }
 
@@ -2052,7 +2119,7 @@ fn a_removal_beside_a_waiting_one_ends_with_its_own_rights_and_the_waiting_one_w
             mut port, buffers, ..
         } = fixture;
         drop(buffers);
-        assert!(port.release().is_some(), "the stopped port retires");
+        assert!(port.release().is_ok(), "the stopped port retires");
     });
 }
 

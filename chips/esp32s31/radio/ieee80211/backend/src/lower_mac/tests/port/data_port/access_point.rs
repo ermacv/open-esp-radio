@@ -880,7 +880,7 @@ fn expired_group_install<Id: radio::SlotIdentity>(
     drop(refused);
     // The fixture's transmit buffers go home before the retire checks.
     drop(core::mem::take(&mut harness.f().buffers));
-    if harness.f().port.release().is_none() {
+    if harness.f().port.release().is_err() {
         return Err(CaseViolation::Lifecycle);
     }
     Ok(())

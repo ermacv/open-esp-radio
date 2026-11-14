@@ -789,9 +789,14 @@ async fn lifecycles<W: Binding>(
             &EmbassyClock,
         )
         .await;
-        let (end, retired) =
+        let (end, mut retired) =
             oer_portable_memory::unpack_placed!(completed, LifecycleCompleted { end, retired });
         let end = end.read();
+        // The retired station's transmit tokens end first, each home to
+        // the port; then the actor is asked for the retirement the end
+        // names (a release or a reinstall), so the port finds them home. An
+        // actor that closed its reception ended already: its news says how.
+        let _asked = actor.ask_retirement(&end, &mut retired).await;
         // The actor retired (a stop, a refused start): the exit and the
         // half wait for the radio's release, or for the stop's drain
         // first. A network that returned late or was lost waits without a
@@ -811,8 +816,9 @@ async fn lifecycles<W: Binding>(
                 if let Some(failure) = failure {
                     W::restarted(&failure);
                 }
-                // The retired half stays whole until the reinstall's
-                // answer: a refusal sends it out with the actor's half.
+                // The retirement was asked above: the rest of the retired
+                // half stays whole until the reinstall's answer, holding no
+                // transmit token of the installation.
                 match crate::station_end::installed(news(&mut mailbox).await) {
                     Ok(installed) => {
                         // The next installation's station takes the

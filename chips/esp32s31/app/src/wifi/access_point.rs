@@ -32,7 +32,8 @@ oer_chips_family_platform_runtime::placed_static! {
 static AP_STORAGE: StaticCell<AccessPointStorage<binding::Binding>> = StaticCell::new();
 
 /// How the access point's installation ended: its exit, or the
-/// installation that did not retire, whole
+/// installation that did not retire, whole but for the runner's transmit
+/// tokens, which ended before the port's release was asked
 /// ([`AccessPoint::installation_end`]).
 pub type ApInstallationEnd = ap::AccessPointEndOwner<binding::Binding>;
 

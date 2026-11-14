@@ -194,6 +194,11 @@ pub(crate) trait Retiring {
     ) -> impl Future<Output = Result<StopWatch<crate::failure::BackendFault>, ReceiveAccounting>>;
     /// Its port.
     fn port_mut(&mut self) -> &mut Self::Port;
+    /// End its transmit tokens (its tickets and buffers), each home to the
+    /// port, before the port's release: the proof of their end.
+    fn end_transmit_tokens(
+        &mut self,
+    ) -> oer_protocols_ieee80211_runtime::datapath::TransmitTokensEnded;
     /// The item a port call of the run could not keep, once.
     fn take_unkept(&mut self) -> Option<Self::Unkept>;
     /// An attempt a submission of the run returned unaccepted.
@@ -219,6 +224,11 @@ impl<R: Retiring> Retiring for oer_portable_memory::Placed<'_, R> {
     }
     fn port_mut(&mut self) -> &mut Self::Port {
         (**self).port_mut()
+    }
+    fn end_transmit_tokens(
+        &mut self,
+    ) -> oer_protocols_ieee80211_runtime::datapath::TransmitTokensEnded {
+        (**self).end_transmit_tokens()
     }
     fn take_unkept(&mut self) -> Option<Self::Unkept> {
         (**self).take_unkept()
@@ -410,6 +420,9 @@ where
         });
     }
     let refused = |cause| published.set(Some(ApExitOf::ReleaseRefused { ended, cause }));
+    // The runner's transmit tokens end before the port's release asks for
+    // them home; a refused release hands back a runner that holds none.
+    let _tokens_ended = runner.end_transmit_tokens();
     let (released, returned) =
         crate::release::release(runner.port_mut(), timer, retry, leave, refused).await;
     let exit = match (ended, finished, released) {

@@ -595,7 +595,8 @@ async fn post<W: Binding>(mailbox: &mut WakingSpscSender<'static, News<W>, 1>, n
 /// actor's rates report to `observer`; its station events go to `sink`.
 /// An installation that does not retire comes back whole
 /// ([`DatapathEnd::Unfinished`]): its actor with the port and every item
-/// it holds, the cleanup's receipt, the cause and the phase.
+/// it holds, the cleanup's receipt, the cause and the phase; the transmit
+/// tokens of one whose retirement was asked ended before the ask.
 pub(crate) async fn drive<W: Binding>(
     datapath: Datapath<W>,
     observer: W::Observer,
@@ -929,7 +930,11 @@ pub(crate) fn take_stopped<W: Binding>(
     let confirmed = port.stop_confirmed();
     let (stopped, cell) = crate::release::stopped_radio(
         confirmed,
-        || port.release(),
+        || {
+            port.release().map_err(|outstanding| {
+                outstanding.map_fault(crate::failure::convert::backend_fault)
+            })
+        },
         |device| device.0.take_stopped(),
     )?;
     Ok(StoppedRadio { stopped, cell })

@@ -699,3 +699,35 @@ impl<W: Binding> StationRunner<W> {
         service::serve(self, profile).await
     }
 }
+
+impl oer_portable_diagnostics::DiagnosticPath for InitializationError {
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
+        path.name(match self {
+            Self::Phy(_) => "Phy",
+            Self::Country => "Country",
+            Self::Domain => "Domain",
+            Self::Channel => "Channel",
+            Self::Address => "Address",
+            Self::Ssid => "Ssid",
+            Self::Arbiter => "Arbiter",
+            Self::Storage => "Storage",
+            Self::Control => "Control",
+            Self::Frontend => "Frontend",
+            Self::MembershipUnavailable => "MembershipUnavailable",
+            Self::Request(_) => "Request",
+            Self::Radio => "Radio",
+            Self::Backend => "Backend",
+            Self::Registration => "Registration",
+            Self::Rx => "Rx",
+            Self::Tx => "Tx",
+            Self::Dma(_) => "Dma",
+            Self::TxBlockAck => "TxBlockAck",
+            Self::HePower => "HePower",
+        });
+        // The PHY's failure, the request's and the DMA's are subtrees of
+        // their own.
+        if matches!(self, Self::Phy(_) | Self::Request(_) | Self::Dma(_)) {
+            path.truncated();
+        }
+    }
+}

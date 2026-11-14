@@ -53,10 +53,14 @@
 //! station's share of the network is home
 //! ([`LifecycleEnd::StoppedNetworkLost`]). A restart keeps the network. A
 //! confirmed stop retires the actor ([`ToActor::Retire`]) after the
-//! application's stop, or ends it for the next installation
-//! ([`ToActor::Reinstall`]) after the station failed: the composition then
-//! reinstalls the port and builds the service again, without a reset
-//! ([`LifecycleEnd::Restart`]). The actor's fault, an unconfirmed stop and a
+//! application's stop, once the composition ended the retired station's
+//! transmit tokens and asked it ([`ActorEnds::ask_retirement`]). After the station failed it ends as a restart
+//! ([`LifecycleEnd::Restart`]) and the actor waits: the composition ends
+//! the retired station's transmit tokens
+//! ([`RetiredLifecycle::end_transmit_tokens`]), every one home to the port
+//! that minted it, and only then asks the actor for the next installation
+//! ([`ActorEnds::ask_retirement`], [`ToActor::Reinstall`]); it then
+//! reinstalls the port and builds the service again, without a reset. The actor's fault, an unconfirmed stop and a
 //! broken contract of the actor's returns end the lifecycle with their
 //! typed cause for the image to record ([`LifecycleEnd`]).
 
@@ -100,7 +104,7 @@ use oer_protocols_radio_port::Slot;
 use crate::datapath::{
     ActorAnyBuffer, ActorCommand, ActorEpochPath, ActorFault, ActorGatePath, ActorLink,
     ActorTerminal, DatapathPort, FromActor, GroupPending, NetworkEnd, PARCELS, Parcel,
-    ReturnObserved, Returned, StationTx, StopObserved, ToActor,
+    ReturnObserved, Returned, StationTx, StopObserved, ToActor, TransmitTokensEnded,
 };
 use crate::station::{
     BackendContractViolation, Notifies, Request, RunnerControl, SameHart, ServiceCommand,
@@ -517,6 +521,71 @@ struct Inner<'id, D: DatapathPort<'id>, X, T, O> {
     now: Instant,
 }
 
+/// The actor was not asked for the port's retirement: it closed its
+/// reception, so it ended already.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RetirementUnasked;
+
+/// The message a finished lifecycle's end asks the actor for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Retirement {
+    /// The port retires: a stop, a stop whose network returns late or was
+    /// lost, a refused start.
+    Retire,
+    /// The port reinstalls for the next installation: a restart.
+    Reinstall,
+}
+
+impl<F> LifecycleEnd<F> {
+    /// The retirement this end asks of the actor; `None` for an end that
+    /// does not retire the actor (an unconfirmed stop, a fault, a broken
+    /// contract), whose owners go out unfinished.
+    pub fn retirement(&self) -> Option<Retirement> {
+        match self {
+            Self::Stopped
+            | Self::StoppedReturning(_)
+            | Self::StoppedNetworkLost(_)
+            | Self::StartRefused(_) => Some(Retirement::Retire),
+            Self::Restart(_) => Some(Retirement::Reinstall),
+            _ => None,
+        }
+    }
+}
+
+impl<'c, 'id, D: DatapathPort<'id>, const TO: usize, const FROM: usize, const RETURNS: usize>
+    ActorEnds<'c, 'id, D, TO, FROM, RETURNS>
+{
+    /// After a lifecycle ended, ask the actor for the port's retirement its
+    /// `end` names ([`LifecycleEnd::retirement`]): the retired station's
+    /// transmit tokens end first ([`RetiredLifecycle::end_transmit_tokens`]),
+    /// then the message that carries their proof goes, so the port finds
+    /// every buffer and ticket of the installation home when it releases or
+    /// reinstalls. An end that retires nothing asks nothing. Waits for room
+    /// in the queue.
+    ///
+    /// # Errors
+    /// [`RetirementUnasked`]: the actor closed its reception.
+    pub async fn ask_retirement<C: StaCallbacks, X, T, const GROUPS: usize, O>(
+        &mut self,
+        end: &LifecycleEnd<
+            <D::Port as oer_protocols_ieee80211_contracts_port::DataPort<'id>>::Fault,
+        >,
+        retired: &mut RetiredLifecycle<'id, D, C, X, T, GROUPS, O>,
+    ) -> Result<Option<Retirement>, RetirementUnasked> {
+        let Some(retirement) = end.retirement() else {
+            return Ok(None);
+        };
+        let ended = retired.end_transmit_tokens();
+        let message = match retirement {
+            Retirement::Retire => ToActor::Retire(ended),
+            Retirement::Reinstall => ToActor::Reinstall(ended),
+        };
+        let permit = self.to_actor.ready().await.map_err(|_| RetirementUnasked)?;
+        permit.send(message).map_err(|_| RetirementUnasked)?;
+        Ok(Some(retirement))
+    }
+}
+
 /// What a finished lifecycle keeps: the station's and the arbiter's banks,
 /// the owners a broken contract left and the events' sink.
 pub struct RetiredLifecycle<
@@ -554,6 +623,18 @@ pub struct RetiredLifecycle<
     >,
     /// The events' sink.
     pub events: O,
+}
+
+impl<'id, D: DatapathPort<'id>, C: StaCallbacks, X, T, const GROUPS: usize, O>
+    RetiredLifecycle<'id, D, C, X, T, GROUPS, O>
+{
+    /// End the retired station's transmit tokens (its tickets and buffers,
+    /// each home to its port as it drops), as a restart does before it asks
+    /// for the next installation; the proof of their end.
+    pub fn end_transmit_tokens(&mut self) -> TransmitTokensEnded {
+        self.station.end_transmit_tokens();
+        TransmitTokensEnded::ended()
+    }
 }
 
 /// The lifecycle's end and what it keeps.

@@ -157,7 +157,11 @@ two ways:
   its port, the cleanup's removal receipt) ends with the retired
   installation;
 - an **unfinished installation** (`unfinished::Unfinished`), returned whole
-  to the external owner, the application: the actor or runner with its port
+  to the external owner, the application, but for its transmit tokens: a
+  retirement (a release or a reinstall) is asked only once the lifecycle's
+  retired station or the access point's runner ended its tickets and
+  buffers (`TransmitTokensEnded`), each home to the port that minted it, so
+  a refused retirement hands back none of them: the actor or runner with its port
   (`owner`), the items a port call could neither give it nor keep
   (`unkept`), an attempt a submission returned unaccepted (`unaccepted`),
   the cleanup's removal receipt (`receipt`), the cause and the phase

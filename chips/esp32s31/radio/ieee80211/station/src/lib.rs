@@ -173,6 +173,11 @@ impl<'a, N: Notifies> Control<'a, N> {
     pub async fn wait_stopped(&mut self) -> Result<Exit, RunnerLost> {
         self.stop.wait().await
     }
+    /// The station's exit once its runner published it (or lost it), read
+    /// without waiting; `None` while the station runs.
+    pub fn exit(&self) -> Option<Result<Exit, RunnerLost>> {
+        self.stop.result.get()
+    }
 }
 /// The station runner ended without publishing its exit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -838,7 +843,7 @@ pub use release::Freed;
 #[cfg(any(test, target_arch = "riscv32"))]
 mod station_end;
 #[cfg(target_arch = "riscv32")]
-pub use station_end::StationExitOf;
+pub use station_end::{StationExitOf, StopErrorOf, stop_result};
 #[cfg(any(test, target_arch = "riscv32"))]
 mod access_point_end;
 
@@ -929,6 +934,9 @@ pub use chip::{
     InterruptTypes, Interrupts, Lower, Profile, Resources, Runners, StationExit, StationRunner,
     StationTransmit, Storage, station,
 };
+/// Why the S31 station's stop did not end with the station stopped.
+#[cfg(target_arch = "riscv32")]
+pub type StopError = StopErrorOf<InitializationError>;
 #[cfg(target_arch = "riscv32")]
 pub use radio::{
     ActorQueues, Boot, BootLeft, DatapathEnd, DatapathInputs, LifecycleQueues, NetworkSide,

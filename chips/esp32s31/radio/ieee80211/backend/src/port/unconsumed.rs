@@ -204,6 +204,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         self.count == 0
     }
 
+    /// How many items the store keeps.
+    pub(super) const fn len(&self) -> usize {
+        self.count as usize
+    }
+
     /// Keep `item` behind everything kept.
     ///
     /// # Errors

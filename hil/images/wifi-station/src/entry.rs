@@ -400,13 +400,15 @@ impl Worker {
     /// radio retires.
     async fn leave(&mut self) -> Left {
         self.phase = Phase::Leaving;
-        let left = match self.station.stop().await {
+        let stopped = self.station.stop().await;
+        let left = match stopped {
             Ok(()) => Left::Down,
-            Err(StopError::Failed | StopError::ReleaseFailed(_)) => {
-                Left::Refused(StationError::Unavailable)
-            }
             // The radio's stop was confirmed; the network's was not.
             Err(StopError::NetworkLost) => Left::DownNetworkLost,
+            Err(StopError::ReleaseFailed(_)) => Left::ReleaseFailed(end(&stopped)),
+            Err(StopError::Failed(_) | StopError::Unavailable(_) | StopError::RunnerLost) => {
+                Left::Ended(end(&stopped))
+            }
         };
         self.phase = Phase::Stopped;
         left
@@ -429,6 +431,7 @@ impl Worker {
                 phy: wifi_station::runtime::phy(linked.phy),
             }),
             ipv4,
+            ended: self.station.ended().map(|ended| end(&ended)),
         }
     }
 
@@ -529,4 +532,15 @@ fn station_error(error: ConnectError) -> StationError {
         ConnectError::Profile(_) => StationError::InvalidSettings,
         ConnectError::Stopped | ConnectError::NotStarted(_) => StationError::Unavailable,
     }
+}
+
+/// How the station ended, as its line reads ([`wifi_station::End`]); a
+/// text longer than the dictionary's keeps its first bytes.
+fn end(ended: &Result<(), StopError>) -> wifi_station::End {
+    let mut text = [0; wifi_station::MAX_END];
+    let length = oer::wifi::end_text(ended, &mut text);
+    text.get(..length)
+        .and_then(|text| core::str::from_utf8(text).ok())
+        .and_then(|text| heapless::String::try_from(text).ok())
+        .unwrap_or_default()
 }

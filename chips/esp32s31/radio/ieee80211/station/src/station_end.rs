@@ -38,6 +38,70 @@ pub enum StationExitOf<E> {
     Unavailable(Unavailable<E>),
 }
 
+/// Why a stop did not end with the station stopped: each end of the
+/// station its own variant, with the value its exit held. `E` is the
+/// start's refusal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StopErrorOf<E> {
+    /// The station ended by this failure before the stop; nothing resets,
+    /// and an installation that did not retire comes back whole.
+    Failed(LifecycleFailure),
+    /// The station never started: its refusal, and how the owners it
+    /// returned ended.
+    Unavailable(Unavailable<E>),
+    /// The station's runner ended without an exit: no end of the station
+    /// reached its control.
+    RunnerLost,
+    /// The station stopped, and its radio's release did not complete, for
+    /// this cause. A leave the release posted is never posted again.
+    ReleaseFailed(ReleaseCause),
+    /// The station stopped and every owner came back, but the network's
+    /// stop participant was lost: its stop was never confirmed. The radio's
+    /// stop was; nothing resets.
+    NetworkLost,
+}
+
+/// A stop's answer for the station's `exit`, or for a runner that ended
+/// without one.
+///
+/// # Errors
+/// Every exit but [`StationExitOf::Stopped`], as its own [`StopErrorOf`].
+pub fn stop_result<E>(
+    exit: Result<StationExitOf<E>, crate::RunnerLost>,
+) -> Result<(), StopErrorOf<E>> {
+    match exit {
+        Ok(StationExitOf::Stopped) => Ok(()),
+        Ok(StationExitOf::StoppedNetworkLost) => Err(StopErrorOf::NetworkLost),
+        Ok(StationExitOf::Failed(failure)) => Err(StopErrorOf::Failed(failure)),
+        Ok(StationExitOf::ReleaseFailed(cause)) => Err(StopErrorOf::ReleaseFailed(cause)),
+        Ok(StationExitOf::Unavailable(unavailable)) => Err(StopErrorOf::Unavailable(unavailable)),
+        Err(crate::RunnerLost) => Err(StopErrorOf::RunnerLost),
+    }
+}
+
+impl<E: oer_portable_diagnostics::DiagnosticPath> oer_portable_diagnostics::DiagnosticPath
+    for StopErrorOf<E>
+{
+    fn push_path(&self, path: &mut oer_portable_diagnostics::DiagPath) {
+        match self {
+            Self::Failed(failure) => {
+                path.name("Failed");
+                failure.push_path(path);
+            }
+            Self::Unavailable(unavailable) => {
+                path.name("Unavailable");
+                unavailable.push_path(path);
+            }
+            Self::RunnerLost => path.name("RunnerLost"),
+            Self::ReleaseFailed(cause) => {
+                path.name("ReleaseFailed");
+                cause.push_path(path);
+            }
+            Self::NetworkLost => path.name("NetworkLost"),
+        }
+    }
+}
+
 /// The datapath actor of an installation, which owns its port: the chip's
 /// actor over the S31 port, an actor of the test on the host.
 pub(crate) trait Installation {

@@ -2749,6 +2749,25 @@ where
         })
     }
 
+    /// End the runner's transmit tokens (its tickets and its buffers),
+    /// each home to the port that minted it, before the port's retirement:
+    /// the proof of their end ([`crate::datapath::TransmitTokensEnded`]).
+    /// The runner keeps every other owner; a later run of it has no ticket
+    /// or buffer to send with.
+    pub fn end_transmit_tokens(&mut self) -> crate::datapath::TransmitTokensEnded {
+        self.homes.tickets.clear();
+        self.homes.buffers.clear();
+        crate::datapath::TransmitTokensEnded::ended()
+    }
+
+    /// The transmit tokens the runner still holds: its tickets and buffers.
+    pub fn transmit_tokens(&self) -> usize {
+        self.homes
+            .tickets
+            .len()
+            .saturating_add(self.homes.buffers.len())
+    }
+
     /// The port, for the composition's release once the stop is confirmed.
     pub fn port_mut(&mut self) -> &mut P {
         &mut self.port
