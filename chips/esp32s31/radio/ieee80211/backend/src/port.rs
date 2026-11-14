@@ -44,7 +44,6 @@ mod engines;
 pub use engines::{
     AccessPointGroupInstall, AccessPointPairwiseInstall, Esp32s31Arena, Esp32s31Commands,
     Esp32s31Port, GroupInstall, InstallRefused, PairwiseInstall, PortDriver, PortInstallation,
-    ReinstallRefused,
 };
 mod keys;
 mod lent;

@@ -35,6 +35,19 @@ impl InstallationGeneration {
     pub const fn get(self) -> NonZeroU32 {
         self.0
     }
+
+    /// The generation of the installation the radio port's installations
+    /// number `generation`: they count from zero, a proof from one. The
+    /// last count names the last generation.
+    pub const fn of_count(generation: u32) -> Self {
+        match generation.checked_add(1) {
+            Some(next) => match NonZeroU32::new(next) {
+                Some(next) => Self(next),
+                None => Self(NonZeroU32::MAX),
+            },
+            None => Self(NonZeroU32::MAX),
+        }
+    }
 }
 
 /// The brand of a port's installations: invariant in `'id`.
@@ -90,8 +103,8 @@ proof! {
     Recovering
 }
 
-/// A proof a port did not take: it names installation `proof`, which is
-/// not the port's (`installation`). Nothing changed.
+/// A proof a port did not take: it is not of the port's installation
+/// (`installation`), or the port's state left it behind. Nothing changed.
 #[derive(Debug, Eq, PartialEq)]
 pub struct StaleProof<P> {
     /// The proof, unchanged.

@@ -2181,13 +2181,7 @@ mod tests;
 
 mod access_point;
 
-/// The proof's generation of installation `generation`, which the model's
-/// installations count from zero: a proof's counts from one.
+/// The proof's generation of the model's installation `generation`.
 fn proof_generation(generation: u32) -> InstallationGeneration {
-    InstallationGeneration::new(
-        generation
-            .checked_add(1)
-            .and_then(core::num::NonZeroU32::new)
-            .unwrap_or(core::num::NonZeroU32::MAX),
-    )
+    InstallationGeneration::of_count(generation)
 }
