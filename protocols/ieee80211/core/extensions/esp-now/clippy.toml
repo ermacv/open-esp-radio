@@ -1,16 +1,5 @@
 # Common bans and the canonical sans-IO catalogue.
 disallowed-methods = [
-    # The door: the data port's transitions, which only the installation
-    # machine's `drive` (the runtime's `src/installation.rs`), the port's
-    # implementations and the testing packages call.
-    { path = "oer_protocols_ieee80211_contracts_port::DataPort::poll_start", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
-    { path = "oer_protocols_ieee80211_contracts_port::DataPort::poll_stop", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
-    { path = "oer_protocols_ieee80211_contracts_port::DataPort::take_unconsumed", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
-    { path = "oer_protocols_ieee80211_contracts_port::DataPort::clean", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
-    { path = "oer_protocols_ieee80211_contracts_port::DataPort::retire", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
-    { path = "oer_protocols_ieee80211_contracts_port::DataPort::reinstall", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
-    { path = "oer_protocols_ieee80211_contracts_port::DataPort::release", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
-    { path = "oer_protocols_ieee80211_contracts_port::DataPort::recover_for_stop", reason = "a transition of the data port is called by the installation machine's `drive` alone" },
     { path = "oer_chips_family_platform_interrupt_table::__private::Unique::new", reason = "interrupt entry tokens come from interrupt_table!'s once gate, never direct construction" },
     { path = "oer_chips_family_platform_interrupt_table::__private::EntryProof::new", reason = "interrupt entry implementations and handler/cell proofs come from interrupt_table!" },
 

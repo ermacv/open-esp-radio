@@ -694,9 +694,7 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   has no refusal for "not now, you already asked". Clippy's
   `struct_excessive_bools` and `fn_params_excessive_bools` are errors
   with no `allow` or `expect`; the layer tests list what no lint sees
-  (`HIDDEN_FLAGS`, `HIDDEN_BOOL_PARAMETERS`, `OPTION_SLOTS`), and the
-  data port's transitions are `disallowed-methods` of every package but
-  the runtime, the port's implementations and the testing packages.
+  (`HIDDEN_FLAGS`, `HIDDEN_BOOL_PARAMETERS`, `OPTION_SLOTS`).
 - A guarantee is written down only with what enforces it: a type with a
   compile-fail test, or a stated run-time check. A type-level mechanism names
   the bug it prevents.

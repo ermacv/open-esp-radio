@@ -104,7 +104,7 @@ is gone both fail, so every list only shrinks:
   `fn_params_excessive_bools` are errors in the whole workspace, at
   `max-struct-bools = 1` and `max-fn-params-bools = 0` (1 in the packages
   of the roles `Pac`, `Hal` and `HardwareDriver`, where one `bool`
-  parameter is a bit's value); `every_clippy_config_holds_the_rules_thresholds_and_the_door`
+  parameter is a bit's value); `every_clippy_config_holds_the_rules_thresholds`
   holds every configuration to them, and
   `no_source_allows_or_expects_a_bool_lint` refuses any `allow` or
   `expect` of the two, in production and in tests. Over the protocols, the
@@ -119,9 +119,6 @@ is gone both fail, so every list only shrinks:
   - `OPTION_SLOTS`: an `Option` field its own crate takes, replaces,
     inserts into, assigns or borrows `&mut` (`file::Struct.field`, the
     field found by its name in the crate).
-- The door: the eight transitions of `DataPort` are `disallowed-methods`
-  of every package's Clippy configuration but the runtime's, the S31
-  backend's (the port's implementation) and the testing packages'.
 
 - `EXTERNAL_ASYNC_CRATES`: the direct normal `embassy-sync` edge of the
   HIL agent.

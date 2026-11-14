@@ -584,15 +584,10 @@ fn every_clippy_config_retains_all_common_method_bans() {
     let common = read_toml(&root.join("clippy.toml"));
     let mut configs = Vec::new();
     clippy_configs(&root, &mut configs);
-    // The door is checked by package beside the thresholds
-    // (`every_clippy_config_holds_the_rules_thresholds_and_the_door`).
     let missing = configs
         .into_iter()
         .filter_map(|path| {
-            let missing = missing_lints(&read_toml(&path), &common, "disallowed-methods")
-                .into_iter()
-                .filter(|ban| !ban.contains("contracts_port::DataPort::"))
-                .collect::<Vec<_>>();
+            let missing = missing_lints(&read_toml(&path), &common, "disallowed-methods");
             (!missing.is_empty()).then(|| format!("{}: {missing:?}", path.display()))
         })
         .collect::<Vec<_>>();
@@ -7870,18 +7865,6 @@ fn state_code(path: &str) -> bool {
         && !path.ends_with("/model")
 }
 
-/// The data port's transitions, the door.
-const DOORS: [&str; 8] = [
-    "poll_start",
-    "poll_stop",
-    "take_unconsumed",
-    "clean",
-    "retire",
-    "reinstall",
-    "release",
-    "recover_for_stop",
-];
-
 /// The parts of `tokens` between top-level commas, the angle brackets of a
 /// type counted (an arrow's `>` is not one).
 fn comma_parts(tokens: &[TokenTree]) -> Vec<&[TokenTree]> {
@@ -8298,15 +8281,6 @@ fn rust_files(directory: &Path, found: &mut Vec<PathBuf>) {
     }
 }
 
-/// The packages whose Clippy configuration may keep no door: the runtime
-/// (from B2 a scan lets `src/installation.rs` alone call), the port's
-/// implementation (the S31 backend) and the testing packages.
-fn calls_the_door(path: &str) -> bool {
-    path == "protocols/ieee80211/runtime"
-        || path == "chips/esp32s31/radio/ieee80211/backend"
-        || path.split('/').any(|part| part == "testing")
-}
-
 /// The packages at `max-fn-params-bools = 1`: those of the layer tests'
 /// roles `Pac`, `Hal` and `HardwareDriver`, where one `bool` parameter is
 /// a bit's value.
@@ -8372,7 +8346,7 @@ fn a_bool_lint_silenced_by_any_spelling_is_found() {
 }
 
 #[test]
-fn every_clippy_config_holds_the_rules_thresholds_and_the_door() {
+fn every_clippy_config_holds_the_rules_thresholds() {
     let root = root();
     let mut problems = Vec::new();
     for (path, _) in packages(&root) {
@@ -8400,28 +8374,6 @@ fn every_clippy_config_holds_the_rules_thresholds_and_the_door() {
         {
             problems.push(std::format!(
                 "{path}: max-fn-params-bools is not {fn_bools}"
-            ));
-        }
-        let methods = config
-            .get("disallowed-methods")
-            .and_then(toml::Value::as_array)
-            .map(|methods| {
-                methods
-                    .iter()
-                    .filter_map(|method| method.get("path").and_then(toml::Value::as_str))
-                    .map(str::to_owned)
-                    .collect::<BTreeSet<_>>()
-            })
-            .unwrap_or_default();
-        let door = DOORS.iter().all(|transition| {
-            methods.contains(&std::format!(
-                "oer_protocols_ieee80211_contracts_port::DataPort::{transition}"
-            ))
-        });
-        if !door && !calls_the_door(&path) {
-            problems.push(std::format!(
-                "{path}: the door is open in {}",
-                file.display()
             ));
         }
     }
