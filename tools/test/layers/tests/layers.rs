@@ -5705,10 +5705,10 @@ fn raw_register_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     raw.then_some(word)
 }
 
-/// S8b: the protocol packages but the wire crates.
+/// S8b: the protocol packages, the wire crates among them: the one place a
+/// frame's bytes are reached by hand is `oer-portable-wire`, outside them.
 fn protocol_code(path: &str) -> bool {
     path.starts_with("protocols/")
-        && !path.ends_with("/wire")
         && !path.split('/').any(|part| part == "testing")
         && !path.ends_with("/model")
 }
@@ -7219,8 +7219,9 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
 ];
 
 /// S8b: byte conversions and indexing of bytes by name in the protocol
-/// packages outside the `wire` crates, by file with their count: an air
-/// format reaches its bytes by hand only through these. It misses an index
+/// packages, the `wire` crates among them, by file with their count: an
+/// air format reaches its bytes by hand only through these, and only
+/// `oer-portable-wire` may. It misses an index
 /// of a slice of bytes named otherwise. The list only shrinks.
 const RAW_BYTES: &[(&str, usize, &str)] = &[
     (
@@ -7306,6 +7307,26 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
     ),
     (
         "protocols/bluetooth/le/port/src/request.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/wire/src/connection.rs",
+        14,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/wire/src/control.rs",
+        10,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/wire/src/data_length.rs",
+        8,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/wire/src/encryption.rs",
         1,
         BY_RADIO_SYSTEM,
     ),
@@ -7400,9 +7421,97 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         2,
         BY_P2,
     ),
+    ("protocols/ieee80211/wire/src/ap.rs", 38, BY_P3),
+    ("protocols/ieee80211/wire/src/ap/probe.rs", 2, BY_P3),
+    ("protocols/ieee80211/wire/src/ap/profile.rs", 3, BY_P3),
+    ("protocols/ieee80211/wire/src/beacon.rs", 5, BY_P3),
+    ("protocols/ieee80211/wire/src/bip.rs", 5, BY_P3),
+    ("protocols/ieee80211/wire/src/block_ack/frame.rs", 23, BY_P3),
+    ("protocols/ieee80211/wire/src/ccmp.rs", 16, BY_P3),
+    ("protocols/ieee80211/wire/src/ccmp/protected.rs", 4, BY_P3),
+    ("protocols/ieee80211/wire/src/data.rs", 8, BY_P3),
+    ("protocols/ieee80211/wire/src/eapol.rs", 11, BY_P3),
+    ("protocols/ieee80211/wire/src/encoding.rs", 2, BY_P3),
+    (
+        "protocols/ieee80211/wire/src/extensions/espressif/esp_now.rs",
+        55,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/extensions/espressif/esp_now/v2.rs",
+        16,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/fragmentation.rs", 3, BY_P3),
+    (
+        "protocols/ieee80211/wire/src/fragmentation/parsing.rs",
+        10,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/frame.rs", 17, BY_P3),
+    ("protocols/ieee80211/wire/src/ftm.rs", 19, BY_P3),
+    ("protocols/ieee80211/wire/src/he.rs", 11, BY_P3),
+    ("protocols/ieee80211/wire/src/ht.rs", 6, BY_P3),
+    ("protocols/ieee80211/wire/src/management.rs", 4, BY_P3),
+    (
+        "protocols/ieee80211/wire/src/monitor_injection.rs",
+        3,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/ndpa.rs", 19, BY_P3),
+    ("protocols/ieee80211/wire/src/sae.rs", 3, BY_P3),
+    ("protocols/ieee80211/wire/src/scan.rs", 5, BY_P3),
+    ("protocols/ieee80211/wire/src/security/rsn.rs", 8, BY_P3),
+    ("protocols/ieee80211/wire/src/sequence.rs", 3, BY_P3),
+    ("protocols/ieee80211/wire/src/station.rs", 6, BY_P3),
+    (
+        "protocols/ieee80211/wire/src/station/association.rs",
+        6,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/station/data.rs", 2, BY_P3),
+    (
+        "protocols/ieee80211/wire/src/station/data/amsdu.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/station/data/template.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/wire/src/station/management.rs",
+        10,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/station/security.rs", 3, BY_P3),
+    ("protocols/ieee80211/wire/src/station_beacon.rs", 4, BY_P3),
+    (
+        "protocols/ieee80211/wire/src/station_power_save.rs",
+        2,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/wire/src/trigger.rs", 10, BY_P3),
+    ("protocols/ieee80211/wire/src/tsf.rs", 2, BY_P3),
+    ("protocols/ieee80211/wire/src/twt.rs", 16, BY_P3),
     ("protocols/ieee802154/port/src/link_metrics.rs", 1, BY_NONE),
+    ("protocols/ieee802154/wire/src/csl.rs", 5, BY_NONE),
+    ("protocols/ieee802154/wire/src/enhanced_ack.rs", 4, BY_NONE),
+    ("protocols/ieee802154/wire/src/frame.rs", 3, BY_NONE),
+    ("protocols/ieee802154/wire/src/link_metrics.rs", 4, BY_NONE),
+    ("protocols/ieee802154/wire/src/security.rs", 1, BY_NONE),
+    ("protocols/ieee802154/wire/src/time_sync.rs", 1, BY_NONE),
     ("protocols/network/core/src/dhcp.rs", 3, BY_PHASE_C),
     ("protocols/network/core/src/interface.rs", 4, BY_PHASE_C),
+    ("protocols/network/wire/src/arp.rs", 3, BY_PHASE_C),
+    ("protocols/network/wire/src/checksum.rs", 3, BY_PHASE_C),
+    ("protocols/network/wire/src/dhcp.rs", 3, BY_PHASE_C),
+    ("protocols/network/wire/src/ethernet.rs", 2, BY_PHASE_C),
+    ("protocols/network/wire/src/icmp.rs", 6, BY_PHASE_C),
+    ("protocols/network/wire/src/ip.rs", 5, BY_PHASE_C),
+    ("protocols/network/wire/src/transport.rs", 13, BY_PHASE_C),
+    ("protocols/network/wire/src/udp_frame.rs", 5, BY_PHASE_C),
 ];
 
 /// The hits of a scan against its list: a new file, a grown count and an
