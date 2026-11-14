@@ -5668,37 +5668,74 @@ fn compatibility_attribute(attribute: &TokenStream) -> Option<String> {
     }
 }
 
-/// S8: the HAL's register and table files and the wire crates.
-fn bit_files(path: &str) -> bool {
-    path == "chips/esp32s31/hal" || (path.starts_with("protocols/") && path.ends_with("/wire"))
+/// S8a: the packages that reach registers: the HAL, the radio crates and
+/// the platform, the PAC aside.
+fn register_code(path: &str) -> bool {
+    [
+        "chips/esp32s31/hal",
+        "chips/esp32s31/radio/",
+        "chips/esp32s31/platform/",
+        "chips/family/radio/",
+        "chips/family/platform/",
+    ]
+    .iter()
+    .any(|prefix| path.starts_with(prefix))
 }
 
-/// S8: a hand-written shift by a literal, or a hexadecimal mask beside a
-/// bit operator.
-fn hand_bits_at(tokens: &[TokenTree], at: usize) -> Option<String> {
-    match tokens.get(at)? {
-        TokenTree::Punct(first)
-            if (first.as_char() == '<' || first.as_char() == '>')
-                && first.spacing() == proc_macro2::Spacing::Joint =>
-        {
-            let same = matches!(tokens.get(at + 1), Some(TokenTree::Punct(second)) if second.as_char() == first.as_char());
-            let literal = matches!(tokens.get(at + 2), Some(TokenTree::Literal(_)));
-            let after_value = matches!(
-                tokens.get(at.checked_sub(1)?),
-                Some(TokenTree::Ident(_) | TokenTree::Literal(_) | TokenTree::Group(_))
-            );
-            (same && literal && after_value).then(|| "shift".to_owned())
-        }
-        TokenTree::Literal(literal) if literal.to_string().starts_with("0x") => {
-            let operator = |at: Option<usize>| {
-                at.and_then(|at| tokens.get(at)).is_some_and(|token| {
-                    matches!(token, TokenTree::Punct(op) if ['&', '|', '^', '!'].contains(&op.as_char()))
-                })
-            };
-            (operator(at.checked_sub(1)) || operator(Some(at + 1))).then(|| "mask".to_owned())
-        }
-        _ => None,
+/// S8a: a call of the PAC's raw conversions and word accessors: `from_bits`,
+/// `.bits()`, `set_bits_…`, `with_bits_…`, `read_word_…`, `modify_word_…`,
+/// `write_word_…`.
+fn raw_register_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let word = ident_at(tokens, at)?;
+    group_at(tokens, at + 1, Delimiter::Parenthesis)?;
+    let method = at
+        .checked_sub(1)
+        .is_some_and(|before| punct_at(tokens, before, '.'));
+    let raw = word == "from_bits"
+        || (word == "bits" && method)
+        || [
+            "set_bits_",
+            "with_bits_",
+            "read_word_",
+            "modify_word_",
+            "write_word_",
+        ]
+        .iter()
+        .any(|prefix| word.starts_with(prefix));
+    raw.then_some(word)
+}
+
+/// S8b: the protocol packages but the wire crates.
+fn protocol_code(path: &str) -> bool {
+    path.starts_with("protocols/")
+        && !path.ends_with("/wire")
+        && !path.split('/').any(|part| part == "testing")
+        && !path.ends_with("/model")
+}
+
+/// S8b: a byte conversion (`from_le_bytes`, `from_be_bytes`, `to_le_bytes`,
+/// `to_be_bytes`), or an index or a range of a slice of bytes by name (a
+/// name ending in `bytes`, or `frame`, `body`, `payload`, `buffer`, `buf`,
+/// `data`, `memory`).
+fn raw_bytes_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let word = ident_at(tokens, at)?;
+    if [
+        "from_le_bytes",
+        "from_be_bytes",
+        "to_le_bytes",
+        "to_be_bytes",
+    ]
+    .contains(&word.as_str())
+        && group_at(tokens, at + 1, Delimiter::Parenthesis).is_some()
+    {
+        return Some(word);
     }
+    let bytes = word.ends_with("bytes")
+        || [
+            "frame", "body", "payload", "buffer", "buf", "data", "memory",
+        ]
+        .contains(&word.as_str());
+    (bytes && group_at(tokens, at + 1, Delimiter::Bracket).is_some()).then(|| "index".to_owned())
 }
 
 /// Hits by file.
@@ -5772,13 +5809,6 @@ fn remover_name(file: &str) -> &'static str {
         BY_PHASE_C => "BY_PHASE_C",
         _ => "BY_NONE",
     }
-}
-
-/// S8's files: the HAL's register and PHY files, and the wire crates.
-fn bit_file(file: &str) -> bool {
-    !file.starts_with("chips/esp32s31/hal/")
-        || file.contains("/registers")
-        || file.contains("/radio/phy/")
 }
 
 /// S1: places claimed at run time in the entry and the facade (`try_take`,
@@ -6718,136 +6748,6 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
     ("protocols/ieee80211/runtime/src/lib.rs", 1, BY_P2),
     ("protocols/network/core/src/lib.rs", 1, BY_PHASE_C),
 ];
-/// S8: hand-written bits (a shift by a literal, a hexadecimal mask beside a
-/// bit operator) in the HAL's register and PHY files and in the wire
-/// crates, by file with their count. It misses a shift or a mask by a named
-/// value, and counts arithmetic that is no register access (a checksum, a
-/// timer's carry). The list only shrinks.
-const HAND_BITS: &[(&str, usize, &str)] = &[
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/controller/init.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/interrupt.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/phy.rs",
-        3,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/block_ack.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/beamforming.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init_suffix.rs",
-        3,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/phy_rate.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/rx/statistics.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/tsf.rs",
-        5,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx.rs",
-        5,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx/power_init.rs",
-        3,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/phy/baseband/ops.rs",
-        1,
-        BY_PHY,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        4,
-        BY_PHY,
-    ),
-    ("chips/esp32s31/hal/src/radio/phy/memory/ops.rs", 47, BY_PHY),
-    ("chips/esp32s31/hal/src/radio/phy/pbus/ops.rs", 2, BY_PHY),
-    (
-        "protocols/bluetooth/le/wire/src/channel.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/wire/src/connection.rs",
-        12,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/wire/src/control.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "protocols/bluetooth/le/wire/src/data_header.rs",
-        3,
-        BY_RADIO_SYSTEM,
-    ),
-    ("protocols/bluetooth/le/wire/src/dtm.rs", 1, BY_RADIO_SYSTEM),
-    ("protocols/ieee80211/wire/src/beacon.rs", 1, BY_P3),
-    ("protocols/ieee80211/wire/src/bip.rs", 1, BY_P3),
-    ("protocols/ieee80211/wire/src/block_ack/frame.rs", 1, BY_P3),
-    ("protocols/ieee80211/wire/src/ccmp.rs", 1, BY_P3),
-    (
-        "protocols/ieee80211/wire/src/extensions/espressif/esp_now.rs",
-        6,
-        BY_P3,
-    ),
-    ("protocols/ieee80211/wire/src/ftm.rs", 1, BY_P3),
-    ("protocols/ieee80211/wire/src/fuzz.rs", 4, BY_P3),
-    ("protocols/ieee80211/wire/src/he.rs", 1, BY_P3),
-    ("protocols/ieee80211/wire/src/ht.rs", 4, BY_P3),
-    (
-        "protocols/ieee80211/wire/src/management_protection.rs",
-        7,
-        BY_P3,
-    ),
-    ("protocols/ieee80211/wire/src/station_beacon.rs", 1, BY_P3),
-    ("protocols/ieee80211/wire/src/trigger.rs", 4, BY_P3),
-    ("protocols/ieee802154/wire/src/csl.rs", 1, BY_NONE),
-    ("protocols/ieee802154/wire/src/enhanced_ack.rs", 11, BY_NONE),
-    ("protocols/ieee802154/wire/src/header.rs", 1, BY_NONE),
-    ("protocols/ieee802154/wire/src/link_metrics.rs", 2, BY_NONE),
-    ("protocols/network/wire/src/checksum.rs", 7, BY_PHASE_C),
-];
 /// S2: the variants of the runtime's violation enums, each with the count of
 /// the production sites that make or match it, and what removes it by what
 /// it guards. The list only shrinks; a variant without an entry fails.
@@ -6875,6 +6775,634 @@ const VIOLATION_VARIANTS: &[(&str, usize, &str)] = &[
     ("ApContract::Permission", 6, BY_P3),
     ("ApContract::CutUnits", 1, BY_P3),
     ("ApContract::NetworkAdmission", 4, BY_P3),
+];
+
+/// S8a: the PAC's raw conversions and word accessors outside the PAC, in
+/// the HAL, the radio crates and the platform, by file with their count:
+/// a value reaches a register by hand only through these. An entry that is
+/// a policy `whole-word` image or a hardware-consumed layout says so. The
+/// list only shrinks.
+const RAW_REGISTERS: &[(&str, usize, &str)] = &[
+    ("chips/esp32s31/hal/src/peripherals/aes.rs", 4, BY_NONE),
+    ("chips/esp32s31/hal/src/peripherals/aes_dma.rs", 6, BY_NONE),
+    (
+        "chips/esp32s31/hal/src/peripherals/watchdog/registers.rs",
+        3,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/controller_time.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/advertising_image.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/ble_phy_engine.rs",
+        9,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/connectable_advertising.rs",
+        14,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/direction_finding_workspace.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm/codec.rs",
+        15,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm_image.rs",
+        10,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm_rx_result.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/le_phy_packet.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/le_rx_packet.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/le_tx_packet.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/legacy_advertising.rs",
+        11,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/legacy_scanning.rs",
+        14,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/peripheral_connection.rs",
+        15,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/rx_memory_list.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/rx_packet_bytes.rs",
+        6,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler_item.rs",
+        12,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/engine/sram_link.rs",
+        4,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/observation.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/baseband.rs",
+        165,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/controller/init.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/controller/time.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/interrupt.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/interrupt/retirement.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
+        29,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/phy.rs",
+        35,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler/cancellation.rs",
+        8,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler/lock_modify.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler/runtime.rs",
+        5,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler/stop.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/esp32s31/hal/src/radio/coex.rs", 1, BY_RADIO_SYSTEM),
+    (
+        "chips/esp32s31/hal/src/radio/coex/external.rs",
+        8,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/coex/ports.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/descriptor.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_dma.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/rx_ring.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_ampdu_storage.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/dma/tx_storage.rs",
+        4,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/block_ack.rs",
+        11,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/channel.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/runtime.rs",
+        4,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/crypto.rs",
+        13,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/enable.rs",
+        4,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/hal_init_tail.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/beamforming.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init.rs",
+        8,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init_suffix.rs",
+        5,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/ofdma.rs",
+        5,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/he/peer.rs",
+        5,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/interface_address.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/interrupt.rs",
+        10,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/last_rx_buffer.rs",
+        5,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/rx/dma.rs",
+        5,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx.rs",
+        79,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx/power_init.rs",
+        20,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/tx/queue.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/txrx_init.rs",
+        22,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee80211/registers/values.rs",
+        23,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee802154/mac/codes.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee802154/mac/etm.rs",
+        4,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/ieee802154/mac/task.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/modem/ops.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/modem/platform.rs",
+        8,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/modem/syscon.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/hal/src/radio/modem/values.rs",
+        22,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/agc/ops.rs", 37, BY_PHY),
+    (
+        "chips/esp32s31/hal/src/radio/phy/baseband/ops.rs",
+        88,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/clock/ops.rs", 14, BY_PHY),
+    (
+        "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
+        20,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 5, BY_PHY),
+    (
+        "chips/esp32s31/hal/src/radio/phy/iq_estimator/ops.rs",
+        8,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/hal/src/radio/phy/memory/ops.rs", 1, BY_PHY),
+    ("chips/esp32s31/hal/src/radio/phy/pbus/ops.rs", 1, BY_PHY),
+    ("chips/esp32s31/hal/src/radio/phy/rx_dco.rs", 2, BY_PHY),
+    ("chips/esp32s31/hal/src/system/boot.rs", 6, BY_NONE),
+    (
+        "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",
+        1,
+        BY_NONE,
+    ),
+    ("chips/esp32s31/hal/src/system/boot/psram.rs", 2, BY_NONE),
+    (
+        "chips/esp32s31/hal/src/system/memory/dma_address.rs",
+        6,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
+        4,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/platform/runtime/src/exception.rs",
+        1,
+        BY_NONE,
+    ),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/controller_time.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/bluetooth/backend/src/modem_lp_timer_queue.rs",
+        8,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/hardware_model.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs",
+        3,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/rx/prefix.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/metadata.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs",
+        3,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/ieee80211/backend/src/rx/receive.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "chips/esp32s31/radio/phy/src/analog/frequency.rs",
+        25,
+        BY_PHY,
+    ),
+    ("chips/esp32s31/radio/phy/src/analog/rfpll.rs", 3, BY_PHY),
+    (
+        "chips/esp32s31/radio/system/src/observation.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/family/platform/executor/src/fault.rs", 1, BY_NONE),
+    (
+        "chips/family/platform/interrupt-table/src/binding.rs",
+        1,
+        BY_NONE,
+    ),
+];
+
+/// S8b: byte conversions and indexing of bytes by name in the protocol
+/// packages outside the `wire` crates, by file with their count: an air
+/// format reaches its bytes by hand only through these. It misses an index
+/// of a slice of bytes named otherwise. The list only shrinks.
+const RAW_BYTES: &[(&str, usize, &str)] = &[
+    (
+        "protocols/bluetooth/hci/src/controller/bootstrap/reset.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/bootstrap/response.rs",
+        7,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/accept_list.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/acl.rs",
+        13,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/advertising.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/data_length.rs",
+        14,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/dtm.rs",
+        10,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/peripheral.rs",
+        35,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/le/scanning.rs",
+        11,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/random.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/controller/response.rs",
+        3,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/hci/src/transport/packet.rs",
+        2,
+        BY_RADIO_SYSTEM,
+    ),
+    ("protocols/bluetooth/hci/src/wire.rs", 1, BY_RADIO_SYSTEM),
+    (
+        "protocols/bluetooth/le/cipher/src/lib.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/controller/src/bootstrap.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/connection.rs",
+        4,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/ll/src/control.rs",
+        11,
+        BY_RADIO_SYSTEM,
+    ),
+    (
+        "protocols/bluetooth/le/port/src/request.rs",
+        1,
+        BY_RADIO_SYSTEM,
+    ),
+    ("protocols/hil/agent/src/postmortem.rs", 3, BY_NONE),
+    ("protocols/hil/protocol/src/framing.rs", 12, BY_NONE),
+    ("protocols/hil/protocol/src/key.rs", 1, BY_NONE),
+    (
+        "protocols/ieee80211/contracts/port/src/monitor.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/protocol.rs",
+        6,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/association.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/ethernet.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/data/plane.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/machine/management.rs",
+        3,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/receive.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/sa_query.rs",
+        3,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/roles/sta/src/security.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/crypto.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/security/rsn/src/crypto/pbkdf2.rs",
+        1,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/core/security/rsn/src/kdf.rs", 2, BY_P3),
+    ("protocols/ieee80211/core/security/rsn/src/sae.rs", 7, BY_P3),
+    (
+        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs",
+        2,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/fragmentation/reassembly.rs",
+        1,
+        BY_P3,
+    ),
+    (
+        "protocols/ieee80211/core/upper-mac/src/receive.rs",
+        4,
+        BY_P3,
+    ),
+    ("protocols/ieee80211/runtime/src/access_point.rs", 1, BY_P2),
+    (
+        "protocols/ieee80211/runtime/src/station/contract/diagnostic_path.rs",
+        2,
+        BY_P2,
+    ),
+    ("protocols/ieee802154/port/src/link_metrics.rs", 1, BY_NONE),
+    ("protocols/network/core/src/dhcp.rs", 3, BY_PHASE_C),
+    ("protocols/network/core/src/interface.rs", 4, BY_PHASE_C),
 ];
 
 /// The hits of a scan against its list: a new file, a grown count and an
@@ -6983,18 +7511,27 @@ fn memory_kept_out_and_quarantines_are_listed_and_only_shrink() {
 }
 
 #[test]
+fn raw_register_calls_are_listed_and_only_shrink() {
+    assert_scan(
+        &scan_hits(&register_code, &raw_register_at, NO_ATTRIBUTE),
+        RAW_REGISTERS,
+    );
+}
+
+#[test]
+fn raw_byte_access_in_protocols_is_listed_and_only_shrinks() {
+    assert_scan(
+        &scan_hits(&protocol_code, &raw_bytes_at, NO_ATTRIBUTE),
+        RAW_BYTES,
+    );
+}
+
+#[test]
 fn compatibility_layers_are_listed_and_only_shrink() {
     assert_scan(
         &scan_hits(&product_code, &compatibility_at, &compatibility_attribute),
         COMPATIBILITY,
     );
-}
-
-#[test]
-fn hand_written_bits_are_listed_and_only_shrink() {
-    let mut hits = scan_hits(&bit_files, &hand_bits_at, NO_ATTRIBUTE);
-    hits.retain(|(file, _)| bit_file(file));
-    assert_scan(&hits, HAND_BITS);
 }
 
 /// Every entry of the lists names what removes it, and the scan's
@@ -7009,7 +7546,8 @@ fn the_rule_lists_name_their_removers() {
         DROPPED_RESULTS,
         KEPT_OUT,
         COMPATIBILITY,
-        HAND_BITS,
+        RAW_REGISTERS,
+        RAW_BYTES,
     ] {
         for (entry, _, remover) in list {
             assert!(!remover.is_empty(), "{entry}");
@@ -7052,7 +7590,8 @@ fn f(cell: &mut Option<u8>, r: Result<u8, ()>) -> Result<u8, ()> {
     let _ = r.unwrap_or_else(|_| 0);
     let _kept = core::mem::ManuallyDrop::new(value);
     let _gone = Box::leak(Box::new(1));
-    let _bits = (value << 4) & 0xF0;
+    let _word = Field::from_bits(value).bits();
+    let _wide = u16::from_le_bytes([payload[0], value]);
     Ok(value)
 }
 #[cfg(test)]
@@ -7064,14 +7603,15 @@ mod tests {
     )
     .expect("source");
     let mut found = BTreeMap::<&str, Vec<String>>::new();
-    let finders: [(&str, &Finder); 7] = [
+    let finders: [(&str, &Finder); 8] = [
         ("claims", &claim_at),
         ("errors", &error_state_at),
         ("statuses", &status_failure_at),
         ("dropped", &dropped_result_at),
         ("kept", &kept_out_at),
         ("compatibility", &compatibility_at),
-        ("bits", &hand_bits_at),
+        ("registers", &raw_register_at),
+        ("bytes", &raw_bytes_at),
     ];
     walk_file(&source, &mut |_: &Path, seen: Seen<'_>| match seen {
         Seen::Token(tokens, at) => {
@@ -7100,14 +7640,15 @@ mod tests {
         found["compatibility"],
         ["pub use … as", "serde(default)", "deprecated"]
     );
-    assert_eq!(found["bits"], ["shift", "mask"]);
+    assert_eq!(found["registers"], ["from_bits", "bits"]);
+    assert_eq!(found["bytes"], ["from_le_bytes", "index"]);
 }
 
 #[test]
 #[ignore = "prints the T8c lists from the scans' hits"]
 fn t8c_print() {
     let none: &AttributeFinder = &|_| None;
-    let scans: [Scan<'_>; 8] = [
+    let scans: [Scan<'_>; 9] = [
         ("CLAIMS", &claims_scope, &claim_at, none),
         ("VIOLATION_SITES", &product_code, &violation_site_at, none),
         ("ERROR_STATES", &product_code, &error_state_at, none),
@@ -7120,13 +7661,11 @@ fn t8c_print() {
             &compatibility_at,
             &compatibility_attribute,
         ),
-        ("HAND_BITS", &bit_files, &hand_bits_at, none),
+        ("RAW_REGISTERS", &register_code, &raw_register_at, none),
+        ("RAW_BYTES", &protocol_code, &raw_bytes_at, none),
     ];
     for (name, select, find, attribute) in scans {
-        let mut hits = scan_hits(select, find, attribute);
-        if name == "HAND_BITS" {
-            hits.retain(|(file, _)| bit_file(file));
-        }
+        let hits = scan_hits(select, find, attribute);
         std::println!("const {name}: &[(&str, usize, &str)] = &[");
         for (file, count) in by_file(&hits) {
             std::println!("    (\"{file}\", {count}, {}),", remover_name(&file));
