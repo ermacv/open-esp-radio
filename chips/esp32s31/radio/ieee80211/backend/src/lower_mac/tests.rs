@@ -3135,14 +3135,13 @@ fn he20_association_colored(color: u8) -> oer_protocols_ieee80211_contracts_port
         &oer_protocols_ieee80211_wire::he::He20PeerState {
             capability_prefix: [0; 24],
             packet_padding_eight_us: 2,
-            default_packet_extension_duration: 4,
-            bss_color: color,
-            bss_color_enabled: true,
-            partial_bss_color: false,
-            basic_mcs_nss_map: 0xfffc,
-            rts_threshold: None,
+            operation: oer_protocols_ieee80211_wire::he::HeOperationFields::from_bytes([0; 6])
+                .with_default_pe(4)
+                .and_then(|fields| fields.with_bss_color(color))
+                .and_then(|fields| fields.with_basic_mcs_nss(0xfffc))
+                .unwrap()
+                .with_er_su_disabled(true),
             max_co_hosted_bssid_indicator: None,
-            extended_range_single_user_disabled: true,
         },
         42,
         5,
@@ -3154,10 +3153,11 @@ fn he20_association_colored(color: u8) -> oer_protocols_ieee80211_contracts_port
 fn he_bss(enabled: bool) -> oer_protocols_ieee80211_contracts_port::HeBssColor {
     oer_protocols_ieee80211_contracts_port::HeBssColor::of(
         &oer_protocols_ieee80211_wire::he::He20Operation {
-            bss_color: 27,
-            bss_color_enabled: enabled,
-            partial_bss_color: false,
-            basic_mcs_nss_map: 0xfffc,
+            fields: oer_protocols_ieee80211_wire::he::HeOperationFields::from_bytes([0; 6])
+                .with_bss_color(27)
+                .and_then(|fields| fields.with_basic_mcs_nss(0xfffc))
+                .unwrap()
+                .with_bss_color_disabled(!enabled),
         },
     )
     .unwrap()

@@ -21,25 +21,25 @@ fn parses_every_common_info_field_across_the_word_boundary() {
         | (0x155 << 54)
         | (1 << 63);
     let common = parse_trigger_common_info(&bits.to_le_bytes()).unwrap();
-    assert_eq!(common.trigger_type, TriggerType::BufferStatusReportPoll);
-    assert_eq!(common.uplink_length, 0xabc);
-    assert!(common.more_trigger_frames);
-    assert!(common.carrier_sense_required);
-    assert_eq!(common.uplink_bandwidth_encoding, 2);
-    assert_eq!(common.gi_ltf, TriggerGiLtf::Reserved);
-    assert!(common.mu_mimo_ltf_mode);
-    assert_eq!(common.he_ltf_symbols_and_midamble_periodicity, 5);
-    assert!(common.uplink_stbc);
-    assert!(common.ldpc_extra_symbol_segment);
-    assert_eq!(common.ap_tx_power_encoding, 42);
+    assert_eq!(common.trigger_type(), TriggerType::BufferStatusReportPoll);
+    assert_eq!(common.fields.uplink_length(), 0xabc);
+    assert!(common.fields.more_trigger_frames());
+    assert!(common.fields.carrier_sense_required());
+    assert_eq!(common.fields.uplink_bandwidth_encoding(), 2);
+    assert_eq!(common.gi_ltf(), TriggerGiLtf::Reserved);
+    assert!(common.fields.mu_mimo_ltf_mode());
+    assert_eq!(common.fields.he_ltf_symbols_and_midamble_periodicity(), 5);
+    assert!(common.fields.uplink_stbc());
+    assert!(common.fields.ldpc_extra_symbol_segment());
+    assert_eq!(common.fields.ap_tx_power_encoding(), 42);
     assert_eq!(common.ap_tx_power, TriggerApTxPower::Dbm(22));
-    assert_eq!(common.pre_fec_padding_factor_encoding, 2);
+    assert_eq!(common.fields.pre_fec_padding_factor_encoding(), 2);
     assert_eq!(common.pre_fec_padding_factor, 2);
-    assert!(common.packet_extension_disambiguity);
-    assert_eq!(common.uplink_spatial_reuse, 0xbeef);
-    assert!(common.doppler);
-    assert_eq!(common.uplink_he_sig_a2_reserved, 0x155);
-    assert!(common.trailing_reserved);
+    assert!(common.fields.packet_extension_disambiguity());
+    assert_eq!(common.fields.uplink_spatial_reuse(), 0xbeef);
+    assert!(common.fields.doppler());
+    assert_eq!(common.fields.uplink_he_sig_a2_reserved(), 0x155);
+    assert!(common.fields.trailing_reserved());
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn admits_trigger_mac_header_and_borrows_user_tail() {
     assert_eq!(trigger.receiver_address, [1, 2, 3, 4, 5, 6]);
     assert_eq!(trigger.transmitter_address, [7, 8, 9, 10, 11, 12]);
     assert_eq!(
-        trigger.common.trigger_type,
+        trigger.common.trigger_type(),
         TriggerType::BeamformingReportPoll
     );
     assert_eq!(trigger.user_info_and_padding, [13, 14, 15, 16, 17]);
@@ -78,36 +78,36 @@ fn basic_trigger_encoder_round_trips_every_owned_field() {
         duration: 0x1234,
         receiver_address: [1, 2, 3, 4, 5, 6],
         transmitter_address: [7, 8, 9, 10, 11, 12],
-        common: TriggerCommonEncoding {
-            uplink_length: 0xabc,
-            more_trigger_frames: true,
-            carrier_sense_required: true,
-            uplink_bandwidth_encoding: 0,
-            gi_ltf: TriggerGiLtf::TwoLtf1600Ns,
-            mu_mimo_ltf_mode: true,
-            he_ltf_symbols_and_midamble_periodicity: 5,
-            uplink_stbc: true,
-            ldpc_extra_symbol_segment: true,
-            ap_tx_power_encoding: 42,
-            pre_fec_padding_factor_encoding: 2,
-            packet_extension_disambiguity: true,
-            uplink_spatial_reuse: 0xbeef,
-            doppler: true,
-            uplink_he_sig_a2_reserved: 0x155,
-            trailing_reserved: true,
-        },
-        user: TriggerScheduledUserEncoding {
-            association_id: 0x234,
-            ru_allocation_region: true,
-            ru_allocation: 53,
-            coding_type: true,
-            mcs: 9,
-            dcm: true,
-            starting_spatial_stream_encoding: 2,
-            spatial_stream_count_encoding: 3,
-            target_rssi_encoding: 0x55,
-            reserved: true,
-        },
+        common: TriggerCommonFields::from_bytes([0; 8])
+            .with_uplink_length(0xabc)
+            .and_then(|fields| fields.with_uplink_bandwidth_encoding(0))
+            .and_then(|fields| fields.with_gi_ltf(TriggerGiLtf::TwoLtf1600Ns.encoding()))
+            .and_then(|fields| fields.with_he_ltf_symbols_and_midamble_periodicity(5))
+            .and_then(|fields| fields.with_ap_tx_power_encoding(42))
+            .and_then(|fields| fields.with_pre_fec_padding_factor_encoding(2))
+            .and_then(|fields| fields.with_uplink_spatial_reuse(0xbeef))
+            .and_then(|fields| fields.with_uplink_he_sig_a2_reserved(0x155))
+            .unwrap()
+            .with_more_trigger_frames(true)
+            .with_carrier_sense_required(true)
+            .with_mu_mimo_ltf_mode(true)
+            .with_uplink_stbc(true)
+            .with_ldpc_extra_symbol_segment(true)
+            .with_packet_extension_disambiguity(true)
+            .with_doppler(true)
+            .with_trailing_reserved(true),
+        user: TriggerScheduledUserFields::from_bytes([0; 5])
+            .with_aid12(0x234)
+            .and_then(|fields| fields.with_ru_allocation(53))
+            .and_then(|fields| fields.with_mcs(9))
+            .and_then(|fields| fields.with_starting_spatial_stream_encoding(2))
+            .and_then(|fields| fields.with_spatial_stream_count_encoding(3))
+            .and_then(|fields| fields.with_target_rssi_encoding(0x55))
+            .unwrap()
+            .with_ru_allocation_region(true)
+            .with_coding_type(true)
+            .with_dcm(true)
+            .with_reserved(true),
         dependent: TriggerBasicDependentInfo {
             mpdu_mu_spacing_factor: 3,
             tid_aggregation_limit: 5,
@@ -132,42 +132,51 @@ fn basic_trigger_encoder_round_trips_every_owned_field() {
     assert_eq!(trigger.duration, encoded.duration);
     assert_eq!(trigger.receiver_address, encoded.receiver_address);
     assert_eq!(trigger.transmitter_address, encoded.transmitter_address);
-    assert_eq!(trigger.common.trigger_type, TriggerType::Basic);
-    assert_eq!(trigger.common.uplink_length, encoded.common.uplink_length);
+    assert_eq!(trigger.common.trigger_type(), TriggerType::Basic);
     assert_eq!(
-        trigger.common.uplink_bandwidth_encoding,
-        encoded.common.uplink_bandwidth_encoding
-    );
-    assert_eq!(trigger.common.gi_ltf, encoded.common.gi_ltf);
-    assert_eq!(
-        trigger.common.he_ltf_symbols_and_midamble_periodicity,
-        encoded.common.he_ltf_symbols_and_midamble_periodicity
+        trigger.common.fields.uplink_length(),
+        encoded.common.uplink_length()
     );
     assert_eq!(
-        trigger.common.uplink_he_sig_a2_reserved,
-        encoded.common.uplink_he_sig_a2_reserved
+        trigger.common.fields.uplink_bandwidth_encoding(),
+        encoded.common.uplink_bandwidth_encoding()
+    );
+    assert_eq!(trigger.common.fields.gi_ltf(), encoded.common.gi_ltf());
+    assert_eq!(
+        trigger
+            .common
+            .fields
+            .he_ltf_symbols_and_midamble_periodicity(),
+        encoded.common.he_ltf_symbols_and_midamble_periodicity()
+    );
+    assert_eq!(
+        trigger.common.fields.uplink_he_sig_a2_reserved(),
+        encoded.common.uplink_he_sig_a2_reserved()
     );
 
     let mut users = trigger.users();
     let user = users.next().unwrap().unwrap();
     assert_eq!(users.next(), None);
     let parsed_user = parse_trigger_user_spatial_stream(user.user_info).unwrap();
-    assert_eq!(parsed_user.aid12, encoded.user.association_id);
-    assert_eq!(parsed_user.ru_allocation, encoded.user.ru_allocation);
-    assert_eq!(parsed_user.coding_type, encoded.user.coding_type);
-    assert_eq!(parsed_user.mcs, encoded.user.mcs);
-    assert_eq!(parsed_user.dcm, encoded.user.dcm);
+    assert_eq!(parsed_user.fields.aid12(), encoded.user.aid12());
     assert_eq!(
-        parsed_user.starting_spatial_stream_encoding,
-        encoded.user.starting_spatial_stream_encoding
+        parsed_user.fields.ru_allocation(),
+        encoded.user.ru_allocation()
+    );
+    assert_eq!(parsed_user.fields.coding_type(), encoded.user.coding_type());
+    assert_eq!(parsed_user.fields.mcs(), encoded.user.mcs());
+    assert_eq!(parsed_user.fields.dcm(), encoded.user.dcm());
+    assert_eq!(
+        parsed_user.fields.starting_spatial_stream_encoding(),
+        encoded.user.starting_spatial_stream_encoding()
     );
     assert_eq!(
-        parsed_user.spatial_stream_count_encoding,
-        encoded.user.spatial_stream_count_encoding
+        parsed_user.fields.spatial_stream_count_encoding(),
+        encoded.user.spatial_stream_count_encoding()
     );
     assert_eq!(
-        parsed_user.target_rssi_encoding,
-        encoded.user.target_rssi_encoding
+        parsed_user.fields.target_rssi_encoding(),
+        encoded.user.target_rssi_encoding()
     );
     assert_eq!(
         parse_trigger_basic_dependent(user.dependent_info),
@@ -181,36 +190,18 @@ fn basic_trigger_encoder_rejects_truncation_and_unbounded_fields() {
         duration: 0,
         receiver_address: [0xff; 6],
         transmitter_address: [0; 6],
-        common: TriggerCommonEncoding {
-            uplink_length: 1,
-            more_trigger_frames: false,
-            carrier_sense_required: false,
-            uplink_bandwidth_encoding: 0,
-            gi_ltf: TriggerGiLtf::OneLtf1600Ns,
-            mu_mimo_ltf_mode: false,
-            he_ltf_symbols_and_midamble_periodicity: 0,
-            uplink_stbc: false,
-            ldpc_extra_symbol_segment: false,
-            ap_tx_power_encoding: 20,
-            pre_fec_padding_factor_encoding: 1,
-            packet_extension_disambiguity: false,
-            uplink_spatial_reuse: 0,
-            doppler: false,
-            uplink_he_sig_a2_reserved: 0x1ff,
-            trailing_reserved: false,
-        },
-        user: TriggerScheduledUserEncoding {
-            association_id: 1,
-            ru_allocation_region: false,
-            ru_allocation: 61,
-            coding_type: false,
-            mcs: 0,
-            dcm: false,
-            starting_spatial_stream_encoding: 0,
-            spatial_stream_count_encoding: 0,
-            target_rssi_encoding: 0x7f,
-            reserved: false,
-        },
+        common: TriggerCommonFields::from_bytes([0; 8])
+            .with_uplink_length(1)
+            .and_then(|fields| fields.with_gi_ltf(TriggerGiLtf::OneLtf1600Ns.encoding()))
+            .and_then(|fields| fields.with_ap_tx_power_encoding(20))
+            .and_then(|fields| fields.with_pre_fec_padding_factor_encoding(1))
+            .and_then(|fields| fields.with_uplink_he_sig_a2_reserved(0x1ff))
+            .unwrap(),
+        user: TriggerScheduledUserFields::from_bytes([0; 5])
+            .with_aid12(1)
+            .and_then(|fields| fields.with_ru_allocation(61))
+            .and_then(|fields| fields.with_target_rssi_encoding(0x7f))
+            .unwrap(),
         dependent: TriggerBasicDependentInfo {
             mpdu_mu_spacing_factor: 0,
             tid_aggregation_limit: 0,
@@ -226,17 +217,16 @@ fn basic_trigger_encoder_rejects_truncation_and_unbounded_fields() {
     );
 
     let mut invalid = valid;
-    invalid.user.association_id = 0;
+    invalid.user = invalid.user.with_aid12(0).unwrap();
     assert_eq!(
         invalid.encode(&mut [0; TRIGGER_BASIC_FRAME_LEN]),
         Err(TriggerEncodeError::AssociationIdOutOfRange)
     );
 
-    let mut invalid = valid;
-    invalid.common.uplink_length = 0x1000;
+    // A length past the field's twelve bits is refused by its setter.
     assert_eq!(
-        invalid.encode(&mut [0; TRIGGER_BASIC_FRAME_LEN]),
-        Err(TriggerEncodeError::UplinkLengthOutOfRange)
+        valid.common.with_uplink_length(0x1000),
+        Err(oer_portable_wire::Error::ValueOutOfRange)
     );
 }
 
@@ -377,7 +367,7 @@ fn rejects_other_control_subtypes() {
 #[test]
 fn zero_pre_fec_encoding_means_factor_four_in_the_blob() {
     let common = parse_trigger_common_info(&[0; 8]).unwrap();
-    assert_eq!(common.pre_fec_padding_factor_encoding, 0);
+    assert_eq!(common.fields.pre_fec_padding_factor_encoding(), 0);
     assert_eq!(common.pre_fec_padding_factor, 4);
     assert_eq!(common.ap_tx_power, TriggerApTxPower::Dbm(-20));
 }
@@ -386,21 +376,21 @@ fn zero_pre_fec_encoding_means_factor_four_in_the_blob() {
 fn parses_ru_and_spatial_stream_views_of_user_info() {
     let bytes = [0xa5, 0xbb, 0xd6, 0xeb, 0x52];
     let ru = parse_trigger_user_ru(&bytes).unwrap();
-    assert_eq!(ru.aid12, 0xba5);
-    assert!(ru.ru_allocation_region);
-    assert_eq!(ru.ru_allocation, 53);
-    assert!(ru.coding_type);
-    assert_eq!(ru.mcs, 14);
-    assert!(ru.dcm);
-    assert_eq!(ru.number_of_ra_ru, 26);
-    assert!(ru.more_ra_ru);
+    assert_eq!(ru.fields.aid12(), 0xba5);
+    assert!(ru.fields.ru_allocation_region());
+    assert_eq!(ru.fields.ru_allocation(), 53);
+    assert!(ru.fields.coding_type());
+    assert_eq!(ru.fields.mcs(), 14);
+    assert!(ru.fields.dcm());
+    assert_eq!(ru.fields.number_of_ra_ru(), 26);
+    assert!(ru.fields.more_ra_ru());
     assert_eq!(ru.target_rssi, TriggerTargetRssi::Dbm(-28));
-    assert!(!ru.reserved);
+    assert!(!ru.fields.reserved());
 
     let ss = parse_trigger_user_spatial_stream(&bytes).unwrap();
-    assert_eq!(ss.starting_spatial_stream_encoding, 2);
+    assert_eq!(ss.fields.starting_spatial_stream_encoding(), 2);
     assert_eq!(ss.starting_spatial_stream, 3);
-    assert_eq!(ss.spatial_stream_count_encoding, 7);
+    assert_eq!(ss.fields.spatial_stream_count_encoding(), 7);
     assert_eq!(ss.spatial_stream_count, 8);
 }
 
@@ -450,14 +440,14 @@ fn parses_trs_and_uph_control_without_hiding_unowned_bits() {
         | (2 << 29)
         | (1 << 31);
     let trs = parse_trigger_response_scheduling_control(&trs_bits.to_le_bytes()).unwrap();
-    assert_eq!(trs.control_id, 0x2a);
-    assert_eq!(trs.uplink_data_symbols, 17);
-    assert!(trs.ru_allocation_region);
-    assert_eq!(trs.ru_allocation, 61);
+    assert_eq!(trs.fields.control_id(), 0x2a);
+    assert_eq!(trs.fields.uplink_data_symbols(), 17);
+    assert!(trs.fields.ru_allocation_region());
+    assert_eq!(trs.fields.ru_allocation(), 61);
     assert_eq!(trs.ap_tx_power, TriggerApTxPower::Dbm(10));
     assert_eq!(trs.uplink_target_rssi, TriggerTargetRssi::Dbm(-50));
-    assert_eq!(trs.mcs, 2);
-    assert!(trs.trailing_reserved);
+    assert_eq!(trs.fields.mcs(), 2);
+    assert!(trs.fields.trailing_reserved());
 
     let uph_bits = 0x15_u32 | (23 << 6) | (1 << 11) | (2 << 12) | (0x2aa << 14);
     let uph = parse_uplink_power_headroom_control(&uph_bits.to_le_bytes()).unwrap();

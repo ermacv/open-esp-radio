@@ -23,11 +23,15 @@ fn the_he20_element_is_one_stream_mcs9_both_ways_with_no_optional_capability() {
     assert!(capability.supports_bidirectional_mcs9());
     assert!(!capability.supports_ldpc_coding_in_payload());
     assert!(!capability.supports_one_ltf_800ns_gi());
-    assert!(!capability.stbc_receive_under_80_mhz && !capability.stbc_transmit_under_80_mhz);
-    assert_eq!(capability.dcm_receive, HeDcmConstellation::NotSupported);
-    assert_eq!(capability.dcm_transmit, HeDcmConstellation::NotSupported);
-    assert!(!capability.triggered_su_beamforming_feedback);
-    assert!(!capability.triggered_cqi_feedback && !capability.non_triggered_cqi_feedback);
+    assert!(
+        !capability.phy.stbc_receive_under_80_mhz() && !capability.phy.stbc_transmit_under_80_mhz()
+    );
+    assert_eq!(capability.dcm_receive(), HeDcmConstellation::NotSupported);
+    assert_eq!(capability.dcm_transmit(), HeDcmConstellation::NotSupported);
+    assert!(!capability.phy.triggered_su_beamforming_feedback());
+    assert!(
+        !capability.phy.triggered_cqi_feedback() && !capability.phy.non_triggered_cqi_feedback()
+    );
     let mac = HeMacCapabilities::from_bytes([HE20[3], HE20[4], HE20[5], HE20[6], HE20[7], HE20[8]]);
     assert_eq!(
         mac.trigger_frame_mac_padding(),

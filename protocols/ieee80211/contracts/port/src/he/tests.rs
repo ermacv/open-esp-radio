@@ -2,20 +2,25 @@
 
 use super::{BssColorScope, BssColorUse, He20Association, He20AssociationError, HeBssColor};
 use crate::BssColor;
-use oer_protocols_ieee80211_wire::he::{He20Operation, He20PeerState};
+use oer_protocols_ieee80211_wire::he::{He20Operation, He20PeerState, HeOperationFields};
+
+/// An HE Operation of default PE 4, BSS color 42 (partial) and the basic
+/// set `0xfffc`.
+fn operation_fields() -> HeOperationFields {
+    HeOperationFields::from_bytes([0; 6])
+        .with_default_pe(4)
+        .and_then(|fields| fields.with_bss_color(42))
+        .and_then(|fields| fields.with_basic_mcs_nss(0xfffc))
+        .unwrap()
+        .with_partial_bss_color(true)
+}
 
 fn peer() -> He20PeerState {
     He20PeerState {
         capability_prefix: [0; 24],
         packet_padding_eight_us: 2,
-        default_packet_extension_duration: 4,
-        bss_color: 42,
-        bss_color_enabled: true,
-        partial_bss_color: true,
-        basic_mcs_nss_map: 0xfffc,
-        rts_threshold: None,
+        operation: operation_fields().with_er_su_disabled(true),
         max_co_hosted_bssid_indicator: Some(3),
-        extended_range_single_user_disabled: true,
     }
 }
 
@@ -41,10 +46,7 @@ fn an_association_keeps_the_peer_values_it_was_made_of() {
 #[test]
 fn a_bss_color_is_the_scan_s_and_a_disabled_one_is_transmitted_as_zero() {
     let mut operation = He20Operation {
-        bss_color: 42,
-        bss_color_enabled: true,
-        partial_bss_color: false,
-        basic_mcs_nss_map: 0xfffc,
+        fields: operation_fields().with_partial_bss_color(false),
     };
     let color = HeBssColor::of(&operation).expect("a color");
     assert_eq!(
@@ -56,13 +58,11 @@ fn a_bss_color_is_the_scan_s_and_a_disabled_one_is_transmitted_as_zero() {
         )
     );
     assert_eq!(color.transmit_color().get(), 42);
-    operation.bss_color_enabled = false;
+    operation.fields = operation.fields.with_bss_color_disabled(true);
     assert_eq!(
         HeBssColor::of(&operation).unwrap().transmit_color(),
         BssColor::ZERO
     );
-    operation.bss_color = 64;
-    assert_eq!(HeBssColor::of(&operation), None);
 }
 
 #[test]
@@ -84,18 +84,6 @@ fn values_outside_their_fields_make_no_association() {
     assert_eq!(
         He20Association::new(&padded, 1, 0),
         Err(He20AssociationError::PacketPadding(3))
-    );
-    let mut extended = peer();
-    extended.default_packet_extension_duration = 8;
-    assert_eq!(
-        He20Association::new(&extended, 1, 0),
-        Err(He20AssociationError::DefaultPacketExtension(8))
-    );
-    let mut colored = peer();
-    colored.bss_color = 64;
-    assert_eq!(
-        He20Association::new(&colored, 1, 0),
-        Err(He20AssociationError::BssColor(64))
     );
     let mut hosted = peer();
     hosted.max_co_hosted_bssid_indicator = Some(9);

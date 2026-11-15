@@ -1215,21 +1215,22 @@ fn the_port_installs_an_he_connection_and_association_and_ends_them() {
     let peer = oer_protocols_ieee80211_wire::he::He20PeerState {
         capability_prefix: [0; 24],
         packet_padding_eight_us: 1,
-        default_packet_extension_duration: 2,
-        bss_color: 9,
-        bss_color_enabled: true,
-        partial_bss_color: true,
-        basic_mcs_nss_map: 0xfffc,
-        rts_threshold: Some(100),
+        operation: oer_protocols_ieee80211_wire::he::HeOperationFields::from_bytes([0; 6])
+            .with_default_pe(2)
+            .and_then(|fields| fields.with_bss_color(9))
+            .and_then(|fields| fields.with_basic_mcs_nss(0xfffc))
+            .and_then(|fields| fields.with_rts_threshold(100))
+            .unwrap()
+            .with_partial_bss_color(true),
         max_co_hosted_bssid_indicator: Some(2),
-        extended_range_single_user_disabled: false,
     };
     let bss = StationHe::Bss(
         HeBssColor::of(&oer_protocols_ieee80211_wire::he::He20Operation {
-            bss_color: 9,
-            bss_color_enabled: true,
-            partial_bss_color: true,
-            basic_mcs_nss_map: 0xfffc,
+            fields: oer_protocols_ieee80211_wire::he::HeOperationFields::from_bytes([0; 6])
+                .with_bss_color(9)
+                .and_then(|fields| fields.with_basic_mcs_nss(0xfffc))
+                .unwrap()
+                .with_partial_bss_color(true),
         })
         .expect("a color"),
     );

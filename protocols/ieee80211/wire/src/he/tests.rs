@@ -7,14 +7,11 @@ fn parses_single_stream_mcs9_capability_without_optional_tails() {
     element[20..22].copy_from_slice(&0xfffd_u16.to_le_bytes());
     element[22..24].copy_from_slice(&0xfffd_u16.to_le_bytes());
     let capability = parse_he20_capabilities(&element).unwrap();
-    assert_eq!(capability.receive_nss1, HeMcsNssSupport::Mcs0To9);
-    assert_eq!(capability.transmit_nss1, HeMcsNssSupport::Mcs0To9);
+    assert_eq!(capability.receive_nss1(), HeMcsNssSupport::Mcs0To9);
+    assert_eq!(capability.transmit_nss1(), HeMcsNssSupport::Mcs0To9);
     assert!(capability.supports_bidirectional_mcs9());
     assert!(!capability.supports_one_ltf_800ns_gi());
-    assert_eq!(
-        capability.dcm_receive_constellation(),
-        HeDcmConstellation::NotSupported
-    );
+    assert_eq!(capability.dcm_receive(), HeDcmConstellation::NotSupported);
 }
 
 #[test]
@@ -170,10 +167,7 @@ fn parses_payload_ldpc_independently_from_gi_and_dcm() {
     let capability = parse_he20_capabilities(&element).unwrap();
     assert!(!capability.supports_one_ltf_800ns_gi());
     assert!(capability.supports_ldpc_coding_in_payload());
-    assert_eq!(
-        capability.dcm_receive_constellation(),
-        HeDcmConstellation::NotSupported
-    );
+    assert_eq!(capability.dcm_receive(), HeDcmConstellation::NotSupported);
 }
 
 #[test]
@@ -184,11 +178,11 @@ fn parses_independent_dcm_transmit_and_receive_constellations() {
     // (bits 4:3 = 3). NSS stays one when bits 2 and 5 are clear.
     element[12] = 0x1a;
     let capability = parse_he20_capabilities(&element).unwrap();
-    assert_eq!(capability.dcm_transmit, HeDcmConstellation::Qpsk);
-    assert_eq!(capability.dcm_receive, HeDcmConstellation::Qam16);
-    assert!(capability.dcm_receive.supports_bpsk());
-    assert!(capability.dcm_receive.supports_qpsk());
-    assert!(capability.dcm_receive.supports_16qam());
+    assert_eq!(capability.dcm_transmit(), HeDcmConstellation::Qpsk);
+    assert_eq!(capability.dcm_receive(), HeDcmConstellation::Qam16);
+    assert!(capability.dcm_receive().supports_bpsk());
+    assert!(capability.dcm_receive().supports_qpsk());
+    assert!(capability.dcm_receive().supports_16qam());
 }
 
 #[test]
@@ -199,12 +193,16 @@ fn parses_stbc_and_independent_cqi_feedback_capabilities() {
     element[15] = 0x1c;
     element[18] = 0x02;
     let capability = parse_he20_capabilities(&element).unwrap();
-    assert!(capability.stbc_transmit_under_80_mhz);
-    assert!(capability.stbc_receive_under_80_mhz);
-    assert!(capability.triggered_su_beamforming_feedback);
-    assert!(capability.triggered_mu_beamforming_partial_bandwidth_feedback);
-    assert!(capability.triggered_cqi_feedback);
-    assert!(capability.non_triggered_cqi_feedback);
+    assert!(capability.phy.stbc_transmit_under_80_mhz());
+    assert!(capability.phy.stbc_receive_under_80_mhz());
+    assert!(capability.phy.triggered_su_beamforming_feedback());
+    assert!(
+        capability
+            .phy
+            .triggered_mu_beamforming_partial_bandwidth_feedback()
+    );
+    assert!(capability.phy.triggered_cqi_feedback());
+    assert!(capability.phy.non_triggered_cqi_feedback());
 }
 
 #[test]
@@ -214,34 +212,38 @@ fn decodes_the_vendor_s31_sta_stbc_and_cqi_advertisement() {
         0x1f, 0x00, 0x02, 0x82, 0x01, 0xfd, 0xff, 0xfd, 0xff,
     ];
     let capability = parse_he20_capabilities(&capability).unwrap();
-    assert!(!capability.stbc_transmit_under_80_mhz);
-    assert!(capability.stbc_receive_under_80_mhz);
-    assert_eq!(capability.dcm_transmit, HeDcmConstellation::Qam16);
-    assert_eq!(capability.dcm_receive, HeDcmConstellation::Qam16);
-    assert!(capability.triggered_su_beamforming_feedback);
-    assert!(capability.triggered_mu_beamforming_partial_bandwidth_feedback);
-    assert!(capability.triggered_cqi_feedback);
-    assert!(capability.non_triggered_cqi_feedback);
+    assert!(!capability.phy.stbc_transmit_under_80_mhz());
+    assert!(capability.phy.stbc_receive_under_80_mhz());
+    assert_eq!(capability.dcm_transmit(), HeDcmConstellation::Qam16);
+    assert_eq!(capability.dcm_receive(), HeDcmConstellation::Qam16);
+    assert!(capability.phy.triggered_su_beamforming_feedback());
+    assert!(
+        capability
+            .phy
+            .triggered_mu_beamforming_partial_bandwidth_feedback()
+    );
+    assert!(capability.phy.triggered_cqi_feedback());
+    assert!(capability.phy.non_triggered_cqi_feedback());
 }
 
 #[test]
 fn parses_disabled_partial_bss_color() {
     let element = [255, 7, 36, 0, 0, 0, 0xc5, 0xfd, 0xff];
     let operation = parse_he20_operation(&element).unwrap();
-    assert_eq!(operation.bss_color, 5);
-    assert!(!operation.bss_color_enabled);
-    assert!(operation.partial_bss_color);
+    assert_eq!(operation.bss_color(), 5);
+    assert!(!operation.bss_color_enabled());
+    assert!(operation.partial_bss_color());
     assert_eq!(operation.effective_bss_color(), 0);
-    assert_eq!(operation.basic_mcs_nss_map, 0xfffd);
+    assert_eq!(operation.basic_mcs_nss_map(), 0xfffd);
 }
 
 #[test]
 fn disabled_color_matches_vendor_effective_tx_color() {
     let element = [255, 7, 36, 0, 0, 0, 0xae, 0xfd, 0xff];
     let operation = parse_he20_operation(&element).unwrap();
-    assert_eq!(operation.bss_color, 46);
-    assert!(!operation.bss_color_enabled);
-    assert!(!operation.partial_bss_color);
+    assert_eq!(operation.bss_color(), 46);
+    assert!(!operation.bss_color_enabled());
+    assert!(!operation.partial_bss_color());
     assert_eq!(operation.effective_bss_color(), 0);
 }
 
@@ -254,13 +256,13 @@ fn recovers_vendor_ap_he20_peer_state() {
     let operation = [0xff, 0x07, 0x24, 0x04, 0x00, 0x01, 0x1b, 0xfc, 0xff];
     let state = parse_he20_peer_state(&capability, &operation).unwrap();
     assert_eq!(state.packet_padding_eight_us, 2);
-    assert_eq!(state.default_packet_extension_duration, 4);
-    assert_eq!(state.bss_color, 27);
-    assert!(state.bss_color_enabled);
-    assert!(!state.partial_bss_color);
-    assert_eq!(state.basic_mcs_nss_map, 0xfffc);
-    assert_eq!(state.rts_threshold, None);
-    assert!(state.extended_range_single_user_disabled);
+    assert_eq!(state.default_packet_extension_duration(), 4);
+    assert_eq!(state.bss_color(), 27);
+    assert!(state.bss_color_enabled());
+    assert!(!state.partial_bss_color());
+    assert_eq!(state.basic_mcs_nss_map(), 0xfffc);
+    assert_eq!(state.rts_threshold(), None);
+    assert!(state.extended_range_single_user_disabled());
     assert!(!state.extended_range_single_user_permitted());
     assert!(
         !parse_he20_capabilities(&capability)
@@ -268,9 +270,7 @@ fn recovers_vendor_ap_he20_peer_state() {
             .supports_one_ltf_800ns_gi()
     );
     assert_eq!(
-        parse_he20_capabilities(&capability)
-            .unwrap()
-            .dcm_receive_constellation(),
+        parse_he20_capabilities(&capability).unwrap().dcm_receive(),
         HeDcmConstellation::NotSupported
     );
 }
@@ -333,7 +333,7 @@ fn parse_every_element(bytes: &[u8]) {
         let _ = (
             capability.supports_bidirectional_mcs9(),
             capability.supports_one_ltf_800ns_gi(),
-            capability.dcm_receive_constellation(),
+            capability.dcm_receive(),
         );
     }
     if let Ok(operation) = parse_he20_operation(bytes) {
@@ -421,16 +421,16 @@ fn an_advertised_capability_reads_back_through_the_parser() {
     });
 
     let capability = parse_he20_capabilities(&element).unwrap();
-    assert_eq!(capability.receive_nss1, HeMcsNssSupport::Mcs0To9);
-    assert_eq!(capability.transmit_nss1, HeMcsNssSupport::Mcs0To7);
+    assert_eq!(capability.receive_nss1(), HeMcsNssSupport::Mcs0To9);
+    assert_eq!(capability.transmit_nss1(), HeMcsNssSupport::Mcs0To7);
     assert!(!capability.supports_bidirectional_mcs9());
     assert!(capability.supports_ldpc_coding_in_payload());
-    assert!(capability.stbc_receive_under_80_mhz);
-    assert!(!capability.stbc_transmit_under_80_mhz);
+    assert!(capability.phy.stbc_receive_under_80_mhz());
+    assert!(!capability.phy.stbc_transmit_under_80_mhz());
     assert!(!capability.supports_one_ltf_800ns_gi());
-    assert_eq!(capability.dcm_receive, HeDcmConstellation::NotSupported);
-    assert!(!capability.triggered_cqi_feedback);
-    assert!(!capability.non_triggered_cqi_feedback);
+    assert_eq!(capability.dcm_receive(), HeDcmConstellation::NotSupported);
+    assert!(!capability.phy.triggered_cqi_feedback());
+    assert!(!capability.phy.non_triggered_cqi_feedback());
 }
 
 #[test]
@@ -450,7 +450,7 @@ fn every_stream_after_the_first_is_not_supported() {
         let capability = parse_he20_capabilities(&element).unwrap();
         assert_eq!(capability.receive_mcs_map, map, "{support:?}");
         assert_eq!(capability.transmit_mcs_map, map, "{support:?}");
-        assert_eq!(capability.receive_nss1, support);
+        assert_eq!(capability.receive_nss1(), support);
     }
 }
 
@@ -584,9 +584,9 @@ fn the_named_fields_reproduce_the_archive_station_element() {
         ]
     );
     let capability = parse_he20_capabilities(&element).unwrap();
-    assert!(!capability.triggered_su_beamforming_feedback);
-    assert!(!capability.triggered_cqi_feedback);
-    assert!(!capability.non_triggered_cqi_feedback);
+    assert!(!capability.phy.triggered_su_beamforming_feedback());
+    assert!(!capability.phy.triggered_cqi_feedback());
+    assert!(!capability.phy.non_triggered_cqi_feedback());
     assert!(capability.supports_bidirectional_mcs9());
 }
 
