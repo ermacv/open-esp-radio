@@ -65,27 +65,21 @@ impl PrimarySchedulerTrigger {
     }
 
     #[cfg(test)]
-    const fn from_dynamic_fields_for_validation(
+    fn from_dynamic_fields_for_validation(
         source_21_pending: bool,
         sources_27_or_28_pending: bool,
         source_3_pending: bool,
     ) -> Self {
         let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(
-            (if source_21_pending {
-                BluetoothPrimarySource::Bank0Source21.set()
-            } else {
-                Set::empty()
-            })
-            .union(if sources_27_or_28_pending {
-                BluetoothPrimarySource::Bank0Sources27Or28.set()
-            } else {
-                Set::empty()
-            })
-            .union(if source_3_pending {
-                BluetoothPrimarySource::Bank1Source3.set()
-            } else {
-                Set::empty()
-            }),
+            Set::of_bit(source_21_pending, BluetoothPrimarySource::Bank0Source21)
+                .union(Set::of_bit(
+                    sources_27_or_28_pending,
+                    BluetoothPrimarySource::Bank0Sources27Or28,
+                ))
+                .union(Set::of_bit(
+                    source_3_pending,
+                    BluetoothPrimarySource::Bank1Source3,
+                )),
         );
         Self::from_epoch(&epoch)
     }

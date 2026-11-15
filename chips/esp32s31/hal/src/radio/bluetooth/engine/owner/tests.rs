@@ -583,3 +583,33 @@ fn refused_shutdown_retains_the_sampled_pending_observation() {
         );
     }
 }
+
+#[test]
+fn the_hal_initialization_leaves_the_phy_initialization_to_run() {
+    let (mut engine, _output, _timer) = model();
+    let hal_config = bluetooth::BluetoothControllerHalInitConfig::reviewed_standalone();
+    // The PHY's writes cannot run on the host: the closure records that it
+    // was asked and stops there.
+    let asked = std::cell::Cell::new(0);
+    let phy = |engine: &mut Engine<Memory>| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            engine.initialize_phy_with(|_, _| {
+                asked.set(asked.get() + 1);
+                std::panic::panic_any("the PHY's writes")
+            })
+        }))
+    };
+    assert!(matches!(
+        phy(&mut engine),
+        Ok(Err(EngineInitError::HalNotInitialized))
+    ));
+    assert_eq!(asked.get(), 0);
+    assert_eq!(engine.initialize_hal_for_host_test(hal_config), Ok(()));
+    assert_eq!(
+        engine.initialize_hal_for_host_test(hal_config),
+        Err(EngineInitError::AlreadyInitialized)
+    );
+    // After the HAL's initialization alone, the PHY's runs.
+    assert!(phy(&mut engine).is_err());
+    assert_eq!(asked.get(), 1);
+}

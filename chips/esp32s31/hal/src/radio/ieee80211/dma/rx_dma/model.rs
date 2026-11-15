@@ -827,6 +827,31 @@ mod tests {
     }
 
     #[test]
+    fn a_doorbell_rung_while_detached_does_not_resume_the_walker_once_rearmed() {
+        let (table, binding) = armed_table();
+        let completed = completed(9);
+        table.ring[1].write_word0(crate::radio::ieee80211::dma::descriptor::rx_detached_word(
+            completed,
+        ));
+        let mut walker = walking_at(1);
+        let stopped = RxWalkerLanding::StoppedOnOwner(descriptor_low(BASE, 1));
+        assert_eq!(walker.land(table, 5, true), stopped);
+
+        // The doorbell rings and clears while the descriptor is detached.
+        walker.reload_latency = 1;
+        walker.request_reload(&binding);
+        assert!(walker.reload_pending());
+        assert!(!walker.reload_pending());
+
+        // Rearmed after that doorbell: the walker waits for the next one.
+        table.ring[1].write_word0(
+            crate::radio::ieee80211::dma::descriptor::rx_rearm_word(completed).unwrap(),
+        );
+        assert_eq!(walker.land(table, 5, true), stopped);
+        assert_eq!(walker.owner_stop, OwnerStop::Stopped);
+    }
+
+    #[test]
     fn a_rearmed_descriptor_and_one_doorbell_resume_the_stopped_walker_in_place() {
         let (table, binding) = armed_table();
         let completed = completed(9);

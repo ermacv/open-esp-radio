@@ -8,7 +8,7 @@ use super::{
     SchedulerReferenceGate, SchedulerWorkClassifier, SchedulerWorkerWake, SchedulerWorkerWakeClass,
 };
 
-const fn trigger(
+fn trigger(
     source_21_pending: bool,
     sources_27_or_28_pending: bool,
     source_3_pending: bool,

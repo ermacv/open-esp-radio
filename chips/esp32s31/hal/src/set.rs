@@ -8,8 +8,17 @@
 
 use core::marker::PhantomData;
 
-/// The members of one enum, in their order.
-pub trait Member: Copy + 'static {
+/// The seal of [`Member`]: only [`members!`], inside this crate,
+/// implements it.
+pub(crate) mod sealed {
+    /// An enum [`members!`] declared.
+    pub trait Sealed {}
+}
+
+/// The members of one enum, in their order. Sealed: only [`members!`]
+/// implements it, so each member has its own place.
+#[allow(private_bounds, reason = "the seal is this crate's alone")]
+pub trait Member: sealed::Sealed + Copy + 'static {
     /// Every member, in its place's order.
     const ALL: &'static [Self];
 
@@ -168,6 +177,8 @@ macro_rules! members {
         $vis enum $name {
             $($(#[$member_meta])* $member),+
         }
+
+        impl $crate::set::sealed::Sealed for $name {}
 
         impl $crate::set::Member for $name {
             const ALL: &'static [Self] = &[$(Self::$member),+];
