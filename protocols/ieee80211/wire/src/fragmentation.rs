@@ -99,7 +99,7 @@ impl OpenDataFragmentIdentity {
 pub struct OpenDataFragment<'frame> {
     identity: OpenDataFragmentIdentity,
     frame_control: crate::frame::FrameControlFields,
-    sequence_control: u16,
+    sequence_control: crate::sequence::SequenceControl,
     packet_number: Option<CcmpPacketNumber>,
     payload: &'frame [u8],
 }
@@ -109,12 +109,12 @@ impl<'frame> OpenDataFragment<'frame> {
         self.identity
     }
 
-    pub const fn sequence_control(self) -> u16 {
+    pub const fn sequence_control(self) -> crate::sequence::SequenceControl {
         self.sequence_control
     }
 
     pub const fn fragment_number(self) -> u8 {
-        crate::sequence::SequenceControl::from_bytes(self.sequence_control.to_le_bytes()).fragment()
+        self.sequence_control.fragment()
     }
 
     pub const fn more_fragments(self) -> bool {

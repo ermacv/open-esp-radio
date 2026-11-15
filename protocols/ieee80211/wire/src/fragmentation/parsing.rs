@@ -85,12 +85,10 @@ fn parse_data_fragment<'frame>(
         // individual.
         return Err(OpenDataFragmentError::InvalidDestination);
     }
-    let sequence_control = header.sequence_control;
-    let fragment_number =
-        crate::sequence::SequenceControl::from_bytes((sequence_control).to_le_bytes()).fragment();
-    let more_fragments =
-        FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).more_fragments();
-    if fragment_number == 0 && !more_fragments {
+    let sequence_control =
+        crate::sequence::SequenceControl::from_bytes(header.sequence_control.to_le_bytes());
+    let frame_control = FrameControlFields::from_bytes(header.frame_control.to_le_bytes());
+    if sequence_control.fragment() == 0 && !frame_control.more_fragments() {
         return Err(OpenDataFragmentError::NotFragmented);
     }
     if payload.is_empty() {
@@ -98,7 +96,7 @@ fn parse_data_fragment<'frame>(
     }
     Ok(OpenDataFragment {
         identity: header.identity,
-        frame_control: FrameControlFields::from_bytes(header.frame_control.to_le_bytes()),
+        frame_control,
         sequence_control,
         packet_number,
         payload,
