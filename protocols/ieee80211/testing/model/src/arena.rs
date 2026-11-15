@@ -162,12 +162,69 @@ impl Slots {
     }
 }
 
+/// Whether the model holds a pairwise key for a standalone arena's
+/// encrypted publications.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModelArenaKey {
+    /// None.
+    Absent,
+    /// One is installed.
+    Installed,
+}
+
+/// Whether the arenas' one claim was taken.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Claim {
+    Free,
+    Taken,
+}
+
+/// How a publication goes out: one MPDU, or an A-MPDU.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Shape {
+    /// One MPDU, position 0 of the arena.
+    Single,
+    /// Every frame of the arena.
+    Aggregate,
+}
+
+impl Shape {
+    fn of<C: Ieee80211Capabilities>(format: &ArenaFormat<C>) -> Self {
+        match format {
+            ArenaFormat::Single(_) => Self::Single,
+            ArenaFormat::Aggregate { .. } => Self::Aggregate,
+        }
+    }
+
+    /// How many of the arena's frames it sends.
+    const fn frames(self) -> usize {
+        match self {
+            Self::Single => 1,
+            Self::Aggregate => usize::MAX,
+        }
+    }
+}
+
+/// Whether the model drains: an arena on the air ends at once.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Drain {
+    Running,
+    Draining,
+}
+
+/// Whether a timed air saw the arena's PPDU collide.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum Collision {
+    Clear,
+    Collided,
+}
+
 /// The two arenas' state, apart from any capabilities: what each holds,
 /// the air's scripted answers and what the hardware read.
 pub struct ModelArenas {
     arenas: [Slots; 2],
-    claimed: bool,
-    key: bool,
+    claimed: Claim,
+    key: ModelArenaKey,
     answers: VecDeque<ModelArenaAnswer>,
     length_limit: Option<usize>,
     published: Vec<ModelArenaPublication>,
@@ -199,8 +256,8 @@ impl ModelArenas {
         let _capacity = Self::CAPACITY;
         Self {
             arenas: [Slots::new(), Slots::new()],
-            claimed: false,
-            key: false,
+            claimed: Claim::Free,
+            key: ModelArenaKey::Absent,
             answers: VecDeque::new(),
             length_limit: None,
             published: Vec::new(),
@@ -216,8 +273,8 @@ impl ModelArenas {
 
     /// Install or remove the pairwise key a standalone [`ModelArena`]'s
     /// encrypted publications need.
-    pub fn set_key(&mut self, installed: bool) {
-        self.key = installed;
+    pub fn set_key(&mut self, key: ModelArenaKey) {
+        self.key = key;
     }
 
     /// Refuse an A-MPDU whose MPDUs exceed `octets` in all, as hardware
@@ -288,7 +345,7 @@ impl ModelArenas {
     }
 
     fn claim(&mut self) -> bool {
-        !core::mem::replace(&mut self.claimed, true)
+        core::mem::replace(&mut self.claimed, Claim::Taken) == Claim::Free
     }
 
     fn push(
@@ -330,20 +387,21 @@ impl ModelArenas {
     }
 
     /// Why the hardware would refuse to publish `arena` as one MPDU
-    /// (`single`) or an A-MPDU, encrypted or not, with a pairwise key or
+    /// or an A-MPDU, as `shape` says, encrypted or not, with a pairwise key or
     /// without one.
     fn refusal(
         &self,
         arena: ArenaId,
-        single: bool,
-        encrypted: bool,
-        key: bool,
+        shape: Shape,
+        protection: MpduProtection,
+        key: ModelArenaKey,
     ) -> Option<PublishRefused> {
+        let encrypted = protection == MpduProtection::Ccmp;
         let other_on_air = self.on_air().is_some_and(|on_air| on_air != arena);
         let Some(slots) = self.arenas.get(arena.index()) else {
             return Some(PublishRefused::Busy);
         };
-        let sent = if single { 1 } else { usize::MAX };
+        let sent = shape.frames();
         let contradicted = slots.frames().take(sent).any(|frame| {
             frame
                 .first_chunk::<2>()
@@ -357,11 +415,12 @@ impl ModelArenas {
             Some(PublishRefused::Busy)
         } else if slots.len == 0 {
             Some(PublishRefused::Empty)
-        } else if encrypted && !key {
+        } else if encrypted && key == ModelArenaKey::Absent {
             Some(PublishRefused::NoKey)
         } else if contradicted {
             Some(PublishRefused::Protection)
-        } else if !single && self.length_limit.is_some_and(|limit| octets > limit) {
+        } else if shape == Shape::Aggregate && self.length_limit.is_some_and(|limit| octets > limit)
+        {
             Some(PublishRefused::Length)
         } else {
             None
@@ -370,12 +429,12 @@ impl ModelArenas {
 
     /// The frames a publication of `arena` sends: position 0 of a single
     /// MPDU, every frame of an A-MPDU.
-    fn sent(&self, arena: ArenaId, single: bool) -> impl Iterator<Item = &[u8]> {
+    fn sent(&self, arena: ArenaId, shape: Shape) -> impl Iterator<Item = &[u8]> {
         self.arenas
             .get(arena.index())
             .into_iter()
             .flat_map(Slots::frames)
-            .take(if single { 1 } else { usize::MAX })
+            .take(shape.frames())
     }
 
     /// Put `publication`, which [`Self::refusal`] accepted, on the air.
@@ -392,7 +451,7 @@ impl ModelArenas {
         };
         let rate = publication.format.rate();
         let frames = self
-            .sent(id, aggregate.is_none())
+            .sent(id, Shape::of(&publication.format))
             .map(<[u8]>::to_vec)
             .collect();
         self.published.push(ModelArenaPublication {
@@ -726,10 +785,11 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, S: BorrowMut<ModelArenas>> TxArena<'
         if let Some(fault) = state.fault {
             return Err(PublishError::Fault(fault));
         }
-        let single = matches!(publication.format, ArenaFormat::Single(_));
-        let encrypted = publication.encryption == MpduProtection::Ccmp;
+        let shape = Shape::of(&publication.format);
         let key = state.key;
-        if let Some(reason) = state.refusal(publication.arena.id(), single, encrypted, key) {
+        if let Some(reason) =
+            state.refusal(publication.arena.id(), shape, publication.encryption, key)
+        {
             return Err(PublishError::Refused {
                 publication,
                 reason,
@@ -794,16 +854,17 @@ impl StationArenas {
     }
 
     /// Serve the arena on the air at `now`: its completion once its answer
-    /// is due, at once when `abort` (the hardware timed out or the model
-    /// drains), unanswered when `collided` on a timed air. The access
+    /// is due, at once while the model drains (or the hardware timed out),
+    /// unanswered after a collision on a timed air. The access
     /// category of the publication comes back with it.
     pub(crate) fn serve<C: Ieee80211Capabilities>(
         &mut self,
         now: Instant,
         held_result: impl Fn(WmmAccessCategory) -> bool,
-        abort: bool,
-        collided: bool,
+        drain: Drain,
+        collision: Collision,
     ) -> Result<Option<(super::ModelArenaCompleted, WmmAccessCategory)>, ModelArenaFault> {
+        let abort = drain == Drain::Draining;
         let Some((access_category, deadline)) = self.arenas.on_air_queue() else {
             return Ok(None);
         };
@@ -813,7 +874,7 @@ impl StationArenas {
         }
         if abort || (held_result(access_category) && overdue) {
             self.arenas.abort();
-        } else if collided {
+        } else if collision == Collision::Collided {
             self.arenas.replace_answer(ModelArenaAnswer::NoResponse);
         }
         let done = ModelArena::<C, &mut ModelArenas>::over(&mut self.arenas).service((), now)?;
@@ -826,8 +887,9 @@ impl StationArenas {
         &self,
         now: Instant,
         held_result: impl Fn(WmmAccessCategory) -> bool,
-        abort: bool,
+        drain: Drain,
     ) -> Option<Instant> {
+        let abort = drain == Drain::Draining;
         let (access_category, deadline) = self.arenas.on_air_queue()?;
         if held_result(access_category) && !abort {
             Some(deadline)
@@ -945,10 +1007,17 @@ impl<C: Ieee80211Capabilities, B: ModelComposition> ModelDataArena<'_, '_, '_, C
                 .saturating_add(expansion)
         };
         let (psdu_octets, subframes) = match publication.format {
-            ArenaFormat::Single(_) => (state.arenas.sent(id, true).next().map_or(0, octets), 1),
+            ArenaFormat::Single(_) => (
+                state
+                    .arenas
+                    .sent(id, Shape::Single)
+                    .next()
+                    .map_or(0, octets),
+                1,
+            ),
             ArenaFormat::Aggregate { spacing, .. } => (
                 ampdu_psdu_octets(
-                    state.arenas.sent(id, false).map(octets),
+                    state.arenas.sent(id, Shape::Aggregate).map(octets),
                     rate,
                     spacing.get(),
                 )?,
@@ -1032,7 +1101,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
             return Err(PublishError::Fault(ModelFault));
         }
         let id = publication.arena.id();
-        let single = matches!(publication.format, ArenaFormat::Single(_));
+        let shape = Shape::of(&publication.format);
         let encrypted = publication.encryption == MpduProtection::Ccmp;
         let held_key = state
             .keys
@@ -1049,7 +1118,14 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
         let reason = if barrier {
             Some(PublishRefused::Busy)
         } else {
-            state.arenas.refusal(id, single, encrypted, key.is_some())
+            let key_state = if key.is_some() {
+                ModelArenaKey::Installed
+            } else {
+                ModelArenaKey::Absent
+            };
+            state
+                .arenas
+                .refusal(id, shape, publication.encryption, key_state)
         };
         if let Some(reason) = reason {
             return Err(PublishError::Refused {
@@ -1063,10 +1139,12 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
                 .and_then(|all| FrameMask::from_bits(all.bits() & bits))
                 .and_then(|acked| state.arenas.block_ack(id, acked))
         };
-        let answer = match (held.air.arena_result(single), single) {
-            (AirAnswer::Ack, true) => Some(ModelArenaAnswer::Ack),
-            (AirAnswer::BlockAck(bits), false) => report(bits).map(ModelArenaAnswer::BlockAck),
-            (AirAnswer::BlockAckUnmeasured(bits), false) => {
+        let answer = match (held.air.arena_result(shape), shape) {
+            (AirAnswer::Ack, Shape::Single) => Some(ModelArenaAnswer::Ack),
+            (AirAnswer::BlockAck(bits), Shape::Aggregate) => {
+                report(bits).map(ModelArenaAnswer::BlockAck)
+            }
+            (AirAnswer::BlockAckUnmeasured(bits), Shape::Aggregate) => {
                 report(bits).map(ModelArenaAnswer::BlockAckUnmeasured)
             }
             (AirAnswer::NoResponse, _) => Some(ModelArenaAnswer::NoResponse),
@@ -1076,8 +1154,8 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
                 Some(ModelArenaAnswer::Aborted)
             }
             (AirAnswer::CtsTimeout, _) => Some(ModelArenaAnswer::ProtectionFailure),
-            (AirAnswer::Ack, false)
-            | (AirAnswer::BlockAck(_) | AirAnswer::BlockAckUnmeasured(_), true) => None,
+            (AirAnswer::Ack, Shape::Aggregate)
+            | (AirAnswer::BlockAck(_) | AirAnswer::BlockAckUnmeasured(_), Shape::Single) => None,
         };
         let Some(answer) = answer else {
             held.poison();
@@ -1097,7 +1175,7 @@ impl<'p, 'id: 'p, C: Ieee80211Capabilities, B: ModelComposition> TxArena<'p, 'id
         // A denied PPDU never reached the air the journal records.
         if answer != ModelArenaAnswer::AirDenied {
             let mut sent = Vec::new();
-            for frame in state.arenas.sent(id, single) {
+            for frame in state.arenas.sent(id, shape) {
                 let wire = match &key {
                     Some(key) => match super::seal(key, frame) {
                         Ok(wire) => wire,

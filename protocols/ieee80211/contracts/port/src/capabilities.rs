@@ -92,13 +92,29 @@ impl PhyFormatSet {
     }
 }
 
+/// Whether a backend serves one capability: one fact of the backend.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Support {
+    /// It does not.
+    Unsupported,
+    /// It does.
+    Supported,
+}
+
+impl Support {
+    /// Whether it does.
+    pub const fn is_supported(self) -> bool {
+        matches!(self, Self::Supported)
+    }
+}
+
 /// The rates a backend sends.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct RateSupport {
     /// DSSS and CCK rates, in the 2.4 GHz band only.
-    pub dsss_cck: bool,
+    pub dsss_cck: Support,
     /// OFDM rates 6 through 54 Mb/s.
-    pub ofdm: bool,
+    pub ofdm: Support,
     /// The highest HT MCS; `None` without HT.
     pub ht_max_mcs: Option<HtMcs>,
     /// The highest HE SU MCS; `None` without HE.
@@ -106,9 +122,9 @@ pub struct RateSupport {
     /// The widest HE PPDU in MHz.
     pub he_max_bandwidth_mhz: u16,
     /// HE dual carrier modulation.
-    pub he_dcm: bool,
+    pub he_dcm: Support,
     /// LDPC coding of HE PPDUs.
-    pub he_ldpc: bool,
+    pub he_ldpc: Support,
     /// Spatial streams of HT and HE rates.
     pub spatial_streams: u8,
 }
@@ -120,9 +136,9 @@ impl RateSupport {
         match rate {
             PhyRate::Legacy(rate) => {
                 if rate.is_ofdm() {
-                    self.ofdm
+                    self.ofdm.is_supported()
                 } else {
-                    self.dsss_cck
+                    self.dsss_cck.is_supported()
                 }
             }
             PhyRate::Ht(rate) => match self.ht_max_mcs {
@@ -137,8 +153,8 @@ impl RateSupport {
                     rate.mcs().index() <= max.index()
                         && rate.spatial_streams().count() <= self.spatial_streams
                         && rate.bandwidth().mhz() <= self.he_max_bandwidth_mhz
-                        && (!rate.dcm() || self.he_dcm)
-                        && (matches!(rate.fec(), FecCoding::Bcc) || self.he_ldpc)
+                        && (!rate.dcm() || self.he_dcm.is_supported())
+                        && (matches!(rate.fec(), FecCoding::Bcc) || self.he_ldpc.is_supported())
                 }
                 None => false,
             },

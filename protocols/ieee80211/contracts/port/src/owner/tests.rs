@@ -7,8 +7,8 @@ const B: [u8; 6] = [2, 0, 0, 0, 0, 2];
 fn qos(tid: u8) -> QosControl {
     QosControl {
         tid: Tid::new(tid).unwrap(),
-        end_of_service_period: false,
-        amsdu_present: false,
+        service_period: ServicePeriod::Continues,
+        body: QosBody::Msdu,
         high: 0,
     }
 }
@@ -177,13 +177,13 @@ impl Ieee80211Capabilities for NonHtNoAck {
         bands: crate::BandSet::GHZ2_4,
         widths: crate::WidthSet::MHZ20,
         rates: crate::RateSupport {
-            dsss_cck: true,
-            ofdm: true,
+            dsss_cck: crate::Support::Supported,
+            ofdm: crate::Support::Supported,
             ht_max_mcs: oer_protocols_ieee80211_wire::phy::HtMcs::new(7),
             he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9),
             he_max_bandwidth_mhz: 20,
-            he_dcm: false,
-            he_ldpc: false,
+            he_dcm: crate::Support::Unsupported,
+            he_ldpc: crate::Support::Unsupported,
             spatial_streams: 1,
         },
         services: crate::HardwareServices::FCS,

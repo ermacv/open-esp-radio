@@ -620,8 +620,8 @@ impl Contender {
 
     /// Its own transmission ended at `end`: the window follows the result
     /// and the next backoff starts at once.
-    fn finished(&mut self, end: u64, collided: bool, rng: &mut Seeded) {
-        self.cw = if collided {
+    fn finished(&mut self, end: u64, outcome: Outcome, rng: &mut Seeded) {
+        self.cw = if outcome == Outcome::Collided {
             self.cw
                 .saturating_mul(2)
                 .saturating_add(1)
@@ -636,8 +636,8 @@ impl Contender {
 
     /// A frame arrived at `at` while the channel is `busy`: a side with no
     /// backoff left transmits at once only after an idle AIFS.
-    fn arrived(&mut self, at: u64, busy: bool, rng: &mut Seeded) {
-        if self.slots == 0 && !self.posted && (busy || at < self.from()) {
+    fn arrived(&mut self, at: u64, medium: Occupancy, rng: &mut Seeded) {
+        if self.slots == 0 && !self.posted && (medium == Occupancy::Busy || at < self.from()) {
             self.slots = rng.up_to(self.cw);
         }
     }
@@ -855,8 +855,12 @@ impl Medium {
         self.next_ticket = self.next_ticket.saturating_add(1);
         if self.requests.is_empty() {
             self.station.adopt(access);
-            let busy = self.on_air.is_some();
-            self.station.arrived(at, busy, &mut self.rng);
+            let medium = if self.on_air.is_some() {
+                Occupancy::Busy
+            } else {
+                Occupancy::Idle
+            };
+            self.station.arrived(at, medium, &mut self.rng);
         }
         self.requests.push_back(Request {
             ticket,
@@ -967,10 +971,20 @@ impl Medium {
             self.start_burst(at);
             return Ok(true);
         }
-        let station = self.station_access() == Some(at);
-        let peer = self.peer_access() == Some(at);
-        if station || peer {
-            self.start(at, station, peer, world)?;
+        let sides = Sides {
+            station: if self.station_access() == Some(at) {
+                Side::Acting
+            } else {
+                Side::Idle
+            },
+            peer: if self.peer_access() == Some(at) {
+                Side::Acting
+            } else {
+                Side::Idle
+            },
+        };
+        if sides.any() {
+            self.start(at, sides, world)?;
         }
         Ok(arrived || self.on_air.is_some())
     }
@@ -988,7 +1002,7 @@ impl Medium {
         bursts.next = bursts
             .next
             .saturating_add(u64::from(bursts.config.period_micros.get()));
-        self.freeze(at, true, true);
+        self.freeze(at, Sides::BOTH);
         self.report.busy_micros = self
             .report
             .busy_micros
@@ -1003,26 +1017,29 @@ impl Medium {
     }
 
     /// The sides that do not transmit at `at` lose the slots that passed.
-    fn freeze(&mut self, at: u64, station: bool, peer: bool) {
+    fn freeze(&mut self, at: u64, sides: Sides) {
         let slot = self.timing.slot_micros;
-        if station {
+        if sides.station == Side::Acting {
             self.station.freeze(at, slot);
         }
-        if peer && let Some(peer) = self.peer.as_mut() {
+        if sides.peer == Side::Acting
+            && let Some(peer) = self.peer.as_mut()
+        {
             peer.contender.freeze(at, slot);
         }
     }
 
     /// The sides whose access falls on `at` take the channel: both collide.
-    fn start(
-        &mut self,
-        at: u64,
-        station: bool,
-        peer: bool,
-        world: &impl AirWorld,
-    ) -> Result<(), AirTimeError> {
-        let built = if peer { self.build(at, world)? } else { None };
-        let request = self.requests.front().filter(|_| station);
+    fn start(&mut self, at: u64, sides: Sides, world: &impl AirWorld) -> Result<(), AirTimeError> {
+        let built = if sides.peer == Side::Acting {
+            self.build(at, world)?
+        } else {
+            None
+        };
+        let request = self
+            .requests
+            .front()
+            .filter(|_| sides.station == Side::Acting);
         let collided = request.is_some() && built.is_some();
         let held = |exchange: &AirExchange| {
             if collided {
@@ -1038,8 +1055,13 @@ impl Medium {
             .as_ref()
             .map(|built| held(&built.exchange))
             .transpose()?;
-        self.freeze(at, !station, !peer);
-        let ppdu = built.map(|built| self.peer_ppdu(at, built, collided));
+        self.freeze(at, sides.others());
+        let outcome = if collided {
+            Outcome::Collided
+        } else {
+            Outcome::Clear
+        };
+        let ppdu = built.map(|built| self.peer_ppdu(at, built, outcome));
         let mut longest = 0;
         if let Some((_, subframes, micros)) = station_time {
             longest = longest.max(micros);
@@ -1066,7 +1088,8 @@ impl Medium {
     }
 
     /// The landing instants of `built`, which starts at `at`.
-    fn peer_ppdu(&mut self, at: u64, built: Built, collided: bool) -> PeerPpdu {
+    fn peer_ppdu(&mut self, at: u64, built: Built, outcome: Outcome) -> PeerPpdu {
+        let collided = outcome == Outcome::Collided;
         let Built { frames, exchange } = built;
         let first = at.saturating_add(u64::from(exchange.protection_micros));
         let frames: Vec<PeerFrame> = frames
@@ -1273,7 +1296,12 @@ impl Medium {
                 AirProgress::Answered
             };
             self.ended.push((ticket, progress));
-            self.station.finished(end, collided, &mut self.rng);
+            let outcome = if collided {
+                Outcome::Collided
+            } else {
+                Outcome::Clear
+            };
+            self.station.finished(end, outcome, &mut self.rng);
         } else {
             self.station.resume(end);
         }
@@ -1288,7 +1316,12 @@ impl Medium {
                     for frame in ppdu.frames.iter().filter(|frame| frame.landed) {
                         state.unacked.retain(|sequence| *sequence != frame.sequence);
                     }
-                    state.contender.finished(end, collided, &mut self.rng);
+                    let outcome = if collided {
+                        Outcome::Collided
+                    } else {
+                        Outcome::Clear
+                    };
+                    state.contender.finished(end, outcome, &mut self.rng);
                     state.since = state.has_work(end).then_some(end);
                 }
                 None => state.contender.resume(end),
@@ -1303,13 +1336,17 @@ impl Medium {
     /// The access point begins to contend once it has a frame.
     /// Whether it began to.
     fn refresh_peer(&mut self, at: u64) -> bool {
-        let busy = self.on_air.is_some();
+        let medium = if self.on_air.is_some() {
+            Occupancy::Busy
+        } else {
+            Occupancy::Idle
+        };
         if let Some(peer) = self.peer.as_mut()
             && peer.since.is_none()
             && peer.has_work(at)
         {
             peer.since = Some(at);
-            peer.contender.arrived(at, busy, &mut self.rng);
+            peer.contender.arrived(at, medium, &mut self.rng);
             return true;
         }
         false
@@ -1329,3 +1366,62 @@ enum Bound {
 
 #[cfg(test)]
 mod tests;
+
+/// How a transmission ended on the medium.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Outcome {
+    /// Alone.
+    Clear,
+    /// It collided.
+    Collided,
+}
+
+/// The medium's occupancy as a contender found it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Occupancy {
+    /// Idle.
+    Idle,
+    /// Something is on the air.
+    Busy,
+}
+
+/// Whether one side of the medium acts at an instant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Side {
+    /// It does not.
+    Idle,
+    /// It does.
+    Acting,
+}
+
+/// The two sides of the medium at an instant.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Sides {
+    station: Side,
+    peer: Side,
+}
+
+impl Sides {
+    /// Both sides.
+    const BOTH: Self = Self {
+        station: Side::Acting,
+        peer: Side::Acting,
+    };
+
+    /// Whether either acts.
+    fn any(self) -> bool {
+        self.station == Side::Acting || self.peer == Side::Acting
+    }
+
+    /// The sides that do not act.
+    fn others(self) -> Self {
+        let flip = |side| match side {
+            Side::Idle => Side::Acting,
+            Side::Acting => Side::Idle,
+        };
+        Self {
+            station: flip(self.station),
+            peer: flip(self.peer),
+        }
+    }
+}

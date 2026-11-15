@@ -359,9 +359,7 @@ pub(super) fn reinstall<'s>(mut harness: Harness<'s>) -> (Harness<'s>, ModelReso
         .retire(harness.stopped.take().unwrap())
         .unwrap();
     let Ok((stopped, (commands, resources))) =
-        harness
-            .port
-            .reinstall(retired, 1, &mut harness.installations)
+        harness.port.reinstall(retired, &mut harness.installations)
     else {
         panic!("a retired port reinstalls");
     };
@@ -557,6 +555,15 @@ impl<'s> AccessPointHarness<'s> for ApHarness<'s> {
         let harness = self.h();
         (&mut harness.port, &mut harness.sink)
     }
+    fn stop_parts(
+        &mut self,
+    ) -> Option<(
+        &mut Port<'s>,
+        &mut oer_protocols_ieee80211_contracts_port::StopRight<'s>,
+    )> {
+        let harness = self.h();
+        Some((&mut harness.port, harness.stop_right.as_mut()?))
+    }
     fn take_stopped(&mut self) -> Option<Stopped<'s>> {
         self.h().stopped.take()
     }
@@ -589,10 +596,14 @@ impl<'s> AccessPointHarness<'s> for ApHarness<'s> {
     fn publication_bound(&self) -> oer_portable_time::Duration {
         MODEL_PUBLICATION_BOUND
     }
-    fn hold(&mut self, category: WmmAccessCategory, hold: bool) {
+    fn hold(
+        &mut self,
+        category: WmmAccessCategory,
+        hold: oer_protocols_ieee80211_testing_conformance::Hold,
+    ) {
         self.h().air.hold_completion(category, hold);
     }
-    fn hold_group_commands(&mut self, hold: bool) {
+    fn hold_group_commands(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.h().air.hold_group_commands(hold);
     }
     fn access_point_frame(
@@ -613,8 +624,12 @@ impl<'s> AccessPointHarness<'s> for ApHarness<'s> {
             }
         }
     }
-    fn station_frame(&mut self, category: WmmAccessCategory, keyed: bool) -> Option<Admitted<'s>> {
-        if !keyed {
+    fn station_frame(
+        &mut self,
+        category: WmmAccessCategory,
+        keying: oer_protocols_ieee80211_testing_conformance::Keying,
+    ) -> Option<Admitted<'s>> {
+        if keying == oer_protocols_ieee80211_testing_conformance::Keying::Open {
             return Some(station_frame_on(self.h(), category));
         }
         if category != CATEGORY {
@@ -829,8 +844,16 @@ impl<'s> AccessPointHarness<'s> for ApHarness<'s> {
     fn interface(&self) -> Interface {
         let interface = self.hr().air.access_point();
         Interface {
-            receives: interface.receive.is_some(),
-            tsf_running: matches!(interface.tsf, ModelAccessPointTsf::Running { .. }),
+            reception: if interface.receive.is_some() {
+                oer_protocols_ieee80211_testing_conformance::access_point::Reception::On
+            } else {
+                oer_protocols_ieee80211_testing_conformance::access_point::Reception::Off
+            },
+            tsf: if matches!(interface.tsf, ModelAccessPointTsf::Running { .. }) {
+                oer_protocols_ieee80211_testing_conformance::access_point::TsfClock::Running
+            } else {
+                oer_protocols_ieee80211_testing_conformance::access_point::TsfClock::Stopped
+            },
         }
     }
     fn key_writes(&self) -> usize {

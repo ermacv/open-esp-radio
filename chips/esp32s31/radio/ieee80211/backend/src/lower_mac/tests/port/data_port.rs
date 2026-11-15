@@ -116,6 +116,9 @@ impl<'id, Id: radio::SlotIdentity + 'id> PortSink<'id, Family<Id>> for Outbox<'i
 /// One installation's port and the tokens the actor and lifecycle hold.
 struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
     port: Port<'id, Id>,
+    /// The stop's right the first installation gave; a reinstall keeps it
+    /// and a release takes it.
+    stop_right: Option<oer_protocols_ieee80211_contracts_port::StopRight<'id>>,
     outbox: Outbox<'id, Id>,
     commands: Esp32s31Commands<'id, Id, TestDevice, 512, Draws>,
     observed: Rc<RefCell<Observed>>,
@@ -156,9 +159,8 @@ struct Fixture<'id, Id: radio::SlotIdentity + 'id> {
     stopped: Option<Stopped<'id>>,
     /// The proof of a start going on.
     starting: Option<oer_protocols_ieee80211_contracts_port::Starting<'id>>,
-    /// The installations, when the fixture reinstalls its port, with the
-    /// TSF epoch of its last reinstall.
-    installations: Option<(Installations<Id, InstallationPools>, u32)>,
+    /// The installations, when the fixture reinstalls its port.
+    installations: Option<Installations<Id, InstallationPools>>,
 }
 
 /// Why the fixture's port did not retire.
@@ -199,6 +201,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             commands,
             resources,
             stopped,
+            stop_right,
         } = installation;
         let tickets = resources.tickets.into_iter().collect();
         let buffers = resources.buffers.into_iter().collect();
@@ -210,6 +213,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         );
         Self {
             port,
+            stop_right: Some(stop_right),
             outbox: Outbox {
                 terminals: Vec::new(),
                 tbtt: 0,
@@ -264,9 +268,10 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// Retire and release the port: its device.
     pub(super) fn release_now(&mut self) -> Result<&mut TestDevice, Unretired> {
         let retired = self.retire()?;
+        let right = self.stop_right.take().expect("the stop's right");
         Ok(self
             .port
-            .release(retired)
+            .release(retired, right)
             .ok()
             .expect("the port's own proof"))
     }
@@ -281,12 +286,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         }
     }
 
-    /// Retire and reinstall the port in place with TSF epoch `epoch`: the
-    /// next installation's commands and resources.
+    /// Retire and reinstall the port in place: the next installation's
+    /// commands and resources.
     pub(super) fn reinstall_in_place(
         &mut self,
         installations: &mut Installations<Id, InstallationPools>,
-        epoch: u32,
     ) -> Result<
         (
             crate::port::Esp32s31Commands<'id, Id, TestDevice, 512, Draws>,
@@ -295,7 +299,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         ReinstallRefused,
     > {
         let retired = self.retire().expect("retired");
-        match self.port.reinstall(retired, epoch, installations) {
+        match self.port.reinstall(retired, installations) {
             Ok((stopped, installed)) => {
                 self.stopped = Some(stopped);
                 Ok(installed)
@@ -469,6 +473,26 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
     fn parts(&mut self) -> (&mut Self::Port, &mut Self::Sink) {
         (&mut self.port, &mut self.outbox)
     }
+    fn stop_parts(
+        &mut self,
+    ) -> Option<(
+        &mut Self::Port,
+        &mut oer_protocols_ieee80211_contracts_port::StopRight<'id>,
+    )> {
+        Some((&mut self.port, self.stop_right.as_mut()?))
+    }
+    fn take_right(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::StopRight<'id>> {
+        self.stop_right.take()
+    }
+    fn keep_right(&mut self, right: oer_protocols_ieee80211_contracts_port::StopRight<'id>) {
+        self.stop_right = Some(right);
+    }
+    fn epoch(&self) -> u32 {
+        self.port.tsf_epoch_for_test()
+    }
+    fn last_epoch(&mut self) {
+        self.port.exhaust_epochs_for_test();
+    }
     fn take_stopped(&mut self) -> Option<Stopped<'id>> {
         self.stopped.take()
     }
@@ -506,8 +530,8 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
     fn identity(attempt: &<Self::Port as DataPort<'id>>::Admitted) -> u8 {
         attempt.operation.ticket().index()
     }
-    fn hold_air(&mut self, hold: bool) {
-        self.observed.borrow_mut().hold_completion = hold;
+    fn hold_air(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
+        self.observed.borrow_mut().hold_completion = hold.is_held();
     }
     fn configure(&mut self) -> Option<PortCommand<'id, Family<Id>, Caps>> {
         Some(PortCommand::Configure {
@@ -592,9 +616,10 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
     }
     fn submit_station(
         &mut self,
-        again: bool,
+        submission: oer_protocols_ieee80211_testing_conformance::Submission,
         transmissions: core::num::NonZeroU8,
     ) -> Result<(), cases::Violation> {
+        let again = submission == oer_protocols_ieee80211_testing_conformance::Submission::Again;
         let kept = self.station.take();
         let attempt = match (again, kept) {
             (true, Some((ticket, mpdu))) => {
@@ -694,11 +719,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
         };
         Some(cases::StationSent { end, retry })
     }
-    fn hold_start(&mut self, hold: bool) {
-        self.observed.borrow_mut().hold_start = hold;
+    fn hold_start(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
+        self.observed.borrow_mut().hold_start = hold.is_held();
     }
-    fn hold_stop(&mut self, hold: bool) {
-        self.observed.borrow_mut().hold_stop = hold;
+    fn hold_stop(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
+        self.observed.borrow_mut().hold_stop = hold.is_held();
     }
     fn buffers_held(&self) -> usize {
         self.buffers.len() + usize::from(self.station.is_some())
@@ -709,12 +734,14 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
     fn refusals_left(&self) -> usize {
         self.outbox.refuse
     }
-    fn fault(&mut self, whole: bool) {
-        self.observed.borrow_mut().fail_poll = Some(if whole {
-            Fault::ReceiveLost
-        } else {
-            Fault::RemovalMismatch
-        });
+    fn fault(&mut self, reach: oer_protocols_ieee80211_testing_conformance::FaultReach) {
+        self.observed.borrow_mut().fail_poll = Some(
+            if reach == oer_protocols_ieee80211_testing_conformance::FaultReach::Whole {
+                Fault::ReceiveLost
+            } else {
+                Fault::RemovalMismatch
+            },
+        );
     }
     fn fail_next_stop(&mut self) {
         self.observed.borrow_mut().fail_stop = Some(Fault::ReceiveLost);
@@ -732,12 +759,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
         Stopped<'id>,
         ProofRefused<oer_protocols_ieee80211_contracts_port::Retired<'id>, ReinstallRefused>,
     > {
-        let Some((installations, epoch)) = self.installations.as_mut() else {
+        let Some(installations) = self.installations.as_mut() else {
             return Err(ProofRefused::Refused(retired, ReinstallRefused::Receipt));
         };
-        *epoch = epoch.wrapping_add(1);
         // The new installation's commands and tokens end here.
-        let (stopped, _installed) = self.port.reinstall(retired, *epoch, installations)?;
+        let (stopped, _installed) = self.port.reinstall(retired, installations)?;
         Ok(stopped)
     }
 }
@@ -751,7 +777,7 @@ fn with_fixture<R>(test: impl for<'id> FnOnce(&mut Fixture<'id, radio::LocalId<'
         let driver = Box::leak(Box::new(PortDriver::vacant()));
         let installation = Port::install(parts, minted, driver).ok().expect("install");
         let mut fixture = Fixture::new(installation, observed, timer);
-        fixture.installations = Some((installations, 1));
+        fixture.installations = Some(installations);
         test(&mut fixture)
     }))
 }
@@ -783,15 +809,6 @@ fn a_refused_installation_returns_its_parts_mint_and_driver_whole() {
 }
 
 #[test]
-fn the_installation_machine_ends_every_case_on_the_s31_port() {
-    use oer_protocols_ieee80211_testing_installation as installation;
-    for case in installation::Case::ALL {
-        let result = with_fixture(|fixture| installation::check(fixture, case));
-        assert_eq!(result, Ok(()), "{case:?}");
-    }
-}
-
-#[test]
 fn every_data_port_case_passes_on_the_s31_port() {
     for case in Case::ALL {
         let result = with_fixture(|fixture| cases::check(fixture, case));
@@ -804,13 +821,17 @@ fn every_data_port_case_passes_on_the_s31_port() {
 pub(super) fn release_stopped<'a, 'id, Id: radio::SlotIdentity + 'id>(
     port: &'a mut Port<'id, Id>,
     stopped: Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>>,
+    stop_right: Option<oer_protocols_ieee80211_contracts_port::StopRight<'id>>,
 ) -> Result<&'a mut TestDevice, Unretired> {
     let stopped = stopped.ok_or(Unretired::NoProof)?;
     let retired = port.retire(stopped).map_err(|refused| match refused {
         ProofRefused::Refused(_, outstanding) => Unretired::Out(outstanding.classes()),
         ProofRefused::Stale(stale) => panic!("the fixture's own proof: {stale:?}"),
     })?;
-    Ok(port.release(retired).ok().expect("the port's own proof"))
+    Ok(port
+        .release(retired, stop_right.expect("the stop's right"))
+        .ok()
+        .expect("the port's own proof"))
 }
 
 /// Run `test` on a fresh fixture, with the installation authority beside it.
@@ -871,7 +892,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         for _ in 0..16 {
             let waker = self.waker();
             let now = self.now();
-            match self.port.poll_stop(&mut Context::from_waker(&waker), now) {
+            match self.port.poll_stop(
+                self.stop_right.as_mut().expect("the stop's right"),
+                &mut Context::from_waker(&waker),
+                now,
+            ) {
                 Poll::Ready(Ok(stopped)) => {
                     self.stopped = Some(stopped);
                     return;
@@ -1081,11 +1106,22 @@ fn a_network_return_is_one_receive_fact() {
         let lent = fixture.port.lend(frame).ok().expect("lent");
         let waker = fixture.waker();
         let mut cx = Context::from_waker(&waker);
-        assert!(!fixture.port.poll_facts(&mut cx).rx, "the ring is empty");
+        assert_eq!(
+            fixture.port.poll_facts(&mut cx).rx,
+            oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+            "the ring is empty"
+        );
         drop(lent);
-        assert!(fixture.port.poll_facts(&mut cx).rx, "the return rearms");
+        assert_eq!(
+            fixture.port.poll_facts(&mut cx).rx,
+            oer_protocols_ieee80211_contracts_port::Signal::Raised,
+            "the return rearms"
+        );
         // A caller that does not pull now hears the return once.
-        assert!(!fixture.port.poll_facts(&mut cx).rx);
+        assert_eq!(
+            fixture.port.poll_facts(&mut cx).rx,
+            oer_protocols_ieee80211_contracts_port::Signal::Quiet
+        );
         assert_eq!(fixture.observed.borrow().returned, 1);
     });
 }
@@ -1279,7 +1315,7 @@ fn a_pairwise_removal_is_held_while_its_key_is_on_air_then_runs() {
             _ => panic!("the installation terminal returns the key"),
         };
         assert!(<PortKeys<_, Station> as KeyTypes<'_>>::pairwise_identity(&key) == identity);
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let attempt = fixture.protected_mpdu(&key).expect("attempt");
         let now = fixture.now();
         fixture
@@ -1297,7 +1333,7 @@ fn a_pairwise_removal_is_held_while_its_key_is_on_air_then_runs() {
             Ok(CommandProgress::Held(removal)) => removal,
             _ => panic!("the removal waits for the published attempt"),
         };
-        fixture.hold_air(false);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         assert!(matches!(fixture.run(removal), Ok(CommandProgress::Done)));
         assert_eq!(fixture.take_completed(), 1);
         assert!(matches!(
@@ -1431,6 +1467,7 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
         fixture.stop();
         let Fixture {
             mut port,
+            stop_right,
             observed,
             timer,
             buffers,
@@ -1444,7 +1481,7 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
             .ok()
             .expect("retired without waiting for the network");
         let (stopped, (commands, resources)) = port
-            .reinstall(retired, 18, installations)
+            .reinstall(retired, installations)
             .ok()
             .expect("reinstalled without waiting for the network");
         let installation = PortInstallation {
@@ -1452,6 +1489,7 @@ fn a_reinstall_keeps_the_lend_credit_and_a_late_return_rejoins_the_new_ring() {
             commands,
             resources,
             stopped,
+            stop_right: stop_right.expect("the stop's right"),
         };
         let mut second = Fixture::new(installation, observed, timer);
         assert_eq!(
@@ -1620,6 +1658,7 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         drop(buffers);
@@ -1627,7 +1666,10 @@ fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and
             .retire(stopped.expect("stopped"))
             .ok()
             .expect("nothing is kept: the port retires");
-        assert!(port.release(retired).is_ok());
+        assert!(
+            port.release(retired, stop_right.expect("the stop's right"))
+                .is_ok()
+        );
     });
 }
 
@@ -1644,6 +1686,7 @@ fn only_a_stopped_port_releases_its_device() {
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         // The fixture's transmit buffers go home before the retire checks.
@@ -1652,6 +1695,9 @@ fn only_a_stopped_port_releases_its_device() {
             .retire(stopped.expect("stopped"))
             .ok()
             .expect("retired");
-        assert!(port.release(retired).is_ok());
+        assert!(
+            port.release(retired, stop_right.expect("the stop's right"))
+                .is_ok()
+        );
     });
 }

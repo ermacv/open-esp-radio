@@ -78,6 +78,27 @@ macro_rules! proof {
     };
 }
 
+/// The right to ask the port's stop and its recovery, the two transitions
+/// that take no proof: of no size, affine and branded as the proofs are.
+/// A port gives it once, beside an installation's first [`Stopped`] where
+/// the binding makes the port; a reinstall gives none, and the right stays
+/// with its holder, who lends it to each call. Whoever does not hold it
+/// asks no stop.
+#[must_use = "the stop's right is the only way to a stop"]
+#[derive(Debug)]
+pub struct StopRight<'id> {
+    brand: Brand<'id>,
+}
+
+impl StopRight<'_> {
+    /// The right, once with a port's first installation. A port issues it
+    /// where the binding makes the port; the layer tests hold that only a
+    /// port's implementation and tests call it.
+    pub const fn issue() -> Self {
+        Self { brand: PhantomData }
+    }
+}
+
 proof! {
     /// The installation's radio stopped and nothing moved the port since:
     /// a port gives it at the installation (an installation starts
@@ -89,7 +110,7 @@ proof! {
 
 proof! {
     /// A start in progress: the port gives it when the start goes on
-    /// ([`StartPoll::Pending`]) and takes it at the next poll of the start
+    /// ([`StartProgress::Pending`]) and takes it at the next poll of the start
     /// alone. It is no stop's proof, so nothing else takes it.
     Starting
 }
@@ -98,13 +119,6 @@ proof! {
     /// The stopped installation holds nothing that blocks its end: a port
     /// gives it at a retirement and takes it at a reinstall or a release.
     Retired
-}
-
-proof! {
-    /// A fault the port took back so that a stop returns its owners: from
-    /// then on the port admits and publishes nothing new, and only its
-    /// service of what is out goes on.
-    Recovering
 }
 
 /// What a start's poll takes: the stop's proof to begin, or the proof of
@@ -169,15 +183,24 @@ impl<P, R> ProofRefused<P, R> {
 }
 
 /// The answer of a start's poll, which takes the stop's proof to begin and
-/// the start's to go on. `F` is the port's fault.
+/// the start's to go on: its progress, or why it was refused. `F` is the
+/// port's fault.
+pub type StartPoll<'id, F> = Result<StartProgress<'id>, StartRefused<'id, F>>;
+
+/// A start's progress.
 #[derive(Debug, Eq, PartialEq)]
-pub enum StartPoll<'id, F> {
+pub enum StartProgress<'id> {
     /// The radio runs: the start's proof ended with the start.
     Started,
     /// The start goes on: its proof, for the next poll. It carries the
     /// serial the start's beginning raised, and it is no [`Stopped`], so
     /// no retirement, clean or take can be asked with it.
     Pending(Starting<'id>),
+}
+
+/// Why a start did not leave the radio running.
+#[derive(Debug, Eq, PartialEq)]
+pub enum StartRefused<'id, F> {
     /// The start failed before it began on the device, or its stop
     /// confirmed: the radio is stopped, and its new stop's proof comes
     /// with why.
@@ -199,8 +222,9 @@ pub enum StartPoll<'id, F> {
 /// and every refusal but [`Self::Resources`] leaves the port as it was.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ReinstallRefused {
-    /// The next installation's TSF epoch repeats the current one.
-    SameEpoch,
+    /// The port's TSF epoch cannot be raised for the next installation:
+    /// final, with the proof back.
+    Epochs,
     /// The port's channel names no channel it installs on.
     ChannelUnset,
     /// The installations refused the receipt (another installation's, or
@@ -209,40 +233,6 @@ pub enum ReinstallRefused {
     /// The retired installation kept a resource the next one needs: the
     /// port keeps its fault.
     Resources,
-}
-
-/// Why a start did not leave the radio running, as the layers above the
-/// port carry it once the stop's proof came back ([`StartPoll`]): `F` is
-/// the port's fault, `O` its [`Outstanding`](crate::Outstanding).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StartRefused<F> {
-    /// The radio runs, or its stop has not confirmed: the caller holds no
-    /// stop's proof to start with, so no start was asked of the port.
-    Running,
-    /// The radio front end did not tune the channel, for the port's cause.
-    Retune(F),
-    /// The start did not end within the backend's command bound.
-    Deadline,
-    /// The device refused the start.
-    Device,
-    /// The start began and failed for `cause`, and the stop of what it
-    /// began did not confirm (`stop`): the port is stopping.
-    Unstopped {
-        /// Why the start failed.
-        cause: crate::StartFailure<F>,
-        /// What the stop of the begun start observed.
-        stop: StopUnconfirmed<F>,
-    },
-}
-
-impl<F> From<crate::StartFailure<F>> for StartRefused<F> {
-    fn from(failure: crate::StartFailure<F>) -> Self {
-        match failure {
-            crate::StartFailure::Retune(cause) => Self::Retune(cause),
-            crate::StartFailure::Deadline => Self::Deadline,
-            crate::StartFailure::Device => Self::Device,
-        }
-    }
 }
 
 /// A stop that did not confirm: why, and everything the port still has
@@ -255,19 +245,38 @@ pub struct StopUnconfirmed<F> {
     pub outstanding: crate::Outstanding<F>,
 }
 
-/// What a stop can do about a port's fault, as
+/// What a recovery for a stop did, as
 /// [`DataPort::recover_for_stop`](crate::DataPort::recover_for_stop)
-/// answers it.
-#[derive(Debug, Eq, PartialEq)]
-pub enum Recovery<'id, F> {
+/// answers it when the stop can return every owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Recovered {
     /// The port holds no fault: there is nothing to take back.
     Clear,
     /// The fault leaves every owner whole: the port took it back, and its
-    /// stop returns them.
-    Recovered(Recovering<'id>),
-    /// The fault holds owners no stop returns: the fault, and what it
-    /// leaves out (`O`). The port keeps it.
-    Kept(F, crate::Outstanding<F>),
+    /// stop returns them; from then on the port admits and publishes
+    /// nothing new, and only its service of what is out goes on.
+    TakenBack,
+}
+
+/// A fault that holds owners no stop returns, as
+/// [`DataPort::recover_for_stop`](crate::DataPort::recover_for_stop)
+/// refuses with it: the port keeps it.
+#[derive(Debug, Eq, PartialEq)]
+pub struct FaultKept<F> {
+    /// The fault.
+    pub fault: F,
+    /// What it leaves out.
+    pub outstanding: crate::Outstanding<F>,
+}
+
+/// A release that did not happen: the retirement's proof is stale, and it
+/// comes back with the stop's right the release took, both unchanged.
+#[derive(Debug)]
+pub struct ReleaseRefused<'id> {
+    /// The proof, unchanged.
+    pub proof: Retired<'id>,
+    /// The stop's right, back with its holder.
+    pub right: StopRight<'id>,
 }
 
 #[cfg(test)]

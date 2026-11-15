@@ -5,6 +5,7 @@ use super::*;
 use alloc::sync::Arc;
 use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use oer_protocols_ieee80211_contracts_port::StopRight;
 use oer_protocols_ieee80211_contracts_port::Tid;
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, Attempt, ChannelWidth, ClassFrame, HeaderSpec, LowerMacTerminal, MpduLength,
@@ -106,11 +107,12 @@ type GroupTokens<'s> = (
 );
 
 struct Harness<'s> {
+    /// The stop's right the port gave with its first installation.
+    /// The stop's right; a release takes it.
+    stop_right: Option<StopRight<'s>>,
     clock: Rc<oer_portable_time_virtual::VirtualClock>,
     air: Rc<ModelAir>,
     installations: Installations<LocalId<'s>, ModelPools>,
-    /// The TSF epoch of the last reinstall.
-    epoch: u32,
     port: Port<'s>,
     commands: ModelCommands<'s, LocalId<'s>>,
     sink: Sink<'s>,
@@ -177,6 +179,7 @@ impl<'s> Harness<'s> {
             commands,
             resources,
             stopped,
+            stop_right,
         } = install;
         let ModelResources {
             shared:
@@ -202,7 +205,6 @@ impl<'s> Harness<'s> {
             clock,
             air,
             installations,
-            epoch: 0,
             port,
             commands,
             sink: Sink {
@@ -228,12 +230,14 @@ impl<'s> Harness<'s> {
             access_point: Some(access_point),
             station: None,
             stopped: Some(stopped),
+            stop_right: Some(stop_right),
         }
     }
 
     /// Poll the stop once: whether it confirmed, keeping its proof.
     fn poll_stopped(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
-        match self.port.poll_stop(cx, now) {
+        let right = self.stop_right.as_mut().expect("the stop's right");
+        match self.port.poll_stop(right, cx, now) {
             Poll::Ready(Ok(stopped)) => {
                 self.stopped = Some(stopped);
                 true
@@ -425,6 +429,21 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     fn parts(&mut self) -> (&mut Port<'s>, &mut Sink<'s>) {
         (&mut self.port, &mut self.sink)
     }
+    fn stop_parts(&mut self) -> Option<(&mut Port<'s>, &mut StopRight<'s>)> {
+        Some((&mut self.port, self.stop_right.as_mut()?))
+    }
+    fn take_right(&mut self) -> Option<StopRight<'s>> {
+        self.stop_right.take()
+    }
+    fn keep_right(&mut self, right: StopRight<'s>) {
+        self.stop_right = Some(right);
+    }
+    fn epoch(&self) -> u32 {
+        self.port.tsf_epoch
+    }
+    fn last_epoch(&mut self) {
+        self.port.tsf_epoch = u32::MAX;
+    }
     fn take_stopped(&mut self) -> Option<Stopped<'s>> {
         self.stopped.take()
     }
@@ -470,7 +489,7 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     fn identity(attempt: &ModelAdmitted<LocalId<'s>, ModelCaps, ()>) -> u8 {
         attempt.operation.ticket().index()
     }
-    fn hold_air(&mut self, hold: bool) {
+    fn hold_air(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.air.hold_completion(CATEGORY, hold);
     }
     fn configure(&mut self) -> Option<PortCommand<'s, Types<'s>, ModelCaps>> {
@@ -524,11 +543,17 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         completed
     }
     fn publish_held_arena(&mut self) -> bool {
-        self.air.hold_completion(CATEGORY, true);
+        self.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         self.publish_arena()
     }
     fn release_arena(&mut self) {
-        self.air.hold_completion(CATEGORY, false);
+        self.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
     }
     fn settle_arena(&mut self, done: ModelArenaCompleted) {
         let mut arena = self.port.arena();
@@ -550,9 +575,10 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     }
     fn submit_station(
         &mut self,
-        again: bool,
+        submission: oer_protocols_ieee80211_testing_conformance::Submission,
         transmissions: NonZeroU8,
     ) -> Result<(), cases::Violation> {
+        let again = submission == oer_protocols_ieee80211_testing_conformance::Submission::Again;
         let kept = self.station.take();
         let attempt = match (again, kept) {
             (true, Some((ticket, sent))) => {
@@ -653,10 +679,10 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         };
         Some(cases::StationSent { end, retry })
     }
-    fn hold_start(&mut self, hold: bool) {
+    fn hold_start(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.air.hold_start(hold);
     }
-    fn hold_stop(&mut self, hold: bool) {
+    fn hold_stop(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.air.hold_stop(hold);
     }
     fn buffers_held(&self) -> usize {
@@ -668,9 +694,9 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
     fn refusals_left(&self) -> usize {
         self.sink.refuse
     }
-    fn fault(&mut self, whole: bool) {
+    fn fault(&mut self, reach: oer_protocols_ieee80211_testing_conformance::FaultReach) {
         self.air.poison_at_next_service();
-        if whole {
+        if reach == oer_protocols_ieee80211_testing_conformance::FaultReach::Whole {
             self.air.allow_recovery();
         }
     }
@@ -693,10 +719,8 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
             oer_protocols_ieee80211_contracts_port::ReinstallRefused,
         >,
     > {
-        self.epoch = self.epoch.wrapping_add(1);
         let (stopped, (commands, _resources)) =
-            self.port
-                .reinstall(retired, self.epoch, &mut self.installations)?;
+            self.port.reinstall(retired, &mut self.installations)?;
         self.commands = commands;
         Ok(stopped)
     }
@@ -775,16 +799,6 @@ fn the_model_passes_every_data_port_case() {
     for case in Case::ALL {
         with_harness(|harness| {
             assert_eq!(cases::check(harness, case), Ok(()), "{case:?}");
-        });
-    }
-}
-
-#[test]
-fn the_installation_machine_ends_every_case_on_the_model() {
-    use oer_protocols_ieee80211_testing_installation as installation;
-    for case in installation::Case::ALL {
-        with_harness(|harness| {
-            assert_eq!(installation::check(harness, case), Ok(()), "{case:?}");
         });
     }
 }
@@ -884,7 +898,11 @@ fn no_data_port_call_wakes_its_caller() {
         let mut cx = Context::from_waker(&waker);
         let before = harness.wakes();
         let facts = harness.port.poll_facts(&mut cx);
-        assert!(facts.rx, "the delivered units are receive work");
+        assert_eq!(
+            facts.rx,
+            oer_protocols_ieee80211_contracts_port::Signal::Raised,
+            "the delivered units are receive work"
+        );
         let _ = harness.port.deadline();
         let attempt = harness.mpdu().unwrap();
         harness
@@ -895,7 +913,12 @@ fn no_data_port_call_wakes_its_caller() {
             .unwrap();
         harness
             .port
-            .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut harness.sink,
+            )
             .unwrap()
             .unwrap();
         let RxPull::Unit { frame, .. } = harness.port.receive(4, now).unwrap() else {
@@ -1184,7 +1207,16 @@ fn a_stop_ends_an_exchange_the_air_still_owes() {
         harness.advance_air();
         let (now, waker) = harness.now_wake();
         let mut cx = Context::from_waker(&waker);
-        assert!(harness.port.poll_stop(&mut cx, now).is_pending());
+        assert!(
+            harness
+                .port
+                .poll_stop(
+                    harness.stop_right.as_mut().expect("the stop's right"),
+                    &mut cx,
+                    now
+                )
+                .is_pending()
+        );
         let done = harness.service().unwrap();
         assert!(matches!(
             done.end(),
@@ -1306,7 +1338,10 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
     with_harness(|harness| {
         harness.start();
         assert_eq!(harness.port.deadline(), None, "an idle port has none");
-        harness.air.hold(CATEGORY, true);
+        harness.air.hold(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         let admitted = harness.clock.now();
         harness
@@ -1335,8 +1370,14 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
         assert_eq!(harness.take_completed(), 1);
         assert_eq!(harness.air.expired_msdus(), 1);
         // A published MPDU bounds the deadline until its completion.
-        harness.air.hold(CATEGORY, false);
-        harness.air.hold_completion(CATEGORY, true);
+        harness.air.hold(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
         harness
@@ -1355,7 +1396,10 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
             harness.port.deadline(),
             Some(now.saturating_add(MODEL_PUBLICATION_BOUND))
         );
-        harness.air.hold_completion(CATEGORY, false);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
         harness.service();
         assert_eq!(harness.take_completed(), 1);
         assert_eq!(harness.port.deadline(), None, "the completion took it off");
@@ -1366,7 +1410,10 @@ fn the_deadline_is_kept_and_follows_admission_expiry_and_completion() {
 fn a_configuration_is_held_behind_a_published_station_mpdu_then_runs() {
     with_harness(|harness| {
         harness.start();
-        harness.air.hold_completion(CATEGORY, true);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
         harness
@@ -1381,7 +1428,10 @@ fn a_configuration_is_held_behind_a_published_station_mpdu_then_runs() {
             panic!("a station MPDU on the air holds the configuration");
         };
         assert!(!harness.take_configured());
-        harness.air.hold_completion(CATEGORY, false);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
         harness.service();
         assert_eq!(harness.take_completed(), 1);
         assert!(matches!(harness.command(command), CommandProgress::Done));
@@ -1411,11 +1461,15 @@ fn a_group_installation_is_held_while_the_air_holds_group_commands_then_runs() {
     with_harness(|harness| {
         harness.start();
         let install = group_install(harness);
-        harness.air.hold_group_commands(true);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("held group commands hold the installation");
         };
-        harness.air.hold_group_commands(false);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         assert!(matches!(harness.command(install), CommandProgress::Done));
         assert!(matches!(
             harness.sink.terminals.as_slice(),
@@ -1482,7 +1536,9 @@ fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop
     with_harness(|harness| {
         harness.start();
         let install = group_install(harness);
-        harness.air.hold_group_commands(true);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("held");
         };
@@ -1498,7 +1554,9 @@ fn a_held_command_past_its_bound_is_refused_expired_with_its_owners_and_the_stop
         assert!(harness.sink.terminals.is_empty(), "it did not run");
         assert_eq!(harness.port.deadline(), None, "no held command's bound");
         // The port runs on: the same command runs once the air lets it.
-        harness.air.hold_group_commands(false);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         assert!(matches!(harness.command(install), CommandProgress::Done));
         assert!(matches!(
             harness.sink.terminals.as_slice(),
@@ -1515,7 +1573,9 @@ fn a_held_command_refused_by_a_stop_measures_its_bound_from_the_restart() {
     with_harness(|harness| {
         harness.start();
         let install = group_install(harness);
-        harness.air.hold_group_commands(true);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("held");
         };
@@ -1534,7 +1594,9 @@ fn a_held_command_refused_by_a_stop_measures_its_bound_from_the_restart() {
         let CommandProgress::Held(install) = harness.command(install) else {
             panic!("the air still holds group commands");
         };
-        harness.air.hold_group_commands(false);
+        harness
+            .air
+            .hold_group_commands(oer_protocols_ieee80211_testing_conformance::Hold::Released);
         assert!(matches!(harness.command(install), CommandProgress::Done));
         assert!(matches!(
             harness.sink.terminals.as_slice(),
@@ -1547,7 +1609,10 @@ fn a_held_command_refused_by_a_stop_measures_its_bound_from_the_restart() {
 fn a_quarantined_air_is_named_with_what_the_port_held() {
     with_harness(|harness| {
         harness.start();
-        harness.air.hold_completion(CATEGORY, true);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         let now = harness.clock.now();
         harness
@@ -1565,7 +1630,12 @@ fn a_quarantined_air_is_named_with_what_the_port_held() {
         let now = harness.clock.now();
         let fault = harness
             .port
-            .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut harness.sink,
+            )
             .unwrap()
             .err()
             .unwrap();
@@ -1599,7 +1669,10 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
             panic!("a unit");
         };
         let lent = harness.port.lend(frame).ok().unwrap();
-        harness.air.hold(CATEGORY, true);
+        harness.air.hold(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let attempt = harness.mpdu().unwrap();
         harness
             .port
@@ -1610,7 +1683,16 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
         let waker = harness.waker();
         let mut cx = Context::from_waker(&waker);
         // The withdrawal's terminal goes out through the next service.
-        assert!(harness.port.poll_stop(&mut cx, now).is_pending());
+        assert!(
+            harness
+                .port
+                .poll_stop(
+                    harness.stop_right.as_mut().expect("the stop's right"),
+                    &mut cx,
+                    now
+                )
+                .is_pending()
+        );
         assert_eq!(harness.port.deadline(), Some(now));
         harness.service();
         assert_eq!(harness.take_completed(), 1);
@@ -1624,9 +1706,7 @@ fn a_stop_withdraws_queued_work_then_reinstalls_with_the_network_credit() {
             .retire(harness.stopped.take().unwrap())
             .unwrap();
         let Ok((_stopped, _installed)) =
-            harness
-                .port
-                .reinstall(retired, 1, &mut harness.installations)
+            harness.port.reinstall(retired, &mut harness.installations)
         else {
             panic!("a retired port reinstalls");
         };
@@ -1697,7 +1777,10 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
             ModelKeys::<B<'_>, Station>::pairwise_identity(&key) == identity,
             "the issued identity names the installed key"
         );
-        harness.air.hold_completion(CATEGORY, true);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Held,
+        );
         let ticket = harness.tickets.pop().unwrap();
         let buffer = harness.small.pop().unwrap();
         let attempt = harness.admitted_under(ticket, buffer, Some(&key));
@@ -1715,7 +1798,10 @@ fn a_pairwise_removal_is_held_while_a_published_mpdu_uses_its_key_then_runs() {
             panic!("a published MPDU under the key holds its removal");
         };
         assert!(harness.sink.terminals.is_empty(), "no removal terminal yet");
-        harness.air.hold_completion(CATEGORY, false);
+        harness.air.hold_completion(
+            CATEGORY,
+            oer_protocols_ieee80211_testing_conformance::Hold::Released,
+        );
         harness.service();
         assert_eq!(harness.take_completed(), 1);
         assert!(matches!(harness.command(remove), CommandProgress::Done));
@@ -2029,7 +2115,12 @@ fn a_response_the_checked_frame_does_not_solicit_quarantines_before_publication(
         let now = harness.clock.now();
         let fault = harness
             .port
-            .service_tx(TxFacts::DUE, false, now, &mut harness.sink)
+            .service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut harness.sink,
+            )
             .unwrap()
             .err()
             .unwrap();
@@ -2052,10 +2143,11 @@ mod station_stale;
 fn stop_radio(harness: &mut Harness<'_>) {
     for _ in 0..64 {
         let (now, waker) = harness.now_wake();
-        match harness
-            .port
-            .poll_stop(&mut Context::from_waker(&waker), now)
-        {
+        match harness.port.poll_stop(
+            harness.stop_right.as_mut().expect("the stop's right"),
+            &mut Context::from_waker(&waker),
+            now,
+        ) {
             Poll::Ready(result) => {
                 harness.stopped = Some(result.unwrap());
                 return;

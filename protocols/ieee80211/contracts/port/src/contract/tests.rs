@@ -4,12 +4,12 @@ const CAPABILITIES: MacServiceCapabilities = MacServiceCapabilities {
     interfaces: MacInterfaceCapabilities {
         station_interfaces: 1,
         access_point_interfaces: 0,
-        simultaneous_station_access_point: false,
-        standalone_monitor: false,
-        monitor_with_interfaces: false,
-        raw_monitor_tap: false,
-        normalized_monitor_tap: false,
-        protocol_validated_monitor_tap: false,
+        simultaneous_station_access_point: crate::Support::Unsupported,
+        standalone_monitor: crate::Support::Unsupported,
+        monitor_with_interfaces: crate::Support::Unsupported,
+        raw_monitor_tap: crate::Support::Unsupported,
+        normalized_monitor_tap: crate::Support::Unsupported,
+        protocol_validated_monitor_tap: crate::Support::Unsupported,
     },
     operations: MacOperationOwnership {
         tx_fcs_generation: MacOperationOwner::Hardware,

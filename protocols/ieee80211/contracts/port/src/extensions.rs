@@ -346,7 +346,15 @@ mod tests {
 
     use super::*;
 
-    fn ht(mcs: u8, bandwidth: PpduBandwidth, short_gi: bool) -> PhyRate {
+    /// An HT rate's guard interval.
+    #[derive(Clone, Copy)]
+    enum Gi {
+        Long,
+        Short,
+    }
+
+    fn ht(mcs: u8, bandwidth: PpduBandwidth, gi: Gi) -> PhyRate {
+        let short_gi = matches!(gi, Gi::Short);
         PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap())
     }
 
@@ -372,13 +380,13 @@ mod tests {
         table.he[2][1][11] = 1_000;
         assert_eq!(
             table
-                .at(ht(7, PpduBandwidth::Mhz40, true))
+                .at(ht(7, PpduBandwidth::Mhz40, Gi::Short))
                 .map(NonZeroU32::get),
             Ok(65_535)
         );
         assert_eq!(
             table
-                .at(ht(0, PpduBandwidth::Mhz20, false))
+                .at(ht(0, PpduBandwidth::Mhz20, Gi::Long))
                 .map(NonZeroU32::get),
             Ok(6_490)
         );
@@ -394,7 +402,7 @@ mod tests {
     #[test]
     fn a_zero_entry_and_a_non_ht_rate_are_refused() {
         let table = AmpduLengthTable::uniform(0);
-        let rate = ht(7, PpduBandwidth::Mhz20, false);
+        let rate = ht(7, PpduBandwidth::Mhz20, Gi::Long);
         assert_eq!(table.at(rate), Err(AmpduRateRefused(rate)));
         let legacy = PhyRate::Legacy(LegacyRate::Ofdm54M);
         assert_eq!(

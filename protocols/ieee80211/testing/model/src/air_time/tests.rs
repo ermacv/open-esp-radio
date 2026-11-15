@@ -280,11 +280,11 @@ fn the_window_doubles_on_a_collision_up_to_its_maximum_and_resets_on_success() {
     let mut side = Contender::new(access);
     let mut windows = vec![];
     for _ in 0..4 {
-        side.finished(0, true, &mut rng);
+        side.finished(0, Outcome::Collided, &mut rng);
         windows.push(side.cw);
     }
     assert_eq!(windows, [31, 63, 63, 63]);
-    side.finished(0, false, &mut rng);
+    side.finished(0, Outcome::Clear, &mut rng);
     assert_eq!(side.cw, 15);
 }
 
@@ -298,20 +298,20 @@ fn a_frame_on_an_idle_channel_goes_at_once_and_one_on_a_busy_channel_backs_off()
     };
     let mut idle = Contender::new(access);
     idle.resume(0);
-    idle.arrived(1000, false, &mut rng);
+    idle.arrived(1000, Occupancy::Idle, &mut rng);
     assert_eq!(idle.slots, 0, "an idle AIFS needs no backoff");
     let mut busy = Contender::new(access);
-    busy.arrived(1000, true, &mut rng);
+    busy.arrived(1000, Occupancy::Busy, &mut rng);
     assert_ne!(busy.slots, 0);
     let mut settling = Contender::new(access);
     settling.resume(1000);
-    settling.arrived(1000, false, &mut rng);
+    settling.arrived(1000, Occupancy::Idle, &mut rng);
     assert_ne!(settling.slots, 0, "AIFS has not passed yet");
     // A backoff drawn after its own transmission stands, even at zero.
     let mut own = Contender::new(access);
-    own.finished(1000, false, &mut rng);
+    own.finished(1000, Outcome::Clear, &mut rng);
     own.slots = 0;
-    own.arrived(1000, false, &mut rng);
+    own.arrived(1000, Occupancy::Idle, &mut rng);
     assert_eq!(own.slots, 0);
 }
 

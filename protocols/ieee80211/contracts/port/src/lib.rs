@@ -90,8 +90,8 @@ mod data_port;
 pub use data_port::{
     CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, Input,
     PortAnswer, PortArena, PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
-    RxPull, StartFailure, StationSubmission, StopCause, SubmitAnswer, SubmitHalt, SubmitRefusal,
-    TxFacts, Unconsumed, Unkeeping, Unkept,
+    RxPull, Signal, StartFailure, StationSubmission, StopCause, SubmitAnswer, SubmitHalt,
+    SubmitRefusal, TxFacts, Unconsumed, Unkeeping, Unkept,
 };
 mod layout;
 pub use layout::{
@@ -101,7 +101,9 @@ pub use layout::{
 pub mod control;
 pub mod extensions;
 pub mod he;
-pub use he::{He20Association, He20AssociationError, HeBssColor, StationHe};
+pub use he::{
+    BssColorScope, BssColorUse, He20Association, He20AssociationError, HeBssColor, StationHe,
+};
 pub mod operation;
 pub mod owner;
 pub mod regulated;
@@ -150,7 +152,7 @@ pub type Ieee80211ClockGeneration =
 pub type Ieee80211ClockSample = oer_protocols_radio_port::ClockSample<Ieee80211Radio>;
 
 pub use capabilities::{
-    BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RateSupport, WidthSet,
+    BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RateSupport, Support, WidthSet,
 };
 pub use control::{ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{
@@ -166,15 +168,16 @@ pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
     AccessPoint, AckHeader, AmpduRate, BssColor, FrameHeader, GroupAddress, HeaderSpec,
     Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
-    NoAckHeader, PortRate, QosControl, ReceiverAddress, ResponseHeader, SizedFrame, Station,
-    StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca, SupportedFilter,
-    SupportedNoAck, SupportedPower, Tid, TxFrame,
+    NoAckHeader, PortRate, QosBody, QosControl, ReceiverAddress, ResponseHeader, ServicePeriod,
+    SizedFrame, Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca,
+    SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub mod installation;
 pub mod outstanding;
 pub use installation::{
-    ProofRefused, Recovering, Recovery, ReinstallRefused, Retired, StaleProof, StartPoll,
-    StartProof, StartRefused, Starting, StateSerial, StopUnconfirmed, Stopped,
+    FaultKept, ProofRefused, Recovered, ReinstallRefused, ReleaseRefused, Retired, StaleProof,
+    StartPoll, StartProgress, StartProof, StartRefused, Starting, StateSerial, StopRight,
+    StopUnconfirmed, Stopped,
 };
 pub use outstanding::{ACCESS_CATEGORIES, ArenaState, Outstanding, RunPhase};
 mod interface_commands;

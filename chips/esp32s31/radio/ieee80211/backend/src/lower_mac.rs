@@ -158,6 +158,7 @@ use crate::mac::tsf_relation::TsfTimingError;
 use oer_chips_esp32s31_hal::types::{MacHe20Association, MacHeBssColor, MacPti, StaTbttSchedule};
 use oer_protocols_ieee80211_contracts_port::TsfGeneration;
 use oer_protocols_ieee80211_contracts_port::tsf::TsfInstant;
+use oer_protocols_ieee80211_contracts_port::{BssColorScope, BssColorUse};
 
 use crate::mac::{
     ap_policy::ApRxPolicyHardware,
@@ -341,13 +342,13 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
         bands: BandSet::GHZ2_4,
         widths: WidthSet::MHZ20.union(WidthSet::MHZ40),
         rates: RateSupport {
-            dsss_cck: true,
-            ofdm: true,
+            dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported,
+            ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
             ht_max_mcs: HtMcs::new(7),
             he_max_mcs: HeMcs::new(9),
             he_max_bandwidth_mhz: 20,
-            he_dcm: true,
-            he_ldpc: true,
+            he_dcm: oer_protocols_ieee80211_contracts_port::Support::Supported,
+            he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported,
             spatial_streams: 1,
         },
         services: ESP32S31_MAC_SERVICE_CAPABILITIES
@@ -499,8 +500,8 @@ pub fn mac_he20_association(
             ))
             .ok_or(HeAssociationRange)?,
             bss_color: MacHeBssColor::new(u32::from(color.get())).ok_or(HeAssociationRange)?,
-            bss_color_enabled: color_enabled,
-            partial_bss_color: partial_color,
+            bss_color_enabled: matches!(color_enabled, BssColorUse::Enabled),
+            partial_bss_color: matches!(partial_color, BssColorScope::Partial),
             max_co_hosted_bssid_indicator: association.max_co_hosted_bssid_indicator(),
             extended_range_single_user_disabled: association.extended_range_single_user_disabled(),
         },
@@ -2075,7 +2076,11 @@ where
                     }
                 }
                 let mac = MacHeBssColor::new(u32::from(color.get())).ok_or(HeAssociationRange)?;
-                hardware.connect_he20_bss(mac, enabled, partial);
+                hardware.connect_he20_bss(
+                    mac,
+                    matches!(enabled, BssColorUse::Enabled),
+                    matches!(partial, BssColorScope::Partial),
+                );
                 self.tx
                     .policy_mut()
                     .install_he_bss_color(bss.transmit_color().get());

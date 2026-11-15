@@ -369,8 +369,16 @@ fn the_receive_cut_brackets_every_captured_stage_around_the_gtk_terminal() {
                 },
                 events,
                 writes: fixture.observed.borrow().key_writes - writes,
-                inactive_material_accepted: inactive_accepted,
-                continuous_rx_at_terminal: continuous,
+                inactive_material: if inactive_accepted {
+                    group_cases::InactiveMaterial::Admitted
+                } else {
+                    group_cases::InactiveMaterial::Refused
+                },
+                ingress: if continuous {
+                    group_cases::Ingress::Continuous
+                } else {
+                    group_cases::Ingress::Interrupted
+                },
             };
             assert_eq!(
                 group_cases::verify(case, trace, COMMAND_BOUND).map_err(|why| (case, why)),
@@ -387,7 +395,7 @@ fn a_gtk_mutation_behind_a_published_frame_outlasts_its_bound_while_the_frame_ho
         let (mut command, _) = fixture.group_command(Mutation::Select);
         // The air keeps the frame on its queue, and a configuration holds
         // every station frame ahead of the mutation.
-        fixture.hold_air(true);
+        fixture.hold_air(oer_protocols_ieee80211_testing_conformance::Hold::Held);
         let attempt = fixture.station_mpdu().expect("attempt");
         let now = fixture.now();
         fixture
@@ -545,8 +553,10 @@ fn a_fault_on_a_descriptor_keeps_the_port_quarantined() {
         };
         fixture.port.fault_for_test(fault);
         assert!(!matches!(
-            fixture.port.recover_for_stop(),
-            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         assert_eq!(fixture.port.fault(), Some(fault));
     });
@@ -739,7 +749,12 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn stopped_service(&mut self) -> Result<(), Fault> {
         let now = self.now();
         self.port
-            .service_tx(TxFacts::DUE, false, now, &mut self.outbox)
+            .service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut self.outbox,
+            )
             .unwrap()
             .map(|completed| assert!(completed.is_none()))
     }
@@ -810,8 +825,10 @@ fn a_gtk_replacement_the_hardware_rolls_back_comes_back_whole_beside_its_fault()
         assert_eq!(fixture.observed.borrow().resumed_cuts, cuts + 1);
         // The stop takes the fault back and the stopped port retires.
         assert!(matches!(
-            fixture.port.recover_for_stop(),
-            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         fixture.stop();
         assert!(fixture.stopped_service().is_ok());
@@ -858,8 +875,10 @@ fn a_gtk_replacement_whose_rollback_fails_returns_its_owners_through_the_stop_on
         // The stop takes the fault back; the stopped port keeps the owners
         // until its cleanup.
         assert!(matches!(
-            fixture.port.recover_for_stop(),
-            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         fixture.stop();
         assert!(fixture.stopped_release_refused(), "the owners are retained");
@@ -902,8 +921,10 @@ fn a_failed_rollbacks_entry_is_cleared_once_and_then_only_read_until_it_reads_cl
             Err(CommandFailed::Taken(_))
         ));
         assert!(matches!(
-            fixture.port.recover_for_stop(),
-            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         fixture.stop();
         // The device's `hardware` records the clears earlier calls wrote.
@@ -974,8 +995,10 @@ fn a_cleanup_receipt_leaves_whole_to_its_caller_and_outlives_the_release() {
             Err(CommandFailed::Taken(_))
         ));
         assert!(matches!(
-            fixture.port.recover_for_stop(),
-            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         fixture.stop();
         assert!(fixture.clean().is_ok());
@@ -1017,8 +1040,10 @@ fn a_faulted_stopped_port_refuses_its_cleanup_with_its_fault_and_clears_nothing(
             Err(CommandFailed::Taken(_))
         ));
         assert!(matches!(
-            fixture.port.recover_for_stop(),
-            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         fixture.stop();
         fixture.port.fault_for_test(Fault::Abandoned);
@@ -1066,11 +1091,12 @@ fn a_received_unit_keeps_its_bytes_and_owner_until_it_is_recycled() {
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         drop(buffers);
         assert!(
-            super::release_stopped(&mut port, stopped).is_ok(),
+            super::release_stopped(&mut port, stopped, stop_right).is_ok(),
             "nothing received is outstanding"
         );
     });
@@ -1101,11 +1127,12 @@ fn a_lent_unit_lends_its_storage_and_its_drop_returns_it_to_the_ring() {
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         drop(buffers);
         assert!(
-            super::release_stopped(&mut port, stopped).is_ok(),
+            super::release_stopped(&mut port, stopped, stop_right).is_ok(),
             "the returned unit retires"
         );
     });
@@ -1129,8 +1156,10 @@ fn a_loss_past_the_held_count_settles_nothing_and_keeps_the_earlier_cause() {
         fixture.port.lose_for_test(2);
         assert!(
             !matches!(
-                fixture.port.recover_for_stop(),
-                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+                fixture
+                    .port
+                    .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+                Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
             ),
             "no recovery follows a failed settlement"
         );
@@ -1142,8 +1171,10 @@ fn a_loss_past_the_held_count_settles_nothing_and_keeps_the_earlier_cause() {
         assert_eq!(fixture.port.held_for_test(), 1, "the held count stays");
         assert!(
             !matches!(
-                fixture.port.recover_for_stop(),
-                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+                fixture
+                    .port
+                    .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+                Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
             ),
             "the losses stay unsettled for the next look"
         );
@@ -1168,8 +1199,10 @@ fn a_loss_settles_exactly_the_units_it_read() {
         drop(lost);
         assert!(
             matches!(
-                fixture.port.recover_for_stop(),
-                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+                fixture
+                    .port
+                    .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+                Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
             ),
             "the unit is back"
         );
@@ -1178,8 +1211,10 @@ fn a_loss_settles_exactly_the_units_it_read() {
         drop(later);
         assert_eq!(fixture.port.fault(), Some(Fault::ReceiveLost));
         assert!(matches!(
-            fixture.port.recover_for_stop(),
-            oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         assert_eq!(fixture.port.held_for_test(), 0);
         assert_eq!(fixture.port.fault(), None);
@@ -1216,7 +1251,12 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
         assert!(matches!(
             fixture
                 .port
-                .service_tx(TxFacts::DUE, false, now, &mut fixture.outbox)
+                .service_tx(
+                    TxFacts::DUE,
+                    oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                    now,
+                    &mut fixture.outbox
+                )
                 .unwrap(),
             Err(Fault::ReceiveLost)
         ));
@@ -1261,9 +1301,11 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
             Err(Fault::ReceiveLost)
         ));
         assert!(matches!(
-            fixture
-                .port
-                .poll_stop(&mut Context::from_waker(&waker), now),
+            fixture.port.poll_stop(
+                fixture.stop_right.as_mut().expect("the stop's right"),
+                &mut Context::from_waker(&waker),
+                now
+            ),
             Poll::Ready(Err(StopUnconfirmed {
                 cause: StopCause::Device(Fault::ReceiveLost),
                 ..
@@ -1280,8 +1322,10 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
         // count; the ordinary stop then confirms.
         assert!(
             matches!(
-                fixture.port.recover_for_stop(),
-                oer_protocols_ieee80211_contracts_port::Recovery::Recovered(_)
+                fixture
+                    .port
+                    .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+                Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
             ),
             "the unit is back"
         );
@@ -1291,11 +1335,12 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         drop(buffers);
         assert!(
-            super::release_stopped(&mut port, stopped).is_ok(),
+            super::release_stopped(&mut port, stopped, stop_right).is_ok(),
             "the stopped port retires"
         );
     });
@@ -1363,7 +1408,11 @@ fn lent_units_beyond_the_held_bound_reach_the_caller_through_facts_without_a_tim
         let waker = fixture.waker();
         for taken in 0..LENT_FRAMES {
             let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
-            assert!(facts.rx, "unit {taken} is announced by a receive fact");
+            assert_eq!(
+                facts.rx,
+                oer_protocols_ieee80211_contracts_port::Signal::Raised,
+                "unit {taken} is announced by a receive fact"
+            );
             let now = fixture.now();
             let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
                 panic!("unit {taken} reaches the caller");
@@ -1401,7 +1450,11 @@ fn idle_fact_polls_leave_the_ring_unpulled_until_it_holds_a_unit() {
         let pulls = fixture.observed.borrow().pulls;
         for _ in 0..64 {
             let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
-            assert!(!facts.rx, "the ring holds nothing");
+            assert_eq!(
+                facts.rx,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                "the ring holds nothing"
+            );
         }
         assert_eq!(
             fixture.observed.borrow().pulls,
@@ -1411,7 +1464,11 @@ fn idle_fact_polls_leave_the_ring_unpulled_until_it_holds_a_unit() {
         let frame = fixture.frame();
         fixture.observed.borrow_mut().received.push_back(frame);
         let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
-        assert!(facts.rx, "the staged unit is a receive fact");
+        assert_eq!(
+            facts.rx,
+            oer_protocols_ieee80211_contracts_port::Signal::Raised,
+            "the staged unit is a receive fact"
+        );
         let now = fixture.now();
         let RxPull::Unit { frame, .. } = fixture.port.receive(8, now).expect("receive") else {
             panic!("the announced unit");
@@ -1427,7 +1484,10 @@ fn each_set_edca_table_reaches_the_next_publications_contention_draw() {
     with_fixture(|fixture| {
         fixture.start();
         let tables = [
-            parameters(VifRole::Station, false),
+            parameters(
+                VifRole::Station,
+                oer_protocols_ieee80211_testing_conformance::edca::Table::First,
+            ),
             EdcaParameterSet::STANDARD_DEFAULT,
         ];
         for (round, table) in tables.into_iter().enumerate() {

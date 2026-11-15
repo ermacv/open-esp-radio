@@ -62,9 +62,9 @@ use crate::{
 /// # const fn caps(bands: BandSet) -> LowerMacCapabilities {
 /// #     LowerMacCapabilities {
 /// #         bands, widths: WidthSet::MHZ20,
-/// #         rates: RateSupport { dsss_cck: true, ofdm: true, ht_max_mcs: HtMcs::new(7),
-/// #             he_max_mcs: HeMcs::new(9), he_max_bandwidth_mhz: 20, he_dcm: false,
-/// #             he_ldpc: true, spatial_streams: 1 },
+/// #         rates: RateSupport { dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported, ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported, ht_max_mcs: HtMcs::new(7),
+/// #             he_max_mcs: HeMcs::new(9), he_max_bandwidth_mhz: 20, he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
+/// #             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported, spatial_streams: 1 },
 /// #         services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #         tx_power_ceiling_min_dbm: None,
 /// #         individual_no_ack: PhyFormatSet::NON_HT,
@@ -94,9 +94,9 @@ use crate::{
 /// # const fn caps(bands: BandSet) -> LowerMacCapabilities {
 /// #     LowerMacCapabilities {
 /// #         bands, widths: WidthSet::MHZ20,
-/// #         rates: RateSupport { dsss_cck: true, ofdm: true, ht_max_mcs: HtMcs::new(7),
-/// #             he_max_mcs: HeMcs::new(9), he_max_bandwidth_mhz: 20, he_dcm: false,
-/// #             he_ldpc: true, spatial_streams: 1 },
+/// #         rates: RateSupport { dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported, ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported, ht_max_mcs: HtMcs::new(7),
+/// #             he_max_mcs: HeMcs::new(9), he_max_bandwidth_mhz: 20, he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
+/// #             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported, spatial_streams: 1 },
 /// #         services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #         tx_power_ceiling_min_dbm: None,
 /// #         individual_no_ack: PhyFormatSet::NON_HT,
@@ -131,13 +131,15 @@ impl<K: Ieee80211Capabilities> Port<K> {
             panic!("the vendor's rate records are recovered for 2.4 GHz only");
         }
         let rates = K::CAPS.rates;
-        if !(rates.dsss_cck && rates.ofdm) {
+        if !(rates.dsss_cck.is_supported() && rates.ofdm.is_supported()) {
             panic!("the vendor's records name DSSS/CCK and OFDM rates");
         }
         if !matches!(rates.ht_max_mcs, Some(mcs) if mcs.index() >= 7) {
             panic!("the vendor's records name HT MCS 0-7");
         }
-        if !(matches!(rates.he_max_mcs, Some(mcs) if mcs.index() >= 9) && rates.he_ldpc) {
+        if !(matches!(rates.he_max_mcs, Some(mcs) if mcs.index() >= 9)
+            && rates.he_ldpc.is_supported())
+        {
             panic!("the vendor's records name HE MCS 0-9 with LDPC");
         }
     };
@@ -246,10 +248,10 @@ fn control_plan(
 /// # impl Ieee80211Capabilities for Caps { type SppScope = oer_protocols_ieee80211_wire::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
 /// # const PORT: LowerMacCapabilities = LowerMacCapabilities {
 /// #     bands: BandSet::GHZ2_4, widths: WidthSet::MHZ20,
-/// #     rates: RateSupport { dsss_cck: true, ofdm: true,
+/// #     rates: RateSupport { dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported, ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
 /// #         ht_max_mcs: oer_protocols_ieee80211_wire::phy::HtMcs::new(7),
 /// #         he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9), he_max_bandwidth_mhz: 20,
-/// #         he_dcm: false, he_ldpc: true, spatial_streams: 1 },
+/// #         he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported, he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported, spatial_streams: 1 },
 /// #     services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #     tx_power_ceiling_min_dbm: None,
 /// #     individual_no_ack: PhyFormatSet::NON_HT,
@@ -283,10 +285,10 @@ fn control_plan(
 /// # impl Ieee80211Capabilities for Caps { type SppScope = oer_protocols_ieee80211_wire::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
 /// # const PORT: LowerMacCapabilities = LowerMacCapabilities {
 /// #     bands: BandSet::GHZ2_4, widths: WidthSet::MHZ20,
-/// #     rates: RateSupport { dsss_cck: true, ofdm: true,
+/// #     rates: RateSupport { dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported, ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
 /// #         ht_max_mcs: oer_protocols_ieee80211_wire::phy::HtMcs::new(7),
 /// #         he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9), he_max_bandwidth_mhz: 20,
-/// #         he_dcm: false, he_ldpc: true, spatial_streams: 1 },
+/// #         he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported, he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported, spatial_streams: 1 },
 /// #     services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #     tx_power_ceiling_min_dbm: None,
 /// #     individual_no_ack: PhyFormatSet::NON_HT,
