@@ -1,4 +1,4 @@
-environment states visited: 6291; machine states: 351; ways of a step: 1974
+environment states visited: 6306; machine states: 351; ways of a step: 1971
 dead ends: 0
 | released | - | fault | — | released | — | wake |
 | released | - | network_stopped | — | released | — | wake |
@@ -7,8 +7,7 @@ dead ends: 0
 | retired | - | fault | kept | retired | recover, held/fault | wake |
 | retired | - | fault | recovered | retired | recover | round |
 | retired | - | network_stopped | — | retired | — | wake |
-| retired | - | release_stays | ok | released | release, ok/released | wake |
-| retired | - | release_stays | stale | stopping | release | round |
+| retired | - | release_stays | — | retired | — | round |
 | retired | - | release_stops | — | retired | stop_network | wake |
 | retired | - | restart | ok | stopped | reinstall, ok/reinstalled | wake |
 | retired | - | restart | refused | retired | reinstall, err/restart_refused | wake |
@@ -18,16 +17,14 @@ dead ends: 0
 | retired | release_stays | fault | clear | retired | recover | round |
 | retired | release_stays | fault | kept | retired | recover, held/fault | wake |
 | retired | release_stays | fault | recovered | retired | recover | round |
-| retired | release_stays | network_stopped | ok | released | release, ok/released | wake |
-| retired | release_stays | network_stopped | stale | stopping | release | round |
+| retired | release_stays | network_stopped | — | retired | — | round |
 | retired | release_stays | turn | ok | released | release, ok/released | wake |
 | retired | release_stays | turn | stale | stopping | release | round |
 | retired | release_stops | deadline | — | retired | err/deadline | wake |
 | retired | release_stops | fault | clear | retired | recover | round |
 | retired | release_stops | fault | kept | retired | recover, held/fault | wake |
 | retired | release_stops | fault | recovered | retired | recover | round |
-| retired | release_stops | network_stopped | ok | released | release, ok/released | wake |
-| retired | release_stops | network_stopped | stale | stopping | release | round |
+| retired | release_stops | network_stopped | — | retired | — | round |
 | retired | release_stops | turn | — | retired | — | wake |
 | retired | release_stops | turn | ok | released | release, ok/released | wake |
 | retired | release_stops | turn | stale | stopping | release | round |

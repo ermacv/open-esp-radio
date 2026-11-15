@@ -704,11 +704,11 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     /// Whether the port holds an installation is asked here, once a step:
     /// a released machine, and one whose release is asked, rest on every
     /// input. A retired installation's release, which takes the stop's
-    /// right out of the machine, is decided here too, where the machine is
-    /// whole; everything else is the port's view.
+    /// right out of the machine, is asked here too, by a turn's step, where
+    /// the machine is whole; everything else is the port's view.
     pub fn step(&mut self, input: Input<'id, C>, now: Instant) -> Step<'_, 'id, C, F> {
         if self.releases(&input, now) {
-            return self.release(input, now);
+            return self.release(now);
         }
         let Self {
             life,
@@ -729,10 +729,10 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         }
     }
 
-    /// Whether `input` makes a retired installation's release due now: its
-    /// goal releases, with the network stopped when it is to stop, and the
-    /// input asks nothing before the pass (no message, no deadline, no
-    /// fault).
+    /// Whether this step asks a retired installation's release: a turn's
+    /// step alone asks it, at its beginning, when the goal releases with
+    /// the network staying or stopped and no deadline passed. Every other
+    /// input goes through the view, whose retired arm rests with a round.
     fn releases(&self, input: &Input<'id, C>, now: Instant) -> bool {
         let retired = matches!(
             self.life,
@@ -741,55 +741,27 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 ..
             }
         );
-        let due = match input {
-            Input::Request(request) => matches!(request.aim, Aim::Release(Network::Stays)),
-            Input::NetworkStopped => matches!(
-                self.goal,
-                Goal::Open {
-                    want: Want::Release(_),
-                    ..
-                }
-            ),
-            Input::Turn | Input::TokensEnded(_) => match self.goal {
-                Goal::Open {
-                    want: Want::Release(NetworkStep::Stays | NetworkStep::Stopped),
-                    deadline,
-                } => deadline.is_none_or(|deadline| now < deadline),
-                Goal::Open { .. } | Goal::None => false,
-            },
-            Input::Fault => false,
+        let due = match self.goal {
+            Goal::Open {
+                want: Want::Release(NetworkStep::Stays | NetworkStep::Stopped),
+                deadline,
+            } => deadline.is_none_or(|deadline| now < deadline),
+            Goal::Open { .. } | Goal::None => false,
         };
-        retired && due
+        retired && due && matches!(input, Input::Turn)
     }
 
-    /// The release of a retired installation: the input's facts, then the
-    /// release, which takes the right with the retirement's proof.
-    fn release(&mut self, input: Input<'id, C>, now: Instant) -> Step<'_, 'id, C, F> {
-        match input {
-            Input::Request(Request { deadline, .. }) => {
-                self.goal = Goal::Open {
-                    want: Want::Release(NetworkStep::Stays),
-                    deadline,
-                };
-            }
-            Input::NetworkStopped => {
-                if let Goal::Open {
-                    want: Want::Release(network @ (NetworkStep::Told | NetworkStep::Stopped)),
-                    ..
-                } = &mut self.goal
-                {
-                    *network = NetworkStep::Stopped;
-                }
-            }
-            Input::Turn | Input::TokensEnded(_) | Input::Fault => {}
-        }
+    /// The release of a retired installation, which takes the right with
+    /// the retirement's proof.
+    fn release(&mut self, now: Instant) -> Step<'_, 'id, C, F> {
         match mem::replace(&mut self.life, Life::Releasing) {
             Life::Port {
                 right,
                 at: At::Retired(retired),
             } => Step::Release(retired, right, Releasing { machine: self, now }),
             // `releases` named a retired installation: anything else is
-            // given back as it was, and the pass is the next round's.
+            // given back as it was, and the step rests with a round, so that
+            // a turn reads the life again.
             life @ (Life::Port { .. } | Life::Releasing | Life::Released) => {
                 self.life = life;
                 Step::Rest(Rest::Round)
@@ -1153,7 +1125,8 @@ impl<'m, 'id, C: Copy, F> Port<'m, 'id, C, F> {
                 want: Want::Restart,
                 ..
             } => Step::Reinstall(retired, self.resume(now, AskReinstall(()))),
-            // A release goes on from the next step's beginning.
+            // A release is asked by a turn's step, at its beginning: the
+            // round is that turn.
             Goal::Open {
                 want: Want::Release(NetworkStep::Stays | NetworkStep::Stopped),
                 ..

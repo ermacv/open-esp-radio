@@ -825,9 +825,12 @@ pub trait DataPort<'id> {
     /// on a port that retired since, a new stop's (the port is stopped
     /// again: a retirement's proof still held is stale, and the retirement
     /// is asked again). An unconfirmed stop says why, with everything the
-    /// port has out. It takes the stop's right ([`crate::StopRight`]), which
-    /// only its holder lends; after a release no holder has it, so a
-    /// released port is never asked.
+    /// port has out. A stop not confirmed yet (`Pending`) names what comes
+    /// next: it wakes the waker `cx` lent, or the port's [`Self::deadline`]
+    /// names the instant of its next call, within the backend's command
+    /// bound from the stop's first call. It takes the stop's right
+    /// ([`crate::StopRight`]), which only its holder lends; after a release
+    /// no holder has it, so a released port is never asked.
     fn poll_stop(
         &mut self,
         right: &mut crate::StopRight<'id>,

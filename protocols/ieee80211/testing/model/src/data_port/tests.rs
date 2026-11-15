@@ -679,6 +679,9 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         };
         Some(cases::StationSent { end, retry })
     }
+    fn stop_bound(&self) -> Duration {
+        crate::MODEL_STOP_BOUND
+    }
     fn retain_group(&mut self) -> Result<(), cases::Violation> {
         let install = group_install(self);
         if !matches!(self.command(install), CommandProgress::Done) {

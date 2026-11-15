@@ -743,6 +743,9 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
             },
         );
     }
+    fn stop_bound(&self) -> oer_portable_time::Duration {
+        crate::port::COMMAND_BOUND
+    }
     fn retain_group(&mut self) -> Result<(), cases::Violation> {
         // A replacement whose write and rollback the hardware rejects: the
         // port retains the group until its stop's cleanup.

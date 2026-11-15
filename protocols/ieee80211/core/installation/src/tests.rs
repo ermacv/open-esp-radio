@@ -958,7 +958,12 @@ fn explore(budget: Budget) -> Search {
                 if holds(ns.pos) != held {
                     problem("proof not accounted");
                 }
-                if rest == "round" && ns == s && !moved && ends == 0 {
+                // A release that is due is the next turn's: that round does
+                // something whatever this input changed.
+                let due = ns.pos == "retired"
+                    && (ns.goal == Some("release_stays")
+                        || (ns.goal == Some("release_stops") && ns.net == Some("stopped")));
+                if rest == "round" && ns == s && !moved && ends == 0 && !due {
                     problem("a round with nothing changed");
                 }
                 if ns.goal.is_none() != opened.is_none() {
