@@ -1,8 +1,9 @@
 //! Each injected fault owns its own entry, allocation and counter.
 use oer_chips_family_platform_interrupt_table::{
-    BindError, BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, Router,
+    BindError, BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, LineExpectation,
+    LineObservation, Router,
 };
-use oer_portable_riscv::clic::{Control, Enable, LevelBits, LineState, Vectoring};
+use oer_portable_riscv::clic::{Control, LevelBits};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
@@ -74,17 +75,17 @@ impl Controller for Injected {
     fn routed(&self, source: u16) -> Option<u8> {
         self.inner.lock().unwrap().routed(source)
     }
-    fn set_line(&mut self, line: u8, state: LineState) -> Result<(), Error> {
-        if matches!(self.refusal, Some(Refuse::Line))
-            && line == 22
-            && state.enable == Enable::Enabled
-        {
+    fn bind(&mut self, line: u8, control: Control) -> Result<(), Error> {
+        if matches!(self.refusal, Some(Refuse::Line)) && line == 22 {
             return Err(Error::NoSuchLine { line });
         }
-        self.inner.lock().unwrap().set_line(line, state)
+        self.inner.lock().unwrap().bind(line, control)
     }
-    fn line(&self, line: u8) -> LineState {
-        self.inner.lock().unwrap().line(line)
+    fn disable(&mut self, line: u8) -> Result<(), Error> {
+        self.inner.lock().unwrap().disable(line)
+    }
+    fn check(&self, line: u8, expected: LineExpectation) -> Result<(), Error> {
+        self.inner.lock().unwrap().check(line, expected)
     }
 }
 fn router(refusal: Option<Refuse>) -> (Router<Injected, 0>, Arc<Mutex<FakeController>>) {
@@ -188,36 +189,27 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
 }
 
 fn router_with(refusal: Refuse) -> (Router<Injected, 0>, Arc<Mutex<FakeController>>) {
-    // Installation writes line 22 too, so enable the failure only on a bound line.
+    // Installation disables line 22 too; the failure is of its binding alone.
     router(Some(refusal))
 }
 
 #[test]
-fn diagnostic_keeps_both_line_states_and_full_entry_identity() {
-    let state = LineState {
-        enable: Enable::Enabled,
-        vectoring: Vectoring::NonVectored,
-        trigger: oer_portable_riscv::clic::Trigger::NegativeEdge,
-        control: Control::from_bits(0xfe),
-    };
-    let expected = LineState {
-        enable: Enable::Disabled,
-        vectoring: Vectoring::Vectored,
-        trigger: oer_portable_riscv::clic::Trigger::NegativeLevel,
-        control: Control::from_bits(0xfd),
-    };
+fn diagnostic_keeps_the_line_s_word_its_expectation_and_full_entry_identity() {
     let fault = BindFault {
         source: u16::MAX,
         line: u8::MAX,
         hart: u8::MAX,
         kind: BindFaultKind::LineRefused(Error::WrongLine {
             line: 254,
-            state,
-            expected,
+            observed: LineObservation::of_word(0xfe1e_0101),
+            expected: LineExpectation::Bound(Control::from_bits(0xfd)),
         }),
     };
     assert_eq!(
         fault.diagnostic(),
-        (BindFaultCode::LineRefused, [u32::MAX, 7, 254, 0xfd0a_fe0d])
+        (
+            BindFaultCode::LineRefused,
+            [u32::MAX, 7 | (254 << 8), 0xfe1e_0101, 0x1fd]
+        )
     );
 }

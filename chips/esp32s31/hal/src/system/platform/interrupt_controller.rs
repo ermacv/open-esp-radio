@@ -34,9 +34,11 @@ use oer_chips_esp32s31_pac::{
     instances,
     interrupt_core::{self, InterruptCore0, InterruptCore0Observer, InterruptCore1},
 };
-use oer_chips_family_platform_interrupt_table::{Controller, Error};
+use oer_chips_family_platform_interrupt_table::{
+    Controller, Error, LineExpectation, LineObservation,
+};
 use oer_portable_memory::{ClaimCell, zeroed::ZeroedOnce};
-use oer_portable_riscv::clic::{Control, Enable, LevelBits, LineState, Trigger, Vectoring};
+use oer_portable_riscv::clic::{Control, LevelBits};
 
 use crate::system::cores::{StopTheWorld, key};
 use oer_portable_mmio::{Bits, Fixed, Index, Placement};
@@ -189,15 +191,6 @@ pub struct InterruptView<
     observer: &'a Observer<M, C>,
 }
 
-/// One CLIC line as a fatal path reads it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LineObservation {
-    /// The line's pending bit (`clicintip`).
-    pub pending: bool,
-    /// Its enable, vectoring, trigger and control byte.
-    pub state: LineState,
-}
-
 impl<M: Placement, C: Placement> InterruptView<'_, M, C> {
     /// The line `source` is routed to; `None` when it is routed nowhere or
     /// is no source of the bank.
@@ -208,19 +201,12 @@ impl<M: Placement, C: Placement> InterruptView<'_, M, C> {
         (line != 0).then_some(line)
     }
 
-    /// The state of `line`; `None` for a line past the CLIC's.
-    pub fn line(&self, line: u8) -> Option<LineObservation> {
+    /// The word of `line`, for the fatal path's record: its pending,
+    /// enable, attribute and control bytes as the hardware has them; `None`
+    /// for a line past the CLIC's.
+    pub fn line(&self, line: u8) -> Option<u32> {
         let index = Index::new(usize::from(line)).ok()?;
-        let word = self.observer.lines.read_ctrl(index);
-        Some(LineObservation {
-            pending: word.ip(),
-            state: LineState {
-                enable: Enable::from(word.ie()),
-                vectoring: Vectoring::from(word.attr_shv()),
-                trigger: trigger_of(word.attr_trig()),
-                control: Control::from_bits(word.ctl()),
-            },
-        })
+        Some(self.observer.lines.read_ctrl(index).record_word())
     }
 
     /// The level bits the CLIC holds.
@@ -407,29 +393,6 @@ pub type Hart0Grant = InterruptGrant<InterruptCore0>;
 /// Hart 1's grant.
 pub type Hart1Grant = InterruptGrant<InterruptCore1>;
 
-/// The trigger field (`ATTR_TRIG`) of `trigger`: bit 0 set for an edge, bit
-/// 1 set for the negative polarity.
-///
-/// SOURCE: RISC-V CLIC specification (`clicintattr.trig`); ESP-IDF 4d80c1b2
-/// `components/soc/esp32s31/include/soc/clic_reg.h` (`CLIC_INT_ATTR_TRIG`).
-const fn trigger_bits(trigger: Trigger) -> clic::ctrl::AttrTrig {
-    match trigger {
-        Trigger::PositiveLevel => clic::ctrl::AttrTrig::PositiveLevel,
-        Trigger::PositiveEdge => clic::ctrl::AttrTrig::PositiveEdge,
-        Trigger::NegativeLevel => clic::ctrl::AttrTrig::NegativeLevel,
-        Trigger::NegativeEdge => clic::ctrl::AttrTrig::NegativeEdge,
-    }
-}
-
-const fn trigger_of(bits: Bits<2>) -> Trigger {
-    match clic::ctrl::AttrTrig::from_field(bits.get()) {
-        clic::ctrl::AttrTrig::PositiveLevel => Trigger::PositiveLevel,
-        clic::ctrl::AttrTrig::PositiveEdge => Trigger::PositiveEdge,
-        clic::ctrl::AttrTrig::NegativeLevel => Trigger::NegativeLevel,
-        clic::ctrl::AttrTrig::NegativeEdge => Trigger::NegativeEdge,
-    }
-}
-
 impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
     const SOURCES: u16 = interrupt_core::route::COUNT as u16;
     const LINES: u8 = clic::ctrl::COUNT as u8;
@@ -498,48 +461,83 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
         (line != 0).then_some(line)
     }
 
+    fn bind(&mut self, line: u8, control: Control) -> Result<(), Error> {
+        self.write_line(line, LineWrite::Bind(control))
+    }
+
+    fn disable(&mut self, line: u8) -> Result<(), Error> {
+        self.write_line(line, LineWrite::Disable)
+    }
+
+    fn check(&self, line: u8, expected: LineExpectation) -> Result<(), Error> {
+        let index = Index::new(usize::from(line)).map_err(|_| Error::NoSuchLine { line })?;
+        let word = self.clic.read_ctrl(index);
+        let holds = match expected {
+            LineExpectation::Disabled => !word.ie(),
+            LineExpectation::Bound(control) => {
+                word.ie()
+                    && word.attr_shv()
+                    && word.attr_trig_variant() == clic::ctrl::AttrTrig::PositiveLevel
+                    && word.ctl() == control.bits()
+            }
+        };
+        if holds {
+            Ok(())
+        } else {
+            Err(Error::WrongLine {
+                line,
+                observed: LineObservation::of_word(word.record_word()),
+                expected,
+            })
+        }
+    }
+}
+
+/// What a line write leaves: the line disabled, or bound at a control byte.
+#[derive(Clone, Copy)]
+enum LineWrite {
+    Disable,
+    Bind(Control),
+}
+
+impl<B: RouteBank, C: Placement> InterruptController<B, C> {
     /// Three writes of the line's word, each changing one kind of byte: the
-    /// enable off, then the attributes and control, then the enable on. The
-    /// word holds `clicintie` (bit 8), `clicintattr` (bits 16 to 23) and
-    /// `clicintctl` (bits 24 to 31), and a word write takes effect in no
-    /// specified byte order, so one write could enable the line before its
-    /// new level and trigger hold.
+    /// enable off, then the attributes and control, then the enable on for a
+    /// bound line. The word holds `clicintie` (bit 8), `clicintattr` (bits 16
+    /// to 23) and `clicintctl` (bits 24 to 31), and a word write takes effect
+    /// in no specified byte order, so one write could enable the line before
+    /// its new level and trigger hold.
+    ///
+    /// A bound line is hardware-vectored and level-triggered, the chip's one
+    /// trigger of a bound line; a disabled one is neither, at level byte 0.
     ///
     /// SOURCE: RISC-V CLIC specification 3f8ee744 `clic.adoc:377` (a word
     /// write's byte updates take effect in no specified order); ESP-IDF
     /// 4d80c1b2 `components/soc/esp32s31/include/soc/clic_reg.h`
     /// `:77,:98,:104` (`CLIC_INT_CTL_S` 24, `CLIC_INT_ATTR_SHV_S` 16,
-    /// `CLIC_INT_IE_S` 8).
-    fn set_line(&mut self, line: u8, state: LineState) -> Result<(), Error> {
+    /// `CLIC_INT_IE_S` 8); `ESP_HAL_1F646C5_CLIC_LEVEL_LINES` in the register
+    /// model (the bound lines are level-triggered).
+    fn write_line(&mut self, line: u8, write: LineWrite) -> Result<(), Error> {
         let index = Index::new(usize::from(line)).map_err(|_| Error::NoSuchLine { line })?;
         if self.clic.read_ctrl(index).ie() {
             self.clic.modify_ctrl(index, |word| {
                 word.set_ie(false);
             });
         }
+        let (vectored, control) = match write {
+            LineWrite::Disable => (false, Control::from_bits(0)),
+            LineWrite::Bind(control) => (true, control),
+        };
         self.clic.modify_ctrl(index, |word| {
-            word.set_attr_shv(state.vectoring.bit())
-                .set_attr_trig(trigger_bits(state.trigger))
-                .set_ctl(state.control.bits());
+            word.set_attr_shv(vectored)
+                .set_attr_trig(clic::ctrl::AttrTrig::PositiveLevel)
+                .set_ctl(control.bits());
         });
-        if state.enable == Enable::Enabled {
+        if let LineWrite::Bind(_) = write {
             self.clic.modify_ctrl(index, |word| {
                 word.set_ie(true);
             });
         }
         Ok(())
-    }
-
-    fn line(&self, line: u8) -> LineState {
-        let Ok(index) = Index::new(usize::from(line)) else {
-            return LineState::DISABLED;
-        };
-        let word = self.clic.read_ctrl(index);
-        LineState {
-            enable: Enable::from(word.ie()),
-            vectoring: Vectoring::from(word.attr_shv()),
-            trigger: trigger_of(word.attr_trig()),
-            control: Control::from_bits(word.ctl()),
-        }
     }
 }

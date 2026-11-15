@@ -1,8 +1,12 @@
 # oer-chips-family-platform-interrupt-table
 
 Espressif interrupt-matrix bindings and vector ABI, including the symbols
-consumed by the staged runtime. Architectural CLIC line values come directly
-from `oer_portable_riscv::clic`; chip facts select geometry and MNLBITS. Chip crates
+consumed by the staged runtime. A chip's controller binds a line at a level
+(`Control`, from `oer_portable_riscv::clic`), disables it, and checks it
+against the table's `LineExpectation`; the trigger, enable and vectoring of a
+bound line are the chip's, and a line it finds otherwise is reported with its
+`LineObservation`, the line's register word, which this crate carries into a
+record and never reads. Chip facts select geometry and MNLBITS. Chip crates
 and firmware use this crate directly.
 
 Each image's static table of its interrupt bindings, declared once per image
@@ -120,7 +124,7 @@ entry binds is routed on no bank:
   sealed `EventAuthority`);
 - a controller refuses a source or line outside it and writes nothing; it
   writes a line's enable apart from its attributes and control, so a line is
-  never enabled with another level or trigger than the router's;
+  never enabled with another level or trigger than its binding's;
 - `Router::verify` checks the controller's configuration again, then that
   every routed source is an entry of the hart
   on its line, every routed line holds its entry's level, and every other

@@ -541,8 +541,13 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   the chip's interrupt controller.
 - `chips/family/platform/interrupt-table` (`oer-chips-family-platform-interrupt-table`) owns
   the Espressif interrupt matrix contract, vector ABI and platform-runtime
-  symbol names. Architectural CLIC line values live in `oer-portable-riscv::clic`;
-  chip facts select line geometry and MNLBITS. Signal task cells, atomic
+  symbol names. Its controller contract binds a line at a level, disables
+  it and checks it against the table, naming no trigger, enable or
+  vectoring: those are the chip's, written in its HAL by the register
+  model's values, and a line's observation is its register's word, carried
+  into a record unread. `oer-portable-riscv::clic` holds the CSR numbers and
+  the arithmetic of a line's control byte; chip facts select line geometry
+  and MNLBITS. Signal task cells, atomic
   facts and intrusive lists live in `oer-portable-memory::signal`. Chip crates and
   firmware use interrupt-table directly; portable support and protocol cores
   do not depend on it.

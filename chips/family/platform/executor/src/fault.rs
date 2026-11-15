@@ -3,7 +3,6 @@
 use core::{marker::PhantomData, mem::ManuallyDrop};
 use oer_chips_family_platform_interrupt_table::Error;
 use oer_chips_family_platform_runtime::panic::FaultReason;
-use oer_portable_riscv::clic::LineState;
 
 /// Source observations of an executor or time-driver invariant failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -204,13 +203,6 @@ impl<P, T> core::fmt::Debug for Failure<P, T> {
     }
 }
 
-fn line(state: LineState) -> u32 {
-    (state.enable as u32)
-        | ((state.vectoring as u32) << 1)
-        | ((state.trigger as u32) << 2)
-        | (u32::from(state.control.bits()) << 8)
-}
-
 fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {
     let executor = executor.into();
     match error {
@@ -251,12 +243,12 @@ fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {
             [executor, source.into(), line.into(), 0],
         ),
         Error::WrongLine {
-            line: index,
-            state,
+            line,
+            observed,
             expected,
         } => (
             FaultReason::RouteWrongLine,
-            [executor, index.into(), line(state), line(expected)],
+            [executor, line.into(), observed.record(), expected.record()],
         ),
         Error::NoSuchSource { source } => (
             FaultReason::RouteNoSuchSource,
@@ -347,6 +339,24 @@ mod tests {
         assert_eq!(
             route_diagnostic(3, Error::HandlerCellMismatch { source: 5 }),
             (FaultReason::RouteHandlerCellMismatch, [3, 5, 0, 0])
+        );
+    }
+
+    #[test]
+    fn a_wrong_line_keeps_the_line_s_word_and_the_expectation() {
+        use oer_chips_family_platform_interrupt_table::{LineExpectation, LineObservation};
+        assert_eq!(
+            route_diagnostic(
+                2,
+                Error::WrongLine {
+                    line: 17,
+                    observed: LineObservation::of_word(0x3f02_0101),
+                    expected: LineExpectation::Bound(oer_portable_riscv::clic::Control::from_bits(
+                        0x5f
+                    )),
+                }
+            ),
+            (FaultReason::RouteWrongLine, [2, 17, 0x3f02_0101, 0x15f])
         );
     }
 }

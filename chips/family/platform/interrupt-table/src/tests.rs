@@ -1,5 +1,5 @@
-use crate::{Entry, Error, Router};
-use oer_portable_riscv::clic::{Control, Enable, LineState, Trigger};
+use crate::{Entry, Error, LineExpectation, LineObservation, Router};
+use oer_portable_riscv::clic::Control;
 
 crate::__fake_table!();
 
@@ -12,14 +12,14 @@ fn install_silences_every_source_and_disables_every_line_before_it_checks() {
         controller
             .lines
             .iter()
-            .all(|line| *line == LineState::DISABLED)
+            .all(|line| *line == FakeLine::Disabled)
     );
     // Every source silent first: no line is touched while a source still
     // holds it.
     let first_line = controller
         .writes
         .iter()
-        .position(|write| matches!(write, Write::Line { .. }))
+        .position(|write| matches!(write, Write::Disable { .. }))
         .unwrap();
     assert_eq!(first_line, 8);
     assert_eq!(controller.writes.len(), 8 + 48);
@@ -40,19 +40,17 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
     let mut router = fake_router::<0>();
     // The timer's source on its own line, but the line at another level.
     router.controller.routes[3] = Some(16);
-    router.controller.lines[16] = LineState::vectored(Control::level::<2, 3>());
+    router.controller.lines[16] = FakeLine::Bound(Control::level::<2, 3>());
     assert_eq!(
         router.verify(),
         Err(Error::WrongLine {
             line: 16,
-            state: LineState::vectored(Control::level::<2, 3>()),
-            expected: LineState::vectored(Control::level::<1, 3>()),
+            observed: LineObservation::of_word(0x100 | u32::from(Control::level::<2, 3>().bits())),
+            expected: LineExpectation::Bound(Control::level::<1, 3>()),
         })
     );
-    router.controller.lines[16] = LineState {
-        trigger: Trigger::PositiveEdge,
-        ..LineState::vectored(Control::level::<1, 3>())
-    };
+    // An attribute no binding writes, as an edge trigger.
+    router.controller.lines[16] = FakeLine::Foreign(0x5f02_0100);
     assert!(matches!(
         router.verify(),
         Err(Error::WrongLine { line: 16, .. })
@@ -70,13 +68,13 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
     );
 
     let mut router = fake_router::<0>();
-    router.controller.lines[40] = LineState::vectored(Control::level::<3, 3>());
+    router.controller.lines[40] = FakeLine::Bound(Control::level::<3, 3>());
     assert_eq!(
         router.verify(),
         Err(Error::WrongLine {
             line: 40,
-            state: LineState::vectored(Control::level::<3, 3>()),
-            expected: LineState::DISABLED,
+            observed: LineObservation::of_word(0x100 | u32::from(Control::level::<3, 3>().bits())),
+            expected: LineExpectation::Disabled,
         })
     );
 }
@@ -148,7 +146,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
             .controller
             .lines
             .iter()
-            .all(|line| line.enable == Enable::Disabled)
+            .all(|line| *line == FakeLine::Disabled)
     );
 
     static OTHER_CELL: oer_portable_memory::HandlerCell<TimerIrq> =
@@ -177,7 +175,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
             .controller
             .lines
             .iter()
-            .all(|line| line.enable == Enable::Disabled)
+            .all(|line| *line == FakeLine::Disabled)
     );
     assert!(OTHER_CELL.with(|_| ()).is_none());
 
@@ -190,9 +188,9 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert_eq!(
         zero.controller.writes[before..],
         [
-            Write::Line {
+            Write::Bind {
                 line: 16,
-                state: LineState::vectored(Control::level::<1, 3>())
+                control: Control::level::<1, 3>()
             },
             Write::Route {
                 source: 3,
@@ -222,9 +220,9 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert_eq!(
         zero.controller.writes[before..],
         [
-            Write::Line {
+            Write::Bind {
                 line: 18,
-                state: LineState::vectored(Control::level::<1, 3>())
+                control: Control::level::<1, 3>()
             },
             Write::Route {
                 source: 4,
@@ -260,7 +258,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     assert_eq!(one.controller.routes[5], Some(17));
     assert_eq!(
         one.controller.lines[17],
-        LineState::vectored(Control::level::<2, 3>())
+        FakeLine::Bound(Control::level::<2, 3>())
     );
     one.verify().unwrap();
 }
@@ -363,8 +361,13 @@ fn a_controller_refuses_a_source_or_line_it_lacks_and_writes_nothing() {
         controller.silence(8),
         Err(Error::NoSuchSource { source: 8 })
     );
+    assert_eq!(controller.disable(48), Err(Error::NoSuchLine { line: 48 }));
     assert_eq!(
-        controller.set_line(48, LineState::DISABLED),
+        controller.bind(48, Control::level::<1, 3>()),
+        Err(Error::NoSuchLine { line: 48 })
+    );
+    assert_eq!(
+        controller.check(48, LineExpectation::Disabled),
         Err(Error::NoSuchLine { line: 48 })
     );
     assert!(controller.writes.is_empty());

@@ -100,8 +100,9 @@ pub struct LineView {
     pub vector: u16,
     /// The handler address `mtvt` holds for it.
     pub slot: u32,
-    /// Bit 0 pending, 1 enabled, 2 edge-triggered, bits 8.. its level
-    /// byte; zero when nothing is routed to the line or the stop failed.
+    /// The line's CLIC word as the hardware has it (`clicintip`,
+    /// `clicintie`, `clicintattr`, `clicintctl`); zero when nothing is
+    /// routed to the line or the stop failed.
     pub state: u32,
     /// The sources routed to the line on this hart.
     pub routed: [u32; SOURCE_WORDS],
@@ -284,11 +285,11 @@ fn observe(
                     }
                 }
                 if view.routed != [0; SOURCE_WORDS]
-                    && let Some(observed) = u8::try_from(vector)
+                    && let Some(word) = u8::try_from(vector)
                         .ok()
                         .and_then(|vector| controller.line(vector))
                 {
-                    view.state = line_word(observed);
+                    view.state = word;
                 }
             });
         }
@@ -310,26 +311,6 @@ fn observe(
         pending,
         line,
     }
-}
-
-/// The record's word of an observed line: bit 0 pending, 1 enabled, 2
-/// edge-triggered, bits 8.. its level byte.
-#[cfg(target_arch = "riscv32")]
-fn line_word(
-    observed: oer_chips_esp32s31_hal::system::platform::interrupt_controller::LineObservation,
-) -> u32 {
-    use oer_portable_riscv::clic::Trigger;
-    let oer_chips_esp32s31_hal::system::platform::interrupt_controller::LineObservation {
-        pending,
-        state,
-    } = observed;
-    u32::from(pending)
-        | (state.enable as u32) << 1
-        | u32::from(matches!(
-            state.trigger,
-            Trigger::PositiveEdge | Trigger::NegativeEdge
-        )) << 2
-        | u32::from(state.control.bits()) << 8
 }
 
 /// Set `source`'s bit, without an index whose bounds check could fail: a
