@@ -854,6 +854,29 @@ enum ReservedCursor {
 /// fn shared<T: Sync>() {}
 /// shared::<oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingLive<'static, 2>>();
 /// ```
+/// Whether a completed nonterminal descriptor awaits proof that the walker
+/// latched its old link before software may rewrite it for recycle.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReleaseProbe {
+    Idle,
+    Pending,
+}
+
+/// Whether the pending tail's doorbell was rung a second time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Doorbell {
+    Once,
+    Rerung,
+}
+
+/// Whether the walker still runs: a token dropped before its stop poisons
+/// the arena until radio reset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Stop {
+    Required,
+    Done,
+}
+
 pub struct RxRingLive<'a, const COUNT: usize> {
     descriptors: &'a [RxDescriptor; COUNT],
     table: &'a RxDescriptorTable<COUNT>,
@@ -869,14 +892,14 @@ pub struct RxRingLive<'a, const COUNT: usize> {
     /// word over `Option<usize>` without introducing a sentinel address.
     pending_tail_plus_one: usize,
     cursor_generation: u32,
-    completion_release_probe_pending: bool,
+    completion_release_probe: ReleaseProbe,
     /// The accepted-unit cursor at R and the retirement of R's link.
     reserved_cursor: ReservedCursor,
-    /// Whether the pending tail's doorbell was already rung a second time.
-    reload_rerung: bool,
+    /// The pending tail's doorbell.
+    reload_doorbell: Doorbell,
     binding: RxDmaBinding<'a>,
     arena: &'a RxArenaWords,
-    requires_stop: bool,
+    stop: Stop,
 }
 
 /// RxDescriptor storage authority after the hardware walker is confirmed off.
@@ -1220,7 +1243,7 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             accepted_tail: self.accepted_tail,
             pending_tail_plus_one: 0,
             cursor_generation: 0,
-            completion_release_probe_pending: false,
+            completion_release_probe: ReleaseProbe::Idle,
             reserved_cursor: if self.retained_next_low == 0
                 || self.retained_next_low
                     == self.binding.reserved_address() & RX_DESCRIPTOR_ADDRESS_LOW_MASK
@@ -1229,10 +1252,10 @@ impl<'a, const COUNT: usize> RxRingStopped<'a, COUNT> {
             } else {
                 ReservedCursor::Passed
             },
-            reload_rerung: false,
+            reload_doorbell: Doorbell::Once,
             binding: self.binding,
             arena: self.arena,
-            requires_stop: true,
+            stop: Stop::Required,
         })
     }
 }
@@ -1535,7 +1558,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             // rebuild the next epoch; a new root prepare must remain blocked.
             RxDmaArenaState::Prepared.store(lifecycle);
         }
-        self.requires_stop = false;
+        self.stop = Stop::Done;
         Ok(halted)
     }
 
@@ -2326,7 +2349,7 @@ impl<'id, 'loan, 'a, const COUNT: usize> ScopedRing<'id, &'loan mut RxRingLive<'
         // equality, so the count wraps.
         self.ring.cursor_generation = self.ring.cursor_generation.wrapping_add(1);
         self.ring.pending_tail_plus_one = tail_index.get() + 1;
-        self.ring.reload_rerung = false;
+        self.ring.reload_doorbell = Doorbell::Once;
         self.ring.observed_mask.remove_group::<COUNT>(
             self.ring.arena,
             self.ring.recycle_start,
@@ -2467,7 +2490,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
     /// Whether a completed nonterminal descriptor still awaits proof that the
     /// walker latched its old link before software may rewrite it for recycle.
     pub const fn completion_release_probe_pending(&self) -> bool {
-        self.completion_release_probe_pending
+        matches!(self.completion_release_probe, ReleaseProbe::Pending)
     }
 
     /// Prove that hardware no longer needs the terminal descriptor's current
@@ -2557,14 +2580,14 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         descriptor_count: usize,
     ) -> bool {
         if descriptor_count == 0 || descriptor_count > COUNT {
-            self.completion_release_probe_pending = false;
+            self.completion_release_probe = ReleaseProbe::Idle;
             return false;
         }
         let tail_index = self.recycle_start.advance(descriptor_count - 1);
         let Some(last_index) =
             descriptor_index::<COUNT>(last_descriptor_low, self.descriptor_table.base())
         else {
-            self.completion_release_probe_pending = false;
+            self.completion_release_probe = ReleaseProbe::Idle;
             return false;
         };
         let tail_next_low = self
@@ -2588,10 +2611,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
             && last_index == self.accepted_tail
             && tail_distance <= last_distance;
         if exhausted_terminal || exhausted_accepted_list || later_completed_frontier {
-            self.completion_release_probe_pending = false;
+            self.completion_release_probe = ReleaseProbe::Idle;
             return true;
         }
-        self.completion_release_probe_pending = true;
+        self.completion_release_probe = ReleaseProbe::Pending;
         false
     }
 
@@ -2715,10 +2738,10 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         if !exhausted_short {
             self.accepted_tail = pending_tail;
             self.pending_tail_plus_one = 0;
-            self.reload_rerung = false;
+            self.reload_doorbell = Doorbell::Once;
             return Ok(());
         }
-        if self.reload_rerung {
+        if self.reload_doorbell == Doorbell::Rerung {
             increment_saturating(&self.arena.rering_failures);
             self.require_reset();
             return Err(RxRingError::Corrupt);
@@ -2728,7 +2751,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
         mmio.fence();
         mmio.request_reload(&self.binding);
         mmio.fence();
-        self.reload_rerung = true;
+        self.reload_doorbell = Doorbell::Rerung;
         increment_saturating(&self.arena.reload_rerings);
         Ok(())
     }
@@ -2736,7 +2759,7 @@ impl<'a, const COUNT: usize> RxRingLive<'a, COUNT> {
 
 impl<const COUNT: usize> Drop for RxRingLive<'_, COUNT> {
     fn drop(&mut self) {
-        if self.requires_stop {
+        if self.stop == Stop::Required {
             RxDmaArenaState::ResetRequired.store(self.arena.lifecycle());
         }
     }

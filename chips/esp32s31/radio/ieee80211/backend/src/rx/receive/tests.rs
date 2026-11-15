@@ -256,7 +256,10 @@ impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
         &mut self,
         ring: oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingPrepared<'a, N>,
     ) -> oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingCoreReady<'a, N> {
-        assert!(!self.host.walker.borrow().walker_enabled);
+        assert_eq!(
+            self.host.walker.borrow().walker_enabled,
+            oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Disabled
+        );
         assert!(ring.topology_snapshot().valid);
         self.host.core_prepared.set(true);
         ring.core_ready_for_test()
@@ -266,7 +269,10 @@ impl<X: SignalExecutor> MacRuntimeStartHardware for HostRadio<X> {
         &mut self,
         _ring: &oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingLive<'_, N>,
     ) {
-        assert!(self.host.walker.borrow().walker_enabled);
+        assert_eq!(
+            self.host.walker.borrow().walker_enabled,
+            oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled
+        );
         assert!(self.host.core_prepared.get());
         self.resume_mac_runtime();
     }
@@ -546,7 +552,10 @@ impl<X: SignalExecutor> Harness<X> {
     /// Bring the epoch up and forget its bring-up log, the banks' too.
     fn started(mut self) -> Self {
         self.settle();
-        assert!(self.host.walker.borrow().walker_enabled);
+        assert_eq!(
+            self.host.walker.borrow().walker_enabled,
+            oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled
+        );
         self.host.take_log();
         self.host.walker.borrow_mut().clear_operations();
         self.host.part(|part| {
@@ -586,7 +595,10 @@ fn cold_start_never_opens_mac_when_walker_enable_is_refused() {
     harness.host.walker.borrow_mut().start = RxWalkerStart::Refused;
     harness.settle();
     assert!(!harness.host.mac_started.get());
-    assert!(!harness.host.walker.borrow().walker_enabled);
+    assert_eq!(
+        harness.host.walker.borrow().walker_enabled,
+        oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Disabled
+    );
     assert_eq!(harness.rx.lifecycle_state(), RxDmaArenaState::Prepared);
     assert!(!harness.host.take_log().contains(&Event::RuntimeResume));
 }
@@ -621,7 +633,10 @@ fn the_handler_activates_the_epoch_after_the_install() {
     );
     // The walker started between the activation and the runtime resume.
     let walker = harness.host.walker.borrow();
-    assert!(walker.walker_enabled);
+    assert_eq!(
+        walker.walker_enabled,
+        oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled
+    );
     assert_eq!(walker.operation_count(RxWalkerOperation::Enable), 1);
     drop(walker);
     // The activation alone touched the banks; the stale mask was not
@@ -897,7 +912,8 @@ fn teardown_waits_for_staged_leases_and_the_mac_runtime() {
 #[test]
 fn failed_stop_quarantines_and_never_retries() {
     let mut harness = harness().started();
-    harness.host.walker.borrow_mut().refuse_stop = true;
+    harness.host.walker.borrow_mut().stop_request =
+        oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::StopRequest::Refused;
     harness.stop.request_stop();
     harness.settle();
     assert_eq!(

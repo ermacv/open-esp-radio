@@ -2467,7 +2467,7 @@ fn a_halted_rebuild_refuses_a_stop_proof_for_another_arena() {
     // Something started the walker again; the rebuild must stop it first,
     // and a proof for another arena's binding does not prove that.
     let mut mmio = ForeignStopProof::new();
-    mmio.walker.walker_enabled = true;
+    mmio.walker.walker_enabled = crate::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled;
     let (_halted, error) = storage
         .prepare_halted(halted, &mut mmio)
         .err()
@@ -2491,16 +2491,19 @@ fn a_walker_that_does_not_stop_returns_the_live_owner_unconfirmed() {
         .map_err(|(_, error)| error)
         .unwrap();
 
-    mmio.refuse_stop = true;
+    mmio.stop_request = crate::radio::ieee80211::dma::rx_dma::model::StopRequest::Refused;
     let (live, error) = live
         .try_stop(&mut mmio)
         .err()
         .expect("an unconfirmed stop keeps the live owner");
     assert_eq!(error, RxRingError::WalkerStopUnconfirmed);
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
-    assert!(mmio.walker_enabled);
+    assert_eq!(
+        mmio.walker_enabled,
+        crate::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled
+    );
 
-    mmio.refuse_stop = false;
+    mmio.stop_request = crate::radio::ieee80211::dma::rx_dma::model::StopRequest::Obeyed;
     assert!(live.try_stop(&mut mmio).is_ok());
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Prepared);
     assert_eq!(mmio.operation_count(RxWalkerOperation::Stop), 2);
@@ -2656,7 +2659,7 @@ fn a_stall_in_the_first_observation_leaves_one_final_observation() {
 
     let mut mmio = RxWalkerModel::new();
     let (_storage, mut live) = ring_with_pending_reload(&mut mmio);
-    mmio.reload_stuck = true;
+    mmio.reload_doorbell = crate::radio::ieee80211::dma::rx_dma::model::ReloadDoorbell::Stuck;
     let clock = Stalled(Cell::new(0));
     let settle = Settle::new(SettleLimit::new(Duration::from_micros(20)).unwrap(), &clock);
     assert_eq!(
@@ -2685,7 +2688,7 @@ fn a_reload_doorbell_that_never_clears_stays_pending_after_the_limit() {
 
     let mut mmio = RxWalkerModel::new();
     let (storage, mut live) = ring_with_pending_reload(&mut mmio);
-    mmio.reload_stuck = true;
+    mmio.reload_doorbell = crate::radio::ieee80211::dma::rx_dma::model::ReloadDoorbell::Stuck;
     mmio.clear_operations();
 
     let clock = Stepping(Cell::new(100));
@@ -2699,7 +2702,7 @@ fn a_reload_doorbell_that_never_clears_stays_pending_after_the_limit() {
     assert!(live.reload_pending(), "the append stays pending");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
 
-    mmio.reload_stuck = false;
+    mmio.reload_doorbell = crate::radio::ieee80211::dma::rx_dma::model::ReloadDoorbell::Clears;
     mmio.clear_operations();
     assert_eq!(
         live.complete_pending_reload(&mut mmio, frozen_settle()),

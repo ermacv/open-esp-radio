@@ -75,6 +75,49 @@ pub enum RxWalkerLanding {
     StoppedOnOwner(u32),
 }
 
+/// Whether the walker stopped on NEXT, a descriptor whose owner bit was
+/// clear, and whether a rung doorbell resumes it there.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OwnerStop {
+    /// Not stopped.
+    Running,
+    /// Stopped on NEXT.
+    Stopped,
+    /// Stopped on NEXT, rearmed, with a doorbell rung: it resumes in place
+    /// when the doorbell clears.
+    Rearmed,
+}
+
+/// `RX_CONTROL.WALKER_ENABLE` of the model.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WalkerEnable {
+    Disabled,
+    Enabled,
+}
+
+/// Whether `RX_NEXT_DESCRIPTOR` reports unassigned upper bits.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NextUpperBits {
+    Assigned,
+    Unknown,
+}
+
+/// Whether the reload doorbell clears.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReloadDoorbell {
+    Clears,
+    /// The doorbell never clears.
+    Stuck,
+}
+
+/// What a stop request does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StopRequest {
+    Obeyed,
+    /// The walker keeps running and reads back as enabled.
+    Refused,
+}
+
 /// Register-level model of the RX descriptor walker.
 pub struct RxWalkerModel {
     /// `RX_LAST_DESCRIPTOR` low address bits.
@@ -82,28 +125,26 @@ pub struct RxWalkerModel {
     /// `RX_NEXT_DESCRIPTOR` low address bits.
     pub next_descriptor_low: u32,
     /// Whether `RX_NEXT_DESCRIPTOR` reports unassigned upper bits.
-    pub next_unknown_upper: bool,
+    pub next_upper_bits: NextUpperBits,
     /// `RX_DESCRIPTOR_BASE` as last written.
     pub descriptor_base: u32,
     /// `RX_CONTROL.WALKER_ENABLE`.
-    pub walker_enabled: bool,
+    pub walker_enabled: WalkerEnable,
     /// Observations of the reload doorbell still to read as pending.
     pub reload_pending_observations: u32,
     /// Pending observations each [`RxDma::request_reload`] sets.
     pub reload_latency: u32,
-    /// The doorbell never clears.
-    pub reload_stuck: bool,
+    /// Whether the doorbell clears.
+    pub reload_doorbell: ReloadDoorbell,
     /// Doorbells still to lose: each leaves NEXT unchanged instead of
     /// resuming an exhausted walker. `u32::MAX` loses every doorbell.
     pub lose_reloads: u32,
     /// The NEXT a rung doorbell applies when it clears.
     reload_resumes_at: Option<u32>,
-    /// The walker stopped on NEXT, a descriptor whose owner bit was clear.
-    pub stopped_on_owner: bool,
-    /// A rung doorbell resumes the stopped walker in place when it clears.
-    reload_resumes_in_place: bool,
-    /// A stop request leaves the walker running and reads back as enabled.
-    pub refuse_stop: bool,
+    /// Whether the walker stopped on NEXT, and resumes there.
+    pub owner_stop: OwnerStop,
+    /// What a stop request does.
+    pub stop_request: StopRequest,
     /// What an enable of a stopped walker does.
     pub start: RxWalkerStart,
     log: [RxWalkerOperation; RX_WALKER_LOG_CAPACITY],
@@ -124,17 +165,16 @@ impl RxWalkerModel {
         Self {
             last_descriptor_low: 0,
             next_descriptor_low: 0,
-            next_unknown_upper: false,
+            next_upper_bits: NextUpperBits::Assigned,
             descriptor_base: 0,
-            walker_enabled: false,
+            walker_enabled: WalkerEnable::Disabled,
             reload_pending_observations: 0,
             reload_latency: 0,
-            reload_stuck: false,
+            reload_doorbell: ReloadDoorbell::Clears,
             lose_reloads: 0,
             reload_resumes_at: None,
-            stopped_on_owner: false,
-            reload_resumes_in_place: false,
-            refuse_stop: false,
+            owner_stop: OwnerStop::Running,
+            stop_request: StopRequest::Obeyed,
             start: RxWalkerStart::Confirmed,
             log: [RxWalkerOperation::Fence; RX_WALKER_LOG_CAPACITY],
             logged: 0,
@@ -191,7 +231,10 @@ impl RxWalkerModel {
         &self,
         table: RxWalkerTable<'storage>,
     ) -> Option<&'storage crate::radio::ieee80211::dma::descriptor::RxDescriptor> {
-        if !self.walker_enabled || self.next_descriptor_low == 0 || self.stopped_on_owner {
+        if self.walker_enabled == WalkerEnable::Disabled
+            || self.next_descriptor_low == 0
+            || self.owner_stop != OwnerStop::Running
+        {
             return None;
         }
         table
@@ -215,14 +258,16 @@ impl RxWalkerModel {
         terminal: bool,
     ) -> RxWalkerLanding {
         let next = self.next_descriptor_low;
-        if !self.walker_enabled || next == 0 {
+        if self.walker_enabled == WalkerEnable::Disabled || next == 0 {
             return RxWalkerLanding::Exhausted;
         }
         let Some(descriptor) = table.descriptor_at_low(next) else {
             return RxWalkerLanding::Exhausted;
         };
-        if self.stopped_on_owner || !descriptor.word0().owner() {
-            self.stopped_on_owner = true;
+        if self.owner_stop != OwnerStop::Running || !descriptor.word0().owner() {
+            if self.owner_stop == OwnerStop::Running {
+                self.owner_stop = OwnerStop::Stopped;
+            }
             return RxWalkerLanding::StoppedOnOwner(next);
         }
         descriptor.write_word0(
@@ -251,7 +296,7 @@ impl RxWalkerModel {
 
     fn observe_reload_pending(&mut self) -> bool {
         self.record(RxWalkerOperation::ObserveReloadPending);
-        if self.reload_stuck {
+        if self.reload_doorbell == ReloadDoorbell::Stuck {
             return true;
         }
         match self.reload_pending_observations.checked_sub(1) {
@@ -265,8 +310,8 @@ impl RxWalkerModel {
                 if let Some(next) = self.reload_resumes_at.take() {
                     self.next_descriptor_low = next;
                 }
-                if core::mem::take(&mut self.reload_resumes_in_place) {
-                    self.stopped_on_owner = false;
+                if self.owner_stop == OwnerStop::Rearmed {
+                    self.owner_stop = OwnerStop::Running;
                 }
                 false
             }
@@ -299,7 +344,10 @@ impl RxDma for RxWalkerModel {
 
     fn next_descriptor(&mut self) -> RxDmaNextDescriptor {
         let address_low = self.next_descriptor_low();
-        RxDmaNextDescriptor::from_fields(address_low, self.next_unknown_upper)
+        RxDmaNextDescriptor::from_fields(
+            address_low,
+            self.next_upper_bits == NextUpperBits::Unknown,
+        )
     }
 
     fn with_ordered_cursor<R>(
@@ -315,7 +363,7 @@ impl RxDma for RxWalkerModel {
 
     fn walker_enabled(&mut self) -> bool {
         self.record(RxWalkerOperation::ObserveWalkerEnabled);
-        self.walker_enabled
+        self.walker_enabled == WalkerEnable::Enabled
     }
 
     fn reload_pending(&mut self) -> bool {
@@ -347,15 +395,20 @@ impl RxDma for RxWalkerModel {
     fn request_reload(&mut self, binding: &RxDmaBinding<'_>) {
         self.record(RxWalkerOperation::RequestReload);
         self.reload_pending_observations = self.reload_latency;
-        if !self.walker_enabled {
+        if self.walker_enabled == WalkerEnable::Disabled {
             return;
         }
-        if self.stopped_on_owner {
+        if self.owner_stop != OwnerStop::Running {
             // Resumed in place only once the descriptor it stopped on
             // carries the owner bit again.
-            self.reload_resumes_in_place = binding
+            let rearmed = binding
                 .descriptor_at_low(self.next_descriptor_low)
                 .is_some_and(|stopped| stopped.word0().owner());
+            self.owner_stop = if rearmed {
+                OwnerStop::Rearmed
+            } else {
+                OwnerStop::Stopped
+            };
             return;
         }
         if self.next_descriptor_low != 0 {
@@ -379,7 +432,7 @@ impl RxDma for RxWalkerModel {
         enabled: impl for<'confirmation> FnOnce(RxDmaWalkerEnabled<'confirmation>) -> R,
     ) -> Option<R> {
         self.record(RxWalkerOperation::Enable);
-        if self.walker_enabled {
+        if self.walker_enabled == WalkerEnable::Enabled {
             return None;
         }
         match self.start {
@@ -401,10 +454,10 @@ impl RxDma for RxWalkerModel {
         stopped: impl for<'confirmation> FnOnce(RxDmaWalkerStopped<'confirmation>) -> R,
     ) -> Option<R> {
         self.record(RxWalkerOperation::Stop);
-        if self.refuse_stop {
+        if self.stop_request == StopRequest::Refused {
             return None;
         }
-        self.walker_enabled = false;
+        self.walker_enabled = WalkerEnable::Disabled;
         Some(stopped(RxDmaWalkerStopped::confirmed(binding)))
     }
 
@@ -515,9 +568,8 @@ impl RxDma for SharedRxWalker<'_> {
 impl RxWalkerModel {
     /// An enabled walker with an exhausted cursor fetches the published head.
     fn start_walker(&mut self) {
-        self.walker_enabled = true;
-        self.stopped_on_owner = false;
-        self.reload_resumes_in_place = false;
+        self.walker_enabled = WalkerEnable::Enabled;
+        self.owner_stop = OwnerStop::Running;
         if self.next_descriptor_low == 0 {
             self.next_descriptor_low = self.descriptor_base & CURSOR_LOW_MASK;
         }
@@ -555,7 +607,7 @@ mod tests {
             .try_start(&mut walker)
             .map_err(|(_, error)| error)
             .unwrap();
-        assert!(walker.walker_enabled);
+        assert_eq!(walker.walker_enabled, WalkerEnable::Enabled);
         // BASE names the reserved descriptor, and the started walker fetches it.
         assert_eq!(walker.descriptor_base, reserved);
         // The diagnostic read reports the written base and logs nothing.
@@ -594,7 +646,7 @@ mod tests {
         assert!(walker.try_with_reload_settled(|_| ()).is_some());
 
         assert!(live.try_stop(&mut walker).is_ok());
-        assert!(!walker.walker_enabled);
+        assert_eq!(walker.walker_enabled, WalkerEnable::Disabled);
     }
 
     const BASE: u32 = HOST_ARENA_BASE;
@@ -631,7 +683,7 @@ mod tests {
 
     fn exhausted_at(last: usize) -> RxWalkerModel {
         let mut walker = RxWalkerModel::new();
-        walker.walker_enabled = true;
+        walker.walker_enabled = WalkerEnable::Enabled;
         walker.set_cursor(BASE, last, None);
         walker
     }
@@ -668,7 +720,7 @@ mod tests {
         assert_eq!(walker.next_descriptor_low, descriptor_low(BASE, 0));
 
         let mut walker = exhausted_at(3);
-        walker.walker_enabled = false;
+        walker.walker_enabled = WalkerEnable::Disabled;
         walker.request_reload(&binding);
         assert!(!walker.reload_pending());
         assert_eq!(walker.next_descriptor_low, 0);
@@ -726,7 +778,7 @@ mod tests {
 
     fn walking_at(next: usize) -> RxWalkerModel {
         let mut walker = RxWalkerModel::new();
-        walker.walker_enabled = true;
+        walker.walker_enabled = WalkerEnable::Enabled;
         walker.set_cursor(BASE, 3, Some(next));
         walker
     }
@@ -768,7 +820,7 @@ mod tests {
                 RxWalkerLanding::StoppedOnOwner(descriptor_low(BASE, 1))
             );
         }
-        assert!(walker.stopped_on_owner);
+        assert_ne!(walker.owner_stop, OwnerStop::Running);
         assert_eq!(table.ring[1].word0(), detached, "never written");
         assert_eq!(walker.next_descriptor_low, descriptor_low(BASE, 1));
         assert_eq!(walker.last_descriptor_low, descriptor_low(BASE, 3));
@@ -807,7 +859,7 @@ mod tests {
             walker.land(table, 5, true),
             RxWalkerLanding::Landed(descriptor_low(BASE, 1))
         );
-        assert!(!walker.stopped_on_owner);
+        assert_eq!(walker.owner_stop, OwnerStop::Running);
     }
 
     #[test]
