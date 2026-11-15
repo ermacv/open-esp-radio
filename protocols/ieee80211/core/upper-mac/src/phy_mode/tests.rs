@@ -62,8 +62,13 @@ fn access_point_with_rsn(akms: &[[u8; 4]], capabilities: u16) -> ScanRecord {
     )
     .unwrap();
     record.ds_channel = Some(6);
-    record.privacy = true;
-    record.rsn = true;
+    record.capability_info = u16::from_le_bytes(
+        oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            record.capability_info.to_le_bytes(),
+        )
+        .with_privacy(true)
+        .to_bytes(),
+    );
     record.rsn_ie_count = 1;
     record
         .set_supported_rates(&[0x82, 0x84, 0x8b, 0x96])

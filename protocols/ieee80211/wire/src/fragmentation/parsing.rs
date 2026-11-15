@@ -98,10 +98,8 @@ fn parse_data_fragment<'frame>(
     }
     Ok(OpenDataFragment {
         identity: header.identity,
+        frame_control: FrameControlFields::from_bytes(header.frame_control.to_le_bytes()),
         sequence_control,
-        fragment_number,
-        more_fragments,
-        retry: FrameControlFields::from_bytes(header.frame_control.to_le_bytes()).retry(),
         packet_number,
         payload,
     })

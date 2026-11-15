@@ -321,15 +321,29 @@ pub struct AssociationResponse {
     pub capability_info: u16,
     pub status_code: u16,
     pub association_id: u16,
-    pub ht_capability: bool,
+    /// An HT Capabilities element of its 26 octets.
+    pub ht_capability: crate::scan::ElementPresence,
     /// The response's HE Capabilities and HE Operation elements.
     pub he: ResponseHeElements,
-    pub wmm: bool,
+    /// A WMM vendor element (OUI 00:50:f2, type 2) of at least six octets.
+    pub wmm_element: crate::scan::ElementPresence,
     pub wmm_parameters: Option<WmmParameterSet>,
     /// Association comeback time in TUs from a Timeout Interval element of
     /// type 3; an access point that refuses a protected association
     /// temporarily (status 30) names it.
     pub association_comeback_tu: Option<u32>,
+}
+
+impl AssociationResponse {
+    /// Whether the access point accepted the WMM/QoS data path: a WMM
+    /// element, or HT or HE Capabilities, as an AP that returned HT
+    /// Capabilities accepted it even if a bounded RX prefix omitted a later
+    /// vendor WMM element.
+    pub fn wmm(&self) -> bool {
+        self.wmm_element == crate::scan::ElementPresence::Present
+            || self.ht_capability == crate::scan::ElementPresence::Present
+            || !self.he.capability().is_empty()
+    }
 }
 
 /// The HE Capabilities and HE Operation elements of an Association
@@ -448,9 +462,9 @@ pub fn parse_association_response(
         return None;
     }
 
-    let mut ht_capability = false;
+    let mut ht_capability = crate::scan::ElementPresence::Absent;
     let mut he = ResponseHeElements::NONE;
-    let mut wmm = false;
+    let mut wmm_element = crate::scan::ElementPresence::Absent;
     let mut wmm_parameters = None;
     let mut association_comeback_tu = None;
     let mut remaining = information_elements;
@@ -459,11 +473,13 @@ pub fn parse_association_response(
         let mut reader = oer_portable_wire::Reader::new(remaining);
         let element = reader.take(length.checked_add(2)?).ok()?;
         let tail = reader.remaining();
-        ht_capability |= id == 45 && length == 26;
+        if id == 45 && length == 26 {
+            ht_capability = crate::scan::ElementPresence::Present;
+        }
         he.record(element);
         let is_wmm = length >= 6 && matches!(element, [221, _, 0x00, 0x50, 0xf2, 0x02, ..]);
-        wmm |= is_wmm;
         if is_wmm {
+            wmm_element = crate::scan::ElementPresence::Present;
             wmm_parameters = parse_wmm_parameter_element(element).or(wmm_parameters);
         }
         if let [
@@ -489,10 +505,8 @@ pub fn parse_association_response(
         association_id: crate::management::AssociationId::from_bytes(association_id.to_le_bytes())
             .aid(),
         ht_capability,
-        // An AP that returned HT Capability accepted the WMM/QoS data path,
-        // even if a bounded RX prefix omitted a later vendor WMM element.
-        wmm: wmm || ht_capability || !he.capability().is_empty(),
         he,
+        wmm_element,
         wmm_parameters,
         association_comeback_tu,
     })

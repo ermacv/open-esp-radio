@@ -1172,8 +1172,12 @@ impl ApMsduPlan {
             peer: self.peer,
             sequence_number,
             user_priority: self.tid.value(),
-            peer_qos: self.qos,
-            more_data: false,
+            peer_qos: if self.qos {
+                oer_protocols_ieee80211_wire::data::PeerQos::Qos
+            } else {
+                oer_protocols_ieee80211_wire::data::PeerQos::NonQos
+            },
+            more_data: oer_protocols_ieee80211_wire::data::MoreData::Clear,
             msdu: MsduHeader {
                 destination: self.peer,
                 source: self.source,

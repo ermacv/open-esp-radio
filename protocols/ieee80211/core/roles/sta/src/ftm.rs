@@ -14,9 +14,9 @@ use heapless::Vec;
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::ftm::{
-    FTM_INITIAL_REQUEST_BODY_LEN, FTM_TIMESTAMP_MASK, FtmBurstDuration, FtmFormatAndBandwidth,
-    FtmMeasurement, FtmRequestParameters, FtmResponseParameters, FtmResponseStatus, FtmTimestampPs,
-    FtmToaError, FtmTodError, encode_initial_request,
+    FTM_INITIAL_REQUEST_BODY_LEN, FTM_TIMESTAMP_MASK, FtmAsap, FtmAsapCapability, FtmBurstDuration,
+    FtmFormatAndBandwidth, FtmMeasurement, FtmRequestParameters, FtmResponseParameters,
+    FtmResponseStatus, FtmTimestampPs, FtmToaError, FtmTodError, encode_initial_request,
 };
 
 /// Half the timestamp space: the horizon of modular timestamp differences.
@@ -1214,8 +1214,8 @@ impl<const N: usize> FtmSession<N> {
         ) && (request_format == FtmFormatAndBandwidth::NoPreference
             || request_format == negotiated.format_and_bandwidth);
         if negotiated.number_of_bursts_exponent != 0
-            || !negotiated.asap
-            || !negotiated.asap_capable
+            || negotiated.asap != FtmAsap::AsSoonAsPossible
+            || negotiated.asap_capable != FtmAsapCapability::Capable
             || negotiated.ftms_per_burst == 0
             || negotiated.ftms_per_burst > requested.ftms_per_burst()
             || usize::from(negotiated.ftms_per_burst.saturating_sub(1)) > N

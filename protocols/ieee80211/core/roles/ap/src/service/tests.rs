@@ -91,13 +91,16 @@ fn association_security_with_rsnxe<'a>(
     rsnxe: Option<&'a [u8]>,
 ) -> ApAssociationSecurityObservation<'a> {
     ApAssociationSecurityObservation {
-        privacy: true,
+        capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            [0; 2],
+        )
+        .with_privacy(true),
         rsn_ie: Some(rsn_ie),
         rsn_ie_count: 1,
         rsnxe,
         rsnxe_count: u8::from(rsnxe.is_some()),
-        legacy_wpa_present: false,
-        malformed_elements: false,
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
     }
 }
 
@@ -308,13 +311,15 @@ fn buffered_downlink_identity_cannot_cross_same_address_reassociation() {
         )
         .unwrap();
     let open_security = ApAssociationSecurityObservation {
-        privacy: false,
+        capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            [0; 2],
+        ),
         rsn_ie: None,
         rsn_ie_count: 0,
         rsnxe: None,
         rsnxe_count: 0,
-        legacy_wpa_present: false,
-        malformed_elements: false,
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
     };
 
     service
@@ -397,13 +402,16 @@ fn bound_power_state_matches_general_semantics_and_rejects_slot_reuse() {
         .associate_open(
             PEER,
             ApAssociationSecurityObservation {
-                privacy: false,
+                capability:
+                    oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+                        [0; 2],
+                    ),
                 rsn_ie: None,
                 rsn_ie_count: 0,
                 rsnxe: None,
                 rsnxe_count: 0,
-                legacy_wpa_present: false,
-                malformed_elements: false,
+                legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+                information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
             },
             LEGACY_CAPABILITIES,
             oer_portable_time::Instant::from_micros(1_000),
@@ -481,13 +489,16 @@ fn admitted_data_activity_is_coalesced_but_pm_edges_are_immediate() {
         .associate_open(
             PEER,
             ApAssociationSecurityObservation {
-                privacy: false,
+                capability:
+                    oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+                        [0; 2],
+                    ),
                 rsn_ie: None,
                 rsn_ie_count: 0,
                 rsnxe: None,
                 rsnxe_count: 0,
-                legacy_wpa_present: false,
-                malformed_elements: false,
+                legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+                information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
             },
             LEGACY_CAPABILITIES,
             oer_portable_time::Instant::from_micros(1_000),
@@ -1702,13 +1713,15 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
         )
         .unwrap();
     let open = ApAssociationSecurityObservation {
-        privacy: false,
+        capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            [0; 2],
+        ),
         rsn_ie: None,
         rsn_ie_count: 0,
         rsnxe: None,
         rsnxe_count: 0,
-        legacy_wpa_present: false,
-        malformed_elements: false,
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
     };
     // An authenticated 11b station is not yet a BSS member.
     service

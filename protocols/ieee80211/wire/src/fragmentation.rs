@@ -93,14 +93,13 @@ impl OpenDataFragmentIdentity {
     }
 }
 
-/// One strictly parsed Open-network data fragment.
+/// One strictly parsed Open-network data fragment: its Frame Control and
+/// Sequence Control fields, and what the parse checked of the rest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OpenDataFragment<'frame> {
     identity: OpenDataFragmentIdentity,
+    frame_control: crate::frame::FrameControlFields,
     sequence_control: u16,
-    fragment_number: u8,
-    more_fragments: bool,
-    retry: bool,
     packet_number: Option<CcmpPacketNumber>,
     payload: &'frame [u8],
 }
@@ -115,15 +114,15 @@ impl<'frame> OpenDataFragment<'frame> {
     }
 
     pub const fn fragment_number(self) -> u8 {
-        self.fragment_number
+        crate::sequence::SequenceControl::from_bytes(self.sequence_control.to_le_bytes()).fragment()
     }
 
     pub const fn more_fragments(self) -> bool {
-        self.more_fragments
+        self.frame_control.more_fragments()
     }
 
     pub const fn retry(self) -> bool {
-        self.retry
+        self.frame_control.retry()
     }
 
     pub const fn packet_number(self) -> Option<CcmpPacketNumber> {

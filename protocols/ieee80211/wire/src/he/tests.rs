@@ -615,3 +615,31 @@ fn a_co_hosted_bss_names_its_max_co_hosted_bssid_indicator() {
         Err(HeElementError::TooShort)
     );
 }
+
+#[test]
+fn an_operation_s_color_is_enabled_by_its_clear_disabled_bit_and_rts_disabled_at_0_and_1023() {
+    let fields = HeOperationFields::from_bytes([0; 6])
+        .with_bss_color(5)
+        .unwrap();
+    let operation = He20Operation { fields };
+    assert!(operation.bss_color_enabled() && operation.effective_bss_color() == 5);
+    let operation = He20Operation {
+        fields: fields.with_bss_color_disabled(true),
+    };
+    assert!(!operation.bss_color_enabled() && operation.effective_bss_color() == 0);
+    let state = |threshold| He20PeerState {
+        capability_prefix: [0; HE_CAPABILITIES_IE_MIN_LEN],
+        packet_padding_eight_us: 0,
+        operation: fields.with_rts_threshold(threshold).unwrap(),
+        max_co_hosted_bssid_indicator: None,
+    };
+    assert_eq!(state(0).rts_threshold(), None);
+    assert_eq!(state(0x03ff).rts_threshold(), None);
+    assert_eq!(state(100).rts_threshold(), Some(100));
+    assert!(state(0).extended_range_single_user_permitted());
+    let disabled = He20PeerState {
+        operation: fields.with_er_su_disabled(true),
+        ..state(0)
+    };
+    assert!(disabled.extended_range_single_user_disabled());
+}

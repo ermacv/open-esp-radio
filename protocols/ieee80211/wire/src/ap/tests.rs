@@ -60,8 +60,8 @@ fn protected_ap_frame_owns_from_ds_ccmp_and_plaintext_boundary() {
         peer,
         sequence_number: seq(7),
         user_priority: 0,
-        peer_qos: true,
-        more_data: false,
+        peer_qos: crate::data::PeerQos::Qos,
+        more_data: crate::data::MoreData::Clear,
         ccmp_header: ccmp,
         msdu: msdu(peer, source, 0x0800, &[1, 2, 3, 4]),
     }
@@ -85,7 +85,10 @@ fn protected_ap_frame_owns_from_ds_ccmp_and_plaintext_boundary() {
 fn an_in_place_prefix_is_the_protected_frame_up_to_its_payload() {
     let access_point = [2, 0, 0, 0, 0, 1];
     let source = [2, 0, 0, 0, 0, 3];
-    for (peer, qos) in [([2, 0, 0, 0, 0, 2], true), ([1, 0, 0x5e, 0, 0, 1], false)] {
+    for (peer, qos) in [
+        ([2, 0, 0, 0, 0, 2], crate::data::PeerQos::Qos),
+        ([1, 0, 0x5e, 0, 0, 1], crate::data::PeerQos::NonQos),
+    ] {
         let payload = [1, 2, 3, 4];
         let mut whole = [0; 96];
         let len = ApProtectedDataFrame {
@@ -94,7 +97,7 @@ fn an_in_place_prefix_is_the_protected_frame_up_to_its_payload() {
             sequence_number: seq(7),
             user_priority: 0,
             peer_qos: qos,
-            more_data: false,
+            more_data: crate::data::MoreData::Clear,
             ccmp_header: [0; 8],
             msdu: msdu(peer, source, 0x0800, &payload),
         }
@@ -106,11 +109,17 @@ fn an_in_place_prefix_is_the_protected_frame_up_to_its_payload() {
             sequence_number: seq(7),
             user_priority: 0,
             peer_qos: qos,
-            more_data: false,
+            more_data: crate::data::MoreData::Clear,
             msdu: msdu(peer, source, 0x0800, &[]).header(),
         };
         let at = prefix.prefix_len().unwrap();
-        assert_eq!(at, if qos { 42 } else { 40 });
+        assert_eq!(
+            at,
+            match qos {
+                crate::data::PeerQos::Qos => 42,
+                crate::data::PeerQos::NonQos => 40,
+            }
+        );
         let mut output = [0; 96];
         output[at..at + 4].copy_from_slice(&payload);
         assert_eq!(prefix.encode(&mut output[..at]), Ok(at));
@@ -138,7 +147,7 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
         peer,
         sequence_number: seq(11),
         user_priority: 5,
-        more_data: true,
+        more_data: crate::data::MoreData::Buffered,
         ccmp_header: Some(ccmp),
         msdus: &frames,
     }
@@ -177,7 +186,7 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
         peer,
         sequence_number: seq(12),
         user_priority: 0,
-        more_data: false,
+        more_data: crate::data::MoreData::Clear,
         ccmp_header: None,
         msdus: &frames,
     }
@@ -202,7 +211,7 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
             peer,
             sequence_number: seq(0),
             user_priority: 0,
-            more_data: false,
+            more_data: crate::data::MoreData::Clear,
             ccmp_header: Some([0; 8]),
             msdus: &frames,
         }
@@ -221,7 +230,7 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
             peer,
             sequence_number: seq(0),
             user_priority: 0,
-            more_data: false,
+            more_data: crate::data::MoreData::Clear,
             ccmp_header: Some([0; 8]),
             msdus: &frames,
         }
@@ -242,8 +251,8 @@ fn protected_ap_frame_rejects_a_destination_outside_pairwise_owner() {
             peer,
             sequence_number: seq(0),
             user_priority: 0,
-            peer_qos: false,
-            more_data: false,
+            peer_qos: crate::data::PeerQos::NonQos,
+            more_data: crate::data::MoreData::Clear,
             ccmp_header: [0; 8],
             msdu: msdu([2, 0, 0, 0, 0, 9], [0; 6], 0, &[]),
         }
@@ -550,13 +559,16 @@ fn association_retains_the_highest_common_advertised_legacy_rate() {
         Some(ApManagementRequest::Association {
             peer,
             security: ApAssociationSecurityObservation {
-                privacy: false,
+                capability: crate::management::CapabilityInformation::from_bytes([
+                    association[24],
+                    association[25],
+                ]),
                 rsn_ie: Some(&association[39..42]),
                 rsn_ie_count: 1,
                 rsnxe: None,
                 rsnxe_count: 0,
-                legacy_wpa_present: false,
-                malformed_elements: false,
+                legacy_wpa: crate::scan::ElementPresence::Absent,
+                information_elements: crate::scan::ElementList::Complete,
             },
             maximum_legacy_rate_500kbps: 108,
             ht_capabilities: None,
@@ -588,7 +600,10 @@ fn association_retains_exact_rsnxe_and_duplicate_count() {
     assert_eq!(security.rsn_ie_count, 1);
     assert_eq!(security.rsnxe, Some(&association[31..34]));
     assert_eq!(security.rsnxe_count, 2);
-    assert!(!security.malformed_elements);
+    assert_eq!(
+        security.information_elements,
+        crate::scan::ElementList::Complete
+    );
 }
 
 #[test]

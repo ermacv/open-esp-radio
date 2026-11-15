@@ -649,6 +649,63 @@ mod tests {
     }
 
     #[test]
+    fn a_request_type_names_each_command_flow_and_flow_type() {
+        for (index, &flow) in IndividualTwtFlowId::ALL.iter().enumerate() {
+            let request = TwtRequestFields::from_bytes([0; 2]).with_flow_id(flow.field());
+            let parameters = IndividualTwtParameterSet {
+                request,
+                target_wake_time_tsf: 0,
+                nominal_minimum_wake_duration: 0,
+                wake_interval_mantissa: 0,
+                twt_channel: 0,
+            };
+            assert_eq!(parameters.flow_id(), flow);
+            assert_eq!(usize::from(flow.get()), index);
+        }
+        for command in [
+            IndividualTwtSetupCommand::Request,
+            IndividualTwtSetupCommand::Suggest,
+            IndividualTwtSetupCommand::Demand,
+            IndividualTwtSetupCommand::Grouping,
+            IndividualTwtSetupCommand::Accept,
+            IndividualTwtSetupCommand::Alternate,
+            IndividualTwtSetupCommand::Dictate,
+            IndividualTwtSetupCommand::Reject,
+        ] {
+            assert_eq!(
+                IndividualTwtSetupCommand::from_field(command.field()),
+                command
+            );
+        }
+        let parameters = |request| IndividualTwtParameterSet {
+            request,
+            target_wake_time_tsf: 0,
+            nominal_minimum_wake_duration: 0,
+            wake_interval_mantissa: 0,
+            twt_channel: 0,
+        };
+        let announced = TwtRequestFields::from_bytes([0; 2]);
+        assert_eq!(
+            parameters(announced).flow_type(),
+            IndividualTwtFlowType::Announced
+        );
+        assert_eq!(
+            parameters(announced.with_flow_type(true)).flow_type(),
+            IndividualTwtFlowType::Unannounced
+        );
+        assert_eq!(
+            TwtControlFields::REQUEST.wake_duration_unit(),
+            TwtWakeDurationUnit::Micros256
+        );
+        assert_eq!(
+            TwtControlFields::REQUEST
+                .with_duration_unit(true)
+                .wake_duration_unit(),
+            TwtWakeDurationUnit::Tu1024
+        );
+    }
+
+    #[test]
     fn every_prefix_of_an_action_body_is_handled() {
         let mut setup = [0_u8; INDIVIDUAL_TWT_SETUP_BODY_LEN];
         setup[0] = TWT_ACTION_CATEGORY;

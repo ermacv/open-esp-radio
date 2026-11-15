@@ -73,19 +73,19 @@ pub enum StaSecurityError {
 pub fn matches_security(record: &ScanRecord, mode: LinkProtection) -> bool {
     match mode {
         LinkProtection::Open => {
-            !record.information_elements_truncated
-                && !record.privacy
-                && !record.rsn
+            record.information_elements == oer_protocols_ieee80211_wire::scan::ElementList::Complete
+                && !record.privacy()
+                && !record.rsn()
                 && record.rsn_ie_count == 0
-                && !record.legacy_wpa
+                && record.legacy_wpa == oer_protocols_ieee80211_wire::scan::ElementPresence::Absent
                 && record.rsn_ie_bytes().is_empty()
         }
         LinkProtection::Ccmp => {
-            !record.information_elements_truncated
-                && record.privacy
-                && record.rsn
+            record.information_elements == oer_protocols_ieee80211_wire::scan::ElementList::Complete
+                && record.privacy()
+                && record.rsn()
                 && record.rsn_ie_count == 1
-                && !record.legacy_wpa
+                && record.legacy_wpa == oer_protocols_ieee80211_wire::scan::ElementPresence::Absent
                 && !record.rsn_ie_bytes().is_empty()
         }
     }

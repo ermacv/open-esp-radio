@@ -175,7 +175,10 @@ impl<const N: usize> ScanTable<N> {
                 if record.ssid_bytes().is_empty() && !existing.ssid_bytes().is_empty() {
                     record.copy_ssid_from(existing);
                 }
-                if record.information_elements_truncated && !existing.information_elements_truncated
+                if record.information_elements
+                    == oer_protocols_ieee80211_wire::scan::ElementList::Truncated
+                    && existing.information_elements
+                        == oer_protocols_ieee80211_wire::scan::ElementList::Complete
                 {
                     // A malformed suffix cannot prove that a previously
                     // observed security/protection element disappeared. Keep

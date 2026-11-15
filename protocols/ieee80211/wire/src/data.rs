@@ -78,6 +78,23 @@ impl DataHeControl {
     }
 }
 
+/// Whether the peer is a QoS STA, so that its data MPDUs are QoS Data with
+/// a QoS Control field, or a non-QoS STA's Data (IEEE Std 802.11-2020,
+/// 9.2.4.1.3, 9.2.4.5).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PeerQos {
+    Qos,
+    NonQos,
+}
+
+/// The More Data subfield of an MPDU sent from an AP: more bufferable units
+/// stay buffered for the peer, or none (IEEE Std 802.11-2020, 9.2.4.1.8).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MoreData {
+    Buffered,
+    Clear,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DataEncapPlan {
     /// The encoded 802.11 header, of `header_len` bytes. A hardware-generated

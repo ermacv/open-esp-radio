@@ -68,6 +68,22 @@ pub fn he_extended_range_single_user_disabled(he_operation_ie: &[u8]) -> Option<
     }
 }
 
+/// Whether a frame's information elements were read to their end, or one
+/// was cut short by the frame or by the buffer that keeps it. Absence of an
+/// element after a cut is no proof that the frame lacks it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ElementList {
+    Complete,
+    Truncated,
+}
+
+/// Whether a frame carries an information element.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ElementPresence {
+    Absent,
+    Present,
+}
+
 /// A value offered to a [`ScanRecord`] setter that its buffer cannot hold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScanRecordError {
@@ -90,12 +106,11 @@ pub struct ScanRecord {
     /// no such element. Which channel the BSS is on is the receiver's
     /// decision.
     pub ds_channel: Option<u8>,
-    pub privacy: bool,
-    pub rsn: bool,
-    /// Number of complete RSN elements observed in this bounded record.
+    /// Number of RSN elements observed in this bounded record.
     pub rsn_ie_count: u8,
-    pub legacy_wpa: bool,
-    pub information_elements_truncated: bool,
+    /// A legacy WPA vendor element (OUI 00:50:f2, type 1).
+    pub legacy_wpa: ElementPresence,
+    pub information_elements: ElementList,
     pub capability_info: u16,
     /// The access point's TSF when it sent this beacon or probe response.
     pub timestamp: crate::tsf::TsfTimestamp,
@@ -119,6 +134,17 @@ pub struct ScanRecord {
 }
 
 impl ScanRecord {
+    /// The Privacy subfield of the record's Capability Information.
+    pub const fn privacy(&self) -> bool {
+        crate::management::CapabilityInformation::from_bytes(self.capability_info.to_le_bytes())
+            .privacy()
+    }
+
+    /// Whether the frame carried an RSN element.
+    pub const fn rsn(&self) -> bool {
+        self.rsn_ie_count != 0
+    }
+
     /// A record's identity, before its information elements are decoded.
     /// Empty table slots use `None`, never this record.
     pub const fn new(bssid: Bssid) -> Self {
@@ -127,11 +153,10 @@ impl ScanRecord {
             ssid_len: oer_portable_wire::PrefixLength::ZERO,
             bssid,
             ds_channel: None,
-            privacy: false,
-            rsn: false,
+
             rsn_ie_count: 0,
-            legacy_wpa: false,
-            information_elements_truncated: false,
+            legacy_wpa: ElementPresence::Absent,
+            information_elements: ElementList::Complete,
             capability_info: 0,
             timestamp: crate::tsf::TsfTimestamp::from_micros(0),
             beacon_interval_tu: 0,
@@ -395,14 +420,11 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     record.timestamp = crate::tsf::TsfTimestamp::from_bytes([t0, t1, t2, t3, t4, t5, t6, t7]);
     record.beacon_interval_tu = u16::from_le_bytes([i0, i1]);
     record.capability_info = u16::from_le_bytes([c0, c1]);
-    record.privacy =
-        crate::management::CapabilityInformation::from_bytes(record.capability_info.to_le_bytes())
-            .privacy();
 
     while let Ok(&element_header) = elements.array::<2>() {
         let [id, length] = element_header;
         let Ok(value) = elements.take(usize::from(length)) else {
-            record.information_elements_truncated = true;
+            record.information_elements = ElementList::Truncated;
             break;
         };
         match (id, value) {
@@ -423,11 +445,10 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
                 }
             }
             (48, _) => {
-                record.rsn = true;
                 record.rsn_ie_count = record.rsn_ie_count.saturating_add(1);
                 match store_element(&mut record.rsn_ie, element_header, value) {
                     Some(length) => record.rsn_ie_len = length,
-                    None => record.information_elements_truncated = true,
+                    None => record.information_elements = ElementList::Truncated,
                 }
             }
             (50, _) => {
@@ -438,7 +459,9 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
                     .map(|(stored, rate)| *stored = *rate)
                     .count();
                 record.extended_supported_rates_len = oer_portable_wire::PrefixLength::new(copied)?;
-                record.information_elements_truncated |= copied != value.len();
+                if copied != value.len() {
+                    record.information_elements = ElementList::Truncated;
+                }
             }
             (61, _) => {
                 if let Some(element) = exact_element(element_header, value) {
@@ -447,25 +470,25 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
             }
             (244, _) => match store_element(&mut record.rsnxe, element_header, value) {
                 Some(length) => record.rsnxe_len = length,
-                None => record.information_elements_truncated = true,
+                None => record.information_elements = ElementList::Truncated,
             },
             (255, [HE_CAPABILITIES_EXTENSION_ID, ..]) => {
                 match store_element(&mut record.he_capability_ie, element_header, value) {
                     Some(length) => record.he_capability_ie_len = length,
-                    None => record.information_elements_truncated = true,
+                    None => record.information_elements = ElementList::Truncated,
                 }
             }
             (255, [HE_OPERATION_EXTENSION_ID, ..]) => {
                 match store_element(&mut record.he_operation_ie, element_header, value) {
                     Some(length) => record.he_operation_ie_len = length,
-                    None => record.information_elements_truncated = true,
+                    None => record.information_elements = ElementList::Truncated,
                 }
             }
-            (221, [0x00, 0x50, 0xf2, 0x01, ..]) => record.legacy_wpa = true,
+            (221, [0x00, 0x50, 0xf2, 0x01, ..]) => record.legacy_wpa = ElementPresence::Present,
             (221, [0x00, 0x50, 0xf2, 0x02, _, _, ..]) => {
                 match store_element(&mut record.wmm_ie, element_header, value) {
                     Some(length) => record.wmm_ie_len = length,
-                    None => record.information_elements_truncated = true,
+                    None => record.information_elements = ElementList::Truncated,
                 }
             }
             _ => {}
@@ -473,7 +496,9 @@ fn decode_management(frame: &[u8]) -> Option<(ScanRecord, &[u8])> {
     }
     // One trailing byte cannot form an IE header. Treat it as malformed,
     // rather than silently accepting it as absence of a later RSN/WPA IE.
-    record.information_elements_truncated |= !elements.is_empty();
+    if !elements.is_empty() {
+        record.information_elements = ElementList::Truncated;
+    }
     Some((record, element_bytes))
 }
 
@@ -543,4 +568,28 @@ fn exact_element<const N: usize>(header: [u8; 2], value: &[u8]) -> Option<[u8; N
         .write(value)
         .ok()?;
     Some(element)
+}
+
+#[cfg(test)]
+mod record_tests {
+    use super::*;
+
+    fn record() -> ScanRecord {
+        ScanRecord::new(Bssid::new(IndividualAddress::new([2, 0, 0, 0, 0, 1]).unwrap()).unwrap())
+    }
+
+    #[test]
+    fn privacy_is_the_capability_s_bit_and_rsn_an_element_counted() {
+        let mut record = record();
+        assert!(!record.privacy() && !record.rsn());
+        record.capability_info = u16::from_le_bytes(
+            crate::management::CapabilityInformation::from_bytes([0; 2])
+                .with_privacy(true)
+                .to_bytes(),
+        );
+        assert!(record.privacy() && !record.rsn());
+        record.capability_info = 0;
+        record.rsn_ie_count = 1;
+        assert!(!record.privacy() && record.rsn());
+    }
 }

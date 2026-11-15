@@ -212,8 +212,8 @@ fn parses_beacon_into_owned_bounded_record() {
     assert_eq!(record.ds_channel, Some(11));
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
     assert_eq!(record.beacon_interval_tu, 100);
-    assert!(record.privacy);
-    assert!(record.rsn);
+    assert!(record.privacy());
+    assert!(record.rsn());
 }
 
 /// `rich_frame(8)` with the Order bit set and an HT Control field after the
@@ -233,7 +233,9 @@ fn a_beacon_with_ht_control_parses_its_fixed_fields_after_it() {
     assert_eq!(record.beacon_interval_tu, 100);
     assert_eq!(record.timestamp.as_micros(), 0x0123_4567_89ab_cdef);
     assert_eq!(record.capability_info, 0x0011);
-    assert!(!record.information_elements_truncated);
+    assert!(
+        record.information_elements == oer_protocols_ieee80211_wire::scan::ElementList::Complete
+    );
     assert_eq!(record, plain);
 }
 
@@ -351,7 +353,10 @@ fn a_damaged_frame_keeps_the_record_but_fails_its_erp_closed_until_a_sound_one()
         ScanObservation::Updated { index: 0 }
     );
     let kept = table.observations().next().unwrap();
-    assert!(!kept.record.information_elements_truncated);
+    assert!(
+        kept.record.information_elements
+            == oer_protocols_ieee80211_wire::scan::ElementList::Complete
+    );
     assert_eq!(kept.record.ssid_bytes(), b"ap");
     assert_eq!(erp(&table), ErpProtection::new(true, true));
     // Repeating the damaged frame changes nothing.
@@ -740,7 +745,9 @@ fn he_operation_readers_never_panic_on_received_bytes_full() {
 #[test]
 fn a_rich_frame_keeps_every_retained_element() {
     let record = parse_management(&rich_frame(8)).unwrap();
-    assert!(!record.information_elements_truncated);
+    assert!(
+        record.information_elements == oer_protocols_ieee80211_wire::scan::ElementList::Complete
+    );
     assert_eq!(record.ds_channel, Some(6));
     assert_eq!(record.supported_rates_bytes().len(), 8);
     assert_eq!(
@@ -766,7 +773,10 @@ fn a_rich_frame_keeps_every_retained_element() {
         &record,
         oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
     ));
-    assert!(record.legacy_wpa);
+    assert_eq!(
+        record.legacy_wpa,
+        oer_protocols_ieee80211_wire::scan::ElementPresence::Present
+    );
     assert_eq!(record.rsnxe_bytes(), &[244, 1, 0x20]);
     assert_eq!(record.he_capability_ie_bytes().len(), 9);
     assert_eq!(
@@ -787,7 +797,9 @@ fn an_oversized_element_marks_the_record_truncated_and_keeps_the_stored_one() {
     frame.extend_from_slice(&[244, 28]);
     frame.extend_from_slice(&[0; 28]);
     let record = parse_management(&frame).unwrap();
-    assert!(record.information_elements_truncated);
+    assert!(
+        record.information_elements == oer_protocols_ieee80211_wire::scan::ElementList::Truncated
+    );
     assert_eq!(record.rsnxe_bytes(), &[244, 1, 0x20]);
 }
 
