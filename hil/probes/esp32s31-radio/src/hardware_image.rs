@@ -64,10 +64,11 @@ fn main(
         oer_chips_esp32s31_platform_runtime::Esp32s31,
         _,
         _,
+        _,
     >(
         handoff,
         root.into_runtime(),
-        INTERRUPT_TABLE,
+        InterruptTable,
         oer_chips_esp32s31_platform_board::BootstrapPsram,
         oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
         |hardware| {
@@ -96,7 +97,7 @@ fn main(
         mac_extension: factory.mac_extension(),
     };
     let timer = runtime_system_timer;
-    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _>(
+    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -106,7 +107,7 @@ fn main(
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _>(
+    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _, _>(
         &mut timer_ready,
         adopted.router(),
         interrupts.app_alarm,

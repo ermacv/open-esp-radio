@@ -111,9 +111,12 @@ oer_chips_family_platform_interrupt_table::__fake_controller!();
 
 /// A real router-issued proof over the fake's unrouted source.
 pub(crate) fn silent() -> oer_chips_family_platform_interrupt_table::Silent<Irq> {
-    oer_chips_family_platform_interrupt_table::Router::<_, 0>::install(FakeController::new(0), &[])
-        .and_then(|router| router.silent())
-        .expect("the empty table leaves the fake USB source silent")
+    oer_chips_family_platform_interrupt_table::Router::<_, 0, _>::install(
+        FakeController::new(0),
+        oer_chips_family_platform_interrupt_table::NoBindings,
+    )
+    .and_then(|router| router.silent())
+    .expect("the empty table leaves the fake USB source silent")
 }
 
 impl InterruptRegisters for Irq {

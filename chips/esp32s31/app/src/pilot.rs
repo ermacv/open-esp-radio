@@ -9,7 +9,7 @@ use oer_chips_esp32s31_platform_runtime::{Esp32s31, phy_fault};
 use oer_chips_esp32s31_radio_phy::sar_pilot::{self, Service};
 use oer_chips_family_platform_executor::InterruptExecutor;
 use oer_chips_family_platform_interrupt_table::{
-    Bound, Controller, Entry, Router,
+    Bound, Controller, Entry, Router, Table,
     signal::{FromExecutorLevel, IrqSignal},
 };
 use oer_portable_memory::HandlerCell;
@@ -48,12 +48,15 @@ impl<I: Entry<Part = Timg0AlarmInterrupt> + 'static> Storage<I> {
         }
     }
     /// Stop/mask and discard stale RAW through the PHY driver before bind.
-    pub fn init<const H: u8>(
+    pub fn init<const H: u8, T: Table>(
         &'static self,
         parts: Timg0AlarmParts,
-        router: &mut Router<impl Controller, H>,
+        router: &mut Router<impl Controller, H, T>,
         token: I,
-    ) -> Client<I> {
+    ) -> Client<I>
+    where
+        I: Entry<Table = T>,
+    {
         let mut interrupt = parts.interrupt;
         let Some(cells) = self.cells.try_init_with(sar_pilot::Cells::new) else {
             reset(SarSetupStorage::Cells);

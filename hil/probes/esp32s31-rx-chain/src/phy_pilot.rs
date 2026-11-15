@@ -28,7 +28,7 @@ oer_chips_family_platform_runtime::placed_static! {
 /// stale RAW before any request can enable peripheral delivery.
 pub(crate) fn init<const H: u8>(
     parts: Timg0AlarmParts,
-    router: &mut Router<impl Controller, H>,
+    router: &mut Router<impl Controller, H, crate::InterruptTable>,
     token: crate::PhyToken,
 ) -> Client {
     let mut interrupt = parts.interrupt;

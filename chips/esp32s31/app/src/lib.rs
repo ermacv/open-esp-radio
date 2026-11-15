@@ -183,7 +183,7 @@ pub struct AesPeripheral(pub(crate) AesParts);
 /// service tasks to start once the executor runs. It exists only while the
 /// boot function runs, before any executor.
 pub struct Boot {
-    adopted: Adopted<InterruptController>,
+    adopted: Adopted<InterruptController, InterruptTable>,
     pub(crate) pending: Pending,
     /// The system timer, until a driver installs it or the boot ends.
     timer: Option<SystemTimer>,
@@ -222,7 +222,11 @@ pub struct NoNet;
 impl Boot {
     pub(crate) fn router(
         &mut self,
-    ) -> &mut oer_chips_family_platform_interrupt_table::Router<InterruptController, 0> {
+    ) -> &mut oer_chips_family_platform_interrupt_table::Router<
+        InterruptController,
+        0,
+        InterruptTable,
+    > {
         self.adopted.router()
     }
 
@@ -731,10 +735,10 @@ pub fn start<S: Started, H: GroupStarted>(
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let (hardware, _psram, adopted) =
-        match oer_chips_family_platform_runtime::adoption::run::<Esp32s31, _, _>(
+        match oer_chips_family_platform_runtime::adoption::run::<Esp32s31, _, _, _>(
             handoff,
             root.into_runtime(),
-            INTERRUPT_TABLE,
+            InterruptTable,
             oer_chips_esp32s31_platform_board::BootstrapPsram,
             oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
             |hardware| {
@@ -852,7 +856,7 @@ pub fn start<S: Started, H: GroupStarted>(
     let _ = hart1;
     // Without a radio executor the application executor writes the timer.
     if let (Some(timer), Some(alarm)) = (setup.timer.take(), setup.app_alarm.take()) {
-        let ready = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>(
+        let ready = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _, _>(
             oer_chips_family_platform_executor::systimer::SystemTimer {
                 comparators: timer.comparators,
                 counter: timer.counter,

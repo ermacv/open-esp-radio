@@ -212,10 +212,10 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
         ),
         _psram,
         mut adopted,
-    ) = match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _>(
+    ) = match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _, _>(
         handoff,
         root.into_runtime(),
-        INTERRUPT_TABLE,
+        InterruptTable,
         board::BootstrapPsram,
         oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
         |hardware| {
@@ -277,7 +277,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
     // The boot hart's executor writes the SYSTIMER registers; hart 1's
     // executor gets comparator 1 through a grant it routes on hart 1.
     let timer = runtime_system_timer;
-    let mut timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>(
+    let mut timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -362,7 +362,7 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! {
         unwrap,
         liveness,
     } = parts;
-    let mut adopted = match handoff.adopt(INTERRUPT_TABLE) {
+    let mut adopted = match handoff.adopt(InterruptTable) {
         Ok(adopted) => adopted,
         Err(error) => fail(error.name()),
     };
@@ -377,7 +377,7 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! {
     };
     let engine = oer_chips_esp32s31_platform_runtime::crypto::aes_engine(aes, silent);
     let spawner = executor
-        .start::<Hart1Tasks, _, _, 1, _>(hart, router, token, irq, ())
+        .start::<Hart1Tasks, _, _, 1, _, _>(hart, router, token, irq, ())
         .unwrap_or_else(|failure| failure.reset());
     let id = u16::from(hart.id());
     if Hart1Tasks::respond(&spawner, exchange, id).is_err()

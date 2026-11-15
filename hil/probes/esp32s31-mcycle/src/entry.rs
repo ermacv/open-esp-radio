@@ -83,10 +83,10 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((timer, software, watchdogs, reset_causes, hart1), _psram, mut adopted) =
-        match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _>(
+        match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _, _>(
             handoff,
             root.into_runtime(),
-            INTERRUPT_TABLE,
+            InterruptTable,
             board::BootstrapPsram,
             oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
             |hardware| {
@@ -106,7 +106,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_portable_diagnostics::name!("interrupt-table"; 32));
     };
-    let timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>(
+    let timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -148,7 +148,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
 /// Hart 1's main: its busy rate, then a sample on each of the boot hart's
 /// requests until the last, then idle.
 fn hart1_main(handoff: SecondaryHandoff<Port, 1>, _parts: Hart1Parts) -> ! {
-    let adopted = match handoff.adopt(INTERRUPT_TABLE) {
+    let adopted = match handoff.adopt(InterruptTable) {
         Ok(adopted) => adopted,
         Err(error) => fail(error.name()),
     };

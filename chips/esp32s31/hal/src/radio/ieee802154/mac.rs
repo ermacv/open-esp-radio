@@ -160,7 +160,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 ///     Ieee802154InterruptOwner, Ieee802154InterruptSetupOwner, Ieee802154TaskOwner,
 /// };
 /// use oer_chips_esp32s31_hal::system::platform::InterruptController;
-/// use oer_chips_family_platform_interrupt_table::{BindError, Bound, Router};
+/// use oer_chips_family_platform_interrupt_table::{Bound, Quarantined, Router};
 /// # const LINES: oer_chips_family_platform_interrupt_table::Lines =
 /// #     oer_chips_family_platform_interrupt_table::Lines { first: 16, count: 48, levels: 8, harts: oer_chips_esp32s31_pac::HARTS as u8, tie_break: oer_chips_family_platform_interrupt_table::TieBreak::HighestLine };
 /// use oer_chips_family_radio_ieee802154_values::Ieee802154EventMask;
@@ -191,13 +191,13 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// # P::finish(p)
 /// # }
 /// fn bind(
-///     router: &mut Router<InterruptController, 0>, token: MacToken,
+///     router: &mut Router<InterruptController, 0, InterruptTable>, token: MacToken,
 ///     task: Ieee802154TaskOwner, setup: Ieee802154InterruptSetupOwner,
-/// ) -> Result<(Ieee802154ArmedTaskOwner, Bound<MacToken>), (Ieee802154ArmedTaskOwner, BindError<MacToken>)> {
+/// ) -> Result<(Ieee802154ArmedTaskOwner, Bound<MacToken>), (Ieee802154ArmedTaskOwner, Quarantined<MacToken>)> {
 ///     let (startup, interrupts) = prepare(setup, task);
 ///     match router.bind(token, interrupts) {
 ///         Ok(bound) => Ok((startup, bound)),
-///         Err(refused) => Err((startup, refused)),
+///         Err(held) => Err((startup, held)),
 ///     }
 /// }
 /// fn start(startup: Ieee802154ArmedTaskOwner, bound: &Bound<MacToken>)
@@ -227,7 +227,7 @@ pub struct Ieee802154InterruptSetupOwner<P: Placement = MacPlacement> {
 /// #     mac: MacToken = Ieee802154InterruptOwner => on_ieee802154, line 20, context radio, hart 0, Hardware;
 /// # }
 /// fn start(
-///     router: &mut Router<InterruptController, 0>,
+///     router: &mut Router<InterruptController, 0, InterruptTable>,
 ///     token: MacToken,
 ///     task: &mut Ieee802154TaskOwner,
 ///     interrupts: Ieee802154InterruptOwner,

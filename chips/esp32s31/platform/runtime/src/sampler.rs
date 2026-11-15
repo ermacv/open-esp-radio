@@ -287,7 +287,7 @@ mod chip {
         Timg1Timer1Parts, Timg1Timer1Program,
     };
     use oer_chips_family_platform_interrupt_table::{
-        Bound, Controller, Entry, EventAuthority, InterruptSources, Router,
+        Bound, Controller, Entry, EventAuthority, InterruptSources, Router, Table,
     };
     use oer_portable_memory::{AffineSpscQueue, CompactSpscCursor, HandlerCell};
     use oer_portable_time::{Duration, Instant, Timer as _};
@@ -461,12 +461,15 @@ mod chip {
 
         /// Stop the timer, discard a stale event and bind the handler on
         /// `router`'s hart. `None` when the storage was initialized before.
-        pub fn init<const H: u8>(
+        pub fn init<const H: u8, Tb: Table>(
             &'static self,
             parts: T::Parts,
-            router: &mut Router<impl Controller, H>,
+            router: &mut Router<impl Controller, H, Tb>,
             token: I,
-        ) -> Option<Sampler<Timer<I, T>>> {
+        ) -> Option<Sampler<Timer<I, T>>>
+        where
+            I: Entry<Table = Tb>,
+        {
             let (program, interrupt) = T::quiet(parts);
             let cells = self.cells.try_init_with(|| Cells {
                 request: Queue::new(),
