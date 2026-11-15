@@ -12,7 +12,6 @@
 //! ESP32-S31 station composition. Installation owners stay in its runners.
 pub mod coex;
 mod credentials;
-pub mod failure;
 pub mod observation;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll};
@@ -837,17 +836,10 @@ mod prepare;
 pub use prepare::{PreparationRefused, Stage, Step, Steps};
 mod reconnect;
 #[cfg(any(test, target_arch = "riscv32"))]
-mod release;
 #[cfg(target_arch = "riscv32")]
-pub use release::Freed;
 #[cfg(any(test, target_arch = "riscv32"))]
-mod station_end;
 #[cfg(target_arch = "riscv32")]
-pub use station_end::{StationExitOf, StopErrorOf, stop_result};
 #[cfg(any(test, target_arch = "riscv32"))]
-mod access_point_end;
-
-pub mod unfinished;
 #[cfg(oer_fault_injection)]
 pub use oer_chips_esp32s31_radio_ieee80211_backend::port::debug::refuse_next_publication;
 pub use reconnect::{ReconnectPolicy, ZeroReconnectInterval};
@@ -948,11 +940,6 @@ pub use station::{
     StationPlacesOf, UnfinishedLifecycle,
 };
 #[cfg(any(test, target_arch = "riscv32"))]
-pub use station_end::{
-    DatapathCause, DatapathRetired, EndHalf, EndHalves, FinishedLifecycleOf, InstallationOf,
-    KeptFull, LateEnd, LateRead, NotInstalledOf, ProofRefusal, RefusedProof, UnfinishedLifecycleOf,
-    UnfinishedStation,
-};
 
 /// Bind the facade's backing to this image's concrete interrupt entries.
 /// The image declares callbacks, collectors and terminal policy.

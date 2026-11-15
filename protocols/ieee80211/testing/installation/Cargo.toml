@@ -5,13 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The installation machine over a real port: a pump and the cases every port passes under it"
+description = "The installation machine over a real port: `drive` and the cases every port passes under it"
 readme = "README.md"
 
 [dependencies]
 oer-portable-time = { path = "../../../../portable/time" }
 oer-protocols-ieee80211-contracts-port = { path = "../../contracts/port" }
 oer-protocols-ieee80211-core-installation = { path = "../../core/installation" }
+oer-protocols-ieee80211-runtime = { path = "../../runtime" }
 oer-protocols-ieee80211-testing-conformance = { path = "../conformance" }
 
 [lints]

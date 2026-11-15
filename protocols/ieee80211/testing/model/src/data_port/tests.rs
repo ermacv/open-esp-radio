@@ -794,6 +794,37 @@ fn with_harness(test: impl for<'s> FnOnce(&mut Harness<'s>)) {
     }));
 }
 
+impl<'s> oer_protocols_ieee80211_testing_installation::InstallationHarness<'s> for Harness<'s> {
+    fn drive_parts(
+        &mut self,
+    ) -> (
+        &mut Port<'s>,
+        &mut Installations<LocalId<'s>, ModelPools>,
+        &mut Sink<'s>,
+    ) {
+        (&mut self.port, &mut self.installations, &mut self.sink)
+    }
+    fn adopt(
+        &mut self,
+        installed: <Port<'s> as oer_protocols_ieee80211_contracts_port::DataPort<'s>>::Installed,
+    ) {
+        // The new installation's tokens end here, as the harness's own
+        // reinstall does; its commands are the harness's.
+        let (commands, _resources) = installed;
+        self.commands = commands;
+    }
+}
+
+#[test]
+fn drive_ends_every_installation_case_on_the_model() {
+    use oer_protocols_ieee80211_testing_installation as installation;
+    for case in installation::Case::ALL {
+        with_harness(|harness| {
+            assert_eq!(installation::check(harness, case), Ok(()), "{case:?}");
+        });
+    }
+}
+
 #[test]
 fn the_model_passes_every_data_port_case() {
     for case in Case::ALL {

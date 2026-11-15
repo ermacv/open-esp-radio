@@ -18,7 +18,7 @@ static_cell.workspace = true
 bytemuck = { version = "1.25.2", features = ["derive"] }
 oer-protocols-ieee80211-core-security-rsn = { path = "../../../../../protocols/ieee80211/core/security/rsn" }
 oer-protocols-network-port = { path = "../../../../../protocols/network/port" }
-oer-protocols-ieee80211-runtime = { path = "../../../../../protocols/ieee80211/runtime", features = ["placement"] }
+oer-protocols-ieee80211-runtime = { path = "../../../../../protocols/ieee80211/runtime" }
 oer-protocols-ieee80211-core-roles-sta = { path = "../../../../../protocols/ieee80211/core/roles/sta" }
 oer-protocols-ieee80211-core-roles-ap = { path = "../../../../../protocols/ieee80211/core/roles/ap" }
 oer-protocols-ieee80211-wire = { path = "../../../../../protocols/ieee80211/wire" }
@@ -58,7 +58,7 @@ oer-chips-family-platform-interrupt-table = { path = "../../../../family/platfor
 oer-portable-memory = { path = "../../../../../portable/memory", features = ["host-context"] }
 oer-portable-time-virtual = { path = "../../../../../portable/time-virtual" }
 oer-protocols-ieee80211-core-roles-sta = { path = "../../../../../protocols/ieee80211/core/roles/sta", features = ["test-support"] }
-oer-protocols-ieee80211-runtime = { path = "../../../../../protocols/ieee80211/runtime", features = ["placement", "test-support"] }
+oer-protocols-ieee80211-runtime = { path = "../../../../../protocols/ieee80211/runtime" }
 oer-protocols-network-core = { path = "../../../../../protocols/network/core", features = ["test-support"] }
 oer-protocols-network-runtime = { path = "../../../../../protocols/network/runtime" }
 oer-protocols-network-wire = { path = "../../../../../protocols/network/wire" }
