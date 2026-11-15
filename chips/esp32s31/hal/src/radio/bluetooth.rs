@@ -70,7 +70,7 @@ pub use registers::{
     BluetoothModemLpTimerPendingObservation, BluetoothModemLpTimerStoppedInterruptFault,
     BluetoothModemLpTimerStoppedInterruptObservation, BluetoothNrtInterruptAcknowledged,
     BluetoothNrtInterruptFault, BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
-    BluetoothRawTickDeltaProjection, BluetoothScanStartPublished,
+    BluetoothPrimarySource, BluetoothRawTickDeltaProjection, BluetoothScanStartPublished,
     BluetoothSchedulerBusyObservation, BluetoothSchedulerCancellationDisposition,
     BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationReleased,
     BluetoothSchedulerCancellationRequested, BluetoothSchedulerCancellationSourceAcknowledged,

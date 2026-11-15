@@ -1,10 +1,9 @@
 use std::vec::Vec;
 
 use super::{
-    BluetoothInterruptControl, BluetoothPrimaryBank0Status, BluetoothPrimaryBank1Status,
-    BluetoothPrimaryInterruptControl, BluetoothSchedulerRunInterruptControl,
-    execute_primary_interrupt_epoch, execute_primary_prepare, execute_primary_release,
-    execute_scheduler_run_interrupt_prepare,
+    BluetoothInterruptControl, BluetoothPrimaryInterruptControl, BluetoothPrimarySource,
+    BluetoothPrimaryStatus, BluetoothSchedulerRunInterruptControl, execute_primary_interrupt_epoch,
+    execute_primary_prepare, execute_primary_release, execute_scheduler_run_interrupt_prepare,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -98,56 +97,35 @@ enum EpochOperation {
 }
 
 struct EpochRecorder {
-    bank_0: BluetoothPrimaryBank0Status,
-    bank_1: BluetoothPrimaryBank1Status,
+    bank_0: BluetoothPrimaryStatus,
+    bank_1: BluetoothPrimaryStatus,
     operations: Vec<EpochOperation>,
 }
 
 impl EpochRecorder {
     fn fault_sources() -> Self {
         Self {
-            bank_0: BluetoothPrimaryBank0Status {
-                source_15_pending: true,
-                source_21_pending: false,
-                sources_27_or_28_pending: false,
-                unclassified_pending: false,
-            },
-            bank_1: BluetoothPrimaryBank1Status {
-                controller_time_overflow: false,
-                source_3_pending: false,
-                source_8_pending: true,
-                source_9_pending: true,
-                source_12_pending: true,
-                unclassified_pending: false,
-            },
+            bank_0: BluetoothPrimarySource::Bank0Source15.set(),
+            bank_1: BluetoothPrimarySource::Bank1Source8
+                .set()
+                .union(BluetoothPrimarySource::Bank1Source9.set())
+                .union(BluetoothPrimarySource::Bank1Source12.set()),
             operations: Vec::new(),
         }
     }
 
     fn empty() -> Self {
         Self {
-            bank_0: BluetoothPrimaryBank0Status {
-                source_15_pending: false,
-                source_21_pending: false,
-                sources_27_or_28_pending: false,
-                unclassified_pending: false,
-            },
-            bank_1: BluetoothPrimaryBank1Status {
-                controller_time_overflow: false,
-                source_3_pending: false,
-                source_8_pending: false,
-                source_9_pending: false,
-                source_12_pending: false,
-                unclassified_pending: false,
-            },
+            bank_0: BluetoothPrimaryStatus::empty(),
+            bank_1: BluetoothPrimaryStatus::empty(),
             operations: Vec::new(),
         }
     }
 }
 
 impl BluetoothPrimaryInterruptControl for EpochRecorder {
-    type Bank0Snapshot = BluetoothPrimaryBank0Status;
-    type Bank1Snapshot = BluetoothPrimaryBank1Status;
+    type Bank0Snapshot = BluetoothPrimaryStatus;
+    type Bank1Snapshot = BluetoothPrimaryStatus;
 
     fn sample_bank_0(&mut self) -> Self::Bank0Snapshot {
         self.operations.push(EpochOperation::SampleBank0);
@@ -159,11 +137,11 @@ impl BluetoothPrimaryInterruptControl for EpochRecorder {
         self.bank_1
     }
 
-    fn bank_0_status(&self, snapshot: &Self::Bank0Snapshot) -> BluetoothPrimaryBank0Status {
+    fn bank_0_status(&self, snapshot: &Self::Bank0Snapshot) -> BluetoothPrimaryStatus {
         *snapshot
     }
 
-    fn bank_1_status(&self, snapshot: &Self::Bank1Snapshot) -> BluetoothPrimaryBank1Status {
+    fn bank_1_status(&self, snapshot: &Self::Bank1Snapshot) -> BluetoothPrimaryStatus {
         *snapshot
     }
 
@@ -215,7 +193,7 @@ fn primary_epoch_acknowledges_before_conditional_fault_capture() {
 #[test]
 fn primary_epoch_skips_diagnostic_reads_without_matching_sources() {
     let mut recorder = EpochRecorder::empty();
-    recorder.bank_0.source_21_pending = true;
+    recorder.bank_0 = BluetoothPrimarySource::Bank0Source21.set();
     let epoch = execute_primary_interrupt_epoch(&mut recorder).expect("source 21 is pending");
 
     assert_eq!(
@@ -295,7 +273,7 @@ fn primary_release_silences_overflow_before_strobes_and_baseline_masks() {
 #[test]
 fn overflow_is_acknowledged_as_a_normal_primary_epoch_without_scheduler_or_diagnostics() {
     let mut recorder = EpochRecorder::empty();
-    recorder.bank_1.controller_time_overflow = true;
+    recorder.bank_1 = BluetoothPrimarySource::ControllerTimeOverflow.set();
     let epoch = execute_primary_interrupt_epoch(&mut recorder).unwrap();
     assert!(epoch.controller_time_overflow());
     assert!(!epoch.fault_sources().is_fault());

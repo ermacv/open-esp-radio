@@ -117,6 +117,13 @@ impl<M: Member> Set<M> {
         Self::of_place(member.place())
     }
 
+    /// The set of `member` when `bit`, a generated reader's value, is set;
+    /// else the empty set.
+    #[must_use]
+    pub fn of_bit(bit: bool, member: M) -> Self {
+        if bit { Self::of(member) } else { Self::empty() }
+    }
+
     /// Whether `member` is in the set.
     #[must_use]
     pub fn contains(self, member: M) -> bool {

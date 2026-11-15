@@ -10,6 +10,7 @@ use crate::radio::bluetooth::registers::{
     BluetoothInterruptRegisters, BluetoothInterruptSetup, BluetoothPlacements, Chip,
     InterruptBlocks, device_fence,
 };
+use crate::set::Set;
 use oer_chips_esp32s31_pac::bt_mac as bank;
 
 trait BluetoothSchedulerRunInterruptControl {
@@ -148,45 +149,42 @@ impl<B: oer_portable_mmio::Placement> BluetoothInterruptControl
     }
 }
 
-#[derive(Clone, Copy)]
-struct BluetoothPrimaryBank0Status {
-    source_15_pending: bool,
-    source_21_pending: bool,
-    sources_27_or_28_pending: bool,
-    unclassified_pending: bool,
-}
-
-impl BluetoothPrimaryBank0Status {
-    /// Whether no bit of the bank was pending: the four cover all of them.
-    const fn is_clear(self) -> bool {
-        !(self.source_15_pending
-            || self.source_21_pending
-            || self.sources_27_or_28_pending
-            || self.unclassified_pending)
+crate::set::members! {
+    /// The sources of the primary interrupt's two status banks, by their
+    /// positions: current evidence proves the control flow, not stable
+    /// Link-Layer names for these undocumented sources.
+    pub enum BluetoothPrimarySource {
+        /// Bank one: the BTLC first-word wrap.
+        ControllerTimeOverflow,
+        Bank0Source15,
+        Bank0Source21,
+        /// Bank zero: source 27 or 28.
+        Bank0Sources27Or28,
+        Bank1Source3,
+        Bank1Source8,
+        Bank1Source9,
+        Bank1Source12,
+        /// A pending bit of either bank without reviewed handler semantics.
+        Unclassified,
     }
 }
 
-#[derive(Clone, Copy)]
-struct BluetoothPrimaryBank1Status {
-    controller_time_overflow: bool,
-    source_3_pending: bool,
-    source_8_pending: bool,
-    source_9_pending: bool,
-    source_12_pending: bool,
-    unclassified_pending: bool,
-}
+/// The pending sources of a sampled status bank.
+type BluetoothPrimaryStatus = Set<BluetoothPrimarySource>;
 
-impl BluetoothPrimaryBank1Status {
-    /// Whether no bit of the bank was pending.
-    const fn is_clear(self) -> bool {
-        !(self.controller_time_overflow
-            || self.source_3_pending
-            || self.source_8_pending
-            || self.source_9_pending
-            || self.source_12_pending
-            || self.unclassified_pending)
-    }
-}
+/// The sources of a fault: reviewed fault sources and unclassified ones.
+const FAULT_SOURCES: BluetoothPrimaryStatus = BluetoothPrimarySource::Bank0Source15
+    .set()
+    .union(BluetoothPrimarySource::Bank1Source8.set())
+    .union(BluetoothPrimarySource::Bank1Source9.set())
+    .union(BluetoothPrimarySource::Bank1Source12.set())
+    .union(BluetoothPrimarySource::Unclassified.set());
+
+/// The sources an epoch reports beside its fault sources.
+const DYNAMIC_SOURCES: BluetoothPrimaryStatus = BluetoothPrimarySource::Bank0Source21
+    .set()
+    .union(BluetoothPrimarySource::Bank0Sources27Or28.set())
+    .union(BluetoothPrimarySource::Bank1Source3.set());
 
 trait BluetoothPrimaryInterruptControl {
     type Bank0Snapshot;
@@ -194,8 +192,8 @@ trait BluetoothPrimaryInterruptControl {
 
     fn sample_bank_0(&mut self) -> Self::Bank0Snapshot;
     fn sample_bank_1(&mut self) -> Self::Bank1Snapshot;
-    fn bank_0_status(&self, snapshot: &Self::Bank0Snapshot) -> BluetoothPrimaryBank0Status;
-    fn bank_1_status(&self, snapshot: &Self::Bank1Snapshot) -> BluetoothPrimaryBank1Status;
+    fn bank_0_status(&self, snapshot: &Self::Bank0Snapshot) -> BluetoothPrimaryStatus;
+    fn bank_1_status(&self, snapshot: &Self::Bank1Snapshot) -> BluetoothPrimaryStatus;
     fn acknowledge_bank_0(&mut self, snapshot: Self::Bank0Snapshot);
     fn acknowledge_bank_1(&mut self, snapshot: Self::Bank1Snapshot);
     fn capture_diagnostic_detail_0(&mut self);
@@ -217,31 +215,56 @@ impl<B: oer_portable_mmio::Placement> BluetoothPrimaryInterruptControl
         self.bank.sample_bluetooth_primary_interrupt_bank_1()
     }
 
-    fn bank_0_status(&self, snapshot: &Self::Bank0Snapshot) -> BluetoothPrimaryBank0Status {
-        BluetoothPrimaryBank0Status {
-            source_15_pending: snapshot.source_15(),
-            source_21_pending: snapshot.source_21(),
-            sources_27_or_28_pending: snapshot.sources_27_28().get() != 0,
-            unclassified_pending: snapshot.bits_0_14_opaque().get() != 0
-                || snapshot.bits_16_20_opaque().get() != 0
-                || snapshot.bits_22_26_opaque().get() != 0
-                || snapshot.bits_29_31_opaque().get() != 0,
-        }
+    fn bank_0_status(&self, snapshot: &Self::Bank0Snapshot) -> BluetoothPrimaryStatus {
+        let unclassified = snapshot.bits_0_14_opaque().get() != 0
+            || snapshot.bits_16_20_opaque().get() != 0
+            || snapshot.bits_22_26_opaque().get() != 0
+            || snapshot.bits_29_31_opaque().get() != 0;
+        Set::of_bit(snapshot.source_15(), BluetoothPrimarySource::Bank0Source15)
+            .union(Set::of_bit(
+                snapshot.source_21(),
+                BluetoothPrimarySource::Bank0Source21,
+            ))
+            .union(Set::of_bit(
+                snapshot.sources_27_28().get() != 0,
+                BluetoothPrimarySource::Bank0Sources27Or28,
+            ))
+            .union(Set::of_bit(
+                unclassified,
+                BluetoothPrimarySource::Unclassified,
+            ))
     }
 
-    fn bank_1_status(&self, snapshot: &Self::Bank1Snapshot) -> BluetoothPrimaryBank1Status {
-        BluetoothPrimaryBank1Status {
-            controller_time_overflow: snapshot.controller_time_overflow(),
-            source_3_pending: snapshot.source_3(),
-            source_8_pending: snapshot.source_8(),
-            source_9_pending: snapshot.source_9(),
-            source_12_pending: snapshot.source_12(),
-            unclassified_pending: snapshot.bit_0_opaque()
-                || snapshot.bit_2_opaque()
-                || snapshot.bits_4_7_opaque().get() != 0
-                || snapshot.bits_10_11_opaque().get() != 0
-                || snapshot.bits_13_31_opaque().get() != 0,
-        }
+    fn bank_1_status(&self, snapshot: &Self::Bank1Snapshot) -> BluetoothPrimaryStatus {
+        let unclassified = snapshot.bit_0_opaque()
+            || snapshot.bit_2_opaque()
+            || snapshot.bits_4_7_opaque().get() != 0
+            || snapshot.bits_10_11_opaque().get() != 0
+            || snapshot.bits_13_31_opaque().get() != 0;
+        Set::of_bit(
+            snapshot.controller_time_overflow(),
+            BluetoothPrimarySource::ControllerTimeOverflow,
+        )
+        .union(Set::of_bit(
+            snapshot.source_3(),
+            BluetoothPrimarySource::Bank1Source3,
+        ))
+        .union(Set::of_bit(
+            snapshot.source_8(),
+            BluetoothPrimarySource::Bank1Source8,
+        ))
+        .union(Set::of_bit(
+            snapshot.source_9(),
+            BluetoothPrimarySource::Bank1Source9,
+        ))
+        .union(Set::of_bit(
+            snapshot.source_12(),
+            BluetoothPrimarySource::Bank1Source12,
+        ))
+        .union(Set::of_bit(
+            unclassified,
+            BluetoothPrimarySource::Unclassified,
+        ))
     }
 
     fn acknowledge_bank_0(&mut self, snapshot: Self::Bank0Snapshot) {
@@ -364,71 +387,52 @@ impl<P: BluetoothPlacements> BluetoothInterruptOutputPrepared<P> {
 /// but not stable Link-Layer names for these undocumented sources. Raw status
 /// and diagnostic register images remain private to the register owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct BluetoothPrimaryFaultSources {
-    bank_0_source_15_pending: bool,
-    bank_1_source_8_pending: bool,
-    bank_1_source_9_pending: bool,
-    bank_1_source_12_pending: bool,
-    unclassified_pending: bool,
-}
+pub struct BluetoothPrimaryFaultSources(BluetoothPrimaryStatus);
 
 impl BluetoothPrimaryFaultSources {
     /// No fault source pending, the base of the host-test epochs.
     #[cfg(any(test, feature = "test-support"))]
-    const NONE_FOR_HOST_TEST: Self = Self {
-        bank_0_source_15_pending: false,
-        bank_1_source_8_pending: false,
-        bank_1_source_9_pending: false,
-        bank_1_source_12_pending: false,
-        unclassified_pending: false,
-    };
+    const NONE_FOR_HOST_TEST: Self = Self(Set::empty());
 
-    const fn from_status(
-        bank_0: BluetoothPrimaryBank0Status,
-        bank_1: BluetoothPrimaryBank1Status,
-    ) -> Self {
-        Self {
-            bank_0_source_15_pending: bank_0.source_15_pending,
-            bank_1_source_8_pending: bank_1.source_8_pending,
-            bank_1_source_9_pending: bank_1.source_9_pending,
-            bank_1_source_12_pending: bank_1.source_12_pending,
-            unclassified_pending: bank_0.unclassified_pending || bank_1.unclassified_pending,
-        }
+    const fn from_status(status: BluetoothPrimaryStatus) -> Self {
+        Self(status.intersection(FAULT_SOURCES))
+    }
+
+    /// The pending fault sources: each is one of the reviewed fault
+    /// sources or [`BluetoothPrimarySource::Unclassified`].
+    pub const fn sources(self) -> Set<BluetoothPrimarySource> {
+        self.0
     }
 
     /// Whether a reviewed fault source or an unclassified source was pending.
     pub const fn is_fault(self) -> bool {
-        self.bank_0_source_15_pending
-            || self.bank_1_source_8_pending
-            || self.bank_1_source_9_pending
-            || self.bank_1_source_12_pending
-            || self.unclassified_pending
+        !self.0.is_empty()
     }
 
     /// Whether positional bank-zero source 15 was pending.
     pub const fn bank_0_source_15_pending(self) -> bool {
-        self.bank_0_source_15_pending
+        self.0.includes(BluetoothPrimarySource::Bank0Source15.set())
     }
 
     /// Whether positional bank-one source 8 was pending.
     pub const fn bank_1_source_8_pending(self) -> bool {
-        self.bank_1_source_8_pending
+        self.0.includes(BluetoothPrimarySource::Bank1Source8.set())
     }
 
     /// Whether positional bank-one source 9 was pending.
     pub const fn bank_1_source_9_pending(self) -> bool {
-        self.bank_1_source_9_pending
+        self.0.includes(BluetoothPrimarySource::Bank1Source9.set())
     }
 
     /// Whether positional bank-one source 12 was pending.
     pub const fn bank_1_source_12_pending(self) -> bool {
-        self.bank_1_source_12_pending
+        self.0.includes(BluetoothPrimarySource::Bank1Source12.set())
     }
 
     /// Whether at least one status source without reviewed handler semantics
     /// was pending in either bank.
     pub const fn unclassified_pending(self) -> bool {
-        self.unclassified_pending
+        self.0.includes(BluetoothPrimarySource::Unclassified.set())
     }
 }
 
@@ -502,10 +506,8 @@ impl BluetoothNrtInterruptAcknowledged {
 #[derive(Debug, Eq, PartialEq)]
 #[must_use = "a primary interrupt epoch must be classified before returning from the handler"]
 pub struct BluetoothPrimaryInterruptEpoch {
-    controller_time_overflow: bool,
-    bank_0_source_21_pending: bool,
-    bank_0_sources_27_or_28_pending: bool,
-    bank_1_source_3_pending: bool,
+    /// The controller time overflow and the dynamic sources pending.
+    sources: BluetoothPrimaryStatus,
     fault_sources: BluetoothPrimaryFaultSources,
 }
 
@@ -515,16 +517,10 @@ impl BluetoothPrimaryInterruptEpoch {
     /// module.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
-    pub const fn for_dynamic_host_test(
-        bank_0_source_21_pending: bool,
-        bank_0_sources_27_or_28_pending: bool,
-        bank_1_source_3_pending: bool,
-    ) -> Self {
+    pub const fn for_dynamic_host_test(sources: Set<BluetoothPrimarySource>) -> Self {
         Self {
-            controller_time_overflow: false,
-            bank_0_source_21_pending,
-            bank_0_sources_27_or_28_pending,
-            bank_1_source_3_pending,
+            // A fault-free epoch: only the dynamic sources are taken.
+            sources: sources.intersection(DYNAMIC_SOURCES),
             fault_sources: BluetoothPrimaryFaultSources::NONE_FOR_HOST_TEST,
         }
     }
@@ -535,14 +531,8 @@ impl BluetoothPrimaryInterruptEpoch {
     #[doc(hidden)]
     pub const fn for_fault_host_test() -> Self {
         Self {
-            controller_time_overflow: false,
-            bank_0_source_21_pending: false,
-            bank_0_sources_27_or_28_pending: false,
-            bank_1_source_3_pending: false,
-            fault_sources: BluetoothPrimaryFaultSources {
-                bank_1_source_8_pending: true,
-                ..BluetoothPrimaryFaultSources::NONE_FOR_HOST_TEST
-            },
+            sources: Set::empty(),
+            fault_sources: BluetoothPrimaryFaultSources(BluetoothPrimarySource::Bank1Source8.set()),
         }
     }
 
@@ -552,43 +542,43 @@ impl BluetoothPrimaryInterruptEpoch {
     #[doc(hidden)]
     pub const fn for_unclassified_host_test() -> Self {
         Self {
-            controller_time_overflow: false,
-            bank_0_source_21_pending: false,
-            bank_0_sources_27_or_28_pending: false,
-            bank_1_source_3_pending: false,
-            fault_sources: BluetoothPrimaryFaultSources {
-                unclassified_pending: true,
-                ..BluetoothPrimaryFaultSources::NONE_FOR_HOST_TEST
-            },
+            sources: Set::empty(),
+            fault_sources: BluetoothPrimaryFaultSources(BluetoothPrimarySource::Unclassified.set()),
         }
     }
 
     /// Whether positional dynamic bank-zero source 21 was pending.
     pub const fn bank_0_source_21_pending(&self) -> bool {
-        self.bank_0_source_21_pending
+        self.sources
+            .includes(BluetoothPrimarySource::Bank0Source21.set())
     }
 
     /// Whether this acknowledged primary epoch captured a BTLC first-word wrap.
     pub const fn controller_time_overflow(&self) -> bool {
-        self.controller_time_overflow
+        self.sources
+            .includes(BluetoothPrimarySource::ControllerTimeOverflow.set())
     }
 
     /// Add an overflow observation to a synthetic epoch for host tests.
     #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub const fn with_controller_time_overflow_for_host_test(mut self) -> Self {
-        self.controller_time_overflow = true;
+        self.sources = self
+            .sources
+            .union(BluetoothPrimarySource::ControllerTimeOverflow.set());
         self
     }
 
     /// Whether positional dynamic bank-zero source 27 or 28 was pending.
     pub const fn bank_0_sources_27_or_28_pending(&self) -> bool {
-        self.bank_0_sources_27_or_28_pending
+        self.sources
+            .includes(BluetoothPrimarySource::Bank0Sources27Or28.set())
     }
 
     /// Whether positional dynamic bank-one source 3 was pending.
     pub const fn bank_1_source_3_pending(&self) -> bool {
-        self.bank_1_source_3_pending
+        self.sources
+            .includes(BluetoothPrimarySource::Bank1Source3.set())
     }
 
     /// Semantic fault-source presence captured in the acknowledged epoch.
@@ -606,13 +596,14 @@ fn execute_primary_interrupt_epoch(
     let bank_1 = control.sample_bank_1();
     let bank_0_status = control.bank_0_status(&bank_0);
     let bank_1_status = control.bank_1_status(&bank_1);
-    if bank_0_status.is_clear() && bank_1_status.is_clear() {
+    let status = bank_0_status.union(bank_1_status);
+    if status.is_empty() {
         return None;
     }
     control.acknowledge_bank_0(bank_0);
     control.acknowledge_bank_1(bank_1);
 
-    let fault_sources = BluetoothPrimaryFaultSources::from_status(bank_0_status, bank_1_status);
+    let fault_sources = BluetoothPrimaryFaultSources::from_status(status);
     if fault_sources.bank_1_source_9_pending() {
         control.capture_diagnostic_detail_0();
         control.capture_diagnostic_detail_1();
@@ -622,10 +613,9 @@ fn execute_primary_interrupt_epoch(
     }
 
     Some(BluetoothPrimaryInterruptEpoch {
-        controller_time_overflow: bank_1_status.controller_time_overflow,
-        bank_0_source_21_pending: bank_0_status.source_21_pending,
-        bank_0_sources_27_or_28_pending: bank_0_status.sources_27_or_28_pending,
-        bank_1_source_3_pending: bank_1_status.source_3_pending,
+        sources: status.intersection(
+            DYNAMIC_SOURCES.union(BluetoothPrimarySource::ControllerTimeOverflow.set()),
+        ),
         fault_sources,
     })
 }

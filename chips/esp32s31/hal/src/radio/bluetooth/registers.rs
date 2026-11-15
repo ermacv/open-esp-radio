@@ -66,7 +66,8 @@ pub use direction_finding::BluetoothDirectionFindingDisabledBaselinePrepared;
 pub use interrupt::{
     BluetoothInterruptOutputPrepared, BluetoothNrtInterruptAcknowledged,
     BluetoothNrtInterruptFault, BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
-    BluetoothSchedulerRunInterruptsPrepared, retirement::BluetoothControllerOutputReleaseError,
+    BluetoothPrimarySource, BluetoothSchedulerRunInterruptsPrepared,
+    retirement::BluetoothControllerOutputReleaseError,
 };
 pub use memory_lists::{
     BluetoothMemoryListPointerImage, BluetoothMemoryListSelector, BluetoothMemoryListSlot,

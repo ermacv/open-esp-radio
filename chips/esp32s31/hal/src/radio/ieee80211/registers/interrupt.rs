@@ -168,13 +168,19 @@ impl MacInterruptSnapshot {
 
     pub fn observation(&self) -> MacInterruptObservation {
         let sample = &self.0;
-        let work_events = cause_if(sample.tx_complete(), MacInterruptCause::TxComplete)
-            .union(cause_if(
+        let work_events = Set::of_bit(sample.tx_complete(), MacInterruptCause::TxComplete)
+            .union(Set::of_bit(
                 sample.tx_queue_collision(),
                 MacInterruptCause::TxQueueCollision,
             ))
-            .union(cause_if(sample.rx_success(), MacInterruptCause::RxSuccess))
-            .union(cause_if(sample.tx_timeout(), MacInterruptCause::TxTimeout));
+            .union(Set::of_bit(
+                sample.rx_success(),
+                MacInterruptCause::RxSuccess,
+            ))
+            .union(Set::of_bit(
+                sample.tx_timeout(),
+                MacInterruptCause::TxTimeout,
+            ));
         let auxiliary_event =
             sample.rx_associated_auxiliary_5() || sample.rx_associated_auxiliary_24();
         let unhandled_event = sample.bits_0_4_opaque().get() != 0
@@ -196,8 +202,10 @@ impl MacInterruptSnapshot {
         // this STATUS sample can be acknowledged.
         MacInterruptObservation::from_semantic_events(
             work_events,
-            cause_if(auxiliary_event, MacInterruptSideEvent::Auxiliary)
-                .union(cause_if(unhandled_event, MacInterruptSideEvent::Unhandled)),
+            Set::of_bit(auxiliary_event, MacInterruptSideEvent::Auxiliary).union(Set::of_bit(
+                unhandled_event,
+                MacInterruptSideEvent::Unhandled,
+            )),
         )
     }
 }
@@ -245,21 +253,24 @@ impl MacPowerInterruptSnapshot {
             || sample.bit_18_opaque()
             || sample.beacon_miss()
             || sample.bits_20_31_opaque().get() != 0;
-        cause_if(sample.tsf_timer_0(), MacPowerInterruptCause::TsfTimer0)
-            .union(cause_if(
+        Set::of_bit(sample.tsf_timer_0(), MacPowerInterruptCause::TsfTimer0)
+            .union(Set::of_bit(
                 sample.tsf_timer_1(),
                 MacPowerInterruptCause::TsfTimer1,
             ))
-            .union(cause_if(
+            .union(Set::of_bit(
                 sample.tsf_timer_2(),
                 MacPowerInterruptCause::TsfTimer2,
             ))
-            .union(cause_if(
+            .union(Set::of_bit(
                 sample.tsf_timer_3(),
                 MacPowerInterruptCause::TsfTimer3,
             ))
-            .union(cause_if(sample.tbtt_0(), MacPowerInterruptCause::StaTbtt))
-            .union(cause_if(unhandled, MacPowerInterruptCause::Unhandled))
+            .union(Set::of_bit(
+                sample.tbtt_0(),
+                MacPowerInterruptCause::StaTbtt,
+            ))
+            .union(Set::of_bit(unhandled, MacPowerInterruptCause::Unhandled))
     }
 }
 
@@ -291,21 +302,11 @@ members! {
 /// A set of WDEVPWR causes.
 pub type MacPowerInterruptObservation = Set<MacPowerInterruptCause>;
 
-/// The set of `member` when `sampled`, else the empty set: a generated
-/// reader's bit taken into a set.
-fn cause_if<M: crate::set::Member>(sampled: bool, member: M) -> Set<M> {
-    if sampled {
-        Set::of(member)
-    } else {
-        Set::empty()
-    }
-}
-
 /// The RX lanes of three generated readers' bits.
 fn rx_lanes(auxiliary_5: bool, success: bool, auxiliary_24: bool) -> MacRxInterrupts {
-    cause_if(auxiliary_5, MacRxLane::Auxiliary5)
-        .union(cause_if(success, MacRxLane::Success))
-        .union(cause_if(auxiliary_24, MacRxLane::Auxiliary24))
+    Set::of_bit(auxiliary_5, MacRxLane::Auxiliary5)
+        .union(Set::of_bit(success, MacRxLane::Success))
+        .union(Set::of_bit(auxiliary_24, MacRxLane::Auxiliary24))
 }
 
 /// Proof that the connected-STA hardware policy was applied.

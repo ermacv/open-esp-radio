@@ -13,8 +13,9 @@
 //! one register image for both merely because their bit geometry is equal.
 
 use oer_chips_esp32s31_hal::radio::bluetooth::{
-    BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
+    BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch, BluetoothPrimarySource,
 };
+use oer_chips_esp32s31_hal::set::Set;
 
 pub use oer_chips_esp32s31_hal::radio::bluetooth::{
     BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerWorkObservation,
@@ -70,9 +71,21 @@ impl PrimarySchedulerTrigger {
         source_3_pending: bool,
     ) -> Self {
         let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(
-            source_21_pending,
-            sources_27_or_28_pending,
-            source_3_pending,
+            (if source_21_pending {
+                BluetoothPrimarySource::Bank0Source21.set()
+            } else {
+                Set::empty()
+            })
+            .union(if sources_27_or_28_pending {
+                BluetoothPrimarySource::Bank0Sources27Or28.set()
+            } else {
+                Set::empty()
+            })
+            .union(if source_3_pending {
+                BluetoothPrimarySource::Bank1Source3.set()
+            } else {
+                Set::empty()
+            }),
         );
         Self::from_epoch(&epoch)
     }
