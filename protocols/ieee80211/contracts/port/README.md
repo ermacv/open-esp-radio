@@ -12,14 +12,13 @@ sans-IO: it declares the port and its values and never waits on it.
 
 ## The data port
 
-The station's datapath actor owns the radio as a `DataPort` (module
-`data_port`) by value for an installation's whole life and calls it in its
-turns: it waits on the port's signals (`poll_facts`) and one alarm at
+One task owns the radio as a `DataPort` (module `data_port`) by value for
+an installation's whole life and calls it in its turns: it waits on the port's signals (`poll_facts`) and one alarm at
 `deadline`, reads the clock once per turn and passes that `now` to every
 call. No port method wakes its caller, reads the clock or loops over a
-queue. The station's lifecycle never holds the port: it sends each key,
-receive-configuration, gate or setting operation as one `PortCommand`
-(module `command`), which the actor hands to `DataPort::command` in order.
+queue. Each key, receive-configuration, gate or setting operation is one
+`PortCommand` (module `command`), which the owner hands to
+`DataPort::command` in order.
 A command whose barrier is not reached comes back `Held` and runs again on a
 later call; one the port cannot run in its state comes back refused with
 every owner. A port fault returns the command beside it when the port did
@@ -45,9 +44,8 @@ the radio has not confirmed a stop; after a confirmed stop only
 `DataPort::take_unconsumed` offers it, each once. The port signals nothing
 for what it keeps: the refusing sink registers its own wake for room and
 checks its room again before its task sleeps. After a confirmed stop the
-lifecycle owner that stopped the port calls `DataPort::clean` with the
-stop's proof, once per call and whether or not the datapath actor still
-runs, for the cleanup the stop leaves to the backend (a hardware write that
+installation machine asks `DataPort::clean` with the stop's proof, once
+per call, for the cleanup the stop leaves to the backend (a hardware write that
 releases what a failed operation left in use); its result (`CleanupRefused`:
 a stale proof, faulted, a step that could not run and wrote nothing, or held
 after its one write) is that owner's, and a port whose cleanup did not

@@ -44,6 +44,7 @@ oer-protocols-ieee80211-wire = { path = "../../../../../protocols/ieee80211/wire
 oer-chips-family-radio-ieee80211-policy = { path = "../../../../family/radio/ieee80211/policy" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../../../../protocols/ieee80211/core/upper-mac" }
 oer-protocols-ieee80211-testing-conformance = { path = "../../../../../protocols/ieee80211/testing/conformance" }
+oer-protocols-ieee80211-testing-installation = { path = "../../../../../protocols/ieee80211/testing/installation" }
 
 oer-chips-family-platform-interrupt-table = { path = "../../../../family/platform/interrupt-table", features = ["host-signal"] }
 oer-portable-time-virtual = { path = "../../../../../portable/time-virtual" }

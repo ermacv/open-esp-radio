@@ -4862,7 +4862,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("Ieee802154LowLevel::rx_auto_ack", SAMPLED_BIT),
     ("Ieee802154LowLevel::tx_auto_ack", SAMPLED_BIT),
     ("Ieee802154LowLevel::tx_enhanced_ack", SAMPLED_BIT),
-    ("InTransit::holds", P3),
     ("Io::ready", SAMPLED_BIT),
     ("Local::again", PHASE_C),
     ("Local::deliver", PHASE_C),
@@ -4910,7 +4909,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         "ModemLpTimerRuntimeTransaction::rollover_low_byte_nonzero",
         SAMPLED_BIT,
     ),
-    ("NetworkStop::takes_frames", P2),
     ("Observation::rx_walker_enabled", SAMPLED_BIT),
     ("OwnedTransmit::notice_waiting", PHASE_C),
     ("ParallelAnalogBus::is_busy", SAMPLED_BIT),
@@ -5971,11 +5969,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         BY_P2,
     ),
     (
-        "chips/esp32s31/radio/ieee80211/station/src/failure.rs",
-        5,
-        BY_P2,
-    ),
-    (
         "chips/esp32s31/radio/phy/src/analog/crystal_duty.rs",
         5,
         BY_PHY,
@@ -6084,22 +6077,6 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         "protocols/ieee80211/core/roles/sta/src/machine/commands.rs",
         1,
         BY_P3,
-    ),
-    ("protocols/ieee80211/runtime/src/datapath.rs", 1, BY_P2),
-    (
-        "protocols/ieee80211/runtime/src/monitor/injection.rs",
-        1,
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/contract.rs",
-        2,
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/control.rs",
-        1,
-        BY_P2,
     ),
     ("protocols/ieee802154/port/src/work.rs", 1, BY_NONE),
     ("protocols/network/runtime/src/local.rs", 1, BY_PHASE_C),
@@ -6344,7 +6321,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         1,
         BY_P3,
     ),
-    ("protocols/ieee80211/runtime/src/datapath/turn.rs", 1, BY_P2),
     ("protocols/ieee802154/port/src/link_metrics.rs", 1, BY_NONE),
     ("protocols/network/core/src/block.rs", 1, BY_PHASE_C),
     ("protocols/network/core/src/dhcp.rs", 1, BY_PHASE_C),
@@ -6569,48 +6545,18 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         BY_P2,
     ),
     (
-        "chips/esp32s31/radio/ieee80211/station/src/access_point_end.rs",
-        15,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/failure.rs",
-        7,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/failure/convert.rs",
-        21,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/failure/path.rs",
-        2,
-        BY_P2,
-    ),
-    (
         "chips/esp32s31/radio/ieee80211/station/src/lib.rs",
-        6,
+        4,
         BY_P2,
     ),
     (
         "chips/esp32s31/radio/ieee80211/station/src/radio.rs",
-        8,
+        6,
         BY_P2,
     ),
     (
         "chips/esp32s31/radio/ieee80211/station/src/station.rs",
-        10,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs",
-        14,
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/unfinished.rs",
-        2,
+        8,
         BY_P2,
     ),
     (
@@ -6718,22 +6664,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ),
     ("protocols/ieee80211/contracts/port/src/arena.rs", 1, BY_P3),
     ("protocols/ieee80211/contracts/port/src/lib.rs", 1, BY_P3),
-    ("protocols/ieee80211/runtime/src/datapath/data.rs", 2, BY_P2),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle/inbox.rs",
-        3,
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/network_return.rs",
-        2,
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/local_tx.rs",
-        1,
-        BY_P2,
-    ),
     ("protocols/ieee802154/port/src/config.rs", 1, BY_NONE),
     ("protocols/ieee802154/port/src/lib.rs", 1, BY_NONE),
     ("protocols/ieee802154/port/src/owner.rs", 6, BY_NONE),
@@ -6800,37 +6730,12 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
     ("protocols/hil/protocol/src/base/boot.rs", 3, BY_NONE),
     ("protocols/hil/protocol/src/lib.rs", 2, BY_NONE),
     ("protocols/ieee80211/core/roles/ap/src/engine.rs", 1, BY_P3),
-    ("protocols/ieee80211/runtime/src/lib.rs", 1, BY_P2),
     ("protocols/network/core/src/lib.rs", 1, BY_PHASE_C),
 ];
 /// S2: the variants of the runtime's violation enums, each with the count of
 /// the production sites that make or match it, and what removes it by what
 /// it guards. The list only shrinks; a variant without an entry fails.
-const VIOLATION_VARIANTS: &[(&str, usize, &str)] = &[
-    ("ActorViolation::OutboxFull", 2, BY_P3),
-    ("ActorViolation::LifecycleClosed", 7, BY_P2),
-    ("ActorViolation::ArenaClaim", 3, BY_P3),
-    ("ActorViolation::ArenaCompletion", 2, BY_P3),
-    ("ActorViolation::LinkMailbox", 3, BY_P2),
-    ("ActorViolation::ParcelMissing", 1, BY_P3),
-    ("ActorViolation::RetireRunning", 1, BY_P2),
-    ("ActorViolation::LinkReturn", 1, BY_P2),
-    ("ActorViolation::PairwiseCustody", 5, BY_P2),
-    ("ActorViolation::ReorderOverflow", 1, BY_P3),
-    ("LifecycleViolation::Returned", 12, BY_P2),
-    ("LifecycleViolation::Missing", 8, BY_P2),
-    ("LifecycleViolation::QueueFull", 1, BY_P2),
-    ("LifecycleViolation::ActorClosed", 3, BY_P2),
-    ("LifecycleViolation::RetuneWithoutRequest", 2, BY_P2),
-    ("ApContract::UnknownTicket", 9, BY_P3),
-    ("ApContract::BufferClass", 10, BY_P3),
-    ("ApContract::ForeignKey", 14, BY_P3),
-    ("ApContract::Engine", 1, BY_P3),
-    ("ApContract::CommandRefused", 2, BY_P3),
-    ("ApContract::Permission", 6, BY_P3),
-    ("ApContract::CutUnits", 1, BY_P3),
-    ("ApContract::NetworkAdmission", 4, BY_P3),
-];
+const VIOLATION_VARIANTS: &[(&str, usize, &str)] = &[];
 
 /// S8a: the PAC's raw conversions and word accessors outside the PAC, in
 /// the HAL, the radio crates and the platform, by file with their count:
@@ -7469,12 +7374,6 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         "protocols/ieee80211/core/upper-mac/src/receive.rs",
         4,
         BY_P3,
-    ),
-    ("protocols/ieee80211/runtime/src/access_point.rs", 1, BY_P2),
-    (
-        "protocols/ieee80211/runtime/src/station/contract/diagnostic_path.rs",
-        2,
-        BY_P2,
     ),
     ("protocols/ieee80211/wire/src/ap.rs", 38, BY_P3),
     ("protocols/ieee80211/wire/src/ap/probe.rs", 2, BY_P3),
@@ -9128,42 +9027,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P2,
     ),
     (
-        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Cleaned.removed",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Freed.removed",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Freed.unkept",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/release.rs::Returning.removed",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/station.rs::StationEnd.lifecycle",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::EndHalves.datapath",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::EndHalves.lifecycle",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::FinishedLifecycleOf.late",
-        BY_P2,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/station/src/station_end.rs::UnfinishedLifecycleOf.late",
-        BY_P2,
-    ),
-    (
         "chips/family/app/src/observe/connect.rs::Connect.ended",
         BY_NONE,
     ),
@@ -9405,10 +9268,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/ieee80211/core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs::EspNowPmkOwner.key",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/installation/src/lib.rs::Machine.goal",
         BY_P3,
     ),
     (
@@ -9814,322 +9673,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     (
         "protocols/ieee80211/core/upper-mac/src/tx/ampdu_status.rs::MacIndividualRetries.final_rate",
         BY_P3,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::ApRunner.starting",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::ApRunner.stopped",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.association",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.beacon",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.broken",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.configure",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.fault",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_pending",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_permission",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.group_slot",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.held",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.kept",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.nonce",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.returned",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.stopped_on",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unaccepted",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unkept",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/access_point.rs::Homes.unrecycled",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.armed",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.end",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.group",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.held",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.held_back",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.link",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.pairwise",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.reply_out",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.retired",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.rx_later",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.sequence_hold",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.starting",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.stash",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Actor.stopped",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::DataTx.plane",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Owed.gate",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Owed.pairwise",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Owed.retuned",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Owed.sequence",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Owed.started",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Owed.stopped",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Owed.tbtt",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.completed",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.group",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.link",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.link_return",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.pairwise",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.returned",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unaccepted",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unkept",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Retained.unrecycled",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Stage.group_terminal",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath.rs::Stage.tbtt",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/datapath/messages.rs::StopObserved.port",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.arbiter",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.armed",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.confirmed",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.end",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.ending",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.group",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.lesson",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.pairwise",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.rejected",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.reply",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::Inner.retune",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::LinkCustody.epoch",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.arbiter",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.confirmed",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle.rs::RetiredLifecycle.rejected",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/lifecycle/inbox.rs::Answer.stopped",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/monitor/capture.rs::MonitorCaptureMetadata.channel",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/monitor/capture.rs::MonitorCaptureSink.channel",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/monitor/capture.rs::MonitorCaptureSink.snapshot_length",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/monitor/injection.rs::MonitorInjectionMailboxOwner.active",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.connect",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.disconnect",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/commands.rs::CommandCredits.scan",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/control.rs::RunnerControl.endpoint",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/control.rs::Status.notice",
-        BY_P2,
-    ),
-    (
-        "protocols/ieee80211/runtime/src/station/reconnect.rs::Policy.next",
-        BY_P2,
     ),
     (
         "protocols/ieee80211/wire/src/ap.rs::ApAssociationSecurityObservation.rsn_ie",

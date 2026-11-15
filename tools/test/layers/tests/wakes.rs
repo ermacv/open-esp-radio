@@ -77,7 +77,6 @@ fn raw_atomic_wakers_stay_within_the_reviewed_inventory() {
         ("portable/sync/src/lib.rs", 5),
         ("portable/waker/src/lib.rs", 8),
         ("portable/waker/src/model.rs", 3),
-        ("protocols/ieee80211/runtime/src/station/notifies.rs", 3),
         ("protocols/ieee80211/testing/model/src/lib.rs", 1),
         ("protocols/network/runtime/src/local.rs", 3),
         ("protocols/network/runtime/src/returns.rs", 3),

@@ -3205,7 +3205,12 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         stopped: &Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        core::convert::Infallible,
+        Result<(), CleanupRefused<Self::Fault>>,
+    > {
         let cleaned = if stopped.is_of(self.serial) {
             self.cleaned(sink)
         } else {

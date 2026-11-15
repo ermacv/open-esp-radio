@@ -1,8 +1,0 @@
-error[E0308]: mismatched types
-  --> tests/ui/configure_installation.rs:19:49
-   |
-19 |     return PortCommand::Configure { permission: foreign, receive: StationReceive::Off }; // ui-error: E0308
-   |                                                 ^^^^^^^ expected `Own`, found `Foreign`
-   |
-   = note: expected struct `ConfigurePermission<'_, oer_protocols_ieee80211_contracts_port::Station, oer_protocols_radio_port::Child<oer_protocols_radio_port::Child<Root<StaticId<Own>>, 9>, 1>>`
-              found struct `ConfigurePermission<'b, oer_protocols_ieee80211_contracts_port::Station, oer_protocols_radio_port::Child<oer_protocols_radio_port::Child<Root<StaticId<Foreign>>, 9>, 1>>`

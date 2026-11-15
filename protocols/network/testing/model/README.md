@@ -24,13 +24,11 @@ ownership and the service's progress, not claims about real air.
 ## Station simulation
 
 `tests/station/` composes the station and the network as the `hil-wifi-network`
-image does, minus the hardware: the real station lifecycle, station and arbiter
-cores and datapath actor over the IEEE 802.11 reference model's data port, the
-station's neutral network end, and the network core, service and one channel
+image does, minus the hardware, over the IEEE 802.11 reference model's data port:
+the station and arbiter cores and the network core, service and one channel
 socket, all on one virtual clock. In place of the product it has the model's port
 for the S31 backend, the software AES for the accelerator, a one-channel scan of the
-test domain, no transmit Block Ack, and the facade's network stop and the
-application's transmit memory without their statics.
+test domain and no transmit Block Ack.
 
 The access point is a test peer on the model's air, not access point code. It
 answers the station's probe with a beacon, its open authentication and its

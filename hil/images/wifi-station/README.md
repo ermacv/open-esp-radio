@@ -164,8 +164,7 @@ Hart 1's PC sampler (`GroupBoot::observe`) is the server's own.
   hart from its idle account since boot, and from a trace build one
   executor row per executor with its work (`observe::executors`).
 - **Parts:** the library's (`application`, `watchdog`, `station`,
-  `datapath`, `radio-actor`, `ip`, `group` and the datapath actor's spans
-  `turn`, `transmit`, `receive`, `intake`, `messages`) and the
+  `datapath`, `radio-actor`, `ip`, `group`) and the
   image's two, `relay` on the boot hart and `load` on hart 1, twelve an
   answer.
 - **Counters, link, tracking:** hart 1's cycles and retired instructions

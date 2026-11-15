@@ -743,6 +743,19 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
             },
         );
     }
+    fn stop_bound(&self) -> oer_portable_time::Duration {
+        crate::port::COMMAND_BOUND
+    }
+    fn retain_group(&mut self) -> Result<(), cases::Violation> {
+        // A replacement whose write and rollback the hardware rejects: the
+        // port retains the group until its stop's cleanup.
+        let (replace, _owners) = self.replacement();
+        self.observed.borrow_mut().reject_key_writes = 2;
+        match self.run_failed(replace) {
+            Err(CommandFailed::Taken(_)) => Ok(()),
+            _ => Err(cases::Violation::Fixture),
+        }
+    }
     fn fail_next_stop(&mut self) {
         self.observed.borrow_mut().fail_stop = Some(Fault::ReceiveLost);
     }
@@ -806,6 +819,56 @@ fn a_refused_installation_returns_its_parts_mint_and_driver_whole() {
         let mut fixture = Fixture::new(installation, observed, timer);
         assert_eq!(cases::check(&mut fixture, Case::ALL[0]), Ok(()));
     }));
+}
+
+impl<'id, Id: radio::SlotIdentity + 'id>
+    oer_protocols_ieee80211_testing_installation::InstallationHarness<'id> for Fixture<'id, Id>
+{
+    fn drive_parts(
+        &mut self,
+    ) -> (
+        &mut Self::Port,
+        &mut Installations<Id, InstallationPools>,
+        &mut Self::Sink,
+    ) {
+        (
+            &mut self.port,
+            self.installations
+                .as_mut()
+                .expect("the fixture reinstalls its port"),
+            &mut self.outbox,
+        )
+    }
+    fn adopt(
+        &mut self,
+        installed: (
+            Esp32s31Commands<'id, Id, TestDevice, 512, Draws>,
+            crate::port::Resources<'id, Id, TestDevice, 512, Draws>,
+        ),
+    ) {
+        // The new installation's tokens end here, as the fixture's own
+        // reinstall does; its commands are the fixture's.
+        let (commands, _resources) = installed;
+        self.commands = commands;
+    }
+}
+
+#[test]
+fn the_installation_machine_ends_every_case_on_the_s31_port() {
+    use oer_protocols_ieee80211_testing_installation as installation;
+    let results: Vec<_> = installation::Case::ALL
+        .into_iter()
+        .map(|case| {
+            (
+                case,
+                with_fixture(|fixture| installation::check(fixture, case)),
+            )
+        })
+        .collect();
+    assert!(
+        results.iter().all(|(_, result)| result.is_ok()),
+        "{results:?}"
+    );
 }
 
 #[test]

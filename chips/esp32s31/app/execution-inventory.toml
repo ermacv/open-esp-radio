@@ -692,36 +692,6 @@ site = "chips/esp32s31/radio/phy/src/sar_pilot.rs"
 anchor = "let bundle = core::future::poll_fn(|cx: &mut Context<'_>| {"
 
 [[wait]]
-id = "network-queues"
-cfg = "feature = \"wifi\""
-waiter = "datapath actor or access point runner, and network service, queue readiness"
-served_by = "the other queue endpoint publishes data or releases capacity; NETWORK and DATAPATH (the access point's ACCESS_POINT_RUNNER) with group, local wakers otherwise"
-condition = "the actor polls eligible transmit input and returned-buffer capacity; the network polls receive data and transmit credits; a published batch flushes its notify"
-held = "queue endpoints and queued frames; unsent owners stay with the caller or actor; a pending readiness wait reserves no queue credit"
-bound = "queue readiness has no per-operation timeout; the actor polls its other sources and any armed protocol deadline in the same round"
-state = "read"
-
-[[wait.evidence]]
-site = "chips/esp32s31/app/src/wifi.rs"
-anchor = "wifi::bind_station! {pub(crate) mod binding{wifi:WifiToken,driver:WakeToken,callbacks:Callbacks,observer:StationObserver,driver_observer:StationObserver,sink:StationSink,events:ProductEvents,tx:TxEnd,fail:failure,restarted:restarted,across_harts:"
-
-[[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/datapath/turn.rs"
-anchor = "core::pin::pin!(network.transmit.ready_at_least(want))"
-
-[[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/station/control.rs"
-anchor = "fn poll_receive_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {"
-
-[[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/station/local_tx.rs"
-anchor = "fn poll_room(&mut self, cx: &mut Context<'_>) -> Poll<()> {"
-
-[[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/access_point.rs"
-anchor = "let mut ready = core::pin::pin!(network.transmit.ready());"
-
-[[wait]]
 id = "network-lent-return"
 cfg = "feature = \"wifi\""
 waiter = "datapath actor, lend capacity and returned receive units"
@@ -738,32 +708,6 @@ anchor = "fn poll_count(&self, cx: &mut Context<'_>, ready: impl Fn(usize) -> bo
 [[wait.evidence]]
 site = "chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs"
 anchor = "impl<P: LentNotifies> Drop for ReturnOnDrop<P> {"
-
-[[wait]]
-id = "network-stop"
-cfg = "feature = \"wifi\""
-waiter = "datapath actor, network stop and final lent returns"
-served_by = "network task reports stopped or lost; owners return their lent receive units"
-condition = "NetworkStopState publishes stopped/lost then notifies the actor; poll_network_stop also requires all lent units returned; no_network reports absence without a consumer wait"
-held = "the actor keeps its port/arena and outstanding frame custody while stopping or draining"
-bound = "Radio::Stopping and Radio::Draining carry a caller-selected deadline, included in the actor alarm; overdue or lost participants yield StopOutcome::Unconfirmed instead of a confirmed stop"
-state = "read"
-
-[[wait.evidence]]
-site = "chips/esp32s31/radio/ieee80211/station/src/lib.rs"
-anchor = "impl<N: Notifies> runtime::NetworkStop for NetworkStopState<N> {"
-
-[[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/datapath/turn.rs"
-anchor = "fn poll_network_stop<"
-
-[[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/datapath/turn.rs"
-anchor = "Radio::Stopping { deadline } => {"
-
-[[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/datapath/turn.rs"
-anchor = "Radio::Draining { deadline } => {"
 
 [[wait]]
 id = "application-send"
@@ -808,7 +752,7 @@ waiter = "datapath actor on the application executor, MAC/RX/power facts"
 served_by = "Wi-Fi P3 handler publishes MAC_SIGNAL, MAC_RX_SIGNAL and POWER_SIGNAL; receive returns may also signal from the actor context"
 condition = "an active port polls device events and RX work; signal polling registers the owning task then takes durable facts; service requires the routed, enabled source and executor polling"
 held = "the actor/port retain installed radio, RX/TX custody and queued work while idle"
-bound = "an idle fact wait has no timeout; outstanding port, TX arena, receive and stop work can supply deadlines through Actor::deadline, so missing hardware facts do not imply every active operation waits forever"
+bound = "an idle fact wait has no timeout; outstanding port, TX arena, receive and stop work supply deadlines through the port's deadline, so missing hardware facts do not imply every active operation waits forever"
 state = "read"
 
 [[wait.evidence]]
@@ -818,10 +762,6 @@ anchor = "fn poll_facts(&mut self, cx: &mut Context<'_>) -> Facts {"
 [[wait.evidence]]
 site = "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/consumer.rs"
 anchor = "pub fn poll_mac(&mut self, cx: &mut Context<'_>) -> Poll<Result<IrqBatch, ForeignContext>> {"
-
-[[wait.evidence]]
-site = "protocols/ieee80211/runtime/src/datapath/turn.rs"
-anchor = "fn deadline(&mut self) -> Option<Instant> {"
 
 [[wait]]
 id = "console-read"

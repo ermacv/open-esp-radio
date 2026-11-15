@@ -1953,6 +1953,9 @@ pub struct ModelAir {
     associations: Cell<InterfaceAssociations>,
     group_rx: OwnedQueue<CapturedGroupRx>,
     group_writes: Cell<usize>,
+    /// The next group key replacement fails with its entry not known
+    /// cleared ([`ModelAir::fail_next_group_replacement`]).
+    group_replacement_fails: Cell<bool>,
     stream: Cell<ModelStream>,
     /// The port may take a poison back for a stop.
     recovery: Cell<bool>,
@@ -2036,6 +2039,7 @@ impl ModelAir {
             associations: Default::default(),
             group_rx: Default::default(),
             group_writes: Default::default(),
+            group_replacement_fails: Default::default(),
             stream: Default::default(),
             recovery: Default::default(),
             poison_at_service: Default::default(),
@@ -2622,6 +2626,21 @@ impl ModelAir {
     /// [`StartProgress::Pending`]: oer_protocols_ieee80211_contracts_port::StartProgress::Pending
     pub fn hold_start(&self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.hold_start.set(hold.is_held());
+    }
+
+    /// Fail the next group key replacement, once, as a replacement whose
+    /// rollback failed: neither key's entry is known installed or cleared,
+    /// the port retains the previous key's slot and permission until a
+    /// cleanup of its stop frees them through the sink, and the command
+    /// fails with the owners taken (a fault the recovery takes back).
+    pub fn fail_next_group_replacement(&self) {
+        self.group_replacement_fails.set(true);
+    }
+
+    /// Whether this replacement fails, as
+    /// [`Self::fail_next_group_replacement`] asked.
+    pub(crate) fn take_group_replacement_failure(&self) -> bool {
+        self.group_replacement_fails.replace(false)
     }
 
     /// Fail the next stop poll with a fault of the device, once: the stop

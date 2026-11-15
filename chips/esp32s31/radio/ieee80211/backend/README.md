@@ -1,8 +1,8 @@
 # oer-chips-esp32s31-radio-ieee80211-backend
 
-The ESP32-S31 Wi-Fi driver: device composition, the data port the station's
-datapath actor owns (`port::Esp32s31Port`), DMA rings, keys and the path
-from the P3 interrupt to the actor's task. System context: [architecture](../../../../../docs/architecture.md).
+The ESP32-S31 Wi-Fi driver: device composition, the data port
+(`port::Esp32s31Port`), DMA rings, keys and the path from the P3 interrupt
+to the task that owns the port. System context: [architecture](../../../../../docs/architecture.md).
 
 The driver's MAC building blocks cover initialization and receive policy,
 EDCA, DMA ownership, aggregate formatting, local/TSF time relations,
@@ -242,7 +242,7 @@ state.
 
 ## Receive path
 
-The datapath actor takes received units in its own turn through
+The port's owner takes received units in its own turn through
 `DataPort::receive`: a staged unit, or the ring serviced once when the RX
 interrupt left work, one unit per call result and at most eight refused
 units per call. The call takes the turn's instant, never reads the clock
@@ -340,7 +340,7 @@ The driver core `LowerMacCore` lives in [`src/lower_mac.rs`](src/lower_mac.rs).
 The data port [`src/port/engines.rs`](src/port/engines.rs) (`Esp32s31Port`)
 implements the contract's `DataPort` over that core for the station: it
 owns the driver's state, the device and the settings by value, and the
-datapath actor's task alone calls it, each call with the turn's instant.
+task that owns it alone calls it, each call with its turn's instant.
 It never reads the clock in a call and never wakes its caller; what must
 run again is in the returned value or in its cached deadline, which every
 call that changes a queue recomputes. A barrier command (a configuration

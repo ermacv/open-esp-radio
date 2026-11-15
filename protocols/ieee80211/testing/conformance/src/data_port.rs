@@ -26,7 +26,16 @@
 //!   leaves what the port has out as it was, and a release takes the
 //!   stop's right ([`Case::Proofs`]);
 //! - each reinstall is at the port's next TSF epoch, and a port at its last
-//!   refuses with the proof back ([`Case::Epochs`]).
+//!   refuses with the proof back ([`Case::Epochs`]);
+//! - after a stop with a group retained, a cleanup whose sink refuses the
+//!   removal's terminal is done and the port keeps the terminal, names it
+//!   and refuses a retirement until a take with room gave it once
+//!   ([`Case::RetainedGroup`]);
+//! - a stop not confirmed yet names what comes next, a wake or its
+//!   deadline within the command bound ([`Case::StopPendingNamesItsCall`]).
+//!
+//! No case reads `outstanding()` of a released port: it holds no
+//! installation, and the ports answer that reading differently.
 
 use core::num::NonZeroU8;
 use core::task::{Context, Waker};
@@ -136,6 +145,19 @@ pub trait DataPortHarness<'id> {
     /// Send the fixture's transmit tokens home (its tickets and buffers):
     /// what a retirement needs of the fixture.
     fn end_tokens(&mut self);
+    /// Install a station group key and fail its replacement, as commands of
+    /// the running port: neither key's entry is known installed, and the
+    /// port retains the group (`Outstanding::retained_groups`) until a
+    /// cleanup of its stop frees it through the sink. The command's answer
+    /// is the fault with its owners taken.
+    ///
+    /// # Errors
+    ///
+    /// [`Violation::Fixture`] when the fixture cannot bring the port there.
+    fn retain_group(&mut self) -> Result<(), Violation>;
+    /// The backend's command bound: a stop is confirmed or answered
+    /// unconfirmed within it from its first call.
+    fn stop_bound(&self) -> Duration;
     /// The transmit buffers of the current installation the fixture holds
     /// itself (its own and its kept station MPDU's): what it was handed and
     /// has not handed the port.
@@ -380,6 +402,15 @@ pub enum Case {
     /// Each reinstall is at the port's next TSF epoch; a port at its last
     /// refuses `Epochs` with the proof back.
     Epochs,
+    /// After a stop with a group retained, a cleanup whose sink refuses the
+    /// removal's terminal is done, the port keeps the terminal and names
+    /// it, a retirement is refused, a take with room gives it once, and the
+    /// retirement is granted.
+    RetainedGroup,
+    /// A stop not confirmed yet names what comes next: the waker it was
+    /// lent is woken, or the port's deadline names its next call within
+    /// the command bound from the stop's first call.
+    StopPendingNamesItsCall,
     /// What the installation issued is home or out, class by class, after
     /// every call, by the suite's own ledger.
     Conservation,
@@ -393,7 +424,7 @@ pub enum Case {
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 13] = [
         Self::QuietCalls,
         Self::Refusals,
         Self::ReceiveRoom,
@@ -402,6 +433,8 @@ impl Case {
         Self::RetryHistory,
         Self::Proofs,
         Self::Epochs,
+        Self::RetainedGroup,
+        Self::StopPendingNamesItsCall,
         Self::Conservation,
         Self::FaultWhole,
         Self::FaultHolding,
@@ -438,6 +471,12 @@ pub enum Violation {
     /// last epoch did not refuse with the proof back: the step of
     /// [`Case::Epochs`] that found it.
     Epoch(u8),
+    /// A retained group's cleanup did not answer as the contract says: the
+    /// step of [`Case::RetainedGroup`] that found it.
+    Retained(u8),
+    /// A stop answered `Pending` and named nothing that comes next: no wake
+    /// and no deadline within the command bound.
+    Unnamed,
     /// What the port has out differs from the suite's ledger after the
     /// `step` of [`Case::Conservation`], in the classes `classes`
     /// ([`outstanding::class`](oer_protocols_ieee80211_contracts_port::outstanding::class)).
@@ -472,6 +511,8 @@ pub fn check<'id, H: DataPortHarness<'id>>(harness: &mut H, case: Case) -> Resul
         Case::RetryHistory => retry_history(harness),
         Case::Proofs => proofs(harness),
         Case::Epochs => epochs(harness),
+        Case::RetainedGroup => retained_group(harness),
+        Case::StopPendingNamesItsCall => stop_pending_names_its_call(harness),
         Case::Conservation => conservation(harness),
         Case::FaultWhole => fault_conservation(harness, crate::FaultReach::Whole),
         Case::FaultHolding => fault_conservation(harness, crate::FaultReach::Holding),
@@ -956,6 +997,86 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
     // written (the contract's compile-fail case `stop_after_release`).
     if port.release(retired, right).is_err() {
         return Err(Violation::Proof(20));
+    }
+    Ok(())
+}
+
+fn stop_pending_names_its_call<'id, H: DataPortHarness<'id>>(
+    harness: &mut H,
+) -> Result<(), Violation> {
+    start(harness)?;
+    harness.hold_stop(crate::Hold::Held);
+    let waker = harness.waker();
+    let first = harness.now();
+    let woken = harness.wakes();
+    let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
+    match port.poll_stop(right, &mut Context::from_waker(&waker), first) {
+        core::task::Poll::Pending => {}
+        core::task::Poll::Ready(_) => return Err(Violation::Fixture),
+    }
+    let bound = first.checked_add(harness.stop_bound());
+    let named_by_deadline = {
+        let (port, _) = harness.parts();
+        port.deadline()
+            .is_some_and(|deadline| bound.is_some_and(|bound| deadline <= bound))
+    };
+    harness.settle();
+    if harness.wakes() == woken && !named_by_deadline {
+        return Err(Violation::Unnamed);
+    }
+    harness.hold_stop(crate::Hold::Released);
+    let _stopped = stopped(harness)?;
+    Ok(())
+}
+
+fn retained_group<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+    use oer_protocols_ieee80211_contracts_port::{Recovered, Unconsumed, outstanding::class};
+    start(harness)?;
+    harness.retain_group()?;
+    // The command's fault leaves every owner whole: the recovery takes it
+    // back, and the stop goes on.
+    let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
+    if port.recover_for_stop(right) != Ok(Recovered::TakenBack) {
+        return Err(Violation::Retained(0));
+    }
+    let stopped = stopped(harness)?;
+    harness.end_tokens();
+    let (port, _) = harness.parts();
+    if port.outstanding().classes() & class::RETAINED_GROUPS == 0 {
+        return Err(Violation::Retained(1));
+    }
+    // The cleanup frees the group: its removal's terminal goes to a sink
+    // that refuses it, and the cleanup is done with the terminal kept.
+    harness.refuse(1);
+    let (port, sink) = harness.parts();
+    if crate::answered(port.clean(&stopped, sink), Violation::Unkept)? != Ok(()) {
+        return Err(Violation::Retained(2));
+    }
+    let out = port.outstanding();
+    if out.classes() & class::RETAINED_GROUPS != 0 || out.unconsumed != 1 {
+        return Err(Violation::Retained(3));
+    }
+    // A retirement is refused for the terminal the port keeps.
+    let stopped = match port.retire(stopped) {
+        Err(ProofRefused::Refused(stopped, out)) if out.classes() & class::UNCONSUMED != 0 => {
+            stopped
+        }
+        _ => return Err(Violation::Retained(4)),
+    };
+    // A take with room gives it once.
+    if harness.refusals_left() != 0 {
+        return Err(Violation::Fixture);
+    }
+    let (port, sink) = harness.parts();
+    if port.take_unconsumed(&stopped, sink) != Ok(Unconsumed::None)
+        || port.outstanding().unconsumed != 0
+        || port.take_unconsumed(&stopped, sink) != Ok(Unconsumed::None)
+    {
+        return Err(Violation::Retained(5));
+    }
+    // Then the retirement is granted.
+    if port.retire(stopped).is_err() {
+        return Err(Violation::Retained(6));
     }
     Ok(())
 }

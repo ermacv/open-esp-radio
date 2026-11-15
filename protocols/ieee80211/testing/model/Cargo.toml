@@ -30,6 +30,7 @@ embassy-futures = "0.1.2"
 oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-protocols-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
 oer-portable-time-virtual = { path = "../../../../portable/time-virtual" }
+oer-protocols-ieee80211-testing-installation = { path = "../installation" }
 
 [lints]
 workspace = true

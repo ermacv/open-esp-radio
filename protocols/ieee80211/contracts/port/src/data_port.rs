@@ -825,9 +825,12 @@ pub trait DataPort<'id> {
     /// on a port that retired since, a new stop's (the port is stopped
     /// again: a retirement's proof still held is stale, and the retirement
     /// is asked again). An unconfirmed stop says why, with everything the
-    /// port has out. It takes the stop's right ([`crate::StopRight`]), which
-    /// only its holder lends; after a release no holder has it, so a
-    /// released port is never asked.
+    /// port has out. A stop not confirmed yet (`Pending`) names what comes
+    /// next: it wakes the waker `cx` lent, or the port's [`Self::deadline`]
+    /// names the instant of its next call, within the backend's command
+    /// bound from the stop's first call. It takes the stop's right
+    /// ([`crate::StopRight`]), which only its holder lends; after a release
+    /// no holder has it, so a released port is never asked.
     fn poll_stop(
         &mut self,
         right: &mut crate::StopRight<'id>,
@@ -851,13 +854,14 @@ pub trait DataPort<'id> {
     ) -> Result<Unconsumed, crate::StaleProof<()>>;
 
     /// The cleanup the stop leaves to the port (a backend's write that
-    /// releases hardware a failed operation left in use), by the lifecycle
-    /// owner that stopped it, whether or not the datapath actor still runs.
+    /// releases hardware a failed operation left in use), asked by the
+    /// installation machine of the port it stopped.
     /// The owners the cleanup frees leave through their terminals in
     /// `sink`, each once; a terminal the sink refuses stays with the port
     /// for [`Self::take_unconsumed`]. A port whose cleanup did not finish
     /// does not retire. Nothing calls it on its own: each call is the
-    /// owner's.
+    /// owner's. A cleanup is always accepted: its input is a type with no
+    /// value, so no answer says that nothing was cleaned.
     ///
     /// The answer's refusal says why the cleanup did not finish
     /// ([`CleanupRefused`]).
@@ -865,13 +869,17 @@ pub trait DataPort<'id> {
     /// # Errors
     ///
     /// A freed terminal the call could neither give `sink` nor keep, beside
-    /// its answer ([`Unkeeping`]). An item an earlier call left refuses
-    /// this one before it cleans anything: [`Input::NotAccepted`] of `()`.
+    /// its answer ([`Unkeeping`], whose input is the cleanup's answer).
     fn clean(
         &mut self,
         stopped: &crate::Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>>;
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        core::convert::Infallible,
+        Result<(), CleanupRefused<Self::Fault>>,
+    >;
 
     /// End the stopped installation's use of what it holds: its proof that
     /// nothing blocks its end.

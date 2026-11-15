@@ -679,6 +679,33 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         };
         Some(cases::StationSent { end, retry })
     }
+    fn stop_bound(&self) -> Duration {
+        crate::MODEL_STOP_BOUND
+    }
+    fn retain_group(&mut self) -> Result<(), cases::Violation> {
+        let install = group_install(self);
+        if !matches!(self.command(install), CommandProgress::Done) {
+            return Err(cases::Violation::Fixture);
+        }
+        let Some(LowerMacTerminal::GroupKeyInstalled(
+            oer_protocols_ieee80211_contracts_port::InstalledGroup::Station { key, permission },
+        )) = self.sink.terminals.pop()
+        else {
+            return Err(cases::Violation::Fixture);
+        };
+        self.air.fail_next_group_replacement();
+        let now = self.clock.now();
+        let replace = PortCommand::ReplaceGroup {
+            permission,
+            installed: key,
+            key_id: GroupKeyId::new(1).unwrap(),
+            key: Ccmp128Key::new(&[4; 16]),
+        };
+        match self.port.command(replace, now, &mut self.sink) {
+            Ok(Err(oer_protocols_ieee80211_contracts_port::CommandFailed::Taken(_))) => Ok(()),
+            _ => Err(cases::Violation::Fixture),
+        }
+    }
     fn hold_start(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.air.hold_start(hold);
     }
@@ -792,6 +819,37 @@ fn with_harness(test: impl for<'s> FnOnce(&mut Harness<'s>)) {
         test(&mut harness);
         harness.recycle_received();
     }));
+}
+
+impl<'s> oer_protocols_ieee80211_testing_installation::InstallationHarness<'s> for Harness<'s> {
+    fn drive_parts(
+        &mut self,
+    ) -> (
+        &mut Port<'s>,
+        &mut Installations<LocalId<'s>, ModelPools>,
+        &mut Sink<'s>,
+    ) {
+        (&mut self.port, &mut self.installations, &mut self.sink)
+    }
+    fn adopt(
+        &mut self,
+        installed: <Port<'s> as oer_protocols_ieee80211_contracts_port::DataPort<'s>>::Installed,
+    ) {
+        // The new installation's tokens end here, as the harness's own
+        // reinstall does; its commands are the harness's.
+        let (commands, _resources) = installed;
+        self.commands = commands;
+    }
+}
+
+#[test]
+fn the_installation_machine_ends_every_case_on_the_model() {
+    use oer_protocols_ieee80211_testing_installation as installation;
+    for case in installation::Case::ALL {
+        with_harness(|harness| {
+            assert_eq!(installation::check(harness, case), Ok(()), "{case:?}");
+        });
+    }
 }
 
 #[test]
