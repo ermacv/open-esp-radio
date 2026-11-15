@@ -130,7 +130,15 @@ fn block_ack_action_parser_never_panics_full() {
 #[test]
 fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
     let sequence = crate::sequence::seq(0xabc);
-    let body = encode_addba_request(7, 15, 1023, 12, true, sequence).unwrap();
+    let body = encode_addba_request(
+        7,
+        15,
+        1023,
+        12,
+        crate::block_ack::frame::AmsduSupport::Supported,
+        sequence,
+    )
+    .unwrap();
     assert_eq!(
         parse_block_ack_action(&body),
         Some(BlockAckAction::AddbaRequest {
@@ -144,12 +152,26 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
         })
     );
     assert_eq!(
-        encode_addba_request(7, 16, 32, 0, false, sequence),
+        encode_addba_request(
+            7,
+            16,
+            32,
+            0,
+            crate::block_ack::frame::AmsduSupport::NotSupported,
+            sequence
+        ),
         Err(AddbaRequestError::InvalidTid(16))
     );
     for window in [0, 1024, u16::MAX] {
         assert_eq!(
-            encode_addba_request(7, 0, window, 0, false, sequence),
+            encode_addba_request(
+                7,
+                0,
+                window,
+                0,
+                crate::block_ack::frame::AmsduSupport::NotSupported,
+                sequence
+            ),
             Err(AddbaRequestError::InvalidWindow(window))
         );
     }
@@ -157,7 +179,15 @@ fn immediate_request_round_trips_and_refuses_unrepresentable_fields() {
 
 #[test]
 fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
-    let response = encode_addba_response(9, 0, 5, 64, 0x1234, true).unwrap();
+    let response = encode_addba_response(
+        9,
+        0,
+        5,
+        64,
+        0x1234,
+        crate::block_ack::frame::AmsduSupport::Supported,
+    )
+    .unwrap();
     assert_eq!(
         parse_block_ack_action(&response),
         Some(BlockAckAction::AddbaResponse {
@@ -171,15 +201,29 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
         })
     );
     assert_eq!(
-        encode_addba_response(9, 0, 16, 64, 0, false),
+        encode_addba_response(
+            9,
+            0,
+            16,
+            64,
+            0,
+            crate::block_ack::frame::AmsduSupport::NotSupported
+        ),
         Err(RxAddbaResponseError::InvalidTid(16))
     );
     assert_eq!(
-        encode_addba_response(9, 0, 5, 1024, 0, false),
+        encode_addba_response(
+            9,
+            0,
+            5,
+            1024,
+            0,
+            crate::block_ack::frame::AmsduSupport::NotSupported
+        ),
         Err(RxAddbaResponseError::InvalidWindow(1024))
     );
 
-    let delba = encode_delba(6, false, 39).unwrap();
+    let delba = encode_delba(6, crate::block_ack::frame::DelbaInitiator::Recipient, 39).unwrap();
     assert_eq!(delba, [3, 2, 0x00, 0x60, 39, 0]);
     assert_eq!(
         parse_block_ack_action(&delba),
@@ -190,7 +234,7 @@ fn addba_response_and_delba_round_trip_and_refuse_wide_fields() {
         })
     );
     assert_eq!(
-        encode_delba(16, true, 1),
+        encode_delba(16, crate::block_ack::frame::DelbaInitiator::Originator, 1),
         Err(AddbaRequestError::InvalidTid(16))
     );
     assert_eq!(parse_block_ack_action(&delba[..5]), None);

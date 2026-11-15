@@ -80,12 +80,10 @@ oer_portable_wire::bitfield! {
 }
 
 impl GtkKdeInfo {
-    /// The info octet of a GTK named `key_id`, for transmission when
-    /// `transmit` holds.
-    pub const fn new(key_id: GroupKeyId, transmit: bool) -> Self {
-        Self::from_bytes([0])
-            .with_key_id(oer_portable_wire::U8::<2>::from_low_bits(key_id.get()))
-            .with_transmit(transmit)
+    /// The info octet of a GTK named `key_id`, its Tx bit clear: a GTK
+    /// for transmission sets it ([`Self::with_transmit`]).
+    pub const fn new(key_id: GroupKeyId) -> Self {
+        Self::from_bytes([0]).with_key_id(oer_portable_wire::U8::<2>::from_low_bits(key_id.get()))
     }
 
     /// The GTK's key ID, `None` when a reserved bit is set.
@@ -609,7 +607,7 @@ mod tests {
 
     #[test]
     fn gtk_info_round_trips_and_refuses_reserved_bits() {
-        let info = GtkKdeInfo::new(GroupKeyId::new(2).unwrap(), true);
+        let info = GtkKdeInfo::new(GroupKeyId::new(2).unwrap()).with_transmit(true);
         assert_eq!(info.to_bytes(), [0x06]);
         assert_eq!(info.group_key_id(), GroupKeyId::new(2));
         assert!(info.transmit());
@@ -719,7 +717,7 @@ mod tests {
     #[test]
     fn group_key_kdes_have_their_reference_layout_and_refuse_other_lengths() {
         let gtk = GtkKde {
-            info: GtkKdeInfo::new(GroupKeyId::new(1).unwrap(), true),
+            info: GtkKdeInfo::new(GroupKeyId::new(1).unwrap()).with_transmit(true),
             key: &[0x11; 16],
         }
         .encode();

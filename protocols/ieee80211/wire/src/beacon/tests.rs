@@ -33,15 +33,36 @@ fn the_access_point_s_tsf_drives_dtim_and_group_indication_and_the_timestamp_sta
     let mut bytes = beacon();
     bytes[24..32].copy_from_slice(&[0xa5; 8]);
 
-    assert_eq!(stamp(&mut bytes, 0, true), Some((1, 2)));
+    assert_eq!(
+        stamp(
+            &mut bytes,
+            0,
+            crate::station_beacon::BufferedTraffic::Buffered
+        ),
+        Some((1, 2))
+    );
     assert_eq!(dtim(&bytes), Some((38, 1, 2)));
     assert_eq!(bytes[42] & 1, 0);
 
-    assert_eq!(stamp(&mut bytes, 100 * 1_024, true), Some((0, 2)));
+    assert_eq!(
+        stamp(
+            &mut bytes,
+            100 * 1_024,
+            crate::station_beacon::BufferedTraffic::Buffered
+        ),
+        Some((0, 2))
+    );
     assert_eq!(dtim(&bytes), Some((38, 0, 2)));
     assert_eq!(bytes[42] & 1, 1);
 
-    assert_eq!(stamp(&mut bytes, 3 * 100 * 1_024, false), Some((0, 2)));
+    assert_eq!(
+        stamp(
+            &mut bytes,
+            3 * 100 * 1_024,
+            crate::station_beacon::BufferedTraffic::Clear
+        ),
+        Some((0, 2))
+    );
     assert_eq!(bytes[42] & 1, 0);
     assert_eq!(
         bytes[24..32],
@@ -204,14 +225,21 @@ fn protection_update_rewrites_only_erp_and_ht_operation_after_tim_growth() {
     .unwrap();
     let mut bitmap = crate::beacon::TimVirtualBitmap::<4>::try_new().unwrap();
     bitmap
-        .set(crate::beacon::TimAssociationId::new(25).unwrap(), true)
+        .set(
+            crate::beacon::TimAssociationId::new(25).unwrap(),
+            crate::station_beacon::BufferedTraffic::Buffered,
+        )
         .unwrap();
     let len = write_tim_partial_virtual_bitmap(&mut bytes, len, bitmap.partial()).unwrap();
     let before = bytes;
 
     let protection = ApBssProtection {
         non_erp_present: true,
-        erp: ErpProtection::new(true, true),
+        erp: ErpProtection::new(
+            crate::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true),
+        ),
         ht: HtOperationProtection {
             mode: HtProtectionMode::NonHtMixed,
             non_greenfield_present: true,
@@ -312,7 +340,11 @@ fn a_5_ghz_beacon_carries_no_dsss_parameter_set_erp_or_dsss_rate() {
     // The protection update needs no ERP element in the band.
     let protection = ApBssProtection {
         non_erp_present: false,
-        erp: ErpProtection::new(false, false),
+        erp: ErpProtection::new(
+            crate::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(false)
+                .with_barker(false),
+        ),
         ht: HtOperationProtection {
             mode: HtProtectionMode::NonHtMixed,
             non_greenfield_present: false,

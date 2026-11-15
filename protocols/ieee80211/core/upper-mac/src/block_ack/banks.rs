@@ -723,7 +723,11 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                 }
                 let tid = active.tid();
                 self.stop(index, port, AgreementStop::Timeout, events);
-                if let Ok(delba) = encode_delba(tid, false, reason_code::TIMEOUT) {
+                if let Ok(delba) = encode_delba(
+                    tid,
+                    oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
+                    reason_code::TIMEOUT,
+                ) {
                     // The reply queue holds ADDBA-sized bodies; the DELBA
                     // fills its prefix.
                     let mut body = [0; ADDBA_ACTION_BODY_LEN];

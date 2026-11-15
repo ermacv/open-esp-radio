@@ -17,7 +17,7 @@ const ADVERTISEMENT: Advertisement = match Advertisement::new(
     HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01),
     match WmmParameters::new(
         4,
-        false,
+        oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
         [WmmAcParameters {
             admission_control_mandatory: false,
             aifsn: oer_portable_wire::U8::constant::<3>(),
@@ -163,7 +163,12 @@ fn static_storage_owns_beacon_dtim_and_next_deadline() {
     assert!(beacon.publication_due(at(102_400)));
     assert_eq!(beacon.next_publication(), None);
     let mut bitmap = TimVirtualBitmap::<2>::try_new().unwrap();
-    bitmap.set(TimAssociationId::new(1).unwrap(), true).unwrap();
+    bitmap
+        .set(
+            TimAssociationId::new(1).unwrap(),
+            oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered,
+        )
+        .unwrap();
     let frame = beacon
         .prepare(
             at(102_400),
@@ -351,8 +356,15 @@ fn an_announced_switch_counts_down_in_each_beacon_until_it_is_due() {
         assert_eq!(beacon.channel_switch_due(), None);
         // A wider TIM moves the announcement with the elements after it.
         let mut wide = TimVirtualBitmap::<2>::try_new().unwrap();
-        wide.set(TimAssociationId::new(9).unwrap(), tbtt == 2)
-            .unwrap();
+        wide.set(
+            TimAssociationId::new(9).unwrap(),
+            if tbtt == 2 {
+                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered
+            } else {
+                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear
+            },
+        )
+        .unwrap();
         let frame = beacon
             .prepare(at(tbtt * 102_400), sequence, 0, wide.partial())
             .unwrap();

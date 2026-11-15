@@ -148,7 +148,7 @@ fn with_rates(run: impl WithRates) {
             oer_protocols_ieee80211_wire::phy::HtRate::new(
                 HtMcs::new(7).unwrap(),
                 oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-                false,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
             )
             .unwrap(),
         ),

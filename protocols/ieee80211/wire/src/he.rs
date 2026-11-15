@@ -231,6 +231,15 @@ fn configuration_record(user_count: u8, encoding: u8) -> Option<&'static [u8; 8]
     }
 }
 
+/// The SIG-B Compression field of an HE MU PPDU's HE-SIG-A: a full-band
+/// MU-MIMO PPDU whose HE-SIG-B has no Common field, or not (IEEE Std
+/// 802.11ax-2021, 27.3.11.7, Table 27-20).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SigBCompression {
+    Compressed,
+    Uncompressed,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HeMuSigBUser {
     NonMimo(HeMuSigBNonMimoUser),
@@ -238,8 +247,8 @@ pub enum HeMuSigBUser {
 }
 
 impl HeMuSigBUser {
-    pub const fn decode(word: u32, compressed_sig_b: bool) -> Self {
-        if compressed_sig_b {
+    pub const fn decode(word: u32, compression: SigBCompression) -> Self {
+        if matches!(compression, SigBCompression::Compressed) {
             Self::Mimo(HeMuSigBMimoUser::decode(word))
         } else {
             Self::NonMimo(HeMuSigBNonMimoUser::decode(word))

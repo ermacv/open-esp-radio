@@ -15,7 +15,14 @@ use oer_protocols_ieee80211_wire::phy::{HtMcs, HtRate, PpduBandwidth};
 const STAND_MPDU: u32 = 1554;
 
 fn stand_rate() -> PhyRate {
-    PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, true).unwrap())
+    PhyRate::Ht(
+        HtRate::new(
+            HtMcs::new(7).unwrap(),
+            PpduBandwidth::Mhz40,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+        )
+        .unwrap(),
+    )
 }
 
 fn best_effort() -> WmmAcParameters {
@@ -634,8 +641,14 @@ fn a_lone_mpdu_lands_with_its_own_last_symbol_not_a_delimiters() {
     // Review counterexample: one subframe at HT20 MCS 0 landed at 84 us,
     // with a delimiter it never carried, inside the signal extension after
     // the last data symbol ended at 80 us.
-    let ht20 =
-        PhyRate::Ht(HtRate::new(HtMcs::new(0).unwrap(), PpduBandwidth::Mhz20, false).unwrap());
+    let ht20 = PhyRate::Ht(
+        HtRate::new(
+            HtMcs::new(0).unwrap(),
+            PpduBandwidth::Mhz20,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+        )
+        .unwrap(),
+    );
     let world = roomy();
     let mut air_peer = peer(
         PeerWindow::Assumed(16),
@@ -940,7 +953,12 @@ fn each_aggregate_names_the_limit_that_bound_it() {
         bound(PeerWindow::Assumed(64), saturated, &|peer| {
             peer.max_length = 1 << 20;
             peer.rate = PhyRate::Ht(
-                HtRate::new(HtMcs::new(0).unwrap(), PpduBandwidth::Mhz20, false).unwrap(),
+                HtRate::new(
+                    HtMcs::new(0).unwrap(),
+                    PpduBandwidth::Mhz20,
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+                )
+                .unwrap(),
             );
         }),
         PeerBounds {

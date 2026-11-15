@@ -253,7 +253,10 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             peer.power_state == ApPeerPowerState::Sleeping && peer.buffered_unicast_frames != 0
         }) {
             let association_id = TimAssociationId::new(peer.association_id)?;
-            bitmap.set(association_id, true)?;
+            bitmap.set(
+                association_id,
+                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered,
+            )?;
         }
         Ok(bitmap)
     }

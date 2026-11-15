@@ -295,7 +295,11 @@ impl<'storage> ApBeacon<'storage> {
         stamp(
             self.storage.get_mut(..self.len)?,
             now.as_micros(),
-            buffered_group_frames != 0,
+            if buffered_group_frames == 0 {
+                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear
+            } else {
+                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered
+            },
         )?;
         write_sequence_control(self.storage, management_sequence.sequence_control())?;
         self.len = write_tim_partial_virtual_bitmap(self.storage, self.len, unicast_tim_bitmap)?;

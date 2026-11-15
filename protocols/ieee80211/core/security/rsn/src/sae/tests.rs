@@ -35,11 +35,19 @@ fn hunting_and_pecking_matches_annex_j10() {
     let commit = SaeCommit::new(&pwe, hex(LOCAL_RAND), hex(LOCAL_MASK)).unwrap();
     let mut body = [0; SAE_COMMIT_LEN];
     assert_eq!(
-        commit.values().encode(None, false, &mut body),
+        commit.values().encode(
+            None,
+            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+            &mut body
+        ),
         Ok(SAE_COMMIT_LEN)
     );
     assert_eq!(body, hex::<SAE_COMMIT_LEN>(LOCAL_COMMIT));
-    let peer = SaeCommitValues::parse(&hex::<SAE_COMMIT_LEN>(PEER_COMMIT), false).unwrap();
+    let peer = SaeCommitValues::parse(
+        &hex::<SAE_COMMIT_LEN>(PEER_COMMIT),
+        oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+    )
+    .unwrap();
     let keys = commit.process(peer).unwrap();
     assert_eq!(keys.kck, hex(KCK));
     assert_eq!(keys.pmk, hex(PMK));
@@ -149,7 +157,11 @@ fn invalid_commits_are_refused() {
 
 #[test]
 fn an_access_point_refuses_commit_values_off_the_scalar_range_or_curve() {
-    let peer = SaeCommitValues::parse(&hex::<SAE_COMMIT_LEN>(PEER_COMMIT), false).unwrap();
+    let peer = SaeCommitValues::parse(
+        &hex::<SAE_COMMIT_LEN>(PEER_COMMIT),
+        oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+    )
+    .unwrap();
     assert!(valid_peer_commit(&peer));
     let mut zero_scalar = peer;
     zero_scalar.scalar.fill(0);

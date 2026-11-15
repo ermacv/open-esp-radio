@@ -162,7 +162,7 @@ fn each_queue_draw_uses_its_head_vif_and_retains_the_complete_record() {
         EdcaParameterSet::from_tu(
             WmmParameterSet::new(
                 0,
-                false,
+                oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
                 [WmmAcParameters {
                     admission_control_mandatory: false,
                     aifsn: oer_portable_wire::U8::new(aifsn).unwrap(),

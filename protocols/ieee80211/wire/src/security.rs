@@ -17,6 +17,16 @@ pub enum LinkProtection {
     Ccmp,
 }
 
+impl LinkProtection {
+    /// The Protected Frame subfield of the link's data MPDUs.
+    pub const fn frame_protection(self) -> crate::frame::FrameProtection {
+        match self {
+            Self::Open => crate::frame::FrameProtection::Unprotected,
+            Self::Ccmp => crate::frame::FrameProtection::Protected,
+        }
+    }
+}
+
 /// Local management frame protection policy: the MFPC and MFPR an RSN
 /// element advertises.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

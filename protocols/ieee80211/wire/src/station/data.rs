@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::address::{Bssid, OwnAddress};
-use crate::data::MsduHeader;
+use crate::data::{MsduHeader, PeerQos};
+use crate::frame::QosAckPolicy;
 
 mod amsdu;
 pub use amsdu::{StaProtectedAmsduFrame, sta_protected_amsdu_frame_length};
@@ -31,7 +32,7 @@ impl StaDataFrame<'_> {
             destination: self.destination,
             sequence_number: self.sequence_number,
             priority: WmmUserPriority::UP7,
-            peer_qos: false,
+            peer_qos: PeerQos::NonQos,
             ether_type: self.ether_type,
             payload: self.payload,
         }
@@ -53,7 +54,7 @@ pub struct StaOpenDataFrame<'a> {
     pub sequence_number: SequenceNumber,
     /// The TID of a QoS data MPDU; unused without QoS.
     pub priority: WmmUserPriority,
-    pub peer_qos: bool,
+    pub peer_qos: PeerQos,
     pub ether_type: u16,
     pub payload: &'a [u8],
 }
@@ -73,7 +74,7 @@ impl StaOpenDataFrame<'_> {
             },
             self.priority,
             self.peer_qos,
-            false,
+            QosAckPolicy::Normal,
         );
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
@@ -107,7 +108,7 @@ pub struct StaProtectedDataFrame<'a> {
     pub destination: [u8; 6],
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
-    pub peer_qos: bool,
+    pub peer_qos: PeerQos,
     pub ccmp_header: [u8; CCMP_HEADER_LEN],
     pub ether_type: u16,
     pub payload: &'a [u8],
@@ -131,7 +132,7 @@ impl StaProtectedDataFrame<'_> {
         validate_peer(self.bssid.get())?;
         let priority = WmmUserPriority::new(self.user_priority)
             .ok_or(StationFrameError::UserPriorityOutOfRange)?;
-        if !self.peer_qos
+        if self.peer_qos == PeerQos::NonQos
             && matches!(
                 he_control,
                 DataHeControl::HardwareGeneratedBufferStatusReport
@@ -150,13 +151,13 @@ impl StaProtectedDataFrame<'_> {
             },
             priority,
             self.peer_qos,
-            false,
+            QosAckPolicy::Normal,
             he_control,
         )
         .map_err(|_| StationFrameError::HeControlRequiresQos)?;
         // Exact `net80211_tx::encapsulate_ordinary` mutation after successful
         // CCMP key selection.
-        plan.set_protected(true);
+        plan.set_protected();
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
             &mut header,

@@ -43,7 +43,7 @@ pub const fn parameters(role: VifRole, table: Table) -> EdcaParameterSet {
     EdcaParameterSet::from_tu(
         WmmParameterSet::new(
             0,
-            false,
+            oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
             [WmmAcParameters {
                 admission_control_mandatory: false,
                 aifsn,

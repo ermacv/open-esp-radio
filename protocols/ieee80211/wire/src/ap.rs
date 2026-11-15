@@ -6,8 +6,8 @@
 //! Management decoding splits the fixed header and each fixed body as arrays
 //! before accessing fields; variable information elements remain borrowed slices.
 
-use crate::data::{MsduHeader, MsduParts};
-use crate::frame::{FrameControlFields, FrameType};
+use crate::data::{MsduHeader, MsduParts, PeerQos};
+use crate::frame::{FrameControlFields, FrameType, QosAckPolicy};
 
 use crate::{
     block_ack::{BlockAckAction, parse_block_ack_action},
@@ -99,8 +99,8 @@ impl ApDataFrame<'_> {
                 ether_type: self.ether_type,
             },
             WmmUserPriority::UP7,
-            false,
-            false,
+            PeerQos::NonQos,
+            QosAckPolicy::Normal,
         );
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
@@ -147,14 +147,14 @@ impl ApUnprotectedDataFrame<'_> {
             self.access_point,
             self.msdu.header(),
             WmmUserPriority::UP0,
-            false,
-            false,
+            PeerQos::NonQos,
+            QosAckPolicy::Normal,
         );
         if plan.header[4..10] != self.peer {
             return Err(ApDataFrameError::InvalidPeer);
         }
         if self.more_data == crate::data::MoreData::Buffered {
-            plan.set_more_data(true);
+            plan.set_more_data();
         }
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(
@@ -308,15 +308,15 @@ impl ProtectedDataPlan {
             access_point,
             msdu,
             priority,
-            matches!(peer_qos, crate::data::PeerQos::Qos),
-            false,
+            peer_qos,
+            QosAckPolicy::Normal,
         );
         if plan.header[4..10] != peer {
             return Err(ApDataFrameError::InvalidPeer);
         }
-        plan.set_protected(true);
+        plan.set_protected();
         if more_data == crate::data::MoreData::Buffered {
-            plan.set_more_data(true);
+            plan.set_more_data();
         }
         crate::encoding::write_array::<22, _, _>(
             &mut plan.header,
@@ -356,12 +356,12 @@ pub struct ApAmsduFrame<'a> {
 
 /// Return the complete DMA-resident MPDU length for a bounded AP A-MSDU.
 ///
-/// The result excludes the hardware-owned CCMP MIC and FCS. `protected`
+/// The result excludes the hardware-owned CCMP MIC and FCS. `protection`
 /// controls only the retained eight-byte CCMP header; the A-MSDU body has the
 /// same IEEE 802.11 representation for Open and CCMP epochs.
 pub fn ap_amsdu_frame_length(
     msdus: &[MsduParts<'_>],
-    protected: bool,
+    protection: crate::security::LinkProtection,
 ) -> Result<usize, ApDataFrameError> {
     let body = crate::encoding::AmsduBody::checked(msdus, AP_AMSDU_BASELINE_MAX_LEN)
         .map_err(amsdu_error)?;
@@ -369,7 +369,10 @@ pub fn ap_amsdu_frame_length(
         .length()
         .map_err(|length| amsdu_error(crate::encoding::AmsduError::TooLong(length)))?;
     crate::data::IEEE80211_QOS_DATA_HEADER_LEN
-        .checked_add(if protected { CCMP_HEADER_LEN } else { 0 })
+        .checked_add(match protection {
+            crate::security::LinkProtection::Open => 0,
+            crate::security::LinkProtection::Ccmp => CCMP_HEADER_LEN,
+        })
         .and_then(|prefix| prefix.checked_add(length))
         .ok_or(ApDataFrameError::AmsduTooLong {
             length: usize::MAX,
@@ -419,19 +422,19 @@ impl ApAmsduFrame<'_> {
             self.access_point,
             first.header(),
             priority,
-            true,
-            false,
+            PeerQos::Qos,
+            QosAckPolicy::Normal,
         );
         if plan.header[4..10] != self.peer {
             return Err(ApDataFrameError::InvalidPeer);
         }
         if self.ccmp_header.is_some() {
-            plan.set_protected(true);
+            plan.set_protected();
         }
         if self.more_data == crate::data::MoreData::Buffered {
-            plan.set_more_data(true);
+            plan.set_more_data();
         }
-        plan.set_amsdu(true);
+        plan.set_amsdu();
 
         let mut header = plan.header;
         crate::encoding::write_array::<22, _, _>(

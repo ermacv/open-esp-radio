@@ -81,7 +81,15 @@ impl Station {
         let len = self
             .commit
             .values()
-            .encode(token, self.h2e, &mut body)
+            .encode(
+                token,
+                if self.h2e {
+                    oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
+                } else {
+                    oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
+                },
+                &mut body,
+            )
             .unwrap();
         (body, len)
     }
@@ -109,7 +117,15 @@ fn exchange(h2e: bool) {
     assert_eq!(output.result, ApSaeResult::Continue);
     let reply = only_reply(&output);
     assert_eq!((reply.transaction, reply.status), (1, station.status()));
-    let access_point_commit = SaeCommitValues::parse(reply.body(), h2e).unwrap();
+    let access_point_commit = SaeCommitValues::parse(
+        reply.body(),
+        if h2e {
+            oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
+        } else {
+            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
+        },
+    )
+    .unwrap();
     let keys = station.commit.process(access_point_commit).unwrap();
 
     let confirm = keys.own_confirm(1);
@@ -161,7 +177,11 @@ fn a_wrong_password_fails_the_confirm() {
         0,
         &mut random,
     );
-    let access_point_commit = SaeCommitValues::parse(only_reply(&output).body(), false).unwrap();
+    let access_point_commit = SaeCommitValues::parse(
+        only_reply(&output).body(),
+        oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+    )
+    .unwrap();
     let keys = station.commit.process(access_point_commit).unwrap();
 
     let output = access_point.receive(
@@ -206,7 +226,11 @@ fn two_open_sessions_require_an_anti_clogging_token() {
     let request = only_reply(&output);
     assert_eq!(request.status, status_code::ANTI_CLOGGING_TOKEN_REQUIRED);
     assert_eq!(output.result, ApSaeResult::Continue);
-    let token = anti_clogging_token(request.body(), false).unwrap();
+    let token = anti_clogging_token(
+        request.body(),
+        oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+    )
+    .unwrap();
 
     let (commit, len) = station.commit_body(Some(token));
     let output = access_point.receive(
@@ -246,7 +270,15 @@ fn queued_commits_count_toward_anti_clogging() {
     );
     let request = only_reply(&output);
     assert_eq!(request.status, status_code::ANTI_CLOGGING_TOKEN_REQUIRED);
-    assert_eq!(anti_clogging_token(request.body(), true).unwrap().len(), 32);
+    assert_eq!(
+        anti_clogging_token(
+            request.body(),
+            oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
+        )
+        .unwrap()
+        .len(),
+        32
+    );
 }
 
 #[test]

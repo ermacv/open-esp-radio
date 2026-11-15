@@ -677,11 +677,11 @@ impl QosControl {
     pub const fn field(self, policy: QosAckPolicy) -> QosControlField {
         QosControlField::new(
             oer_portable_wire::U8::from_low_bits(self.tid.get()),
-            matches!(self.service_period, ServicePeriod::Ends),
             policy,
-            matches!(self.body, QosBody::Amsdu),
             self.high,
         )
+        .with_eosp(matches!(self.service_period, ServicePeriod::Ends))
+        .with_amsdu(matches!(self.body, QosBody::Amsdu))
     }
 
     /// The values of a received field; its Ack Policy is the response's.
@@ -778,9 +778,14 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
     }
     /// Derive the Protected bit from the preparation's sole protection value.
     pub(crate) fn with_protection(mut self, protection: crate::MpduProtection) -> Self {
-        self.header = self
-            .header
-            .with_protected(matches!(protection, crate::MpduProtection::Ccmp));
+        self.header = self.header.with_protected(match protection {
+            crate::MpduProtection::Ccmp => {
+                oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
+            }
+            crate::MpduProtection::Open => {
+                oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected
+            }
+        });
         self
     }
     /// The header, when its fields agree with its Frame Control.

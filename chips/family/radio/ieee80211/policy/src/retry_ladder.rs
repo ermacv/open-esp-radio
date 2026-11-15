@@ -99,7 +99,7 @@ pub fn he_retry_rate(initial: HeRate, failed_attempts: u8) -> Option<PhyRate> {
             rate.bandwidth(),
             rate.gi_ltf(),
             FecCoding::Ldpc,
-            false,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
         )?),
         (selected, _) => selected,
     })
@@ -146,11 +146,21 @@ mod tests {
 
     #[test]
     fn ht_and_he_ladders_keep_their_width_and_coding() {
-        let ht40 = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, false).unwrap();
+        let ht40 = HtRate::new(
+            HtMcs::new(7).unwrap(),
+            PpduBandwidth::Mhz40,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+        )
+        .unwrap();
         assert_eq!(ht_retry_rate(ht40, 0), Some(PhyRate::Ht(ht40)));
         assert!(matches!(ht_retry_rate(ht40, 2), Some(PhyRate::Ht(rate))
             if rate.bandwidth() == PpduBandwidth::Mhz40 && rate.mcs().index() == 5));
-        let sgi_mcs3 = HtRate::new(HtMcs::new(3).unwrap(), PpduBandwidth::Mhz20, true).unwrap();
+        let sgi_mcs3 = HtRate::new(
+            HtMcs::new(3).unwrap(),
+            PpduBandwidth::Mhz20,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+        )
+        .unwrap();
         assert_eq!(ht_retry_rate(sgi_mcs3, 0), Some(PhyRate::Ht(sgi_mcs3)));
         assert!(matches!(ht_retry_rate(sgi_mcs3, 2), Some(PhyRate::Ht(rate))
             if !rate.short_gi() && rate.mcs().index() == 2));
@@ -161,7 +171,7 @@ mod tests {
             PpduBandwidth::Mhz20,
             HeGiLtf::Ltf2xGi1600Ns,
             FecCoding::Ldpc,
-            false,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
         )
         .unwrap();
         assert!(matches!(he_retry_rate(he, 2), Some(PhyRate::He(rate))
@@ -176,8 +186,16 @@ mod tests {
     fn every_supported_starting_mcs_uses_its_own_record() {
         for index in 0..=31 {
             for short in [false, true] {
-                let initial =
-                    HtRate::new(HtMcs::new(index).unwrap(), PpduBandwidth::Mhz20, short).unwrap();
+                let initial = HtRate::new(
+                    HtMcs::new(index).unwrap(),
+                    PpduBandwidth::Mhz20,
+                    if short {
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                    } else {
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                    },
+                )
+                .unwrap();
                 let expected = if index <= 7 {
                     Some(PhyRate::Ht(initial))
                 } else {
@@ -199,7 +217,7 @@ mod tests {
                     PpduBandwidth::Mhz20,
                     gi,
                     FecCoding::Ldpc,
-                    false,
+                    oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
                 )
                 .unwrap();
                 let expected = if (index <= 9 && gi == HeGiLtf::Ltf2xGi1600Ns)

@@ -3101,7 +3101,7 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
                 oer_protocols_ieee80211_wire::address::IndividualAddress::new(BSSID).unwrap(),
             )
             .unwrap(),
-            true,
+            oer_protocols_ieee80211_wire::data::PeerQos::Qos,
             oer_protocols_ieee80211_wire::security::LinkProtection::Open,
         )
         .unwrap();
@@ -5793,7 +5793,7 @@ fn eapol_under_a_closed_voice_category_contends_as_video_in_tid_five() {
         let defaults = WmmParameterSet::STANDARD_DEFAULT;
         AcAdmission::from_edca(WmmParameterSet::new(
             1,
-            false,
+            oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
             WmmAccessCategory::ALL.map(|category| WmmAcParameters {
                 admission_control_mandatory: restricted.contains(&category),
                 ..defaults.access_category(category)

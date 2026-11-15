@@ -23,6 +23,24 @@ pub const ADDBA_ACTION_BODY_LEN: usize = 9;
 /// SOURCE: IEEE Std 802.11-2020, 9.6.5.5 (DELBA frame format).
 pub const DELBA_ACTION_BODY_LEN: usize = 6;
 
+/// The A-MSDU Supported subfield of a Block Ack Parameter Set: the
+/// agreement's frames may carry A-MSDUs, or not (IEEE Std 802.11-2020,
+/// 9.4.1.14).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AmsduSupport {
+    Supported,
+    NotSupported,
+}
+
+/// The Initiator subfield of a DELBA Parameter Set: the originator or the
+/// recipient of the agreement tears it down (IEEE Std 802.11-2020,
+/// 9.4.1.16).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DelbaInitiator {
+    Originator,
+    Recipient,
+}
+
 /// A field that cannot be represented by an immediate ADDBA request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AddbaRequestError {
@@ -39,7 +57,7 @@ pub fn encode_addba_request(
     tid: u8,
     window: u16,
     timeout_tu: u16,
-    amsdu: bool,
+    amsdu: AmsduSupport,
     starting_sequence: SequenceNumber,
 ) -> Result<[u8; ADDBA_ACTION_BODY_LEN], AddbaRequestError> {
     if tid > 15 {
@@ -49,7 +67,7 @@ pub fn encode_addba_request(
         return Err(AddbaRequestError::InvalidWindow(window));
     }
     let parameters = AddbaParameters::from_bytes([0; 2])
-        .with_amsdu(amsdu)
+        .with_amsdu(amsdu == AmsduSupport::Supported)
         .with_immediate(true)
         .with_tid(tid)
         .map_err(|_| AddbaRequestError::InvalidTid(tid))?
@@ -279,11 +297,11 @@ pub fn encode_addba_response(
     tid: u8,
     window: u16,
     timeout_tu: u16,
-    amsdu: bool,
+    amsdu: AmsduSupport,
 ) -> Result<[u8; ADDBA_ACTION_BODY_LEN], RxAddbaResponseError> {
     let parameters = AddbaParameters::from_bytes([0; 2])
         .with_immediate(true)
-        .with_amsdu(amsdu)
+        .with_amsdu(amsdu == AmsduSupport::Supported)
         .with_tid(tid)
         .map_err(|_| RxAddbaResponseError::InvalidTid(tid))?
         .with_window(window)
@@ -313,13 +331,13 @@ pub fn encode_addba_response(
 /// A TID wider than four bits.
 pub fn encode_delba(
     tid: u8,
-    initiator: bool,
+    initiator: DelbaInitiator,
     reason: u16,
 ) -> Result<[u8; DELBA_ACTION_BODY_LEN], AddbaRequestError> {
     let parameters = DelbaParameters::from_bytes([0; 2])
         .with_tid(tid)
         .map_err(|_| AddbaRequestError::InvalidTid(tid))?
-        .with_initiator(initiator);
+        .with_initiator(initiator == DelbaInitiator::Originator);
     let [p0, p1] = parameters.to_bytes();
     let [r0, r1] = reason.to_le_bytes();
     Ok([BLOCK_ACK_CATEGORY, DELBA_ACTION, p0, p1, r0, r1])

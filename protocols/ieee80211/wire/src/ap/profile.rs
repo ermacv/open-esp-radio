@@ -50,7 +50,7 @@ impl LegacyRates {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WmmParameters {
     parameter_set_count: u8,
-    uapsd: bool,
+    uapsd: crate::extensions::wmm::Uapsd,
     access_categories: [WmmAcParameters; 4],
 }
 
@@ -59,7 +59,7 @@ impl WmmParameters {
     /// AC records retain their own field-width proofs.
     pub const fn new(
         parameter_set_count: u8,
-        uapsd: bool,
+        uapsd: crate::extensions::wmm::Uapsd,
         access_categories: [WmmAcParameters; 4],
     ) -> Option<Self> {
         if parameter_set_count > WMM_NIBBLE_MAX {

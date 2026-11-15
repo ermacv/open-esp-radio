@@ -8,10 +8,14 @@ use crate::sequence::seq;
 const AP: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const PEER: [u8; 6] = [2, 0, 0, 0, 0, 2];
 
-fn request(ssid: &[u8], directed: bool) -> std::vec::Vec<u8> {
+/// The broadcast address.
+const BROADCAST: [u8; 6] = [0xff; 6];
+
+/// A Probe Request to `receiver`, the AP or broadcast.
+fn request(ssid: &[u8], receiver: [u8; 6]) -> std::vec::Vec<u8> {
     let mut frame = std::vec![0; 24];
     frame[0] = 0x40;
-    frame[4..10].copy_from_slice(if directed { &AP } else { &[0xff; 6] });
+    frame[4..10].copy_from_slice(&receiver);
     frame[10..16].copy_from_slice(&PEER);
     frame[16..22].fill(0xff);
     frame.extend_from_slice(&[0, ssid.len() as u8]);
@@ -21,9 +25,9 @@ fn request(ssid: &[u8], directed: bool) -> std::vec::Vec<u8> {
 
 #[test]
 fn accepts_broadcast_and_directed_discovery_without_association() {
-    for directed in [false, true] {
+    for receiver in [BROADCAST, AP] {
         for name in [b"".as_slice(), b"ap"] {
-            let frame = request(name, directed);
+            let frame = request(name, receiver);
             assert_eq!(
                 parse_ap_management_request(&TEST_ADVERTISEMENT, &frame, AP),
                 Some(ApManagementRequest::Probe {
@@ -37,7 +41,7 @@ fn accepts_broadcast_and_directed_discovery_without_association() {
 
 #[test]
 fn rejects_foreign_addresses_and_malformed_or_ambiguous_requests() {
-    let valid = request(b"ap", false);
+    let valid = request(b"ap", BROADCAST);
     let mut cases = std::vec::Vec::new();
     for offset in [4, 16] {
         let mut frame = valid.clone();
@@ -51,7 +55,7 @@ fn rejects_foreign_addresses_and_malformed_or_ambiguous_requests() {
     truncated.extend_from_slice(&[1, 4, 1]);
     cases.push(truncated);
     cases.push(valid[..24].to_vec());
-    cases.push(request(&[b'a'; 33], false));
+    cases.push(request(&[b'a'; 33], BROADCAST));
     for (offset, mask) in [(0, 1), (1, 0x40), (1, 4), (22, 1), (10, 1)] {
         let mut frame = valid.clone();
         frame[offset] |= mask;
@@ -140,8 +144,8 @@ fn probe_parsers_never_panic(count: usize) {
     )
     .unwrap();
     let beacon = &beacon[..len];
-    let broadcast = request(b"", false);
-    let directed = request(b"ap", true);
+    let broadcast = request(b"", BROADCAST);
+    let directed = request(b"ap", AP);
     let seeds: [&[u8]; 4] = [&broadcast[24..], &directed[24..], &beacon[36..], beacon];
     crate::fuzz::inputs(&seeds, count, 160, |bytes| {
         let _ = ssid(bytes);

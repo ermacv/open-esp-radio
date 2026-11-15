@@ -106,7 +106,14 @@ fn transmit_rate_fields_keep_their_meaning() {
 #[test]
 fn portable_rates_beyond_the_s31_formatter_are_refused() {
     let ht = |mcs, bandwidth| {
-        PhyRate::Ht(phy::HtRate::new(phy::HtMcs::new(mcs).unwrap(), bandwidth, false).unwrap())
+        PhyRate::Ht(
+            phy::HtRate::new(
+                phy::HtMcs::new(mcs).unwrap(),
+                bandwidth,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+            )
+            .unwrap(),
+        )
     };
     assert_eq!(
         TxPhyRate::try_from(ht(8, PpduBandwidth::Mhz20)),
@@ -126,22 +133,55 @@ fn portable_rates_beyond_the_s31_formatter_are_refused() {
         )
     };
     assert_eq!(
-        TxPhyRate::try_from(he(10, 1, PpduBandwidth::Mhz20, FecCoding::Bcc, false)),
+        TxPhyRate::try_from(he(
+            10,
+            1,
+            PpduBandwidth::Mhz20,
+            FecCoding::Bcc,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed
+        )),
         Err(UnsupportedTxRate::HeMcs)
     );
     assert_eq!(
-        TxPhyRate::try_from(he(0, 2, PpduBandwidth::Mhz20, FecCoding::Bcc, false)),
+        TxPhyRate::try_from(he(
+            0,
+            2,
+            PpduBandwidth::Mhz20,
+            FecCoding::Bcc,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed
+        )),
         Err(UnsupportedTxRate::HeSpatialStreams)
     );
     assert_eq!(
-        TxPhyRate::try_from(he(0, 1, PpduBandwidth::Mhz40, FecCoding::Bcc, false)),
+        TxPhyRate::try_from(he(
+            0,
+            1,
+            PpduBandwidth::Mhz40,
+            FecCoding::Bcc,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed
+        )),
         Err(UnsupportedTxRate::HeBandwidth)
     );
     assert_eq!(
-        TxPhyRate::try_from(he(4, 1, PpduBandwidth::Mhz20, FecCoding::Bcc, true)),
+        TxPhyRate::try_from(he(
+            4,
+            1,
+            PpduBandwidth::Mhz20,
+            FecCoding::Bcc,
+            oer_protocols_ieee80211_wire::phy::Dcm::Used
+        )),
         Err(UnsupportedTxRate::HeDcm)
     );
-    assert!(TxPhyRate::try_from(he(4, 1, PpduBandwidth::Mhz20, FecCoding::Ldpc, true)).is_ok());
+    assert!(
+        TxPhyRate::try_from(he(
+            4,
+            1,
+            PpduBandwidth::Mhz20,
+            FecCoding::Ldpc,
+            oer_protocols_ieee80211_wire::phy::Dcm::Used
+        ))
+        .is_ok()
+    );
 }
 
 const DOT11B: u8 = 0;
@@ -178,7 +218,11 @@ fn non_ht_receptions_decode_the_rate_code_of_their_format() {
 fn ht_receptions_decode_ht_sig() {
     // MCS 7, 40 MHz, aggregated, short GI.
     let siga1 = 7 | (1 << 7) | (1 << 27) | (1 << 31);
-    let expected = phy::HtRate::new(phy::HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, true);
+    let expected = phy::HtRate::new(
+        phy::HtMcs::new(7).unwrap(),
+        PpduBandwidth::Mhz40,
+        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+    );
     assert_eq!(
         prefix(HT, 0, siga1, 0).phy_rate(),
         expected.map(PhyRate::Ht)
@@ -198,7 +242,7 @@ fn he_su_receptions_decode_he_sig_a() {
         PpduBandwidth::Mhz20,
         HeGiLtf::Ltf2xGi800Ns,
         FecCoding::Ldpc,
-        true,
+        oer_protocols_ieee80211_wire::phy::Dcm::Used,
     );
     assert_eq!(
         prefix(HE_SU, 0, siga1, siga2).phy_rate(),

@@ -12,6 +12,7 @@
 //!
 //! Received bytes reach this module; nothing here panics on them.
 
+use crate::security::SaePwe;
 use oer_portable_wire::{Reader, Writer};
 
 /// Element ID that introduces an Element ID Extension.
@@ -116,7 +117,8 @@ impl SaeCommitValues {
     /// element that does not reject group 19, as the vendor's
     /// `wpa3_check_sae_rejected_groups` does; a Password Identifier, which
     /// this station never sends, is refused.
-    pub fn parse(body: &[u8], h2e: bool) -> Result<Self, SaeBodyError> {
+    pub fn parse(body: &[u8], pwe: SaePwe) -> Result<Self, SaeBodyError> {
+        let h2e = pwe == SaePwe::HashToElement;
         let mut reader = Reader::new(body);
         let group = reader.u16_le().map_err(|_| SaeBodyError::Malformed)?;
         if group != SAE_GROUP_P256 {
@@ -153,9 +155,10 @@ impl SaeCommitValues {
     pub fn encode(
         &self,
         token: Option<&[u8]>,
-        h2e: bool,
+        pwe: SaePwe,
         output: &mut [u8],
     ) -> Result<usize, SaeBodyError> {
+        let h2e = pwe == SaePwe::HashToElement;
         let token = token.unwrap_or(&[]);
         let container = if h2e && !token.is_empty() {
             Some(anti_clogging_token_container_header(token.len()).ok_or(SaeBodyError::Malformed)?)
@@ -215,7 +218,8 @@ impl<'a> SaeReceivedCommit<'a> {
     /// Rejected Groups element and an Anti-Clogging Token Container may follow
     /// the element. Whether the scalar and element are valid is for the
     /// cryptography to decide.
-    pub fn parse(body: &'a [u8], h2e: bool) -> Result<Self, SaeCommitRefusal> {
+    pub fn parse(body: &'a [u8], pwe: SaePwe) -> Result<Self, SaeCommitRefusal> {
+        let h2e = pwe == SaePwe::HashToElement;
         let mut reader = Reader::new(body);
         let group = reader.u16_le().map_err(|_| SaeCommitRefusal::Unspecified)?;
         if group != SAE_GROUP_P256 {
@@ -267,7 +271,8 @@ impl<'a> SaeReceivedCommit<'a> {
 
 /// The anti-clogging token of a commit refused with status 76: after the
 /// group under hunting and pecking, inside its container element under H2E.
-pub fn anti_clogging_token(body: &[u8], h2e: bool) -> Result<&[u8], SaeBodyError> {
+pub fn anti_clogging_token(body: &[u8], pwe: SaePwe) -> Result<&[u8], SaeBodyError> {
+    let h2e = pwe == SaePwe::HashToElement;
     let mut reader = Reader::new(body);
     reader.u16_le().map_err(|_| SaeBodyError::Malformed)?;
     let rest = reader.remaining();
@@ -411,7 +416,10 @@ mod tests {
 
     fn commit_body() -> [u8; SAE_COMMIT_LEN] {
         let mut body = [0; SAE_COMMIT_LEN];
-        assert_eq!(VALUES.encode(None, false, &mut body), Ok(SAE_COMMIT_LEN));
+        assert_eq!(
+            VALUES.encode(None, SaePwe::HuntingAndPecking, &mut body),
+            Ok(SAE_COMMIT_LEN)
+        );
         body
     }
 
@@ -421,19 +429,26 @@ mod tests {
         assert_eq!(&body[..2], &[19, 0]);
         assert_eq!(&body[2..34], &VALUES.scalar);
         assert_eq!(&body[34..], &VALUES.element);
-        assert_eq!(SaeCommitValues::parse(&body, false), Ok(VALUES));
+        assert_eq!(
+            SaeCommitValues::parse(&body, SaePwe::HuntingAndPecking),
+            Ok(VALUES)
+        );
         body[0] = 20;
         assert_eq!(
-            SaeCommitValues::parse(&body, false),
+            SaeCommitValues::parse(&body, SaePwe::HuntingAndPecking),
             Err(SaeBodyError::UnsupportedGroup(20))
         );
         body[0] = 19;
         assert_eq!(
-            SaeCommitValues::parse(&body[..10], false),
+            SaeCommitValues::parse(&body[..10], SaePwe::HuntingAndPecking),
             Err(SaeBodyError::Malformed)
         );
         assert_eq!(
-            VALUES.encode(None, false, &mut [0; SAE_COMMIT_LEN - 1]),
+            VALUES.encode(
+                None,
+                SaePwe::HuntingAndPecking,
+                &mut [0; SAE_COMMIT_LEN - 1]
+            ),
             Err(SaeBodyError::Malformed)
         );
     }
@@ -442,44 +457,53 @@ mod tests {
     fn tokens_sit_where_the_vendor_writes_them() {
         let token = [0xab; 5];
         let mut hunting = [0; 128];
-        let length = VALUES.encode(Some(&token), false, &mut hunting).unwrap();
+        let length = VALUES
+            .encode(Some(&token), SaePwe::HuntingAndPecking, &mut hunting)
+            .unwrap();
         assert_eq!(length, SAE_COMMIT_LEN + 5);
         assert_eq!(&hunting[2..7], &token);
         assert_eq!(&hunting[7..39], &VALUES.scalar);
 
         let mut h2e = [0; 128];
-        let length = VALUES.encode(Some(&token), true, &mut h2e).unwrap();
+        let length = VALUES
+            .encode(Some(&token), SaePwe::HashToElement, &mut h2e)
+            .unwrap();
         assert_eq!(length, SAE_COMMIT_LEN + 3 + 5);
         assert_eq!(&h2e[2..34], &VALUES.scalar);
         assert_eq!(&h2e[SAE_COMMIT_LEN..SAE_COMMIT_LEN + 3], &[255, 6, 93]);
 
         // A status-76 refusal carries the token after the group.
         assert_eq!(
-            anti_clogging_token(&[19, 0, 1, 2, 3], false),
+            anti_clogging_token(&[19, 0, 1, 2, 3], SaePwe::HuntingAndPecking),
             Ok(&[1, 2, 3][..])
         );
         assert_eq!(
-            anti_clogging_token(&[19, 0, 255, 4, 93, 1, 2, 3], true),
+            anti_clogging_token(&[19, 0, 255, 4, 93, 1, 2, 3], SaePwe::HashToElement),
             Ok(&[1, 2, 3][..])
         );
-        assert!(anti_clogging_token(&[19, 0, 1, 2, 3], true).is_err());
-        assert!(anti_clogging_token(&[19, 0, 255, 0, 93], true).is_err());
-        assert!(anti_clogging_token(&[19], false).is_err());
+        assert!(anti_clogging_token(&[19, 0, 1, 2, 3], SaePwe::HashToElement).is_err());
+        assert!(anti_clogging_token(&[19, 0, 255, 0, 93], SaePwe::HashToElement).is_err());
+        assert!(anti_clogging_token(&[19], SaePwe::HuntingAndPecking).is_err());
     }
 
     #[test]
     fn an_h2e_commit_admits_only_a_rejected_groups_element_without_19() {
         let mut body = [0; SAE_COMMIT_LEN + 5];
-        VALUES.encode(None, true, &mut body).unwrap();
+        VALUES
+            .encode(None, SaePwe::HashToElement, &mut body)
+            .unwrap();
         body[SAE_COMMIT_LEN..].copy_from_slice(&[255, 3, 92, 20, 0]);
-        assert_eq!(SaeCommitValues::parse(&body, true), Ok(VALUES));
         assert_eq!(
-            SaeCommitValues::parse(&body, false),
+            SaeCommitValues::parse(&body, SaePwe::HashToElement),
+            Ok(VALUES)
+        );
+        assert_eq!(
+            SaeCommitValues::parse(&body, SaePwe::HuntingAndPecking),
             Err(SaeBodyError::Malformed)
         );
         body[SAE_COMMIT_LEN + 3] = 19;
         assert_eq!(
-            SaeCommitValues::parse(&body, true),
+            SaeCommitValues::parse(&body, SaePwe::HashToElement),
             Err(SaeBodyError::Malformed)
         );
     }
@@ -489,18 +513,24 @@ mod tests {
         let token = [0x5a; SAE_ANTI_CLOGGING_TOKEN_LEN];
         let mut body = [0; SAE_COMMIT_LEN + SAE_ANTI_CLOGGING_TOKEN_LEN + 3];
 
-        let len = VALUES.encode(None, false, &mut body).unwrap();
-        let received = SaeReceivedCommit::parse(&body[..len], false).unwrap();
+        let len = VALUES
+            .encode(None, SaePwe::HuntingAndPecking, &mut body)
+            .unwrap();
+        let received = SaeReceivedCommit::parse(&body[..len], SaePwe::HuntingAndPecking).unwrap();
         assert_eq!(received.values, VALUES);
         assert_eq!(received.token, None);
 
-        let len = VALUES.encode(Some(&token), false, &mut body).unwrap();
-        let received = SaeReceivedCommit::parse(&body[..len], false).unwrap();
+        let len = VALUES
+            .encode(Some(&token), SaePwe::HuntingAndPecking, &mut body)
+            .unwrap();
+        let received = SaeReceivedCommit::parse(&body[..len], SaePwe::HuntingAndPecking).unwrap();
         assert_eq!(received.values, VALUES);
         assert_eq!(received.token, Some(&token[..]));
 
-        let len = VALUES.encode(Some(&token), true, &mut body).unwrap();
-        let received = SaeReceivedCommit::parse(&body[..len], true).unwrap();
+        let len = VALUES
+            .encode(Some(&token), SaePwe::HashToElement, &mut body)
+            .unwrap();
+        let received = SaeReceivedCommit::parse(&body[..len], SaePwe::HashToElement).unwrap();
         assert_eq!(received.values, VALUES);
         assert_eq!(received.token, Some(&token[..]));
         assert!(!received.rejects_offered_group());
@@ -512,7 +542,7 @@ mod tests {
         let mut body = [0; SAE_COMMIT_LEN + 12];
         body[..SAE_COMMIT_LEN].copy_from_slice(&commit);
         body[SAE_COMMIT_LEN..].copy_from_slice(&[255, 5, 92, 20, 0, 19, 0, 255, 2, 93, 7, 0]);
-        let received = SaeReceivedCommit::parse(&body, true).unwrap();
+        let received = SaeReceivedCommit::parse(&body, SaePwe::HashToElement).unwrap();
         assert_eq!(received.rejected_groups, Some(&[20, 0, 19, 0][..]));
         assert!(received.rejects_offered_group());
         assert_eq!(received.token, Some(&[7][..]));
@@ -520,17 +550,17 @@ mod tests {
         let mut odd = body;
         odd[SAE_COMMIT_LEN + 1] = 4;
         assert_eq!(
-            SaeReceivedCommit::parse(&odd[..SAE_COMMIT_LEN + 6], true),
+            SaeReceivedCommit::parse(&odd[..SAE_COMMIT_LEN + 6], SaePwe::HashToElement),
             Err(SaeCommitRefusal::Unspecified)
         );
         let mut other_group = commit;
         other_group[0] = 20;
         assert_eq!(
-            SaeReceivedCommit::parse(&other_group, false),
+            SaeReceivedCommit::parse(&other_group, SaePwe::HuntingAndPecking),
             Err(SaeCommitRefusal::UnsupportedGroup)
         );
         assert_eq!(
-            SaeReceivedCommit::parse(&commit[..SAE_COMMIT_LEN - 1], false),
+            SaeReceivedCommit::parse(&commit[..SAE_COMMIT_LEN - 1], SaePwe::HuntingAndPecking),
             Err(SaeCommitRefusal::Unspecified)
         );
         // A password identifier is reported, not refused.
@@ -538,7 +568,7 @@ mod tests {
         named[..SAE_COMMIT_LEN].copy_from_slice(&commit);
         named[SAE_COMMIT_LEN..].copy_from_slice(&[255, 2, 33, b'x']);
         assert!(
-            SaeReceivedCommit::parse(&named, false)
+            SaeReceivedCommit::parse(&named, SaePwe::HuntingAndPecking)
                 .unwrap()
                 .password_identifier
         );
@@ -576,11 +606,11 @@ mod tests {
         bytes[0] = 19;
         bytes[1] = 0;
         for length in 0..=bytes.len() {
-            for h2e in [false, true] {
+            for pwe in [SaePwe::HuntingAndPecking, SaePwe::HashToElement] {
                 let body = &bytes[..length];
-                let _ = SaeCommitValues::parse(body, h2e);
-                let _ = SaeReceivedCommit::parse(body, h2e);
-                let _ = anti_clogging_token(body, h2e);
+                let _ = SaeCommitValues::parse(body, pwe);
+                let _ = SaeReceivedCommit::parse(body, pwe);
+                let _ = anti_clogging_token(body, pwe);
                 let _ = SaeConfirm::parse(body);
             }
         }

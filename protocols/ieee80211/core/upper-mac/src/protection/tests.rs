@@ -47,7 +47,14 @@ fn policy(erp: ErpProtection, ht: HtProtectionMode, basic_rates: BasicRates) -> 
 }
 
 fn ht(mcs: u8, bandwidth: PpduBandwidth) -> PhyRate {
-    PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, false).unwrap())
+    PhyRate::Ht(
+        HtRate::new(
+            HtMcs::new(mcs).unwrap(),
+            bandwidth,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+        )
+        .unwrap(),
+    )
 }
 
 fn he(mcs: u8) -> HeRate {
@@ -57,7 +64,7 @@ fn he(mcs: u8) -> HeRate {
         PpduBandwidth::Mhz20,
         HeGiLtf::Ltf2xGi800Ns,
         FecCoding::Bcc,
-        false,
+        oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
     )
     .unwrap()
 }
@@ -201,7 +208,11 @@ fn control_rate_is_the_fastest_basic_rate_not_faster_than_the_data_rate() {
     );
     // ERP without a DSSS basic rate: the ERP mandatory DSSS rates.
     let erp = self::policy(
-        ErpProtection::new(true, false),
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(false),
+        ),
         HtProtectionMode::None,
         basic(OFDM_BASIC),
     );
@@ -229,7 +240,11 @@ fn every_basic_set_selects_the_required_control_rate() {
                 BasicRates::ERP_MANDATORY
             };
             let policy = policy(
-                ErpProtection::new(dsss_only, false),
+                ErpProtection::new(
+                    oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                        .with_use_protection(dsss_only)
+                        .with_barker(false),
+                ),
                 HtProtectionMode::None,
                 selected,
             );
@@ -330,7 +345,11 @@ fn the_he_txop_budget_protects_individual_he_ppdus_above_it() {
 #[test]
 fn leaving_the_bss_keeps_only_the_local_length_threshold() {
     let mut policy = policy(
-        ErpProtection::new(true, true),
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true),
+        ),
         HtProtectionMode::NonHtMixed,
         basic(DSSS_BASIC),
     );

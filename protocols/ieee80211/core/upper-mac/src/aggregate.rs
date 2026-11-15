@@ -189,7 +189,14 @@ mod tests {
     }
 
     fn ht_mcs7() -> PhyRate {
-        PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap())
+        PhyRate::Ht(
+            HtRate::new(
+                HtMcs::new(7).unwrap(),
+                PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+            )
+            .unwrap(),
+        )
     }
 
     fn limits() -> AmpduLimits {
@@ -292,12 +299,44 @@ mod tests {
             ..limits()
         };
         // The port's length: four 1 514-octet frames at MCS 3.
-        assert_eq!(at(3, PpduBandwidth::Mhz20, false).run([1_514; 40]), 4);
+        assert_eq!(
+            at(
+                3,
+                PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+            )
+            .run([1_514; 40]),
+            4
+        );
         // The HT-mixed PPDU time (5 484 us): 28 at MCS 7, 20 MHz, long GI.
-        assert_eq!(at(7, PpduBandwidth::Mhz20, false).run([1_514; 40]), 28);
+        assert_eq!(
+            at(
+                7,
+                PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+            )
+            .run([1_514; 40]),
+            28
+        );
         // At 150 Mb/s the port's 32 subframes end it.
-        assert_eq!(at(7, PpduBandwidth::Mhz40, true).run([1_514; 40]), 32);
-        assert!(at(1, PpduBandwidth::Mhz20, false).begin().is_none());
+        assert_eq!(
+            at(
+                7,
+                PpduBandwidth::Mhz40,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+            )
+            .run([1_514; 40]),
+            32
+        );
+        assert!(
+            at(
+                1,
+                PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+            )
+            .begin()
+            .is_none()
+        );
     }
 
     #[test]
@@ -312,7 +351,12 @@ mod tests {
             peer_ampdu_parameters: 7 << 2,
             txop_limit_micros: None,
             rate: PhyRate::Ht(
-                HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, true).unwrap(),
+                HtRate::new(
+                    HtMcs::new(7).unwrap(),
+                    PpduBandwidth::Mhz40,
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+                )
+                .unwrap(),
             ),
         };
         // Each 16 us interval at 150 Mb/s needs 300 octets. The final
@@ -326,28 +370,48 @@ mod tests {
             // MCS7 N_DBPS: 260 (20 MHz), 540 (40 MHz).
             (
                 PhyRate::Ht(
-                    HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap(),
+                    HtRate::new(
+                        HtMcs::new(7).unwrap(),
+                        PpduBandwidth::Mhz20,
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+                    )
+                    .unwrap(),
                 ),
                 260,
                 4_000,
             ),
             (
                 PhyRate::Ht(
-                    HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, true).unwrap(),
+                    HtRate::new(
+                        HtMcs::new(7).unwrap(),
+                        PpduBandwidth::Mhz20,
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+                    )
+                    .unwrap(),
                 ),
                 260,
                 3_600,
             ),
             (
                 PhyRate::Ht(
-                    HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, false).unwrap(),
+                    HtRate::new(
+                        HtMcs::new(7).unwrap(),
+                        PpduBandwidth::Mhz40,
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+                    )
+                    .unwrap(),
                 ),
                 540,
                 4_000,
             ),
             (
                 PhyRate::Ht(
-                    HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, true).unwrap(),
+                    HtRate::new(
+                        HtMcs::new(7).unwrap(),
+                        PpduBandwidth::Mhz40,
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+                    )
+                    .unwrap(),
                 ),
                 540,
                 3_600,
@@ -361,7 +425,7 @@ mod tests {
                         PpduBandwidth::Mhz20,
                         HeGiLtf::Ltf2xGi800Ns,
                         FecCoding::Ldpc,
-                        false,
+                        oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
                     )
                     .unwrap(),
                 ),

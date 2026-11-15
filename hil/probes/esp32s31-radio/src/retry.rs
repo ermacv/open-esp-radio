@@ -113,13 +113,24 @@ mod tests {
         // unrepresentable selected stage.
         let initial = u32::from(
             TxPhyRate::try_from(PhyRate::Ht(
-                HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap(),
+                HtRate::new(
+                    HtMcs::new(7).unwrap(),
+                    PpduBandwidth::Mhz20,
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+                )
+                .unwrap(),
             ))
             .unwrap()
             .code(),
         );
-        let ht =
-            PhyRate::Ht(HtRate::new(HtMcs::new(8).unwrap(), PpduBandwidth::Mhz20, false).unwrap());
+        let ht = PhyRate::Ht(
+            HtRate::new(
+                HtMcs::new(8).unwrap(),
+                PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+            )
+            .unwrap(),
+        );
         let he = PhyRate::He(
             HeRate::new(
                 HeMcs::new(7).unwrap(),
@@ -127,7 +138,7 @@ mod tests {
                 PpduBandwidth::Mhz20,
                 HeGiLtf::Ltf2xGi800Ns,
                 FecCoding::Ldpc,
-                false,
+                oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
             )
             .unwrap(),
         );

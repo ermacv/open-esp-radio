@@ -1412,8 +1412,14 @@ mod tests {
         use oer_protocols_ieee80211_wire::phy::{
             HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
         };
-        let ht40 =
-            PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, true).unwrap());
+        let ht40 = PhyRate::Ht(
+            HtRate::new(
+                HtMcs::new(7).unwrap(),
+                PpduBandwidth::Mhz40,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+            )
+            .unwrap(),
+        );
         assert_eq!(
             RateClass::of(Some(ht40)),
             RateClass::Ht {

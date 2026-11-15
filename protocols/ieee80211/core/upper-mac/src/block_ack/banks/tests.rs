@@ -137,7 +137,7 @@ fn addba(tid: u8, timeout_tu: u16) -> BlockAckAction {
         tid,
         8,
         timeout_tu,
-        false,
+        oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
         SequenceNumber::new(100).unwrap(),
     )
     .unwrap();
@@ -213,7 +213,15 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
     let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
     let mut view = storage.view();
     let mut port = Recording::default();
-    let body = encode_addba_request(5, 0, 64, 0, false, SequenceNumber::new(100).unwrap()).unwrap();
+    let body = encode_addba_request(
+        5,
+        0,
+        64,
+        0,
+        oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported,
+        SequenceNumber::new(100).unwrap(),
+    )
+    .unwrap();
     let request = parse_block_ack_action(&body).unwrap();
     view.offer(now(1), 7, bssid(), request, true, &mut port, &mut ())
         .unwrap();

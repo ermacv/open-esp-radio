@@ -89,7 +89,11 @@ impl AddbaResponse {
             self.tid,
             self.window,
             self.timeout_tu,
-            self.amsdu,
+            if self.amsdu {
+                oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported
+            } else {
+                oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported
+            },
         )
         .ok()
     }

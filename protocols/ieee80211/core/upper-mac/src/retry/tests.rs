@@ -46,7 +46,7 @@ fn detached_rate_selection_uses_mpdu_and_short_failures_without_backend_policy()
         oer_protocols_ieee80211_wire::phy::HtRate::new(
             oer_protocols_ieee80211_wire::phy::HtMcs::new(3).unwrap(),
             oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-            true,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
         )
         .unwrap(),
     );

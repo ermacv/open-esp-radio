@@ -298,7 +298,10 @@ pub(crate) fn mark_retry(buffer: &mut [u8], frame_length: usize) -> Result<(), O
         .ok_or(OrdinaryTxError::InvalidRetryHeader)?;
     let checked = FrameControl::new(u16::from_le_bytes(*control))
         .ok_or(OrdinaryTxError::InvalidRetryHeader)?;
-    *control = checked.with_retry(true).get().to_le_bytes();
+    *control = checked
+        .with_retry(oer_protocols_ieee80211_wire::frame::Retry::Retransmission)
+        .get()
+        .to_le_bytes();
     Ok(())
 }
 

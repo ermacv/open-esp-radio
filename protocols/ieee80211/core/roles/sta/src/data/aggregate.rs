@@ -139,7 +139,16 @@ mod tests {
                 .flat_map(move |bandwidth| {
                     [false, true].map(move |short_gi| {
                         PhyRate::Ht(
-                            HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap(),
+                            HtRate::new(
+                                HtMcs::new(mcs).unwrap(),
+                                bandwidth,
+                                if short_gi {
+                                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                                } else {
+                                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                                },
+                            )
+                            .unwrap(),
                         )
                     })
                 })

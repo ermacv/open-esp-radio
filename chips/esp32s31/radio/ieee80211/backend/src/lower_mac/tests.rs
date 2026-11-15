@@ -741,7 +741,12 @@ impl<'core> Core<'core> {
             frame[0], frame[1],
         ]))
         .unwrap();
-        frame[..2].copy_from_slice(&control.with_protected(true).get().to_le_bytes());
+        frame[..2].copy_from_slice(
+            &control
+                .with_protected(oer_protocols_ieee80211_wire::frame::FrameProtection::Protected)
+                .get()
+                .to_le_bytes(),
+        );
         self.inner.submit_checked(
             hardware,
             queue,
@@ -1307,7 +1312,13 @@ fn check_management_transmissions(
     let returned = &idle.buffer_mut().unwrap()[TX_METADATA_SIZE..TX_METADATA_SIZE + frame.len()];
     let control = FrameControl::new(u16::from_le_bytes(returned[..2].try_into().unwrap())).unwrap();
     assert_eq!(control.retry(), expected_retries.ack_timeouts != 0);
-    assert_eq!(control.with_retry(false).get().to_le_bytes(), frame[..2]);
+    assert_eq!(
+        control
+            .with_retry(oer_protocols_ieee80211_wire::frame::Retry::First)
+            .get()
+            .to_le_bytes(),
+        frame[..2]
+    );
     assert_eq!(returned[2..], frame[2..]);
 }
 
@@ -1836,7 +1847,13 @@ fn a_transmission_the_plan_sends_again_carries_the_retry_bit() {
         let control =
             FrameControl::new(u16::from_le_bytes(returned[..2].try_into().unwrap())).unwrap();
         assert!(control.retry());
-        assert_eq!(control.with_retry(false).get().to_le_bytes(), frame[..2]);
+        assert_eq!(
+            control
+                .with_retry(oer_protocols_ieee80211_wire::frame::Retry::First)
+                .get()
+                .to_le_bytes(),
+            frame[..2]
+        );
         assert_eq!(returned[2..], frame[2..]);
     });
 }
@@ -2060,7 +2077,12 @@ fn ht_and_he_attempts_use_their_programs() {
         let mut core = enabled(&mut hardware, pools);
         let frame = data_frame(BSSID);
         let ht = PhyRate::Ht(
-            phy::HtRate::new(phy::HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, true).unwrap(),
+            phy::HtRate::new(
+                phy::HtMcs::new(7).unwrap(),
+                PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+            )
+            .unwrap(),
         );
         let he = PhyRate::He(
             phy::HeRate::new(
@@ -2069,7 +2091,7 @@ fn ht_and_he_attempts_use_their_programs() {
                 PpduBandwidth::Mhz20,
                 HeGiLtf::Ltf2xGi800Ns,
                 FecCoding::Ldpc,
-                false,
+                oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
             )
             .unwrap(),
         );
@@ -2097,7 +2119,12 @@ fn the_callers_protection_and_control_rate_are_published_on_every_phy() {
         let mut core = enabled(&mut hardware, pools);
         let frame = data_frame(BSSID);
         let ht = PhyRate::Ht(
-            phy::HtRate::new(phy::HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, true).unwrap(),
+            phy::HtRate::new(
+                phy::HtMcs::new(7).unwrap(),
+                PpduBandwidth::Mhz20,
+                oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+            )
+            .unwrap(),
         );
         let he = PhyRate::He(
             phy::HeRate::new(
@@ -2106,7 +2133,7 @@ fn the_callers_protection_and_control_rate_are_published_on_every_phy() {
                 PpduBandwidth::Mhz20,
                 HeGiLtf::Ltf2xGi800Ns,
                 FecCoding::Ldpc,
-                false,
+                oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
             )
             .unwrap(),
         );
@@ -3066,7 +3093,7 @@ fn wmm_set_with_best_effort_txop(
     };
     oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
         0,
-        false,
+        oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
         [
             category(3, txop_units_32_us),
             category(7, 0),
@@ -3367,7 +3394,7 @@ fn an_edca_set_outside_the_limits_leaves_the_installed_one() {
             };
         let outside = oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
             0,
-            false,
+            oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
             [record(3, 11), record(7, 10), record(2, 10), record(2, 10)],
         );
         assert!(
@@ -3411,7 +3438,7 @@ fn each_interface_contends_with_its_own_edca_set() {
         let mut refused = wmm_set_with_best_effort_txop(0);
         refused = oer_protocols_ieee80211_wire::extensions::wmm::WmmParameterSet::new(
             0,
-            false,
+            oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
             [
                 oer_protocols_ieee80211_wire::extensions::wmm::WmmAcParameters {
                     ecw_max: oer_portable_wire::U8::constant::<11>(),
@@ -3436,7 +3463,12 @@ const BACKING: usize = 2048;
 
 fn ht_rate(mcs: u8) -> PhyRate {
     PhyRate::Ht(
-        phy::HtRate::new(phy::HtMcs::new(mcs).unwrap(), PpduBandwidth::Mhz20, false).unwrap(),
+        phy::HtRate::new(
+            phy::HtMcs::new(mcs).unwrap(),
+            PpduBandwidth::Mhz20,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+        )
+        .unwrap(),
     )
 }
 
@@ -3448,7 +3480,7 @@ fn he_rate() -> PhyRate {
             PpduBandwidth::Mhz20,
             HeGiLtf::Ltf2xGi800Ns,
             FecCoding::Ldpc,
-            false,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
         )
         .unwrap(),
     )
@@ -3986,7 +4018,11 @@ fn a_protected_wire_frame_cannot_publish_with_an_open_ticket() {
             frame[0], frame[1],
         ]))
         .unwrap();
-        frame[..2].copy_from_slice(&fc.with_protected(true).get().to_le_bytes());
+        frame[..2].copy_from_slice(
+            &fc.with_protected(oer_protocols_ieee80211_wire::frame::FrameProtection::Protected)
+                .get()
+                .to_le_bytes(),
+        );
         let refused = core
             .submit_checked(&mut hardware, values(&frame, false))
             .err()
@@ -4343,7 +4379,7 @@ fn the_core_draws_from_the_publishing_vif_and_keeps_each_complete_record() {
             EdcaParameterSet::from_tu(
                 WmmParameterSet::new(
                     0,
-                    false,
+                    oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
                     [WmmAcParameters {
                         admission_control_mandatory: false,
                         aifsn: oer_portable_wire::U8::new(aifsn).unwrap(),
@@ -4593,7 +4629,7 @@ fn the_cores_plan_at_an_he_rate_is_what_the_budget_admits() {
                 PpduBandwidth::Mhz20,
                 HeGiLtf::Ltf2xGi800Ns,
                 FecCoding::Ldpc,
-                false,
+                oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
             )
             .unwrap(),
         );
@@ -4626,7 +4662,12 @@ fn the_port_table_holds_the_lengths_the_core_plans_by() {
     assert_eq!(at(ht_rate(0)), Ok(6_490));
     assert_eq!(at(ht_rate(7)), Ok(65_535));
     let ht40 = PhyRate::Ht(
-        phy::HtRate::new(phy::HtMcs::new(3).unwrap(), PpduBandwidth::Mhz40, true).unwrap(),
+        phy::HtRate::new(
+            phy::HtMcs::new(3).unwrap(),
+            PpduBandwidth::Mhz40,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short,
+        )
+        .unwrap(),
     );
     // The vendor's table is indexed by the rate code, whose short-GI codes
     // start at 26: short-GI MCS 3 takes the entry after long-GI MCS 9's.
@@ -4642,7 +4683,7 @@ fn the_port_table_holds_the_lengths_the_core_plans_by() {
             PpduBandwidth::Mhz40,
             HeGiLtf::Ltf2xGi800Ns,
             FecCoding::Ldpc,
-            false,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
         )
         .unwrap(),
     );
@@ -4656,8 +4697,18 @@ fn the_port_table_holds_the_lengths_the_core_plans_by() {
             (PpduBandwidth::Mhz40, false),
             (PpduBandwidth::Mhz40, true),
         ] {
-            let rate =
-                PhyRate::Ht(phy::HtRate::new(phy::HtMcs::new(mcs).unwrap(), width, guard).unwrap());
+            let rate = PhyRate::Ht(
+                phy::HtRate::new(
+                    phy::HtMcs::new(mcs).unwrap(),
+                    width,
+                    if guard {
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                    } else {
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                    },
+                )
+                .unwrap(),
+            );
             let planned = crate::mac::tx::TxPhyRate::try_from(rate)
                 .ok()
                 .and_then(ampdu::esp32s31_ampdu_length)

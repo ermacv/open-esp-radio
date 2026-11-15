@@ -22,6 +22,42 @@ fn a_connected_station_hands_its_link_over_once_and_releases_its_data() {
     });
 }
 
+/// The data header the station hands over with its link: QoS Data on a
+/// BSS that advertises WMM, Data otherwise, as the link's numbering is.
+#[test]
+fn the_handed_over_link_s_header_is_qos_data_exactly_on_a_qos_bss() {
+    use oer_protocols_ieee80211_wire::data::PeerQos;
+    installed(|mint| {
+        let mut world = connected_world(mint);
+        let link = world.link.as_mut().expect("the holder keeps the link");
+        assert!(!link.numbers().qos());
+        let header = link
+            .data_mut()
+            .expect("the plane's state of the link")
+            .header;
+        assert_eq!(header.peer_qos(), PeerQos::NonQos);
+    });
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        world.advance();
+        let wmm = wmm_element(1, 3, 10);
+        world.receive(at(13), &with_element(&beacon(), &wmm));
+        world.advance();
+        world.answer_authentication(at(30), 0);
+        world.receive(at(31), &with_element(&open_association_response(), &wmm));
+        assert!(world.station.is_connected());
+        let link = world.link.as_mut().expect("the holder keeps the link");
+        assert!(link.numbers().qos(), "a WMM BSS numbers each TID");
+        let header = link
+            .data_mut()
+            .expect("the plane's state of the link")
+            .header;
+        assert_eq!(header.peer_qos(), PeerQos::Qos);
+    });
+}
+
 #[test]
 fn a_protected_link_is_held_until_its_keys_are_confirmed() {
     installed(|mint| {

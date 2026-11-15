@@ -80,7 +80,15 @@ fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
     let commit_wire = world.frames.last().unwrap();
     let (status, body) = outgoing_authentication(commit_wire, 3, 1);
     assert_eq!(status, if h2e { 126 } else { 0 });
-    let station = SaeCommitValues::parse(body, h2e).unwrap();
+    let station = SaeCommitValues::parse(
+        body,
+        if h2e {
+            oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
+        } else {
+            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
+        },
+    )
+    .unwrap();
     let element = if h2e {
         SaePasswordToken::derive(SSID, b"password", None)
             .unwrap()
@@ -91,7 +99,18 @@ fn commit(world: &mut World<'_>, h2e: bool, now: u32) -> SaeKeys {
     let peer = SaeCommit::new(&element, [0x40; 32], [0x41; 32]).unwrap();
     let keys = peer.process(station).unwrap();
     let mut body = [0; oer_protocols_ieee80211_wire::sae::SAE_COMMIT_LEN];
-    let length = peer.values().encode(None, h2e, &mut body).unwrap();
+    let length = peer
+        .values()
+        .encode(
+            None,
+            if h2e {
+                oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
+            } else {
+                oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
+            },
+            &mut body,
+        )
+        .unwrap();
     world.receive(at(now), &peer_authentication(1, status, &body[..length]));
     let (status, confirm) = outgoing_authentication(world.frames.last().unwrap(), 3, 2);
     assert_eq!(status, 0);
@@ -197,7 +216,13 @@ fn review_sae_selection_transmits_a_wire_commit() {
             let mut world = World::with_security(mint, 3, personal());
             begin(&mut world, &advertised(transition, false), 0, 91);
             let (_, body) = outgoing_authentication(world.frames.last().unwrap(), 3, 1);
-            assert!(SaeCommitValues::parse(body, false).is_ok());
+            assert!(
+                SaeCommitValues::parse(
+                    body,
+                    oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
+                )
+                .is_ok()
+            );
         });
     }
 }

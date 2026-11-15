@@ -102,7 +102,7 @@ pub const fn phy_rate(
             PpduBandwidth::Mhz20,
             gi_ltf,
             FecCoding::Bcc,
-            false,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
         ) {
             Some(rate) => Some(PhyRate::He(rate)),
             None => None,
@@ -119,7 +119,15 @@ pub const fn phy_rate(
     let Some(mcs) = HtMcs::new(index) else {
         return None;
     };
-    match HtRate::new(mcs, ht_bandwidth, short_gi) {
+    match HtRate::new(
+        mcs,
+        ht_bandwidth,
+        if short_gi {
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+        } else {
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+        },
+    ) {
         Some(rate) => Some(PhyRate::Ht(rate)),
         None => None,
     }
@@ -150,7 +158,12 @@ mod tests {
         assert_eq!(
             ht,
             Some(PhyRate::Ht(
-                HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, false).unwrap()
+                HtRate::new(
+                    HtMcs::new(7).unwrap(),
+                    PpduBandwidth::Mhz40,
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                )
+                .unwrap()
             ))
         );
         let he = phy_rate(

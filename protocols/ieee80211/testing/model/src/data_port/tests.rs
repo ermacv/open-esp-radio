@@ -1315,7 +1315,7 @@ fn the_ring_limit_refuses_a_landing_frame_only() {
                 oer_protocols_ieee80211_wire::phy::HtRate::new(
                     oer_protocols_ieee80211_wire::phy::HtMcs::new(7).unwrap(),
                     oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-                    false,
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
                 )
                 .unwrap(),
             ),

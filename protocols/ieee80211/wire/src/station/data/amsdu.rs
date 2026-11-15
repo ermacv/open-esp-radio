@@ -79,11 +79,11 @@ impl<'a> StaProtectedAmsduFrame<'a> {
             self.source,
             first.header(),
             priority,
-            true,
-            false,
+            PeerQos::Qos,
+            QosAckPolicy::Normal,
         );
-        plan.set_protected(true);
-        plan.set_amsdu(true);
+        plan.set_protected();
+        plan.set_amsdu();
         crate::encoding::write_array::<22, _, _>(
             &mut plan.header,
             &self.sequence_number.sequence_control().to_le_bytes(),

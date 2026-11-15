@@ -256,7 +256,7 @@ mod edca_tests {
         };
         EdcaParameterSet::from_wmm(WmmParameterSet::new(
             0,
-            false,
+            oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
             [record(0), record(1), record(2), record(3)],
         ))
     }

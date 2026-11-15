@@ -114,7 +114,10 @@ impl FtmRequesterConfig {
         if parameters.number_of_bursts_exponent() != 0 {
             return Err(FtmRequesterConfigError::MultipleBurstsUnsupported);
         }
-        if !parameters.asap() {
+        if !matches!(
+            parameters.asap(),
+            oer_protocols_ieee80211_wire::ftm::FtmAsap::AsSoonAsPossible
+        ) {
             return Err(FtmRequesterConfigError::ScheduledBurstUnsupported);
         }
         if parameters.partial_tsf_timer().is_some() {

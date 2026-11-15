@@ -116,18 +116,22 @@ impl DataEncapPlan {
         self.header[0] = low;
         self.header[1] = high;
     }
-    pub(crate) const fn set_protected(&mut self, protected: bool) {
-        self.set_control(self.control().with_protected(protected));
+    /// Set the Protected Frame bit.
+    pub(crate) const fn set_protected(&mut self) {
+        self.set_control(self.control().with_protected(true));
     }
-    pub(crate) const fn set_more_data(&mut self, more_data: bool) {
-        self.set_control(self.control().with_more_data(more_data));
+    /// Set the More Data bit.
+    pub(crate) const fn set_more_data(&mut self) {
+        self.set_control(self.control().with_more_data(true));
     }
-    pub(crate) const fn set_order(&mut self, order: bool) {
-        self.set_control(self.control().with_order(order));
+    /// Set the Order bit: an HT Control field follows.
+    pub(crate) const fn set_order(&mut self) {
+        self.set_control(self.control().with_order(true));
     }
-    pub(crate) const fn set_amsdu(&mut self, amsdu: bool) {
+    /// Set the A-MSDU Present bit of the QoS Control field.
+    pub(crate) const fn set_amsdu(&mut self) {
         let [low, high] = QosControl::from_bytes([self.header[24], self.header[25]])
-            .with_amsdu(amsdu)
+            .with_amsdu(true)
             .to_bytes();
         self.header[24] = low;
         self.header[25] = high;
@@ -350,9 +354,10 @@ impl<'a> AmsduSubframes<'a> {
 ///
 /// ```compile_fail,E0308
 /// use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
+/// use oer_protocols_ieee80211_wire::{data::PeerQos, frame::QosAckPolicy};
 /// let msdu = MsduHeader { destination: [6; 6], source: [4; 6], ether_type: 0x0800 };
 /// let _plan = plan_data_encapsulation(
-///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu, 8, true, false,
+///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu, 8, PeerQos::Qos, QosAckPolicy::Normal,
 /// );
 /// ```
 ///
@@ -361,10 +366,11 @@ impl<'a> AmsduSubframes<'a> {
 /// ```
 /// use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, plan_data_encapsulation};
 /// use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
+/// use oer_protocols_ieee80211_wire::{data::PeerQos, frame::QosAckPolicy};
 /// let msdu = MsduHeader { destination: [6; 6], source: [4; 6], ether_type: 0x0800 };
 /// let plan = plan_data_encapsulation(
 ///     DataInterfaceRole::Station, [2; 6], [4; 6], msdu,
-///     WmmUserPriority::UP7, true, false,
+///     WmmUserPriority::UP7, PeerQos::Qos, QosAckPolicy::Normal,
 /// );
 /// assert_eq!(plan.access_category, WmmAccessCategory::Voice);
 /// ```
@@ -374,8 +380,8 @@ pub const fn plan_data_encapsulation(
     interface_mac: [u8; 6],
     msdu: MsduHeader,
     priority: WmmUserPriority,
-    peer_qos: bool,
-    no_ack_policy: bool,
+    peer_qos: PeerQos,
+    ack_policy: crate::frame::QosAckPolicy,
 ) -> DataEncapPlan {
     let MsduHeader {
         destination,
@@ -387,7 +393,7 @@ pub const fn plan_data_encapsulation(
     // An access point's group-addressed data stays non-QoS.
     let group_from_access_point = matches!(role, DataInterfaceRole::AccessPoint)
         && crate::address::AddressFlags::from_bytes([d0]).group();
-    let qos = peer_qos && !group_from_access_point;
+    let qos = matches!(peer_qos, PeerQos::Qos) && !group_from_access_point;
     let (direction, addresses) = match role {
         DataInterfaceRole::Station => (IEEE80211_TO_DS, [bssid, source, destination]),
         DataInterfaceRole::AccessPoint => (IEEE80211_FROM_DS, [destination, interface_mac, source]),
@@ -404,11 +410,7 @@ pub const fn plan_data_encapsulation(
         QosControl::from_bytes([0; 2])
             // User priorities are three-bit values; the TID field is four bits.
             .with_tid(oer_portable_wire::U8::<3>::from_low_bits(priority.value()).widen())
-            .with_ack_policy(if no_ack_policy {
-                oer_portable_wire::U8::constant::<1>()
-            } else {
-                oer_portable_wire::U8::ZERO
-            })
+            .with_ack_policy(ack_policy.field())
             .to_bytes()
     } else {
         [0, 0]
@@ -471,8 +473,8 @@ pub const fn plan_data_encapsulation_with_he_control(
     interface_mac: [u8; 6],
     msdu: MsduHeader,
     priority: WmmUserPriority,
-    peer_qos: bool,
-    no_ack_policy: bool,
+    peer_qos: PeerQos,
+    ack_policy: crate::frame::QosAckPolicy,
     he_control: DataHeControl,
 ) -> Result<DataEncapPlan, HeControlRequiresQos> {
     let mut plan = plan_data_encapsulation(
@@ -482,7 +484,7 @@ pub const fn plan_data_encapsulation_with_he_control(
         msdu,
         priority,
         peer_qos,
-        no_ack_policy,
+        ack_policy,
     );
     if matches!(
         he_control,
@@ -493,7 +495,7 @@ pub const fn plan_data_encapsulation_with_he_control(
         }
         // The chip-specific DMA owner separately marks the four-byte hardware
         // insertion; the encoded QoS header itself remains 26 bytes.
-        plan.set_order(true);
+        plan.set_order();
     }
     plan.he_control = he_control;
     Ok(plan)

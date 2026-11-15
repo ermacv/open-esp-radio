@@ -14,7 +14,15 @@ fn unsupported_addba_receives_an_explicit_decline() {
         let clock = VirtualClock::<8>::starting_at(at(40));
         // The backend accepts TIDs 0..=7. A parsed request for TID 15 still
         // needs a response, without allocating a receive agreement.
-        let body = encode_addba_request(17, 15, 16, 0, true, SequenceNumber::ZERO).unwrap();
+        let body = encode_addba_request(
+            17,
+            15,
+            16,
+            0,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
+            SequenceNumber::ZERO,
+        )
+        .unwrap();
         let mut request = std::vec![0; 24];
         request[0] = 0xd0;
         request[4..10].copy_from_slice(&LOCAL);
@@ -94,4 +102,21 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
         assert_eq!(world.station.tickets.len(), 2);
         assert_eq!(world.station.buffers.len(), 2);
     });
+}
+
+/// The DELBA the station sends to end its own transmit agreement names it
+/// the originator, with the TID and the timeout's reason.
+#[test]
+fn the_station_s_own_delba_names_it_the_agreement_s_originator() {
+    for tid in 0..8 {
+        let body = super::super::own_delba(tid).unwrap();
+        assert_eq!(
+            parse_block_ack_action(&body),
+            Some(BlockAckAction::Delba {
+                tid,
+                initiator: true,
+                reason: oer_protocols_ieee80211_wire::status::reason_code::TIMEOUT,
+            })
+        );
+    }
 }

@@ -37,7 +37,7 @@ fn the_standard_default_is_the_records_of_table_9_155() {
 fn parses_all_four_access_categories_and_complete_txop() {
     let parameters = parse_wmm_parameter_element(&STANDARD_PARAMETER_ELEMENT).unwrap();
     assert_eq!(parameters.parameter_set_count, 5);
-    assert!(parameters.uapsd);
+    assert_eq!(parameters.uapsd, super::Uapsd::Supported);
 
     let best_effort = parameters.access_category(WmmAccessCategory::BestEffort);
     assert_eq!(best_effort.aifsn.get(), 3);

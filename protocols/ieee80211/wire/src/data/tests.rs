@@ -1,4 +1,5 @@
 use super::*;
+use crate::frame::QosAckPolicy;
 
 const DESTINATION: [u8; 6] = [0x10, 0x11, 0x12, 0x13, 0x14, 0x15];
 const SOURCE: [u8; 6] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25];
@@ -21,8 +22,8 @@ fn station_qos_header_matches_the_recovered_plan() {
         AP_MAC,
         msdu(DESTINATION),
         WmmUserPriority::UP7,
-        true,
-        false,
+        PeerQos::Qos,
+        QosAckPolicy::Normal,
     );
     assert_eq!(plan.header_len, 26);
     assert_eq!(&plan.header[..2], &[0x88, 0x01]);
@@ -42,8 +43,8 @@ fn hardware_bsr_sets_order_without_moving_dma_payload() {
         AP_MAC,
         msdu(DESTINATION),
         WmmUserPriority::UP0,
-        true,
-        false,
+        PeerQos::Qos,
+        QosAckPolicy::Normal,
         DataHeControl::HardwareGeneratedBufferStatusReport,
     )
     .unwrap();
@@ -61,8 +62,8 @@ fn hardware_bsr_sets_order_without_moving_dma_payload() {
             AP_MAC,
             msdu(DESTINATION),
             WmmUserPriority::UP0,
-            false,
-            false,
+            PeerQos::NonQos,
+            QosAckPolicy::Normal,
             DataHeControl::HardwareGeneratedBufferStatusReport,
         )
         .is_err()
@@ -77,8 +78,8 @@ fn station_decapsulation_reverses_from_ds_rfc1042_data() {
         BSSID,
         msdu(DESTINATION),
         WmmUserPriority::UP0,
-        false,
-        false,
+        PeerQos::NonQos,
+        QosAckPolicy::Normal,
     );
     let header_length = usize::from(plan.header_len);
     let payload = [1, 2, 3, 4];
@@ -323,8 +324,8 @@ fn ordinary_mpdu() -> std::vec::Vec<u8> {
         BSSID,
         msdu(DESTINATION),
         WmmUserPriority::UP5,
-        true,
-        false,
+        PeerQos::Qos,
+        QosAckPolicy::Normal,
     );
     let mut mpdu = plan.header[..usize::from(plan.header_len)].to_vec();
     mpdu.extend_from_slice(&plan.llc_snap);
@@ -507,8 +508,8 @@ fn malformed_payload_offsets_and_lengths_return_errors() {
         BSSID,
         msdu(DESTINATION),
         WmmUserPriority::UP0,
-        false,
-        false,
+        PeerQos::NonQos,
+        QosAckPolicy::Normal,
     );
     let mut mpdu = std::vec::Vec::from(&plan.header[..usize::from(plan.header_len)]);
     mpdu.extend_from_slice(&plan.llc_snap);

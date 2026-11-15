@@ -100,7 +100,11 @@ impl TxPhyRate {
                         HtChannelWidth::Mhz20 => PpduBandwidth::Mhz20,
                         HtChannelWidth::Mhz40 => PpduBandwidth::Mhz40,
                     },
-                    matches!(rate.guard_interval, HtGuardInterval::Short400Ns),
+                    if matches!(rate.guard_interval, HtGuardInterval::Short400Ns) {
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                    } else {
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                    },
                 )
                 .expect("HT at 20 or 40 MHz"),
             ),
@@ -114,7 +118,11 @@ impl TxPhyRate {
                         HeFecCoding::Bcc => FecCoding::Bcc,
                         HeFecCoding::Ldpc => FecCoding::Ldpc,
                     },
-                    rate.is_dcm(),
+                    if rate.is_dcm() {
+                        oer_protocols_ieee80211_wire::phy::Dcm::Used
+                    } else {
+                        oer_protocols_ieee80211_wire::phy::Dcm::NotUsed
+                    },
                 )
                 .expect("S31 DCM rates use MCS 0, 1, 3 or 4"),
             ),
@@ -244,7 +252,11 @@ impl RxPhyInfo {
                 phy::HtRate::new(
                     phy::HtMcs::new(signal.mcs)?,
                     bandwidth,
-                    signal.short_guard_interval,
+                    if signal.short_guard_interval {
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                    } else {
+                        oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                    },
                 )
                 .map(PhyRate::Ht)
             }
@@ -265,7 +277,11 @@ impl RxPhyInfo {
                     } else {
                         FecCoding::Bcc
                     },
-                    signal.dcm,
+                    if signal.dcm {
+                        oer_protocols_ieee80211_wire::phy::Dcm::Used
+                    } else {
+                        oer_protocols_ieee80211_wire::phy::Dcm::NotUsed
+                    },
                 )
                 .map(PhyRate::He)
             }

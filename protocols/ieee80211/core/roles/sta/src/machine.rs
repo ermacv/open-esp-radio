@@ -2398,6 +2398,22 @@ enum Sending {
     BlockAckRequest { tid: u8 },
 }
 
+/// The DELBA body that ends the station's own transmit agreement of `tid`
+/// after its inactivity: the station is its originator (IEEE Std
+/// 802.11-2020, 9.6.5.5, 10.25.5).
+fn own_delba(
+    tid: u8,
+) -> Result<
+    [u8; oer_protocols_ieee80211_wire::block_ack::frame::DELBA_ACTION_BODY_LEN],
+    oer_protocols_ieee80211_wire::block_ack::frame::AddbaRequestError,
+> {
+    oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
+        tid,
+        oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
+        reason_code::TIMEOUT,
+    )
+}
+
 /// The station's transmit agreements in `connected`'s association, started
 /// afresh at their first use in it.
 fn tx_agreements<'c, T: StaTokens, K>(
@@ -2453,7 +2469,11 @@ fn handover_data<T: StaTokens, K>(
     let header = oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate::new(
         address,
         bssid,
-        connected.qos,
+        if connected.qos {
+            oer_protocols_ieee80211_wire::data::PeerQos::Qos
+        } else {
+            oer_protocols_ieee80211_wire::data::PeerQos::NonQos
+        },
         if keyed {
             oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
         } else {
@@ -6460,11 +6480,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 return self.owe_block_ack_request(connected, tid, start, events);
             }
             TxBlockAckOwed::Delba { tid } => {
-                let Ok(delba) = oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
-                    tid,
-                    true,
-                    reason_code::TIMEOUT,
-                ) else {
+                let Ok(delba) = own_delba(tid) else {
                     return Some(Err(StaDisconnectReason::Encode));
                 };
                 Body::Delba(tid, delba)
@@ -7601,7 +7617,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     ) -> Result<StaTransmit<'id, T, K>, EapolUnsent> {
         let priority = eapol_priority(admission)?;
         let credit = self.reserve_transmit(events)?;
-        let peer_qos = qos.is_some();
+        let peer_qos = if qos.is_some() {
+            oer_protocols_ieee80211_wire::data::PeerQos::Qos
+        } else {
+            oer_protocols_ieee80211_wire::data::PeerQos::NonQos
+        };
         // A TID's next number is the station's to write while it holds the
         // link; its holder writes it once it has the link.
         let (sequence_number, number) = match qos {
