@@ -27,6 +27,9 @@
 //!   stop's right ([`Case::Proofs`]);
 //! - each reinstall is at the port's next TSF epoch, and a port at its last
 //!   refuses with the proof back ([`Case::Epochs`]).
+//!
+//! No case reads `outstanding()` of a released port: it holds no
+//! installation, and the ports answer that reading differently.
 
 use core::num::NonZeroU8;
 use core::task::{Context, Waker};

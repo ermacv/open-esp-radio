@@ -816,7 +816,7 @@ impl<'s> oer_protocols_ieee80211_testing_installation::InstallationHarness<'s> f
 }
 
 #[test]
-fn drive_ends_every_installation_case_on_the_model() {
+fn the_installation_machine_ends_every_case_on_the_model() {
     use oer_protocols_ieee80211_testing_installation as installation;
     for case in installation::Case::ALL {
         with_harness(|harness| {

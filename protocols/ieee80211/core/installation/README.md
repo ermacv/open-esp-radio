@@ -24,10 +24,13 @@ right. A position holds exactly the proof its name says: stopped the
 stop's, starting the start's, retired the retirement's. A proof an ask
 takes or borrows travels in the `Step`, and the machine's position is then
 "stopping", which holds none, so a step that is dropped leaves a state a
-stop mends. A stop and a recovery lend the right inside their resume
-(`Resume::poll`, `Resume::recover`); a pump has no other way to it
-(`tests/ui/stop_without_step.rs`). A release takes the right with the
-retirement's proof: after it, no stop can be written.
+stop mends. A stop and a recovery carry the right out in their step,
+which lends it (`Resume::right`) and gives it back with the answer
+(`Resume::answer`, and for a stop not confirmed yet `Resume::pending`); a
+pump has no other way to it (`tests/ui/stop_without_step.rs`). A release
+takes the right with the retirement's proof: after it, no stop can be
+written. A step that carries the right and is dropped leaves a port nobody
+can stop; `drive` drops none.
 
 A controller asks from its permit (`Live`: anything; `Spent`: a restart or
 a release), which only the machine makes: one at its placement, one at each

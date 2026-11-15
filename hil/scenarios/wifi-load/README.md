@@ -83,7 +83,7 @@ through collection of the finished window
 p95, max, replies; `OER_WIFI_LOAD_PROBES=off` sends no probes), each hart's busy share (1 − idle/window: the boot hart's
 radio and station, hart 1's network and load) with each executor's work
 share, each named part's polls (tasks, the station work's and the network's
-futures and the datapath actor's spans: count, rate, share of the window
+futures: count, rate, share of the window
 with an open poll's part, and the mean and longest of the ended polls), and
 the window's counters (the boot hart's cycles and retired instructions, their
 rate per microsecond and per cycle, the datagrams the network delivered with the hart's instructions over

@@ -15,8 +15,12 @@
 //! told.
 //!
 //! - From a run with a received unit held and a unit lent, a restart ends
-//!   reinstalled ([`Case::Restart`]) and a release released
-//!   ([`Case::Release`]), with nothing out of the port.
+//!   reinstalled with nothing out of the port ([`Case::Restart`]), and a
+//!   release ends released ([`Case::Release`]).
+//!
+//! A case reads `outstanding()` only of a port that holds an installation:
+//! after a release it holds none, and the proof that nothing was out is the
+//! retirement the port granted before it.
 //! - After a fault the recovery takes back, a restart and a release end as
 //!   they do from a run ([`Case::FaultTakenBack`]).
 //! - A retirement refused for a unit held says what is out and ends once
@@ -225,6 +229,7 @@ pub fn check<'id, H: InstallationHarness<'id>>(
         recorder: Recorder::new(),
         rest: Rest::Round,
         woken: 0,
+        radio: None,
     };
     let channel = run.harness.channel();
     run.step(Input::Request(Request::run(live, channel, None)));
@@ -241,8 +246,7 @@ pub fn check<'id, H: InstallationHarness<'id>>(
             let held = run.traffic()?;
             run.ask(|permit| Ok(Request::release(permit, Network::Stops, None)))?;
             run.home(held)?;
-            run.until("released", Recorder::released)?;
-            run.nothing_out()
+            run.until("released", Recorder::released)
         }
         Case::FaultTakenBack => {
             run.harness.fault(FaultReach::Whole);
@@ -251,8 +255,7 @@ pub fn check<'id, H: InstallationHarness<'id>>(
             run.until("reinstalled", |heard| heard.reached(End::Reinstalled) == 1)?;
             run.nothing_out()?;
             run.ask(|permit| Ok(Request::release(permit, Network::Stays, None)))?;
-            run.until("released", Recorder::released)?;
-            run.nothing_out()
+            run.until("released", Recorder::released)
         }
         Case::RetireHeld => {
             let held = run.traffic()?;
@@ -264,24 +267,21 @@ pub fn check<'id, H: InstallationHarness<'id>>(
                 return Err(Violation::Held);
             }
             run.home(held)?;
-            run.until("released", Recorder::released)?;
-            run.nothing_out()
+            run.until("released", Recorder::released)
         }
         Case::StopFailsOnce => {
             run.harness.fail_next_stop();
-            let now = run.harness.now();
             run.ask(|permit| match permit {
                 Permit::Live(live) => Ok(Request::halt(live, None)),
                 Permit::Spent(_) => Err(Violation::Fixture),
             })?;
-            // The stop that failed names nothing that wakes: the step says
-            // what it waits for and names the retry time.
-            if !run.recorder.held.contains(&Waited::Radio)
-                || run.rest != Rest::Wake(now.checked_add(RETRY))
-            {
-                return Err(Violation::Held);
+            run.until("halted", |heard| heard.reached(End::Halted) == 1)?;
+            // The stop that failed names nothing that wakes: its step said
+            // what it waits for and named the retry time.
+            match run.radio {
+                Some((Rest::Wake(Some(at)), now)) if now.checked_add(RETRY) == Some(at) => Ok(()),
+                Some(_) | None => Err(Violation::Held),
             }
-            run.until("halted", |heard| heard.reached(End::Halted) == 1)
         }
         Case::Deadline => {
             let held = run.traffic()?;
@@ -298,8 +298,7 @@ pub fn check<'id, H: InstallationHarness<'id>>(
             // The next request goes on from where the machine is.
             run.ask(|permit| Ok(Request::release(permit, Network::Stays, None)))?;
             run.home(held)?;
-            run.until("released", Recorder::released)?;
-            run.nothing_out()
+            run.until("released", Recorder::released)
         }
     }
 }
@@ -319,12 +318,16 @@ struct Run<'m, 'id, H: InstallationHarness<'id>> {
     rest: Rest,
     /// The wakes of the port's waker at the last step.
     woken: usize,
+    /// The rest, and the instant, of the step that first said the radio's
+    /// stop is unconfirmed.
+    radio: Option<(Rest, oer_portable_time::Instant)>,
 }
 
 impl<'id, H: InstallationHarness<'id>> Run<'_, 'id, H> {
     /// One step from `input`, then the inputs its messages call for: the
     /// controller's tokens' end and the network's stop. The last rest.
     fn step(&mut self, input: Input<'id, ChannelOf<'id, H::Port>>) -> Rest {
+        let now = self.harness.now();
         let mut rest = self.drive(input);
         loop {
             if let Some(order) = self.recorder.orders.pop() {
@@ -339,6 +342,9 @@ impl<'id, H: InstallationHarness<'id>> Run<'_, 'id, H> {
         }
         for installed in self.recorder.installed.drain(..) {
             self.harness.adopt(installed);
+        }
+        if self.recorder.held.last() == Some(&Waited::Radio) && self.radio.is_none() {
+            self.radio = Some((rest, now));
         }
         self.rest = rest;
         self.woken = self.harness.wakes();
@@ -417,15 +423,27 @@ impl<'id, H: InstallationHarness<'id>> Run<'_, 'id, H> {
                 rest = faulted;
             }
             let woken = came_home || self.harness.wakes() != self.woken;
-            let turn = match rest {
-                Rest::Round => true,
-                Rest::Wake(Some(at)) => {
+            // The port names the earliest instant a call must run without a
+            // fact (`DataPort::deadline`): a call is due then as at a time a
+            // rest names.
+            let due = {
+                let (port, _) = self.harness.parts();
+                port.deadline()
+            };
+            let at = match (rest, due) {
+                (Rest::Round, _) => None,
+                (Rest::Wake(Some(at)), Some(due)) => Some(at.min(due)),
+                (Rest::Wake(at), None) | (Rest::Wake(None), at) => at,
+            };
+            let turn = match (rest, at) {
+                (Rest::Round, _) => true,
+                (Rest::Wake(_), Some(at)) => {
                     if !woken && let Some(by) = at.checked_duration_since(self.harness.now()) {
                         self.harness.advance(by);
                     }
                     true
                 }
-                Rest::Wake(None) => woken,
+                (Rest::Wake(_), None) => woken,
             };
             if turn {
                 rest = self.step(Input::Turn);

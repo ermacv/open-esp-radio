@@ -67,7 +67,6 @@ mod tests;
 
 use core::marker::PhantomData;
 use core::mem::{self, MaybeUninit};
-use core::task::Poll;
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
@@ -346,8 +345,9 @@ pub enum Rest {
 pub enum Step<'m, 'id, C, F> {
     /// Ask the port's start with the proof, on the channel.
     Start(StartProof<'id>, C, Resume<'m, 'id, C, F, AskStart<C>>),
-    /// Poll the port's stop; [`Resume::poll`] lends the stop's right.
-    Stop(Resume<'m, 'id, C, F, AskStop>),
+    /// Poll the port's stop with the stop's right [`Resume::right`] lends;
+    /// its answer is [`Resume::answer`] or [`Resume::pending`].
+    Stop(Resume<'m, 'id, C, F, AskStop<'id>>),
     /// Ask the data plane to stop the data.
     StopData(Resume<'m, 'id, C, F, AskStopData<'id>>),
     /// Take what a sink refused, under the stop's proof, which comes back
@@ -369,9 +369,9 @@ pub enum Step<'m, 'id, C, F> {
         StopRight<'id>,
         Resume<'m, 'id, C, F, AskRelease>,
     ),
-    /// Ask what a stop can do about the port's fault; [`Resume::recover`]
-    /// lends the stop's right.
-    Recover(Resume<'m, 'id, C, F, AskRecover>),
+    /// Ask what a stop can do about the port's fault, with the stop's right
+    /// [`Resume::right`] lends.
+    Recover(Resume<'m, 'id, C, F, AskRecover<'id, C>>),
     /// Pass this on to its party, and go on.
     Tell(Tell<'id>, Resume<'m, 'id, C, F, Told<'id>>),
     /// The one end of the open request: to the controller, and go on.
@@ -398,10 +398,12 @@ pub struct AskStart<C> {
     run: Run,
 }
 
-/// A stop is polled.
-pub struct AskStop {
+/// A stop is polled. It carries the stop's right out of the machine, and
+/// gives it back with the answer.
+pub struct AskStop<'id> {
     after: AfterStop,
     run: Run,
+    right: StopRight<'id>,
 }
 
 /// The data's stop is asked.
@@ -436,9 +438,12 @@ pub struct AskReinstall(());
 /// A release is asked.
 pub struct AskRelease(());
 
-/// A recovery is asked.
-pub struct AskRecover {
+/// A recovery is asked. It carries the stop's right and the position out
+/// of the machine, and gives them back with the answer.
+pub struct AskRecover<'id, C> {
     after: AfterRecover,
+    right: StopRight<'id>,
+    at: At<'id, C>,
 }
 
 /// A message is passed on; the step goes on towards the goal.
@@ -467,6 +472,9 @@ enum Life<'id, C> {
         right: StopRight<'id>,
         at: At<'id, C>,
     },
+    /// A stop or a recovery is asked: the right and the position are out
+    /// with the step, which gives them back with its answer.
+    Lent,
     /// A release is asked: the right is out with the proof.
     Releasing,
     /// The port is released.
@@ -665,10 +673,11 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                         ..
                     } => *tokens = Tokens::Ended,
                     // A retired installation's tokens are ended; a released
-                    // port holds none.
+                    // port holds none; no step is out between two inputs.
                     Life::Port {
                         at: At::Retired(_), ..
                     }
+                    | Life::Lent
                     | Life::Releasing
                     | Life::Released => {}
                 }
@@ -701,7 +710,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     fn put(&mut self, at: At<'id, C>) {
         match &mut self.life {
             Life::Port { at: place, .. } => *place = at,
-            Life::Releasing | Life::Released => {}
+            Life::Lent | Life::Releasing | Life::Released => {}
         }
     }
 
@@ -743,6 +752,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             Life::Port {
                 at: At::Retired(_), ..
             }
+            | Life::Lent
             | Life::Releasing
             | Life::Released => Tokens::Ended,
         };
@@ -789,12 +799,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         match next {
             Next::Advance => self.advance(now),
             Next::Rest(again) => Step::Rest(self.rest(again, now)),
-            Next::RecoverForFault => Step::Recover(self.resume(
-                now,
-                AskRecover {
-                    after: AfterRecover::Fault,
-                },
-            )),
+            Next::RecoverForFault => self.recover(AfterRecover::Fault, now),
             Next::AfterRecovery(after, kept) => self.after_recovery(after, kept, now),
             Next::Drain(stopped, run) => self.drain(stopped, run, now),
             Next::EndStarted => self.end(Ok(End::Started), Next::Rest(Again::Wake), now),
@@ -885,7 +890,9 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 }
             },
             // A released port has no installation a fault could hold.
-            Life::Releasing | Life::Released => Step::Rest(self.rest(Again::Wake, now)),
+            Life::Lent | Life::Releasing | Life::Released => {
+                Step::Rest(self.rest(Again::Wake, now))
+            }
         }
     }
 
@@ -901,28 +908,45 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         };
         match after {
             AfterRecover::Again => Step::Rest(self.rest(again, now)),
-            AfterRecover::Fault => match &self.life {
+            AfterRecover::Fault => match mem::replace(&mut self.life, Life::Lent) {
                 // The fault's step polls the stop of a radio stopping once.
                 Life::Port {
+                    right,
                     at: At::Stopping(run),
-                    ..
-                } => {
-                    let run = *run;
-                    Step::Stop(self.resume(
-                        now,
-                        AskStop {
-                            after: AfterStop::Fault,
-                            run,
-                        },
-                    ))
-                }
-                Life::Port {
+                } => Step::Stop(self.resume(
+                    now,
+                    AskStop {
+                        after: AfterStop::Fault,
+                        run,
+                        right,
+                    },
+                )),
+                life @ (Life::Port {
                     at: At::Stopped(..) | At::Starting(..) | At::Running(_) | At::Retired(_),
                     ..
                 }
+                | Life::Lent
                 | Life::Releasing
-                | Life::Released => Step::Rest(self.rest(again, now)),
+                | Life::Released) => {
+                    self.life = life;
+                    Step::Rest(self.rest(again, now))
+                }
             },
+        }
+    }
+
+    /// Ask what a stop can do about the port's fault, the right and the
+    /// position carried out with the step. A released port has no fault to
+    /// recover: the step rests.
+    fn recover(&mut self, after: AfterRecover, now: Instant) -> Step<'_, 'id, C, F> {
+        match mem::replace(&mut self.life, Life::Lent) {
+            Life::Port { right, at } => {
+                Step::Recover(self.resume(now, AskRecover { after, right, at }))
+            }
+            life @ (Life::Lent | Life::Releasing | Life::Released) => {
+                self.life = life;
+                Step::Rest(self.rest(Again::Wake, now))
+            }
         }
     }
 
@@ -954,19 +978,14 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                         self.resume(now, AskStart { channel, run }),
                     )
                 }
-                At::Stopping(run) => {
-                    self.life = Life::Port {
+                At::Stopping(run) => Step::Stop(self.resume(
+                    now,
+                    AskStop {
+                        after: AfterStop::Pass,
+                        run,
                         right,
-                        at: At::Stopping(run),
-                    };
-                    Step::Stop(self.resume(
-                        now,
-                        AskStop {
-                            after: AfterStop::Pass,
-                            run,
-                        },
-                    ))
-                }
+                    },
+                )),
                 At::Stopped(stopped, run) => {
                     self.life = Life::Port {
                         right,
@@ -976,7 +995,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 }
                 At::Retired(retired) => self.retired(right, retired, now),
             },
-            life @ (Life::Releasing | Life::Released) => {
+            life @ (Life::Lent | Life::Releasing | Life::Released) => {
                 self.life = life;
                 Step::Rest(self.rest(Again::Wake, now))
             }
@@ -1170,28 +1189,43 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStart<C>> {
     }
 }
 
-impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStop> {
-    /// Poll the port's stop with the stop's right `poll` is lent.
-    pub fn poll(
-        self,
-        poll: impl FnOnce(&mut StopRight<'id>) -> Poll<Result<Stopped<'id>, StopUnconfirmed<F>>>,
-    ) -> Step<'m, 'id, C, F> {
+impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStop<'id>> {
+    /// The stop's right, lent for the port's stop.
+    pub const fn right(&mut self) -> &mut StopRight<'id> {
+        &mut self.kind.right
+    }
+
+    /// The port's stop is not confirmed yet, and its waker is registered:
+    /// the step rests until it wakes.
+    pub fn pending(self) -> Step<'m, 'id, C, F> {
         let Self {
             machine,
             now,
-            kind: AskStop { after, run },
+            kind: AskStop { run, right, .. },
         } = self;
-        let answer = match &mut machine.life {
-            Life::Port { right, .. } => poll(right),
-            // A stop is asked only of a port that holds an installation.
-            Life::Releasing | Life::Released => Poll::Pending,
+        machine.life = Life::Port {
+            right,
+            at: At::Stopping(run),
+        };
+        Step::Rest(machine.rest(Again::Wake, now))
+    }
+
+    /// The port's answer to the stop.
+    pub fn answer(self, answer: Result<Stopped<'id>, StopUnconfirmed<F>>) -> Step<'m, 'id, C, F> {
+        let Self {
+            machine,
+            now,
+            kind: AskStop { after, run, right },
+        } = self;
+        machine.life = Life::Port {
+            right,
+            at: At::Stopping(run),
         };
         match answer {
-            Poll::Pending => Step::Rest(machine.rest(Again::Wake, now)),
-            Poll::Ready(Err(unconfirmed)) => {
+            Err(unconfirmed) => {
                 machine.say(Waiting::Radio(unconfirmed), Next::Rest(Again::Timer), now)
             }
-            Poll::Ready(Ok(stopped)) => {
+            Ok(stopped) => {
                 machine.clear(Waited::Radio);
                 match after {
                     AfterStop::Pass => machine.stopped(stopped, run, now),
@@ -1279,12 +1313,7 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskClean> {
             }
             CallInput::Accepted(Err(CleanupRefused::Faulted(_))) => {
                 machine.put(At::Stopped(stopped, run));
-                Step::Recover(machine.resume(
-                    now,
-                    AskRecover {
-                        after: AfterRecover::Again,
-                    },
-                ))
+                machine.recover(AfterRecover::Again, now)
             }
             CallInput::Accepted(Err(
                 refused @ (CleanupRefused::Unavailable(_) | CleanupRefused::Held(_)),
@@ -1352,7 +1381,7 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRetire> {
                     Life::Port { right, at: _ } => machine.retired(right, retired, now),
                     // A retirement is asked only of a port that holds an
                     // installation.
-                    life @ (Life::Releasing | Life::Released) => {
+                    life @ (Life::Lent | Life::Releasing | Life::Released) => {
                         machine.life = life;
                         drop(retired);
                         Step::Rest(machine.rest(Again::Wake, now))
@@ -1362,12 +1391,7 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRetire> {
             Err(ProofRefused::Refused(stopped, outstanding)) => {
                 machine.put(At::Stopped(stopped, run));
                 match outstanding.fault {
-                    Some(_) => Step::Recover(machine.resume(
-                        now,
-                        AskRecover {
-                            after: AfterRecover::Again,
-                        },
-                    )),
+                    Some(_) => machine.recover(AfterRecover::Again, now),
                     None => machine.say(
                         Waiting::Outstanding(outstanding),
                         Next::Rest(Again::Wake),
@@ -1460,22 +1484,20 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRelease> {
     }
 }
 
-impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRecover> {
-    /// Ask the port's recovery with the stop's right `recover` is lent.
-    pub fn recover(
-        self,
-        recover: impl FnOnce(&mut StopRight<'id>) -> Result<Recovered, FaultKept<F>>,
-    ) -> Step<'m, 'id, C, F> {
+impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRecover<'id, C>> {
+    /// The stop's right, lent for the port's recovery.
+    pub const fn right(&mut self) -> &mut StopRight<'id> {
+        &mut self.kind.right
+    }
+
+    /// The port's answer to the recovery.
+    pub fn answer(self, answer: Result<Recovered, FaultKept<F>>) -> Step<'m, 'id, C, F> {
         let Self {
             machine,
             now,
-            kind: AskRecover { after },
+            kind: AskRecover { after, right, at },
         } = self;
-        let answer = match &mut machine.life {
-            Life::Port { right, .. } => recover(right),
-            // A recovery is asked only of a port that holds an installation.
-            Life::Releasing | Life::Released => Ok(Recovered::Clear),
-        };
+        machine.life = Life::Port { right, at };
         match answer {
             Err(kept) => machine.say(
                 Waiting::Fault(kept),

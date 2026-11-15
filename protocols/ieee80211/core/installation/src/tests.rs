@@ -197,6 +197,7 @@ fn project(m: &M) -> S {
             At::Stopping(run) => ("stopping", *run),
             At::Retired(_) => ("retired", DONE),
         },
+        Life::Lent => ("stopping", DONE),
         Life::Releasing => ("releasing", DONE),
         Life::Released => ("released", DONE),
     };
@@ -405,11 +406,11 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
             }
             Step::Stop(resume) => {
                 let answer = ask!("stop", None, resume);
-                resume.poll(|_right| match answer {
-                    "ok" => Poll::Ready(Ok(stopped())),
-                    "pending" => Poll::Pending,
-                    _ => Poll::Ready(Err(unconfirmed())),
-                })
+                match answer {
+                    "ok" => resume.answer(Ok(stopped())),
+                    "pending" => resume.pending(),
+                    _ => resume.answer(Err(unconfirmed())),
+                }
             }
             Step::StopData(resume) => {
                 let answer = ask!("stop_data", None, resume);
@@ -465,7 +466,7 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
             }
             Step::Recover(resume) => {
                 let answer = ask!("recover", None, resume);
-                resume.recover(|_right| match answer {
+                resume.answer(match answer {
                     "clear" => Ok(Recovered::Clear),
                     "recovered" => Ok(Recovered::TakenBack),
                     _ => Err(FaultKept {

@@ -2,7 +2,8 @@
 
 These packages contain portable wire formats, MAC mechanisms, role policy,
 service contracts and security. Chip drivers implement the lower-MAC port;
-the portable runtime drives role services over that port.
+the installation machine decides every transition of a port's installation,
+and the runtime's `drive` carries its steps out on the port.
 
 | Module relative to this directory | Responsibility |
 | --- | --- |
@@ -63,7 +64,6 @@ the portable runtime drives role services over that port.
 | `core/roles/sta/src/events.rs` | The station core's events: lost tokens and data, dropped RSN input, scan table outcomes |
 | `core/upper-mac/src/block_ack/banks.rs` (`RxBlockAckEvent`) | The receive agreements' events: containment, reorder decisions, agreement start and stop |
 | `core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs` (`EspNowPeersCleared`) | The keys shutdown cleared, the one fact its result does not return |
-| `runtime/src/station/events.rs` | The station service's events and `StationEvents`, the sink a composition lends the service |
 
 Frame builders, sequence owners and reorder windows use
 `wire::sequence::SequenceNumber`, validating the twelve-bit range at
@@ -99,7 +99,7 @@ It takes facts and returns actions for the port owner to execute.
 configuration, the monitor tap, operation ownership, capabilities, the
 backend's service description and normalized statuses. One submission is one
 hardware attempt; data goes through the data port's two data arenas
-(`arena`), which the datapath actor alone fills. The backend draws EDCA contention below the port (the S31
+(`arena`), which the port's owner alone fills. The backend draws EDCA contention below the port (the S31
 MAC's `edca::contention`); an attempt carries no backoff. The port depends on
 no core. [`core/upper-mac`](core/upper-mac/README.md) owns retry ladders, Retry bits,
 aggregate retry selection, the reading of a BlockAck, protection and the BSS
@@ -138,10 +138,10 @@ serialization or HIL. Counts that decide protocol behaviour (packet numbers,
 replay frontiers, retry and probe budgets, beacon deadlines) stay in their
 owners.
 
-The [`runtime`](runtime/README.md) is the asynchronous glue: it waits on
-port events, deadlines and commands, hands each input to the cores and
-carries out their actions through the port. It decides no protocol question
-and neither parses nor builds frames; it depends on neither `wire` nor
+The [`runtime`](runtime/README.md) holds the pumps that carry the cores'
+steps out on the port: `installation::drive` for the [installation
+machine](core/installation/README.md). It decides no protocol question and
+neither parses nor builds frames; it depends on neither `wire` nor
 `core/security/cipher`. The station unwraps RSN key data in its step over the
 synchronous block primitive its composition supplies (`oer-portable-crypto`'s
 `Aes128Blocks`). The cores never wait. `cargo test -p oer-tools-test-layers` checks both,

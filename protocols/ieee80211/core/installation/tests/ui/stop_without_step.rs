@@ -13,7 +13,10 @@ pub fn pump<'id, P: DataPort<'id>, C: Copy>(
 ) {
     #[cfg(ui_reject)]
     let _unasked = port.poll_stop(machine.right(), cx, now); // ui-error: E0599
-    if let Step::Stop(resume) = machine.step(Input::Turn, now) {
-        let _next = resume.poll(|right| port.poll_stop(right, cx, now));
+    if let Step::Stop(mut resume) = machine.step(Input::Turn, now) {
+        let _next = match port.poll_stop(resume.right(), cx, now) {
+            core::task::Poll::Ready(answer) => resume.answer(answer),
+            core::task::Poll::Pending => resume.pending(),
+        };
     }
 }
