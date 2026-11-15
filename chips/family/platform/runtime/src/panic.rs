@@ -570,7 +570,7 @@ mod tests {
     }
     #[test]
     fn every_numeric_fault_preserves_exact_words() {
-        let retired = [5, 10, 13, 19, 25, 30, 31, 32, 256];
+        let retired = [5, 10, 13, 19, 22, 23, 25, 30, 31, 32, 256, 259, 260];
         for code in retired {
             assert_eq!(FaultReason::from_code(code), None);
         }

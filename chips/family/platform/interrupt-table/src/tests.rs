@@ -77,6 +77,19 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
             expected: LineExpectation::Disabled,
         })
     );
+
+    // The timer's line bound at its level with its source routed nowhere:
+    // a line no routed source holds is disabled, an entry's line too.
+    let mut router = fake_router::<0>();
+    router.controller.lines[16] = FakeLine::Bound(Control::level::<1, 3>());
+    assert_eq!(
+        router.verify(),
+        Err(Error::WrongLine {
+            line: 16,
+            observed: LineObservation::of_word(0x100 | u32::from(Control::level::<1, 3>().bits())),
+            expected: LineExpectation::Disabled,
+        })
+    );
 }
 
 #[test]
@@ -224,31 +237,6 @@ fn the_table_lays_out_each_entry_as_the_tools_read_it() {
     };
     assert!(core::ptr::fn_addr_eq(first, second));
     assert!(absent.handler.is_none());
-}
-
-#[test]
-fn a_controller_refuses_a_source_or_line_it_lacks_and_writes_nothing() {
-    use crate::Controller;
-    let mut controller = FakeController::new(0);
-    assert_eq!(controller.route(3, 48), Err(Error::NoSuchLine { line: 48 }));
-    assert_eq!(
-        controller.route(8, 20),
-        Err(Error::NoSuchSource { source: 8 })
-    );
-    assert_eq!(
-        controller.silence(8),
-        Err(Error::NoSuchSource { source: 8 })
-    );
-    assert_eq!(controller.disable(48), Err(Error::NoSuchLine { line: 48 }));
-    assert_eq!(
-        controller.bind(48, Control::level::<1, 3>()),
-        Err(Error::NoSuchLine { line: 48 })
-    );
-    assert_eq!(
-        controller.check(48, LineExpectation::Disabled),
-        Err(Error::NoSuchLine { line: 48 })
-    );
-    assert!(controller.writes.is_empty());
 }
 
 #[test]

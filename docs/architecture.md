@@ -530,9 +530,10 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   sessions through the task owner alone. No task accesses the handler cell.
   Polling retains `Silent` after the same pre-bind discard.
   A binding is refused for nothing of the table's: an entry's membership,
-  class, handler and cell are its table's by type. A failed placement,
-  handler installation or controller write returns a named fault with source
-  observations, retaining its token and part in quarantine.
+  class, handler and cell are its table's by type, and the controller's
+  writes name only its own line and sources, by an entry's number at compile
+  time. A failed placement or handler installation returns a named fault
+  with source observations, retaining its token and part in quarantine.
   The image records/resets through the existing retained slot, without
   publishing `Bound`, releasing owners or rolling back an unconfirmed write.
   Fault capture stores numeric reasons without reading cached text. Next-boot

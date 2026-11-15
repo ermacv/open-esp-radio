@@ -119,28 +119,30 @@ entry binds is routed on no bank:
   sources to it, and returns
   `Bound<Entry>`, carrying `LEVEL`, `HART` and `CONTEXT` from that entry, the proof a driver takes before it enables the peripheral's
   interrupt. An entry of another table or another hart than the router's
-  fails to compile; what `bind` can still answer is the hardware's (storage
-  claimed, a handler cell occupied, a write the controller refused), with
-  its owners in `Quarantined`;
+  fails to compile; what `bind` can still answer is its storage claimed or
+  its handler cell occupied, with its owners in `Quarantined`;
 - `Router::silent` returns `Silent<Part>`, the proof that each of the part's
   sources is routed nowhere (read from the hardware) and no entry of the
   table binds it (at compile time), which a driver that
   polls the part's events takes instead of `Bound` (both implement the
   sealed `EventAuthority`);
-- a controller refuses a source or line outside it and writes nothing; it
-  writes a line's enable apart from its attributes and control, so a line is
-  never enabled with another level or trigger than its binding's;
+- a controller's sources and lines are its own values (`Controller::Source`
+  and `Line`), one for each it has in its constants `SOURCES` and `LINES`,
+  which the router takes by an entry's number at compile time: a write names
+  only what the controller has and returns nothing. The controller writes a
+  line's enable apart from its attributes and control, so a line is never
+  enabled with another level or trigger than its binding's;
 - `Router::verify` checks the controller's configuration again, then that
   every routed source is an entry of the hart
   on its line, every routed line holds its entry's level, and every other
   line is disabled.
 
-A faulted binding records four words (`BindFault::diagnostic`): the context (the source in bits 0..16, the line
-in 16..24, the hart from 24), the error's tag, and its two payload words.
-A wrong line's (tag 7) are the line's register word as the chip read it
-(`LineObservation`), and the line with what the table expected of it: the
-line in bits 0..8, `LineExpectation::record` from bit 8 (0 disabled, bit 8
-and the control byte bound).
+A faulted binding records four words (`BindFault::diagnostic`): the context
+(the source in bits 0..16, the line in 16..24, the hart from 24), then three
+zero words; the reason names the fault. A wrong line `verify` finds is
+reported with the line's register word as the chip read it
+(`LineObservation`) and what the table expected of it
+(`LineExpectation::record`: 0 disabled, bit 8 and the control byte bound).
 
 An interrupt handler reaches its task only through a static signal
 (`signal`), never through the router or a lock. A signal binds its executor's

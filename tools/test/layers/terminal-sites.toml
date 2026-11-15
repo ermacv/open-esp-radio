@@ -167,8 +167,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteWrongHart:1" = { owner = "chips/family/platform/runtime", classes = ["configuration-boot"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteForeignRoute:1" = { owner = "chips/family/platform/runtime", classes = ["configuration-boot"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteWrongLine:1" = { owner = "chips/family/platform/runtime", classes = ["configuration-boot"] }
-"chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteNoSuchSource:1" = { owner = "chips/family/platform/runtime", classes = ["configuration-boot"] }
-"chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteNoSuchLine:1" = { owner = "chips/family/platform/runtime", classes = ["configuration-boot"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::RouteNoSuchLevel:1" = { owner = "chips/family/platform/runtime", classes = ["configuration-boot"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::HilReceiverLimit:1" = { owner = "chips/family/platform/runtime", classes = ["exhaustion"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::HilConsole:1" = { owner = "chips/family/platform/runtime", classes = ["software-invariant"] }
@@ -184,8 +182,6 @@ invalid-hart = "HW_PANIC_SOURCE: chips/esp32s31/facts/chip.toml [interrupts], SO
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::WakerCrossedHarts:1" = { owner = "chips/family/platform/runtime", classes = ["software-invariant"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingStorageClaimed:1" = { owner = "chips/family/platform/runtime", classes = ["software-invariant"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingHandlerOccupied:1" = { owner = "chips/family/platform/runtime", classes = ["software-invariant"] }
-"chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingLineRefused:1" = { owner = "chips/family/platform/runtime", classes = ["configuration-boot", "unexpected-hardware"] }
-"chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::BindingRouteRefused:1" = { owner = "chips/family/platform/runtime", classes = ["configuration-boot", "unexpected-hardware"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::OutsideExecutor:1" = { owner = "chips/family/platform/runtime", classes = ["software-invariant"] }
 "chips/family/platform/runtime/src/panic/fault.rs:crate::panic::fault::FaultReason:retained-reason:FaultReason::SignalContext:1" = { owner = "chips/family/platform/runtime", classes = ["software-invariant"] }
 

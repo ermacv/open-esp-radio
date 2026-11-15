@@ -198,6 +198,16 @@ fn line(number: u8) -> Index<{ clic::ctrl::COUNT }> {
     Index::new(usize::from(number)).expect("a line of the CLIC")
 }
 
+/// The controller's own source `number`.
+fn bank_source(number: u16) -> super::Source {
+    Ours::SOURCES[usize::from(number)]
+}
+
+/// The controller's own line `number`.
+fn clic_line(number: u8) -> super::Line {
+    Ours::LINES[usize::from(number)]
+}
+
 #[test]
 fn splitting_the_partition_sets_three_level_bits_and_keeps_the_other_configuration() {
     let mut memory = Memory::filled(u32::MAX);
@@ -213,7 +223,7 @@ fn splitting_the_partition_sets_three_level_bits_and_keeps_the_other_configurati
 fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
     let mut memory = Memory::filled(0);
     let mut controller = memory.controller();
-    controller.route(12, 20).expect("source 12 and line 20");
+    controller.route(bank_source(12), clic_line(20));
     drop(controller);
     // An edge-triggered line no binding writes, pending.
     memory.clic().modify_ctrl(line(20), |word| {
@@ -255,14 +265,12 @@ fn a_route_writes_its_source_s_line_alone_and_keeps_the_rest_of_its_word() {
     });
     let before = memory.matrix.clone();
     let mut controller = memory.controller();
-    let neighbour = controller.routed(11);
-    let routed_before = controller.routed(12);
-    controller
-        .route(12, 20)
-        .expect("source 12 and line 20 are the controller's");
-    assert_eq!(controller.routed(12), Some(20));
+    let neighbour = controller.routed(bank_source(11));
+    let routed_before = controller.routed(bank_source(12));
+    controller.route(bank_source(12), clic_line(20));
+    assert_eq!(controller.routed(bank_source(12)), Some(20));
     assert_eq!(
-        controller.routed(11),
+        controller.routed(bank_source(11)),
         neighbour,
         "the next source is untouched"
     );
@@ -273,12 +281,10 @@ fn a_route_writes_its_source_s_line_alone_and_keeps_the_rest_of_its_word() {
         "the route keeps its source's PASS_LEVEL"
     );
     let mut controller = memory.controller();
-    controller
-        .route(
-            12,
-            routed_before.expect("the filled word routes the source"),
-        )
-        .expect("the filled word's line is a line of the CLIC");
+    controller.route(
+        bank_source(12),
+        clic_line(routed_before.expect("the filled word routes the source")),
+    );
     drop(controller);
     assert!(
         memory.matrix == before,
@@ -287,42 +293,11 @@ fn a_route_writes_its_source_s_line_alone_and_keeps_the_rest_of_its_word() {
 }
 
 #[test]
-fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_is_refused() {
+fn a_silenced_source_is_routed_nowhere_and_writes_its_word_alone() {
     let mut memory = Memory::filled(u32::MAX);
     let mut controller = memory.controller();
-    controller.silence(5).expect("source 5 is the bank's");
-    assert_eq!(controller.routed(5), None);
-    assert_eq!(
-        controller.route(Ours::SOURCES, 20),
-        Err(Error::NoSuchSource {
-            source: Ours::SOURCES
-        })
-    );
-    assert_eq!(
-        controller.silence(Ours::SOURCES),
-        Err(Error::NoSuchSource {
-            source: Ours::SOURCES
-        })
-    );
-    assert_eq!(controller.routed(Ours::SOURCES), None);
-    // MAP holds 63, the CLIC has 48 lines: line 48 is refused, not written.
-    assert_eq!(Ours::LINES, 48);
-    assert_eq!(
-        controller.route(12, 48),
-        Err(Error::NoSuchLine { line: 48 })
-    );
-    assert_eq!(
-        controller.disable(Ours::LINES),
-        Err(Error::NoSuchLine { line: Ours::LINES })
-    );
-    assert_eq!(
-        controller.bind(Ours::LINES, Control::level::<1, LEVEL_BITS>()),
-        Err(Error::NoSuchLine { line: Ours::LINES })
-    );
-    assert_eq!(
-        controller.check(Ours::LINES, LineExpectation::Disabled),
-        Err(Error::NoSuchLine { line: Ours::LINES })
-    );
+    controller.silence(bank_source(5));
+    assert_eq!(controller.routed(bank_source(5)), None);
     drop(controller);
     let changed = memory
         .matrix
@@ -340,15 +315,17 @@ fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_is_refused() {
 fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_bit_and_mode() {
     let mut memory = Memory::filled(u32::MAX);
     let mut controller = memory.controller();
-    controller
-        .bind(30, Control::level::<3, LEVEL_BITS>())
-        .expect("line 30 is the CLIC's");
+    controller.bind(clic_line(30), Control::level::<3, LEVEL_BITS>());
     let level = Control::level::<3, LEVEL_BITS>();
-    assert_eq!(controller.check(30, LineExpectation::Bound(level)), Ok(()));
-    assert!(matches!(
-        controller.check(30, LineExpectation::Disabled),
-        Err(Error::WrongLine { line: 30, .. })
-    ));
+    assert_eq!(
+        controller.check(clic_line(30), LineExpectation::Bound(level)),
+        Ok(())
+    );
+    assert!(
+        controller
+            .check(clic_line(30), LineExpectation::Disabled)
+            .is_err()
+    );
     drop(controller);
     let word = memory.clic().read_ctrl(line(30));
     assert!(word.ie() && word.attr_shv());
@@ -360,8 +337,11 @@ fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_bit_and_m
     assert!(word.ip(), "the pending bit stays");
     assert_eq!(word.attr_mode().get(), 3, "the privilege mode stays");
     let mut controller = memory.controller();
-    controller.disable(30).expect("line 30 is the CLIC's");
-    assert_eq!(controller.check(30, LineExpectation::Disabled), Ok(()));
+    controller.disable(clic_line(30));
+    assert_eq!(
+        controller.check(clic_line(30), LineExpectation::Disabled),
+        Ok(())
+    );
     drop(controller);
     let word = memory.clic().read_ctrl(line(30));
     assert!(!word.ie() && !word.attr_shv() && word.ctl() == 0);
@@ -390,12 +370,8 @@ fn a_line_another_writer_left_edge_triggered_is_no_binding() {
     let controller = memory.controller();
     let expected = LineExpectation::Bound(Control::level::<3, LEVEL_BITS>());
     assert_eq!(
-        controller.check(20, expected),
-        Err(Error::WrongLine {
-            line: 20,
-            observed: LineObservation::of_word(0x5f03_0100),
-            expected,
-        }),
+        controller.check(clic_line(20), expected),
+        Err(LineObservation::of_word(0x5f03_0100)),
         "the router's check sees the line differ from a binding"
     );
 }
@@ -425,15 +401,11 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     let mut memory = configured_memory(facts::CONTROL_BITS, u16::from(LINES.count), LEVEL_BITS);
     {
         let mut controller = memory.controller();
-        for number in 0..Ours::SOURCES {
-            controller
-                .route(number, 20)
-                .expect("every source of the bank routes to line 20");
+        for &source in Ours::SOURCES {
+            controller.route(source, clic_line(20));
         }
-        for number in 0..Ours::LINES {
-            controller
-                .bind(number, Control::level::<1, LEVEL_BITS>())
-                .expect("every line of the CLIC takes a binding");
+        for &line in Ours::LINES {
+            controller.bind(line, Control::level::<1, LEVEL_BITS>());
         }
     }
     {
@@ -447,17 +419,17 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     }
 
     let controller = memory.controller();
-    for number in 0..Ours::SOURCES {
+    for (&source, number) in Ours::SOURCES.iter().zip(0u16..) {
         let expected = (number == WakeIrq::SOURCE).then_some(20);
-        assert_eq!(controller.routed(number), expected, "source {number}");
+        assert_eq!(controller.routed(source), expected, "source {number}");
     }
-    for number in 0..Ours::LINES {
+    for (&line, number) in Ours::LINES.iter().zip(0u8..) {
         let expected = if number == 20 {
             LineExpectation::Bound(Control::level::<3, LEVEL_BITS>())
         } else {
             LineExpectation::Disabled
         };
-        assert_eq!(controller.check(number, expected), Ok(()), "line {number}");
+        assert_eq!(controller.check(line, expected), Ok(()), "line {number}");
     }
     drop(controller);
     let word = memory.clic().read_ctrl(line(20));
@@ -578,18 +550,14 @@ fn a_bound_line_with_any_one_of_its_four_facts_wrong_is_no_binding() {
     for (fact, undo, word) in cases {
         let mut memory = Memory::filled(0);
         let mut controller = memory.controller();
-        controller.bind(20, level).expect("line 20 is the CLIC's");
-        assert_eq!(controller.check(20, expected), Ok(()), "{fact}");
+        controller.bind(clic_line(20), level);
+        assert_eq!(controller.check(clic_line(20), expected), Ok(()), "{fact}");
         drop(controller);
         memory.clic().modify_ctrl(line(20), |w| undo(w));
         let controller = memory.controller();
         assert_eq!(
-            controller.check(20, expected),
-            Err(Error::WrongLine {
-                line: 20,
-                observed: LineObservation::of_word(word),
-                expected,
-            }),
+            controller.check(clic_line(20), expected),
+            Err(LineObservation::of_word(word)),
             "{fact}"
         );
     }

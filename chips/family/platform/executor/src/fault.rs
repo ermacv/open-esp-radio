@@ -223,11 +223,6 @@ fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {
             FaultReason::RouteWrongLine,
             [executor, line.into(), observed.record(), expected.record()],
         ),
-        Error::NoSuchSource { source } => (
-            FaultReason::RouteNoSuchSource,
-            [executor, source.into(), 0, 0],
-        ),
-        Error::NoSuchLine { line } => (FaultReason::RouteNoSuchLine, [executor, line.into(), 0, 0]),
         Error::NoSuchLevel { level } => (
             FaultReason::RouteNoSuchLevel,
             [executor, level.into(), 0, 0],

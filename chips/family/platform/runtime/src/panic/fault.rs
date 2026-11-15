@@ -22,8 +22,6 @@ pub enum FaultReason {
     RouteWrongHart = 18,
     RouteForeignRoute = 20,
     RouteWrongLine = 21,
-    RouteNoSuchSource = 22,
-    RouteNoSuchLine = 23,
     RouteNoSuchLevel = 24,
     HilReceiverLimit = 26,
     HilConsole = 27,
@@ -64,8 +62,6 @@ pub enum FaultReason {
     WakerCrossedHarts = 40,
     BindingStorageClaimed = 257,
     BindingHandlerOccupied = 258,
-    BindingLineRefused = 259,
-    BindingRouteRefused = 260,
 }
 
 impl FaultReason {
@@ -90,8 +86,6 @@ impl FaultReason {
             Self::RouteWrongHart => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::RouteForeignRoute => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::RouteWrongLine => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
-            Self::RouteNoSuchSource => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
-            Self::RouteNoSuchLine => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::RouteNoSuchLevel => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::HilReceiverLimit => oer_portable_diagnostics::fault::Class::Exhaustion,
             Self::HilConsole => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
@@ -111,8 +105,6 @@ impl FaultReason {
             Self::BindingHandlerOccupied => {
                 oer_portable_diagnostics::fault::Class::SoftwareInvariant
             }
-            Self::BindingLineRefused => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
-            Self::BindingRouteRefused => oer_portable_diagnostics::fault::Class::ConfigurationBoot,
             Self::OutsideExecutor => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
             Self::SignalContext => oer_portable_diagnostics::fault::Class::SoftwareInvariant,
         }
@@ -137,8 +129,6 @@ impl FaultReason {
             18 => Some(Self::RouteWrongHart),
             20 => Some(Self::RouteForeignRoute),
             21 => Some(Self::RouteWrongLine),
-            22 => Some(Self::RouteNoSuchSource),
-            23 => Some(Self::RouteNoSuchLine),
             24 => Some(Self::RouteNoSuchLevel),
             26 => Some(Self::HilReceiverLimit),
             27 => Some(Self::HilConsole),
@@ -154,8 +144,6 @@ impl FaultReason {
             40 => Some(Self::WakerCrossedHarts),
             257 => Some(Self::BindingStorageClaimed),
             258 => Some(Self::BindingHandlerOccupied),
-            259 => Some(Self::BindingLineRefused),
-            260 => Some(Self::BindingRouteRefused),
             _ => None,
         }
     }
@@ -180,8 +168,6 @@ impl FaultReason {
             Self::RouteWrongHart => "RouteWrongHart",
             Self::RouteForeignRoute => "RouteForeignRoute",
             Self::RouteWrongLine => "RouteWrongLine",
-            Self::RouteNoSuchSource => "RouteNoSuchSource",
-            Self::RouteNoSuchLine => "RouteNoSuchLine",
             Self::RouteNoSuchLevel => "RouteNoSuchLevel",
             Self::HilReceiverLimit => "HilReceiverLimit",
             Self::HilConsole => "HilConsole",
@@ -197,8 +183,6 @@ impl FaultReason {
             Self::LivenessBroken => "LivenessBroken",
             Self::BindingStorageClaimed => "BindingStorageClaimed",
             Self::BindingHandlerOccupied => "BindingHandlerOccupied",
-            Self::BindingLineRefused => "BindingLineRefused",
-            Self::BindingRouteRefused => "BindingRouteRefused",
         }
     }
 }
@@ -208,8 +192,6 @@ impl From<BindFaultCode> for FaultReason {
         match code {
             BindFaultCode::StorageClaimed => Self::BindingStorageClaimed,
             BindFaultCode::HandlerOccupied => Self::BindingHandlerOccupied,
-            BindFaultCode::LineRefused => Self::BindingLineRefused,
-            BindFaultCode::RouteRefused => Self::BindingRouteRefused,
         }
     }
 }

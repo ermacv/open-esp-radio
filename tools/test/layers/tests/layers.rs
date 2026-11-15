@@ -6598,7 +6598,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/family/platform/interrupt-table/src/binding.rs",
-        12,
+        10,
         BY_NONE,
     ),
     (
@@ -6608,7 +6608,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/family/platform/interrupt-table/src/router.rs",
-        6,
+        4,
         BY_NONE,
     ),
     (

@@ -139,9 +139,9 @@ types; signal execution proofs belong to `oer-portable-memory`. Every safe `Entr
 `EntryProof<Self>`; root Clippy policy restricts both proof and token
 constructors to the table macro. This policy requires an explicit lint waiver
 to bypass; it cannot validate scheduling metadata supplied under such a waiver.
-Binding checks source, line, level, hart, class and the proof's vector/cell
-identity before placement or controller writes, returning typed refusals on
-mismatch. Claimed storage retains owners in quarantine. Memory cells enforce
+An entry's membership of its router's table, its class and its vector/cell
+identity are the table's by type; its source, line, level and hart are
+checked at compile time. Claimed storage retains owners in quarantine. Memory cells enforce
 exclusive access independently of entry metadata. The memory core owns the
 symbol-export attributes. Chip crates and firmware consume the bindings directly.
 
@@ -286,19 +286,17 @@ record consumption or successful console output.
 Software lines use fallible static placement and one-time value publication,
 without a panicking initialization path or additional unsafe code.
 
-`Router::bind` returns ordinary input refusals with their unchanged token
-and part. Once admitted, storage, handler installation and controller write
-failures return a named `BindFault`; the token and any uninstalled part stay
-in `Quarantined`, whose private `ManuallyDrop` fields have no recovery API.
-Placed parts retain their claimed static allocation; installed parts remain
-in their handler cell. No failed binding issues `Bound` or enables a driver.
+`Router::bind` refuses nothing of the table's and makes controller writes
+that cannot fail. Storage and handler installation failures return a named
+`BindFault`; the token and the uninstalled part stay in `Quarantined`, whose
+private `ManuallyDrop` fields have no recovery API. Placed parts retain their
+claimed static allocation. No failed binding issues `Bound` or enables a driver.
 The image keeps its router and all interrupted owners while the staged
-runtime's binding reporter records the complete source/line/hart, operation
-and controller error through `fatal::reset_recording`. The existing panic
-slot holds four lossless diagnostic words; no retained allocation is added.
-Successful binding still installs the part, writes the line, then routes
-sources in declaration order. A failed write attempts no later write or
-rollback. No unsafe code is added to placement or ownership transfer.
+runtime's binding reporter records the complete source/line/hart and
+operation through `fatal::reset_recording`. The existing panic slot holds
+four diagnostic words; no retained allocation is added. Successful binding
+installs the part, writes the line, then routes the part's sources in the
+order of their numbers. No unsafe code is added to placement or ownership transfer.
 
 The generated Rust MTVT is one immutable array of aligned per-hart rows.
 Its one unsafe attribute owns the SRAM section. The table and trap assembly
