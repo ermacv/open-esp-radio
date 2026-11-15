@@ -665,7 +665,10 @@ pub trait DataPort<'id> {
 
     /// Stop the radio: queued attempts end withdrawn, a published one is
     /// waited for, then the MAC, its DMA and interrupt work stop, within
-    /// the backend's command bound from the first call. A confirmed stop
+    /// the backend's command bound from the first call. What the stop
+    /// withdraws leaves as terminals through the sink of the port's next
+    /// service, which its [`Self::deadline`] asks for at once; the stop is
+    /// confirmed only after they left, and `poll_stop` hands nothing itself. A confirmed stop
     /// gives its proof, and a stopped port answers each call with a proof
     /// it takes: its stop's, which a holder that dropped it has again, or,
     /// on a port that retired since, a new stop's (the port is stopped

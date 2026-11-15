@@ -582,7 +582,10 @@ serial, the one check of every call; no call reads the port's state to
 decide whether a proof holds. A stopped port answers each `poll_stop` with
 a proof it takes: its stop's, or, after a retirement, a new stop's (the
 port is stopped again and the retirement is asked again), so a dropped
-proof never leaves an installation without a way to its end. A release
+proof never leaves an installation without a way to its end. What a stop
+withdraws leaves as terminals through the sink of the port's next service,
+which its deadline asks for at once; a stop is confirmed only after they
+left, and `poll_stop` hands nothing itself. A release
 takes the right: a released port holds no installation, and no stop or
 recovery of it can be written.
 
