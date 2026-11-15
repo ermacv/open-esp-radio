@@ -33,13 +33,13 @@ fn opaque_enables_distinguish_unknown_images_without_writing_the_bank() {
 
 #[test]
 fn rx_selection_keeps_only_sampled_selected_lanes() {
-    use super::MacRxInterrupts;
+    use super::{MacRxInterrupts, MacRxLane};
     for selected in [
-        MacRxInterrupts::NONE,
-        MacRxInterrupts::ALL,
-        MacRxInterrupts::AUXILIARY_5,
-        MacRxInterrupts::SUCCESS,
-        MacRxInterrupts::AUXILIARY_24,
+        MacRxInterrupts::empty(),
+        MacRxInterrupts::all(),
+        MacRxLane::Auxiliary5.set(),
+        MacRxLane::Success.set(),
+        MacRxLane::Auxiliary24.set(),
     ] {
         for initial in [0, u32::MAX] {
             let mut words = HostWords::filled(initial);
@@ -49,7 +49,7 @@ fn rx_selection_keeps_only_sampled_selected_lanes() {
                 .mac_interrupt_status()
                 .retain_rx_causes(selected);
             let expected = if initial == 0 {
-                MacRxInterrupts::NONE
+                MacRxInterrupts::empty()
             } else {
                 selected
             };
@@ -58,9 +58,9 @@ fn rx_selection_keeps_only_sampled_selected_lanes() {
             let bits = sample.bits();
             assert_eq!(
                 bits.count_ones(),
-                u32::from(expected.auxiliary_5)
-                    + u32::from(expected.success)
-                    + u32::from(expected.auxiliary_24)
+                u32::from(expected.contains(MacRxLane::Auxiliary5))
+                    + u32::from(expected.contains(MacRxLane::Success))
+                    + u32::from(expected.contains(MacRxLane::Auxiliary24))
             );
             let before = words.clone();
             words
@@ -87,15 +87,15 @@ fn rx_selection_keeps_only_sampled_selected_lanes() {
 
 #[test]
 fn individual_rx_enables_preserve_unrelated_delivery_and_raw_observation() {
-    use super::MacRxInterrupts;
+    use super::MacRxLane;
     let mut words = HostWords::filled(u32::MAX);
     let mut owners = words.owners();
     owners
         .mac_interrupt
-        .set_mac_rx_interrupt_enable(MacRxInterrupts::AUXILIARY_24);
+        .set_mac_rx_interrupt_enable(MacRxLane::Auxiliary24.set());
     assert_eq!(
         owners.mac_interrupt.mac_rx_interrupt_enable(),
-        MacRxInterrupts::AUXILIARY_24
+        MacRxLane::Auxiliary24.set()
     );
     assert!(owners.mac_interrupt.mac.read_enable().tx_complete());
     assert!(owners.mac_interrupt.mac.read_enable().fatal_assertion());
@@ -257,10 +257,27 @@ fn a_full_status_reads_every_cause() {
     let mut words = HostWords::filled(u32::MAX);
     let owners = words.owners();
     let observation = owners.mac_interrupt.mac_interrupt_status().observation();
-    assert!(observation.work_events().tx_complete());
-    assert!(observation.work_events().tx_queue_collision());
-    assert!(observation.work_events().rx_success());
-    assert!(observation.work_events().tx_timeout());
+    use super::{MacInterruptCause, MacPowerInterruptCause};
+    assert!(
+        observation
+            .work_events()
+            .contains(MacInterruptCause::TxComplete)
+    );
+    assert!(
+        observation
+            .work_events()
+            .contains(MacInterruptCause::TxQueueCollision)
+    );
+    assert!(
+        observation
+            .work_events()
+            .contains(MacInterruptCause::RxSuccess)
+    );
+    assert!(
+        observation
+            .work_events()
+            .contains(MacInterruptCause::TxTimeout)
+    );
     assert!(observation.has_auxiliary_event() && observation.has_unhandled_event());
     assert_eq!(
         owners
@@ -273,8 +290,14 @@ fn a_full_status_reads_every_cause() {
         .power_interrupt
         .power_interrupt_status()
         .observation();
-    assert!(power.sta_tbtt() && power.has_unhandled_event());
-    assert!(power.tsf_timer_0() && power.tsf_timer_3());
+    assert!(
+        power.contains(MacPowerInterruptCause::StaTbtt)
+            && power.contains(MacPowerInterruptCause::Unhandled)
+    );
+    assert!(
+        power.contains(MacPowerInterruptCause::TsfTimer0)
+            && power.contains(MacPowerInterruptCause::TsfTimer3)
+    );
 }
 
 #[test]

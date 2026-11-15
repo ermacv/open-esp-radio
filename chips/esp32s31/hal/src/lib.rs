@@ -35,6 +35,7 @@ use crate::radio::phy::RadioPhyRegisters;
 
 pub mod power;
 pub mod radio;
+pub mod set;
 pub mod system;
 pub mod types;
 

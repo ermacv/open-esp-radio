@@ -17,11 +17,13 @@
 //! captured RAW events; WDEVPWR closure clears every latched event.
 
 use oer_chips_esp32s31_hal::types::{
-    MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
+    MacInterruptCause, MacInterruptEnableState, MacInterruptEvents, MacInterruptMask,
+    MacInterruptObservation, MacInterruptSideEvent, MacPowerInterruptCause,
     MacPowerInterruptObservation,
 };
 
 use super::{BanksMasked, MacInterrupt, MacInterruptRawSample, MacPowerInterrupt, sealed};
+use oer_chips_esp32s31_hal::set::Set;
 
 /// Operations a log keeps; later ones are counted in
 /// [`OperationLog::overflowed`].
@@ -107,18 +109,6 @@ impl<T: Copy> OperationLog<T> {
     }
 }
 
-const fn events_without(
-    events: MacInterruptEvents,
-    removed: MacInterruptEvents,
-) -> MacInterruptEvents {
-    MacInterruptEvents::from_causes(
-        events.tx_complete() && !removed.tx_complete(),
-        events.tx_queue_collision() && !removed.tx_queue_collision(),
-        events.rx_success() && !removed.rx_success(),
-        events.tx_timeout() && !removed.tx_timeout(),
-    )
-}
-
 /// An owned RAW snapshot of the MAC model, including masked pending events.
 pub struct MacRawSnapshot {
     events: MacInterruptObservation,
@@ -149,8 +139,7 @@ impl MacInterruptModel {
         Self {
             latched: MacInterruptObservation::from_semantic_events(
                 MacInterruptEvents::empty(),
-                false,
-                false,
+                Set::empty(),
             ),
             fatal_assertion_raw: None,
             rx_delivery_enabled: true,
@@ -171,8 +160,7 @@ impl MacInterruptModel {
     pub fn latch(&mut self, events: MacInterruptObservation) {
         self.latched = MacInterruptObservation::from_semantic_events(
             self.latched.work_events().union(events.work_events()),
-            self.latched.has_auxiliary_event() || events.has_auxiliary_event(),
-            self.latched.has_unhandled_event() || events.has_unhandled_event(),
+            self.latched.side_events().union(events.side_events()),
         );
     }
 
@@ -195,18 +183,32 @@ impl MacInterruptModel {
 
     /// The STATUS image: the latched events whose source is enabled.
     pub const fn visible(&self) -> MacInterruptObservation {
-        let latched = self.latched.work_events();
-        let rx = self.rx_delivery_enabled;
-        let other = self.other_sources_enabled;
+        // The station mask excludes TX queue collision.
+        let (rx_work, rx_side) = if self.rx_delivery_enabled {
+            (
+                MacInterruptCause::RxSuccess.set(),
+                MacInterruptSideEvent::Auxiliary.set(),
+            )
+        } else {
+            (Set::empty(), Set::empty())
+        };
+        let (other_work, other_side) = if self.other_sources_enabled {
+            (
+                MacInterruptCause::TxComplete
+                    .set()
+                    .union(MacInterruptCause::TxTimeout.set()),
+                MacInterruptSideEvent::Unhandled.set(),
+            )
+        } else {
+            (Set::empty(), Set::empty())
+        };
         MacInterruptObservation::from_semantic_events(
-            MacInterruptEvents::from_causes(
-                other && latched.tx_complete(),
-                false, // The station mask excludes TX queue collision.
-                rx && latched.rx_success(),
-                other && latched.tx_timeout(),
-            ),
-            rx && self.latched.has_auxiliary_event(),
-            other && self.latched.has_unhandled_event(),
+            self.latched
+                .work_events()
+                .intersection(rx_work.union(other_work)),
+            self.latched
+                .side_events()
+                .intersection(rx_side.union(other_side)),
         )
     }
 
@@ -279,18 +281,20 @@ impl MacInterrupt for MacInterruptModel {
         self.operations
             .push(MacInterruptOperation::Acknowledge(snapshot));
         self.latched = MacInterruptObservation::from_semantic_events(
-            events_without(self.latched.work_events(), snapshot.work_events()),
-            self.latched.has_auxiliary_event() && !snapshot.has_auxiliary_event(),
-            self.latched.has_unhandled_event() && !snapshot.has_unhandled_event(),
+            self.latched.work_events().without(snapshot.work_events()),
+            self.latched.side_events().without(snapshot.side_events()),
         );
     }
 
     fn acknowledge_raw(&mut self, snapshot: Self::RawSnapshot, _masked: &BanksMasked) {
         self.operations.push(MacInterruptOperation::AcknowledgeRaw);
         self.latched = MacInterruptObservation::from_semantic_events(
-            events_without(self.latched.work_events(), snapshot.events.work_events()),
-            self.latched.has_auxiliary_event() && !snapshot.events.has_auxiliary_event(),
-            self.latched.has_unhandled_event() && !snapshot.events.has_unhandled_event(),
+            self.latched
+                .work_events()
+                .without(snapshot.events.work_events()),
+            self.latched
+                .side_events()
+                .without(snapshot.events.side_events()),
         );
         if snapshot.fatal.is_some() {
             self.fatal_assertion_raw = None;
@@ -326,9 +330,7 @@ impl PowerInterruptModel {
     /// enabled, nothing latched.
     pub const fn new() -> Self {
         Self {
-            latched: MacPowerInterruptObservation::from_semantic_events(
-                false, false, false, false, false, false,
-            ),
+            latched: MacPowerInterruptObservation::empty(),
             sta_tbtt_enabled: true,
             operations: OperationLog::new(),
         }
@@ -353,14 +355,12 @@ impl PowerInterruptModel {
 
     /// The STATUS image: the latched causes whose source is enabled.
     pub const fn visible(&self) -> MacPowerInterruptObservation {
-        MacPowerInterruptObservation::from_semantic_events(
-            false,
-            false,
-            false,
-            false,
-            self.sta_tbtt_enabled && self.latched.sta_tbtt(),
-            false,
-        )
+        if self.sta_tbtt_enabled {
+            self.latched
+                .intersection(MacPowerInterruptCause::StaTbtt.set())
+        } else {
+            MacPowerInterruptObservation::empty()
+        }
     }
 
     pub const fn sta_tbtt_enabled(&self) -> bool {
@@ -404,23 +404,13 @@ impl MacPowerInterrupt for PowerInterruptModel {
     fn acknowledge(&mut self, snapshot: Self::Snapshot) {
         self.operations
             .push(PowerInterruptOperation::Acknowledge(snapshot));
-        let latched = self.latched;
-        self.latched = MacPowerInterruptObservation::from_semantic_events(
-            latched.tsf_timer_0() && !snapshot.tsf_timer_0(),
-            latched.tsf_timer_1() && !snapshot.tsf_timer_1(),
-            latched.tsf_timer_2() && !snapshot.tsf_timer_2(),
-            latched.tsf_timer_3() && !snapshot.tsf_timer_3(),
-            latched.sta_tbtt() && !snapshot.sta_tbtt(),
-            latched.has_unhandled_event() && !snapshot.has_unhandled_event(),
-        );
+        self.latched = self.latched.without(snapshot);
     }
 
     fn clear_all(&mut self, _masked: &BanksMasked) {
         self.operations.push(PowerInterruptOperation::ClearAll);
         self.sta_tbtt_enabled = false;
-        self.latched = MacPowerInterruptObservation::from_semantic_events(
-            false, false, false, false, false, false,
-        );
+        self.latched = MacPowerInterruptObservation::empty();
     }
 
     fn enable_station_tbtt(&mut self) {

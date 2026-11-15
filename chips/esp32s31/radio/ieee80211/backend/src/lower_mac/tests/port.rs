@@ -426,7 +426,7 @@ impl Device<512> for TestDevice {
             self.completed += 1;
             return Poll::Ready(Ok(DeviceEvent::Tx(crate::tx::WifiTxWake::Interrupt {
                 events: crate::mac::irq::event_mask(
-                    oer_chips_esp32s31_hal::types::MacInterruptEvents::TX_QUEUE_COLLISION,
+                    oer_chips_esp32s31_hal::types::MacInterruptCause::TxQueueCollision.set(),
                 ),
             })));
         }

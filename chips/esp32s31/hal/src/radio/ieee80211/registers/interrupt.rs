@@ -13,88 +13,35 @@ use oer_chips_esp32s31_pac::{
 };
 use oer_portable_mmio::{Bits, Placement};
 
+use crate::set::{Set, members};
+
 use crate::radio::ieee80211::registers::{
     Chip, MacInterruptMask, MacPlacement, WifiRadioRegisters,
 };
 
-/// Semantic MAC work causes recovered from reviewed vendor transactions.
-///
-/// This type is deliberately not a register image. The generated PAC owns
-/// STATUS field geometry; higher layers can only combine named causes.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct MacInterruptEvents {
-    pub(crate) tx_complete: bool,
-    pub(crate) tx_queue_collision: bool,
-    pub(crate) rx_success: bool,
-    pub(crate) tx_timeout: bool,
-}
-
-impl MacInterruptEvents {
-    pub const TX_COMPLETE: Self = Self::from_causes(true, false, false, false);
-    pub const TX_QUEUE_COLLISION: Self = Self::from_causes(false, true, false, false);
-    pub const RX_SUCCESS: Self = Self::from_causes(false, false, true, false);
-    pub const TX_TIMEOUT: Self = Self::from_causes(false, false, false, true);
-
-    pub const fn empty() -> Self {
-        Self::from_causes(false, false, false, false)
-    }
-
-    pub const fn from_causes(
-        tx_complete: bool,
-        tx_queue_collision: bool,
-        rx_success: bool,
-        tx_timeout: bool,
-    ) -> Self {
-        Self {
-            tx_complete,
-            tx_queue_collision,
-            rx_success,
-            tx_timeout,
-        }
-    }
-
-    pub const fn union(self, other: Self) -> Self {
-        Self::from_causes(
-            self.tx_complete || other.tx_complete,
-            self.tx_queue_collision || other.tx_queue_collision,
-            self.rx_success || other.rx_success,
-            self.tx_timeout || other.tx_timeout,
-        )
-    }
-
-    pub const fn contains(self, other: Self) -> bool {
-        (!other.tx_complete || self.tx_complete)
-            && (!other.tx_queue_collision || self.tx_queue_collision)
-            && (!other.rx_success || self.rx_success)
-            && (!other.tx_timeout || self.tx_timeout)
-    }
-
-    pub const fn is_empty(self) -> bool {
-        !self.tx_complete && !self.tx_queue_collision && !self.rx_success && !self.tx_timeout
-    }
-
-    pub const fn tx_complete(self) -> bool {
-        self.tx_complete
-    }
-
-    pub const fn tx_queue_collision(self) -> bool {
-        self.tx_queue_collision
-    }
-
-    pub const fn rx_success(self) -> bool {
-        self.rx_success
-    }
-
-    pub const fn tx_timeout(self) -> bool {
-        self.tx_timeout
+members! {
+    /// Semantic MAC work causes recovered from reviewed vendor transactions.
+    ///
+    /// These are not register lanes. The generated PAC owns STATUS field
+    /// geometry; higher layers can only combine named causes.
+    pub enum MacInterruptCause {
+        TxComplete,
+        TxQueueCollision,
+        RxSuccess,
+        TxTimeout,
     }
 }
 
-impl core::ops::BitOr for MacInterruptEvents {
-    type Output = Self;
+/// A set of MAC work causes.
+pub type MacInterruptEvents = Set<MacInterruptCause>;
 
-    fn bitor(self, rhs: Self) -> Self::Output {
-        self.union(rhs)
+members! {
+    /// What a sampled MAC interrupt image holds beside its work causes.
+    pub enum MacInterruptSideEvent {
+        /// An acknowledge-only auxiliary RX event.
+        Auxiliary,
+        /// A cause no driver handles.
+        Unhandled,
     }
 }
 
@@ -105,8 +52,7 @@ impl core::ops::BitOr for MacInterruptEvents {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct MacInterruptObservation {
     pub(crate) work_events: MacInterruptEvents,
-    pub(crate) auxiliary_event: bool,
-    pub(crate) unhandled_event: bool,
+    pub(crate) side_events: Set<MacInterruptSideEvent>,
 }
 
 impl MacInterruptObservation {
@@ -116,18 +62,20 @@ impl MacInterruptObservation {
     /// simulate in the same vocabulary consumed by the MAC driver.
     pub const fn from_semantic_events(
         work_events: MacInterruptEvents,
-        auxiliary_event: bool,
-        unhandled_event: bool,
+        side_events: Set<MacInterruptSideEvent>,
     ) -> Self {
         Self {
             work_events,
-            auxiliary_event,
-            unhandled_event,
+            side_events,
         }
     }
 
     pub const fn is_empty(self) -> bool {
-        self.work_events.is_empty() && !self.auxiliary_event && !self.unhandled_event
+        self.work_events.is_empty() && self.side_events.is_empty()
+    }
+
+    pub const fn side_events(self) -> Set<MacInterruptSideEvent> {
+        self.side_events
     }
 
     pub const fn work_events(self) -> MacInterruptEvents {
@@ -135,11 +83,13 @@ impl MacInterruptObservation {
     }
 
     pub const fn has_auxiliary_event(self) -> bool {
-        self.auxiliary_event
+        self.side_events
+            .includes(MacInterruptSideEvent::Auxiliary.set())
     }
 
     pub const fn has_unhandled_event(self) -> bool {
-        self.unhandled_event
+        self.side_events
+            .includes(MacInterruptSideEvent::Unhandled.set())
     }
 }
 
@@ -148,14 +98,19 @@ impl MacInterruptObservation {
 #[must_use = "an interrupt snapshot must be inspected and acknowledged"]
 pub struct MacInterruptSnapshot(wifi_mac::MacInterruptSnapshot);
 
-/// Independently selectable RX-associated lanes of the MAC interrupt bank.
-/// The auxiliary names identify register lanes, not established event causes.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct MacRxInterrupts {
-    pub auxiliary_5: bool,
-    pub success: bool,
-    pub auxiliary_24: bool,
+members! {
+    /// Independently selectable RX-associated lanes of the MAC interrupt
+    /// bank. The auxiliary names identify register lanes, not established
+    /// event causes.
+    pub enum MacRxLane {
+        Auxiliary5,
+        Success,
+        Auxiliary24,
+    }
 }
+
+/// A set of RX-associated lanes of the MAC interrupt bank.
+pub type MacRxInterrupts = Set<MacRxLane>;
 
 /// Independently observed delivery enables whose physical causes remain opaque.
 /// These are values from one ENABLE read, with no acknowledgement authority.
@@ -167,43 +122,18 @@ pub struct MacOpaqueInterruptEnables {
     pub lane_23: bool,
 }
 
-impl MacRxInterrupts {
-    pub const NONE: Self = Self {
-        auxiliary_5: false,
-        success: false,
-        auxiliary_24: false,
-    };
-    pub const ALL: Self = Self {
-        auxiliary_5: true,
-        success: true,
-        auxiliary_24: true,
-    };
-    pub const AUXILIARY_5: Self = Self {
-        auxiliary_5: true,
-        ..Self::NONE
-    };
-    pub const SUCCESS: Self = Self {
-        success: true,
-        ..Self::NONE
-    };
-    pub const AUXILIARY_24: Self = Self {
-        auxiliary_24: true,
-        ..Self::NONE
-    };
-}
-
 impl MacInterruptSnapshot {
     /// Complete sampled diagnostic value; grants no acknowledgement authority.
     pub const fn bits(&self) -> u32 {
         self.0.bits()
     }
 
-    pub const fn rx_causes(&self) -> MacRxInterrupts {
-        MacRxInterrupts {
-            auxiliary_5: self.0.rx_associated_auxiliary_5(),
-            success: self.0.rx_success(),
-            auxiliary_24: self.0.rx_associated_auxiliary_24(),
-        }
+    pub fn rx_causes(&self) -> MacRxInterrupts {
+        rx_lanes(
+            self.0.rx_associated_auxiliary_5(),
+            self.0.rx_success(),
+            self.0.rx_associated_auxiliary_24(),
+        )
     }
 
     /// Consume this sample, retaining only selected RX lanes for acknowledgement.
@@ -212,7 +142,7 @@ impl MacInterruptSnapshot {
         Self(
             self.0
                 .retain_bits_0_4_opaque(false)
-                .retain_rx_associated_auxiliary_5(selected.auxiliary_5)
+                .retain_rx_associated_auxiliary_5(selected.includes(MacRxLane::Auxiliary5.set()))
                 .retain_bit_6_opaque(false)
                 .retain_tx_complete(false)
                 .retain_tx_queue_collision(false)
@@ -220,7 +150,7 @@ impl MacInterruptSnapshot {
                 .retain_watchdog(false)
                 .retain_bit_12_opaque(false)
                 .retain_bit_13_opaque(false)
-                .retain_rx_success(selected.success)
+                .retain_rx_success(selected.includes(MacRxLane::Success.set()))
                 .retain_sta_beacon_filter(false)
                 .retain_bits_16_18_opaque(false)
                 .retain_tx_timeout(false)
@@ -228,7 +158,7 @@ impl MacInterruptSnapshot {
                 .retain_fatal_assertion(false)
                 .retain_bit_22_opaque(false)
                 .retain_bit_23_opaque(false)
-                .retain_rx_associated_auxiliary_24(selected.auxiliary_24)
+                .retain_rx_associated_auxiliary_24(selected.includes(MacRxLane::Auxiliary24.set()))
                 .retain_bits_25_26_opaque(false)
                 .retain_wdev_timer_0(false)
                 .retain_wdev_timer_1(false)
@@ -238,12 +168,13 @@ impl MacInterruptSnapshot {
 
     pub fn observation(&self) -> MacInterruptObservation {
         let sample = &self.0;
-        let work_events = MacInterruptEvents::from_causes(
-            sample.tx_complete(),
-            sample.tx_queue_collision(),
-            sample.rx_success(),
-            sample.tx_timeout(),
-        );
+        let work_events = cause_if(sample.tx_complete(), MacInterruptCause::TxComplete)
+            .union(cause_if(
+                sample.tx_queue_collision(),
+                MacInterruptCause::TxQueueCollision,
+            ))
+            .union(cause_if(sample.rx_success(), MacInterruptCause::RxSuccess))
+            .union(cause_if(sample.tx_timeout(), MacInterruptCause::TxTimeout));
         let auxiliary_event =
             sample.rx_associated_auxiliary_5() || sample.rx_associated_auxiliary_24();
         let unhandled_event = sample.bits_0_4_opaque().get() != 0
@@ -263,7 +194,11 @@ impl MacInterruptSnapshot {
             || sample.bits_29_31_opaque().get() != 0;
         // Fatal assertions are checked independently in unmasked RAW before
         // this STATUS sample can be acknowledged.
-        MacInterruptObservation::from_semantic_events(work_events, auxiliary_event, unhandled_event)
+        MacInterruptObservation::from_semantic_events(
+            work_events,
+            cause_if(auxiliary_event, MacInterruptSideEvent::Auxiliary)
+                .union(cause_if(unhandled_event, MacInterruptSideEvent::Unhandled)),
+        )
     }
 }
 
@@ -301,22 +236,30 @@ pub struct MacPowerInterruptSnapshot(modem_pwr::MacPowerInterruptSnapshot);
 impl MacPowerInterruptSnapshot {
     pub fn observation(&self) -> MacPowerInterruptObservation {
         let sample = &self.0;
-        MacPowerInterruptObservation::from_semantic_events(
-            sample.tsf_timer_0(),
-            sample.tsf_timer_1(),
-            sample.tsf_timer_2(),
-            sample.tsf_timer_3(),
-            sample.tbtt_0(),
-            // Only the station TSF's TBTT is ever enabled.
-            sample.tbtt_1()
-                || sample.tbtt_2()
-                || sample.tbtt_3()
-                || sample.bits_8_16_opaque().get() != 0
-                || sample.beacon_filter_wake()
-                || sample.bit_18_opaque()
-                || sample.beacon_miss()
-                || sample.bits_20_31_opaque().get() != 0,
-        )
+        // Only the station TSF's TBTT is ever enabled.
+        let unhandled = sample.tbtt_1()
+            || sample.tbtt_2()
+            || sample.tbtt_3()
+            || sample.bits_8_16_opaque().get() != 0
+            || sample.beacon_filter_wake()
+            || sample.bit_18_opaque()
+            || sample.beacon_miss()
+            || sample.bits_20_31_opaque().get() != 0;
+        cause_if(sample.tsf_timer_0(), MacPowerInterruptCause::TsfTimer0)
+            .union(cause_if(
+                sample.tsf_timer_1(),
+                MacPowerInterruptCause::TsfTimer1,
+            ))
+            .union(cause_if(
+                sample.tsf_timer_2(),
+                MacPowerInterruptCause::TsfTimer2,
+            ))
+            .union(cause_if(
+                sample.tsf_timer_3(),
+                MacPowerInterruptCause::TsfTimer3,
+            ))
+            .union(cause_if(sample.tbtt_0(), MacPowerInterruptCause::StaTbtt))
+            .union(cause_if(unhandled, MacPowerInterruptCause::Unhandled))
     }
 }
 
@@ -329,74 +272,40 @@ impl core::fmt::Debug for MacPowerInterruptSnapshot {
     }
 }
 
-/// Semantic WDEVPWR causes sampled through generated PAC field accessors.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct MacPowerInterruptObservation(pub(crate) u8);
-
-impl MacPowerInterruptObservation {
-    // Driver-local semantic flags. Their positions intentionally do not match
-    // WDEVPWR register geometry, which remains behind generated accessors.
-    pub(crate) const TSF_TIMER_0: u8 = 0x01;
-    pub(crate) const TSF_TIMER_1: u8 = 0x02;
-    pub(crate) const TSF_TIMER_2: u8 = 0x04;
-    pub(crate) const TSF_TIMER_3: u8 = 0x08;
-    pub(crate) const UNHANDLED_EVENT: u8 = 0x10;
-    pub(crate) const STA_TBTT: u8 = 0x20;
-
-    pub const fn from_semantic_events(
-        tsf_timer_0: bool,
-        tsf_timer_1: bool,
-        tsf_timer_2: bool,
-        tsf_timer_3: bool,
-        sta_tbtt: bool,
-        unhandled_event: bool,
-    ) -> Self {
-        Self(
-            (if tsf_timer_0 { Self::TSF_TIMER_0 } else { 0 })
-                | (if tsf_timer_1 { Self::TSF_TIMER_1 } else { 0 })
-                | (if tsf_timer_2 { Self::TSF_TIMER_2 } else { 0 })
-                | (if tsf_timer_3 { Self::TSF_TIMER_3 } else { 0 })
-                | (if sta_tbtt { Self::STA_TBTT } else { 0 })
-                | (if unhandled_event {
-                    Self::UNHANDLED_EVENT
-                } else {
-                    0
-                }),
-        )
+members! {
+    /// Semantic WDEVPWR causes sampled through generated PAC field
+    /// accessors. Their places do not match WDEVPWR register geometry,
+    /// which remains behind generated accessors.
+    pub enum MacPowerInterruptCause {
+        TsfTimer0,
+        TsfTimer1,
+        TsfTimer2,
+        TsfTimer3,
+        /// A cause no driver handles.
+        Unhandled,
+        /// The station TSF reached its target beacon transmission time.
+        StaTbtt,
     }
+}
 
-    pub const fn is_empty(self) -> bool {
-        self.0 == 0
-    }
+/// A set of WDEVPWR causes.
+pub type MacPowerInterruptObservation = Set<MacPowerInterruptCause>;
 
-    pub const fn union(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+/// The set of `member` when `sampled`, else the empty set: a generated
+/// reader's bit taken into a set.
+fn cause_if<M: crate::set::Member>(sampled: bool, member: M) -> Set<M> {
+    if sampled {
+        Set::of(member)
+    } else {
+        Set::empty()
     }
+}
 
-    pub const fn tsf_timer_0(self) -> bool {
-        self.0 & Self::TSF_TIMER_0 != 0
-    }
-
-    pub const fn tsf_timer_1(self) -> bool {
-        self.0 & Self::TSF_TIMER_1 != 0
-    }
-
-    pub const fn tsf_timer_2(self) -> bool {
-        self.0 & Self::TSF_TIMER_2 != 0
-    }
-
-    pub const fn tsf_timer_3(self) -> bool {
-        self.0 & Self::TSF_TIMER_3 != 0
-    }
-
-    /// The station TSF reached its target beacon transmission time.
-    pub const fn sta_tbtt(self) -> bool {
-        self.0 & Self::STA_TBTT != 0
-    }
-
-    pub const fn has_unhandled_event(self) -> bool {
-        self.0 & Self::UNHANDLED_EVENT != 0
-    }
+/// The RX lanes of three generated readers' bits.
+fn rx_lanes(auxiliary_5: bool, success: bool, auxiliary_24: bool) -> MacRxInterrupts {
+    cause_if(auxiliary_5, MacRxLane::Auxiliary5)
+        .union(cause_if(success, MacRxLane::Success))
+        .union(cause_if(auxiliary_24, MacRxLane::Auxiliary24))
 }
 
 /// Proof that the connected-STA hardware policy was applied.
@@ -658,11 +567,11 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// Read each RX delivery-enable lane independently.
     pub fn mac_rx_interrupt_enable(&self) -> MacRxInterrupts {
         let value = self.mac.read_enable();
-        MacRxInterrupts {
-            auxiliary_5: value.rx_associated_auxiliary_5(),
-            success: value.rx_success(),
-            auxiliary_24: value.rx_associated_auxiliary_24(),
-        }
+        rx_lanes(
+            value.rx_associated_auxiliary_5(),
+            value.rx_success(),
+            value.rx_associated_auxiliary_24(),
+        )
     }
 
     /// Observe the four opaque station delivery lanes independently, including
@@ -681,9 +590,9 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// This is a mask operation and acknowledges nothing.
     pub fn set_mac_rx_interrupt_enable(&mut self, enabled: MacRxInterrupts) {
         self.mac.modify_enable(|w| {
-            w.set_rx_associated_auxiliary_5(enabled.auxiliary_5)
-                .set_rx_success(enabled.success)
-                .set_rx_associated_auxiliary_24(enabled.auxiliary_24);
+            w.set_rx_associated_auxiliary_5(enabled.contains(MacRxLane::Auxiliary5))
+                .set_rx_success(enabled.contains(MacRxLane::Success))
+                .set_rx_associated_auxiliary_24(enabled.contains(MacRxLane::Auxiliary24));
         });
         oer_portable_riscv::fence();
     }

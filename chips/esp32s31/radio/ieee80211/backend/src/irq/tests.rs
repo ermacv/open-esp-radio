@@ -104,7 +104,10 @@ fn fixture() -> Fixture {
 }
 
 fn rx_success() -> MacInterruptObservation {
-    MacInterruptObservation::from_semantic_events(MacInterruptEvents::RX_SUCCESS, false, false)
+    MacInterruptObservation::from_semantic_events(
+        oer_chips_esp32s31_hal::types::MacInterruptCause::RxSuccess.set(),
+        oer_chips_esp32s31_hal::set::Set::empty(),
+    )
 }
 
 fn mac(part: &HostPart) -> &MacInterruptModel {
@@ -258,15 +261,20 @@ fn the_mac_bank_masks_rx_acknowledges_and_wakes_once() {
 fn the_power_bank_acknowledges_publishes_and_counts() {
     let mut fixture = fixture();
     let mut part = active_part();
-    let tbtt =
-        MacPowerInterruptObservation::from_semantic_events(false, false, false, false, true, false);
+    let tbtt = oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set();
     part.epoch_mut().banks_mut().1.latch(tbtt);
     assert!(service_wifi_line(fixture.cell, &mut part).expect("healthy interrupt"));
     assert!(power(&part).operations().matches(&[
         PowerInterruptOperation::Status,
         PowerInterruptOperation::Acknowledge(tbtt),
     ]));
-    assert!(fixture.power.take().unwrap().sta_tbtt());
+    assert!(
+        fixture
+            .power
+            .take()
+            .unwrap()
+            .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt)
+    );
     // The MAC bank was sampled first and held nothing; no MAC fact.
     assert!(
         mac(&part)

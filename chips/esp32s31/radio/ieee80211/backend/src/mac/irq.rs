@@ -9,9 +9,9 @@ pub mod model;
 use oer_chips_esp32s31_hal::{
     system::owner::{MacInterruptRegisters, MacPowerInterruptRegisters},
     types::{
-        MacInterruptEnableState, MacInterruptEvents, MacInterruptMask, MacInterruptObservation,
-        MacInterruptRawSnapshot, MacInterruptSnapshot, MacPowerInterruptObservation,
-        MacPowerInterruptSnapshot,
+        MacInterruptCause, MacInterruptEnableState, MacInterruptEvents, MacInterruptMask,
+        MacInterruptObservation, MacInterruptRawSnapshot, MacInterruptSnapshot,
+        MacPowerInterruptObservation, MacPowerInterruptSnapshot,
     },
 };
 
@@ -292,16 +292,16 @@ pub const fn next_irq_work(pending: u32) -> Option<IrqWork> {
 
 pub const fn event_mask(causes: MacInterruptEvents) -> u32 {
     let mut mask = 0;
-    if causes.tx_complete() {
+    if causes.includes(MacInterruptCause::TxComplete.set()) {
         mask |= EVENT_TX_COMPLETE;
     }
-    if causes.tx_timeout() {
+    if causes.includes(MacInterruptCause::TxTimeout.set()) {
         mask |= EVENT_TX_TIMEOUT;
     }
-    if causes.tx_queue_collision() {
+    if causes.includes(MacInterruptCause::TxQueueCollision.set()) {
         mask |= EVENT_TX_QUEUE_COLLISION;
     }
-    if causes.rx_success() {
+    if causes.includes(MacInterruptCause::RxSuccess.set()) {
         mask |= EVENT_RX_SUCCESS;
     }
     mask
@@ -337,7 +337,7 @@ pub fn handle_mac_irq<M: epoch::RxDelivery, I: MacInterrupt>(
     if observation.is_empty() {
         return Ok((IrqDisposition::Spurious, snapshot));
     }
-    if M::MODERATES_RX && work_events.contains(MacInterruptEvents::RX_SUCCESS) {
+    if M::MODERATES_RX && work_events.contains(MacInterruptCause::RxSuccess) {
         // Mask before W1C; a racing level remains latched until the driver
         // restores the source after draining the durable RX frontier.
         interrupt.mask_rx_delivery();

@@ -97,15 +97,13 @@ fn cancelled_power_wait_releases_the_slot_for_the_next_waiter() {
     let mut next = pin!(consumer.wait());
     let mut cx = Context::from_waker(&waker);
     assert!(next.as_mut().poll(&mut cx).is_pending());
-    publisher.publish(MacPowerInterruptObservation::from_semantic_events(
-        false, false, false, false, true, false,
-    ));
+    publisher.publish(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set());
     assert_eq!(old.0.load(Ordering::Relaxed), 0);
     assert_eq!(current.0.load(Ordering::Relaxed), 1);
     let Poll::Ready(Ok(observation)) = next.as_mut().poll(&mut cx) else {
         panic!("published")
     };
-    assert!(observation.sta_tbtt());
+    assert!(observation.contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt));
 }
 
 #[test]
@@ -163,20 +161,33 @@ fn power_snapshot_coalesces_all_semantic_facts_and_then_clears() {
     let mut storage =
         PowerIrqStorage::new(oer_chips_family_platform_interrupt_table::signal::host::signal().0);
     let (publisher, mut consumer) = storage.split();
-    publisher.publish(MacPowerInterruptObservation::from_semantic_events(
-        true, false, true, false, false, true,
-    ));
-    publisher.publish(MacPowerInterruptObservation::from_semantic_events(
-        false, true, false, true, true, false,
-    ));
+    publisher.publish(
+        oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer0
+            .set()
+            .union(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer2.set())
+            .union(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::Unhandled.set()),
+    );
+    publisher.publish(
+        oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer1
+            .set()
+            .union(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer3.set())
+            .union(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set()),
+    );
     let observation = consumer.take().unwrap();
     assert!(
-        observation.tsf_timer_0()
-            && observation.tsf_timer_1()
-            && observation.tsf_timer_2()
-            && observation.tsf_timer_3()
+        observation.contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer0)
+            && observation
+                .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer1)
+            && observation
+                .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer2)
+            && observation
+                .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer3)
     );
-    assert!(observation.sta_tbtt() && observation.has_unhandled_event());
+    assert!(
+        observation.contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt)
+            && observation
+                .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::Unhandled)
+    );
     assert!(consumer.take().unwrap().is_empty());
 }
 

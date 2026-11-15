@@ -4,7 +4,7 @@ use core::fmt::Write as _;
 use oer_chips_esp32s31_hal::{
     radio::ieee80211::{
         dma::rx_ring::RxRingLive,
-        registers::{MacInterruptMask, MacRxInterrupts},
+        registers::{MacInterruptMask, MacRxInterrupts, MacRxLane},
     },
     system::owner::{MacInterruptRegisters, RadioAccess},
 };
@@ -49,7 +49,9 @@ fn bank(irq: &MacInterruptRegisters) -> Result<[u32; WIDTH], oer_portable_diagno
     // Compact software output codes, not peripheral masks.
     *row.get_mut(12)
         .ok_or(oer_portable_diagnostics::name!("row"; 32))? =
-        u32::from(rx.auxiliary_5) + 2 * u32::from(rx.success) + 4 * u32::from(rx.auxiliary_24);
+        u32::from(rx.contains(MacRxLane::Auxiliary5))
+            + 2 * u32::from(rx.contains(MacRxLane::Success))
+            + 4 * u32::from(rx.contains(MacRxLane::Auxiliary24));
     *row.get_mut(13)
         .ok_or(oer_portable_diagnostics::name!("row"; 32))? = u32::from(opaque.lane_6)
         + 2 * u32::from(opaque.lane_12)
@@ -336,7 +338,7 @@ fn scan(
     }
     // This exact sample is the logged pre-ack STATUS, closing HW20's sampling gap.
     if phase == 203 {
-        irq.acknowledge_mac_interrupts(status.retain_rx_causes(MacRxInterrupts::ALL));
+        irq.acknowledge_mac_interrupts(status.retain_rx_causes(MacRxInterrupts::all()));
     }
     *row.get_mut(26)
         .ok_or(oer_portable_diagnostics::name!("row"; 32))? = irq.mac_interrupt_raw().bits();
@@ -394,17 +396,17 @@ pub(super) fn clears(
 ) -> Result<(), oer_portable_diagnostics::Name<32>> {
     irq.mask_all_mac_interrupts();
     checkpoint(trace, 205, 0, irq)?;
-    irq.set_mac_rx_interrupt_enable(MacRxInterrupts::ALL);
+    irq.set_mac_rx_interrupt_enable(MacRxInterrupts::all());
     checkpoint(trace, 206, 0, irq)?;
     let held5 = irq
         .mac_interrupt_status()
-        .retain_rx_causes(MacRxInterrupts::AUXILIARY_5);
+        .retain_rx_causes(MacRxLane::Auxiliary5.set());
     let held14 = irq
         .mac_interrupt_status()
-        .retain_rx_causes(MacRxInterrupts::SUCCESS);
+        .retain_rx_causes(MacRxLane::Success.set());
     let held24 = irq
         .mac_interrupt_status()
-        .retain_rx_causes(MacRxInterrupts::AUXILIARY_24);
+        .retain_rx_causes(MacRxLane::Auxiliary24.set());
     // Emit each exact clear authority before consuming it, including zero samples.
     for (step, bits) in [(5, held5.bits()), (14, held14.bits()), (24, held24.bits())] {
         let mut row = bank(irq)?;
@@ -422,7 +424,7 @@ pub(super) fn clears(
     checkpoint(trace, 208, 1, irq)?;
     irq.acknowledge_mac_interrupts(held24);
     checkpoint(trace, 209, 1, irq)?;
-    irq.set_mac_rx_interrupt_enable(MacRxInterrupts::ALL);
+    irq.set_mac_rx_interrupt_enable(MacRxInterrupts::all());
     checkpoint(trace, 209, 2, irq)?;
     irq.mask_all_mac_interrupts();
     checkpoint(trace, 209, 3, irq)

@@ -333,22 +333,14 @@ fn a_tbtt_between_the_power_and_the_mac_facts_is_kept() {
     // The radio handler's typed publication on the device's power signal.
     let mut storage = crate::mac::irq::consumer::PowerIrqStorage::new(bench.power);
     let (publisher, _consumer) = storage.split();
-    publisher.publish(
-        oer_chips_esp32s31_hal::types::MacPowerInterruptObservation::from_semantic_events(
-            false, false, false, false, true, false,
-        ),
-    );
+    publisher.publish(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set());
     assert!(session.poll(cx).is_pending(), "no MAC fact");
     assert!(
-        matches!(session.port_power(cx), Poll::Ready(Ok(facts)) if facts.sta_tbtt()),
+        matches!(session.port_power(cx), Poll::Ready(Ok(facts)) if facts.contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt)),
         "the TBTT waits for the power facts"
     );
     // Through the device: the facts give it as its event once.
-    publisher.publish(
-        oer_chips_esp32s31_hal::types::MacPowerInterruptObservation::from_semantic_events(
-            false, false, false, false, true, false,
-        ),
-    );
+    publisher.publish(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set());
     assert!(matches!(
         <Model as Device<TX>>::poll_event(bench.device, cx),
         Poll::Ready(Ok(DeviceEvent::Tbtt))

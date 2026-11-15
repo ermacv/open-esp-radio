@@ -471,7 +471,10 @@ where
 }
 
 fn rx_success() -> MacInterruptObservation {
-    MacInterruptObservation::from_semantic_events(MacInterruptEvents::RX_SUCCESS, false, false)
+    MacInterruptObservation::from_semantic_events(
+        oer_chips_esp32s31_hal::types::MacInterruptCause::RxSuccess.set(),
+        oer_chips_esp32s31_hal::set::Set::empty(),
+    )
 }
 
 impl<X: SignalExecutor> Harness<X> {

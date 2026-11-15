@@ -20,7 +20,7 @@ use core::{
     future::poll_fn,
     task::{Context, Poll},
 };
-use oer_chips_esp32s31_hal::types::MacPowerInterruptObservation;
+use oer_chips_esp32s31_hal::types::{MacPowerInterruptCause, MacPowerInterruptObservation};
 pub use oer_chips_family_platform_interrupt_table::signal::ForeignContext;
 use oer_chips_family_platform_interrupt_table::signal::{IrqSignal, SignalExecutor, SignalPend};
 
@@ -509,14 +509,19 @@ impl<E: SignalExecutor> PowerIrqStorage<E> {
     }
 
     fn observation(events: u32) -> MacPowerInterruptObservation {
-        MacPowerInterruptObservation::from_semantic_events(
-            events & Self::TSF0 != 0,
-            events & Self::TSF1 != 0,
-            events & Self::TSF2 != 0,
-            events & Self::TSF3 != 0,
-            events & Self::TBTT != 0,
-            events & Self::UNHANDLED != 0,
-        )
+        [
+            (Self::TSF0, MacPowerInterruptCause::TsfTimer0),
+            (Self::TSF1, MacPowerInterruptCause::TsfTimer1),
+            (Self::TSF2, MacPowerInterruptCause::TsfTimer2),
+            (Self::TSF3, MacPowerInterruptCause::TsfTimer3),
+            (Self::TBTT, MacPowerInterruptCause::StaTbtt),
+            (Self::UNHANDLED, MacPowerInterruptCause::Unhandled),
+        ]
+        .into_iter()
+        .filter(|(event, _)| events & event != 0)
+        .fold(MacPowerInterruptObservation::empty(), |set, (_, cause)| {
+            set.union(cause.set())
+        })
     }
 }
 
@@ -532,12 +537,13 @@ impl<E: SignalExecutor> PowerIrqPublisher<'_, E> {
 
     #[inline(always)]
     pub fn publish_deferred(&self, observation: MacPowerInterruptObservation) -> IrqPublication<E> {
-        let events = (u32::from(observation.tsf_timer_0()) * PowerIrqStorage::<E>::TSF0)
-            | (u32::from(observation.tsf_timer_1()) * PowerIrqStorage::<E>::TSF1)
-            | (u32::from(observation.tsf_timer_2()) * PowerIrqStorage::<E>::TSF2)
-            | (u32::from(observation.tsf_timer_3()) * PowerIrqStorage::<E>::TSF3)
-            | (u32::from(observation.sta_tbtt()) * PowerIrqStorage::<E>::TBTT)
-            | (u32::from(observation.has_unhandled_event()) * PowerIrqStorage::<E>::UNHANDLED);
+        let has = |cause| u32::from(observation.contains(cause));
+        let events = (has(MacPowerInterruptCause::TsfTimer0) * PowerIrqStorage::<E>::TSF0)
+            | (has(MacPowerInterruptCause::TsfTimer1) * PowerIrqStorage::<E>::TSF1)
+            | (has(MacPowerInterruptCause::TsfTimer2) * PowerIrqStorage::<E>::TSF2)
+            | (has(MacPowerInterruptCause::TsfTimer3) * PowerIrqStorage::<E>::TSF3)
+            | (has(MacPowerInterruptCause::StaTbtt) * PowerIrqStorage::<E>::TBTT)
+            | (has(MacPowerInterruptCause::Unhandled) * PowerIrqStorage::<E>::UNHANDLED);
         let raised = self.storage.signal.raise_deferred(events);
         IrqPublication {
             #[cfg(test)]
