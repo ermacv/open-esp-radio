@@ -5,14 +5,14 @@ use crate::radio::bluetooth::registers::{
     BluetoothSchedulerHardwareListIndex,
 };
 
-use super::{Control, Phase, State, Unsettled};
+use super::{Control, ExecutionModifyKind, Phase, Repeat, State, Unsettled};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Op {
     Busy,
     EnginesIdle,
     SelectProgress,
-    Publish(bool),
+    Publish(ExecutionModifyKind),
     Repeats,
     Ready,
     SelectSettle,
@@ -30,14 +30,38 @@ struct Model {
     ready: VecDeque<bool>,
     settled: VecDeque<bool>,
     /// Every diagnostic sample exhausts its attempt budget.
-    unsettled: bool,
-    rejected: bool,
-    defer_samples: bool,
+    unsettled: Samples,
+    rejected: Verdict,
+    defer_samples: Replies,
+}
+
+/// Whether the model's diagnostic samples settle.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Samples {
+    #[default]
+    Settle,
+    Unsettled,
+}
+
+/// What the hardware says of the request once it settles.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Verdict {
+    #[default]
+    Accepted,
+    Rejected,
+}
+
+/// Whether the model's P3 replies come at once or after a yield.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Replies {
+    #[default]
+    Immediate,
+    Deferred,
 }
 
 impl Model {
     async fn before_reply(&self) {
-        if self.defer_samples {
+        if self.defer_samples == Replies::Deferred {
             let mut yielded = false;
             core::future::poll_fn(|_| {
                 if core::mem::replace(&mut yielded, true) {
@@ -50,7 +74,7 @@ impl Model {
         }
     }
     fn sample(&mut self, value: impl FnOnce(&mut Self) -> bool) -> Result<bool, Unsettled> {
-        if self.unsettled {
+        if self.unsettled == Samples::Unsettled {
             Err(Unsettled)
         } else {
             Ok(value(self))
@@ -76,8 +100,8 @@ impl Control for Model {
         self.ops.push(Op::SelectProgress);
         Ok(())
     }
-    fn publish(&mut self, _: BluetoothSchedulerHardwareListIndex, list_deletion: bool) {
-        self.ops.push(Op::Publish(list_deletion));
+    fn publish(&mut self, _: BluetoothSchedulerHardwareListIndex, kind: ExecutionModifyKind) {
+        self.ops.push(Op::Publish(kind));
     }
     async fn repeats(&mut self) -> Result<bool, Unsettled> {
         self.before_reply().await;
@@ -103,13 +127,13 @@ impl Control for Model {
     }
     fn rejected(&mut self) -> bool {
         self.ops.push(Op::Rejected);
-        self.rejected
+        self.rejected == Verdict::Rejected
     }
 }
 
 struct Request {
     phase: Phase,
-    repeat: bool,
+    repeat: Repeat,
     published: Option<()>,
 }
 
@@ -117,24 +141,24 @@ impl Request {
     fn new() -> Self {
         Self {
             phase: Phase::Preamble,
-            repeat: false,
+            repeat: Repeat::No,
             published: None,
         }
     }
 
-    fn step(&mut self, model: &mut Model, list_deletion: bool) -> Disposition {
-        self.try_step(model, list_deletion).unwrap()
+    fn step(&mut self, model: &mut Model, kind: ExecutionModifyKind) -> Disposition {
+        self.try_step(model, kind).unwrap()
     }
 
     fn try_step(
         &mut self,
         model: &mut Model,
-        list_deletion: bool,
+        kind: ExecutionModifyKind,
     ) -> Result<Disposition, Unsettled> {
         crate::radio::bluetooth::test_ready(super::step(
             State {
                 index: BluetoothSchedulerHardwareListIndex::ZERO,
-                list_deletion,
+                kind,
                 phase: &mut self.phase,
                 repeat: &mut self.repeat,
                 published: &mut self.published,
@@ -148,13 +172,16 @@ impl Request {
 fn an_idle_scheduler_publishes_and_settles_in_the_vendor_order() {
     let mut model = Model::default();
     let mut request = Request::new();
-    assert_eq!(request.step(&mut model, true), Disposition::Ready);
+    assert_eq!(
+        request.step(&mut model, ExecutionModifyKind::ListDeletion),
+        Disposition::Ready
+    );
     assert_eq!(
         model.ops,
         [
             Op::Busy,
             Op::SelectProgress,
-            Op::Publish(true),
+            Op::Publish(ExecutionModifyKind::ListDeletion),
             Op::Repeats,
             Op::Busy,
             Op::SelectSettle,
@@ -172,7 +199,7 @@ fn delayed_p3_replies_preserve_publication_order_without_repeating_writes() {
         task::{Context, Poll, Waker},
     };
     let mut model = Model {
-        defer_samples: true,
+        defer_samples: Replies::Deferred,
         ..Model::default()
     };
     let mut request = Request::new();
@@ -180,7 +207,7 @@ fn delayed_p3_replies_preserve_publication_order_without_repeating_writes() {
         let mut future = core::pin::pin!(super::step(
             State {
                 index: BluetoothSchedulerHardwareListIndex::ZERO,
-                list_deletion: true,
+                kind: ExecutionModifyKind::ListDeletion,
                 phase: &mut request.phase,
                 repeat: &mut request.repeat,
                 published: &mut request.published,
@@ -201,7 +228,7 @@ fn delayed_p3_replies_preserve_publication_order_without_repeating_writes() {
         [
             Op::Busy,
             Op::SelectProgress,
-            Op::Publish(true),
+            Op::Publish(ExecutionModifyKind::ListDeletion),
             Op::Repeats,
             Op::Busy,
             Op::SelectSettle,
@@ -221,24 +248,33 @@ fn busy_engines_hold_the_request_and_a_busy_scheduler_waits_for_ready() {
         ..Model::default()
     };
     let mut request = Request::new();
-    assert_eq!(request.step(&mut model, false), Disposition::Pending);
+    assert_eq!(
+        request.step(&mut model, ExecutionModifyKind::Modify),
+        Disposition::Pending
+    );
     assert_eq!(model.ops, [Op::Busy, Op::EnginesIdle]);
     model.ops.clear();
-    assert_eq!(request.step(&mut model, false), Disposition::Pending);
+    assert_eq!(
+        request.step(&mut model, ExecutionModifyKind::Modify),
+        Disposition::Pending
+    );
     assert_eq!(
         model.ops,
         [
             Op::Busy,
             Op::EnginesIdle,
             Op::SelectProgress,
-            Op::Publish(false),
+            Op::Publish(ExecutionModifyKind::Modify),
             Op::Repeats,
             Op::Busy,
             Op::Ready,
         ]
     );
     model.ops.clear();
-    assert_eq!(request.step(&mut model, false), Disposition::Ready);
+    assert_eq!(
+        request.step(&mut model, ExecutionModifyKind::Modify),
+        Disposition::Ready
+    );
     assert_eq!(
         model.ops,
         [
@@ -260,10 +296,16 @@ fn a_conflict_repeats_the_request_after_it_settles() {
     };
     let mut request = Request::new();
     // The conflict is observed right after publication.
-    assert_eq!(request.step(&mut model, false), Disposition::Pending);
+    assert_eq!(
+        request.step(&mut model, ExecutionModifyKind::Modify),
+        Disposition::Pending
+    );
     model.ops.clear();
     // A resumed observation selects the progress signal again.
-    assert_eq!(request.step(&mut model, false), Disposition::Pending);
+    assert_eq!(
+        request.step(&mut model, ExecutionModifyKind::Modify),
+        Disposition::Pending
+    );
     assert_eq!(
         model.ops,
         [
@@ -275,7 +317,10 @@ fn a_conflict_repeats_the_request_after_it_settles() {
         ]
     );
     model.ops.clear();
-    assert_eq!(request.step(&mut model, false), Disposition::Ready);
+    assert_eq!(
+        request.step(&mut model, ExecutionModifyKind::Modify),
+        Disposition::Ready
+    );
     assert_eq!(
         model.ops,
         [
@@ -284,7 +329,7 @@ fn a_conflict_repeats_the_request_after_it_settles() {
             Op::ClearStart,
             Op::Busy,
             Op::SelectProgress,
-            Op::Publish(false),
+            Op::Publish(ExecutionModifyKind::Modify),
             Op::Repeats,
             Op::Busy,
             Op::SelectSettle,
@@ -297,11 +342,11 @@ fn a_conflict_repeats_the_request_after_it_settles() {
 #[test]
 fn a_set_status_19_is_a_hardware_rejection() {
     let mut model = Model {
-        rejected: true,
+        rejected: Verdict::Rejected,
         ..Model::default()
     };
     assert_eq!(
-        Request::new().step(&mut model, false),
+        Request::new().step(&mut model, ExecutionModifyKind::Modify),
         Disposition::HardwareRejected
     );
 }
@@ -309,11 +354,14 @@ fn a_set_status_19_is_a_hardware_rejection() {
 #[test]
 fn an_unsettled_diagnostic_sample_fails_the_step_without_publishing() {
     let mut model = Model {
-        unsettled: true,
+        unsettled: Samples::Unsettled,
         ..Model::default()
     };
     let mut request = Request::new();
-    assert_eq!(request.try_step(&mut model, false), Err(Unsettled));
+    assert_eq!(
+        request.try_step(&mut model, ExecutionModifyKind::Modify),
+        Err(Unsettled)
+    );
     assert_eq!(model.ops, [Op::Busy]);
     assert!(request.published.is_none());
 }

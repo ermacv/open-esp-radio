@@ -544,10 +544,11 @@ pub use he::{
     tb::{MacHeTbStatistics, MacHeTbTxDiagnostics},
 };
 pub use interrupt::{
-    ConnectedStaWithoutPowerSavePrepared, MacInterruptEnableState, MacInterruptEvents,
-    MacInterruptObservation, MacInterruptRawSnapshot, MacInterruptRegisters, MacInterruptSnapshot,
-    MacOpaqueInterruptEnables, MacPowerInterruptObservation, MacPowerInterruptRegisters,
-    MacPowerInterruptSnapshot, MacRxInterrupts,
+    ConnectedStaWithoutPowerSavePrepared, MacInterruptCause, MacInterruptEnableState,
+    MacInterruptEvents, MacInterruptObservation, MacInterruptRawSnapshot, MacInterruptRegisters,
+    MacInterruptSideEvent, MacInterruptSnapshot, MacOpaqueInterruptEnables, MacPowerInterruptCause,
+    MacPowerInterruptObservation, MacPowerInterruptRegisters, MacPowerInterruptSnapshot,
+    MacRxInterrupts, MacRxLane,
 };
 pub use rx::{
     dma::{MacRxDmaSnapshot, MacRxNextDescriptorObservation},

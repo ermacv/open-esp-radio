@@ -23,18 +23,32 @@ enum ObservationOperation {
     ModifyRejected,
 }
 
+/// Whether a request the recorder observes is ready.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Ready {
+    Pending,
+    Ready,
+}
+
+/// What the hardware says of an execution modify.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Verdict {
+    Accepted,
+    Rejected,
+}
+
 struct ObservationRecorder {
     operations: Vec<ObservationOperation>,
-    lock_ready: bool,
+    lock_ready: Ready,
     lock_result: u8,
-    modify_ready: bool,
-    modify_rejected: bool,
+    modify_ready: Ready,
+    modify_rejected: Verdict,
 }
 
 impl BluetoothSchedulerInsertionExecutionObservationControl for ObservationRecorder {
     fn observe_execution_lock_ready(&mut self) -> bool {
         self.operations.push(ObservationOperation::LockReady);
-        self.lock_ready
+        self.lock_ready == Ready::Ready
     }
 
     fn observe_execution_lock_result(&mut self) -> u8 {
@@ -44,12 +58,12 @@ impl BluetoothSchedulerInsertionExecutionObservationControl for ObservationRecor
 
     fn observe_execution_modify_ready(&mut self) -> bool {
         self.operations.push(ObservationOperation::ModifyReady);
-        self.modify_ready
+        self.modify_ready == Ready::Ready
     }
 
     fn observe_execution_modify_rejected(&mut self) -> bool {
         self.operations.push(ObservationOperation::ModifyRejected);
-        self.modify_rejected
+        self.modify_rejected == Verdict::Rejected
     }
 }
 
@@ -57,10 +71,10 @@ impl ObservationRecorder {
     fn new() -> Self {
         Self {
             operations: Vec::new(),
-            lock_ready: false,
+            lock_ready: Ready::Pending,
             lock_result: 0,
-            modify_ready: false,
-            modify_rejected: false,
+            modify_ready: Ready::Pending,
+            modify_rejected: Verdict::Accepted,
         }
     }
 }
@@ -81,7 +95,7 @@ fn execution_lock_preserves_idle_ready_and_result_short_circuits() {
     assert_eq!(recorder.operations, [ObservationOperation::LockReady]);
 
     recorder.operations.clear();
-    recorder.lock_ready = true;
+    recorder.lock_ready = Ready::Ready;
     recorder.lock_result = 0;
     assert_eq!(
         execute_execution_lock_observation(&mut recorder, scheduler(true)),

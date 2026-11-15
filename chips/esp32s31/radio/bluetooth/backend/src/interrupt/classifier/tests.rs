@@ -1,4 +1,6 @@
-use oer_chips_esp32s31_hal::radio::bluetooth::BluetoothPrimaryInterruptEpoch;
+use oer_chips_esp32s31_hal::radio::bluetooth::{
+    BluetoothPrimaryInterruptEpoch, BluetoothPrimarySource,
+};
 
 use super::{
     BluetoothSchedulerReferenceGateObservation, BluetoothSchedulerWorkObservation,
@@ -6,7 +8,7 @@ use super::{
     SchedulerReferenceGate, SchedulerWorkClassifier, SchedulerWorkerWake, SchedulerWorkerWakeClass,
 };
 
-const fn trigger(
+fn trigger(
     source_21_pending: bool,
     sources_27_or_28_pending: bool,
     source_3_pending: bool,
@@ -49,7 +51,11 @@ fn baseline_fault_preempts_dynamic_scheduler_work() {
 
 #[test]
 fn fault_free_epoch_reaches_dynamic_scheduler_classifier() {
-    let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(false, true, true);
+    let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(
+        BluetoothPrimarySource::Bank0Sources27Or28
+            .set()
+            .union(BluetoothPrimarySource::Bank1Source3.set()),
+    );
     let classification = PrimaryInterruptClassification::from_epoch(epoch)
         .expect("dynamic sources are not fault lanes");
 

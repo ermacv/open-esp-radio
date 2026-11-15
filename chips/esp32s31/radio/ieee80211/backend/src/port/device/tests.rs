@@ -333,22 +333,14 @@ fn a_tbtt_between_the_power_and_the_mac_facts_is_kept() {
     // The radio handler's typed publication on the device's power signal.
     let mut storage = crate::mac::irq::consumer::PowerIrqStorage::new(bench.power);
     let (publisher, _consumer) = storage.split();
-    publisher.publish(
-        oer_chips_esp32s31_hal::types::MacPowerInterruptObservation::from_semantic_events(
-            false, false, false, false, true, false,
-        ),
-    );
+    publisher.publish(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set());
     assert!(session.poll(cx).is_pending(), "no MAC fact");
     assert!(
-        matches!(session.port_power(cx), Poll::Ready(Ok(facts)) if facts.sta_tbtt()),
+        matches!(session.port_power(cx), Poll::Ready(Ok(facts)) if facts.contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt)),
         "the TBTT waits for the power facts"
     );
     // Through the device: the facts give it as its event once.
-    publisher.publish(
-        oer_chips_esp32s31_hal::types::MacPowerInterruptObservation::from_semantic_events(
-            false, false, false, false, true, false,
-        ),
-    );
+    publisher.publish(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set());
     assert!(matches!(
         <Model as Device<TX>>::poll_event(bench.device, cx),
         Poll::Ready(Ok(DeviceEvent::Tbtt))
@@ -488,7 +480,10 @@ fn a_request_without_ring_work_takes_a_snapshot_but_no_service() {
 #[test]
 fn a_never_started_device_gives_its_radio_back_without_a_stop() {
     let bench = Bench::unstarted();
-    assert!(!bench.walker.borrow().walker_enabled);
+    assert_eq!(
+        bench.walker.borrow().walker_enabled,
+        oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Disabled
+    );
     assert!(
         bench.device.take_stopped().is_none(),
         "the general release still needs a paused session"
@@ -514,7 +509,11 @@ fn a_start_that_began_and_failed_keeps_its_radio_from_the_never_started_release(
         channel(),
     );
     assert!(matches!(started, Poll::Ready(Err(_))), "{started:?}");
-    assert!(bench.walker.borrow().walker_enabled, "the walker may run");
+    assert_eq!(
+        bench.walker.borrow().walker_enabled,
+        oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled,
+        "the walker may run"
+    );
     assert!(bench.device.take_unstarted().is_none());
     assert!(bench.device.take_stopped().is_none());
 }

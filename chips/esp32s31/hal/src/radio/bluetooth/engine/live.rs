@@ -50,7 +50,7 @@ impl<
         if self.is_quarantined() {
             return Err(ReceivePublicationError::Quarantined);
         }
-        if !self.phy_initialized {
+        if self.lifecycle != Lifecycle::PhyReady {
             return Err(ReceivePublicationError::NotInitialized);
         }
         if self.memory.hardware.has_run() {
@@ -145,7 +145,7 @@ impl<
             )
             .await
             .map_err(|error| {
-                self.faulted = true;
+                self.lifecycle = Lifecycle::Faulted;
                 EngineScheduleError::Hardware(error)
             })?;
         for (id, _) in step.released().iter() {
@@ -179,7 +179,7 @@ impl<
                 SchedulerHardwareError::Interrupt(SchedulerInterruptError::NotInstalled),
             ));
         }
-        if !self.phy_initialized {
+        if self.lifecycle != Lifecycle::PhyReady {
             return Err(EngineScheduleError::NotInitialized);
         }
         let window = match instance.kind() {
@@ -225,7 +225,7 @@ impl<
             Ok(snapshot) => snapshot,
             Err(error) => {
                 self.return_item(id).map_err(EngineScheduleError::Pool)?;
-                self.faulted = true;
+                self.lifecycle = Lifecycle::Faulted;
                 return Err(EngineScheduleError::Hardware(error));
             }
         };
@@ -281,7 +281,7 @@ impl<
                 )
                 .await
                 .map_err(|error| {
-                    self.faulted = true;
+                    self.lifecycle = Lifecycle::Faulted;
                     EngineScheduleError::Start(error)
                 })?;
             Ok((id, SchedulerNext::Finished))
@@ -318,7 +318,7 @@ impl<
             )
             .await
             .map_err(|error| {
-                self.faulted = true;
+                self.lifecycle = Lifecycle::Faulted;
                 EngineScheduleError::Hardware(error)
             })?;
         if matches!(
@@ -341,7 +341,7 @@ impl<
                 };
                 result.map_err(EngineScheduleError::Pool)?;
             }
-            self.faulted = true;
+            self.lifecycle = Lifecycle::Faulted;
             return Err(EngineScheduleError::Quarantined);
         }
         let mut items = SchedulerItemSpace::new()
@@ -353,7 +353,7 @@ impl<
         let step = match self.memory.scheduler.advance(&mut items, observation) {
             Ok(step) => step,
             Err(fault) => {
-                self.faulted = true;
+                self.lifecycle = Lifecycle::Faulted;
                 self.memory.hardware.recover_live(
                     &mut self.registers.borrow_bluetooth_controller(),
                     self.scheduler_interrupts
@@ -406,7 +406,7 @@ impl<
             )
             .await
             .map_err(|error| {
-                self.faulted = true;
+                self.lifecycle = Lifecycle::Faulted;
                 EngineScheduleError::Hardware(error)
             })?;
         let step = self
@@ -450,7 +450,7 @@ impl<
             )
             .await
             .map_err(|error| {
-                self.faulted = true;
+                self.lifecycle = Lifecycle::Faulted;
                 EngineScheduleError::Hardware(error)
             })?;
         let step = self
@@ -489,7 +489,7 @@ impl<
         );
         core::task::Poll::Ready(match result {
             Err(error) => {
-                self.faulted = true;
+                self.lifecycle = Lifecycle::Faulted;
                 Err(EngineStopError::Hardware(
                     super::scheduler::SchedulerStopError::Interrupt(error),
                 ))
@@ -538,7 +538,7 @@ impl<
             )
             .await
             .map_err(|error| {
-                self.faulted = true;
+                self.lifecycle = Lifecycle::Faulted;
                 EngineScheduleError::Hardware(error)
             })?;
         if let Some(insertion) = self
@@ -563,7 +563,7 @@ impl<
                 )
                 .await
                 .map_err(|error| {
-                    self.faulted = true;
+                    self.lifecycle = Lifecycle::Faulted;
                     EngineScheduleError::Start(error)
                 })?;
         }
@@ -611,7 +611,7 @@ impl<
                 )
                 .await
                 .map_err(|error| {
-                    self.faulted = true;
+                    self.lifecycle = Lifecycle::Faulted;
                     EngineScheduleError::Start(error)
                 })?;
         }

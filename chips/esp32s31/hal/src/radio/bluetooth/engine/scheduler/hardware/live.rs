@@ -2,6 +2,7 @@
 
 use super::super::interrupt::{SchedulerDoorbell, SchedulerInterruptError, SchedulerTaskHalf};
 use crate::radio::bluetooth::engine::SchedulerItemLink;
+use crate::radio::bluetooth::scheduler_execution_modify::ExecutionModifyKind;
 use crate::radio::bluetooth::{
     BluetoothSchedulerCancellationIndexed, BluetoothSchedulerCancellationRequested,
     BluetoothSchedulerCancellationSourceAcknowledged, BluetoothSchedulerExecutionLock,
@@ -54,10 +55,9 @@ impl<S: SchedulerDoorbell> SchedulerHardwareBackend for LiveSchedulerBackend<'_,
 
     fn publish_execution_modify(
         &mut self,
-        list_deletion: bool,
+        kind: ExecutionModifyKind,
     ) -> BluetoothSchedulerExecutionModify {
-        self.controller
-            .admit_scheduler_execution_modify(LIST, list_deletion)
+        self.controller.admit_scheduler_execution_modify(LIST, kind)
     }
 
     fn release_execution_modify(&mut self, modify: BluetoothSchedulerExecutionModify) {

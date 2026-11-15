@@ -3,7 +3,10 @@ use crate::interrupt::{
     SchedulerWakePublication, SchedulerWorkerWakeClass,
 };
 
-use oer_chips_esp32s31_hal::radio::bluetooth::BluetoothPrimaryInterruptEpoch;
+use oer_chips_esp32s31_hal::radio::bluetooth::{
+    BluetoothPrimaryInterruptEpoch, BluetoothPrimarySource,
+};
+use oer_chips_esp32s31_hal::set::Set;
 
 use std::vec::Vec;
 
@@ -35,9 +38,15 @@ impl Backend {
     ) -> Self {
         Self {
             epoch: Some(BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(
-                source_21_pending,
-                sources_27_or_28_pending,
-                source_3_pending,
+                Set::of_bit(source_21_pending, BluetoothPrimarySource::Bank0Source21)
+                    .union(Set::of_bit(
+                        sources_27_or_28_pending,
+                        BluetoothPrimarySource::Bank0Sources27Or28,
+                    ))
+                    .union(Set::of_bit(
+                        source_3_pending,
+                        BluetoothPrimarySource::Bank1Source3,
+                    )),
             )),
             gate: Ok(
                 BluetoothSchedulerReferenceGateObservation::from_busy_for_host_test(gate_busy),
@@ -223,7 +232,11 @@ fn dynamic_inputs(key: u8) -> (bool, bool, bool, bool) {
 }
 fn reference_marker(key: u8) -> Option<bool> {
     let (a, b, c, deferred) = dynamic_inputs(key);
-    let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(a, b, c);
+    let epoch = BluetoothPrimaryInterruptEpoch::for_dynamic_host_test(
+        Set::of_bit(a, BluetoothPrimarySource::Bank0Source21)
+            .union(Set::of_bit(b, BluetoothPrimarySource::Bank0Sources27Or28))
+            .union(Set::of_bit(c, BluetoothPrimarySource::Bank1Source3)),
+    );
     let classification = PrimaryInterruptClassification::from_epoch(epoch).expect("no fault");
     classification.work_classifier().map(|classifier| {
         classifier

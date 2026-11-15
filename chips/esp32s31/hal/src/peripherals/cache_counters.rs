@@ -39,34 +39,30 @@ use oer_chips_esp32s31_pac::{
 };
 use oer_portable_mmio::{Fixed, Placement};
 
+use crate::set::Set;
+
 #[cfg(test)]
 mod tests;
 
 /// Where the cache block lies.
 pub type CachePlacement = Fixed<{ instances::cache::BASE }>;
 
-/// The buses whose counters [`CacheCounters::start`] runs.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Buses {
-    /// Instruction bus 0: core 0's fetches through L1-ICache0.
-    pub ibus0: bool,
-    /// Instruction bus 1: core 1's fetches through L1-ICache1.
-    pub ibus1: bool,
-    /// Data bus 0 of L1-DCache, the one ESP-IDF requests for every core.
-    pub dbus0: bool,
-    /// Data bus 1 of L1-DCache.
-    pub dbus1: bool,
+crate::set::members! {
+    /// A bus the L1 cache counts.
+    pub enum Bus {
+        /// Instruction bus 0: core 0's fetches through L1-ICache0.
+        Ibus0,
+        /// Instruction bus 1: core 1's fetches through L1-ICache1.
+        Ibus1,
+        /// Data bus 0 of L1-DCache, the one ESP-IDF requests for every core.
+        Dbus0,
+        /// Data bus 1 of L1-DCache.
+        Dbus1,
+    }
 }
 
-impl Buses {
-    /// Every bus the cache counts.
-    pub const ALL: Self = Self {
-        ibus0: true,
-        ibus1: true,
-        dbus0: true,
-        dbus1: true,
-    };
-}
+/// The buses whose counters [`CacheCounters::start`] runs.
+pub type Buses = Set<Bus>;
 
 /// An instruction bus's counts since its [`CacheCounters::start`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -192,41 +188,41 @@ impl<P: Placement> CacheCounters<P> {
                 .set_l1_dbus0_cnt_ena(false)
                 .set_l1_dbus1_cnt_ena(false);
         });
-        if buses.ibus0 {
+        if buses.contains(Bus::Ibus0) {
             self.counters
                 .trigger_l1_cache_acs_cnt_ctrl_l1_ibus0_cnt_clr();
         }
-        if buses.ibus1 {
+        if buses.contains(Bus::Ibus1) {
             self.counters
                 .trigger_l1_cache_acs_cnt_ctrl_l1_ibus1_cnt_clr();
         }
-        if buses.dbus0 {
+        if buses.contains(Bus::Dbus0) {
             self.counters
                 .trigger_l1_cache_acs_cnt_ctrl_l1_dbus0_cnt_clr();
         }
-        if buses.dbus1 {
+        if buses.contains(Bus::Dbus1) {
             self.counters
                 .trigger_l1_cache_acs_cnt_ctrl_l1_dbus1_cnt_clr();
         }
         self.counters.trigger_l1_cache_acs_cnt_int_clr(|t| {
-            if buses.ibus0 {
+            if buses.contains(Bus::Ibus0) {
                 t.l1_ibus0_ovf_int_clr();
             }
-            if buses.ibus1 {
+            if buses.contains(Bus::Ibus1) {
                 t.l1_ibus1_ovf_int_clr();
             }
-            if buses.dbus0 {
+            if buses.contains(Bus::Dbus0) {
                 t.l1_dbus0_ovf_int_clr();
             }
-            if buses.dbus1 {
+            if buses.contains(Bus::Dbus1) {
                 t.l1_dbus1_ovf_int_clr();
             }
         });
         self.counters.modify_l1_cache_acs_cnt_ctrl(|w| {
-            w.set_l1_ibus0_cnt_ena(buses.ibus0)
-                .set_l1_ibus1_cnt_ena(buses.ibus1)
-                .set_l1_dbus0_cnt_ena(buses.dbus0)
-                .set_l1_dbus1_cnt_ena(buses.dbus1);
+            w.set_l1_ibus0_cnt_ena(buses.contains(Bus::Ibus0))
+                .set_l1_ibus1_cnt_ena(buses.contains(Bus::Ibus1))
+                .set_l1_dbus0_cnt_ena(buses.contains(Bus::Dbus0))
+                .set_l1_dbus1_cnt_ena(buses.contains(Bus::Dbus1));
         });
     }
 
@@ -239,12 +235,10 @@ impl<P: Placement> CacheCounters<P> {
     /// Whose counters run: each bus's enable bit.
     pub fn enabled(&self) -> Buses {
         let control = self.counters.read_l1_cache_acs_cnt_ctrl();
-        Buses {
-            ibus0: control.l1_ibus0_cnt_ena(),
-            ibus1: control.l1_ibus1_cnt_ena(),
-            dbus0: control.l1_dbus0_cnt_ena(),
-            dbus1: control.l1_dbus1_cnt_ena(),
-        }
+        Set::of_bit(control.l1_ibus0_cnt_ena(), Bus::Ibus0)
+            .union(Set::of_bit(control.l1_ibus1_cnt_ena(), Bus::Ibus1))
+            .union(Set::of_bit(control.l1_dbus0_cnt_ena(), Bus::Dbus0))
+            .union(Set::of_bit(control.l1_dbus1_cnt_ena(), Bus::Dbus1))
     }
 
     /// Every bus's counts, then the overflow bits: an overflow while the

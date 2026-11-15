@@ -340,18 +340,38 @@ impl ModemLpTimerInterruptTransaction for InterruptRecorder {
     }
 }
 
+/// Whether the modelled rollover delivery is armed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Rollover {
+    Disarmed,
+    Armed,
+}
+
+/// The modelled interrupt output.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Output {
+    Low,
+    Asserted,
+}
+
+impl Output {
+    const fn asserted_if(asserted: bool) -> Self {
+        if asserted { Self::Asserted } else { Self::Low }
+    }
+}
+
 struct PreparationModel {
     operations: Vec<PreparationOperation>,
     pending: super::BluetoothModemLpTimerPendingObservation,
-    rollover_armed: bool,
-    output: bool,
+    rollover_armed: Rollover,
+    output: Output,
 }
 
 impl ModemLpTimerTransaction for PreparationModel {
     fn prepare_controls(&mut self) {
         self.operations.push(PreparationOperation::PrepareControls);
-        self.rollover_armed = false;
-        self.output = false;
+        self.rollover_armed = Rollover::Disarmed;
+        self.output = Output::Low;
     }
 
     fn sample_pending(&mut self) -> super::BluetoothModemLpTimerPendingObservation {
@@ -363,12 +383,12 @@ impl ModemLpTimerTransaction for PreparationModel {
         // SOURCE: HW9_S31_LP_CLEAR34_20261027, hw9-20261027-lp-06.
         // Model the measured command effect, not a passive host-memory store.
         self.pending = Default::default();
-        self.output = false;
+        self.output = Output::Low;
     }
     fn enable_rollover(&mut self) {
         self.operations.push(PreparationOperation::EnableRollover);
-        self.rollover_armed = true;
-        self.output = self.pending.state_002c() != 0;
+        self.rollover_armed = Rollover::Armed;
+        self.output = Output::asserted_if(self.pending.state_002c() != 0);
     }
     fn fence(&mut self) {
         self.operations.push(PreparationOperation::DeviceFence);
@@ -385,8 +405,8 @@ fn preparation_returns_pending_before_clear34_erases_both_tested_causes() {
         let mut model = PreparationModel {
             operations: Vec::new(),
             pending: inherited,
-            rollover_armed: true,
-            output: software != 0 || rollover != 0,
+            rollover_armed: Rollover::Armed,
+            output: Output::asserted_if(software != 0 || rollover != 0),
         };
         let stale = execute_modem_lp_timer_prepare(&mut model);
         assert_eq!(
@@ -394,8 +414,11 @@ fn preparation_returns_pending_before_clear34_erases_both_tested_causes() {
             "the observation precedes the destructive command"
         );
         assert_eq!(model.pending, Default::default());
-        assert!(model.rollover_armed);
-        assert!(!model.output, "arming cannot redeliver inherited rollover");
+        assert!(model.rollover_armed == Rollover::Armed);
+        assert!(
+            model.output == Output::Low,
+            "arming cannot redeliver inherited rollover"
+        );
         assert_eq!(
             model.operations,
             [
@@ -947,11 +970,25 @@ enum StopOp {
     ClearRollover,
     ClearPending,
 }
+/// The modelled low-power counter: running on the clock, or stopped at a
+/// count.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Counter {
+    Running,
+    Stopped(u64),
+}
+
+/// The modelled timer interrupt delivery.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Delivery {
+    Enabled,
+    Disabled,
+}
+
 struct StopRecorder {
     clock: oer_portable_time_virtual::VirtualClock,
-    counter_running: bool,
-    stopped_counter: u64,
-    delivery_enabled: bool,
+    counter: Counter,
+    delivery_enabled: Delivery,
     source_127_high: bool,
     pending: super::BluetoothModemLpTimerPendingObservation,
     status: u32,
@@ -961,9 +998,8 @@ impl StopRecorder {
     fn new(pending: super::BluetoothModemLpTimerPendingObservation, status: u32) -> Self {
         Self {
             clock: oer_portable_time_virtual::VirtualClock::new(),
-            counter_running: true,
-            stopped_counter: 0,
-            delivery_enabled: true,
+            counter: Counter::Running,
+            delivery_enabled: Delivery::Enabled,
             source_127_high: status != 0,
             pending,
             status,
@@ -973,16 +1009,15 @@ impl StopRecorder {
 
     fn counter(&self) -> u64 {
         use oer_portable_time::Clock;
-        if self.counter_running {
-            self.clock.now().as_micros()
-        } else {
-            self.stopped_counter
+        match self.counter {
+            Counter::Running => self.clock.now().as_micros(),
+            Counter::Stopped(count) => count,
         }
     }
 
     fn is_quiet(&self) -> bool {
-        !self.counter_running
-            && !self.delivery_enabled
+        self.counter != Counter::Running
+            && self.delivery_enabled == Delivery::Disabled
             && !self.source_127_high
             && self.status == 0
             && self.pending == Default::default()
@@ -992,14 +1027,13 @@ impl StopRecorder {
 impl super::ModemLpTimerStopTransaction for StopRecorder {
     fn disable_delivery(&mut self) {
         self.ops.push(StopOp::DisableDelivery);
-        self.delivery_enabled = false;
+        self.delivery_enabled = Delivery::Disabled;
         self.status = 0;
         self.source_127_high = false;
     }
     fn stop_counter(&mut self) {
         self.ops.push(StopOp::StopCounter);
-        self.stopped_counter = self.counter();
-        self.counter_running = false;
+        self.counter = Counter::Stopped(self.counter());
     }
     fn sample_pending(&mut self) -> super::BluetoothModemLpTimerPendingObservation {
         self.ops.push(StopOp::SamplePending);

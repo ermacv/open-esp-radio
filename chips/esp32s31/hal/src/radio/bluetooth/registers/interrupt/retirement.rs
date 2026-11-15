@@ -195,10 +195,18 @@ fn release(
     .map_err(Error::InterruptPolicy)
 }
 
+/// Whether the handler acknowledged a fault during the epoch: a fault it
+/// acknowledged stays recorded and refuses the output release.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FaultHistory {
+    None,
+    Acknowledged,
+}
+
 struct BankHardware<'a, P: BluetoothPlacements> {
     bank: &'a mut oer_chips_esp32s31_pac::bt_mac::BluetoothInterruptBank<P::BtMac>,
-    /// The handler acknowledged a fault during the epoch.
-    fault_acknowledged: bool,
+    /// What the handler acknowledged during the epoch.
+    fault: FaultHistory,
 }
 
 impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
@@ -206,7 +214,7 @@ impl<P: BluetoothPlacements> BankControl for BankHardware<'_, P> {
         crate::radio::bluetooth::observation::primary(self.bank)
     }
     fn fault_acknowledged(&self) -> bool {
-        self.fault_acknowledged
+        self.fault == FaultHistory::Acknowledged
     }
 
     fn acknowledge_nrt(&mut self) -> Result<(), BluetoothNrtInterruptFault> {
@@ -325,13 +333,13 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     pub(crate) fn sample_idle_output(
         &mut self,
         busy: BluetoothSchedulerBusyObservation,
-        fault_acknowledged: bool,
+        fault: FaultHistory,
         task_enable: u32,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
         sample_idle(
             &mut BankHardware::<P> {
                 bank: &mut self.peripherals.bluetooth_interrupt_bank,
-                fault_acknowledged,
+                fault,
             },
             busy,
             task_enable,
@@ -342,13 +350,13 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     /// sourced terminal-cleanup sources and fence.
     pub(crate) fn mask_output_dynamic_sources(
         &mut self,
-        fault_acknowledged: bool,
+        fault: FaultHistory,
         task_enable: u32,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
         mask(
             &mut BankHardware::<P> {
                 bank: &mut self.peripherals.bluetooth_interrupt_bank,
-                fault_acknowledged,
+                fault,
             },
             task_enable,
         )
@@ -361,13 +369,13 @@ impl<P: BluetoothPlacements> BluetoothInterruptRegisters<P> {
     pub(crate) fn release_idle_output(
         &mut self,
         busy: BluetoothSchedulerBusyObservation,
-        fault_acknowledged: bool,
+        fault: FaultHistory,
         task_enable: u32,
     ) -> Result<(), BluetoothControllerOutputReleaseError> {
         release(
             &mut BankHardware::<P> {
                 bank: &mut self.peripherals.bluetooth_interrupt_bank,
-                fault_acknowledged,
+                fault,
             },
             busy,
             task_enable,

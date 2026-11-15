@@ -505,25 +505,41 @@ fn activation_publication_matches_the_ten_event_runtime_baseline() {
 
 #[test]
 fn startup_discards_all_fourteen_lanes() {
-    assert_startup_discard(true, true, true, true);
+    assert_startup_discard(crate::set::Set::all());
 }
 
 #[test]
 fn startup_discards_lane7() {
-    assert_startup_discard(true, false, false, false);
+    assert_startup_discard(StartupLane::Events7.set());
 }
 
 #[test]
 fn startup_discards_lane10() {
-    assert_startup_discard(false, true, false, false);
+    assert_startup_discard(StartupLane::Clock.set());
 }
 
 #[test]
 fn startup_discards_lane13() {
-    assert_startup_discard(false, false, true, false);
+    assert_startup_discard(StartupLane::Events13.set());
 }
 
-fn assert_startup_discard(events_7: bool, clock: bool, events_13: bool, other: bool) {
+crate::set::members! {
+    /// The lanes of the visible event image a startup test injects.
+    enum StartupLane {
+        Events7,
+        /// The clock count match.
+        Clock,
+        Events13,
+        /// Every other event lane.
+        Other,
+    }
+}
+
+fn assert_startup_discard(lanes: crate::set::Set<StartupLane>) {
+    let events_7 = lanes.contains(StartupLane::Events7);
+    let clock = lanes.contains(StartupLane::Clock);
+    let events_13 = lanes.contains(StartupLane::Events13);
+    let other = lanes.contains(StartupLane::Other);
     let mut memory = HostMemory::filled(u32::MAX);
     let (task, mut setup) = memory.owners();
     // Host memory stores the selected W1C image as the next visible read.

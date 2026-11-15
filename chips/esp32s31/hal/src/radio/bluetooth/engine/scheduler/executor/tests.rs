@@ -15,8 +15,24 @@ struct Item {
     next: Option<SchedulerItemLink>,
     previous: Option<SchedulerItemLink>,
     status: Option<SchedulerItemCompletionStatus>,
-    prepared: bool,
-    deleted: bool,
+    prepared: Preparation,
+    deleted: Deletion,
+}
+
+/// Whether an item was prepared.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Preparation {
+    #[default]
+    Unprepared,
+    Prepared,
+}
+
+/// Whether an item was marked deleted.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Deletion {
+    #[default]
+    Kept,
+    Deleted,
 }
 
 /// Item memory for event identities 0..8.
@@ -71,8 +87,8 @@ impl SchedulerItemAccess<u8> for Items {
             next,
             previous,
             status: None,
-            prepared: true,
-            deleted: false,
+            prepared: Preparation::Prepared,
+            deleted: Deletion::Kept,
         };
     }
 
@@ -89,7 +105,7 @@ impl SchedulerItemAccess<u8> for Items {
     }
 
     fn mark_deleted(&mut self, id: u8) {
-        self.0[usize::from(id)].deleted = true;
+        self.0[usize::from(id)].deleted = Deletion::Deleted;
     }
 }
 
@@ -126,7 +142,7 @@ fn idle_insertion_links_the_chain_in_start_order() {
 
     assert_eq!(head.head, link(4));
     assert_eq!(items.chain(head.head), [4, 1, 3, 2]);
-    assert!(items.0[4].prepared);
+    assert_eq!(items.0[4].prepared, Preparation::Prepared);
     assert_eq!(items.0[4].previous, None);
     assert_eq!(items.0[1].previous, Some(link(4)));
     assert_eq!(items.0[3].previous, Some(link(1)));
@@ -492,7 +508,7 @@ mod cancel {
         assert_eq!(items.chain(link(1)), [1, 4]);
         assert_eq!(items.0[4].previous, Some(link(1)));
         // A deleted item keeps its own next link for hardware that holds it.
-        assert!(items.0[2].deleted && items.0[3].deleted);
+        assert!(items.0[2].deleted == crate::radio::bluetooth::engine::scheduler::executor::tests::Deletion::Deleted && items.0[3].deleted == crate::radio::bluetooth::engine::scheduler::executor::tests::Deletion::Deleted);
         assert_eq!(items.0[3].next, Some(link(4)));
 
         let step = executor
@@ -789,7 +805,12 @@ mod pools {
             .prepare_event(
                 &instance,
                 &image(
-                    ChannelFixture::new(true, true, true).unwrap(),
+                    ChannelFixture::new(&[
+                        crate::radio::bluetooth::engine::LegacyAdvertisingPrimaryChannel::Channel37,
+                        crate::radio::bluetooth::engine::LegacyAdvertisingPrimaryChannel::Channel38,
+                        crate::radio::bluetooth::engine::LegacyAdvertisingPrimaryChannel::Channel39,
+                    ])
+                    .unwrap(),
                     1_000,
                     100,
                     0,

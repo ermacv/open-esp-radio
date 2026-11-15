@@ -63,10 +63,12 @@ pub use controller::{
 };
 pub use device_table::BluetoothDeviceTablePublished;
 pub use direction_finding::BluetoothDirectionFindingDisabledBaselinePrepared;
+pub(crate) use interrupt::retirement::FaultHistory;
 pub use interrupt::{
     BluetoothInterruptOutputPrepared, BluetoothNrtInterruptAcknowledged,
     BluetoothNrtInterruptFault, BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,
-    BluetoothSchedulerRunInterruptsPrepared, retirement::BluetoothControllerOutputReleaseError,
+    BluetoothPrimarySource, BluetoothSchedulerRunInterruptsPrepared,
+    retirement::BluetoothControllerOutputReleaseError,
 };
 pub use memory_lists::{
     BluetoothMemoryListPointerImage, BluetoothMemoryListSelector, BluetoothMemoryListSlot,

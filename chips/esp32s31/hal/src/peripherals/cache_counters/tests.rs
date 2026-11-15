@@ -16,28 +16,19 @@ fn changed(before: &[u32], after: &[u32]) -> usize {
     before.iter().zip(after).filter(|(a, b)| a != b).count()
 }
 
-const NONE: Buses = Buses {
-    ibus0: false,
-    ibus1: false,
-    dbus0: false,
-    dbus1: false,
-};
+const NONE: Buses = Buses::empty();
 
 #[test]
 fn a_start_enables_exactly_the_selected_buses() {
     for fill in [0, u32::MAX] {
-        let selected = Buses {
-            ibus0: true,
-            dbus0: true,
-            ..NONE
-        };
+        let selected = Bus::Ibus0.set().union(Bus::Dbus0.set());
         let mut counters = memory(fill);
         let mut geometry = memory(fill);
         let mut owner = CacheCounters::host(&mut counters, &mut geometry).expect("host memory");
         owner.start(selected);
         assert_eq!(owner.enabled(), selected);
-        owner.start(Buses::ALL);
-        assert_eq!(owner.enabled(), Buses::ALL);
+        owner.start(Buses::all());
+        assert_eq!(owner.enabled(), Buses::all());
         owner.start(NONE);
         assert_eq!(owner.enabled(), NONE);
     }
@@ -49,7 +40,7 @@ fn a_start_writes_only_the_trace_the_enable_word_and_the_overflow_clear() {
     let mut geometry = memory(0x5a5a_5a5a);
     let (counters_before, geometry_before) = (counters.clone(), geometry.clone());
     let mut owner = CacheCounters::host(&mut counters, &mut geometry).expect("host memory");
-    owner.start(Buses::ALL);
+    owner.start(Buses::all());
     drop(owner);
     assert_eq!(
         changed(&counters_before, &counters),
@@ -65,10 +56,7 @@ fn a_start_turns_the_counters_trace_on() {
     let mut geometry = memory(0);
     let mut owner = CacheCounters::host(&mut counters, &mut geometry).expect("host memory");
     assert!(!owner.tracing());
-    owner.start(Buses {
-        dbus1: true,
-        ..NONE
-    });
+    owner.start(Bus::Dbus1.set());
     assert!(owner.tracing());
 }
 
@@ -82,24 +70,24 @@ fn expected_after_start(fill: u32, buses: Buses) -> Vec<u32> {
         w.set_l1_cache_trace_ena(true);
     });
     part.trigger_l1_cache_acs_cnt_int_clr(|t| {
-        if buses.ibus0 {
+        if buses.contains(Bus::Ibus0) {
             t.l1_ibus0_ovf_int_clr();
         }
-        if buses.ibus1 {
+        if buses.contains(Bus::Ibus1) {
             t.l1_ibus1_ovf_int_clr();
         }
-        if buses.dbus0 {
+        if buses.contains(Bus::Dbus0) {
             t.l1_dbus0_ovf_int_clr();
         }
-        if buses.dbus1 {
+        if buses.contains(Bus::Dbus1) {
             t.l1_dbus1_ovf_int_clr();
         }
     });
     part.modify_l1_cache_acs_cnt_ctrl(|w| {
-        w.set_l1_ibus0_cnt_ena(buses.ibus0)
-            .set_l1_ibus1_cnt_ena(buses.ibus1)
-            .set_l1_dbus0_cnt_ena(buses.dbus0)
-            .set_l1_dbus1_cnt_ena(buses.dbus1);
+        w.set_l1_ibus0_cnt_ena(buses.contains(Bus::Ibus0))
+            .set_l1_ibus1_cnt_ena(buses.contains(Bus::Ibus1))
+            .set_l1_dbus0_cnt_ena(buses.contains(Bus::Dbus0))
+            .set_l1_dbus1_cnt_ena(buses.contains(Bus::Dbus1));
     });
     drop(part);
     words
@@ -108,17 +96,9 @@ fn expected_after_start(fill: u32, buses: Buses) -> Vec<u32> {
 #[test]
 fn a_start_ends_with_an_enable_write_that_sets_no_clear_lane() {
     let selections = [
-        Buses::ALL,
-        Buses {
-            ibus0: true,
-            dbus0: true,
-            ..NONE
-        },
-        Buses {
-            ibus1: true,
-            dbus1: true,
-            ..NONE
-        },
+        Buses::all(),
+        Bus::Ibus0.set().union(Bus::Dbus0.set()),
+        Bus::Ibus1.set().union(Bus::Dbus1.set()),
     ];
     for fill in [0, u32::MAX, 0xa5a5_a5a5] {
         for buses in selections {

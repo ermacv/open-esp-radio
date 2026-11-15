@@ -18,15 +18,32 @@ fn place<const COUNT: usize, const BUFFER: usize, const STORAGE: usize, S: DmaSp
     RxDmaStorage::place(Placed::host(storage)).expect("the host storage has a layout")
 }
 
+/// What the mock does with a stop request.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Stop {
+    #[default]
+    Confirmed,
+    /// The walker keeps running and the stop is not confirmed.
+    Refused,
+}
+
+/// What the mock does with an enable request.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Start {
+    #[default]
+    Confirmed,
+    /// The walker runs but the enable is not confirmed.
+    Unconfirmed,
+}
+
 #[derive(Default)]
 struct MockRxDma {
     walker: bool,
     descriptor_base: u32,
     last_descriptor_low: u32,
     next_descriptor_low: u32,
-    fail_disable: bool,
-    ambiguous_enable: bool,
-    reload: bool,
+    fail_disable: Stop,
+    ambiguous_enable: Start,
     disable_calls: usize,
     publications: usize,
 }
@@ -69,7 +86,8 @@ impl RxDma for MockRxDma {
     }
 
     fn reload_pending(&mut self) -> bool {
-        self.reload
+        // No test of this mock rings a doorbell that stays pending.
+        false
     }
 
     fn try_with_reload_settled<R>(
@@ -106,7 +124,7 @@ impl RxDma for MockRxDma {
         ) -> R,
     ) -> Option<R> {
         self.walker = true;
-        (!self.ambiguous_enable).then(|| {
+        (self.ambiguous_enable == Start::Confirmed).then(|| {
             enabled(crate::radio::ieee80211::dma::rx_dma::RxDmaWalkerEnabled::for_host_test())
         })
     }
@@ -119,7 +137,7 @@ impl RxDma for MockRxDma {
         ) -> R,
     ) -> Option<R> {
         self.disable_calls += 1;
-        if self.fail_disable {
+        if self.fail_disable == Stop::Refused {
             return None;
         }
         self.walker = false;
@@ -654,7 +672,7 @@ fn failed_root_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
     let storage = placed.storage();
     let mut mmio = MockRxDma {
         walker: true,
-        fail_disable: true,
+        fail_disable: Stop::Refused,
         ..MockRxDma::default()
     };
 
@@ -690,7 +708,7 @@ fn failed_halted_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
     // Model an external hardware fault between epochs: the walker became
     // active again and refuses the stop request made by preparation.
     mmio.walker = true;
-    mmio.fail_disable = true;
+    mmio.fail_disable = Stop::Refused;
     let (_halted, error) = match storage.prepare_halted(halted, &mut mmio) {
         Ok(_) => panic!("unproved stop must reject preparation"),
         Err(failure) => failure,
@@ -1579,7 +1597,7 @@ fn ambiguous_start_quarantines_the_arena_when_walker_is_observed_live() {
     let placed = place(storage);
     let storage = placed.storage();
     let mut mmio = MockRxDma {
-        ambiguous_enable: true,
+        ambiguous_enable: Start::Unconfirmed,
         ..MockRxDma::default()
     };
     let prepared = placed
@@ -2467,7 +2485,7 @@ fn a_halted_rebuild_refuses_a_stop_proof_for_another_arena() {
     // Something started the walker again; the rebuild must stop it first,
     // and a proof for another arena's binding does not prove that.
     let mut mmio = ForeignStopProof::new();
-    mmio.walker.walker_enabled = true;
+    mmio.walker.walker_enabled = crate::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled;
     let (_halted, error) = storage
         .prepare_halted(halted, &mut mmio)
         .err()
@@ -2491,16 +2509,19 @@ fn a_walker_that_does_not_stop_returns_the_live_owner_unconfirmed() {
         .map_err(|(_, error)| error)
         .unwrap();
 
-    mmio.refuse_stop = true;
+    mmio.stop_request = crate::radio::ieee80211::dma::rx_dma::model::StopRequest::Refused;
     let (live, error) = live
         .try_stop(&mut mmio)
         .err()
         .expect("an unconfirmed stop keeps the live owner");
     assert_eq!(error, RxRingError::WalkerStopUnconfirmed);
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
-    assert!(mmio.walker_enabled);
+    assert_eq!(
+        mmio.walker_enabled,
+        crate::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled
+    );
 
-    mmio.refuse_stop = false;
+    mmio.stop_request = crate::radio::ieee80211::dma::rx_dma::model::StopRequest::Obeyed;
     assert!(live.try_stop(&mut mmio).is_ok());
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Prepared);
     assert_eq!(mmio.operation_count(RxWalkerOperation::Stop), 2);
@@ -2656,7 +2677,7 @@ fn a_stall_in_the_first_observation_leaves_one_final_observation() {
 
     let mut mmio = RxWalkerModel::new();
     let (_storage, mut live) = ring_with_pending_reload(&mut mmio);
-    mmio.reload_stuck = true;
+    mmio.reload_doorbell = crate::radio::ieee80211::dma::rx_dma::model::ReloadDoorbell::Stuck;
     let clock = Stalled(Cell::new(0));
     let settle = Settle::new(SettleLimit::new(Duration::from_micros(20)).unwrap(), &clock);
     assert_eq!(
@@ -2685,7 +2706,7 @@ fn a_reload_doorbell_that_never_clears_stays_pending_after_the_limit() {
 
     let mut mmio = RxWalkerModel::new();
     let (storage, mut live) = ring_with_pending_reload(&mut mmio);
-    mmio.reload_stuck = true;
+    mmio.reload_doorbell = crate::radio::ieee80211::dma::rx_dma::model::ReloadDoorbell::Stuck;
     mmio.clear_operations();
 
     let clock = Stepping(Cell::new(100));
@@ -2699,7 +2720,7 @@ fn a_reload_doorbell_that_never_clears_stays_pending_after_the_limit() {
     assert!(live.reload_pending(), "the append stays pending");
     assert_eq!(storage.lifecycle_state(), RxDmaArenaState::Live);
 
-    mmio.reload_stuck = false;
+    mmio.reload_doorbell = crate::radio::ieee80211::dma::rx_dma::model::ReloadDoorbell::Clears;
     mmio.clear_operations();
     assert_eq!(
         live.complete_pending_reload(&mut mmio, frozen_settle()),

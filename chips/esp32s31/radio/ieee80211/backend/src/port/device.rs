@@ -687,7 +687,10 @@ where
         }
         for _ in 0..4 {
             match session.port_power(cx) {
-                Poll::Ready(Ok(facts)) => self.tbtt_pending |= facts.sta_tbtt(),
+                Poll::Ready(Ok(facts)) => {
+                    self.tbtt_pending |= facts
+                        .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt)
+                }
                 Poll::Ready(Err(cause)) => return Poll::Ready(Err(Fault::Receive(cause))),
                 Poll::Pending => break,
             }

@@ -33,6 +33,7 @@ pub use access::{EnginePrepareError, EngineReceiveError};
 #[cfg(target_arch = "riscv32")]
 mod live;
 mod owner;
+use arena::Lifecycle;
 pub use arena::{ArenaError, ArenaMemory, BluetoothArena, ControllerMemory, Engine, EngineFault};
 #[cfg(target_arch = "riscv32")]
 pub use live::{EngineScheduleError, EngineStopError, ReceivePublicationError};

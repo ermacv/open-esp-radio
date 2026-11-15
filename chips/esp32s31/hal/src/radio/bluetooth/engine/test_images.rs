@@ -2,15 +2,19 @@
 use super::*;
 pub(super) struct ChannelFixture([Option<LegacyAdvertisingPrimaryChannel>; 3]);
 impl ChannelFixture {
-    pub(super) fn new(a: bool, b: bool, c: bool) -> Option<Self> {
-        if !a && !b && !c {
+    /// The fixture of `channels`, each in its own place; `None` for none.
+    pub(super) fn new(channels: &[LegacyAdvertisingPrimaryChannel]) -> Option<Self> {
+        if channels.is_empty() {
             return None;
         }
-        Some(Self([
-            a.then_some(LegacyAdvertisingPrimaryChannel::Channel37),
-            b.then_some(LegacyAdvertisingPrimaryChannel::Channel38),
-            c.then_some(LegacyAdvertisingPrimaryChannel::Channel39),
-        ]))
+        Some(Self(
+            [
+                LegacyAdvertisingPrimaryChannel::Channel37,
+                LegacyAdvertisingPrimaryChannel::Channel38,
+                LegacyAdvertisingPrimaryChannel::Channel39,
+            ]
+            .map(|channel| channels.contains(&channel).then_some(channel)),
+        ))
     }
 }
 pub(super) fn priority() -> SchedulerEventPriority {

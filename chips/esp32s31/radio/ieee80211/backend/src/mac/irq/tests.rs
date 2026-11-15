@@ -62,9 +62,12 @@ impl MacInterrupt for Interrupt {
 fn moderated_ack_masks_before_clear_and_returns_all_facts() {
     let mut interrupt = Interrupt {
         observation: MacInterruptObservation::from_semantic_events(
-            MacInterruptEvents::RX_SUCCESS.union(MacInterruptEvents::TX_COMPLETE),
-            true,
-            true,
+            oer_chips_esp32s31_hal::types::MacInterruptCause::RxSuccess
+                .set()
+                .union(oer_chips_esp32s31_hal::types::MacInterruptCause::TxComplete.set()),
+            oer_chips_esp32s31_hal::types::MacInterruptSideEvent::Auxiliary
+                .set()
+                .union(oer_chips_esp32s31_hal::types::MacInterruptSideEvent::Unhandled.set()),
         ),
         ..Default::default()
     };
@@ -81,8 +84,7 @@ fn unmoderated_ack_has_no_mask_and_auxiliary_only_is_not_work() {
     let mut interrupt = Interrupt {
         observation: MacInterruptObservation::from_semantic_events(
             MacInterruptEvents::empty(),
-            true,
-            false,
+            oer_chips_esp32s31_hal::types::MacInterruptSideEvent::Auxiliary.set(),
         ),
         ..Default::default()
     };
@@ -107,9 +109,8 @@ fn spurious_mac_does_not_mask_acknowledge_or_publish() {
 fn tx_queue_collision_posts_an_independent_event() {
     let mut interrupt = Interrupt {
         observation: MacInterruptObservation::from_semantic_events(
-            MacInterruptEvents::TX_QUEUE_COLLISION,
-            false,
-            false,
+            oer_chips_esp32s31_hal::types::MacInterruptCause::TxQueueCollision.set(),
+            oer_chips_esp32s31_hal::set::Set::empty(),
         ),
         ..Default::default()
     };
@@ -127,9 +128,8 @@ fn tx_queue_collision_posts_an_independent_event() {
 #[test]
 fn station_mask_keeps_tx_queue_collision_latched_without_asserting_the_line() {
     let collision = MacInterruptObservation::from_semantic_events(
-        MacInterruptEvents::TX_QUEUE_COLLISION,
-        false,
-        false,
+        oer_chips_esp32s31_hal::types::MacInterruptCause::TxQueueCollision.set(),
+        oer_chips_esp32s31_hal::set::Set::empty(),
     );
     let mut interrupt = MacInterruptModel::new();
     interrupt.latch(collision);
@@ -139,9 +139,8 @@ fn station_mask_keeps_tx_queue_collision_latched_without_asserting_the_line() {
     assert_eq!(interrupt.latched(), collision);
 
     interrupt.latch(MacInterruptObservation::from_semantic_events(
-        MacInterruptEvents::RX_SUCCESS,
-        false,
-        false,
+        oer_chips_esp32s31_hal::types::MacInterruptCause::RxSuccess.set(),
+        oer_chips_esp32s31_hal::set::Set::empty(),
     ));
     let (_, snapshot) = handle_mac_irq::<Moderated, _>(&mut interrupt).expect("nonfatal sample");
     assert_eq!(snapshot.posted_events, EVENT_RX_SUCCESS);
@@ -171,18 +170,25 @@ impl MacPowerInterrupt for Power {
 #[test]
 fn power_ack_returns_every_cause_and_spurious_does_not_ack() {
     let mut interrupt = Power {
-        observation: MacPowerInterruptObservation::from_semantic_events(
-            true, false, false, false, true, true,
-        ),
+        observation: oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer0
+            .set()
+            .union(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set())
+            .union(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::Unhandled.set()),
         acks: 0,
     };
     let (disposition, snapshot) = handle_power_irq(&mut interrupt);
     assert_eq!(disposition, PowerIrqDisposition::Posted);
     assert_eq!(interrupt.acks, 1);
     assert!(
-        snapshot.observation.tsf_timer_0()
-            && snapshot.observation.sta_tbtt()
-            && snapshot.observation.has_unhandled_event()
+        snapshot
+            .observation
+            .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::TsfTimer0)
+            && snapshot
+                .observation
+                .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt)
+            && snapshot
+                .observation
+                .contains(oer_chips_esp32s31_hal::types::MacPowerInterruptCause::Unhandled)
     );
     interrupt.observation = MacPowerInterruptObservation::default();
     assert_eq!(
@@ -194,14 +200,15 @@ fn power_ack_returns_every_cause_and_spurious_does_not_ack() {
 
 fn rx_and_tx() -> MacInterruptObservation {
     MacInterruptObservation::from_semantic_events(
-        MacInterruptEvents::RX_SUCCESS.union(MacInterruptEvents::TX_COMPLETE),
-        true,
-        false,
+        oer_chips_esp32s31_hal::types::MacInterruptCause::RxSuccess
+            .set()
+            .union(oer_chips_esp32s31_hal::types::MacInterruptCause::TxComplete.set()),
+        oer_chips_esp32s31_hal::types::MacInterruptSideEvent::Auxiliary.set(),
     )
 }
 
 fn sta_tbtt() -> MacPowerInterruptObservation {
-    MacPowerInterruptObservation::from_semantic_events(false, false, false, false, true, false)
+    oer_chips_esp32s31_hal::types::MacPowerInterruptCause::StaTbtt.set()
 }
 
 type HostEpoch = InterruptEpoch<Moderated, MacInterruptModel, PowerInterruptModel>;
@@ -387,8 +394,10 @@ fn an_unmask_after_mask_all_or_close_is_refused() {
 #[test]
 fn moderated_rx_stays_latched_until_the_drain_unmasks_it() {
     let mut epoch = host_epoch();
-    let rx =
-        MacInterruptObservation::from_semantic_events(MacInterruptEvents::RX_SUCCESS, false, false);
+    let rx = MacInterruptObservation::from_semantic_events(
+        oer_chips_esp32s31_hal::types::MacInterruptCause::RxSuccess.set(),
+        oer_chips_esp32s31_hal::set::Set::empty(),
+    );
     epoch.banks_mut().0.latch(rx);
     assert_eq!(
         epoch

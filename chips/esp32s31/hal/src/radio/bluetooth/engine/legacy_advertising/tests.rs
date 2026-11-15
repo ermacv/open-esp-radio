@@ -1,3 +1,4 @@
+use crate::radio::bluetooth::engine::LegacyAdvertisingPrimaryChannel;
 use crate::radio::bluetooth::engine::test_images::{ChannelFixture, image, priority};
 use bytemuck::Zeroable;
 use std::boxed::Box;
@@ -36,7 +37,12 @@ fn priorities(lanes: [u8; 4]) -> AdvertisingCoexistencePriorities {
 }
 
 fn all_channels() -> ChannelFixture {
-    ChannelFixture::new(true, true, true).unwrap()
+    ChannelFixture::new(&[
+        LegacyAdvertisingPrimaryChannel::Channel37,
+        LegacyAdvertisingPrimaryChannel::Channel38,
+        LegacyAdvertisingPrimaryChannel::Channel39,
+    ])
+    .unwrap()
 }
 
 fn reset(
@@ -118,7 +124,7 @@ fn only_prepared_items_are_submitted_and_the_space_links_them() {
         pool.submit(&instance, 0),
         Err(SchedulerPoolError::NotPrepared)
     );
-    let channel_37 = ChannelFixture::new(true, false, false).unwrap();
+    let channel_37 = ChannelFixture::new(&[LegacyAdvertisingPrimaryChannel::Channel37]).unwrap();
     pool.prepare_event(
         &instance,
         &image(channel_37, 0, 100, 0),

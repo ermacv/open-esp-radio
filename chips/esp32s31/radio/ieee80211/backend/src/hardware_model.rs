@@ -270,7 +270,10 @@ impl Atoms {
             queue.completion = Some(MacTxCompletionObservation::new_model(status, detail));
             queue.ended = true;
         });
-        MacInterruptObservation::from_semantic_events(MacInterruptEvents::TX_COMPLETE, false, false)
+        MacInterruptObservation::from_semantic_events(
+            oer_chips_esp32s31_hal::types::MacInterruptCause::TxComplete.set(),
+            oer_chips_esp32s31_hal::set::Set::empty(),
+        )
     }
 
     /// An adverse input: the next abort of `queue` finds the hardware took
@@ -1180,9 +1183,8 @@ impl<const N: usize, const B: usize, const S: usize> ModelRx<N, B, S> {
         Ok((
             landing,
             Some(MacInterruptObservation::from_semantic_events(
-                MacInterruptEvents::RX_SUCCESS,
-                false,
-                false,
+                oer_chips_esp32s31_hal::types::MacInterruptCause::RxSuccess.set(),
+                oer_chips_esp32s31_hal::set::Set::empty(),
             )),
         ))
     }

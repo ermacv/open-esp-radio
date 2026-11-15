@@ -1,3 +1,4 @@
+use crate::radio::bluetooth::engine::LegacyAdvertisingPrimaryChannel;
 use crate::radio::bluetooth::engine::test_images::{ChannelFixture, image, priority};
 use bytemuck::Zeroable;
 use std::boxed::Box;
@@ -190,7 +191,12 @@ fn the_item_carries_its_number_and_each_event_its_coexistence_lanes() {
             assert_eq!(item.layout.allocation_number().read().bits(), 3);
         }
     }
-    let plan = ChannelFixture::new(true, true, true).unwrap();
+    let plan = ChannelFixture::new(&[
+        LegacyAdvertisingPrimaryChannel::Channel37,
+        LegacyAdvertisingPrimaryChannel::Channel38,
+        LegacyAdvertisingPrimaryChannel::Channel39,
+    ])
+    .unwrap();
     let lanes = priorities([9, 0, 13, 13]);
     pool.prepare_event(&instance, &image(plan, 6_000, 200, 214), lanes)
         .unwrap();
@@ -220,7 +226,11 @@ fn an_event_lowers_one_item_per_channel_and_finishing_restores_them() {
         pool.submit(&instance, 0),
         Err(SchedulerPoolError::NotPrepared)
     );
-    let plan = ChannelFixture::new(true, false, true).unwrap();
+    let plan = ChannelFixture::new(&[
+        LegacyAdvertisingPrimaryChannel::Channel37,
+        LegacyAdvertisingPrimaryChannel::Channel39,
+    ])
+    .unwrap();
     let event = pool
         .prepare_event(
             &instance,
@@ -301,7 +311,12 @@ fn a_scanning_chain_and_early_events_are_refused() {
     assert_eq!(
         pool.prepare_event(
             &instance,
-            &image(ChannelFixture::new(true, false, false).unwrap(), 0, 1, 0),
+            &image(
+                ChannelFixture::new(&[LegacyAdvertisingPrimaryChannel::Channel37]).unwrap(),
+                0,
+                1,
+                0
+            ),
             priorities([15; 4])
         )
         .err(),

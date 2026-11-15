@@ -66,21 +66,28 @@ enum RemovalOperation {
     ReadCommandOne,
 }
 
+/// What a command engine's status says: set when it is idle.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Engine {
+    Busy,
+    Idle,
+}
+
 struct RemovalRecorder {
-    command_zero: bool,
-    command_one: bool,
+    command_zero: Engine,
+    command_one: Engine,
     operations: Vec<RemovalOperation>,
 }
 
 impl BluetoothSchedulerSoftwareListRemovalControl for RemovalRecorder {
     fn read_command_0_status_26(&mut self) -> bool {
         self.operations.push(RemovalOperation::ReadCommandZero);
-        self.command_zero
+        self.command_zero == Engine::Idle
     }
 
     fn read_command_1_status_18(&mut self) -> bool {
         self.operations.push(RemovalOperation::ReadCommandOne);
-        self.command_one
+        self.command_one == Engine::Idle
     }
 }
 
@@ -161,8 +168,8 @@ fn worker_finished_list_transfer_reads_before_complete_low_halfword_report() {
 #[test]
 fn software_list_removal_finish_preserves_short_circuit_reads() {
     let mut blocked_at_zero = RemovalRecorder {
-        command_zero: false,
-        command_one: true,
+        command_zero: Engine::Busy,
+        command_one: Engine::Idle,
         operations: Vec::new(),
     };
     let blocked = execute_software_list_removal_finish(&mut blocked_at_zero);
@@ -176,8 +183,8 @@ fn software_list_removal_finish_preserves_short_circuit_reads() {
     );
 
     let mut blocked_at_one = RemovalRecorder {
-        command_zero: true,
-        command_one: false,
+        command_zero: Engine::Idle,
+        command_one: Engine::Busy,
         operations: Vec::new(),
     };
     let blocked = execute_software_list_removal_finish(&mut blocked_at_one);
@@ -194,8 +201,8 @@ fn software_list_removal_finish_preserves_short_circuit_reads() {
     );
 
     let mut ready = RemovalRecorder {
-        command_zero: true,
-        command_one: true,
+        command_zero: Engine::Idle,
+        command_one: Engine::Idle,
         operations: Vec::new(),
     };
     let ready_observation = execute_software_list_removal_finish(&mut ready);
