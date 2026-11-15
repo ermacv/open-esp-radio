@@ -90,7 +90,7 @@ fn consumer_preemption_at_each_notification_boundary_keeps_the_next_wait_live() 
         if boundary == 0 {
             signal.register(&new_waker);
         }
-        let selected = signal.active.load(Ordering::Acquire);
+        let selected = signal.active(Ordering::Acquire);
         if boundary == 1 {
             signal.register(&new_waker);
         }

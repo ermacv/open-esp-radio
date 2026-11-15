@@ -159,17 +159,64 @@ pub enum Trigger {
     NegativeEdge = 0b11,
 }
 
+/// The individual `clicintie.ie` field values.
+///
+/// SOURCE: RISC-V CLIC specification §4.5: the one enable bit of a line.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum Enable {
+    Disabled = 0,
+    Enabled = 1,
+}
+
+impl From<bool> for Enable {
+    /// The field's value of the bit.
+    fn from(bit: bool) -> Self {
+        if bit { Self::Enabled } else { Self::Disabled }
+    }
+}
+
+/// The individual `clicintattr.shv` field values.
+///
+/// SOURCE: RISC-V CLIC specification §4.6: selective hardware vectoring,
+/// the line's one vectoring bit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum Vectoring {
+    NonVectored = 0,
+    Vectored = 1,
+}
+
+impl From<bool> for Vectoring {
+    /// The field's value of the bit.
+    fn from(bit: bool) -> Self {
+        if bit {
+            Self::Vectored
+        } else {
+            Self::NonVectored
+        }
+    }
+}
+
+impl Vectoring {
+    /// The field's bit.
+    #[must_use]
+    pub const fn bit(self) -> bool {
+        matches!(self, Self::Vectored)
+    }
+}
+
 /// Individual CLIC line fields; privilege mode and pending are untouched.
 ///
 /// SOURCE: RISC-V CLIC specification §4.5 (`clicintie`, one enable bit),
 /// §4.6 (`clicintattr.shv`, one vectoring bit, and `trig`), §4.7 (`clicintctl`).
-/// Booleans represent the two single-bit fields, not complete register bytes.
+/// Each field is the named values of its field, not complete register bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LineState {
     /// Individual `clicintie.ie` field.
-    pub enabled: bool,
-    /// Individual `clicintattr.shv` field: hardware vectoring when set.
-    pub vectored: bool,
+    pub enable: Enable,
+    /// Individual `clicintattr.shv` field.
+    pub vectoring: Vectoring,
     /// Individual `clicintattr.trig` field.
     pub trigger: Trigger,
     /// `clicintctl` level and priority byte.
@@ -179,8 +226,8 @@ pub struct LineState {
 impl LineState {
     /// Disabled with zero control; not a claim about WARL readback/reset state.
     pub const DISABLED: Self = Self {
-        enabled: false,
-        vectored: false,
+        enable: Enable::Disabled,
+        vectoring: Vectoring::NonVectored,
         trigger: Trigger::PositiveLevel,
         control: Control::from_bits(0),
     };
@@ -188,8 +235,8 @@ impl LineState {
     /// Enabled, hardware-vectored, positive-level triggered at `control`.
     pub const fn vectored(control: Control) -> Self {
         Self {
-            enabled: true,
-            vectored: true,
+            enable: Enable::Enabled,
+            vectoring: Vectoring::Vectored,
             trigger: Trigger::PositiveLevel,
             control,
         }

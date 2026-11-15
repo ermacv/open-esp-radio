@@ -1,5 +1,5 @@
 use crate::{Entry, Error, Router};
-use oer_portable_riscv::clic::{Control, LineState, Trigger};
+use oer_portable_riscv::clic::{Control, Enable, LineState, Trigger};
 
 crate::__fake_table!();
 
@@ -148,7 +148,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
             .controller
             .lines
             .iter()
-            .all(|line| !line.enabled)
+            .all(|line| line.enable == Enable::Disabled)
     );
 
     static OTHER_CELL: oer_portable_memory::HandlerCell<TimerIrq> =
@@ -172,7 +172,13 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     };
     assert_eq!(error, Error::HandlerCellMismatch { source: 3 });
     assert_eq!(wrong_cell.controller.writes.len(), before_cell);
-    assert!(wrong_cell.controller.lines.iter().all(|line| !line.enabled));
+    assert!(
+        wrong_cell
+            .controller
+            .lines
+            .iter()
+            .all(|line| line.enable == Enable::Disabled)
+    );
     assert!(OTHER_CELL.with(|_| ()).is_none());
 
     // Before its binding the timer's handler finds no part and runs nothing.

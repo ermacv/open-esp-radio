@@ -2,7 +2,7 @@
 use oer_chips_family_platform_interrupt_table::{
     BindError, BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, Router,
 };
-use oer_portable_riscv::clic::{Control, LevelBits, LineState};
+use oer_portable_riscv::clic::{Control, Enable, LevelBits, LineState, Vectoring};
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
@@ -75,7 +75,10 @@ impl Controller for Injected {
         self.inner.lock().unwrap().routed(source)
     }
     fn set_line(&mut self, line: u8, state: LineState) -> Result<(), Error> {
-        if matches!(self.refusal, Some(Refuse::Line)) && line == 22 && state.enabled {
+        if matches!(self.refusal, Some(Refuse::Line))
+            && line == 22
+            && state.enable == Enable::Enabled
+        {
             return Err(Error::NoSuchLine { line });
         }
         self.inner.lock().unwrap().set_line(line, state)
@@ -192,14 +195,14 @@ fn router_with(refusal: Refuse) -> (Router<Injected, 0>, Arc<Mutex<FakeControlle
 #[test]
 fn diagnostic_keeps_both_line_states_and_full_entry_identity() {
     let state = LineState {
-        enabled: true,
-        vectored: false,
+        enable: Enable::Enabled,
+        vectoring: Vectoring::NonVectored,
         trigger: oer_portable_riscv::clic::Trigger::NegativeEdge,
         control: Control::from_bits(0xfe),
     };
     let expected = LineState {
-        enabled: false,
-        vectored: true,
+        enable: Enable::Disabled,
+        vectoring: Vectoring::Vectored,
         trigger: oer_portable_riscv::clic::Trigger::NegativeLevel,
         control: Control::from_bits(0xfd),
     };

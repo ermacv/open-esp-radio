@@ -36,7 +36,7 @@ use oer_chips_esp32s31_pac::{
 };
 use oer_chips_family_platform_interrupt_table::{Controller, Error};
 use oer_portable_memory::{ClaimCell, zeroed::ZeroedOnce};
-use oer_portable_riscv::clic::{Control, LevelBits, LineState, Trigger};
+use oer_portable_riscv::clic::{Control, Enable, LevelBits, LineState, Trigger, Vectoring};
 
 use crate::system::cores::{StopTheWorld, key};
 use oer_portable_mmio::{Bits, Fixed, Index, Placement};
@@ -215,8 +215,8 @@ impl<M: Placement, C: Placement> InterruptView<'_, M, C> {
         Some(LineObservation {
             pending: word.ip(),
             state: LineState {
-                enabled: word.ie(),
-                vectored: word.attr_shv(),
+                enable: Enable::from(word.ie()),
+                vectoring: Vectoring::from(word.attr_shv()),
                 trigger: trigger_of(word.attr_trig()),
                 control: Control::from_bits(word.ctl()),
             },
@@ -518,11 +518,11 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
             });
         }
         self.clic.modify_ctrl(index, |word| {
-            word.set_attr_shv(state.vectored)
+            word.set_attr_shv(state.vectoring.bit())
                 .set_attr_trig(trigger_bits(state.trigger))
                 .set_ctl(state.control.bits());
         });
-        if state.enabled {
+        if state.enable == Enable::Enabled {
             self.clic.modify_ctrl(index, |word| {
                 word.set_ie(true);
             });
@@ -536,8 +536,8 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
         };
         let word = self.clic.read_ctrl(index);
         LineState {
-            enabled: word.ie(),
-            vectored: word.attr_shv(),
+            enable: Enable::from(word.ie()),
+            vectoring: Vectoring::from(word.attr_shv()),
             trigger: trigger_of(word.attr_trig()),
             control: Control::from_bits(word.ctl()),
         }
