@@ -2547,3 +2547,91 @@ fn group_management_reports_ipn_exhaustion_and_keeps_the_announced_frontier() {
         assert_eq!(service.igtk().unwrap().packet_number(), [0xff; 6]);
     }
 }
+
+/// What a WPA2 BSS and an Open BSS answer a request whose security
+/// elements carry `fault`: `INVALID_ELEMENT`, no association identifier,
+/// and the peer still only authenticated.
+fn refused_on_both_bss_kinds(
+    fault: impl Fn(ApAssociationSecurityObservation<'_>) -> ApAssociationSecurityObservation<'_>,
+) {
+    let refused = ApMlmeAction::AssociationResponse {
+        peer: PEER,
+        status: status_code::INVALID_ELEMENT,
+        association_id: None,
+    };
+    let mut storage = AccessPointPeerStorage::new();
+    let mut rsn = service(&mut storage);
+    rsn.authenticate_open(PEER, oer_portable_time::Instant::from_micros(0))
+        .unwrap();
+    assert_eq!(
+        rsn.associate_rsn(
+            PEER,
+            fault(association_security(&WPA2_RSN)),
+            ht_capabilities(),
+            [7; 32],
+            9,
+            oer_portable_time::Instant::from_micros(1),
+        ),
+        Ok(refused),
+        "the WPA2 BSS"
+    );
+    assert_eq!(rsn.associated_count(), 0);
+    assert_eq!(
+        rsn.peer_status(PEER).map(|status| status.phase),
+        Some(ApPeerPhase::Authenticated)
+    );
+
+    let mut storage = AccessPointPeerStorage::new();
+    let mut open =
+        AccessPointService::<oer_protocols_ieee80211_wire::security::spp::Association>::new_open(
+            AP,
+            AccessPointClientLimit::new(1).unwrap(),
+            AccessPointInactiveTimeout::default(),
+            storage.lend(),
+        )
+        .unwrap();
+    open.authenticate_open(PEER, oer_portable_time::Instant::from_micros(0))
+        .unwrap();
+    let open_security = ApAssociationSecurityObservation {
+        capability: oer_protocols_ieee80211_wire::management::CapabilityInformation::from_bytes(
+            [0; 2],
+        ),
+        rsn_ie: None,
+        rsn_ie_count: 0,
+        rsnxe: None,
+        rsnxe_count: 0,
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Complete,
+    };
+    assert_eq!(
+        open.associate_open(
+            PEER,
+            fault(open_security),
+            LEGACY_CAPABILITIES,
+            oer_portable_time::Instant::from_micros(1),
+        ),
+        Ok(refused),
+        "the Open BSS"
+    );
+    assert_eq!(open.associated_count(), 0);
+    assert_eq!(
+        open.peer_status(PEER).map(|status| status.phase),
+        Some(ApPeerPhase::Authenticated)
+    );
+}
+
+#[test]
+fn a_request_carrying_the_legacy_wpa_element_is_an_invalid_element_and_makes_no_peer() {
+    refused_on_both_bss_kinds(|security| ApAssociationSecurityObservation {
+        legacy_wpa: oer_protocols_ieee80211_wire::scan::ElementPresence::Present,
+        ..security
+    });
+}
+
+#[test]
+fn a_request_whose_element_list_is_cut_short_is_an_invalid_element_and_makes_no_peer() {
+    refused_on_both_bss_kinds(|security| ApAssociationSecurityObservation {
+        information_elements: oer_protocols_ieee80211_wire::scan::ElementList::Truncated,
+        ..security
+    });
+}
