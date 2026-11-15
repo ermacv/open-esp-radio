@@ -14,3 +14,6 @@ oer-portable-time = { path = "../../../../portable/time" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }

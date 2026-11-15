@@ -1,0 +1,10 @@
+error[E0499]: cannot borrow `*machine` as mutable more than once at a time
+  --> tests/ui/second_step.rs:9:19
+   |
+ 7 |     let first = machine.step(Input::Turn, now);
+   |                 ------- first mutable borrow occurs here
+ 8 |     #[cfg(all())]
+ 9 |     let _second = machine.step(Input::Turn, now); // ui-error: E0499
+   |                   ^^^^^^^ second mutable borrow occurs here
+10 |     if let Step::Rest(_) = first {}
+   |                            ----- first borrow later used here
