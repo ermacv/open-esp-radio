@@ -142,10 +142,32 @@ pub struct ColdOwner {
 #[derive(Clone, Copy)]
 pub struct ModemLpTimerStatus(oer_chips_esp32s31_pac::modem_pwr::BtdmLpTimerStatus);
 
+/// The modem LP timer's causes, as one read of its cause word gives them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ModemLpTimerCauses {
+    /// No cause is raised: no field of the word is set.
+    Quiet,
+    /// A cause is raised: the word, for a record.
+    Raised { record: u32 },
+}
+
 impl ModemLpTimerStatus {
-    /// The complete LP cause word, without acknowledgement or timer mutation.
-    pub fn read(&self) -> u32 {
-        self.0.read_word_0038_opaque().record_word()
+    /// The LP causes, without acknowledgement or timer mutation, decided by
+    /// the readers of the cause word's five fields.
+    pub fn causes(&self) -> ModemLpTimerCauses {
+        let status = self.0.read_word_0038_opaque();
+        if status.bit_0_opaque()
+            || status.rollover_status()
+            || status.bits_2_17_opaque() != 0
+            || status.compare_software_status()
+            || status.bits_19_31_opaque().get() != 0
+        {
+            ModemLpTimerCauses::Raised {
+                record: status.record_word(),
+            }
+        } else {
+            ModemLpTimerCauses::Quiet
+        }
     }
 }
 
