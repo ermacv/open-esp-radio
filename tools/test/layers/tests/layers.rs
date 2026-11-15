@@ -4350,7 +4350,7 @@ const HAL_DECISIONS: &[(&str, usize, &str)] = &[
     ("radio/ieee80211/dma/descriptor.rs", 362, WIFI_DMA),
     ("radio/ieee80211/dma/ring_index.rs", 72, WIFI_DMA),
     ("radio/ieee80211/dma/rx_dma.rs", 527, WIFI_DMA),
-    ("radio/ieee80211/dma/rx_dma/model.rs", 933, WIFI_DMA),
+    ("radio/ieee80211/dma/rx_dma/model.rs", 580, WIFI_DMA),
     ("radio/ieee80211/dma/rx_ring.rs", 3096, WIFI_DMA),
     ("radio/ieee80211/dma/rx_storage.rs", 1198, WIFI_DMA),
     ("radio/ieee80211/dma/rx_storage/buffers.rs", 511, WIFI_DMA),
