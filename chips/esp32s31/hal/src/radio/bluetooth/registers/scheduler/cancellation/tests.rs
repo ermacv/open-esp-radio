@@ -33,11 +33,20 @@ enum Operation {
     DeviceFence,
 }
 
+/// What a status the cancellation waits on says of its wait.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Wait {
+    Holds,
+    Ends,
+}
+
 struct Recorder {
     operations: Vec<Operation>,
     skip: (bool, u8),
-    status_0324: bool,
-    status_0208: bool,
+    /// Status 0x0324: set when the first wait ends.
+    status_0324: Wait,
+    /// Status 0x0208: set while the second wait holds.
+    status_0208: Wait,
 }
 
 impl Recorder {
@@ -45,8 +54,8 @@ impl Recorder {
         Self {
             operations: Vec::new(),
             skip: (true, 0),
-            status_0324: false,
-            status_0208: true,
+            status_0324: Wait::Holds,
+            status_0208: Wait::Holds,
         }
     }
 }
@@ -83,12 +92,12 @@ impl BluetoothSchedulerCancellationControl for Recorder {
 
     fn observe_status_0324(&mut self) -> bool {
         self.operations.push(Operation::ObserveStatus0324);
-        self.status_0324
+        self.status_0324 == Wait::Ends
     }
 
     fn observe_status_0208(&mut self) -> bool {
         self.operations.push(Operation::ObserveStatus0208);
-        self.status_0208
+        self.status_0208 == Wait::Holds
     }
 
     fn order_after_publication(&mut self) {
@@ -204,7 +213,7 @@ fn cancellation_waits_are_sequential_and_end_when_the_scheduler_is_idle() {
 
     // The first wait ends; the second still holds.
     recorder.operations.clear();
-    recorder.status_0324 = true;
+    recorder.status_0324 = Wait::Ends;
     assert_eq!(
         execute_cancellation_observation(&mut recorder, &mut requested, scheduler(true)),
         BluetoothSchedulerCancellationDisposition::Pending
@@ -216,8 +225,8 @@ fn cancellation_waits_are_sequential_and_end_when_the_scheduler_is_idle() {
 
     // The first predicate is not sampled again once it has ended.
     recorder.operations.clear();
-    recorder.status_0324 = false;
-    recorder.status_0208 = false;
+    recorder.status_0324 = Wait::Holds;
+    recorder.status_0208 = Wait::Ends;
     assert_eq!(
         execute_cancellation_observation(&mut recorder, &mut requested, scheduler(true)),
         BluetoothSchedulerCancellationDisposition::Settled

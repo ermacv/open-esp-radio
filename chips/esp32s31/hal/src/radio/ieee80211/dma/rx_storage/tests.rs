@@ -18,15 +18,32 @@ fn place<const COUNT: usize, const BUFFER: usize, const STORAGE: usize, S: DmaSp
     RxDmaStorage::place(Placed::host(storage)).expect("the host storage has a layout")
 }
 
+/// What the mock does with a stop request.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Stop {
+    #[default]
+    Confirmed,
+    /// The walker keeps running and the stop is not confirmed.
+    Refused,
+}
+
+/// What the mock does with an enable request.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Start {
+    #[default]
+    Confirmed,
+    /// The walker runs but the enable is not confirmed.
+    Unconfirmed,
+}
+
 #[derive(Default)]
 struct MockRxDma {
     walker: bool,
     descriptor_base: u32,
     last_descriptor_low: u32,
     next_descriptor_low: u32,
-    fail_disable: bool,
-    ambiguous_enable: bool,
-    reload: bool,
+    fail_disable: Stop,
+    ambiguous_enable: Start,
     disable_calls: usize,
     publications: usize,
 }
@@ -69,7 +86,8 @@ impl RxDma for MockRxDma {
     }
 
     fn reload_pending(&mut self) -> bool {
-        self.reload
+        // No test of this mock rings a doorbell that stays pending.
+        false
     }
 
     fn try_with_reload_settled<R>(
@@ -106,7 +124,7 @@ impl RxDma for MockRxDma {
         ) -> R,
     ) -> Option<R> {
         self.walker = true;
-        (!self.ambiguous_enable).then(|| {
+        (self.ambiguous_enable == Start::Confirmed).then(|| {
             enabled(crate::radio::ieee80211::dma::rx_dma::RxDmaWalkerEnabled::for_host_test())
         })
     }
@@ -119,7 +137,7 @@ impl RxDma for MockRxDma {
         ) -> R,
     ) -> Option<R> {
         self.disable_calls += 1;
-        if self.fail_disable {
+        if self.fail_disable == Stop::Refused {
             return None;
         }
         self.walker = false;
@@ -654,7 +672,7 @@ fn failed_root_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
     let storage = placed.storage();
     let mut mmio = MockRxDma {
         walker: true,
-        fail_disable: true,
+        fail_disable: Stop::Refused,
         ..MockRxDma::default()
     };
 
@@ -690,7 +708,7 @@ fn failed_halted_prepare_quarantines_the_arena_when_walker_stop_is_unproved() {
     // Model an external hardware fault between epochs: the walker became
     // active again and refuses the stop request made by preparation.
     mmio.walker = true;
-    mmio.fail_disable = true;
+    mmio.fail_disable = Stop::Refused;
     let (_halted, error) = match storage.prepare_halted(halted, &mut mmio) {
         Ok(_) => panic!("unproved stop must reject preparation"),
         Err(failure) => failure,
@@ -1579,7 +1597,7 @@ fn ambiguous_start_quarantines_the_arena_when_walker_is_observed_live() {
     let placed = place(storage);
     let storage = placed.storage();
     let mut mmio = MockRxDma {
-        ambiguous_enable: true,
+        ambiguous_enable: Start::Unconfirmed,
         ..MockRxDma::default()
     };
     let prepared = placed

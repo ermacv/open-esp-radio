@@ -23,15 +23,15 @@ const _: () = {
 struct Model {
     raw: BluetoothInterruptPolicyObservation,
     task_pending: u32,
-    acknowledged_fault: bool,
-    sticky_pending: bool,
-    sticky_enable: bool,
+    fault: super::FaultHistory,
+    pending_clear: Write,
+    enable_mask: Write,
     fault_after_mask: Option<[u32; 2]>,
     nrt_after_release: Option<[u32; 2]>,
     nrt_after_sample: Option<[u32; 2]>,
     head: Option<BluetoothSchedulerHardwareListIndex>,
-    run_enabled: bool,
-    output_live: bool,
+    run: Run,
+    output: Output,
     inspected: Vec<BluetoothSchedulerHardwareListIndex>,
     events: Vec<&'static str>,
     clock: VirtualClock,
@@ -51,19 +51,25 @@ impl Model {
                 task_enable: bank::interrupt_enable::SCHEDULER_RUN_MASK,
             },
             task_pending: 0,
-            acknowledged_fault: false,
-            sticky_pending: false,
-            sticky_enable: false,
+            fault: super::FaultHistory::None,
+            pending_clear: Write::Takes,
+            enable_mask: Write::Takes,
             fault_after_mask: None,
             nrt_after_release: None,
             nrt_after_sample: None,
             head: None,
-            run_enabled: true,
-            output_live: true,
+            run: Run::Enabled,
+            output: Output::Live,
             inspected: Vec::new(),
             events: Vec::new(),
             clock: VirtualClock::new(),
         }
+    }
+    fn run_enabled(&self) -> bool {
+        self.run == Run::Enabled
+    }
+    fn output_live(&self) -> bool {
+        self.output == Output::Live
     }
     fn visible(&self) -> BluetoothInterruptPolicyObservation {
         let mut view = self.raw;
@@ -71,6 +77,25 @@ impl Model {
         view.primary.status_1 &= view.primary.enable_1;
         view
     }
+}
+/// Whether the model's hardware takes a clear or a mask written to it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Write {
+    Takes,
+    /// The bits stay as they were.
+    Sticks,
+}
+/// The scheduler's RUN enable in the model.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Run {
+    Enabled,
+    Disabled,
+}
+/// The controller's interrupt output in the model.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Output {
+    Live,
+    Released,
 }
 struct Bank<'a>(&'a RefCell<Model>);
 struct Task<'a>(&'a RefCell<Model>);
@@ -83,7 +108,7 @@ impl BankControl for Bank<'_> {
     fn fault_acknowledged(&self) -> bool {
         let mut model = self.0.borrow_mut();
         model.events.push("fault history");
-        model.acknowledged_fault
+        model.fault == super::FaultHistory::Acknowledged
     }
     fn acknowledge_nrt(&mut self) -> Result<(), BluetoothNrtInterruptFault> {
         let mut model = self.0.borrow_mut();
@@ -98,7 +123,7 @@ impl BankControl for Bank<'_> {
                 return;
             }
             model.events.extend(["ack nrt0", "ack nrt1", "nrt fence"]);
-            if !model.sticky_pending {
+            if model.pending_clear == Write::Takes {
                 model.raw.primary.status_0 &= !snapshots[0];
                 model.raw.primary.status_1 &= !snapshots[1];
                 model.raw.primary.nrt_0 &= !snapshots[0];
@@ -108,7 +133,7 @@ impl BankControl for Bank<'_> {
     }
     fn mask_dynamic(&mut self) {
         let mut model = self.0.borrow_mut();
-        if !model.sticky_enable {
+        if model.enable_mask == Write::Takes {
             model.raw.primary.enable_0 = 0;
             model.raw.primary.enable_1 = 0;
         }
@@ -121,9 +146,9 @@ impl BankControl for Bank<'_> {
     }
     fn clear_pending(&mut self) {
         let mut model = self.0.borrow_mut();
-        assert!(!model.run_enabled);
+        assert!(!model.run_enabled());
         // Fixed images clear retained non-fault causes even when STATUS is zero.
-        if !model.sticky_pending {
+        if model.pending_clear == Write::Takes {
             model.raw.primary.status_0 &= !CLEANUP_0;
             model.raw.primary.status_1 &= !CLEANUP_1;
             model.raw.primary.nrt_0 &= !CLEANUP_0;
@@ -133,7 +158,7 @@ impl BankControl for Bank<'_> {
     }
     fn release_output(&mut self) {
         let mut model = self.0.borrow_mut();
-        model.output_live = false;
+        model.output = Output::Released;
         model.events.push("release");
         if let Some([bank0, bank1]) = model.nrt_after_release.take() {
             model.raw.primary.nrt_0 |= bank0;
@@ -152,7 +177,7 @@ impl TaskControl for Task<'_> {
     }
     fn disable_run(&mut self) {
         let mut model = self.0.borrow_mut();
-        model.run_enabled = false;
+        model.run = Run::Disabled;
         model.raw.task_enable = 0;
         // Model the sourced all-lane task WT publication; production never
         // reads opaque task status to claim hardware acknowledgement success.
@@ -168,16 +193,16 @@ fn busy(value: bool) -> BluetoothSchedulerBusyObservation {
 }
 fn release_all(
     model: &RefCell<Model>,
-    preflight: bool,
-    after_fence: bool,
+    preflight: BluetoothSchedulerBusyObservation,
+    after_fence: BluetoothSchedulerBusyObservation,
 ) -> Result<(), BluetoothControllerOutputReleaseError> {
     let task = model.borrow().raw.task_enable;
-    sample_idle(&mut Bank(model), busy(preflight), task)?;
+    sample_idle(&mut Bank(model), preflight, task)?;
     confirm_heads_absent(&mut Task(model))?;
     mask(&mut Bank(model), task)?;
     disable_run(&mut Task(model));
     let task = model.borrow().raw.task_enable;
-    release(&mut Bank(model), busy(after_fence), task)
+    release(&mut Bank(model), after_fence, task)
 }
 fn policy_error(
     observed: BluetoothInterruptPolicyObservation,
@@ -190,7 +215,7 @@ fn policy_error(
 fn live_scheduler_and_every_published_head_reject_without_mutation() {
     let model = RefCell::new(Model::idle());
     assert_eq!(
-        release_all(&model, true, false),
+        release_all(&model, busy(true), busy(false)),
         Err(BluetoothControllerOutputReleaseError::SchedulerBusy)
     );
     assert!(model.borrow().events.is_empty());
@@ -198,10 +223,10 @@ fn live_scheduler_and_every_published_head_reject_without_mutation() {
         let model = RefCell::new(Model::idle());
         model.borrow_mut().head = Some(index);
         assert_eq!(
-            release_all(&model, false, false),
+            release_all(&model, busy(false), busy(false)),
             Err(BluetoothControllerOutputReleaseError::PublishedHead(index))
         );
-        assert!(model.borrow().output_live && model.borrow().run_enabled);
+        assert!(model.borrow().output_live() && model.borrow().run_enabled());
         assert!(!model.borrow().events.contains(&"mask"));
     }
 }
@@ -223,7 +248,7 @@ fn a_fault_between_idle_and_mask_keeps_its_visible_source_image_without_writes()
         assert_eq!(mask(&mut Bank(&model), task), Err(policy_error(observed)));
         assert!(!model.borrow().events.contains(&"mask"));
         assert!(!model.borrow().events.contains(&"clear"));
-        assert!(model.borrow().output_live && model.borrow().run_enabled);
+        assert!(model.borrow().output_live() && model.borrow().run_enabled());
     }
 }
 #[test]
@@ -232,7 +257,7 @@ fn a_fault_arriving_after_the_mask_is_hidden_retained_and_never_blindly_cleared(
         let model = RefCell::new(Model::idle());
         let before = model.borrow().clock.now();
         model.borrow_mut().fault_after_mask = Some(pending);
-        assert_eq!(release_all(&model, false, false), Ok(()));
+        assert_eq!(release_all(&model, busy(false), busy(false)), Ok(()));
         let model = model.borrow();
         assert!(model.clock.now() > before);
         assert_eq!(
@@ -259,19 +284,19 @@ fn a_fault_arriving_after_the_mask_is_hidden_retained_and_never_blindly_cleared(
 #[test]
 fn acknowledged_faults_and_execution_after_the_fence_refuse_release() {
     let model = RefCell::new(Model::idle());
-    model.borrow_mut().acknowledged_fault = true;
+    model.borrow_mut().fault = super::FaultHistory::Acknowledged;
     assert_eq!(
-        release_all(&model, false, false),
+        release_all(&model, busy(false), busy(false)),
         Err(BluetoothControllerOutputReleaseError::InterruptFault)
     );
     assert!(!model.borrow().events.contains(&"mask"));
     let model = RefCell::new(Model::idle());
     assert_eq!(
-        release_all(&model, false, true),
+        release_all(&model, busy(false), busy(true)),
         Err(BluetoothControllerOutputReleaseError::SchedulerBusy)
     );
     assert!(!model.borrow().events.contains(&"clear"));
-    assert!(model.borrow().output_live);
+    assert!(model.borrow().output_live());
 }
 
 #[test]
@@ -282,7 +307,7 @@ fn a_fault_acknowledged_between_idle_and_mask_refuses_before_nrt_access() {
     confirm_heads_absent(&mut Task(&model)).unwrap();
     {
         let mut m = model.borrow_mut();
-        m.acknowledged_fault = true;
+        m.fault = super::FaultHistory::Acknowledged;
         [m.raw.primary.nrt_0, m.raw.primary.nrt_1] = NRT_OUTSIDE_CLEANUP;
         m.events.clear();
     }
@@ -294,13 +319,13 @@ fn a_fault_acknowledged_between_idle_and_mask_refuses_before_nrt_access() {
     let m = model.borrow();
     assert_eq!(m.events, ["fault history"]);
     assert_eq!(m.raw, before);
-    assert!(m.output_live && m.run_enabled);
+    assert!(m.output_live() && m.run_enabled());
 }
 
 #[test]
 fn visible_fault_checks_precede_mask_and_fixed_clear_follows_task_disable() {
     let model = RefCell::new(Model::idle());
-    assert_eq!(release_all(&model, false, false), Ok(()));
+    assert_eq!(release_all(&model, busy(false), busy(false)), Ok(()));
     let model = model.borrow();
     assert_eq!(
         model.events,
@@ -338,10 +363,10 @@ fn nrt_outside_fixed_cleanup_is_acknowledged_before_mask_and_final_confirmation(
         [m.raw.primary.nrt_0, m.raw.primary.nrt_1] = pending;
         m.nrt_after_release = Some(pending);
     }
-    assert_eq!(release_all(&model, false, false), Ok(()));
+    assert_eq!(release_all(&model, busy(false), busy(false)), Ok(()));
     let m = model.borrow();
     assert_eq!([m.raw.primary.nrt_0, m.raw.primary.nrt_1], [0, 0]);
-    assert!(!m.output_live);
+    assert!(!m.output_live());
     assert_eq!(
         m.events,
         [
@@ -398,11 +423,11 @@ fn nrt_fault_and_overflow_lanes_still_refuse_the_idle_sample_without_writes() {
             [m.raw.primary.nrt_0, m.raw.primary.nrt_1] = pending;
         }
         assert_eq!(
-            release_all(&model, false, false),
+            release_all(&model, busy(false), busy(false)),
             Err(policy_error(model.borrow().visible()))
         );
         assert_eq!(model.borrow().events, ["observe"]);
-        assert!(model.borrow().output_live && model.borrow().run_enabled);
+        assert!(model.borrow().output_live() && model.borrow().run_enabled());
     }
 }
 
@@ -490,7 +515,7 @@ fn feature_task17_and_pending_receive_mask_and_fixed_ack_before_release() {
         m.raw.task_enable |= bank::interrupt_enable::SOURCE_17_MASK;
         m.task_pending = bank::interrupt_enable::SOURCE_17_MASK;
     }
-    assert_eq!(release_all(&model, false, false), Ok(()));
+    assert_eq!(release_all(&model, busy(false), busy(false)), Ok(()));
     let m = model.borrow();
     assert_eq!(m.task_pending, 0);
     assert_eq!(
@@ -505,19 +530,19 @@ fn feature_task17_and_pending_receive_mask_and_fixed_ack_before_release() {
 #[test]
 fn a_visible_pending_lane_that_survives_ack_faults_with_the_full_image() {
     let model = RefCell::new(Model::idle());
-    model.borrow_mut().sticky_pending = true;
+    model.borrow_mut().pending_clear = Write::Sticks;
     model.borrow_mut().raw.primary.nrt_1 = bank::irq_enable_1::SOURCE_4_MASK;
     assert_eq!(
-        release_all(&model, false, false),
+        release_all(&model, busy(false), busy(false)),
         Err(policy_error(model.borrow().visible()))
     );
 }
 #[test]
 fn nonzero_enable_readback_faults_with_original_words() {
     let model = RefCell::new(Model::idle());
-    model.borrow_mut().sticky_enable = true;
+    model.borrow_mut().enable_mask = Write::Sticks;
     assert_eq!(
-        release_all(&model, false, false),
+        release_all(&model, busy(false), busy(false)),
         Err(policy_error(model.borrow().visible()))
     );
 }
@@ -527,7 +552,7 @@ fn an_opaque_enabled_cause_refuses_cleanup_without_acknowledgement() {
     model.borrow_mut().raw.primary.enable_1 |= bank::irq_enable_1::BIT_2_OPAQUE_MASK;
     model.borrow_mut().raw.primary.status_1 = bank::irq_enable_1::BIT_2_OPAQUE_MASK;
     assert_eq!(
-        release_all(&model, false, false),
+        release_all(&model, busy(false), busy(false)),
         Err(policy_error(model.borrow().visible()))
     );
     assert!(!model.borrow().events.contains(&"clear"));

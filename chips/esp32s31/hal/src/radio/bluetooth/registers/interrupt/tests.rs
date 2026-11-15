@@ -291,10 +291,22 @@ fn overflow_is_acknowledged_as_a_normal_primary_epoch_without_scheduler_or_diagn
 
 #[test]
 fn release_masks_and_clears_overflow_before_the_bank_leaves_its_handler() {
+    /// The overflow lane's enable.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum Lane {
+        Masked,
+        Enabled,
+    }
+    /// The overflow lane's pending bit.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    enum Overflow {
+        Clear,
+        Pending,
+    }
     struct Pending {
         setup: SetupRecorder,
-        enabled: bool,
-        pending: bool,
+        enabled: Lane,
+        pending: Overflow,
     }
     impl BluetoothInterruptControl for Pending {
         fn clear_primary_baseline_bank_0(&mut self) {
@@ -313,7 +325,7 @@ fn release_masks_and_clears_overflow_before_the_bank_leaves_its_handler() {
             unreachable!()
         }
         fn release_output_0(&mut self) {
-            assert!(!self.enabled && !self.pending);
+            assert!(self.enabled == Lane::Masked && self.pending == Overflow::Clear);
             self.setup.release_output_0();
         }
         fn release_output_1(&mut self) {
@@ -328,22 +340,22 @@ fn release_masks_and_clears_overflow_before_the_bank_leaves_its_handler() {
         fn silence_controller_time_overflow(&mut self) {
             // SOURCE: HW12_S31_BLE_OVERFLOW_ACK_20261026: masking alone
             // lowers 124 but retains pending; teardown must also acknowledge.
-            self.enabled = false;
-            assert!(self.pending);
-            self.pending = false;
+            self.enabled = Lane::Masked;
+            assert!(self.pending == Overflow::Pending);
+            self.pending = Overflow::Clear;
             self.setup.silence_controller_time_overflow();
         }
     }
     let mut bank = Pending {
         setup: SetupRecorder::default(),
-        enabled: true,
-        pending: true,
+        enabled: Lane::Enabled,
+        pending: Overflow::Pending,
     };
     execute_primary_release(&mut bank);
-    assert!(!bank.pending);
-    bank.enabled = true;
+    assert!(bank.pending == Overflow::Clear);
+    bank.enabled = Lane::Enabled;
     assert!(
-        !bank.pending,
+        bank.pending == Overflow::Clear,
         "a later enable must not redeliver the retired overflow"
     );
 }
