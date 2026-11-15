@@ -110,9 +110,10 @@ entry binds is routed on no bank:
   write, silences every source and disables every line of the hart, then
   verifies;
 - `Router::bind` consumes an entry's token and its part, moves the part where
-  only the entry's handler reaches it, writes the entry's line (enabled,
-  hardware-vectored, positive-level-triggered, its level in the control
-  byte, `oer_portable_riscv::clic::Control`) and only then routes each of the part's
+  only the entry's handler reaches it, binds the entry's line at its level
+  (`Controller::bind` with its control byte, `oer_portable_riscv::clic::Control`:
+  enabled, hardware-vectored, with the trigger the chip's bound lines have)
+  and only then routes each of the part's
   sources to it, and returns
   `Bound<Entry>`, carrying `LEVEL`, `HART` and `CONTEXT` from that entry, the proof a driver takes before it enables the peripheral's
   interrupt; an entry the table lacks comes back with its token and part,
@@ -129,6 +130,14 @@ entry binds is routed on no bank:
   every routed source is an entry of the hart
   on its line, every routed line holds its entry's level, and every other
   line is disabled.
+
+A refused or faulted binding records four words (`BindFault::diagnostic`,
+`BindError::diagnostic`): the context (the source in bits 0..16, the line
+in 16..24, the hart from 24), the error's tag, and its two payload words.
+A wrong line's (tag 7) are the line's register word as the chip read it
+(`LineObservation`), and the line with what the table expected of it: the
+line in bits 0..8, `LineExpectation::record` from bit 8 (0 disabled, bit 8
+and the control byte bound).
 
 An interrupt handler reaches its task only through a static signal
 (`signal`), never through the router or a lock. A signal binds its executor's

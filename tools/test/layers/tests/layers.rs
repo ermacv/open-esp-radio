@@ -7087,6 +7087,11 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         3,
         BY_RADIO_SYSTEM,
     ),
+    (
+        "chips/family/platform/interrupt-table/src/router.rs",
+        1,
+        "the family's encoding of a line's expectation: `Control::bits`, a portable value's byte",
+    ),
 ];
 
 /// S8b: byte conversions and indexing of bytes by name in the protocol

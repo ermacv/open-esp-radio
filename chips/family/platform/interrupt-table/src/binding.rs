@@ -1,7 +1,7 @@
 //! Binding failures keep ownership and source observations distinct.
 use core::mem::ManuallyDrop;
 
-use crate::{Entry, Error};
+use crate::{Entry, Error, LineExpectation};
 
 /// Numeric operation identity, safe to capture without reading cached text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -138,9 +138,16 @@ fn context(source: u16, line: u8, hart: u8) -> u32 {
     u32::from(source) | (u32::from(line) << 16) | (u32::from(hart) << 24)
 }
 
+/// A line and what the table expected of it, both the family's own values,
+/// in one word of a record: the line in bits 0..8, the expectation's record
+/// (`LineExpectation::record`) from bit 8.
+const fn line_and_expectation(line: u8, expected: LineExpectation) -> u32 {
+    line as u32 | (expected.record() << 8)
+}
+
 // The diagnostic encoding of an error: its tag and two payload words. A wrong
-// line's tag carries the line in bits 8..16, as its payload is the line's
-// observed register word and the expectation's record.
+// line's are the line's register word as the hardware has it, then the line
+// with its expectation.
 fn error_words(error: Error) -> [u32; 3] {
     match error {
         Error::WrongControlBits { actual, expected } => [1, actual.into(), expected.into()],
@@ -159,11 +166,7 @@ fn error_words(error: Error) -> [u32; 3] {
             line,
             observed,
             expected,
-        } => [
-            7 | (u32::from(line) << 8),
-            observed.record(),
-            expected.record(),
-        ],
+        } => [7, observed.record(), line_and_expectation(line, expected)],
         Error::NoSuchSource { source } => [8, source.into(), 0],
         Error::NoSuchLine { line } => [9, line.into(), 0],
         Error::NoSuchLevel { level } => [10, level.into(), 0],

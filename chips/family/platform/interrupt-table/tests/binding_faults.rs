@@ -209,7 +209,7 @@ fn diagnostic_keeps_the_line_s_word_its_expectation_and_full_entry_identity() {
         fault.diagnostic(),
         (
             BindFaultCode::LineRefused,
-            [u32::MAX, 7 | (254 << 8), 0xfe1e_0101, 0x1fd]
+            [u32::MAX, 7, 0xfe1e_0101, 254 | (0x1fd << 8)]
         )
     );
 }
