@@ -143,7 +143,11 @@ impl RxWalkerFixture for RxWalkerModel {
     }
 
     fn set_rx_walker_enabled(&mut self, enabled: bool) {
-        self.walker_enabled = enabled;
+        self.walker_enabled = if enabled {
+            oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Enabled
+        } else {
+            oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_dma::model::WalkerEnable::Disabled
+        };
     }
 
     fn set_rx_reload_pending(&mut self, pending: bool) {
