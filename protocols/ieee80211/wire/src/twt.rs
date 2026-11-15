@@ -639,6 +639,38 @@ mod tests {
     }
 
     #[test]
+    fn a_setup_body_has_the_bytes_of_every_field() {
+        let setup = IndividualTwtSetup {
+            dialog_token: 9,
+            control: IndividualTwtControl {
+                responder_power_save: true,
+                information_frames_disabled: true,
+                wake_duration_unit: TwtWakeDurationUnit::Tu1024,
+            },
+            parameters: IndividualTwtParameterSet {
+                requesting_sta: true,
+                setup_command: IndividualTwtSetupCommand::Demand,
+                trigger: true,
+                implicit: true,
+                flow_type: IndividualTwtFlowType::Unannounced,
+                flow_id: IndividualTwtFlowId::ALL[5],
+                wake_interval_exponent: 10,
+                protection: true,
+                target_wake_time_tsf: 0x0123_4567_89ab_cdef,
+                nominal_minimum_wake_duration: 0x40,
+                wake_interval_mantissa: 0x1234,
+                twt_channel: 0,
+            },
+        };
+        let body = [
+            0x16, 0x06, 0x09, 0xd8, 0x0f, 0x32, 0xf5, 0xaa, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45,
+            0x23, 0x01, 0x40, 0x34, 0x12, 0x00,
+        ];
+        assert_eq!(setup.encode_body(), Ok(body));
+        assert_eq!(IndividualTwtSetup::parse(&body), Ok(setup));
+    }
+
+    #[test]
     fn every_prefix_of_an_action_body_is_handled() {
         let mut setup = [0_u8; INDIVIDUAL_TWT_SETUP_BODY_LEN];
         setup[0] = TWT_ACTION_CATEGORY;

@@ -117,6 +117,15 @@ fn basic_trigger_encoder_round_trips_every_owned_field() {
     };
     let mut bytes = [0xaa; TRIGGER_BASIC_FRAME_LEN];
     assert_eq!(encoded.encode(&mut bytes), Ok(TRIGGER_BASIC_FRAME_LEN));
+    // The frame's bytes as the encoder writes them.
+    assert_eq!(
+        bytes,
+        [
+            0x24, 0x00, 0x34, 0x12, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+            0x0b, 0x0c, 0xc0, 0xab, 0xd3, 0xae, 0xfa, 0xdd, 0x77, 0xd5, 0x34, 0xb2, 0x36, 0x6b,
+            0xd5, 0xb7,
+        ]
+    );
 
     let trigger = parse_trigger_frame(&bytes).unwrap();
     assert_eq!(trigger.frame_control, 0x0024);

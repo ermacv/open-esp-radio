@@ -216,3 +216,13 @@ fn every_prefix_of_a_body_is_handled() {
         );
     }
 }
+
+#[test]
+fn a_response_element_has_the_bytes_of_its_fields() {
+    assert_eq!(
+        response_parameters().encode_element(),
+        Ok([
+            0xce, 0x09, 0x01, 0x70, 0x03, 0x34, 0x12, 0x46, 0x24, 0x00, 0x00
+        ])
+    );
+}
