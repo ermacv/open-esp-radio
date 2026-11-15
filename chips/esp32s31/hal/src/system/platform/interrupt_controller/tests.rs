@@ -1,4 +1,4 @@
-use oer_portable_riscv::clic::{Control, LineState, Trigger};
+use oer_portable_riscv::clic::{Control, Enable, LineState, Trigger, Vectoring};
 use std::vec;
 use std::vec::Vec;
 
@@ -216,8 +216,8 @@ fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
         .set_line(
             20,
             LineState {
-                enabled: true,
-                vectored: true,
+                enable: Enable::Enabled,
+                vectoring: Vectoring::Vectored,
                 trigger: Trigger::PositiveEdge,
                 control: Control::level::<3, LEVEL_BITS>(),
             },
@@ -242,8 +242,8 @@ fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
             Some(LineObservation {
                 pending: true,
                 state: LineState {
-                    enabled: true,
-                    vectored: true,
+                    enable: Enable::Enabled,
+                    vectoring: Vectoring::Vectored,
                     trigger: Trigger::PositiveEdge,
                     control: Control::level::<3, LEVEL_BITS>(),
                 },
@@ -358,8 +358,8 @@ fn a_line_reads_back_as_written_and_keeps_its_pending_bit_and_mode() {
         Trigger::NegativeEdge,
     ] {
         let state = LineState {
-            enabled: false,
-            vectored: true,
+            enable: Enable::Disabled,
+            vectoring: Vectoring::Vectored,
             trigger,
             control: Control::from_bits(0x5f),
         };
@@ -383,8 +383,8 @@ fn a_line_reads_back_as_written_and_keeps_its_pending_bit_and_mode() {
         .set_line(
             30,
             LineState {
-                enabled: true,
-                vectored: true,
+                enable: Enable::Enabled,
+                vectoring: Vectoring::Vectored,
                 trigger: Trigger::NegativeEdge,
                 control: Control::from_bits(0xff),
             },
@@ -477,13 +477,13 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
             LineState::DISABLED
         };
         assert_eq!(
-            controller.line(number).enabled,
-            expected.enabled,
+            controller.line(number).enable,
+            expected.enable,
             "line {number}"
         );
     }
     let state = controller.line(20);
-    assert!(state.vectored && state.trigger == Trigger::PositiveLevel);
+    assert!(state.vectoring == Vectoring::Vectored && state.trigger == Trigger::PositiveLevel);
     assert_eq!(state.control, Control::level::<3, 3>());
 }
 

@@ -21,7 +21,7 @@ use oer_portable_mmio::{InterruptSource, InterruptSources};
 
 use crate::{BindError, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table};
 
-use oer_portable_riscv::clic::{LevelBits, LineState};
+use oer_portable_riscv::clic::{Enable, LevelBits, LineState};
 
 /// A hart's interrupt matrix bank and CLIC, as the table writes them. The
 /// chip implements it on its typed blocks; each method is a few word reads
@@ -499,7 +499,7 @@ impl<C: Controller, const H: u8> Router<C, H> {
         }
         for line in (0..C::LINES).filter(|&line| routed_lines >> line & 1 == 0) {
             let state = self.controller.line(line);
-            if state.enabled {
+            if state.enable == Enable::Enabled {
                 return Err(Error::WrongLine {
                     line,
                     state,

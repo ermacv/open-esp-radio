@@ -140,8 +140,8 @@ fn context(source: u16, line: u8, hart: u8) -> u32 {
 }
 
 fn line(state: LineState) -> u32 {
-    u32::from(state.enabled)
-        | (u32::from(state.vectored) << 1)
+    (state.enable as u32)
+        | ((state.vectoring as u32) << 1)
         | ((state.trigger as u32) << 2)
         | (u32::from(state.control.bits()) << 8)
 }

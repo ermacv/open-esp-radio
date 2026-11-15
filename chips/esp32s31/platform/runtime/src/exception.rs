@@ -324,7 +324,7 @@ fn line_word(
         state,
     } = observed;
     u32::from(pending)
-        | u32::from(state.enabled) << 1
+        | (state.enable as u32) << 1
         | u32::from(matches!(
             state.trigger,
             Trigger::PositiveEdge | Trigger::NegativeEdge

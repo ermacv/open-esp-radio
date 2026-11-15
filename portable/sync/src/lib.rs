@@ -47,6 +47,23 @@ impl Slot {
     }
 }
 
+/// One of the two slots: the active one, or its peer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Side {
+    First,
+    Second,
+}
+
+impl Side {
+    /// The peer slot.
+    const fn other(self) -> Self {
+        match self {
+            Self::First => Self::Second,
+            Self::Second => Self::First,
+        }
+    }
+}
+
 /// Notification for one serialized consumer that may preempt its producers.
 ///
 /// All participants run on one hart. Registration must not run concurrently
@@ -62,6 +79,7 @@ impl Slot {
 /// A waker clone/drop callback must not reenter registration.
 pub struct PriorityWaker {
     slots: [Slot; 2],
+    /// The active slot's side: set for [`Side::Second`].
     active: AtomicBool,
 }
 impl PriorityWaker {
@@ -72,11 +90,22 @@ impl PriorityWaker {
             active: AtomicBool::new(false),
         }
     }
-    fn slot(&self, index: bool) -> &Slot {
-        if index {
-            &self.slots[1]
+    /// The active slot's side, read with `order`.
+    fn active(&self, order: Ordering) -> Side {
+        if self.active.load(order) {
+            Side::Second
         } else {
-            &self.slots[0]
+            Side::First
+        }
+    }
+    /// Make `side` the active slot's, stored with `order`.
+    fn activate(&self, side: Side, order: Ordering) {
+        self.active.store(matches!(side, Side::Second), order);
+    }
+    fn slot(&self, side: Side) -> &Slot {
+        match side {
+            Side::First => &self.slots[0],
+            Side::Second => &self.slots[1],
         }
     }
     /// Bind the next wait to `waker`, without waking it on replacement.
@@ -84,23 +113,23 @@ impl PriorityWaker {
     /// An interrupted producer keeps its old registration until it finishes.
     /// A subsequent registration releases that obsolete waker when idle.
     pub fn register(&self, waker: &Waker) {
-        let mut selected = self.active.load(Ordering::Acquire);
+        let mut selected = self.active(Ordering::Acquire);
         if self.slot(selected).waking.load(Ordering::Acquire) != 0 {
-            selected = !selected;
+            selected = selected.other();
         }
         // At most one slot can be held by suspended lower-priority producers
         // here. Higher-priority producers finish before registration resumes.
         // Registering in its peer
         // cannot observe AtomicWaker's WAKING state and enqueue the consumer.
         self.slot(selected).waker.register(waker);
-        self.active.store(selected, Ordering::Release);
-        let inactive = self.slot(!selected);
+        self.activate(selected, Ordering::Release);
+        let inactive = self.slot(selected.other());
         // An interrupted producer has already published its input, checked
         // after registration. Keep its old waker only until it finishes.
         inactive.release_if_idle();
     }
     fn begin_wake(&self) -> Waking<'_> {
-        let slot = self.slot(self.active.load(Ordering::Acquire));
+        let slot = self.slot(self.active(Ordering::Acquire));
         // A wake can nest inside a suspended lower-priority wake; its completion
         // must not release the outer producer's slot.
         slot.waking.fetch_add(1, Ordering::AcqRel);
