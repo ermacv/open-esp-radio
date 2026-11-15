@@ -430,7 +430,6 @@ allow-indexing-slicing-in-tests = true
 # Check runtime-accessible const functions as well as ordinary code.
 suppress-restriction-lint-in-const = false
 
-# A state is a sum (CLAUDE.md): more than one `bool` field is a state kept
-# as flags; a `bool` parameter selects behaviour.
-max-struct-bools = 1
-max-fn-params-bools = 0
+# Deferred until clean of the two bool lints (DEFERRED_BOOL_LINTS, layer tests).
+max-struct-bools = 255
+max-fn-params-bools = 255

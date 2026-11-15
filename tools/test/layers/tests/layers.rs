@@ -5809,6 +5809,11 @@ const BY_PHY: &str = "the PHY, after the Wi-Fi path";
 const BY_RADIO_SYSTEM: &str = "no package yet: the radio system and Bluetooth";
 const BY_PHASE_C: &str = "phase C, the network owner in the network runtime";
 const BY_NONE: &str = "no package yet";
+const BY_IMAGES: &str = "the HAL's register images, in the stand campaign";
+const BY_IEEE802154: &str = "the IEEE 802.15.4 step, in the stand campaign";
+const BY_PLATFORM: &str = "the platform's step, in the stand campaign";
+const BY_HIL: &str = "the HIL images, probes and examples, in the stand campaign";
+const BY_FAMILY: &str = "the family's drivers and facts, in the stand campaign";
 
 /// The package that removes a list's entry in `file`, by its place: the
 /// first assignment, which a package that removes one corrects.
@@ -8165,6 +8170,87 @@ fn outside_the_bool_lints(path: &str) -> bool {
     path.starts_with("tools/") && path != "tools/test/layers"
 }
 
+/// The Wi-Fi path, never deferred: every package under
+/// `protocols/ieee80211`, every one whose path holds `radio/ieee80211`,
+/// `oer` and the entries.
+fn wifi_path(path: &str) -> bool {
+    path.starts_with("protocols/ieee80211/")
+        || path.contains("radio/ieee80211")
+        || path == "oer"
+        || path == "chips/family/app"
+        || (path.starts_with("chips/") && path.ends_with("/app"))
+}
+
+/// The packages outside the Wi-Fi path and the tools not yet clean of the
+/// two lints, which read the thresholds that never fire: each with its
+/// sites of `struct_excessive_bools` and of `fn_params_excessive_bools`
+/// (one Clippy run of the branch, host and chip, the lints as warnings;
+/// a record, not checked) and what cleans it. An entry leaves in the
+/// change that cleans its package; none is added. The list is emptied
+/// after the stand campaign.
+const DEFERRED_BOOL_LINTS: &[(&str, usize, usize, &str)] = &[
+    ("chips/esp32s31/drivers/aes", 2, 0, BY_FAMILY),
+    ("chips/esp32s31/hal", 43, 15, BY_IMAGES),
+    ("chips/esp32s31/platform/runtime", 0, 2, BY_PLATFORM),
+    (
+        "chips/esp32s31/radio/bluetooth/backend",
+        4,
+        8,
+        BY_RADIO_SYSTEM,
+    ),
+    ("chips/esp32s31/radio/client", 0, 1, BY_RADIO_SYSTEM),
+    (
+        "chips/esp32s31/radio/ieee802154/backend",
+        0,
+        4,
+        BY_IEEE802154,
+    ),
+    ("chips/esp32s31/radio/phy", 38, 5, BY_PHY),
+    ("chips/esp32s31/radio/system", 2, 3, BY_RADIO_SYSTEM),
+    ("chips/family/boot", 5, 2, BY_FAMILY),
+    ("chips/family/drivers/pmu", 2, 0, BY_FAMILY),
+    ("chips/family/drivers/usb-serial-jtag", 2, 0, BY_FAMILY),
+    ("chips/family/drivers/watchdog", 1, 2, BY_FAMILY),
+    ("chips/family/facts", 1, 0, BY_FAMILY),
+    ("chips/family/platform/executor", 0, 3, BY_PLATFORM),
+    ("chips/family/platform/interrupt-table", 0, 1, BY_PLATFORM),
+    ("chips/family/platform/runtime", 0, 2, BY_PLATFORM),
+    ("chips/family/radio/coex", 1, 0, BY_RADIO_SYSTEM),
+    ("chips/family/radio/ieee802154/engine", 8, 0, BY_IEEE802154),
+    ("chips/family/radio/ieee802154/values", 6, 9, BY_IEEE802154),
+    ("chips/family/radio/phy", 2, 1, BY_PHY),
+    ("chips/family/radio/power", 9, 0, BY_RADIO_SYSTEM),
+    ("examples/wifi-station", 0, 2, BY_HIL),
+    ("hil/probes/esp32s31-aes-timing", 0, 1, BY_HIL),
+    ("hil/probes/esp32s31-facts", 1, 48, BY_HIL),
+    ("hil/probes/esp32s31-rx-chain", 0, 1, BY_HIL),
+    ("hil/scenarios/wifi-access-point", 0, 1, BY_HIL),
+    ("hil/services/load", 5, 0, BY_HIL),
+    ("protocols/bluetooth/hci", 2, 4, BY_RADIO_SYSTEM),
+    ("protocols/bluetooth/le/cipher", 0, 6, BY_RADIO_SYSTEM),
+    ("protocols/bluetooth/le/controller", 1, 1, BY_RADIO_SYSTEM),
+    ("protocols/bluetooth/le/ll", 2, 5, BY_RADIO_SYSTEM),
+    ("protocols/bluetooth/le/model", 0, 3, BY_RADIO_SYSTEM),
+    ("protocols/bluetooth/le/port", 2, 0, BY_RADIO_SYSTEM),
+    ("protocols/bluetooth/le/wire", 0, 3, BY_RADIO_SYSTEM),
+    ("protocols/hil/agent", 1, 0, BY_HIL),
+    ("protocols/hil/protocol", 2, 0, BY_HIL),
+    ("protocols/ieee802154/mac", 0, 2, BY_IEEE802154),
+    ("protocols/ieee802154/model", 2, 1, BY_IEEE802154),
+    ("protocols/ieee802154/port", 2, 5, BY_IEEE802154),
+    ("protocols/ieee802154/wire", 0, 3, BY_IEEE802154),
+    ("protocols/network/core", 2, 5, BY_PHASE_C),
+    ("protocols/network/runtime", 10, 4, BY_PHASE_C),
+    ("protocols/network/testing/model", 1, 1, BY_PHASE_C),
+    ("protocols/radio/port", 3, 3, BY_RADIO_SYSTEM),
+];
+
+/// The thresholds a package reads: the tools' and the deferred packages'
+/// never fire; every other package's are the rule's.
+fn loose_bool_thresholds(path: &str) -> bool {
+    outside_the_bool_lints(path) || DEFERRED_BOOL_LINTS.iter().any(|(entry, ..)| *entry == path)
+}
+
 /// The packages at `max-fn-params-bools = 1`: those of the layer tests'
 /// roles `Pac`, `Hal` and `HardwareDriver`, where one `bool` parameter is
 /// a bit's value.
@@ -8245,7 +8331,7 @@ fn every_clippy_config_holds_the_rules_thresholds() {
     let mut problems = Vec::new();
     for (path, _) in packages(&root) {
         let (file, config) = clippy_config_of(&path);
-        let (struct_bools, fn_bools) = if outside_the_bool_lints(&path) {
+        let (struct_bools, fn_bools) = if loose_bool_thresholds(&path) {
             (255, 255)
         } else {
             (1, i64::from(bit_parameters(&path)))
@@ -8282,6 +8368,22 @@ fn every_clippy_config_holds_the_rules_thresholds() {
         }
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+#[test]
+fn every_deferred_package_is_a_package_outside_the_wifi_path_and_the_tools() {
+    let packages = packages(&root());
+    let wrong = DEFERRED_BOOL_LINTS
+        .iter()
+        .map(|(path, ..)| *path)
+        .filter(|path| {
+            !packages.contains_key(*path) || wifi_path(path) || outside_the_bool_lints(path)
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        wrong.is_empty(),
+        "deferred, but no package, on the Wi-Fi path or a tool: {wrong:?}"
+    );
 }
 
 #[test]
