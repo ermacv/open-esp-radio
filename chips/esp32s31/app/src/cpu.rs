@@ -45,7 +45,7 @@ impl Cpu0 {
     /// every bus's cache counters first.
     pub fn counters(&mut self, start: bool) -> HartCounters {
         if start {
-            self.cache.start(Buses::ALL);
+            self.cache.start(Buses::all());
         }
         let cycles = oer_portable_riscv::cycle64();
         let instructions = oer_portable_riscv::instret64();
