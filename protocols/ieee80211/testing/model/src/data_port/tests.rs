@@ -679,6 +679,30 @@ impl<'s> DataPortHarness<'s> for Harness<'s> {
         };
         Some(cases::StationSent { end, retry })
     }
+    fn retain_group(&mut self) -> Result<(), cases::Violation> {
+        let install = group_install(self);
+        if !matches!(self.command(install), CommandProgress::Done) {
+            return Err(cases::Violation::Fixture);
+        }
+        let Some(LowerMacTerminal::GroupKeyInstalled(
+            oer_protocols_ieee80211_contracts_port::InstalledGroup::Station { key, permission },
+        )) = self.sink.terminals.pop()
+        else {
+            return Err(cases::Violation::Fixture);
+        };
+        self.air.fail_next_group_replacement();
+        let now = self.clock.now();
+        let replace = PortCommand::ReplaceGroup {
+            permission,
+            installed: key,
+            key_id: GroupKeyId::new(1).unwrap(),
+            key: Ccmp128Key::new(&[4; 16]),
+        };
+        match self.port.command(replace, now, &mut self.sink) {
+            Ok(Err(oer_protocols_ieee80211_contracts_port::CommandFailed::Taken(_))) => Ok(()),
+            _ => Err(cases::Violation::Fixture),
+        }
+    }
     fn hold_start(&mut self, hold: oer_protocols_ieee80211_testing_conformance::Hold) {
         self.air.hold_start(hold);
     }

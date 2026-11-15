@@ -30,6 +30,10 @@
 //!   is reached ([`Case::StopFailsOnce`]).
 //! - A deadline ends the request with what is waited for, and the next
 //!   request goes on from there ([`Case::Deadline`]).
+//! - After a group a failed replacement retained, a release's cleanup frees
+//!   its removal's terminal into a sink that refuses it: the drain goes on
+//!   only when the sink has room, and the retirement is asked after a take
+//!   that left nothing ([`Case::CleanupTerminal`]).
 
 extern crate alloc;
 
@@ -189,17 +193,23 @@ pub enum Case {
     StopFailsOnce,
     /// A deadline ends the request, and the next request goes on.
     Deadline,
+    /// After a group a failed replacement retained, a release's cleanup
+    /// frees its removal's terminal into a sink that refuses it: the drain
+    /// goes on only when the sink has room, and the retirement is asked
+    /// after a take that left nothing.
+    CleanupTerminal,
 }
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Restart,
         Self::Release,
         Self::FaultTakenBack,
         Self::RetireHeld,
         Self::StopFailsOnce,
         Self::Deadline,
+        Self::CleanupTerminal,
     ];
 }
 
@@ -301,6 +311,22 @@ pub fn check<'id, H: InstallationHarness<'id>>(
             match run.radio {
                 Some((Rest::Wake(Some(at)), now)) if now.checked_add(RETRY) == Some(at) => Ok(()),
                 Some(_) | None => Err(Violation::Held),
+            }
+        }
+        Case::CleanupTerminal => {
+            run.harness.retain_group().map_err(|_| Violation::Fixture)?;
+            // The command's fault ends the run; the recovery takes it back.
+            run.until("interrupted", |heard| heard.interrupted == 1)?;
+            // The sink refuses the terminal at the cleanup and at the take
+            // after it: the machine waits for its room.
+            run.harness.refuse(2);
+            run.ask(|permit| Ok(Request::release(permit, Network::Stays, None)))?;
+            run.until("released", Recorder::released)?;
+            // The take after the cleanup found the terminal kept.
+            if run.recorder.held.contains(&Waited::Unconsumed) {
+                Ok(())
+            } else {
+                Err(Violation::Held)
             }
         }
         Case::Deadline => {
@@ -445,7 +471,11 @@ impl<'id, H: InstallationHarness<'id>> Run<'_, 'id, H> {
             if let Some(faulted) = faulted {
                 rest = faulted;
             }
-            let woken = came_home || self.harness.wakes() != self.woken;
+            // Room in the sink wakes a machine that waits for what it
+            // refused, as the refusing sink's own wake does.
+            let room = self.harness.refusals_left() == 0
+                && self.machine.waiting().class() == Waited::Unconsumed;
+            let woken = came_home || room || self.harness.wakes() != self.woken;
             // The port names the earliest instant a call must run without a
             // fact (`DataPort::deadline`): a call is due then as at a time a
             // rest names.

@@ -743,6 +743,16 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
             },
         );
     }
+    fn retain_group(&mut self) -> Result<(), cases::Violation> {
+        // A replacement whose write and rollback the hardware rejects: the
+        // port retains the group until its stop's cleanup.
+        let (replace, _owners) = self.replacement();
+        self.observed.borrow_mut().reject_key_writes = 2;
+        match self.run_failed(replace) {
+            Err(CommandFailed::Taken(_)) => Ok(()),
+            _ => Err(cases::Violation::Fixture),
+        }
+    }
     fn fail_next_stop(&mut self) {
         self.observed.borrow_mut().fail_stop = Some(Fault::ReceiveLost);
     }

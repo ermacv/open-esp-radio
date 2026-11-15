@@ -723,7 +723,7 @@ const REPLACEMENT: (u8, u8) = (2, 2);
 impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// The installed first GTK's replacement, with the slot and
     /// permission it holds.
-    fn replacement(&mut self) -> (Command<'id, Id>, (u8, u8)) {
+    pub(super) fn replacement(&mut self) -> (Command<'id, Id>, (u8, u8)) {
         let (key, permission) = self.installed_group();
         let owners = (
             <Keys<Id> as KeyTypes<'id>>::group_slot_identity(&key),
@@ -1613,7 +1613,7 @@ fn a_unit_a_cut_drains_past_the_held_units_goes_back_to_the_ring_beside_the_faul
 impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// Run `command` until it leaves its barrier, serving a turn between
     /// holds: its progress or its failure, as the port returned them.
-    fn run_failed(
+    pub(super) fn run_failed(
         &mut self,
         mut command: Command<'id, Id>,
     ) -> Result<CommandProgress<'id, Family<Id>, Caps>, CommandFailed<Command<'id, Id>, Fault>>

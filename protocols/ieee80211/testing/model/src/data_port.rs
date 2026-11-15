@@ -401,6 +401,10 @@ pub enum ModelPortFault {
         /// What the port held.
         observation: ModelPortObservation,
     },
+    /// A group key replacement failed with neither key's entry known
+    /// installed: the port retains the previous key until a cleanup frees
+    /// it. Every owner stays whole, so a recovery takes it back.
+    GroupReplacement,
     /// The station's data arenas quarantined themselves.
     Arena {
         /// The arenas' own fault, when they recorded one.
@@ -527,6 +531,21 @@ pub struct ModelPort<
     kept: alloc::collections::VecDeque<Unkept<'id, ModelTypes<Backend<Id, C, X>>>>,
     /// The one item this call could not keep: returned at its end.
     unkept: Option<Unkept<'id, ModelTypes<Backend<Id, C, X>>>>,
+    /// A group key a failed replacement left: the cleanup frees it.
+    retained: RetainedGroup<Id, C, X>,
+}
+
+/// A group key whose replacement failed: its entry is not known cleared,
+/// and its slot and permission stay with the port until a cleanup of its
+/// stop frees them, through the sink, as the removal's terminal.
+enum RetainedGroup<Id: SlotIdentity, C: Ieee80211Capabilities, X: ModelContext> {
+    /// None.
+    None,
+    /// The key, and its removal's owners.
+    Retained {
+        key: RawKeyIdentity,
+        removed: OwnedRemoved<'static, Backend<Id, C, X>>,
+    },
 }
 
 /// Where a test makes the model's next call stop on an item its sink
@@ -613,6 +632,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 kept: alloc::collections::VecDeque::new(),
                 unkept: None,
                 fault: None,
+                retained: RetainedGroup::None,
             },
             commands: ModelCommands { air, loan },
             resources: resources.lend(&loan),
@@ -1091,6 +1111,29 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             PortCommand::ReplaceGroup {
                 permission,
                 installed,
+                ..
+            } if self.air.take_group_replacement_failure() => {
+                // Neither key's entry is known installed: the previous key
+                // is not live, and its slot stays with the port until a
+                // cleanup frees it.
+                installed.identity.0.active.set(false);
+                installed.identity.0.rx_active.set(false);
+                self.retained = RetainedGroup::Retained {
+                    key: installed.identity.clone(),
+                    removed: OwnedRemoved::retain(
+                        Removed::Station(RemovedKey::Group {
+                            slot: installed.slot,
+                            permission,
+                        }),
+                        &self.loan,
+                    ),
+                };
+                self.fail(ModelPortFault::GroupReplacement);
+                CommandProgress::Done
+            }
+            PortCommand::ReplaceGroup {
+                permission,
+                installed,
                 key_id,
                 key,
             } => {
@@ -1462,9 +1505,23 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
     fn clean(
         &mut self,
         stopped: &Stopped<'id>,
-        _sink: &mut impl PortSink<'id, Self::Types>,
+        sink: &mut impl PortSink<'id, Self::Types>,
     ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>> {
         let answer = if stopped.is_of(self.serial) {
+            // A retained group key: its entry is cleared now, and its slot
+            // and permission leave through the sink as the removal's
+            // terminal; one the sink refuses stays with the port for
+            // `take_unconsumed`.
+            if let RetainedGroup::Retained { key, removed } =
+                core::mem::replace(&mut self.retained, RetainedGroup::None)
+            {
+                self.air.remove_key_material(&key);
+                self.driver.keys.retain(|installed| *installed != key);
+                self.held.post(OwnedLowerMacEvent::Terminal(
+                    OwnedLowerMacTerminal::KeyRemoved(removed),
+                ));
+                self.drain(sink);
+            }
             Ok(())
         } else {
             Err(CleanupRefused::Stale)
@@ -2102,7 +2159,9 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         }) else {
             return Ok(Recovered::Clear);
         };
-        if !self.air.recover() {
+        // A failed group replacement leaves every owner whole; any other
+        // fault is taken back only when the air allows it.
+        if fault != ModelPortFault::GroupReplacement && !self.air.recover() {
             return Err(FaultKept {
                 fault,
                 outstanding: DataPort::outstanding(self),
@@ -2139,7 +2198,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             received: self.held.rx_out.get(),
             lent: self.held.network.held(),
             removals: self.driver.removing.len(),
-            retained_groups: 0,
+            retained_groups: usize::from(matches!(self.retained, RetainedGroup::Retained { .. })),
             unconsumed: self.kept.len().saturating_add(self.held.events.len()),
             transmit_out: self
                 .held
