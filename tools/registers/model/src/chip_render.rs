@@ -107,6 +107,37 @@ fn render_parts(model: &ChipModel, policy: &ChipPolicy) -> Result<(String, Strin
         }
         plans.insert(name.as_str(), plan);
     }
+    for record in &policy.file().record_words {
+        let entity = record.register.as_str();
+        // An element names its template: every element shares the read value.
+        let (instance, key) = match model.register(entity) {
+            Some(element) => (element.instance.as_str(), element.key.as_str()),
+            None => entity
+                .split_once('.')
+                .ok_or_else(|| Error::new(entity, "a record word is `INSTANCE.REGISTER`"))?,
+        };
+        let block = model
+            .instances()
+            .iter()
+            .find(|candidate| candidate.name == instance)
+            .map(|candidate| candidate.block_type.as_str())
+            .ok_or_else(|| Error::new(entity, format!("{instance} is no instance")))?;
+        let template = plans
+            .get_mut(block)
+            .and_then(|plan| {
+                plan.templates
+                    .iter_mut()
+                    .find(|template| template.key == key)
+            })
+            .ok_or_else(|| Error::new(entity, format!("{key} is no register of {block}")))?;
+        if !template.readable() {
+            return Err(Error::new(
+                entity,
+                "a record word's register has a read value",
+            ));
+        }
+        template.record = true;
+    }
     let ownership = owners::plan(model, policy)?;
     let mut output = String::from(
         "// The thin PAC of the chip root and its ownership policy, rendered by\n\

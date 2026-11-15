@@ -27,7 +27,7 @@ fn snapshot(s: &Session<'_>) -> [u32; 5] {
     let output = matrix(s);
     let t = &s.ble.timer;
     [
-        s.ble.timer_status.read_bluetooth_modem_lp_status(),
+        s.ble.timer_status.read_word_0038_opaque().record_word(),
         u32::from(t.read_word_0024_opaque().low_byte()),
         u32::from(t.read_word_002c_opaque().low_byte()),
         counter(s),

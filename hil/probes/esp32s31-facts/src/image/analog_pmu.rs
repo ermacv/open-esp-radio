@@ -26,8 +26,8 @@ fn state(s: &Session<'_>, tag: u32) {
     let power = s.sar.radio.pmu_radio.read_ana_peri_pwr_ctrl();
     emit(
         tag,
-        s.sar.radio.lp_tsens.read_tsens_control_image(),
-        s.sar.radio.lp_tsens.read_tsens_clock_image(),
+        s.sar.radio.lp_tsens.read_ctrl().record_word(),
+        s.sar.radio.lp_tsens.read_clk_conf().record_word(),
         u32::from(lp.lp_tsens_clk_en())
             | (u32::from(lp.lp_tsens_rst_en()) << 1)
             | (u32::from(power.xpd_perif_i2c()) << 2)
@@ -119,8 +119,8 @@ fn prepare(s: &mut Session<'_>, lanes: u32) -> bool {
 
 fn sample(s: &Session<'_>, tag: u32, start: u32) {
     let before = oer_portable_riscv::cycle32();
-    let control = s.sar.radio.lp_tsens.read_tsens_control_image();
-    let clock = s.sar.radio.lp_tsens.read_tsens_clock_image();
+    let control = s.sar.radio.lp_tsens.read_ctrl().record_word();
+    let clock = s.sar.radio.lp_tsens.read_clk_conf().record_word();
     emit(tag, before.wrapping_sub(start), control, clock);
 }
 
@@ -135,7 +135,7 @@ fn injection_at(s: &mut Session<'_>, lanes: u32, pattern: u32, us: u32, start: u
             0x31c0,
             before.wrapping_sub(start),
             oer_portable_riscv::cycle32().wrapping_sub(start),
-            s.sar.radio.lp_tsens.read_tsens_clock_image(),
+            s.sar.radio.lp_tsens.read_clk_conf().record_word(),
         );
     }
 }
@@ -200,17 +200,30 @@ pub(super) fn registers(s: &mut Session<'_>) {
     if !opaque::xtal_cpu(s) {
         return;
     }
-    let before = s.sar.radio.pmu_radio.read_hp_active_clock_power_image();
+    let before = s
+        .sar
+        .radio
+        .pmu_radio
+        .read_hp_active_hp_ck_power()
+        .record_word();
     s.sar.radio.pmu_radio.modify_hp_active_hp_ck_power(|w| {
         w.set_bits_0_3_opaque(Bits::constant::<15>())
             .set_hp_active_xpd_bb_i2c(true);
     });
-    let after = s.sar.radio.pmu_radio.read_hp_active_clock_power_image();
-    emit(0x3120, before, after, before ^ after);
+    let after = s
+        .sar
+        .radio
+        .pmu_radio
+        .read_hp_active_hp_ck_power()
+        .record_word();
+    emit(0x3120, before, after, 0);
     opaque::prepare(s);
     let index = Index::constant::<0>();
     let old = s.tx_control.read_control_n(index);
-    let old_image = s.tx_control.read_tx_control0_image();
+    let old_image = s
+        .tx_control
+        .read_control_n(Index::constant::<0>())
+        .record_word();
     emit(
         0x3121,
         old_image,
@@ -230,7 +243,9 @@ pub(super) fn registers(s: &mut Session<'_>) {
             0x3122,
             case,
             pair | (u32::from(bit) << 2),
-            s.tx_control.read_tx_control0_image(),
+            s.tx_control
+                .read_control_n(Index::constant::<0>())
+                .record_word(),
         );
     }
     // Restore the only changed lanes from the owned saved image, before
@@ -239,7 +254,14 @@ pub(super) fn registers(s: &mut Session<'_>) {
         w.set_bits_20_21_opaque(old.bits_20_21_opaque())
             .set_bit_22_opaque(old.bit_22_opaque());
     });
-    emit(0x3123, old_image, s.tx_control.read_tx_control0_image(), 0);
+    emit(
+        0x3123,
+        old_image,
+        s.tx_control
+            .read_control_n(Index::constant::<0>())
+            .record_word(),
+        0,
+    );
     let fe = &mut s.sar.radio.phy_frequency_channel_oracle_fe;
     let old = fe.read_frequency_control();
     // Hold autonomous updates and every strobe inactive for composition only.
@@ -255,7 +277,12 @@ pub(super) fn registers(s: &mut Session<'_>) {
             w.set_memory_address_low(Bits::constant::<0>())
                 .set_memory_address_high(high);
         });
-        emit(0x3124, address, fe.read_frequency_control_image(), 0);
+        emit(
+            0x3124,
+            address,
+            fe.read_frequency_control().record_word(),
+            0,
+        );
         for channel in [1, 0xff] {
             fe.modify_frequency_control(|w| {
                 w.set_channel_index(channel);
@@ -263,7 +290,7 @@ pub(super) fn registers(s: &mut Session<'_>) {
             emit(
                 0x3125,
                 u32::from(channel),
-                fe.read_frequency_control_image(),
+                fe.read_frequency_control().record_word(),
                 0,
             );
         }
@@ -280,5 +307,5 @@ pub(super) fn registers(s: &mut Session<'_>) {
             .set_channel_switch_pulse(old.channel_switch_pulse())
             .set_memory_write_pulse(old.memory_write_pulse());
     });
-    emit(0x3126, fe.read_frequency_control_image(), 0, 0);
+    emit(0x3126, fe.read_frequency_control().record_word(), 0, 0);
 }

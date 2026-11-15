@@ -309,11 +309,20 @@ impl InterruptRecorder {
     }
 }
 
+/// The status register's read value holding `word`, as its owner reads it.
+fn status_read(word: u32) -> oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque::R {
+    let mut words = std::vec![0; 0x40 / 4];
+    words[0x38 / 4] = word;
+    oer_chips_esp32s31_pac::modem_pwr::BtdmLpTimerStatus::host(&mut words)
+        .expect("host status words")
+        .read_word_0038_opaque()
+}
+
 impl ModemLpTimerInterruptTransaction for InterruptRecorder {
-    fn read_status_0038(&mut self) -> u32 {
+    fn read_status_0038(&mut self) -> oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque::R {
         self.operations
             .push(InterruptOperation::ReadStatus0038(self.status_0038));
-        self.status_0038
+        status_read(self.status_0038)
     }
 
     fn read_value_006c(&mut self) -> u32 {
@@ -1039,9 +1048,9 @@ impl super::ModemLpTimerStopTransaction for StopRecorder {
         self.ops.push(StopOp::SamplePending);
         self.pending
     }
-    fn read_status(&mut self) -> u32 {
+    fn read_status(&mut self) -> oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque::R {
         self.ops.push(StopOp::ReadStatus);
-        self.status
+        status_read(self.status)
     }
     fn clear_rollover(&mut self) {
         self.ops.push(StopOp::ClearRollover);
@@ -1197,8 +1206,35 @@ fn read_only_status_capability_remains_after_the_timer_owner_leaves() {
             timer.status
         };
         let other_reader = status;
-        assert_eq!(status.read_bluetooth_modem_lp_status(), 0x89ab_cdef);
-        assert_eq!(other_reader.read_bluetooth_modem_lp_status(), 0x89ab_cdef);
+        assert_eq!(status.read_word_0038_opaque().record_word(), 0x89ab_cdef);
+        assert_eq!(
+            other_reader.read_word_0038_opaque().record_word(),
+            0x89ab_cdef
+        );
     }
     assert_eq!(memory, before);
+}
+
+#[test]
+fn each_field_of_the_cause_word_alone_is_a_cause_and_the_rollover_alone_is_no_other() {
+    // One word of each field set alone, at both ends of a wider field.
+    for (word, field) in [
+        (1 << 0, "BIT_0_OPAQUE"),
+        (1 << 1, "ROLLOVER_STATUS"),
+        (1 << 2, "BITS_2_17_OPAQUE"),
+        (1 << 17, "BITS_2_17_OPAQUE"),
+        (1 << 18, "COMPARE_SOFTWARE_STATUS"),
+        (1 << 19, "BITS_19_31_OPAQUE"),
+        (1 << 31, "BITS_19_31_OPAQUE"),
+    ] {
+        let status = status_read(word);
+        assert!(super::any_cause(status), "{field}");
+        assert_eq!(
+            super::any_cause_but_rollover(status),
+            field != "ROLLOVER_STATUS",
+            "{field}"
+        );
+    }
+    assert!(!super::any_cause(status_read(0)));
+    assert!(!super::any_cause_but_rollover(status_read(0)));
 }

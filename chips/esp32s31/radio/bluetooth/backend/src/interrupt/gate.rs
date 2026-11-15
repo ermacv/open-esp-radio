@@ -82,8 +82,8 @@ pub trait GateHardware: 'static {
     type Doorbell: Send + 'static;
     /// Permanent read-only LP cause capability.
     type Status: Send + 'static;
-    /// Read the LP cause word without acknowledgement.
-    fn lp_status(status: &Self::Status) -> u32;
+    /// Read the LP causes without acknowledgement.
+    fn lp_causes(status: &Self::Status) -> bluetooth::ModemLpTimerCauses;
     /// Read NRT causes without acknowledgement.
     fn nrt_status(bank: &Self::Bank) -> [u32; 2];
     /// The bank before its output is prepared.
@@ -190,8 +190,8 @@ pub enum GateTimerState {
 /// Causes sampled before servicing an interrupt. No status bits are discarded.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GateObservation {
-    /// Complete modem LP cause word.
-    pub lp_status: u32,
+    /// The modem LP causes, with the cause word when one is raised.
+    pub lp_causes: bluetooth::ModemLpTimerCauses,
     /// Both NRT cause words, or no bank owner in this handler.
     pub nrt_status: Option<[u32; 2]>,
     /// Software timer ownership phase.
@@ -460,7 +460,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
     pub fn service<C: oer_portable_time::Clock>(&mut self, clock: &C) -> Result<(), GateFault> {
         self.check_fault()?;
         let observation = GateObservation {
-            lp_status: H::lp_status(&self.status),
+            lp_causes: H::lp_causes(&self.status),
             nrt_status: match &self.bank {
                 Bank::Open { registers, .. } => Some(H::nrt_status(registers)),
                 Bank::Closed => None,
@@ -685,7 +685,7 @@ impl<H: GateHardware, X: SignalExecutor + 'static, B: DoorbellLine> BluetoothInt
                 self.timer = Timer::AwaitingPlan(timer);
             }
             Timer::Vacant => {
-                if observation.lp_status != 0 {
+                if let bluetooth::ModemLpTimerCauses::Raised { .. } = observation.lp_causes {
                     self.fault(GateFaultReason::VacantTimer, observation);
                 }
             }
@@ -882,8 +882,8 @@ impl GateHardware for ChipGate {
     type Doorbell = FromCpu3Irq;
     type Status = bluetooth::ModemLpTimerStatus;
 
-    fn lp_status(status: &Self::Status) -> u32 {
-        status.read()
+    fn lp_causes(status: &Self::Status) -> bluetooth::ModemLpTimerCauses {
+        status.causes()
     }
     fn nrt_status(bank: &Self::Bank) -> [u32; 2] {
         bank.nrt_status()

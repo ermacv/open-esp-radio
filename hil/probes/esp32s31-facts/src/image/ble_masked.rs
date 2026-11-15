@@ -134,7 +134,7 @@ fn routes(s: &Session<'_>, tag: u32, cause: u32) {
 }
 
 fn word_04bc(s: &Session<'_>) -> u32 {
-    s.ble.task_irq.read_bluetooth_task_diagnostic_image()
+    s.ble.task_irq.read_word_04bc_opaque().record_word()
 }
 
 fn reads(s: &mut Session<'_>, tag: u32) {

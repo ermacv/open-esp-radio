@@ -65,7 +65,7 @@ fn opaque_task_state_retains_the_complete_sourced_word() {
             let mut memory = words(image);
             let task =
                 bt_mac::BtmacBlePhyInit::host(&mut memory).expect("memory holds the instance");
-            task.read_bluetooth_task_diagnostic_image()
+            task.read_word_04bc_opaque().record_word()
         },
         u32::MAX,
     );

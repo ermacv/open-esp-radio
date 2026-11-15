@@ -1021,18 +1021,29 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
             let owner = self.owner(entity, target, None)?;
             self.take(entity, &[owner], false)?;
         }
-        for read in &file.register_image_reads {
-            let entity = read.name.as_str();
-            self.begin(entity, &read.sources)?;
-            let target = Target::Word(self.element(entity, &read.register)?);
+        let mut recorded = std::collections::BTreeSet::new();
+        for record in &file.record_words {
+            let entity = record.register.as_str();
+            if !recorded.insert(entity) {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Duplicate(format!("record word {entity}")),
+                ));
+            }
+            if record.reason.trim().is_empty() {
+                return Err(self.error(
+                    entity,
+                    ErrorKind::Transaction("a record word names its reason".to_owned()),
+                ));
+            }
+            self.context.sources(entity, &record.sources)?;
+            let target = self.register(entity, &record.register)?;
             self.reads_freely(entity, target)?;
             let word = self.word(entity, target)?;
             if word.register.width != 32 {
                 return Err(self.error(
                     entity,
-                    ErrorKind::Transaction(
-                        "a register image read names one 32-bit word".to_owned(),
-                    ),
+                    ErrorKind::Transaction("a record word is one 32-bit word".to_owned()),
                 ));
             }
             for field in word.fields() {
@@ -1049,11 +1060,11 @@ impl<'a, 'm: 'a> Checker<'a, 'm> {
                             | FieldClass::HardwareWritten
                             | FieldClass::DebugOnly
                     ),
-                    "a register image read",
+                    "a record word",
                 )?;
             }
-            let owner = self.owner(entity, target, None)?;
-            self.take(entity, &[owner], false)?;
+            // Some owner reads the word: the method is of its read value.
+            self.owner(entity, target, None)?;
         }
         for read in &file.partition_image_reads {
             let entity = read.name.as_str();

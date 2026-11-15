@@ -91,10 +91,11 @@ is gone both fail, so every list only shrinks:
     `Poison…`, `Quarantin…`, `ResetRequired…`, `Unfinished…`;
   - `COMPATIBILITY`: `#[serde(default)]`, `#[serde(alias)]`,
     `#[deprecated]`, a renamed re-export `pub use … as …`;
-  - `RAW_REGISTERS`: calls of the PAC's raw conversions and word accessors
-    outside the PAC (`from_bits`, `.bits()`, `set_bits_…`, `with_bits_…`,
-    `read_word_…`, `modify_word_…`, `write_word_…`) in the HAL, the radio
-    crates and the platform;
+  - `RAW_REGISTERS`: calls of the PAC's raw conversions outside the PAC
+    (`from_bits`, `.bits()`) in the HAL, the radio crates and the platform.
+    An accessor of a register or field the model names `WORD_…_OPAQUE` or
+    `BITS_…_OPAQUE` is a typed one, not counted: the model lists its opaque
+    names itself;
   - `RAW_BYTES`: byte conversions (`from_le_bytes`, `from_be_bytes`,
     `to_le_bytes`, `to_be_bytes`) and indexing of bytes by name in the
     protocol packages, the `wire` crates among them. It misses an index of a

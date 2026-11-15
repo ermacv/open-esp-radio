@@ -35112,6 +35112,13 @@ pub mod bt_mac {
             pub const fn bit_24_opaque(self) -> bool {
                 (self.0 & 0x01000000) != 0
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
     }
 
@@ -40428,14 +40435,6 @@ pub mod bt_mac {
         pub fn publish_ble_phy_init_configuration_word(&mut self) {
             self.0
                 .write::<0x940>(PUBLISH_BLE_PHY_INIT_CONFIGURATION_WORD_IMAGE);
-        }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`BT_MAC.WORD_04BC_OPAQUE`).
-        ///
-        /// SOURCE: S31_MMIO_USE_201014BC, S31_MMIO_DECLARED_201014BC, HW32_S31_BT_04BC_READ_SCOPE_20261027.
-        #[inline]
-        pub fn read_bluetooth_task_diagnostic_image(&self) -> u32 {
-            self.0.read::<0x4bc>()
         }
     }
 
@@ -58047,6 +58046,13 @@ pub mod clic {
             pub const fn ctl(self) -> u8 {
                 (self.0 >> 24) as u8
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -71005,6 +71011,13 @@ pub mod fe {
             pub const fn bit_21_opaque(self) -> bool {
                 (self.0 & 0x00200000) != 0
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -79797,14 +79810,6 @@ pub mod fe {
         pub fn frequency_parameter_1_initialization(&mut self) {
             self.0
                 .write::<0x28>(FREQUENCY_PARAMETER_1_INITIALIZATION_IMAGE);
-        }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`FE.FREQUENCY_CONTROL`).
-        ///
-        /// SOURCE: BX10_S31_FE_FREQ_ADDRESS_20261027.
-        #[inline]
-        pub fn read_frequency_control_image(&self) -> u32 {
-            self.0.read::<0x1c>()
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -136614,6 +136619,13 @@ pub mod modem_pwr {
             pub const fn low_byte_variant(self) -> Option<LowByte> {
                 LowByte::from_bits(self.0 & 0xff)
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -136669,6 +136681,13 @@ pub mod modem_pwr {
             #[inline]
             pub const fn low_byte(self) -> u8 {
                 self.0 as u8
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -136835,6 +136854,13 @@ pub mod modem_pwr {
             #[inline]
             pub const fn bits_19_31_opaque(self) -> oer_portable_mmio::Bits<13> {
                 oer_portable_mmio::Bits::truncate(self.0 >> 19)
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
     }
@@ -145016,22 +145042,6 @@ pub mod modem_pwr {
         pub fn disable_bluetooth_lp_sleep_17(&mut self) {
             self.0.write::<0x44>(DISABLE_BLUETOOTH_LP_SLEEP_17_IMAGE);
         }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_0024_OPAQUE`).
-        ///
-        /// SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027.
-        #[inline]
-        pub fn read_bluetooth_modem_lp_pending_image(&self) -> u32 {
-            self.0.read::<0x24>()
-        }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_002C_OPAQUE`).
-        ///
-        /// SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027.
-        #[inline]
-        pub fn read_bluetooth_modem_lp_rollover_image(&self) -> u32 {
-            self.0.read::<0x2c>()
-        }
     }
 
     /// The `BtdmLpTimerStatus` part of `MODEM_PWR`.
@@ -145088,14 +145098,6 @@ pub mod modem_pwr {
         #[inline]
         pub fn read_word_0038_opaque(&self) -> word_0038_opaque::R {
             word_0038_opaque::R(self.0.read::<0x38>())
-        }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`MODEM_PWR.WORD_0038_OPAQUE`).
-        ///
-        /// SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027, HW_BLE_LP_CAUSES_2026_10_26.
-        #[inline]
-        pub fn read_bluetooth_modem_lp_status(&self) -> u32 {
-            self.0.read::<0x38>()
         }
     }
 }
@@ -151619,6 +151621,13 @@ pub mod pmu {
             #[inline]
             pub const fn hp_active_xpd_mpll(self) -> bool {
                 (self.0 & 0x40000000) != 0
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -167867,14 +167876,6 @@ pub mod pmu {
             let mut value = ana_peri_pwr_ctrl::W(self.0.read::<0x208>());
             change(&mut value);
             self.0.write::<0x208>(value.0);
-        }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`PMU.HP_ACTIVE_HP_CK_POWER`).
-        ///
-        /// SOURCE: BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4.
-        #[inline]
-        pub fn read_hp_active_clock_power_image(&self) -> u32 {
-            self.0.read::<0x1c>()
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -254042,6 +254043,13 @@ pub mod tsens {
             pub const fn bits_24_31_opaque(self) -> u8 {
                 (self.0 >> 24) as u8
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -254433,6 +254441,13 @@ pub mod tsens {
             #[inline]
             pub const fn bit_23_opaque(self) -> bool {
                 (self.0 & 0x00800000) != 0
+            }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
             }
         }
 
@@ -254918,22 +254933,6 @@ pub mod tsens {
             let mut value = clk_conf::W(self.0.read::<0x18>());
             change(&mut value);
             self.0.write::<0x18>(value.0);
-        }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`LP_TSENS.CTRL`).
-        ///
-        /// SOURCE: ROM_REV0_PHY_TSENS.
-        #[inline]
-        pub fn read_tsens_control_image(&self) -> u32 {
-            self.0.read::<0x0>()
-        }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`LP_TSENS.CLK_CONF`).
-        ///
-        /// SOURCE: BLOB_S31_TSENS_CLK_CONF_WRITES_20261027.
-        #[inline]
-        pub fn read_tsens_clock_image(&self) -> u32 {
-            self.0.read::<0x18>()
         }
 
         /// The block offsets of the part's words in the `radio_phy_register_image` diagnostic
@@ -295526,6 +295525,13 @@ pub mod wifi_mac {
             pub const fn enable(self) -> bool {
                 (self.0 & 0x80000000) != 0
             }
+
+            /// The whole word as the hardware has it, for a diagnostic record
+            /// and nothing else: it decides nothing.
+            #[inline]
+            pub const fn record_word(self) -> u32 {
+                self.0
+            }
         }
 
         /// The register's value while it is changed.
@@ -314211,14 +314217,6 @@ pub mod wifi_mac {
             let mut value = control_n::W(self.0.read_indexed::<0xd40, 0x10, 4>(index));
             change(&mut value);
             self.0.write_indexed::<0xd40, 0x10, 4>(index, value.0);
-        }
-
-        /// Read the complete word without decoding or acknowledging it, including undeclared and reserved bits (`WIFI_MAC.CONTROL0`).
-        ///
-        /// SOURCE: BLOB_LIBPP_HAL_MAC_TX.
-        #[inline]
-        pub fn read_tx_control0_image(&self) -> u32 {
-            self.0.read::<0xd40>()
         }
     }
 

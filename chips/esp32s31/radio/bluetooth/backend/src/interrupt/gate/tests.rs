@@ -91,8 +91,12 @@ struct Compare;
 impl GateHardware for Fake {
     type Doorbell = ();
     type Status = Shared;
-    fn lp_status(status: &Shared) -> u32 {
-        status.lock().unwrap().lp_status
+    fn lp_causes(status: &Shared) -> bluetooth::ModemLpTimerCauses {
+        // The model's word covers the register: zero is no cause.
+        match status.lock().unwrap().lp_status {
+            0 => bluetooth::ModemLpTimerCauses::Quiet,
+            record => bluetooth::ModemLpTimerCauses::Raised { record },
+        }
     }
     fn nrt_status(bank: &FakeBank) -> [u32; 2] {
         bank.model.lock().unwrap().nrt_status
@@ -833,7 +837,7 @@ fn vacant_timer_with_lp_cause_faults_without_acknowledging_or_returning_owners()
     let expected = GateFault::Invariant {
         reason: GateFaultReason::VacantTimer,
         observation: GateObservation {
-            lp_status: 0x38,
+            lp_causes: bluetooth::ModemLpTimerCauses::Raised { record: 0x38 },
             nrt_status: None,
             timer: GateTimerState::Vacant,
         },
@@ -860,7 +864,7 @@ fn fault_preserves_raw_lp_and_both_nrt_causes_and_the_timer_phase() {
     assert_eq!(
         invariant(fault).1,
         GateObservation {
-            lp_status: 0x40002,
+            lp_causes: bluetooth::ModemLpTimerCauses::Raised { record: 0x40002 },
             nrt_status: Some([0x80001234, 0xfedcba98]),
             timer: GateTimerState::Ready,
         }

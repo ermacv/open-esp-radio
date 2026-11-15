@@ -5745,26 +5745,18 @@ fn register_code(path: &str) -> bool {
     .any(|prefix| path.starts_with(prefix))
 }
 
-/// S8a: a call of the PAC's raw conversions and word accessors: `from_bits`,
-/// `.bits()`, `set_bits_…`, `with_bits_…`, `read_word_…`, `modify_word_…`,
-/// `write_word_…`.
+/// S8a: a call of the PAC's raw conversions, `from_bits` and `.bits()`. The
+/// accessors of a register or field the model names `WORD_…_OPAQUE` or
+/// `BITS_…_OPAQUE` are typed, and the model lists its opaque names itself.
 fn raw_register_at(tokens: &[TokenTree], at: usize) -> Option<String> {
     let word = ident_at(tokens, at)?;
     group_at(tokens, at + 1, Delimiter::Parenthesis)?;
     let method = at
         .checked_sub(1)
         .is_some_and(|before| punct_at(tokens, before, '.'));
-    let raw = word == "from_bits"
-        || (word == "bits" && method)
-        || [
-            "set_bits_",
-            "with_bits_",
-            "read_word_",
-            "modify_word_",
-            "write_word_",
-        ]
-        .iter()
-        .any(|prefix| word.starts_with(prefix));
+    // The raw conversions alone: an accessor of a register or field the
+    // model names `WORD_…_OPAQUE` or `BITS_…_OPAQUE` is a typed one.
+    let raw = word == "from_bits" || (word == "bits" && method);
     raw.then_some(word)
 }
 
@@ -6737,7 +6729,7 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
 /// it guards. The list only shrinks; a variant without an entry fails.
 const VIOLATION_VARIANTS: &[(&str, usize, &str)] = &[];
 
-/// S8a: the PAC's raw conversions and word accessors outside the PAC, in
+/// S8a: the PAC's raw conversions outside the PAC, in
 /// the HAL, the radio crates and the platform, by file with their count:
 /// a value reaches a register by hand only through these. An entry that is
 /// a policy `whole-word` image or a hardware-consumed layout says so. The
@@ -6757,7 +6749,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/bluetooth/engine/advertising_image.rs",
-        3,
+        1,
         BY_RADIO_SYSTEM,
     ),
     (
@@ -6771,18 +6763,13 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/hal/src/radio/bluetooth/engine/direction_finding_workspace.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm/codec.rs",
         15,
         BY_RADIO_SYSTEM,
     ),
     (
         "chips/esp32s31/hal/src/radio/bluetooth/engine/dtm_image.rs",
-        10,
+        7,
         BY_RADIO_SYSTEM,
     ),
     (
@@ -6832,7 +6819,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/bluetooth/engine/scheduler_item.rs",
-        12,
+        10,
         BY_RADIO_SYSTEM,
     ),
     (
@@ -6846,16 +6833,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/baseband.rs",
-        165,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/controller/init.rs",
-        1,
-        BY_RADIO_SYSTEM,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/bluetooth/registers/controller/time.rs",
         2,
         BY_RADIO_SYSTEM,
@@ -6866,32 +6843,17 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/interrupt/retirement.rs",
-        3,
-        BY_RADIO_SYSTEM,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
-        29,
+        12,
         BY_RADIO_SYSTEM,
     ),
     (
         "chips/esp32s31/hal/src/radio/bluetooth/registers/phy.rs",
-        35,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler.rs",
         2,
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler/cancellation.rs",
-        8,
-        BY_RADIO_SYSTEM,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler/lock_modify.rs",
+        "chips/esp32s31/hal/src/radio/bluetooth/registers/scheduler.rs",
         2,
         BY_RADIO_SYSTEM,
     ),
@@ -6908,7 +6870,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ("chips/esp32s31/hal/src/radio/coex.rs", 1, BY_RADIO_SYSTEM),
     (
         "chips/esp32s31/hal/src/radio/coex/external.rs",
-        8,
+        2,
         BY_RADIO_SYSTEM,
     ),
     (
@@ -6943,7 +6905,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/block_ack.rs",
-        11,
+        2,
         BY_P3,
     ),
     (
@@ -6953,22 +6915,12 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/coex/runtime.rs",
-        4,
+        1,
         BY_RADIO_SYSTEM,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/crypto.rs",
-        13,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/enable.rs",
-        4,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/hal_init_tail.rs",
-        2,
+        7,
         BY_P3,
     ),
     (
@@ -6978,7 +6930,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/he/init.rs",
-        8,
+        6,
         BY_P3,
     ),
     (
@@ -6997,28 +6949,13 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/interface_address.rs",
-        1,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/interrupt.rs",
-        10,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/last_rx_buffer.rs",
-        5,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/hal/src/radio/ieee80211/registers/rx/dma.rs",
-        5,
+        3,
         BY_P3,
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/tx.rs",
-        79,
+        74,
         BY_P3,
     ),
     (
@@ -7033,7 +6970,7 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/esp32s31/hal/src/radio/ieee80211/registers/txrx_init.rs",
-        22,
+        12,
         BY_P3,
     ),
     (
@@ -7057,11 +6994,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_NONE,
     ),
     (
-        "chips/esp32s31/hal/src/radio/modem/ops.rs",
-        2,
-        BY_RADIO_SYSTEM,
-    ),
-    (
         "chips/esp32s31/hal/src/radio/modem/platform.rs",
         8,
         BY_RADIO_SYSTEM,
@@ -7076,27 +7008,17 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         22,
         BY_RADIO_SYSTEM,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/agc/ops.rs", 37, BY_PHY),
     (
         "chips/esp32s31/hal/src/radio/phy/baseband/ops.rs",
-        88,
+        2,
         BY_PHY,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/clock/ops.rs", 14, BY_PHY),
     (
         "chips/esp32s31/hal/src/radio/phy/frequency/ops.rs",
-        20,
+        1,
         BY_PHY,
     ),
-    ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 5, BY_PHY),
-    (
-        "chips/esp32s31/hal/src/radio/phy/iq_estimator/ops.rs",
-        8,
-        BY_PHY,
-    ),
-    ("chips/esp32s31/hal/src/radio/phy/memory/ops.rs", 1, BY_PHY),
-    ("chips/esp32s31/hal/src/radio/phy/pbus/ops.rs", 1, BY_PHY),
-    ("chips/esp32s31/hal/src/radio/phy/rx_dco.rs", 2, BY_PHY),
+    ("chips/esp32s31/hal/src/radio/phy/i2c/master.rs", 1, BY_PHY),
     ("chips/esp32s31/hal/src/system/boot.rs", 6, BY_NONE),
     (
         "chips/esp32s31/hal/src/system/boot/clock/lp_fast.rs",
@@ -8164,6 +8086,59 @@ fn silences_a_bool_lint(source: &str) -> bool {
             names.iter().any(|name| inside.contains(name.as_str()))
         })
     })
+}
+
+/// The files that build a diagnostic record from a register's whole word:
+/// the one door of `record_word`, the method a `record-words` entry of the
+/// register model gives a read value. A word decides nothing, so a new
+/// caller fails here; the developer's tools are aside.
+const RECORD_WORD_CALLERS: &[&str] = &[
+    "chips/esp32s31/hal/src/radio/bluetooth.rs",
+    "chips/esp32s31/hal/src/radio/bluetooth/observation.rs",
+    "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
+    "hil/probes/esp32s31-facts/src/image/analog_pmu.rs",
+    "hil/probes/esp32s31-facts/src/image/ble.rs",
+    "hil/probes/esp32s31-facts/src/image/ble/reset.rs",
+    "hil/probes/esp32s31-facts/src/image/ble_masked.rs",
+    "hil/probes/esp32s31-facts/src/image/ble_wave2/lp.rs",
+    "hil/probes/esp32s31-facts/src/image/lp_ack_race.rs",
+    "hil/probes/esp32s31-facts/src/image/lp_lanes.rs",
+    "hil/probes/esp32s31-facts/src/image/lp_lanes/rest.rs",
+    "hil/probes/esp32s31-facts/src/image/lp_softreset.rs",
+    "hil/probes/esp32s31-facts/src/image/pb1.rs",
+];
+
+/// A call of `.record_word()`.
+fn record_word_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let called = ident_at(tokens, at)? == "record_word"
+        && group_at(tokens, at + 1, Delimiter::Parenthesis).is_some()
+        && at
+            .checked_sub(1)
+            .is_some_and(|before| punct_at(tokens, before, '.'));
+    called.then(|| "record_word".to_owned())
+}
+
+#[test]
+fn a_registers_record_word_is_taken_only_where_a_record_is_built() {
+    // Every package's code, tests among it; the developer's tools aside.
+    let callers = scan_hits(
+        &|path: &str| !path.starts_with("tools/"),
+        &record_word_at,
+        NO_ATTRIBUTE,
+    )
+    .into_iter()
+    .map(|(file, _)| file)
+    .collect::<BTreeSet<_>>();
+    let listed = RECORD_WORD_CALLERS
+        .iter()
+        .map(|file| (*file).to_owned())
+        .collect::<BTreeSet<_>>();
+    let new = callers.difference(&listed).collect::<Vec<_>>();
+    let gone = listed.difference(&callers).collect::<Vec<_>>();
+    assert!(
+        new.is_empty() && gone.is_empty(),
+        "new callers {new:?}; listed without a call {gone:?}"
+    );
 }
 
 /// Every Rust file under `directory`, `target` and `.git` aside.

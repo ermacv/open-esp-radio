@@ -1886,18 +1886,18 @@ fn indexed_fields_follow_the_block_prefix_rule() {
     );
 }
 
-fn with_register_image_read() -> String {
+fn with_record_word() -> String {
     rendered_with(&[(
         "policy.toml",
         "chip = \"testchip\"\n",
-        "chip = \"testchip\"\n\n[[register-image-reads]]\nname = \"read_event_image\"\nregister = \"RADIO1.RAD_EVENTS\"\nsources = [\"SRC_DRIVER\"]\n",
+        "chip = \"testchip\"\n\n[[record-words]]\nregister = \"RADIO1.RAD_EVENTS\"\nreason = \"A test record keeps it.\"\nsources = [\"SRC_DRIVER\"]\n",
     )])
 }
 
 #[test]
-fn a_register_image_read_keeps_unknown_bits_and_read_only_ownership() {
+fn a_record_word_is_the_read_value_whole_with_its_unknown_bits() {
     let output = run(
-        &with_register_image_read(),
+        &with_record_word(),
         r#"
 fn main() {
     let mut memory = [0_u32; 0x40];
@@ -1906,8 +1906,8 @@ fn main() {
     {
         let owner = radio::SecondEvents::host(&mut memory).expect("memory holds the block");
         let copy = owner;
-        let whole: u32 = owner.read_event_image();
-        println!("{whole:08x} {:08x}", copy.read_event_image());
+        let whole: u32 = owner.read_events().record_word();
+        println!("{whole:08x} {:08x}", copy.read_events().record_word());
     }
     assert_eq!(memory, before);
 }
@@ -1917,27 +1917,24 @@ fn main() {
 }
 
 #[test]
-fn a_register_image_read_is_unavailable_on_other_owners() {
+fn a_register_not_named_has_no_record_word() {
     let error = refused(
-        &with_register_image_read(),
+        &with_record_word(),
         r#"
 fn main() {
     let mut memory = [0_u32; 0x40];
-    let other = radio::Second::host(&mut memory).expect("memory holds the block");
-    let _ = other.read_event_image();
+    let (task, _) = radio::radio0_host(&mut memory).unwrap();
+    let _ = task.read_config().record_word();
 }
 "#,
     );
-    assert!(
-        error.contains("no method named `read_event_image`"),
-        "{error}"
-    );
+    assert!(error.contains("no method named `record_word`"), "{error}");
 }
 
 #[test]
-fn a_register_image_read_grants_no_status_writer() {
+fn a_record_word_grants_no_status_writer() {
     let error = refused(
-        &with_register_image_read(),
+        &with_record_word(),
         r#"
 fn main() {
     let mut memory = [0_u32; 0x40];

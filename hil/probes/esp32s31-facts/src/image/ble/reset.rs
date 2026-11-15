@@ -8,7 +8,7 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(b),
-        b.timer_status.read_bluetooth_modem_lp_status(),
+        b.timer_status.read_word_0038_opaque().record_word(),
         pending(s),
     );
     emit(
