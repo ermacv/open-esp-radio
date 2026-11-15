@@ -8166,6 +8166,59 @@ fn silences_a_bool_lint(source: &str) -> bool {
     })
 }
 
+/// The files that build a diagnostic record from a register's whole word:
+/// the one door of `record_word`, the method a `record-words` entry of the
+/// register model gives a read value. A word decides nothing, so a new
+/// caller fails here; the developer's tools are aside.
+const RECORD_WORD_CALLERS: &[&str] = &[
+    "chips/esp32s31/hal/src/radio/bluetooth.rs",
+    "chips/esp32s31/hal/src/radio/bluetooth/observation.rs",
+    "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
+    "hil/probes/esp32s31-facts/src/image/analog_pmu.rs",
+    "hil/probes/esp32s31-facts/src/image/ble.rs",
+    "hil/probes/esp32s31-facts/src/image/ble/reset.rs",
+    "hil/probes/esp32s31-facts/src/image/ble_masked.rs",
+    "hil/probes/esp32s31-facts/src/image/ble_wave2/lp.rs",
+    "hil/probes/esp32s31-facts/src/image/lp_ack_race.rs",
+    "hil/probes/esp32s31-facts/src/image/lp_lanes.rs",
+    "hil/probes/esp32s31-facts/src/image/lp_lanes/rest.rs",
+    "hil/probes/esp32s31-facts/src/image/lp_softreset.rs",
+    "hil/probes/esp32s31-facts/src/image/pb1.rs",
+];
+
+/// A call of `.record_word()`.
+fn record_word_at(tokens: &[TokenTree], at: usize) -> Option<String> {
+    let called = ident_at(tokens, at)? == "record_word"
+        && group_at(tokens, at + 1, Delimiter::Parenthesis).is_some()
+        && at
+            .checked_sub(1)
+            .is_some_and(|before| punct_at(tokens, before, '.'));
+    called.then(|| "record_word".to_owned())
+}
+
+#[test]
+fn a_registers_record_word_is_taken_only_where_a_record_is_built() {
+    // Every package's code, tests among it; the developer's tools aside.
+    let callers = scan_hits(
+        &|path: &str| !path.starts_with("tools/"),
+        &record_word_at,
+        NO_ATTRIBUTE,
+    )
+    .into_iter()
+    .map(|(file, _)| file)
+    .collect::<BTreeSet<_>>();
+    let listed = RECORD_WORD_CALLERS
+        .iter()
+        .map(|file| (*file).to_owned())
+        .collect::<BTreeSet<_>>();
+    let new = callers.difference(&listed).collect::<Vec<_>>();
+    let gone = listed.difference(&callers).collect::<Vec<_>>();
+    assert!(
+        new.is_empty() && gone.is_empty(),
+        "new callers {new:?}; listed without a call {gone:?}"
+    );
+}
+
 /// Every Rust file under `directory`, `target` and `.git` aside.
 fn rust_files(directory: &Path, found: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(directory) else {

@@ -96,7 +96,7 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         t.read_word_0048_opaque().counter_low().get(),
-        s.ble.timer_status.read_bluetooth_modem_lp_status(),
+        s.ble.timer_status.read_word_0038_opaque().record_word(),
         s.interrupt_matrix
             .interrupt_core0_status
             .read_int_status_reg_3()

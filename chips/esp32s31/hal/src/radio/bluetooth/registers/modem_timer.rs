@@ -13,6 +13,7 @@
 
 #![deny(unsafe_code)]
 
+use oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque;
 use oer_portable_mmio::Bits;
 
 use crate::radio::bluetooth::registers::{
@@ -225,7 +226,7 @@ trait ModemLpTimerStopTransaction {
     fn disable_delivery(&mut self);
     fn stop_counter(&mut self);
     fn sample_pending(&mut self) -> BluetoothModemLpTimerPendingObservation;
-    fn read_status(&mut self) -> u32;
+    fn read_status(&mut self) -> word_0038_opaque::R;
     fn clear_rollover(&mut self);
     fn clear_pending(&mut self);
     fn fence(&mut self);
@@ -254,15 +255,21 @@ fn execute_modem_lp_timer_stopped_interrupt(
     BluetoothModemLpTimerStoppedInterruptObservation,
     BluetoothModemLpTimerStoppedInterruptFault,
 > {
-    use oer_chips_esp32s31_pac::modem_pwr::word_0038_opaque::ROLLOVER_STATUS_MASK;
-    let status = transaction.read_status();
+    let observed = transaction.read_status();
+    let status = observed.record_word();
     let pending = transaction.sample_pending();
     if pending.state_0024() != 0 {
         return Err(
             BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending { status, pending },
         );
     }
-    if status != 0 && status != ROLLOVER_STATUS_MASK {
+    // The measured rollover alone, or nothing: no field but
+    // `ROLLOVER_STATUS` is set.
+    if observed.bit_0_opaque()
+        || observed.bits_2_17_opaque() != 0
+        || observed.compare_software_status()
+        || observed.bits_19_31_opaque().get() != 0
+    {
         return Err(
             BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus { status, pending },
         );
@@ -291,7 +298,7 @@ trait ModemLpTimerStartTransaction {
 }
 
 trait ModemLpTimerInterruptTransaction {
-    fn read_status_0038(&mut self) -> u32;
+    fn read_status_0038(&mut self) -> word_0038_opaque::R;
     fn read_value_006c(&mut self) -> u32;
     fn control_0058_bit_2_is_set(&mut self) -> bool;
     fn set_control_0058_bit_1_from_fresh_read(&mut self);
@@ -360,7 +367,14 @@ enum ModemLpTimerHandlerRegisterDisposition {
 fn execute_modem_lp_timer_interrupt(
     transaction: &mut impl ModemLpTimerInterruptTransaction,
 ) -> ModemLpTimerInterruptDisposition {
-    if transaction.read_status_0038() == 0 {
+    // None of the word's five fields is set: no cause selects the handler.
+    let status = transaction.read_status_0038();
+    if !(status.bit_0_opaque()
+        || status.rollover_status()
+        || status.bits_2_17_opaque() != 0
+        || status.compare_software_status()
+        || status.bits_19_31_opaque().get() != 0)
+    {
         return ModemLpTimerInterruptDisposition::Spurious;
     }
 
@@ -645,8 +659,8 @@ impl<B: oer_portable_mmio::Placement> ModemLpTimerStopTransaction
     fn sample_pending(&mut self) -> BluetoothModemLpTimerPendingObservation {
         ModemLpTimerTransaction::sample_pending(self)
     }
-    fn read_status(&mut self) -> u32 {
-        self.status.read_bluetooth_modem_lp_status()
+    fn read_status(&mut self) -> word_0038_opaque::R {
+        self.status.read_word_0038_opaque()
     }
     fn clear_rollover(&mut self) {
         self.registers.clear_bluetooth_modem_lp_timer_state_002c();
@@ -663,8 +677,8 @@ impl<B: oer_portable_mmio::Placement> ModemLpTimerStopTransaction
 impl<B: oer_portable_mmio::Placement> ModemLpTimerInterruptTransaction
     for HardwareModemLpTimerTransaction<'_, B>
 {
-    fn read_status_0038(&mut self) -> u32 {
-        self.status.read_bluetooth_modem_lp_status()
+    fn read_status_0038(&mut self) -> word_0038_opaque::R {
+        self.status.read_word_0038_opaque()
     }
 
     fn read_value_006c(&mut self) -> u32 {

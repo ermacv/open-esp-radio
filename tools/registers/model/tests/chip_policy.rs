@@ -2760,31 +2760,27 @@ fn referenced_ranges_bound_writes_and_cannot_be_shifted_or_redeclared() -> TestR
     Ok(())
 }
 
-fn register_image_read(register: &str) -> String {
+fn record_word(register: &str) -> String {
     format!(
-        "\n[[register-image-reads]]\nname = \"read_image\"\nregister = \"{register}\"\nsources = [\"SRC_DRIVER\"]\n"
+        "\n[[record-words]]\nregister = \"{register}\"\nreason = \"A test record keeps it.\"\nsources = [\"SRC_DRIVER\"]\n"
     )
 }
 
 #[test]
-fn register_image_read_accepts_split_fields_on_the_existing_owner() -> TestResult {
-    let fixture = Fixture::new()?;
-    fixture.append(&register_image_read("TIMER0.CONFIG"))?;
-    assert_eq!(
-        fixture.load()?.owner("read_image"),
-        Some(PartId {
-            partition: 0,
-            part: 0
-        })
-    );
+fn a_record_word_accepts_split_fields_and_a_register_array() -> TestResult {
+    for register in ["TIMER0.CONFIG", "TIMER0.ALARM_%s"] {
+        let fixture = Fixture::new()?;
+        fixture.append(&record_word(register))?;
+        fixture.load()?;
+    }
     Ok(())
 }
 
 #[test]
-fn register_image_read_rejects_side_effects_and_unreadable_words() -> TestResult {
+fn a_record_word_rejects_side_effects_and_unreadable_words() -> TestResult {
     for register in ["TIMER0.FIFO", "TIMER0.LOAD", "TIMER0.WO", "TIMER0.STATE"] {
         let fixture = Fixture::new()?;
-        fixture.append(&register_image_read(register))?;
+        fixture.append(&record_word(register))?;
         assert!(
             matches!(kind_of(&fixture)?, ErrorKind::Register(_)),
             "{register}"
@@ -2797,48 +2793,42 @@ fn register_image_read_rejects_side_effects_and_unreadable_words() -> TestResult
             "name = \"CONFIG\"\noffset = 0x00",
             "name = \"CONFIG\"\noffset = 0x00\nread-side-effect = { sources = [\"SRC_HEADER\"] }",
         )?
-        .append(&register_image_read("TIMER0.CONFIG"))?;
+        .append(&record_word("TIMER0.CONFIG"))?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::Register(_)));
     Ok(())
 }
 
 #[test]
-fn register_image_read_rejects_templates_and_unclaimed_words() -> TestResult {
-    for (register, unclaimed) in [("TIMER0.ALARM_%s", false), ("TIMER2.VALUE", true)] {
-        let fixture = Fixture::new()?;
-        fixture.append(&register_image_read(register))?;
-        let error = kind_of(&fixture)?;
-        assert!(
-            if unclaimed {
-                matches!(error, ErrorKind::ReachesUnclaimed(_))
-            } else {
-                matches!(error, ErrorKind::Transaction(_))
-            },
-            "{register}: {error}"
-        );
-    }
+fn a_record_word_rejects_an_unclaimed_word() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.append(&record_word("TIMER2.VALUE"))?;
+    let error = kind_of(&fixture)?;
+    assert!(matches!(error, ErrorKind::ReachesUnclaimed(_)), "{error}");
     Ok(())
 }
 
 #[test]
-fn register_image_read_requires_evidence_and_a_unique_name() -> TestResult {
+fn a_record_word_requires_evidence_a_reason_and_one_entry() -> TestResult {
     let fixture = Fixture::new()?;
-    fixture.append(&register_image_read("TIMER0.CONFIG").replace("SRC_DRIVER", "MISSING"))?;
+    fixture.append(&record_word("TIMER0.CONFIG").replace("SRC_DRIVER", "MISSING"))?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::UnknownSource(_)));
     let fixture = Fixture::new()?;
+    fixture.append(&record_word("TIMER0.CONFIG").replace("A test record keeps it.", " "))?;
+    assert!(matches!(kind_of(&fixture)?, ErrorKind::Transaction(_)));
+    let fixture = Fixture::new()?;
     fixture
-        .append(&register_image_read("TIMER0.CONFIG"))?
-        .append(&register_image_read("TIMER0.VALUE"))?;
+        .append(&record_word("TIMER0.CONFIG"))?
+        .append(&record_word("TIMER0.CONFIG"))?;
     assert!(matches!(kind_of(&fixture)?, ErrorKind::Duplicate(_)));
     Ok(())
 }
 
 #[test]
-fn register_image_read_rejects_write_one_to_clear_word() -> TestResult {
+fn a_record_word_rejects_a_write_one_to_clear_word() -> TestResult {
     let fixture = Fixture::new()?;
-    fixture.append(&register_image_read("TIMER0.INT_CLR"))?;
+    fixture.append(&record_word("TIMER0.INT_CLR"))?;
     let error = fixture.rejection()?;
-    assert_eq!(error.entity, "read_image");
+    assert_eq!(error.entity, "TIMER0.INT_CLR");
     assert!(
         matches!(error.kind, ErrorKind::WriteOneToClear(_)),
         "{error}"
@@ -2847,7 +2837,7 @@ fn register_image_read_rejects_write_one_to_clear_word() -> TestResult {
 }
 
 #[test]
-fn register_image_read_rejects_each_nonobservational_lane_in_a_mixed_word() -> TestResult {
+fn a_record_word_rejects_each_nonobservational_lane_in_a_mixed_word() -> TestResult {
     for class in [
         "write-trigger",
         "write-one-to-clear",
@@ -2863,11 +2853,11 @@ fn register_image_read_rejects_each_nonobservational_lane_in_a_mixed_word() -> T
                 &format!("name = \"KEY\"\nbits = \"7:0\"\nclass = \"{class}\""),
             )?;
         // The word and its ordinary read-only neighbour are valid before
-        // requesting a whole-word observation.
+        // naming it a record word.
         fixture.load()?;
-        fixture.append(&register_image_read("TIMER0.WO"))?;
+        fixture.append(&record_word("TIMER0.WO"))?;
         let error = fixture.rejection()?;
-        assert_eq!(error.entity, "read_image");
+        assert_eq!(error.entity, "TIMER0.WO");
         assert!(
             matches!(
                 error.kind,
@@ -2880,7 +2870,7 @@ fn register_image_read_rejects_each_nonobservational_lane_in_a_mixed_word() -> T
 }
 
 #[test]
-fn register_image_read_accepts_each_defined_observational_class() -> TestResult {
+fn a_record_word_accepts_each_defined_observational_class() -> TestResult {
     for class in [
         "plain",
         "read-only",
@@ -2898,7 +2888,7 @@ fn register_image_read_accepts_each_defined_observational_class() -> TestResult 
                 "name = \"KEY\"\nbits = \"7:0\"\nclass = \"write-only\"",
                 &format!("name = \"KEY\"\nbits = \"7:0\"\nclass = \"{class}\""),
             )?
-            .append(&register_image_read("TIMER0.WO"))?;
+            .append(&record_word("TIMER0.WO"))?;
         fixture.load()?;
     }
     Ok(())

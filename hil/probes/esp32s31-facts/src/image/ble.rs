@@ -344,7 +344,7 @@ fn lp_state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(b),
-        b.timer_status.read_bluetooth_modem_lp_status(),
+        b.timer_status.read_word_0038_opaque().record_word(),
         pending(s),
     );
     emit(
@@ -441,8 +441,15 @@ fn command18(b: &mut Ble) {
 }
 fn wait_cause(s: &Session<'_>) {
     let start = oer_portable_riscv::cycle32();
-    while s.ble.timer_status.read_bluetooth_modem_lp_status() == 0
-        && oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT
+    // Until a field of the cause word is set.
+    while {
+        let status = s.ble.timer_status.read_word_0038_opaque();
+        !(status.bit_0_opaque()
+            || status.rollover_status()
+            || status.bits_2_17_opaque() != 0
+            || status.compare_software_status()
+            || status.bits_19_31_opaque().get() != 0)
+    } && oer_portable_riscv::cycle32().wrapping_sub(start) < WAIT_LIMIT
     {}
     emit(
         0x23ff,

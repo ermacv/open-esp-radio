@@ -27,7 +27,7 @@ fn state(s: &Session<'_>, tag: u32) {
     emit(
         tag,
         counter(s),
-        s.ble.timer_status.read_bluetooth_modem_lp_status(),
+        s.ble.timer_status.read_word_0038_opaque().record_word(),
         s.interrupt_matrix
             .interrupt_core0_status
             .read_int_status_reg_3()
@@ -35,8 +35,8 @@ fn state(s: &Session<'_>, tag: u32) {
     );
     emit(
         tag + 1,
-        t.read_bluetooth_modem_lp_pending_image(),
-        t.read_bluetooth_modem_lp_rollover_image(),
+        t.read_word_0024_opaque().record_word(),
+        t.read_word_002c_opaque().record_word(),
         u32::from(t.read_word_0058_opaque().control_2()),
     );
     emit(
@@ -413,8 +413,8 @@ fn width_modes(s: &mut Session<'_>, modes: &[bool], first: u32) {
             );
             emit(
                 tag + 3,
-                s.ble.timer.read_bluetooth_modem_lp_pending_image(),
-                s.ble.timer_status.read_bluetooth_modem_lp_status(),
+                s.ble.timer.read_word_0024_opaque().record_word(),
+                s.ble.timer_status.read_word_0038_opaque().record_word(),
                 s.interrupt_matrix
                     .interrupt_core0_status
                     .read_int_status_reg_3()

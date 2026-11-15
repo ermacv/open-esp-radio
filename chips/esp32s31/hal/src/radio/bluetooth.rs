@@ -145,7 +145,7 @@ pub struct ModemLpTimerStatus(oer_chips_esp32s31_pac::modem_pwr::BtdmLpTimerStat
 impl ModemLpTimerStatus {
     /// The complete LP cause word, without acknowledgement or timer mutation.
     pub fn read(&self) -> u32 {
-        self.0.read_bluetooth_modem_lp_status()
+        self.0.read_word_0038_opaque().record_word()
     }
 }
 

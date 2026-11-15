@@ -300,6 +300,8 @@ pub(super) struct Template<'m> {
     pub(super) reserved: u32,
     /// The reset value of the reserved bits: a write from zero stores it.
     pub(super) reserved_reset: u32,
+    /// The policy names it a record word: its read value gives the word.
+    pub(super) record: bool,
 }
 
 impl Template<'_> {
@@ -665,6 +667,7 @@ impl<'m> TypePlan<'m> {
                     .any(|command| command.register == *key),
                 reserved,
                 reserved_reset,
+                record: false,
             });
         }
         templates.sort_by_key(|template| {
@@ -1007,6 +1010,13 @@ pub(super) fn render_register_module(output: &mut String, template: &Template<'_
         );
         for field in template.fields.iter().filter(|field| field.getter()) {
             render_getter(output, field, "self");
+        }
+        if template.record {
+            output.push_str(
+                "/// The whole word as the hardware has it, for a diagnostic record\n\
+                 /// and nothing else: it decides nothing.\n\
+                 #[inline]\npub const fn record_word(self) -> u32 {\nself.0\n}\n",
+            );
         }
         output.push_str("}\n\n");
     }

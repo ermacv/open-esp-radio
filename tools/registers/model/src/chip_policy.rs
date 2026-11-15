@@ -35,7 +35,7 @@ pub use source::{
     FixedRegisterImage, FixedRegisterSequence, FlagDomain, FullRegisterRead, FullRegisterWrite,
     IndexedBitSetModify, InputTransform, InterruptSnapshot, MaskedRegisterModify, OpaqueDomain,
     POLICY_SCHEMA, Part, Partition, PartitionImageRead, PointerField, PolicyFile, Projection,
-    RegisterImageRead, SampledBitZeroWrite, SequenceStep, Triggers, Unclaimed, WholeWordBits,
+    RecordWord, SampledBitZeroWrite, SequenceStep, Triggers, Unclaimed, WholeWordBits,
     ZeroBasedFieldWrite, ZeroRegisterWrite,
 };
 

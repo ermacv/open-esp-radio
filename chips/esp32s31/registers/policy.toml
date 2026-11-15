@@ -8334,52 +8334,57 @@ value = 0x00000002
 consumed-event = "The caller consumes the local BTLC first-word overflow indication itself; no handler or continuous-time reconstruction may require this indication. This is a discard, not a sampled runtime acknowledgement."
 sources = ["HW9_S31_MAC_CAUSES_20261027", "HW9_S31_MAC_MASK_ACK_20261027", "HW32_S31_BT_MASKED_FIXED_W1C_20261027"]
 
-[[register-image-reads]]
-name = "read_bluetooth_task_diagnostic_image"
+[[record-words]]
 register = "BT_MAC.WORD_04BC_OPAQUE"
+reason = "The Bluetooth task interrupt observation keeps the opaque state word beside the enable; no field of it has a meaning."
 sources = ["S31_MMIO_USE_201014BC", "S31_MMIO_DECLARED_201014BC", "HW32_S31_BT_04BC_READ_SCOPE_20261027"]
 
-[[register-image-reads]]
-name = "read_bluetooth_modem_lp_status"
+[[record-words]]
 register = "MODEM_PWR.WORD_0038_OPAQUE"
+reason = "The modem timer's stopped-interrupt fault and the gate's LP status record keep the cause word; its fields are decided on by their readers."
 sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027", "HW_BLE_LP_CAUSES_2026_10_26"]
 
 # SOURCE: BX4_S31_LP_STATUS_CONSUMER_20261027 establishes complete loads;
-# these diagnostic images assign no meaning to undeclared upper lanes.
-[[register-image-reads]]
-name = "read_bluetooth_modem_lp_pending_image"
+# these diagnostic words assign no meaning to undeclared upper lanes.
+[[record-words]]
 register = "MODEM_PWR.WORD_0024_OPAQUE"
+reason = "The facts probe's LP records keep the pending word."
 sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027"]
 
-[[register-image-reads]]
-name = "read_bluetooth_modem_lp_rollover_image"
+[[record-words]]
 register = "MODEM_PWR.WORD_002C_OPAQUE"
+reason = "The facts probe's LP records keep the rollover word."
 sources = ["BX4_S31_LP_STATUS_CONSUMER_20261027"]
 
-[[register-image-reads]]
-name = "read_hp_active_clock_power_image"
+[[record-words]]
 register = "PMU.HP_ACTIVE_HP_CK_POWER"
+reason = "The facts probe's PMU record keeps the word before and after its change."
 sources = ["BLOB_ROM_S31_PMU_ACTIVE_CK_LOW4"]
 
-[[register-image-reads]]
-name = "read_tsens_control_image"
+[[record-words]]
 register = "LP_TSENS.CTRL"
+reason = "The facts probe's temperature-sensor records keep the control word."
 sources = ["ROM_REV0_PHY_TSENS"]
 
-[[register-image-reads]]
-name = "read_tsens_clock_image"
+[[record-words]]
 register = "LP_TSENS.CLK_CONF"
+reason = "The facts probe's temperature-sensor records keep the clock word."
 sources = ["BLOB_S31_TSENS_CLK_CONF_WRITES_20261027"]
 
-[[register-image-reads]]
-name = "read_frequency_control_image"
+[[record-words]]
 register = "FE.FREQUENCY_CONTROL"
+reason = "The facts probe's front-end records keep the frequency control word."
 sources = ["BX10_S31_FE_FREQ_ADDRESS_20261027"]
 
-[[register-image-reads]]
-name = "read_tx_control0_image"
+[[record-words]]
 register = "WIFI_MAC.CONTROL0"
+reason = "The facts probe's TX control records keep queue zero's control word."
 sources = ["BLOB_LIBPP_HAL_MAC_TX"]
+
+[[record-words]]
+register = "CLIC.CTRL%s"
+reason = "A line's observation in the interrupt table's and the executor's route faults and the S31 exception record: the word as the hardware has it."
+sources = ["ESP_IDF_4D59230D_S31_CLIC"]
 
 [[fixed-register-images]]
 name = "clear_bluetooth_terminal_non_fault_bank_0"

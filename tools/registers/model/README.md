@@ -734,7 +734,7 @@ it alone. Transactions name `INSTANCE.REGISTER` and
 `INSTANCE.REGISTER.FIELD` of the root, a template key for every element
 (`MODEM_ETM.CH%s_EVENT.ID`), and take no `peripheral` or `exposure`. The
 kinds are `interrupt-snapshots` (`status`, optional `events`), `field-reads`,
-`full-register-reads`, `register-image-reads`, `partition-image-reads`,
+`full-register-reads`, `partition-image-reads`,
 `full-register-writes`, `pointer-fields`, `zero-based-field-writes` (`fields`),
 `sampled-bit-zero-writes`, `zero-register-writes`,
 `fixed-register-images`, `fixed-register-sequences` (each step one
@@ -774,23 +774,28 @@ generic modify accessor renders a named configuration operation. It replaces
 the declared writable lanes and preserves undeclared and read-only bits. It
 does not grant arbitrary writes to hardware-updated fields.
 
-`register-image-reads` names one 32-bit `register` element, a transaction
-`name` and `sources`. It renders an infallible `&self -> u32` read on that
-word's existing owner, including a read-only owner. The word must read
-without a side effect, and every declared field must have a defined
+`record-words` is not a transaction: it names a register whose observation
+a diagnostic record keeps as the hardware has it. Each entry names one
+`register` (`INSTANCE.REGISTER`, an element or a register array's template,
+whose elements share it), its `reason` (which record keeps the word, and why
+its fields do not suffice) and `sources`. The register's read value `R` then
+has `record_word(self) -> u32`: the whole word, with undeclared and reserved
+bits, undecoded. The method reads nothing more, since the owner's ordinary
+read gave `R`, and it grants no write, acknowledgement or other word. A
+register not named has no such method. The word decides nothing: its fields
+are decided on by their readers, and the layer tests hold the method to the
+files that build records. The word must read without a side effect, some
+owner must read it, and every declared field must have a defined
 observational class: `plain`, `read-only`, `read-observed`, `set-only`,
 `self-clearing`, `hardware-written` or `debug-only`. A `write-only`,
 `write-trigger`, `write-one-to-clear`, `read-clears` or `unknown` field
-rejects the whole word, including when other fields are readable. FIFO and
-other read side effects also reject it. Undeclared and reserved bits remain
-in the returned image, without assigning them a meaning; an explicitly
-`unknown` field does not grant observation. The read grants no write,
-acknowledgement or access to other words or owners. For example:
+rejects the register, including when other fields are readable. FIFO and
+other read side effects also reject it. For example:
 
 ```toml
-[[register-image-reads]]
-name = "read_timer_status_image"
+[[record-words]]
 register = "TIMER.STATUS"
+reason = "The timer's fault record keeps the status word beside its cause."
 sources = ["SRC_TIMER_STATUS_CONSUMER"]
 ```
 

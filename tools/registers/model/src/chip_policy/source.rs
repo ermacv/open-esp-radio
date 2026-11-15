@@ -36,7 +36,7 @@ pub struct PolicyFile {
     #[serde(default)]
     pub full_register_reads: Vec<FullRegisterRead>,
     #[serde(default)]
-    pub register_image_reads: Vec<RegisterImageRead>,
+    pub record_words: Vec<RecordWord>,
     #[serde(default)]
     pub partition_image_reads: Vec<PartitionImageRead>,
     #[serde(default)]
@@ -311,13 +311,16 @@ pub struct FullRegisterRead {
     pub sources: Vec<String>,
 }
 
-/// One side-effect-free 32-bit register, whole and undecoded.
+/// A register whose observation a diagnostic record keeps as the
+/// hardware has it: its read value gets the whole word, undecoded.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct RegisterImageRead {
-    pub name: String,
-    /// `INSTANCE.REGISTER`: one element, irrespective of its field split.
+pub struct RecordWord {
+    /// `INSTANCE.REGISTER`, one element or a register array's template:
+    /// every element shares the read value.
     pub register: String,
+    /// Which record keeps the word, and why the fields do not suffice.
+    pub reason: String,
     pub sources: Vec<String>,
 }
 

@@ -129,7 +129,7 @@ pub(super) fn task<B: oer_portable_mmio::Placement>(
 ) -> BluetoothTaskInterruptObservation {
     BluetoothTaskInterruptObservation {
         enable: task_enable(b),
-        opaque_state: b.read_bluetooth_task_diagnostic_image(),
+        opaque_state: b.read_word_04bc_opaque().record_word(),
     }
 }
 
