@@ -364,16 +364,17 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
     /// controller did not take a write.
     pub fn install(mut controller: C, table: T) -> Result<Self, Error> {
         const {
-            assert!(C::LINES.len() <= 64, "a controller has at most 64 lines");
-            assert!(
-                table_inside(
-                    T::DECLARED,
-                    C::SOURCES.len(),
-                    C::LINES.len(),
-                    C::LEVEL_BITS.levels()
-                ),
-                "an entry of the table lies outside the controller"
-            );
+            if C::LINES.len() > 64 {
+                panic!("a controller has at most 64 lines")
+            }
+            if !table_inside(
+                T::DECLARED,
+                C::SOURCES.len(),
+                C::LINES.len(),
+                C::LEVEL_BITS.levels(),
+            ) {
+                panic!("an entry of the table lies outside the controller")
+            }
         };
         let current = controller.hart();
         if current != H {
@@ -448,15 +449,15 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
         part: E::Part,
     ) -> Result<Bound<E>, Quarantined<E>> {
         const {
-            assert!(
-                inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES.len()),
-                "the entry's source is no source of the controller"
-            );
-            assert!(
-                E::LEVEL >= 1 && E::LEVEL as u16 <= C::LEVEL_BITS.levels(),
-                "the entry's level is no level of the controller's lines"
-            );
-            assert!(E::HART == H, "the entry belongs to the router's hart");
+            if !inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES.len()) {
+                panic!("the entry's source is no source of the controller")
+            }
+            if E::LEVEL < 1 || E::LEVEL as u16 > C::LEVEL_BITS.levels() {
+                panic!("the entry's level is no level of the controller's lines")
+            }
+            if E::HART != H {
+                panic!("the entry belongs to the router's hart")
+            }
         };
         let sources = <E::Part as InterruptSources>::SOURCES;
         // A part has a source (checked at compile time).
@@ -539,14 +540,12 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
     /// [`Error::ForeignRoute`] when a source is routed.
     pub fn silent<P: InterruptSources>(&self) -> Result<Silent<P>, Error> {
         const {
-            assert!(
-                inside_matrix(P::SOURCES, C::SOURCES.len()),
-                "the part's source is no source of the controller"
-            );
-            assert!(
-                !table_binds(T::DECLARED, P::SOURCES),
-                "an entry of the table binds the part's source"
-            );
+            if !inside_matrix(P::SOURCES, C::SOURCES.len()) {
+                panic!("the part's source is no source of the controller")
+            }
+            if table_binds(T::DECLARED, P::SOURCES) {
+                panic!("an entry of the table binds the part's source")
+            }
         };
         for (source, number) in sources_of::<C>(P::SOURCES) {
             if let Some(line) = self.controller.routed(source) {

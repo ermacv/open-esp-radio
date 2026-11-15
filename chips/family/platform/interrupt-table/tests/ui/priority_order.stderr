@@ -8,22 +8,9 @@ error[E0080]: evaluation panicked: declared low-to-high priority contradicts the
 12 | |             first: First = TimerIrq => timer, line 17, context radio, hart 0, Hardware;
 13 | |             second: Second = RadioIrq => radio, line $second, context radio, hart 0, Hardware;
 14 | |         }
-   | |_________^ evaluation of `_` failed inside this call
+   | |_________^ evaluation of `_` failed here
 ...
 18 |   table!(16);
    |   ---------- in this macro invocation
    |
-note: inside `oer_chips_family_platform_interrupt_table::__private::check`
-  --> $RUST/core/src/panic.rs
-   |
-   |           $crate::panicking::panic_fmt($crate::const_format_args!($($t)+));
-   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the failure occurred here
-   |
-  ::: src/lib.rs
-   |
-   |                           crate::TieBreak::HighestLine => assert!(
-   |  _________________________________________________________-
-   | |                             entry.binding.line < other.binding.line,
-   | |                             "declared low-to-high priority contradicts the chip's line tie-break"
-   | |                         ),
-   | |_________________________- in this macro invocation
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `table` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -154,7 +154,16 @@ impl<E: SignalExecutor> IrqSignal<E> {
     where
         Target::Part: crate::InterruptSource,
     {
-        const { R::CONTEXTS.check(binding::executor_context::<E, Target>()) };
+        const {
+            match binding::executor_context::<E, Target>() {
+                Ok(executor) => {
+                    if let Err(why) = R::CONTEXTS.check(executor) {
+                        panic!("{}", why)
+                    }
+                }
+                Err(why) => panic!("{}", why),
+            }
+        };
         Self::empty()
     }
 

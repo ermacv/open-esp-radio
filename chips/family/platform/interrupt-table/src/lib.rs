@@ -125,13 +125,27 @@ pub struct Binding {
 
 const _: () = {
     use core::mem::{offset_of, size_of};
-    assert!(offset_of!(Binding, source) == 0);
-    assert!(offset_of!(Binding, line) == 2);
-    assert!(offset_of!(Binding, level) == 3);
-    assert!(offset_of!(Binding, class) == 4 && size_of::<Class>() == 1);
-    assert!(offset_of!(Binding, hart) == 5);
-    assert!(offset_of!(Binding, handler) == 8);
-    assert!(size_of::<Binding>() == 8 + size_of::<usize>());
+    if offset_of!(Binding, source) != 0 {
+        panic!("a binding's source is at byte 0")
+    }
+    if offset_of!(Binding, line) != 2 {
+        panic!("a binding's line is at byte 2")
+    }
+    if offset_of!(Binding, level) != 3 {
+        panic!("a binding's level is at byte 3")
+    }
+    if offset_of!(Binding, class) != 4 || size_of::<Class>() != 1 {
+        panic!("a binding's class is one byte at byte 4")
+    }
+    if offset_of!(Binding, hart) != 5 {
+        panic!("a binding's hart is at byte 5")
+    }
+    if offset_of!(Binding, handler) != 8 {
+        panic!("a binding's handler is at byte 8")
+    }
+    if size_of::<Binding>() != 8 + size_of::<usize>() {
+        panic!("a binding is eight bytes and a handler word")
+    }
 };
 
 /// An image's table, as a type: [`interrupt_table!`] declares it
@@ -582,7 +596,9 @@ macro_rules! interrupt_table {
             },)*
         ];
 
-        const _: () = $crate::__private::check($lines, &[$(contexts::$context_name),*], __OER_DECLARED);
+        const _: () = if let Err(why) = $crate::__private::check($lines, &[$(contexts::$context_name),*], __OER_DECLARED) {
+            panic!("{}", why)
+        };
 
         /// Every token of the image's interrupt table.
         #[allow(dead_code, reason = "an image without bindings takes no token")]
@@ -675,10 +691,7 @@ macro_rules! interrupt_sources {
     ($($member:ty),+ $(,)?) => {{
         const LISTS: &[&[u16]] = &[$(<$member as $crate::InterruptSources>::SOURCES),+];
         const UNION: [u16; $crate::__private::total(LISTS)] = $crate::__private::union(LISTS);
-        const _: () = assert!(
-            !$crate::__private::repeats(&UNION),
-            "two members of a part, or one member, list a source twice"
-        );
+        const _: () = if $crate::__private::repeats(&UNION) { panic!("two members of a part, or one member, list a source twice") };
         &UNION
     }};
 }
@@ -737,7 +750,10 @@ macro_rules! __exemption {
         $crate::__private::link_fn! {
             exemption $crate::__private::ExemptionSlot<$hart, $line, { REASON.len() }>, hart $hart, line $line =>
             #[used]
-            static EXEMPTION: [u8; REASON.len()] = $crate::__private::bytes(REASON);
+            static EXEMPTION: [u8; REASON.len()] = match $crate::__private::bytes(REASON) {
+                Ok(bytes) => bytes,
+                Err(why) => panic!("{}", why),
+            };
         }
     };
 }
@@ -913,18 +929,21 @@ pub mod __private {
         out
     }
 
-    /// The rules of a table, at compile time: declared context levels and
+    /// The rules of a table, or the first it breaks, at compile time: declared context levels and
     /// present entries' lines and harts in range, one entry per line and hart and per source,
     /// one `Executor` per level and hart, no `Hardware` or waker exemption
     /// on its level, every level exemption on it.
-    pub const fn check(lines: Lines, contexts: &[u8], entries: &[Declared]) {
+    pub const fn check(
+        lines: Lines,
+        contexts: &[u8],
+        entries: &[Declared],
+    ) -> Result<(), &'static str> {
         let mut levels = contexts;
         while let [level, tail @ ..] = levels {
             levels = tail;
-            assert!(
-                *level >= 1 && *level <= lines.levels,
-                "a context's level is no level a line can hold"
-            );
+            if *level < 1 || *level > lines.levels {
+                return Err("a context's level is no level a line can hold");
+            }
         }
         let mut rest = entries;
         let mut position = 0;
@@ -934,14 +953,12 @@ pub mod __private {
             if !entry.present {
                 continue;
             }
-            assert!(
-                entry.binding.line >= lines.first && entry.binding.line < lines.count,
-                "an entry's line is no line a peripheral source can be routed to"
-            );
-            assert!(
-                entry.binding.hart < lines.harts,
-                "an entry's hart is no hart of the image"
-            );
+            if entry.binding.line < lines.first || entry.binding.line >= lines.count {
+                return Err("an entry's line is no line a peripheral source can be routed to");
+            }
+            if entry.binding.hart >= lines.harts {
+                return Err("an entry's hart is no hart of the image");
+            }
             let mut executors = 0;
             let mut others = entries;
             let mut other_position = 0;
@@ -952,26 +969,27 @@ pub mod __private {
                 if !other.present {
                     continue;
                 }
-                if !same {
-                    assert!(
-                        !(other.binding.line == entry.binding.line
-                            && other.binding.hart == entry.binding.hart),
-                        "two entries share a line and hart"
-                    );
+                if !same
+                    && other.binding.line == entry.binding.line
+                    && other.binding.hart == entry.binding.hart
+                {
+                    return Err("two entries share a line and hart");
                 }
-                assert!(
-                    !twice(entry.sources, other.sources, same),
-                    "two entries, or one part, list a source twice"
-                );
+                if twice(entry.sources, other.sources, same) {
+                    return Err("two entries, or one part, list a source twice");
+                }
                 if other_position > position
                     && other.binding.level == entry.binding.level
                     && other.binding.hart == entry.binding.hart
                 {
                     match lines.tie_break {
-                        crate::TieBreak::HighestLine => assert!(
-                            entry.binding.line < other.binding.line,
-                            "declared low-to-high priority contradicts the chip's line tie-break"
-                        ),
+                        crate::TieBreak::HighestLine => {
+                            if entry.binding.line >= other.binding.line {
+                                return Err(
+                                    "declared low-to-high priority contradicts the chip's line tie-break",
+                                );
+                            }
+                        }
                     }
                 }
                 if other.binding.level == entry.binding.level
@@ -982,20 +1000,26 @@ pub mod __private {
                 }
             }
             match entry.binding.class {
-                Class::Executor => assert!(
-                    executors == 1,
-                    "two Executor entries share a level and hart"
-                ),
-                Class::Hardware | Class::ExemptWakerCall => assert!(
-                    executors == 0,
-                    "a Hardware entry shares the level of its hart's Executor"
-                ),
-                Class::ExemptExecutorLevel => assert!(
-                    executors == 1,
-                    "an Exempt(ExecutorLevel) entry is not on the level of its hart's Executor"
-                ),
+                Class::Executor => {
+                    if executors != 1 {
+                        return Err("two Executor entries share a level and hart");
+                    }
+                }
+                Class::Hardware | Class::ExemptWakerCall => {
+                    if executors != 0 {
+                        return Err("a Hardware entry shares the level of its hart's Executor");
+                    }
+                }
+                Class::ExemptExecutorLevel => {
+                    if executors != 1 {
+                        return Err(
+                            "an Exempt(ExecutorLevel) entry is not on the level of its hart's Executor",
+                        );
+                    }
+                }
             }
         }
+        Ok(())
     }
 
     /// The sources `lists` hold together.
@@ -1053,8 +1077,8 @@ pub mod __private {
         false
     }
 
-    /// The bytes of `text`, which holds `N`.
-    pub const fn bytes<const N: usize>(text: &str) -> [u8; N] {
+    /// The bytes of `text`, which holds `N`; why not otherwise.
+    pub const fn bytes<const N: usize>(text: &str) -> Result<[u8; N], &'static str> {
         let mut out = [0; N];
         let mut from = text.as_bytes();
         let mut to: &mut [u8] = &mut out;
@@ -1063,8 +1087,10 @@ pub mod __private {
             from = from_tail;
             to = to_tail;
         }
-        assert!(from.is_empty(), "the reason holds its length");
-        out
+        if !from.is_empty() {
+            return Err("the reason holds its length");
+        }
+        Ok(out)
     }
 
     /// The private part of a token.

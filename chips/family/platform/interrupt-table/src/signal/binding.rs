@@ -73,10 +73,9 @@ impl<E: Entry> Raisers for FromHandler<E> {
 
 impl<E: Entry> Raisers for FromExecutorLevel<E> {
     const CONTEXTS: Raising = {
-        assert!(
-            matches!(E::CLASS, Class::ExemptExecutorLevel),
-            "a same-level signal handler must have class Exempt(ExecutorLevel)"
-        );
+        if !matches!(E::CLASS, Class::ExemptExecutorLevel) {
+            panic!("a same-level signal handler must have class Exempt(ExecutorLevel)")
+        }
         Raising::ExecutorLevel(E::CONTEXT)
     };
 }
@@ -85,21 +84,30 @@ impl<X: SignalExecutor, E: Entry> Raisers for FromTask<X, E>
 where
     E::Part: InterruptSource,
 {
-    const CONTEXTS: Raising = Raising::Task(executor_context::<X, E>());
+    const CONTEXTS: Raising = match executor_context::<X, E>() {
+        Ok(context) => Raising::Task(context),
+        Err(why) => panic!("{}", why),
+    };
 }
 
 impl<X: SignalExecutor, E: Entry> Raisers for FromOwnTask<X, E>
 where
     E::Part: InterruptSource,
 {
-    const CONTEXTS: Raising = Raising::OwnTask(executor_context::<X, E>());
+    const CONTEXTS: Raising = match executor_context::<X, E>() {
+        Ok(context) => Raising::OwnTask(context),
+        Err(why) => panic!("{}", why),
+    };
 }
 
 impl<X: SignalExecutor, E: Entry> Raisers for FromPeerHart<X, E>
 where
     E::Part: InterruptSource,
 {
-    const CONTEXTS: Raising = Raising::PeerHart(executor_context::<X, E>());
+    const CONTEXTS: Raising = match executor_context::<X, E>() {
+        Ok(context) => Raising::PeerHart(context),
+        Err(why) => panic!("{}", why),
+    };
 }
 
 impl<A: Raisers, B: Raisers> Raisers for (A, B) {
@@ -111,81 +119,75 @@ impl<A: Raisers, B: Raisers> Raisers for (A, B) {
 /// executor's entry polls its tasks (class `Executor`) and a thread-mode
 /// executor's is its wake entry (class `Hardware`), whose tasks run at level
 /// zero. A raiser or requester names its executor through it.
-pub const fn executor_context<X: SignalExecutor, E: Entry>() -> Context
+pub const fn executor_context<X: SignalExecutor, E: Entry>() -> Result<Context, &'static str>
 where
     E::Part: InterruptSource,
 {
-    assert!(
-        <E::Part as InterruptSource>::SOURCE == X::SOURCE,
-        "an executor's entry must name its software interrupt"
-    );
+    if <E::Part as InterruptSource>::SOURCE != X::SOURCE {
+        return Err("an executor's entry must name its software interrupt");
+    }
     if X::INTERRUPT_MODE {
-        assert!(
-            matches!(E::CLASS, Class::Executor),
-            "an interrupt-mode executor's entry must poll its tasks"
-        );
-        E::CONTEXT
+        if !matches!(E::CLASS, Class::Executor) {
+            return Err("an interrupt-mode executor's entry must poll its tasks");
+        }
+        Ok(E::CONTEXT)
     } else {
-        assert!(
-            matches!(E::CLASS, Class::Hardware),
-            "a thread executor needs its wake entry"
-        );
-        Context {
+        if !matches!(E::CLASS, Class::Hardware) {
+            return Err("a thread executor needs its wake entry");
+        }
+        Ok(Context {
             level: 0,
             hart: E::HART,
-        }
+        })
     }
 }
 
 impl Raising {
-    pub(super) const fn check(&self, executor: Context) {
+    pub(super) const fn check(&self, executor: Context) -> Result<(), &'static str> {
         match self {
             Self::Handler(from) => {
-                assert!(
-                    from.hart == executor.hart,
-                    "a signal and its raiser must share a hart"
-                );
-                assert!(
-                    from.level > executor.level,
-                    "a signal handler must be above its executor"
-                );
+                if from.hart != executor.hart {
+                    return Err("a signal and its raiser must share a hart");
+                }
+                if from.level <= executor.level {
+                    return Err("a signal handler must be above its executor");
+                }
             }
             Self::Task(from) => {
-                assert!(
-                    from.hart == executor.hart,
-                    "a signal and its raiser must share a hart"
-                );
-                assert!(
-                    from.level < executor.level,
-                    "a signal task must be below its executor"
-                );
+                if from.hart != executor.hart {
+                    return Err("a signal and its raiser must share a hart");
+                }
+                if from.level >= executor.level {
+                    return Err("a signal task must be below its executor");
+                }
             }
             Self::OwnTask(from) => {
-                assert!(
-                    from.hart == executor.hart && from.level == executor.level,
-                    "an own-task raiser must be a task of its receiving executor"
-                );
+                if from.hart != executor.hart || from.level != executor.level {
+                    return Err("an own-task raiser must be a task of its receiving executor");
+                }
             }
             Self::ExecutorLevel(from) => {
-                assert!(
-                    from.hart == executor.hart,
-                    "a signal and its raiser must share a hart"
-                );
-                assert!(
-                    from.level == executor.level,
-                    "a same-level signal handler must be on its receiving executor's level"
-                );
+                if from.hart != executor.hart {
+                    return Err("a signal and its raiser must share a hart");
+                }
+                if from.level != executor.level {
+                    return Err(
+                        "a same-level signal handler must be on its receiving executor's level",
+                    );
+                };
             }
             Self::PeerHart(from) => {
-                assert!(
-                    from.hart != executor.hart,
-                    "a peer-hart raiser must run on another hart than its executor"
-                );
+                if from.hart == executor.hart {
+                    return Err("a peer-hart raiser must run on another hart than its executor");
+                }
             }
             Self::Pair(a, b) => {
-                a.check(executor);
-                b.check(executor);
+                if let Err(why) = a.check(executor) {
+                    return Err(why);
+                }
+                return b.check(executor);
             }
         }
+        Ok(())
     }
 }

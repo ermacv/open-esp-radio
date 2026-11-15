@@ -96,7 +96,10 @@ where
 {
     /// The handler and requester selected by this doorbell's constructor.
     pub const HANDLER: Context = E::CONTEXT;
-    pub const EXECUTOR: Context = executor_context::<X, R>();
+    pub const EXECUTOR: Context = match executor_context::<X, R>() {
+        Ok(context) => context,
+        Err(why) => panic!("{}", why),
+    };
 
     /// The ringing half of `line`, once `bound` proves that the image's
     /// interrupt table binds entry `E`, whose part holds `Member`'s source, the
@@ -116,7 +119,7 @@ where
         Member: InterruptSource,
     {
         const {
-            if !request_direction(E::CONTEXT, executor_context::<X, R>()) {
+            if !request_direction(E::CONTEXT, Self::EXECUTOR) {
                 panic!("a request handler must be above its executor on the same hart");
             }
             if Member::SOURCE
