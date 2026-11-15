@@ -13,8 +13,8 @@ of the port's transitions in the repository, by type: six of the eight
 take a proof and two the stop's right, which only the machine holds.
 
 Three answers of the port carry an owner that is not the machine's, and
-`drive` splits them: a reinstall's `Installed` goes to the party that
-delivers the end, a release's device stays with the binding that holds the
+`drive` splits them: a reinstall's `Installed` goes to the controller in
+the one call that delivers the restart's end (`Parties::reinstalled`), a release's device stays with the binding that holds the
 port, and an item a cleanup hands back (`Unkeeping`) goes to the data
 plane. The machine gets what is left.
 

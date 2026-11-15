@@ -347,7 +347,7 @@ pub enum Step<'m, 'id, C, F> {
     Start(StartProof<'id>, C, Resume<'m, 'id, C, F, AskStart<C>>),
     /// Poll the port's stop with the stop's right [`Resume::right`] lends;
     /// its answer is [`Resume::answer`] or [`Resume::pending`].
-    Stop(Resume<'m, 'id, C, F, AskStop<'id>>),
+    Stop(Resume<'m, 'id, C, F, AskStop>),
     /// Ask the data plane to stop the data.
     StopData(Resume<'m, 'id, C, F, AskStopData<'id>>),
     /// Take what a sink refused, under the stop's proof, which comes back
@@ -360,18 +360,18 @@ pub enum Step<'m, 'id, C, F> {
     TakeFreed(Stopped<'id>, Resume<'m, 'id, C, F, AskTakeFreed>),
     /// Retire the installation.
     Retire(Stopped<'id>, Resume<'m, 'id, C, F, AskRetire>),
-    /// Reinstall the next installation.
+    /// Reinstall the next installation: [`Resume::installed`] with the
+    /// next installation's stop, or [`Resume::refused`].
     Reinstall(Retired<'id>, Resume<'m, 'id, C, F, AskReinstall>),
     /// Release the port: it takes the stop's right too, which a refusal
     /// gives back.
-    Release(
-        Retired<'id>,
-        StopRight<'id>,
-        Resume<'m, 'id, C, F, AskRelease>,
-    ),
+    Release(Retired<'id>, StopRight<'id>, Releasing<'m, 'id, C, F>),
+    /// The release's end: the end of the port, and of the stop's right. It
+    /// returns no permit, and the step rests.
+    Released(Ended<'id, F>, Rest),
     /// Ask what a stop can do about the port's fault, with the stop's right
     /// [`Resume::right`] lends.
-    Recover(Resume<'m, 'id, C, F, AskRecover<'id, C>>),
+    Recover(Resume<'m, 'id, C, F, AskRecover>),
     /// Pass this on to its party, and go on.
     Tell(Tell<'id>, Resume<'m, 'id, C, F, Told<'id>>),
     /// The one end of the open request: to the controller, and go on.
@@ -384,12 +384,20 @@ pub enum Step<'m, 'id, C, F> {
     Rest(Rest),
 }
 
-/// The machine, held until the ask `K` is answered or the message passed.
+/// The port that holds an installation, held until the ask `K` is answered
+/// or the message passed.
 #[must_use = "a step goes on only through its resume"]
 pub struct Resume<'m, 'id, C, F, K> {
-    machine: &'m mut Machine<'id, C, F>,
+    port: Port<'m, 'id, C, F>,
     now: Instant,
     kind: K,
+}
+
+/// The whole machine, held while its release is asked.
+#[must_use = "a step goes on only through its resume"]
+pub struct Releasing<'m, 'id, C, F> {
+    machine: &'m mut Machine<'id, C, F>,
+    now: Instant,
 }
 
 /// A start is asked.
@@ -398,12 +406,10 @@ pub struct AskStart<C> {
     run: Run,
 }
 
-/// A stop is polled. It carries the stop's right out of the machine, and
-/// gives it back with the answer.
-pub struct AskStop<'id> {
+/// A stop is polled.
+pub struct AskStop {
     after: AfterStop,
     run: Run,
-    right: StopRight<'id>,
 }
 
 /// The data's stop is asked.
@@ -435,15 +441,9 @@ pub struct AskRetire {
 /// A reinstall is asked.
 pub struct AskReinstall(());
 
-/// A release is asked.
-pub struct AskRelease(());
-
-/// A recovery is asked. It carries the stop's right and the position out
-/// of the machine, and gives them back with the answer.
-pub struct AskRecover<'id, C> {
+/// A recovery is asked.
+pub struct AskRecover {
     after: AfterRecover,
-    right: StopRight<'id>,
-    at: At<'id, C>,
 }
 
 /// A message is passed on; the step goes on towards the goal.
@@ -472,13 +472,21 @@ enum Life<'id, C> {
         right: StopRight<'id>,
         at: At<'id, C>,
     },
-    /// A stop or a recovery is asked: the right and the position are out
-    /// with the step, which gives them back with its answer.
-    Lent,
     /// A release is asked: the right is out with the proof.
     Releasing,
     /// The port is released.
     Released,
+}
+
+/// A view of a port that holds an installation: the stop's right, the
+/// position, the goal and what is waited for. Every function of a step but
+/// the release's works on it.
+struct Port<'m, 'id, C, F> {
+    right: &'m mut StopRight<'id>,
+    at: &'m mut At<'id, C>,
+    goal: &'m mut Goal<C>,
+    waiting: &'m mut Waiting<F>,
+    retry: Duration,
 }
 
 /// The position of the installation, each holding the proof its name says.
@@ -492,6 +500,22 @@ enum At<'id, C> {
     /// A retired installation's data is stopped, its tokens ended and its
     /// drain done.
     Retired(Retired<'id>),
+}
+
+impl<C> At<'_, C> {
+    /// The facts of the installation at this position: what stands in its
+    /// place, as "stopping", while a step carries its proof out.
+    const fn facts(&self) -> Run {
+        match self {
+            Self::Stopped(_, run) | Self::Starting(_, run, _) | Self::Stopping(run) => *run,
+            Self::Running(tokens) => Run {
+                data: Data::Flowing,
+                tokens: *tokens,
+                drain: Drain::Owed,
+            },
+            Self::Retired(_) => DONE,
+        }
+    }
 }
 
 /// The facts of an installation that are not its position.
@@ -541,6 +565,31 @@ enum Goal<C> {
         want: Want<C>,
         deadline: Option<Instant>,
     },
+}
+
+impl<C> Goal<C> {
+    const fn deadline(&self) -> Option<Instant> {
+        match self {
+            Self::Open { deadline, .. } => *deadline,
+            Self::None => None,
+        }
+    }
+
+    /// The rest `again` names, at `now`: a wake names the request's
+    /// deadline; a timer the earlier of the deadline and the retry time.
+    fn rest(&self, again: Again, now: Instant, retry: Duration) -> Rest {
+        match again {
+            Again::Wake => Rest::Wake(self.deadline()),
+            Again::Round => Rest::Round,
+            Again::Timer => {
+                let retry = now.saturating_add(retry);
+                Rest::Wake(Some(match self.deadline() {
+                    Some(deadline) => deadline.min(retry),
+                    None => retry,
+                }))
+            }
+        }
+    }
 }
 
 /// What the open request wants.
@@ -651,37 +700,77 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// One input, then towards the goal as far as the answers allow.
+    ///
+    /// Whether the port holds an installation is asked here, once a step:
+    /// a released machine, and one whose release is asked, rest on every
+    /// input. A retired installation's release, which takes the stop's
+    /// right out of the machine, is decided here too, where the machine is
+    /// whole; everything else is the port's view.
     pub fn step(&mut self, input: Input<'id, C>, now: Instant) -> Step<'_, 'id, C, F> {
-        match input {
-            Input::Request(request) => self.request(request, now),
-            Input::Turn => match self.goal {
+        if self.releases(&input, now) {
+            return self.release(input, now);
+        }
+        let Self {
+            life,
+            goal,
+            waiting,
+            retry,
+        } = self;
+        match life {
+            Life::Port { right, at } => Port {
+                right,
+                at,
+                goal,
+                waiting,
+                retry: *retry,
+            }
+            .step(input, now),
+            Life::Releasing | Life::Released => Step::Rest(goal.rest(Again::Wake, now, *retry)),
+        }
+    }
+
+    /// Whether `input` makes a retired installation's release due now: its
+    /// goal releases, with the network stopped when it is to stop, and the
+    /// input asks nothing before the pass (no message, no deadline, no
+    /// fault).
+    fn releases(&self, input: &Input<'id, C>, now: Instant) -> bool {
+        let retired = matches!(
+            self.life,
+            Life::Port {
+                at: At::Retired(_),
+                ..
+            }
+        );
+        let due = match input {
+            Input::Request(request) => matches!(request.aim, Aim::Release(Network::Stays)),
+            Input::NetworkStopped => matches!(
+                self.goal,
                 Goal::Open {
-                    deadline: Some(deadline),
+                    want: Want::Release(_),
                     ..
-                } if deadline <= now => self.deadline(now),
-                Goal::Open { .. } | Goal::None => self.advance(now),
-            },
-            Input::Fault => self.fault(now),
-            Input::TokensEnded(TokensEnded { brand: _ }) => {
-                match &mut self.life {
-                    Life::Port {
-                        at: At::Stopped(_, run) | At::Starting(_, run, _) | At::Stopping(run),
-                        ..
-                    } => run.tokens = Tokens::Ended,
-                    Life::Port {
-                        at: At::Running(tokens),
-                        ..
-                    } => *tokens = Tokens::Ended,
-                    // A retired installation's tokens are ended; a released
-                    // port holds none; no step is out between two inputs.
-                    Life::Port {
-                        at: At::Retired(_), ..
-                    }
-                    | Life::Lent
-                    | Life::Releasing
-                    | Life::Released => {}
                 }
-                self.advance(now)
+            ),
+            Input::Turn | Input::TokensEnded(_) => match self.goal {
+                Goal::Open {
+                    want: Want::Release(NetworkStep::Stays | NetworkStep::Stopped),
+                    deadline,
+                } => deadline.is_none_or(|deadline| now < deadline),
+                Goal::Open { .. } | Goal::None => false,
+            },
+            Input::Fault => false,
+        };
+        retired && due
+    }
+
+    /// The release of a retired installation: the input's facts, then the
+    /// release, which takes the right with the retirement's proof.
+    fn release(&mut self, input: Input<'id, C>, now: Instant) -> Step<'_, 'id, C, F> {
+        match input {
+            Input::Request(Request { deadline, .. }) => {
+                self.goal = Goal::Open {
+                    want: Want::Release(NetworkStep::Stays),
+                    deadline,
+                };
             }
             Input::NetworkStopped => {
                 if let Goal::Open {
@@ -691,85 +780,65 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 {
                     *network = NetworkStep::Stopped;
                 }
-                self.advance(now)
+            }
+            Input::Turn | Input::TokensEnded(_) | Input::Fault => {}
+        }
+        match mem::replace(&mut self.life, Life::Releasing) {
+            Life::Port {
+                right,
+                at: At::Retired(retired),
+            } => Step::Release(retired, right, Releasing { machine: self, now }),
+            // `releases` named a retired installation: anything else is
+            // given back as it was, and the pass is the next round's.
+            life @ (Life::Port { .. } | Life::Releasing | Life::Released) => {
+                self.life = life;
+                Step::Rest(Rest::Round)
             }
         }
     }
+}
 
-    fn resume<K>(&mut self, now: Instant, kind: K) -> Resume<'_, 'id, C, F, K> {
+impl<'m, 'id, C: Copy, F> Port<'m, 'id, C, F> {
+    fn resume<K>(self, now: Instant, kind: K) -> Resume<'m, 'id, C, F, K> {
         Resume {
-            machine: self,
+            port: self,
             now,
             kind,
         }
     }
 
-    /// Put the installation at `at`. Only a step of a port that holds an
-    /// installation puts one: a releasing or released machine has none to
-    /// put, and what `at` holds is dropped.
-    fn put(&mut self, at: At<'id, C>) {
-        match &mut self.life {
-            Life::Port { at: place, .. } => *place = at,
-            Life::Lent | Life::Releasing | Life::Released => {}
-        }
-    }
-
-    const fn due(&self) -> Option<Instant> {
-        match self.goal {
-            Goal::Open { deadline, .. } => deadline,
-            Goal::None => None,
-        }
-    }
-
     fn rest(&self, again: Again, now: Instant) -> Rest {
-        match again {
-            Again::Wake => Rest::Wake(self.due()),
-            Again::Round => Rest::Round,
-            Again::Timer => {
-                let retry = now.saturating_add(self.retry);
-                Rest::Wake(Some(match self.due() {
-                    Some(deadline) => deadline.min(retry),
-                    None => retry,
-                }))
-            }
-        }
+        self.goal.rest(again, now, self.retry)
+    }
+
+    /// Take the position's proof out for a step: "stopping", with the same
+    /// facts, stands in its place.
+    fn take(&mut self) -> At<'id, C> {
+        let facts = self.at.facts();
+        mem::replace(self.at, At::Stopping(facts))
     }
 
     /// The permit an end returns: what may be asked next.
     const fn permit(&self) -> Permit<'id> {
-        let tokens = match &self.life {
-            Life::Port {
-                at: At::Stopped(_, run) | At::Starting(_, run, _) | At::Stopping(run),
-                ..
-            } => run.tokens,
-            Life::Port {
-                at: At::Running(tokens),
-                ..
-            } => *tokens,
-            // A retired installation's tokens are ended. A release's end
-            // returns no permit and no request is open after it, so no end
-            // that returns one comes from a released port.
-            Life::Port {
-                at: At::Retired(_), ..
-            }
-            | Life::Lent
-            | Life::Releasing
-            | Life::Released => Tokens::Ended,
-        };
-        match tokens {
-            Tokens::Held => Permit::Live(Live { brand: PhantomData }),
+        match self.at.facts().tokens {
+            Tokens::Held => match self.at {
+                At::Retired(_) => Permit::Spent(Spent { brand: PhantomData }),
+                At::Stopped(..) | At::Starting(..) | At::Running(_) | At::Stopping(_) => {
+                    Permit::Live(Live { brand: PhantomData })
+                }
+            },
             Tokens::Asked | Tokens::Ended => Permit::Spent(Spent { brand: PhantomData }),
         }
     }
 
     /// The open request ends.
     fn end(
-        &mut self,
+        self,
         result: Result<End, Unreached<F>>,
         next: Next<'id>,
         now: Instant,
-    ) -> Step<'_, 'id, C, F> {
-        self.goal = Goal::None;
+    ) -> Step<'m, 'id, C, F> {
+        *self.goal = Goal::None;
         let permit = self.permit();
         Step::Ended(
             Ended::Request(result, permit),
@@ -778,9 +847,9 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// What is waited for, said when its class changed; then `next`.
-    fn say(&mut self, waiting: Waiting<F>, next: Next<'id>, now: Instant) -> Step<'_, 'id, C, F> {
+    fn say(self, waiting: Waiting<F>, next: Next<'id>, now: Instant) -> Step<'m, 'id, C, F> {
         let changed = self.waiting.class() != waiting.class();
-        self.waiting = waiting;
+        *self.waiting = waiting;
         if changed {
             Step::Held(self.resume(now, Said { next }))
         } else {
@@ -791,11 +860,11 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     /// Clear what is waited for when it is of `class`.
     fn clear(&mut self, class: Waited) {
         if self.waiting.class() == class {
-            self.waiting = Waiting::Nothing;
+            *self.waiting = Waiting::Nothing;
         }
     }
 
-    fn go(&mut self, next: Next<'id>, now: Instant) -> Step<'_, 'id, C, F> {
+    fn go(self, next: Next<'id>, now: Instant) -> Step<'m, 'id, C, F> {
         match next {
             Next::Advance => self.advance(now),
             Next::Rest(again) => Step::Rest(self.rest(again, now)),
@@ -806,7 +875,42 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
         }
     }
 
-    fn request(&mut self, request: Request<'id, C>, now: Instant) -> Step<'_, 'id, C, F> {
+    fn step(self, input: Input<'id, C>, now: Instant) -> Step<'m, 'id, C, F> {
+        match input {
+            Input::Request(request) => self.request(request, now),
+            Input::Turn => match *self.goal {
+                Goal::Open {
+                    deadline: Some(deadline),
+                    ..
+                } if deadline <= now => self.deadline(now),
+                Goal::Open { .. } | Goal::None => self.advance(now),
+            },
+            Input::Fault => self.fault(now),
+            Input::TokensEnded(TokensEnded { brand: _ }) => {
+                match self.at {
+                    At::Stopped(_, run) | At::Starting(_, run, _) | At::Stopping(run) => {
+                        run.tokens = Tokens::Ended;
+                    }
+                    At::Running(tokens) => *tokens = Tokens::Ended,
+                    // A retired installation's tokens are ended.
+                    At::Retired(_) => {}
+                }
+                self.advance(now)
+            }
+            Input::NetworkStopped => {
+                if let Goal::Open {
+                    want: Want::Release(network @ (NetworkStep::Told | NetworkStep::Stopped)),
+                    ..
+                } = self.goal
+                {
+                    *network = NetworkStep::Stopped;
+                }
+                self.advance(now)
+            }
+        }
+    }
+
+    fn request(self, request: Request<'id, C>, now: Instant) -> Step<'m, 'id, C, F> {
         let Request {
             aim,
             deadline,
@@ -819,13 +923,11 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             Aim::Release(Network::Stays) => Want::Release(NetworkStep::Stays),
             Aim::Release(Network::Stops) => Want::Release(NetworkStep::Told),
         };
-        self.goal = Goal::Open { want, deadline };
+        *self.goal = Goal::Open { want, deadline };
         // Every request stops a running radio: a run on another channel is
         // a retune, and a run on the same one is answered by the start.
-        if let Life::Port { at, .. } = &mut self.life
-            && let At::Running(tokens) = *at
-        {
-            *at = At::Stopping(Run {
+        if let At::Running(tokens) = *self.at {
+            *self.at = At::Stopping(Run {
                 data: Data::Flowing,
                 tokens,
                 drain: Drain::Owed,
@@ -849,13 +951,10 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
 
     /// The open request's deadline passed: it ends with what is waited
     /// for, and a start under way is stopped.
-    fn deadline(&mut self, now: Instant) -> Step<'_, 'id, C, F> {
-        if let Life::Port { at, .. } = &mut self.life
-            && let At::Starting(_, run, _) = at
-        {
+    fn deadline(self, now: Instant) -> Step<'m, 'id, C, F> {
+        if let At::Starting(_, run, _) = *self.at {
             // The start's proof is dropped: the stop gives the next one.
-            let run = *run;
-            *at = At::Stopping(run);
+            *self.at = At::Stopping(run);
         }
         let waited = self.waiting.class();
         self.end(Err(Unreached::Deadline(waited)), Next::Advance, now)
@@ -863,148 +962,94 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
 
     /// The port holds a fault: it ends a run and a start, by a stop, and
     /// the machine asks what a stop can do about it.
-    fn fault(&mut self, now: Instant) -> Step<'_, 'id, C, F> {
-        match &mut self.life {
-            Life::Port { at, .. } => match at {
-                At::Starting(_, run, _) => {
-                    let run = *run;
-                    *at = At::Stopping(run);
-                    self.end(Err(Unreached::StartInterrupted), Next::RecoverForFault, now)
-                }
-                At::Running(tokens) => {
-                    let tokens = *tokens;
-                    *at = At::Stopping(Run {
-                        data: Data::Flowing,
-                        tokens,
-                        drain: Drain::Owed,
-                    });
-                    Step::Interrupted(self.resume(
-                        now,
-                        Told {
-                            next: Next::RecoverForFault,
-                        },
-                    ))
-                }
-                At::Stopped(..) | At::Stopping(_) | At::Retired(_) => {
-                    self.go(Next::RecoverForFault, now)
-                }
-            },
-            // A released port has no installation a fault could hold.
-            Life::Lent | Life::Releasing | Life::Released => {
-                Step::Rest(self.rest(Again::Wake, now))
+    fn fault(self, now: Instant) -> Step<'m, 'id, C, F> {
+        match *self.at {
+            At::Starting(_, run, _) => {
+                *self.at = At::Stopping(run);
+                self.end(Err(Unreached::StartInterrupted), Next::RecoverForFault, now)
+            }
+            At::Running(tokens) => {
+                *self.at = At::Stopping(Run {
+                    data: Data::Flowing,
+                    tokens,
+                    drain: Drain::Owed,
+                });
+                Step::Interrupted(self.resume(
+                    now,
+                    Told {
+                        next: Next::RecoverForFault,
+                    },
+                ))
+            }
+            At::Stopped(..) | At::Stopping(_) | At::Retired(_) => {
+                self.recover(AfterRecover::Fault, now)
             }
         }
     }
 
-    fn after_recovery(
-        &mut self,
-        after: AfterRecover,
-        kept: Kept,
-        now: Instant,
-    ) -> Step<'_, 'id, C, F> {
+    /// Ask what a stop can do about the port's fault.
+    fn recover(self, after: AfterRecover, now: Instant) -> Step<'m, 'id, C, F> {
+        Step::Recover(self.resume(now, AskRecover { after }))
+    }
+
+    fn after_recovery(self, after: AfterRecover, kept: Kept, now: Instant) -> Step<'m, 'id, C, F> {
         let again = match kept {
             Kept::Kept => Again::Wake,
             Kept::Gone => Again::Round,
         };
-        match after {
-            AfterRecover::Again => Step::Rest(self.rest(again, now)),
-            AfterRecover::Fault => match mem::replace(&mut self.life, Life::Lent) {
-                // The fault's step polls the stop of a radio stopping once.
-                Life::Port {
-                    right,
-                    at: At::Stopping(run),
-                } => Step::Stop(self.resume(
+        match (after, &*self.at) {
+            // The fault's step polls the stop of a radio stopping once.
+            (AfterRecover::Fault, At::Stopping(run)) => {
+                let run = *run;
+                Step::Stop(self.resume(
                     now,
                     AskStop {
                         after: AfterStop::Fault,
                         run,
-                        right,
                     },
-                )),
-                life @ (Life::Port {
-                    at: At::Stopped(..) | At::Starting(..) | At::Running(_) | At::Retired(_),
-                    ..
-                }
-                | Life::Lent
-                | Life::Releasing
-                | Life::Released) => {
-                    self.life = life;
-                    Step::Rest(self.rest(again, now))
-                }
-            },
-        }
-    }
-
-    /// Ask what a stop can do about the port's fault, the right and the
-    /// position carried out with the step. A released port has no fault to
-    /// recover: the step rests.
-    fn recover(&mut self, after: AfterRecover, now: Instant) -> Step<'_, 'id, C, F> {
-        match mem::replace(&mut self.life, Life::Lent) {
-            Life::Port { right, at } => {
-                Step::Recover(self.resume(now, AskRecover { after, right, at }))
+                ))
             }
-            life @ (Life::Lent | Life::Releasing | Life::Released) => {
-                self.life = life;
-                Step::Rest(self.rest(Again::Wake, now))
-            }
+            (
+                AfterRecover::Fault,
+                At::Stopped(..) | At::Starting(..) | At::Running(_) | At::Retired(_),
+            )
+            | (AfterRecover::Again, _) => Step::Rest(self.rest(again, now)),
         }
     }
 
     /// A proof the port did not take is gone: a stop gives one again.
-    fn lost(&mut self, run: Run, now: Instant) -> Step<'_, 'id, C, F> {
-        self.put(At::Stopping(run));
+    fn lost(self, run: Run, now: Instant) -> Step<'m, 'id, C, F> {
+        *self.at = At::Stopping(run);
         Step::Rest(self.rest(Again::Round, now))
     }
 
     /// Towards the goal, as far as the answers allow.
-    fn advance(&mut self, now: Instant) -> Step<'_, 'id, C, F> {
-        match mem::replace(&mut self.life, Life::Releasing) {
-            Life::Port { right, at } => match at {
-                At::Running(tokens) => {
-                    self.life = Life::Port {
-                        right,
-                        at: At::Running(tokens),
-                    };
-                    Step::Rest(self.rest(Again::Wake, now))
-                }
-                At::Starting(starting, run, channel) => {
-                    self.life = Life::Port {
-                        right,
-                        at: At::Stopping(run),
-                    };
-                    Step::Start(
-                        StartProof::Starting(starting),
-                        channel,
-                        self.resume(now, AskStart { channel, run }),
-                    )
-                }
-                At::Stopping(run) => Step::Stop(self.resume(
-                    now,
-                    AskStop {
-                        after: AfterStop::Pass,
-                        run,
-                        right,
-                    },
-                )),
-                At::Stopped(stopped, run) => {
-                    self.life = Life::Port {
-                        right,
-                        at: At::Stopping(run),
-                    };
-                    self.stopped(stopped, run, now)
-                }
-                At::Retired(retired) => self.retired(right, retired, now),
-            },
-            life @ (Life::Lent | Life::Releasing | Life::Released) => {
-                self.life = life;
+    fn advance(mut self, now: Instant) -> Step<'m, 'id, C, F> {
+        match self.take() {
+            At::Running(tokens) => {
+                *self.at = At::Running(tokens);
                 Step::Rest(self.rest(Again::Wake, now))
             }
+            At::Starting(starting, run, channel) => Step::Start(
+                StartProof::Starting(starting),
+                channel,
+                self.resume(now, AskStart { channel, run }),
+            ),
+            At::Stopping(run) => Step::Stop(self.resume(
+                now,
+                AskStop {
+                    after: AfterStop::Pass,
+                    run,
+                },
+            )),
+            At::Stopped(stopped, run) => self.stopped(stopped, run, now),
+            At::Retired(retired) => self.retired(retired, now),
         }
     }
 
     /// A stopped installation, its proof out of the machine: the data first.
-    fn stopped(&mut self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'_, 'id, C, F> {
-        let ending = match self.goal {
+    fn stopped(self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'m, 'id, C, F> {
+        let ending = match *self.goal {
             Goal::Open {
                 want: Want::Halt | Want::Restart | Want::Release(_),
                 ..
@@ -1022,10 +1067,10 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// A stopped installation towards the goal, the data asked.
-    fn toward(&mut self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'_, 'id, C, F> {
-        match self.goal {
+    fn toward(self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'m, 'id, C, F> {
+        match *self.goal {
             Goal::None => {
-                self.put(At::Stopped(stopped, run));
+                *self.at = At::Stopped(stopped, run);
                 Step::Rest(self.rest(Again::Wake, now))
             }
             Goal::Open {
@@ -1033,7 +1078,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 ..
             } => {
                 if run.data == Data::Stopping {
-                    self.put(At::Stopped(stopped, run));
+                    *self.at = At::Stopped(stopped, run);
                     Step::Rest(self.rest(Again::Wake, now))
                 } else {
                     Step::Start(
@@ -1046,7 +1091,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
             Goal::Open {
                 want: Want::Halt, ..
             } => {
-                self.put(At::Stopped(stopped, run));
+                *self.at = At::Stopped(stopped, run);
                 if run.data == Data::Stopped {
                     self.end(Ok(End::Halted), Next::Rest(Again::Wake), now)
                 } else {
@@ -1062,7 +1107,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                         tokens: Tokens::Asked,
                         ..run
                     };
-                    self.put(At::Stopping(run));
+                    *self.at = At::Stopping(run);
                     Step::Tell(
                         Tell::EndTokens(Order { brand: PhantomData }),
                         self.resume(
@@ -1080,7 +1125,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
     }
 
     /// What a run may have left unconsumed, then the retirement.
-    fn drain(&mut self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'_, 'id, C, F> {
+    fn drain(self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'m, 'id, C, F> {
         match run.drain {
             Drain::Owed => Step::TakeUnconsumed(stopped, self.resume(now, AskTake { run })),
             Drain::Done => self.retire(stopped, run, now),
@@ -1089,40 +1134,32 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
 
     /// The retirement, asked only with the data stopped, the tokens ended
     /// and the drain done.
-    fn retire(&mut self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'_, 'id, C, F> {
+    fn retire(self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'m, 'id, C, F> {
         if run.data == Data::Stopped && run.tokens == Tokens::Ended && run.drain == Drain::Done {
-            self.put(At::Stopping(run));
+            *self.at = At::Stopping(run);
             Step::Retire(stopped, self.resume(now, AskRetire { run }))
         } else {
-            self.put(At::Stopped(stopped, run));
+            *self.at = At::Stopped(stopped, run);
             Step::Rest(self.rest(Again::Wake, now))
         }
     }
 
-    /// A retired installation towards the goal.
-    fn retired(
-        &mut self,
-        right: StopRight<'id>,
-        retired: Retired<'id>,
-        now: Instant,
-    ) -> Step<'_, 'id, C, F> {
-        match self.goal {
+    /// A retired installation towards the goal, its proof out of the
+    /// machine. Its release is decided at a step's beginning
+    /// ([`Machine::step`]), where the machine is whole.
+    fn retired(self, retired: Retired<'id>, now: Instant) -> Step<'m, 'id, C, F> {
+        match *self.goal {
             Goal::Open {
                 want: Want::Restart,
                 ..
-            } => {
-                self.life = Life::Port {
-                    right,
-                    at: At::Stopping(DONE),
-                };
-                Step::Reinstall(retired, self.resume(now, AskReinstall(())))
-            }
+            } => Step::Reinstall(retired, self.resume(now, AskReinstall(()))),
+            // A release goes on from the next step's beginning.
             Goal::Open {
                 want: Want::Release(NetworkStep::Stays | NetworkStep::Stopped),
                 ..
             } => {
-                self.life = Life::Releasing;
-                Step::Release(retired, right, self.resume(now, AskRelease(())))
+                *self.at = At::Retired(retired);
+                Step::Rest(self.rest(Again::Round, now))
             }
             // A release that stops the network waits for its stop; a
             // retired installation's permit asks no run and no halt.
@@ -1131,10 +1168,7 @@ impl<'id, C: Copy, F> Machine<'id, C, F> {
                 ..
             }
             | Goal::None => {
-                self.life = Life::Port {
-                    right,
-                    at: At::Retired(retired),
-                };
+                *self.at = At::Retired(retired);
                 Step::Rest(self.rest(Again::Wake, now))
             }
         }
@@ -1145,18 +1179,18 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStart<C>> {
     /// The port's answer to the start.
     pub fn answer(self, answer: StartPoll<'id, F>) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            port,
             now,
             kind: AskStart { channel, run },
         } = self;
         match answer {
             Ok(StartProgress::Started) => {
-                machine.put(At::Running(run.tokens));
-                machine.goal = Goal::None;
+                *port.at = At::Running(run.tokens);
+                *port.goal = Goal::None;
                 if run.data == Data::Stopped {
                     Step::Tell(
                         Tell::DataFlows,
-                        machine.resume(
+                        port.resume(
                             now,
                             Told {
                                 next: Next::EndStarted,
@@ -1164,74 +1198,62 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStart<C>> {
                         ),
                     )
                 } else {
-                    machine.go(Next::EndStarted, now)
+                    port.go(Next::EndStarted, now)
                 }
             }
             Ok(StartProgress::Pending(starting)) => {
-                machine.put(At::Starting(starting, run, channel));
-                Step::Rest(machine.rest(Again::Wake, now))
+                *port.at = At::Starting(starting, run, channel);
+                Step::Rest(port.rest(Again::Wake, now))
             }
             Err(StartRefused::Refused(stopped, failure)) => {
-                machine.put(At::Stopped(stopped, run));
-                machine.end(
+                *port.at = At::Stopped(stopped, run);
+                port.end(
                     Err(Unreached::StartRefused(failure)),
                     Next::Rest(Again::Wake),
                     now,
                 )
             }
-            Err(StartRefused::Unstopped { cause, stop }) => machine.end(
+            Err(StartRefused::Unstopped { cause, stop }) => port.end(
                 Err(Unreached::StartUnstopped { cause, stop }),
                 Next::Rest(Again::Round),
                 now,
             ),
-            Err(StartRefused::Stale(StaleProof { proof: _ })) => machine.lost(run, now),
+            Err(StartRefused::Stale(StaleProof { proof: _ })) => port.lost(run, now),
         }
     }
 }
 
-impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStop<'id>> {
+impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStop> {
     /// The stop's right, lent for the port's stop.
-    pub const fn right(&mut self) -> &mut StopRight<'id> {
-        &mut self.kind.right
+    pub fn right(&mut self) -> &mut StopRight<'id> {
+        &mut *self.port.right
     }
 
     /// The port's stop is not confirmed yet, and its waker is registered:
     /// the step rests until it wakes.
     pub fn pending(self) -> Step<'m, 'id, C, F> {
-        let Self {
-            machine,
-            now,
-            kind: AskStop { run, right, .. },
-        } = self;
-        machine.life = Life::Port {
-            right,
-            at: At::Stopping(run),
-        };
-        Step::Rest(machine.rest(Again::Wake, now))
+        let Self { port, now, .. } = self;
+        Step::Rest(port.rest(Again::Wake, now))
     }
 
     /// The port's answer to the stop.
     pub fn answer(self, answer: Result<Stopped<'id>, StopUnconfirmed<F>>) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            mut port,
             now,
-            kind: AskStop { after, run, right },
+            kind: AskStop { after, run },
         } = self;
-        machine.life = Life::Port {
-            right,
-            at: At::Stopping(run),
-        };
         match answer {
             Err(unconfirmed) => {
-                machine.say(Waiting::Radio(unconfirmed), Next::Rest(Again::Timer), now)
+                port.say(Waiting::Radio(unconfirmed), Next::Rest(Again::Timer), now)
             }
             Ok(stopped) => {
-                machine.clear(Waited::Radio);
+                port.clear(Waited::Radio);
                 match after {
-                    AfterStop::Pass => machine.stopped(stopped, run, now),
+                    AfterStop::Pass => port.stopped(stopped, run, now),
                     AfterStop::Fault => {
-                        machine.put(At::Stopped(stopped, run));
-                        Step::Rest(machine.rest(Again::Round, now))
+                        *port.at = At::Stopped(stopped, run);
+                        Step::Rest(port.rest(Again::Round, now))
                     }
                 }
             }
@@ -1243,7 +1265,7 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStopData<'id>> {
     /// The data plane's answer.
     pub fn answer(self, answer: DataStop) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            port,
             now,
             kind: AskStopData { stopped, run },
         } = self;
@@ -1254,8 +1276,8 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStopData<'id>> {
             },
             ..run
         };
-        machine.put(At::Stopping(run));
-        machine.toward(stopped, run, now)
+        *port.at = At::Stopping(run);
+        port.toward(stopped, run, now)
     }
 }
 
@@ -1267,19 +1289,19 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskTake> {
         answer: Result<Unconsumed, StaleProof<()>>,
     ) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            port,
             now,
             kind: AskTake { run },
         } = self;
         match answer {
-            Ok(Unconsumed::None) => Step::Clean(stopped, machine.resume(now, AskClean { run })),
+            Ok(Unconsumed::None) => Step::Clean(stopped, port.resume(now, AskClean { run })),
             Ok(Unconsumed::Kept) => {
-                machine.put(At::Stopped(stopped, run));
-                machine.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
+                *port.at = At::Stopped(stopped, run);
+                port.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
             }
             Err(StaleProof { proof: () }) => {
                 drop(stopped);
-                machine.lost(run, now)
+                port.lost(run, now)
             }
         }
     }
@@ -1295,31 +1317,31 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskClean> {
         answer: CallInput<(), Result<(), CleanupRefused<F>>>,
     ) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            port,
             now,
             kind: AskClean { run },
         } = self;
         match answer {
             CallInput::Accepted(Ok(())) => {
-                Step::TakeFreed(stopped, machine.resume(now, AskTakeFreed { run }))
+                Step::TakeFreed(stopped, port.resume(now, AskTakeFreed { run }))
             }
             CallInput::NotAccepted(()) => {
-                machine.put(At::Stopped(stopped, run));
-                machine.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
+                *port.at = At::Stopped(stopped, run);
+                port.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
             }
             CallInput::Accepted(Err(CleanupRefused::Stale)) => {
                 drop(stopped);
-                machine.lost(run, now)
+                port.lost(run, now)
             }
             CallInput::Accepted(Err(CleanupRefused::Faulted(_))) => {
-                machine.put(At::Stopped(stopped, run));
-                machine.recover(AfterRecover::Again, now)
+                *port.at = At::Stopped(stopped, run);
+                port.recover(AfterRecover::Again, now)
             }
             CallInput::Accepted(Err(
                 refused @ (CleanupRefused::Unavailable(_) | CleanupRefused::Held(_)),
             )) => {
-                machine.put(At::Stopped(stopped, run));
-                machine.say(Waiting::Cleanup(refused), Next::Rest(Again::Timer), now)
+                *port.at = At::Stopped(stopped, run);
+                port.say(Waiting::Cleanup(refused), Next::Rest(Again::Timer), now)
             }
         }
     }
@@ -1334,15 +1356,15 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskTakeFreed> {
         answer: Result<Unconsumed, StaleProof<()>>,
     ) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            mut port,
             now,
             kind: AskTakeFreed { run },
         } = self;
         match answer {
             Ok(Unconsumed::None) => {
-                machine.clear(Waited::Unconsumed);
-                machine.clear(Waited::Cleanup);
-                machine.retire(
+                port.clear(Waited::Unconsumed);
+                port.clear(Waited::Cleanup);
+                port.retire(
                     stopped,
                     Run {
                         drain: Drain::Done,
@@ -1352,47 +1374,41 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskTakeFreed> {
                 )
             }
             Ok(Unconsumed::Kept) => {
-                machine.put(At::Stopped(stopped, run));
-                machine.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
+                *port.at = At::Stopped(stopped, run);
+                port.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
             }
             Err(StaleProof { proof: () }) => {
                 drop(stopped);
-                machine.lost(run, now)
+                port.lost(run, now)
             }
         }
     }
 }
 
 impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRetire> {
-    /// The port's answer to the retirement.
+    /// The port's answer to the retirement. A retirement granted ends its
+    /// step with a round: the retired installation goes on from the next
+    /// step's beginning.
     pub fn answer(
         self,
         answer: Result<Retired<'id>, ProofRefused<Stopped<'id>, Outstanding<F>>>,
     ) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            mut port,
             now,
             kind: AskRetire { run },
         } = self;
         match answer {
             Ok(retired) => {
-                machine.clear(Waited::Outstanding);
-                match mem::replace(&mut machine.life, Life::Releasing) {
-                    Life::Port { right, at: _ } => machine.retired(right, retired, now),
-                    // A retirement is asked only of a port that holds an
-                    // installation.
-                    life @ (Life::Lent | Life::Releasing | Life::Released) => {
-                        machine.life = life;
-                        drop(retired);
-                        Step::Rest(machine.rest(Again::Wake, now))
-                    }
-                }
+                port.clear(Waited::Outstanding);
+                *port.at = At::Retired(retired);
+                Step::Rest(port.rest(Again::Round, now))
             }
             Err(ProofRefused::Refused(stopped, outstanding)) => {
-                machine.put(At::Stopped(stopped, run));
+                *port.at = At::Stopped(stopped, run);
                 match outstanding.fault {
-                    Some(_) => machine.recover(AfterRecover::Again, now),
-                    None => machine.say(
+                    Some(_) => port.recover(AfterRecover::Again, now),
+                    None => port.say(
                         Waiting::Outstanding(outstanding),
                         Next::Rest(Again::Wake),
                         now,
@@ -1401,74 +1417,78 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRetire> {
             }
             Err(ProofRefused::Stale(StaleProof { proof })) => {
                 drop(proof);
-                machine.lost(run, now)
+                port.lost(run, now)
             }
         }
     }
 }
 
 impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskReinstall> {
-    /// The port's answer to the reinstall, without the next installation's
-    /// permissions, which go to the controller with the end.
-    pub fn answer(
+    /// The next installation, stopped as `stopped` proves: the end of the
+    /// restart, for the controller with the next installation's
+    /// permissions the port gave beside it, and the step's resume.
+    pub fn installed(
         self,
-        answer: Result<Stopped<'id>, ProofRefused<Retired<'id>, ReinstallRefused>>,
+        stopped: Stopped<'id>,
+    ) -> (Ended<'id, F>, Resume<'m, 'id, C, F, Told<'id>>) {
+        let Self { port, now, .. } = self;
+        *port.at = At::Stopped(
+            stopped,
+            Run {
+                data: Data::Stopped,
+                tokens: Tokens::Held,
+                drain: Drain::Done,
+            },
+        );
+        *port.waiting = Waiting::Nothing;
+        *port.goal = Goal::None;
+        let permit = port.permit();
+        (
+            Ended::Request(Ok(End::Reinstalled), permit),
+            port.resume(
+                now,
+                Told {
+                    next: Next::Rest(Again::Wake),
+                },
+            ),
+        )
+    }
+
+    /// The port's refusal of the reinstall.
+    pub fn refused(
+        self,
+        refused: ProofRefused<Retired<'id>, ReinstallRefused>,
     ) -> Step<'m, 'id, C, F> {
-        let Self {
-            machine,
-            now,
-            kind: AskReinstall(()),
-        } = self;
-        match answer {
-            Ok(stopped) => {
-                machine.put(At::Stopped(
-                    stopped,
-                    Run {
-                        data: Data::Stopped,
-                        tokens: Tokens::Held,
-                        drain: Drain::Done,
-                    },
-                ));
-                machine.waiting = Waiting::Nothing;
-                machine.end(Ok(End::Reinstalled), Next::Rest(Again::Wake), now)
-            }
-            Err(ProofRefused::Refused(retired, refused)) => {
-                machine.put(At::Retired(retired));
-                machine.end(
+        let Self { port, now, .. } = self;
+        match refused {
+            ProofRefused::Refused(retired, refused) => {
+                *port.at = At::Retired(retired);
+                port.end(
                     Err(Unreached::RestartRefused(refused)),
                     Next::Rest(Again::Wake),
                     now,
                 )
             }
-            Err(ProofRefused::Stale(StaleProof { proof })) => {
+            ProofRefused::Stale(StaleProof { proof }) => {
                 drop(proof);
-                machine.lost(DONE, now)
+                port.lost(DONE, now)
             }
         }
     }
 }
 
-impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRelease> {
+impl<'m, 'id, C: Copy, F> Releasing<'m, 'id, C, F> {
     /// The port's answer to the release, without what the binding needs to
     /// give the radio up, which stays with the binding.
     pub fn answer(self, answer: Result<(), ReleaseRefused<'id>>) -> Step<'m, 'id, C, F> {
-        let Self {
-            machine,
-            now,
-            kind: AskRelease(()),
-        } = self;
+        let Self { machine, now } = self;
         match answer {
             Ok(()) => {
                 machine.life = Life::Released;
                 machine.goal = Goal::None;
-                Step::Ended(
+                Step::Released(
                     Ended::Released,
-                    machine.resume(
-                        now,
-                        Told {
-                            next: Next::Rest(Again::Wake),
-                        },
-                    ),
+                    machine.goal.rest(Again::Wake, now, machine.retry),
                 )
             }
             Err(ReleaseRefused { proof, right }) => {
@@ -1478,35 +1498,34 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRelease> {
                     right,
                     at: At::Stopping(DONE),
                 };
-                Step::Rest(machine.rest(Again::Round, now))
+                Step::Rest(Rest::Round)
             }
         }
     }
 }
 
-impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRecover<'id, C>> {
+impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskRecover> {
     /// The stop's right, lent for the port's recovery.
-    pub const fn right(&mut self) -> &mut StopRight<'id> {
-        &mut self.kind.right
+    pub fn right(&mut self) -> &mut StopRight<'id> {
+        &mut *self.port.right
     }
 
     /// The port's answer to the recovery.
     pub fn answer(self, answer: Result<Recovered, FaultKept<F>>) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            mut port,
             now,
-            kind: AskRecover { after, right, at },
+            kind: AskRecover { after },
         } = self;
-        machine.life = Life::Port { right, at };
         match answer {
-            Err(kept) => machine.say(
+            Err(kept) => port.say(
                 Waiting::Fault(kept),
                 Next::AfterRecovery(after, Kept::Kept),
                 now,
             ),
             Ok(Recovered::Clear | Recovered::TakenBack) => {
-                machine.clear(Waited::Fault);
-                machine.after_recovery(after, Kept::Gone, now)
+                port.clear(Waited::Fault);
+                port.after_recovery(after, Kept::Gone, now)
             }
         }
     }
@@ -1516,27 +1535,27 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, Told<'id>> {
     /// The message is passed on: the step goes on.
     pub fn go(self) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            port,
             now,
             kind: Told { next },
         } = self;
-        machine.go(next, now)
+        port.go(next, now)
     }
 }
 
 impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, Said<'id>> {
     /// What is waited for.
     pub const fn waiting(&self) -> &Waiting<F> {
-        &self.machine.waiting
+        &*self.port.waiting
     }
 
     /// The status is said: the step goes on as its order says.
     pub fn go(self) -> Step<'m, 'id, C, F> {
         let Self {
-            machine,
+            port,
             now,
             kind: Said { next },
         } = self;
-        machine.go(next, now)
+        port.go(next, now)
     }
 }

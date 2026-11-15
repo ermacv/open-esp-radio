@@ -9,10 +9,10 @@
 //! proof and two the stop's right, which only the machine holds.
 //!
 //! Three answers of the port carry an owner that is not the machine's, and
-//! `drive` splits them: a reinstall's `Installed` goes to the party that
-//! delivers the end, a release's device stays with the binding that holds
-//! the port, and an item a cleanup hands back (`Unkeeping`) goes to the
-//! data plane. The machine gets what is left. A stop's answer is the
+//! `drive` splits them: a reinstall's `Installed` goes to the controller in
+//! the one call that delivers the restart's end (`Parties::reinstalled`), a
+//! release's device stays with the binding that holds the port, and an item
+//! a cleanup hands back (`Unkeeping`) goes to the data plane. The machine gets what is left. A stop's answer is the
 //! port's `Poll`, and the wait is the pump's: `drive` answers `Ready` with
 //! the contract's `Result` and `Pending` with `pending`. That is the whole
 //! of the mapping.
@@ -44,10 +44,10 @@ pub trait Parties<'id, P: DataPort<'id>> {
     /// A message to its party: the controller's tokens' end, the network's
     /// stop, or the data plane's flow.
     fn tell(&mut self, tell: Tell<'id>);
-    /// The controller: the next installation's permissions, which the end
-    /// of its restart follows.
-    fn installed(&mut self, installed: P::Installed);
-    /// The controller: the one end of its open request.
+    /// The controller: the end of its restart, with the next installation's
+    /// permissions, in one call.
+    fn reinstalled(&mut self, ended: Ended<'id, P::Fault>, installed: P::Installed);
+    /// The controller: the one end of its open request, or the release's.
     fn ended(&mut self, ended: Ended<'id, P::Fault>);
     /// The controller: the run was interrupted by a fault of the port.
     fn interrupted(&mut self);
@@ -110,21 +110,23 @@ pub fn drive<'id, P: DataPort<'id>, S: PortSink<'id, P::Types>>(
                 resume.answer(stopped, answer)
             }
             Step::Retire(stopped, resume) => resume.answer(port.retire(stopped)),
-            Step::Reinstall(retired, resume) => {
-                let answer = match port.reinstall(retired, installations) {
-                    Ok((stopped, installed)) => {
-                        parties.installed(installed);
-                        Ok(stopped)
-                    }
-                    Err(refused) => Err(refused),
-                };
-                resume.answer(answer)
-            }
-            Step::Release(retired, right, resume) => {
+            Step::Reinstall(retired, resume) => match port.reinstall(retired, installations) {
+                Ok((stopped, installed)) => {
+                    let (ended, resume) = resume.installed(stopped);
+                    parties.reinstalled(ended, installed);
+                    resume.go()
+                }
+                Err(refused) => resume.refused(refused),
+            },
+            Step::Release(retired, right, releasing) => {
                 // What the binding needs to give the radio up is the port's:
                 // the binding holds the port and reaches it there.
                 let answer = port.release(retired, right).map(|_released| ());
-                resume.answer(answer)
+                releasing.answer(answer)
+            }
+            Step::Released(ended, rest) => {
+                parties.ended(ended);
+                return rest;
             }
             Step::Recover(mut resume) => {
                 let answer = port.recover_for_stop(resume.right());

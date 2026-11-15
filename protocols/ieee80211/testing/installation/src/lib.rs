@@ -15,8 +15,9 @@
 //! told.
 //!
 //! - From a run with a received unit held and a unit lent, a restart ends
-//!   reinstalled with nothing out of the port ([`Case::Restart`]), and a
-//!   release ends released ([`Case::Release`]).
+//!   reinstalled with nothing out of the port, the controller holds the next
+//!   installation's permissions and a run on them starts
+//!   ([`Case::Restart`]); a release ends released ([`Case::Release`]).
 //!
 //! A case reads `outstanding()` only of a port that holds an installation:
 //! after a release it holds none, and the proof that nothing was out is the
@@ -132,7 +133,12 @@ impl<'id, P: DataPort<'id>> Parties<'id, P> for Recorder<'id, P> {
         DataStop::Stopped
     }
     fn deliver(&mut self, unkept: Unkept<'id, P::Types>) {
-        // The data plane would deliver it; here its owners go home.
+        // The data plane would deliver it; here it is dropped, and its
+        // owners go home: on both ports a terminal's transmit buffer returns
+        // by its own `Drop` (the model's `BufferOut`, the S31 port's
+        // `ReturnableBuffer`) and its ticket to the bank that minted it; a
+        // received unit's buffer goes back to its ring (the model's
+        // `OwnedRxBuffer`, the S31 port's ring return).
         drop(unkept);
     }
     fn tell(&mut self, tell: Tell<'id>) {
@@ -142,8 +148,9 @@ impl<'id, P: DataPort<'id>> Parties<'id, P> for Recorder<'id, P> {
             Tell::DataFlows => {}
         }
     }
-    fn installed(&mut self, installed: P::Installed) {
+    fn reinstalled(&mut self, ended: Ended<'id, P::Fault>, installed: P::Installed) {
         self.installed.push(installed);
+        self.ended(ended);
     }
     fn ended(&mut self, ended: Ended<'id, P::Fault>) {
         match ended {
@@ -229,6 +236,7 @@ pub fn check<'id, H: InstallationHarness<'id>>(
         recorder: Recorder::new(),
         rest: Rest::Round,
         woken: 0,
+        adopted: 0,
         radio: None,
     };
     let channel = run.harness.channel();
@@ -240,7 +248,19 @@ pub fn check<'id, H: InstallationHarness<'id>>(
             run.ask(|permit| Ok(Request::restart(permit, None)))?;
             run.home(held)?;
             run.until("reinstalled", |heard| heard.reached(End::Reinstalled) == 1)?;
-            run.nothing_out()
+            run.nothing_out()?;
+            // The controller holds the next installation's permissions,
+            // from the one call that ended the restart, and a run on them
+            // starts.
+            if run.adopted != 1 {
+                return Err(Violation::Fixture);
+            }
+            let channel = run.harness.channel();
+            run.ask(|permit| match permit {
+                Permit::Live(live) => Ok(Request::run(live, channel, None)),
+                Permit::Spent(_) => Err(Violation::Fixture),
+            })?;
+            run.until("started again", |heard| heard.reached(End::Started) == 2)
         }
         Case::Release => {
             let held = run.traffic()?;
@@ -318,6 +338,8 @@ struct Run<'m, 'id, H: InstallationHarness<'id>> {
     rest: Rest,
     /// The wakes of the port's waker at the last step.
     woken: usize,
+    /// The next installations' permissions the harness adopted.
+    adopted: usize,
     /// The rest, and the instant, of the step that first said the radio's
     /// stop is unconfirmed.
     radio: Option<(Rest, oer_portable_time::Instant)>,
@@ -342,6 +364,7 @@ impl<'id, H: InstallationHarness<'id>> Run<'_, 'id, H> {
         }
         for installed in self.recorder.installed.drain(..) {
             self.harness.adopt(installed);
+            self.adopted += 1;
         }
         if self.recorder.held.last() == Some(&Waited::Radio) && self.radio.is_none() {
             self.radio = Some((rest, now));

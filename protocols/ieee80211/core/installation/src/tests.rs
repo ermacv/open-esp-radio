@@ -28,8 +28,12 @@ struct Fault;
 const CHANNEL: u8 = 6;
 /// The instant of every step but a deadline's.
 const NOW: Instant = Instant::from_micros(0);
-/// Every request's deadline: the instant of the model's `deadline`.
+/// Every request's deadline in the search that is compared with the
+/// model's table: after any retry time of a step, the instant of the
+/// model's `deadline`.
 const DEADLINE: Instant = Instant::from_micros(1_000_000);
+/// A deadline before the retry time of a step at [`NOW`].
+const EARLY: Instant = Instant::from_micros(5);
 /// The retry interval.
 const RETRY: Duration = Duration::from_micros(10);
 
@@ -93,8 +97,8 @@ fn run_of(s: &S) -> Run {
     }
 }
 
-/// The machine in the model's state `s`.
-fn build(s: &S) -> M {
+/// The machine in the model's state `s`, its request's deadline `deadline`.
+fn build(s: &S, deadline: Option<Instant>) -> M {
     let run = run_of(s);
     let life = match s.pos {
         "stopped" => Life::Port {
@@ -138,7 +142,7 @@ fn build(s: &S) -> M {
             None => Goal::None,
             Some(goal) => Goal::Open {
                 want: want(goal),
-                deadline: Some(DEADLINE),
+                deadline,
             },
         },
         waiting: match s.wait {
@@ -180,28 +184,35 @@ fn drain_name(drain: Drain) -> &'static str {
     }
 }
 
+/// The model's position of a port that holds an installation.
+fn place_of(at: &At<'static, u8>) -> (&'static str, Run) {
+    let pos = match at {
+        At::Stopped(..) => "stopped",
+        At::Starting(..) => "starting",
+        At::Running(_) => "running",
+        At::Stopping(_) => "stopping",
+        At::Retired(_) => "retired",
+    };
+    (pos, at.facts())
+}
+
 /// The model's state of the machine.
 fn project(m: &M) -> S {
-    let (pos, run) = match &m.life {
-        Life::Port { at, .. } => match at {
-            At::Stopped(_, run) => ("stopped", *run),
-            At::Starting(_, run, _) => ("starting", *run),
-            At::Running(tokens) => (
-                "running",
-                Run {
-                    data: Data::Flowing,
-                    tokens: *tokens,
-                    drain: Drain::Owed,
-                },
-            ),
-            At::Stopping(run) => ("stopping", *run),
-            At::Retired(_) => ("retired", DONE),
-        },
-        Life::Lent => ("stopping", DONE),
+    let place = match &m.life {
+        Life::Port { at, .. } => place_of(at),
         Life::Releasing => ("releasing", DONE),
         Life::Released => ("released", DONE),
     };
-    let (goal, net) = match m.goal {
+    project_parts(place, &m.goal, &m.waiting)
+}
+
+/// The model's state of the view of a port that holds an installation.
+fn project_port(port: &Port<'_, 'static, u8, Fault>) -> S {
+    project_parts(place_of(port.at), port.goal, port.waiting)
+}
+
+fn project_parts((pos, run): (&'static str, Run), goal: &Goal<u8>, waiting: &Waiting<Fault>) -> S {
+    let (goal, net) = match *goal {
         Goal::None => (None, None),
         Goal::Open { want, .. } => match want {
             Want::Run(_) => (Some("run"), None),
@@ -219,7 +230,7 @@ fn project(m: &M) -> S {
         tokens: tokens_name(run.tokens),
         drain: drain_name(run.drain),
         net,
-        wait: match m.waiting.class() {
+        wait: match waiting.class() {
             Waited::Nothing => None,
             Waited::Radio => Some("radio"),
             Waited::Fault => Some("fault"),
@@ -283,29 +294,29 @@ fn permit_for(request: &str, held: Option<&str>) -> Permit<'static> {
 }
 
 /// The Rust input of the model's, and the instant of its step.
-fn input(inp: In, permit: Option<&str>) -> (Input<'static, u8>, Instant) {
+fn input(
+    inp: In,
+    permit: Option<&str>,
+    deadline: Option<Instant>,
+) -> (Input<'static, u8>, Instant) {
     match inp.kind {
         "request" => {
             let request = match inp.request {
-                "run" => Request::run(live(), CHANNEL, Some(DEADLINE)),
-                "halt" => Request::halt(live(), Some(DEADLINE)),
-                "restart" => Request::restart(permit_for(inp.request, permit), Some(DEADLINE)),
-                "release_stays" => Request::release(
-                    permit_for(inp.request, permit),
-                    Network::Stays,
-                    Some(DEADLINE),
-                ),
-                "release_stops" => Request::release(
-                    permit_for(inp.request, permit),
-                    Network::Stops,
-                    Some(DEADLINE),
-                ),
+                "run" => Request::run(live(), CHANNEL, deadline),
+                "halt" => Request::halt(live(), deadline),
+                "restart" => Request::restart(permit_for(inp.request, permit), deadline),
+                "release_stays" => {
+                    Request::release(permit_for(inp.request, permit), Network::Stays, deadline)
+                }
+                "release_stops" => {
+                    Request::release(permit_for(inp.request, permit), Network::Stops, deadline)
+                }
                 other => panic!("no request {other}"),
             };
             (Input::Request(request), NOW)
         }
         "turn" => (Input::Turn, NOW),
-        "deadline" => (Input::Turn, DEADLINE),
+        "deadline" => (Input::Turn, deadline.unwrap_or(DEADLINE)),
         "fault" => (Input::Fault, NOW),
         "tokens_ended" => (Input::TokensEnded(TokensEnded { brand: PhantomData }), NOW),
         "network_stopped" => (Input::NetworkStopped, NOW),
@@ -315,7 +326,10 @@ fn input(inp: In, permit: Option<&str>) -> (Input<'static, u8>, Instant) {
 
 /// How a run of one step ended.
 enum Ran {
-    Done(S, Vec<Item>, &'static str),
+    /// The state after the step, its trace, the model's name of its rest,
+    /// the rest itself, the deadline of the request open after it and the
+    /// step's instant.
+    Done(S, Vec<Item>, &'static str, Rest, Option<Instant>, Instant),
     Need(&'static str),
 }
 
@@ -359,9 +373,15 @@ fn take(answer: &str) -> Result<Unconsumed, StaleProof<()>> {
 
 /// Run one step of the machine in state `s` with the answers given: what it
 /// did, or the ask it stops at.
-fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
-    let mut machine = build(s);
-    let (rust, now) = input(inp, permit);
+fn run(
+    s: &S,
+    inp: In,
+    permit: Option<&str>,
+    answers: &[&'static str],
+    deadline: Option<Instant>,
+) -> Ran {
+    let mut machine = build(s, deadline);
+    let (rust, now) = input(inp, permit, deadline);
     let mut trace = Vec::new();
     if (inp.kind == "fault" || inp.kind == "deadline") && s.pos == "starting" {
         trace.push(Item::Drop("starting"));
@@ -369,11 +389,11 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
     let mut feed = answers.iter().copied();
     let mut step = machine.step(rust, now);
     macro_rules! ask {
-        ($name:expr, $proof:expr, $resume:expr) => {{
+        ($name:expr, $proof:expr, $at:expr) => {{
             trace.push(Item::Ask {
                 name: $name,
                 proof: $proof,
-                at: project($resume.machine),
+                at: $at,
             });
             let Some(answer) = feed.next() else {
                 return Ran::Need($name);
@@ -392,7 +412,7 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
                     StartProof::Stopped(_) => "stopped",
                     StartProof::Starting(_) => "starting",
                 };
-                let answer = ask!("start", Some(kind), resume);
+                let answer = ask!("start", Some(kind), project_port(&resume.port));
                 resume.answer(match answer {
                     "started" => Ok(StartProgress::Started),
                     "pending" => Ok(StartProgress::Pending(Starting::issue(StateSerial::FIRST))),
@@ -405,7 +425,7 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
                 })
             }
             Step::Stop(resume) => {
-                let answer = ask!("stop", None, resume);
+                let answer = ask!("stop", None, project_port(&resume.port));
                 match answer {
                     "ok" => resume.answer(Ok(stopped())),
                     "pending" => resume.pending(),
@@ -413,18 +433,22 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
                 }
             }
             Step::StopData(resume) => {
-                let answer = ask!("stop_data", None, resume);
+                let answer = ask!("stop_data", None, project_port(&resume.port));
                 resume.answer(match answer {
                     "stopped" => DataStop::Stopped,
                     _ => DataStop::Going,
                 })
             }
             Step::TakeUnconsumed(proof, resume) => {
-                let answer = ask!("take_unconsumed", Some("&stopped"), resume);
+                let answer = ask!(
+                    "take_unconsumed",
+                    Some("&stopped"),
+                    project_port(&resume.port)
+                );
                 resume.answer(proof, take(answer))
             }
             Step::Clean(proof, resume) => {
-                let answer = ask!("clean", Some("&stopped"), resume);
+                let answer = ask!("clean", Some("&stopped"), project_port(&resume.port));
                 resume.answer(
                     proof,
                     match answer {
@@ -437,11 +461,11 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
                 )
             }
             Step::TakeFreed(proof, resume) => {
-                let answer = ask!("take_freed", Some("&stopped"), resume);
+                let answer = ask!("take_freed", Some("&stopped"), project_port(&resume.port));
                 resume.answer(proof, take(answer))
             }
             Step::Retire(proof, resume) => {
-                let answer = ask!("retire", Some("stopped"), resume);
+                let answer = ask!("retire", Some("stopped"), project_port(&resume.port));
                 resume.answer(match answer {
                     "ok" => Ok(Retired::issue(StateSerial::FIRST)),
                     "refused" => Err(ProofRefused::Refused(proof, outstanding(None))),
@@ -450,22 +474,32 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
                 })
             }
             Step::Reinstall(proof, resume) => {
-                let answer = ask!("reinstall", Some("retired"), resume);
-                resume.answer(match answer {
-                    "ok" => Ok(stopped()),
-                    "refused" => Err(ProofRefused::Refused(proof, ReinstallRefused::Epochs)),
-                    _ => Err(ProofRefused::Stale(StaleProof { proof })),
-                })
+                let answer = ask!("reinstall", Some("retired"), project_port(&resume.port));
+                match answer {
+                    "ok" => {
+                        let (ended, resume) = resume.installed(stopped());
+                        trace.push(Item::End(end_name(&ended), returned(&ended)));
+                        resume.go()
+                    }
+                    "refused" => {
+                        resume.refused(ProofRefused::Refused(proof, ReinstallRefused::Epochs))
+                    }
+                    _ => resume.refused(ProofRefused::Stale(StaleProof { proof })),
+                }
             }
-            Step::Release(proof, right, resume) => {
-                let answer = ask!("release", Some("retired"), resume);
-                resume.answer(match answer {
+            Step::Release(proof, right, releasing) => {
+                let answer = ask!("release", Some("retired"), project(releasing.machine));
+                releasing.answer(match answer {
                     "ok" => Ok(()),
                     _ => Err(ReleaseRefused { proof, right }),
                 })
             }
+            Step::Released(ended, rest) => {
+                trace.push(Item::End(end_name(&ended), returned(&ended)));
+                Step::Rest(rest)
+            }
             Step::Recover(resume) => {
-                let answer = ask!("recover", None, resume);
+                let answer = ask!("recover", None, project_port(&resume.port));
                 resume.answer(match answer {
                     "clear" => Ok(Recovered::Clear),
                     "recovered" => Ok(Recovered::TakenBack),
@@ -484,12 +518,7 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
                 resume.go()
             }
             Step::Ended(ended, resume) => {
-                let returned = match &ended {
-                    Ended::Request(_, Permit::Live(_)) => Some("live"),
-                    Ended::Request(_, Permit::Spent(_)) => Some("spent"),
-                    Ended::Released => None,
-                };
-                trace.push(Item::End(end_name(&ended), returned));
+                trace.push(Item::End(end_name(&ended), returned(&ended)));
                 resume.go()
             }
             Step::Interrupted(resume) => {
@@ -503,14 +532,36 @@ fn run(s: &S, inp: In, permit: Option<&str>, answers: &[&'static str]) -> Ran {
                 resume.go()
             }
             Step::Rest(rest) => {
-                let rest = match rest {
+                let named = match rest {
                     Rest::Round => "round",
                     Rest::Wake(Some(at)) if Some(at) == now.checked_add(RETRY) => "timer",
                     Rest::Wake(_) => "wake",
                 };
-                return Ran::Done(project(&machine), trace, rest);
+                let after = machine.goal.deadline();
+                return Ran::Done(project(&machine), trace, named, rest, after, now);
             }
         };
+    }
+}
+
+/// The class of the permit an end returned.
+fn returned(ended: &Ended<'static, Fault>) -> Option<&'static str> {
+    match ended {
+        Ended::Request(_, Permit::Live(_)) => Some("live"),
+        Ended::Request(_, Permit::Spent(_)) => Some("spent"),
+        Ended::Released => None,
+    }
+}
+
+/// The instant a rest the model names `named` must carry, after a step at
+/// `now` that leaves a request open until `deadline`: a wake names the
+/// deadline, a timer the earlier of the deadline and the retry time.
+fn named_instant(named: &str, deadline: Option<Instant>, now: Instant) -> Rest {
+    let retry = now.saturating_add(RETRY);
+    match named {
+        "round" => Rest::Round,
+        "timer" => Rest::Wake(Some(deadline.map_or(retry, |deadline| deadline.min(retry)))),
+        _ => Rest::Wake(deadline),
     }
 }
 
@@ -660,8 +711,8 @@ fn steps(env: &Env, inp: In, nref: u32) -> Vec<(S, Vec<Item>, &'static str, u32)
     let mut ways = Vec::new();
     let mut stack: Vec<(Vec<&'static str>, u32)> = vec![(Vec::new(), 0)];
     while let Some((answers, used)) = stack.pop() {
-        match run(&env.s, inp, env.permit, &answers) {
-            Ran::Done(s, trace, rest) => ways.push((s, trace, rest, used)),
+        match run(&env.s, inp, env.permit, &answers, Some(DEADLINE)) {
+            Ran::Done(s, trace, rest, _, _, _) => ways.push((s, trace, rest, used)),
             Ran::Need(name) => {
                 for &answer in answers_of(name) {
                     let cost = u32::from(refusal(name, answer));
@@ -943,6 +994,21 @@ fn explore(budget: Budget) -> Search {
                         _ => None,
                     })
                     .collect();
+                // The same way of the step with no deadline, one before the
+                // retry time and one after it: every rest names its instant.
+                for deadline in [None, Some(EARLY), Some(DEADLINE)] {
+                    if deadline.is_none() && inp.kind == "deadline" {
+                        continue;
+                    }
+                    match run(&s, inp, env.permit, &answers, deadline) {
+                        Ran::Done(_, _, _, raw, after, now) => {
+                            if raw != named_instant(rest, after, now) {
+                                problem("a rest names the wrong instant");
+                            }
+                        }
+                        Ran::Need(_) => problem("a way of a step changes with its deadline"),
+                    }
+                }
                 table
                     .entry((s.pos, s.goal.unwrap_or("-"), inp.last()))
                     .or_default()
