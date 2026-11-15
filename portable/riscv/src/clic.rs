@@ -3,8 +3,9 @@
 //! SOURCE: [RISC-V CLIC specification](https://github.com/pulp-platform/clic/blob/master/doc/clic.adoc),
 //! §4.2.2 "Specifying Interrupt Level", §4.5 "CLIC Interrupt Enable",
 //! §4.6 "CLIC Interrupt Attribute" and §4.7 "CLIC Interrupt Input Control".
-//! The HAL accesses individual PAC fields; this module neither packs a whole
-//! register word nor overwrites privilege mode, pending or reserved bits.
+//! A line's enable, attributes and trigger are the register model's values,
+//! which the HAL writes by the PAC's generated names; this module holds the
+//! CSR numbers and the arithmetic of a line's control byte.
 #![forbid(unsafe_code)]
 
 /// `mtvt`: base of the table of hardware-vectored handler addresses.
@@ -142,103 +143,6 @@ impl Control {
                 Ok(control) => control,
                 Err(_) => panic!("CLIC level is outside NLBITS"),
             }
-        }
-    }
-}
-
-/// The individual `clicintattr.trig` field values.
-///
-/// SOURCE: RISC-V CLIC specification §4.6: bit 0 selects edge versus
-/// level, bit 1 selects negative versus positive polarity.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum Trigger {
-    PositiveLevel = 0b00,
-    PositiveEdge = 0b01,
-    NegativeLevel = 0b10,
-    NegativeEdge = 0b11,
-}
-
-/// The individual `clicintie.ie` field values.
-///
-/// SOURCE: RISC-V CLIC specification §4.5: the one enable bit of a line.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum Enable {
-    Disabled = 0,
-    Enabled = 1,
-}
-
-impl From<bool> for Enable {
-    /// The field's value of the bit.
-    fn from(bit: bool) -> Self {
-        if bit { Self::Enabled } else { Self::Disabled }
-    }
-}
-
-/// The individual `clicintattr.shv` field values.
-///
-/// SOURCE: RISC-V CLIC specification §4.6: selective hardware vectoring,
-/// the line's one vectoring bit.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u8)]
-pub enum Vectoring {
-    NonVectored = 0,
-    Vectored = 1,
-}
-
-impl From<bool> for Vectoring {
-    /// The field's value of the bit.
-    fn from(bit: bool) -> Self {
-        if bit {
-            Self::Vectored
-        } else {
-            Self::NonVectored
-        }
-    }
-}
-
-impl Vectoring {
-    /// The field's bit.
-    #[must_use]
-    pub const fn bit(self) -> bool {
-        matches!(self, Self::Vectored)
-    }
-}
-
-/// Individual CLIC line fields; privilege mode and pending are untouched.
-///
-/// SOURCE: RISC-V CLIC specification §4.5 (`clicintie`, one enable bit),
-/// §4.6 (`clicintattr.shv`, one vectoring bit, and `trig`), §4.7 (`clicintctl`).
-/// Each field is the named values of its field, not complete register bytes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LineState {
-    /// Individual `clicintie.ie` field.
-    pub enable: Enable,
-    /// Individual `clicintattr.shv` field.
-    pub vectoring: Vectoring,
-    /// Individual `clicintattr.trig` field.
-    pub trigger: Trigger,
-    /// `clicintctl` level and priority byte.
-    pub control: Control,
-}
-
-impl LineState {
-    /// Disabled with zero control; not a claim about WARL readback/reset state.
-    pub const DISABLED: Self = Self {
-        enable: Enable::Disabled,
-        vectoring: Vectoring::NonVectored,
-        trigger: Trigger::PositiveLevel,
-        control: Control::from_bits(0),
-    };
-
-    /// Enabled, hardware-vectored, positive-level triggered at `control`.
-    pub const fn vectored(control: Control) -> Self {
-        Self {
-            enable: Enable::Enabled,
-            vectoring: Vectoring::Vectored,
-            trigger: Trigger::PositiveLevel,
-            control,
         }
     }
 }

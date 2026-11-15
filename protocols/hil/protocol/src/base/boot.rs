@@ -204,8 +204,9 @@ pub struct TrapLine {
     pub vector: u16,
     /// The handler address the vector table holds for it.
     pub slot: u32,
-    /// Bit 0 pending, 1 enabled, 2 edge-triggered, bits 8.. its level
-    /// byte; zero when nothing is routed to it or the stop failed.
+    /// The line's CLIC word as the hardware has it, rendered against the
+    /// chip's register model; zero when nothing is routed to it or the stop
+    /// failed.
     pub state: u32,
     /// The sources routed to it on the trapping hart.
     pub routed: [u32; TRAP_SOURCE_WORDS],

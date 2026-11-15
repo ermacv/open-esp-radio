@@ -132,8 +132,8 @@ Below it are, by directory (`/` ends a domain), for the S31 workspace:
 | Bootstrap and probe images | `chips/esp32s31/platform/bootstrap/`, `hil/probes/` |
 
 `oer-chips-family-platform-interrupt-table` owns the Espressif interrupt matrix contract,
-vector ABI and platform-runtime symbols. CLIC line encodings live in
-`oer-portable-riscv::clic`, independent of chip geometry. Its narrow unsafe
+vector ABI and platform-runtime symbols. It holds no CLIC line encoding: a
+chip's controller binds, disables and checks a line. Its narrow unsafe
 contracts cover the existing vector/table/exemption slot names and ABI
 types; signal execution proofs belong to `oer-portable-memory`. Every safe `Entry` implementation carries
 `EntryProof<Self>`; root Clippy policy restricts both proof and token

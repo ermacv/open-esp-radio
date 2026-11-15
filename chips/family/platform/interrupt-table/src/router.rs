@@ -21,7 +21,7 @@ use oer_portable_mmio::{InterruptSource, InterruptSources};
 
 use crate::{BindError, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table};
 
-use oer_portable_riscv::clic::{Enable, LevelBits, LineState};
+use oer_portable_riscv::clic::{Control, LevelBits};
 
 /// A hart's interrupt matrix bank and CLIC, as the table writes them. The
 /// chip implements it on its typed blocks; each method is a few word reads
@@ -55,16 +55,66 @@ pub trait Controller {
     fn silence(&mut self, source: u16) -> Result<(), Error>;
     /// The line `source` is routed to on this hart; `None` when silent.
     fn routed(&self, source: u16) -> Option<u8>;
-    /// Write `line`'s enable, attributes and control, keeping its pending
-    /// bit. The line is never enabled with another attribute or control
-    /// than `state`'s.
+    /// Bind `line` at the level of `control`: enabled, hardware-vectored,
+    /// with the trigger the chip's lines have, keeping its pending bit. The
+    /// line is never enabled with another attribute or control.
     ///
     /// # Errors
     ///
     /// [`Error::NoSuchLine`]; nothing is written.
-    fn set_line(&mut self, line: u8, state: LineState) -> Result<(), Error>;
-    /// Read `line`'s enable, attributes and control.
-    fn line(&self, line: u8) -> LineState;
+    fn bind(&mut self, line: u8, control: Control) -> Result<(), Error>;
+    /// Disable `line`, keeping its pending bit.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoSuchLine`]; nothing is written.
+    fn disable(&mut self, line: u8) -> Result<(), Error>;
+    /// Check `line` against what the table left in it: a disabled line is
+    /// not enabled, a bound one holds exactly its binding.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::WrongLine`] with the line's observation, or
+    /// [`Error::NoSuchLine`].
+    fn check(&self, line: u8, expected: LineExpectation) -> Result<(), Error>;
+}
+
+/// What the table leaves in a line: the family's own value, which names no
+/// trigger, enable or vectoring of a chip.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LineExpectation {
+    /// The line is not enabled.
+    Disabled,
+    /// The line is bound at this control byte's level.
+    Bound(Control),
+}
+
+impl LineExpectation {
+    /// The expectation's word in a record, encoded here alone: 0 disabled,
+    /// bit 8 and the control byte bound.
+    pub const fn record(self) -> u32 {
+        match self {
+            Self::Disabled => 0,
+            Self::Bound(control) => 0x100 | control.bits() as u32,
+        }
+    }
+}
+
+/// A line as its chip reads it: the line's own register word, which the
+/// family carries into a record and does not look into.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LineObservation(u32);
+
+impl LineObservation {
+    /// The observation of a line whose register reads `word`.
+    pub const fn of_word(word: u32) -> Self {
+        Self(word)
+    }
+
+    /// The word, for a record.
+    pub const fn record(self) -> u32 {
+        self.0
+    }
 }
 
 /// How a hart's routes and lines disagree with the table, or a binding the
@@ -91,11 +141,12 @@ pub enum Error {
     HandlerCellMismatch { source: u16 },
     /// `source` is routed to `line`, which no entry of this hart binds it to.
     ForeignRoute { source: u16, line: u8 },
-    /// `line` holds `state`, not what the table's entries leave in it.
+    /// `line` is observed as `observed`, not what the table's entries leave
+    /// in it.
     WrongLine {
         line: u8,
-        state: LineState,
-        expected: LineState,
+        observed: LineObservation,
+        expected: LineExpectation,
     },
     /// `source` is no source of the controller's matrix (`0..SOURCES`).
     NoSuchSource { source: u16 },
@@ -229,7 +280,7 @@ impl<C: Controller, const H: u8> Router<C, H> {
             controller.silence(source)?;
         }
         for line in 0..C::LINES {
-            controller.set_line(line, LineState::DISABLED)?;
+            controller.disable(line)?;
         }
         let router = Self { controller, table };
         router.verify()?;
@@ -380,16 +431,14 @@ impl<C: Controller, const H: u8> Router<C, H> {
                 place,
             )));
         }
-        if let Err(error) = self.controller.set_line(
+        if let Err(error) = self.controller.bind(
             E::LINE,
-            LineState::vectored(
-                const {
-                    match C::LEVEL_BITS.control(E::LEVEL as u16) {
-                        Ok(control) => control,
-                        Err(_) => panic!("the entry's level is no level of the controller"),
-                    }
-                },
-            ),
+            const {
+                match C::LEVEL_BITS.control(E::LEVEL as u16) {
+                    Ok(control) => control,
+                    Err(_) => panic!("the entry's level is no level of the controller"),
+                }
+            },
         ) {
             return Err(BindError::Fault(Quarantined::installed(
                 fault(source, BindFaultKind::LineRefused(error)),
@@ -487,25 +536,11 @@ impl<C: Controller, const H: u8> Router<C, H> {
                 .map_err(|_| Error::NoSuchLevel {
                     level: binding.level,
                 })?;
-            let expected = LineState::vectored(control);
-            let state = self.controller.line(line);
-            if state != expected {
-                return Err(Error::WrongLine {
-                    line,
-                    state,
-                    expected,
-                });
-            }
+            self.controller
+                .check(line, LineExpectation::Bound(control))?;
         }
         for line in (0..C::LINES).filter(|&line| routed_lines >> line & 1 == 0) {
-            let state = self.controller.line(line);
-            if state.enable == Enable::Enabled {
-                return Err(Error::WrongLine {
-                    line,
-                    state,
-                    expected: LineState::DISABLED,
-                });
-            }
+            self.controller.check(line, LineExpectation::Disabled)?;
         }
         Ok(())
     }

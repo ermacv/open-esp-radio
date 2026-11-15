@@ -1,8 +1,7 @@
 //! Binding failures keep ownership and source observations distinct.
 use core::mem::ManuallyDrop;
 
-use crate::{Entry, Error};
-use oer_portable_riscv::clic::LineState;
+use crate::{Entry, Error, LineExpectation};
 
 /// Numeric operation identity, safe to capture without reading cached text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -139,15 +138,16 @@ fn context(source: u16, line: u8, hart: u8) -> u32 {
     u32::from(source) | (u32::from(line) << 16) | (u32::from(hart) << 24)
 }
 
-fn line(state: LineState) -> u32 {
-    (state.enable as u32)
-        | ((state.vectoring as u32) << 1)
-        | ((state.trigger as u32) << 2)
-        | (u32::from(state.control.bits()) << 8)
+/// A line and what the table expected of it, both the family's own values,
+/// in one word of a record: the line in bits 0..8, the expectation's record
+/// (`LineExpectation::record`) from bit 8.
+const fn line_and_expectation(line: u8, expected: LineExpectation) -> u32 {
+    line as u32 | (expected.record() << 8)
 }
 
-// Software diagnostic encoding, independent of any register layout. Each
-// LineState fits sixteen bits: flags/trigger in bits 0..3, control in 8..15.
+// The diagnostic encoding of an error: its tag and two payload words. A wrong
+// line's are the line's register word as the hardware has it, then the line
+// with its expectation.
 fn error_words(error: Error) -> [u32; 3] {
     match error {
         Error::WrongControlBits { actual, expected } => [1, actual.into(), expected.into()],
@@ -163,10 +163,10 @@ fn error_words(error: Error) -> [u32; 3] {
         Error::NotInTable { source } => [5, source.into(), 0],
         Error::ForeignRoute { source, line } => [6, source.into(), line.into()],
         Error::WrongLine {
-            line: index,
-            state,
+            line,
+            observed,
             expected,
-        } => [7, index.into(), line(state) | (line(expected) << 16)],
+        } => [7, observed.record(), line_and_expectation(line, expected)],
         Error::NoSuchSource { source } => [8, source.into(), 0],
         Error::NoSuchLine { line } => [9, line.into(), 0],
         Error::NoSuchLevel { level } => [10, level.into(), 0],

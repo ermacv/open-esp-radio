@@ -97,15 +97,37 @@ impl oer_chips_family_platform_interrupt_table::Controller for NoRoutes {
     fn routed(&self, _source: u16) -> Option<u8> {
         None
     }
-    fn set_line(
+    fn bind(
         &mut self,
         _line: u8,
-        _state: oer_portable_riscv::clic::LineState,
+        _control: oer_portable_riscv::clic::Control,
     ) -> Result<(), oer_chips_family_platform_interrupt_table::Error> {
         Ok(())
     }
-    fn line(&self, _line: u8) -> oer_portable_riscv::clic::LineState {
-        oer_portable_riscv::clic::LineState::DISABLED
+    fn disable(
+        &mut self,
+        _line: u8,
+    ) -> Result<(), oer_chips_family_platform_interrupt_table::Error> {
+        Ok(())
+    }
+    /// Every line reads disabled: a binding is never observed.
+    fn check(
+        &self,
+        line: u8,
+        expected: oer_chips_family_platform_interrupt_table::LineExpectation,
+    ) -> Result<(), oer_chips_family_platform_interrupt_table::Error> {
+        match expected {
+            oer_chips_family_platform_interrupt_table::LineExpectation::Disabled => Ok(()),
+            oer_chips_family_platform_interrupt_table::LineExpectation::Bound(_) => Err(
+                oer_chips_family_platform_interrupt_table::Error::WrongLine {
+                    line,
+                    observed: oer_chips_family_platform_interrupt_table::LineObservation::of_word(
+                        0,
+                    ),
+                    expected,
+                },
+            ),
+        }
     }
 }
 

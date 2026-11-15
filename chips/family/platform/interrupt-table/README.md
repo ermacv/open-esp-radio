@@ -1,8 +1,12 @@
 # oer-chips-family-platform-interrupt-table
 
 Espressif interrupt-matrix bindings and vector ABI, including the symbols
-consumed by the staged runtime. Architectural CLIC line values come directly
-from `oer_portable_riscv::clic`; chip facts select geometry and MNLBITS. Chip crates
+consumed by the staged runtime. A chip's controller binds a line at a level
+(`Control`, from `oer_portable_riscv::clic`), disables it, and checks it
+against the table's `LineExpectation`; the trigger, enable and vectoring of a
+bound line are the chip's, and a line it finds otherwise is reported with its
+`LineObservation`, the line's register word, which this crate carries into a
+record and never reads. Chip facts select geometry and MNLBITS. Chip crates
 and firmware use this crate directly.
 
 Each image's static table of its interrupt bindings, declared once per image
@@ -106,9 +110,10 @@ entry binds is routed on no bank:
   write, silences every source and disables every line of the hart, then
   verifies;
 - `Router::bind` consumes an entry's token and its part, moves the part where
-  only the entry's handler reaches it, writes the entry's line (enabled,
-  hardware-vectored, positive-level-triggered, its level in the control
-  byte, `oer_portable_riscv::clic::Control`) and only then routes each of the part's
+  only the entry's handler reaches it, binds the entry's line at its level
+  (`Controller::bind` with its control byte, `oer_portable_riscv::clic::Control`:
+  enabled, hardware-vectored, with the trigger the chip's bound lines have)
+  and only then routes each of the part's
   sources to it, and returns
   `Bound<Entry>`, carrying `LEVEL`, `HART` and `CONTEXT` from that entry, the proof a driver takes before it enables the peripheral's
   interrupt; an entry the table lacks comes back with its token and part,
@@ -120,11 +125,19 @@ entry binds is routed on no bank:
   sealed `EventAuthority`);
 - a controller refuses a source or line outside it and writes nothing; it
   writes a line's enable apart from its attributes and control, so a line is
-  never enabled with another level or trigger than the router's;
+  never enabled with another level or trigger than its binding's;
 - `Router::verify` checks the controller's configuration again, then that
   every routed source is an entry of the hart
   on its line, every routed line holds its entry's level, and every other
   line is disabled.
+
+A refused or faulted binding records four words (`BindFault::diagnostic`,
+`BindError::diagnostic`): the context (the source in bits 0..16, the line
+in 16..24, the hart from 24), the error's tag, and its two payload words.
+A wrong line's (tag 7) are the line's register word as the chip read it
+(`LineObservation`), and the line with what the table expected of it: the
+line in bits 0..8, `LineExpectation::record` from bit 8 (0 disabled, bit 8
+and the control byte bound).
 
 An interrupt handler reaches its task only through a static signal
 (`signal`), never through the router or a lock. A signal binds its executor's

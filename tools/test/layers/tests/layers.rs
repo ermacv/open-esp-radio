@@ -7037,11 +7037,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_NONE,
     ),
     (
-        "chips/esp32s31/platform/runtime/src/exception.rs",
-        1,
-        BY_NONE,
-    ),
-    (
         "chips/esp32s31/radio/bluetooth/backend/src/controller_time.rs",
         1,
         BY_RADIO_SYSTEM,
@@ -7092,11 +7087,10 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         3,
         BY_RADIO_SYSTEM,
     ),
-    ("chips/family/platform/executor/src/fault.rs", 1, BY_NONE),
     (
-        "chips/family/platform/interrupt-table/src/binding.rs",
+        "chips/family/platform/interrupt-table/src/router.rs",
         1,
-        BY_NONE,
+        "the family's encoding of a line's expectation: `Control::bits`, a portable value's byte",
     ),
 ];
 
@@ -8096,6 +8090,7 @@ const RECORD_WORD_CALLERS: &[&str] = &[
     "chips/esp32s31/hal/src/radio/bluetooth.rs",
     "chips/esp32s31/hal/src/radio/bluetooth/observation.rs",
     "chips/esp32s31/hal/src/radio/bluetooth/registers/modem_timer.rs",
+    "chips/esp32s31/hal/src/system/platform/interrupt_controller.rs",
     "hil/probes/esp32s31-facts/src/image/analog_pmu.rs",
     "hil/probes/esp32s31-facts/src/image/ble.rs",
     "hil/probes/esp32s31-facts/src/image/ble/reset.rs",

@@ -1,4 +1,5 @@
-use oer_portable_riscv::clic::{Control, Enable, LineState, Trigger, Vectoring};
+use oer_chips_family_platform_interrupt_table::{LineExpectation, LineObservation};
+use oer_portable_riscv::clic::Control;
 use std::vec;
 use std::vec::Vec;
 
@@ -11,7 +12,7 @@ use oer_chips_family_platform_interrupt_table::{Binding, Class, Controller, Erro
 use oer_portable_mmio::{Bits, Host, Index, InterruptSource};
 
 use super::{
-    ForeignHart, InterruptController, InterruptGrant, InterruptView, LineObservation, Observer,
+    ForeignHart, InterruptController, InterruptGrant, InterruptView, Observer,
     facts::{self, LEVEL_BITS, LINES},
 };
 
@@ -212,20 +213,14 @@ fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
     let mut memory = Memory::filled(0);
     let mut controller = memory.controller();
     controller.route(12, 20).expect("source 12 and line 20");
-    controller
-        .set_line(
-            20,
-            LineState {
-                enable: Enable::Enabled,
-                vectoring: Vectoring::Vectored,
-                trigger: Trigger::PositiveEdge,
-                control: Control::level::<3, LEVEL_BITS>(),
-            },
-        )
-        .expect("line 20");
     drop(controller);
+    // An edge-triggered line no binding writes, pending.
     memory.clic().modify_ctrl(line(20), |word| {
-        word.set_ip(true);
+        word.set_ip(true)
+            .set_ie(true)
+            .set_attr_shv(true)
+            .set_attr_trig(clic::ctrl::AttrTrig::PositiveEdge)
+            .set_ctl(Control::level::<3, LEVEL_BITS>().bits());
     });
     let matrix_before = memory.matrix.clone();
     let clic_before = memory.clic.clone();
@@ -237,25 +232,11 @@ fn the_fatal_view_reads_exactly_the_routes_and_lines_the_words_hold() {
         assert_eq!(view.routed(12), Some(20));
         assert_eq!(view.routed(11), None, "a silent source");
         assert_eq!(view.routed(u16::MAX), None, "no source of the bank");
-        assert_eq!(
-            view.line(20),
-            Some(LineObservation {
-                pending: true,
-                state: LineState {
-                    enable: Enable::Enabled,
-                    vectoring: Vectoring::Vectored,
-                    trigger: Trigger::PositiveEdge,
-                    control: Control::level::<3, LEVEL_BITS>(),
-                },
-            })
-        );
-        assert_eq!(
-            view.line(21),
-            Some(LineObservation {
-                pending: false,
-                state: LineState::DISABLED,
-            })
-        );
+        // The line's word as the hardware has it: level byte 0x5f (bits
+        // 24..32), positive edge (bit 17), vectored (16), enabled (8),
+        // pending (0).
+        assert_eq!(view.line(20), Some(0x5f03_0101));
+        assert_eq!(view.line(21), Some(0));
         assert_eq!(view.line(u8::MAX), None, "no line of the CLIC");
     }
     assert!(
@@ -330,10 +311,17 @@ fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_is_refused() {
         Err(Error::NoSuchLine { line: 48 })
     );
     assert_eq!(
-        controller.set_line(Ours::LINES, LineState::DISABLED),
+        controller.disable(Ours::LINES),
         Err(Error::NoSuchLine { line: Ours::LINES })
     );
-    assert_eq!(controller.line(Ours::LINES), LineState::DISABLED);
+    assert_eq!(
+        controller.bind(Ours::LINES, Control::level::<1, LEVEL_BITS>()),
+        Err(Error::NoSuchLine { line: Ours::LINES })
+    );
+    assert_eq!(
+        controller.check(Ours::LINES, LineExpectation::Disabled),
+        Err(Error::NoSuchLine { line: Ours::LINES })
+    );
     drop(controller);
     let changed = memory
         .matrix
@@ -348,57 +336,49 @@ fn a_silenced_source_is_routed_nowhere_and_an_index_past_the_bank_is_refused() {
 }
 
 #[test]
-fn a_line_reads_back_as_written_and_keeps_its_pending_bit_and_mode() {
+fn a_bound_and_a_disabled_line_check_as_written_and_keep_their_pending_bit_and_mode() {
     let mut memory = Memory::filled(u32::MAX);
     let mut controller = memory.controller();
-    for trigger in [
-        Trigger::PositiveLevel,
-        Trigger::PositiveEdge,
-        Trigger::NegativeLevel,
-        Trigger::NegativeEdge,
-    ] {
-        let state = LineState {
-            enable: Enable::Disabled,
-            vectoring: Vectoring::Vectored,
-            trigger,
-            control: Control::from_bits(0x5f),
-        };
-        controller
-            .set_line(30, state)
-            .expect("line 30 is the CLIC's");
-        assert_eq!(controller.line(30), state);
-    }
-    let bound = LineState::vectored(Control::level::<3, LEVEL_BITS>());
     controller
-        .set_line(30, bound)
+        .bind(30, Control::level::<3, LEVEL_BITS>())
         .expect("line 30 is the CLIC's");
-    assert_eq!(controller.line(30), bound);
-    assert_eq!(bound.control, Control::level::<3, 3>());
+    let level = Control::level::<3, LEVEL_BITS>();
+    assert_eq!(controller.check(30, LineExpectation::Bound(level)), Ok(()));
+    assert!(matches!(
+        controller.check(30, LineExpectation::Disabled),
+        Err(Error::WrongLine { line: 30, .. })
+    ));
     drop(controller);
     let word = memory.clic().read_ctrl(line(30));
+    assert!(word.ie() && word.attr_shv());
+    assert_eq!(
+        word.attr_trig_variant(),
+        clic::ctrl::AttrTrig::PositiveLevel
+    );
+    assert_eq!(word.ctl(), level.bits());
     assert!(word.ip(), "the pending bit stays");
     assert_eq!(word.attr_mode().get(), 3, "the privilege mode stays");
     let mut controller = memory.controller();
-    controller
-        .set_line(
-            30,
-            LineState {
-                enable: Enable::Enabled,
-                vectoring: Vectoring::Vectored,
-                trigger: Trigger::NegativeEdge,
-                control: Control::from_bits(0xff),
-            },
-        )
-        .expect("line 30 is the CLIC's");
+    controller.disable(30).expect("line 30 is the CLIC's");
+    assert_eq!(controller.check(30, LineExpectation::Disabled), Ok(()));
     drop(controller);
+    let word = memory.clic().read_ctrl(line(30));
+    assert!(!word.ie() && !word.attr_shv() && word.ctl() == 0);
+    assert!(word.ip(), "the pending bit stays");
+    assert_eq!(word.attr_mode().get(), 3, "the privilege mode stays");
     assert!(
-        memory.clic.iter().skip(1).all(|&word| word == u32::MAX),
-        "writing the line back restores its word"
+        memory
+            .clic
+            .iter()
+            .enumerate()
+            .skip(1)
+            .all(|(index, &word)| index == clic::ctrl::OFFSET / 4 + 30 || word == u32::MAX),
+        "no other line's word changed"
     );
 }
 
 #[test]
-fn a_line_another_writer_left_edge_triggered_reads_as_such() {
+fn a_line_another_writer_left_edge_triggered_is_no_binding() {
     let mut memory = Memory::filled(0);
     memory.clic().modify_ctrl(line(20), |word| {
         word.set_ie(true)
@@ -407,11 +387,14 @@ fn a_line_another_writer_left_edge_triggered_reads_as_such() {
             .set_ctl(Control::level::<3, 3>().bits());
     });
     let controller = memory.controller();
-    let state = controller.line(20);
-    assert_eq!(state.trigger, Trigger::PositiveEdge);
-    assert_ne!(
-        state,
-        LineState::vectored(Control::level::<3, LEVEL_BITS>()),
+    let expected = LineExpectation::Bound(Control::level::<3, LEVEL_BITS>());
+    assert_eq!(
+        controller.check(20, expected),
+        Err(Error::WrongLine {
+            line: 20,
+            observed: LineObservation::of_word(0x5f03_0100),
+            expected,
+        }),
         "the router's check sees the line differ from a binding"
     );
 }
@@ -448,10 +431,7 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
         }
         for number in 0..Ours::LINES {
             controller
-                .set_line(
-                    number,
-                    LineState::vectored(Control::level::<1, LEVEL_BITS>()),
-                )
+                .bind(number, Control::level::<1, LEVEL_BITS>())
                 .expect("every line of the CLIC takes a binding");
         }
     }
@@ -472,19 +452,20 @@ fn the_router_silences_boot_leftovers_then_binds_a_line_on_its_level() {
     }
     for number in 0..Ours::LINES {
         let expected = if number == 20 {
-            LineState::vectored(Control::level::<3, LEVEL_BITS>())
+            LineExpectation::Bound(Control::level::<3, LEVEL_BITS>())
         } else {
-            LineState::DISABLED
+            LineExpectation::Disabled
         };
-        assert_eq!(
-            controller.line(number).enable,
-            expected.enable,
-            "line {number}"
-        );
+        assert_eq!(controller.check(number, expected), Ok(()), "line {number}");
     }
-    let state = controller.line(20);
-    assert!(state.vectoring == Vectoring::Vectored && state.trigger == Trigger::PositiveLevel);
-    assert_eq!(state.control, Control::level::<3, 3>());
+    drop(controller);
+    let word = memory.clic().read_ctrl(line(20));
+    assert!(word.attr_shv());
+    assert_eq!(
+        word.attr_trig_variant(),
+        clic::ctrl::AttrTrig::PositiveLevel
+    );
+    assert_eq!(word.ctl(), Control::level::<3, 3>().bits());
 }
 
 extern "C" fn no_handler() {}
@@ -602,4 +583,60 @@ fn each_banks_controller_names_its_own_hart() {
     .into_controller_on(1)
     .expect("hart 1 builds its own controller");
     assert_eq!(controller.hart(), 1);
+}
+
+#[test]
+fn a_bound_line_with_any_one_of_its_four_facts_wrong_is_no_binding() {
+    let level = Control::level::<3, LEVEL_BITS>();
+    let expected = LineExpectation::Bound(level);
+    // Each fact of the binding undone alone, with the word it leaves: level
+    // byte 0x5f (bits 24..32), vectored (16), enabled (8) as bound.
+    let cases: [(&str, fn(&mut clic::ctrl::W), u32); 4] = [
+        (
+            "enable",
+            |word| {
+                word.set_ie(false);
+            },
+            0x5f01_0000,
+        ),
+        (
+            "vectoring",
+            |word| {
+                word.set_attr_shv(false);
+            },
+            0x5f00_0100,
+        ),
+        (
+            "trigger",
+            |word| {
+                word.set_attr_trig(clic::ctrl::AttrTrig::PositiveEdge);
+            },
+            0x5f03_0100,
+        ),
+        (
+            "level",
+            |word| {
+                word.set_ctl(Control::level::<1, LEVEL_BITS>().bits());
+            },
+            0x1f01_0100,
+        ),
+    ];
+    for (fact, undo, word) in cases {
+        let mut memory = Memory::filled(0);
+        let mut controller = memory.controller();
+        controller.bind(20, level).expect("line 20 is the CLIC's");
+        assert_eq!(controller.check(20, expected), Ok(()), "{fact}");
+        drop(controller);
+        memory.clic().modify_ctrl(line(20), |w| undo(w));
+        let controller = memory.controller();
+        assert_eq!(
+            controller.check(20, expected),
+            Err(Error::WrongLine {
+                line: 20,
+                observed: LineObservation::of_word(word),
+                expected,
+            }),
+            "{fact}"
+        );
+    }
 }

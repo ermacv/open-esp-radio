@@ -70,7 +70,9 @@
 mod binding;
 pub use binding::{BindError, BindFault, BindFaultCode, BindFaultKind, Quarantined};
 mod router;
-pub use router::{Bound, Controller, Error, EventAuthority, Router, Silent};
+pub use router::{
+    Bound, Controller, Error, EventAuthority, LineExpectation, LineObservation, Router, Silent,
+};
 
 pub mod signal;
 
@@ -1104,17 +1106,42 @@ macro_rules! __fake_controller {
             Silence {
                 source: u16,
             },
-            Line {
+            Bind {
                 line: u8,
-                state: $crate::__private::clic::LineState,
+                control: $crate::__private::clic::Control,
             },
+            Disable {
+                line: u8,
+            },
+        }
+
+        /// A fake line: what it was written, or a word a test puts there as
+        /// a boot or a fault might leave it.
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum FakeLine {
+            Disabled,
+            Bound($crate::__private::clic::Control),
+            /// Enabled, with an attribute or control no binding writes.
+            Foreign(u32),
+        }
+
+        impl FakeLine {
+            /// The fake's own word for a record: a written line as the
+            /// expectation it holds records, a foreign one as put there.
+            fn word(self) -> u32 {
+                match self {
+                    Self::Disabled => 0,
+                    Self::Bound(control) => $crate::LineExpectation::Bound(control).record(),
+                    Self::Foreign(word) => word,
+                }
+            }
         }
 
         /// Eight sources, 48 lines, three level bits; the writes it took.
         pub struct FakeController {
             pub hart: u8,
             pub routes: [Option<u8>; 8],
-            pub lines: [$crate::__private::clic::LineState; 48],
+            pub lines: [FakeLine; 48],
             pub writes: ::std::vec::Vec<Write>,
         }
 
@@ -1125,9 +1152,7 @@ macro_rules! __fake_controller {
                 Self {
                     hart,
                     routes: [Some(20); 8],
-                    lines: [$crate::__private::clic::LineState::vectored(
-                        $crate::__private::clic::Control::level::<1, 3>(),
-                    ); 48],
+                    lines: [FakeLine::Bound($crate::__private::clic::Control::level::<1, 3>()); 48],
                     writes: ::std::vec::Vec::new(),
                 }
             }
@@ -1166,20 +1191,48 @@ macro_rules! __fake_controller {
             fn routed(&self, source: u16) -> Option<u8> {
                 self.routes[usize::from(source)]
             }
-            fn set_line(
+            fn bind(
                 &mut self,
                 line: u8,
-                state: $crate::__private::clic::LineState,
+                control: $crate::__private::clic::Control,
             ) -> Result<(), $crate::Error> {
                 *self
                     .lines
                     .get_mut(usize::from(line))
-                    .ok_or($crate::Error::NoSuchLine { line })? = state;
-                self.writes.push(Write::Line { line, state });
+                    .ok_or($crate::Error::NoSuchLine { line })? = FakeLine::Bound(control);
+                self.writes.push(Write::Bind { line, control });
                 Ok(())
             }
-            fn line(&self, line: u8) -> $crate::__private::clic::LineState {
-                self.lines[usize::from(line)]
+            fn disable(&mut self, line: u8) -> Result<(), $crate::Error> {
+                *self
+                    .lines
+                    .get_mut(usize::from(line))
+                    .ok_or($crate::Error::NoSuchLine { line })? = FakeLine::Disabled;
+                self.writes.push(Write::Disable { line });
+                Ok(())
+            }
+            fn check(
+                &self,
+                line: u8,
+                expected: $crate::LineExpectation,
+            ) -> Result<(), $crate::Error> {
+                let held = *self
+                    .lines
+                    .get(usize::from(line))
+                    .ok_or($crate::Error::NoSuchLine { line })?;
+                let holds = match expected {
+                    $crate::LineExpectation::Disabled => held == FakeLine::Disabled,
+                    $crate::LineExpectation::Bound(control) => held == FakeLine::Bound(control),
+                };
+                if holds {
+                    Ok(())
+                } else {
+                    Err($crate::Error::WrongLine {
+                        line,
+                        observed: $crate::LineObservation::of_word(held.word()),
+                        expected,
+                    })
+                }
             }
         }
     };
