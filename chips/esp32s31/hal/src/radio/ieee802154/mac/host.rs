@@ -68,9 +68,30 @@ pub(crate) fn changed(before: &[u32], after: &[u32]) -> Vec<u32> {
 /// the router's proofs in tests: its writes change nothing it reports.
 pub(crate) struct NoRoutes;
 
+/// The numbers `0..N`, number `n` at `n`.
+const fn numbers<const N: usize>() -> [u16; N] {
+    let mut all = [0; N];
+    let mut rest: &mut [u16] = &mut all;
+    let mut number = 0;
+    while let [slot, tail @ ..] = rest {
+        *slot = number;
+        rest = tail;
+        number += 1;
+    }
+    all
+}
+
+/// The host stub's 256 sources.
+const NO_ROUTE_SOURCES: [u16; 256] = numbers::<256>();
+/// The host stub's lines, the chip's count of them.
+const NO_ROUTE_LINES: [u16; crate::system::platform::interrupt_controller::facts::LINES.count
+    as usize] = numbers();
+
 impl oer_chips_family_platform_interrupt_table::Controller for NoRoutes {
-    const SOURCES: u16 = 256;
-    const LINES: u8 = crate::system::platform::interrupt_controller::facts::LINES.count;
+    type Source = u16;
+    type Line = u16;
+    const SOURCES: &'static [u16] = &NO_ROUTE_SOURCES;
+    const LINES: &'static [u16] = &NO_ROUTE_LINES;
     const LEVEL_BITS: oer_portable_riscv::clic::LevelBits =
         oer_portable_riscv::clic::LevelBits::constant::<
             { crate::system::platform::interrupt_controller::facts::LEVEL_BITS },
@@ -81,52 +102,24 @@ impl oer_chips_family_platform_interrupt_table::Controller for NoRoutes {
     fn hart(&self) -> u8 {
         0
     }
-    fn route(
-        &mut self,
-        _source: u16,
-        _line: u8,
-    ) -> Result<(), oer_chips_family_platform_interrupt_table::Error> {
-        Ok(())
-    }
-    fn silence(
-        &mut self,
-        _source: u16,
-    ) -> Result<(), oer_chips_family_platform_interrupt_table::Error> {
-        Ok(())
-    }
+    fn route(&mut self, _source: u16, _line: u16) {}
+    fn silence(&mut self, _source: u16) {}
     fn routed(&self, _source: u16) -> Option<u8> {
         None
     }
-    fn bind(
-        &mut self,
-        _line: u8,
-        _control: oer_portable_riscv::clic::Control,
-    ) -> Result<(), oer_chips_family_platform_interrupt_table::Error> {
-        Ok(())
-    }
-    fn disable(
-        &mut self,
-        _line: u8,
-    ) -> Result<(), oer_chips_family_platform_interrupt_table::Error> {
-        Ok(())
-    }
+    fn bind(&mut self, _line: u16, _control: oer_portable_riscv::clic::Control) {}
+    fn disable(&mut self, _line: u16) {}
     /// Every line reads disabled: a binding is never observed.
     fn check(
         &self,
-        line: u8,
+        _line: u16,
         expected: oer_chips_family_platform_interrupt_table::LineExpectation,
-    ) -> Result<(), oer_chips_family_platform_interrupt_table::Error> {
+    ) -> Result<(), oer_chips_family_platform_interrupt_table::LineObservation> {
         match expected {
             oer_chips_family_platform_interrupt_table::LineExpectation::Disabled => Ok(()),
-            oer_chips_family_platform_interrupt_table::LineExpectation::Bound(_) => Err(
-                oer_chips_family_platform_interrupt_table::Error::WrongLine {
-                    line,
-                    observed: oer_chips_family_platform_interrupt_table::LineObservation::of_word(
-                        0,
-                    ),
-                    expected,
-                },
-            ),
+            oer_chips_family_platform_interrupt_table::LineExpectation::Bound(_) => {
+                Err(oer_chips_family_platform_interrupt_table::LineObservation::of_word(0))
+            }
         }
     }
 }

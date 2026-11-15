@@ -16,9 +16,9 @@
 //! Each method of [`Controller`] reads or read-modify-writes one word: a
 //! route keeps its source's `PASS_LEVEL` field and the reserved bits
 //! of its word, a line keeps its pending bit and its privilege mode. A source
-//! outside the bank or a line outside the CLIC is refused
-//! ([`Error::NoSuchSource`], [`Error::NoSuchLine`]) and nothing is written;
-//! it reads as silent or disabled.
+//! and a line are the controller's own values ([`Source`], [`Line`]), made
+//! for each of the bank's sources and the CLIC's lines in a constant, so no
+//! write converts a number or refuses one.
 //!
 //! A fatal path of hart 0 observes hart 0's routes and lines as they are
 //! ([`fatal_view`]): the root publishes the observers of the route and line
@@ -36,6 +36,54 @@ use oer_chips_esp32s31_pac::{
 };
 use oer_chips_family_platform_interrupt_table::{
     Controller, Error, LineExpectation, LineObservation,
+};
+
+/// A source of the interrupt matrix: its route word's index.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Source(Index<{ interrupt_core::route::COUNT }>);
+
+/// A line of the hart's CLIC: its control word's index, and its number as a
+/// route's `MAP` value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Line {
+    ctrl: Index<{ clic::ctrl::COUNT }>,
+    map: Bits<6>,
+}
+
+/// Every source, source `n` at `n`.
+const SOURCES: [Source; interrupt_core::route::COUNT] = {
+    let mut sources = [Source(Index::constant::<0>()); interrupt_core::route::COUNT];
+    let mut rest: &mut [Source] = &mut sources;
+    let mut number = 0;
+    while let [source, tail @ ..] = rest {
+        *source = match Index::new(number) {
+            Ok(index) => Source(index),
+            Err(_) => panic!("the source lies inside the matrix"),
+        };
+        rest = tail;
+        number += 1;
+    }
+    sources
+};
+
+/// Every line, line `n` at `n`; a route's `MAP` holds each line's number.
+const LINES: [Line; clic::ctrl::COUNT] = {
+    let mut lines = [Line {
+        ctrl: Index::constant::<0>(),
+        map: Bits::constant::<0>(),
+    }; clic::ctrl::COUNT];
+    let mut rest: &mut [Line] = &mut lines;
+    let (mut number, mut map) = (0, 0);
+    while let [line, tail @ ..] = rest {
+        *line = match (Index::new(number), Bits::new(map)) {
+            (Ok(ctrl), Ok(map)) => Line { ctrl, map },
+            _ => panic!("the line lies inside the CLIC and its number in MAP"),
+        };
+        rest = tail;
+        number += 1;
+        map += 1;
+    }
+    lines
 };
 use oer_portable_memory::{ClaimCell, zeroed::ZeroedOnce};
 use oer_portable_riscv::clic::{Control, LevelBits};
@@ -394,8 +442,10 @@ pub type Hart0Grant = InterruptGrant<InterruptCore0>;
 pub type Hart1Grant = InterruptGrant<InterruptCore1>;
 
 impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
-    const SOURCES: u16 = interrupt_core::route::COUNT as u16;
-    const LINES: u8 = clic::ctrl::COUNT as u8;
+    type Source = Source;
+    type Line = Line;
+    const SOURCES: &'static [Source] = &SOURCES;
+    const LINES: &'static [Line] = &LINES;
     const LEVEL_BITS: LevelBits = LevelBits::constant::<{ facts::LEVEL_BITS }>();
 
     fn hart(&self) -> u8 {
@@ -403,7 +453,7 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
     }
 
     fn verify_configuration(&self) -> Result<(), Error> {
-        const { assert!(Self::LINES == facts::LINES.count) };
+        const { assert!(clic::ctrl::COUNT == facts::LINES.count as usize) };
         let info = self.clic.read_int_info();
         // These fields fit their destination types (four, thirteen and four bits).
         let control_bits = info.ctlbits().get() as u8;
@@ -430,48 +480,36 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
         Ok(())
     }
 
-    fn route(&mut self, source: u16, line: u8) -> Result<(), Error> {
-        let index = Index::new(usize::from(source)).map_err(|_| Error::NoSuchSource { source })?;
-        // MAP is wider than the CLIC's lines: a line past them is refused,
-        // not written.
-        let map = (line < Self::LINES)
-            .then(|| Bits::new(u32::from(line)).ok())
-            .flatten()
-            .ok_or(Error::NoSuchLine { line })?;
-        RouteBank::modify_route(&mut self.matrix, index, |route| {
-            route.set_map(map);
+    fn route(&mut self, source: Source, line: Line) {
+        RouteBank::modify_route(&mut self.matrix, source.0, |route| {
+            route.set_map(line.map);
         });
-        Ok(())
     }
 
-    fn silence(&mut self, source: u16) -> Result<(), Error> {
-        let index = Index::new(usize::from(source)).map_err(|_| Error::NoSuchSource { source })?;
-        RouteBank::modify_route(&mut self.matrix, index, |route| {
+    fn silence(&mut self, source: Source) {
+        RouteBank::modify_route(&mut self.matrix, source.0, |route| {
             route.set_map(Bits::truncate(
                 interrupt_core::route::Map::Disconnected.bits(),
             ));
         });
-        Ok(())
     }
 
-    fn routed(&self, source: u16) -> Option<u8> {
-        let index = Index::new(usize::from(source)).ok()?;
+    fn routed(&self, source: Source) -> Option<u8> {
         // MAP is six bits wide.
-        let line = RouteBank::read_route(&self.matrix, index).map().get() as u8;
+        let line = RouteBank::read_route(&self.matrix, source.0).map().get() as u8;
         (line != 0).then_some(line)
     }
 
-    fn bind(&mut self, line: u8, control: Control) -> Result<(), Error> {
-        self.write_line(line, LineWrite::Bind(control))
+    fn bind(&mut self, line: Line, control: Control) {
+        self.write_line(line, LineWrite::Bind(control));
     }
 
-    fn disable(&mut self, line: u8) -> Result<(), Error> {
-        self.write_line(line, LineWrite::Disable)
+    fn disable(&mut self, line: Line) {
+        self.write_line(line, LineWrite::Disable);
     }
 
-    fn check(&self, line: u8, expected: LineExpectation) -> Result<(), Error> {
-        let index = Index::new(usize::from(line)).map_err(|_| Error::NoSuchLine { line })?;
-        let word = self.clic.read_ctrl(index);
+    fn check(&self, line: Line, expected: LineExpectation) -> Result<(), LineObservation> {
+        let word = self.clic.read_ctrl(line.ctrl);
         let holds = match expected {
             LineExpectation::Disabled => !word.ie(),
             LineExpectation::Bound(control) => {
@@ -484,11 +522,7 @@ impl<B: RouteBank, C: Placement> Controller for InterruptController<B, C> {
         if holds {
             Ok(())
         } else {
-            Err(Error::WrongLine {
-                line,
-                observed: LineObservation::of_word(word.record_word()),
-                expected,
-            })
+            Err(LineObservation::of_word(word.record_word()))
         }
     }
 }
@@ -517,8 +551,8 @@ impl<B: RouteBank, C: Placement> InterruptController<B, C> {
     /// `:77,:98,:104` (`CLIC_INT_CTL_S` 24, `CLIC_INT_ATTR_SHV_S` 16,
     /// `CLIC_INT_IE_S` 8); `ESP_HAL_1F646C5_CLIC_LEVEL_LINES` in the register
     /// model (the bound lines are level-triggered).
-    fn write_line(&mut self, line: u8, write: LineWrite) -> Result<(), Error> {
-        let index = Index::new(usize::from(line)).map_err(|_| Error::NoSuchLine { line })?;
+    fn write_line(&mut self, line: Line, write: LineWrite) {
+        let index = line.ctrl;
         if self.clic.read_ctrl(index).ie() {
             self.clic.modify_ctrl(index, |word| {
                 word.set_ie(false);
@@ -538,6 +572,5 @@ impl<B: RouteBank, C: Placement> InterruptController<B, C> {
                 word.set_ie(true);
             });
         }
-        Ok(())
     }
 }

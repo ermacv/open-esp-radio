@@ -25,14 +25,21 @@ use oer_portable_riscv::clic::{Control, LevelBits};
 
 /// A hart's interrupt matrix bank and CLIC, as the table writes them. The
 /// chip implements it on its typed blocks; each method is a few word reads
-/// or writes, never a wait. A write of a source or line outside the
-/// controller writes nothing and returns [`Error::NoSuchSource`] or
-/// [`Error::NoSuchLine`].
+/// or writes, never a wait.
+///
+/// A source and a line are the controller's own values ([`Self::Source`],
+/// [`Self::Line`]), made once, in a constant, for each source and line it
+/// has: the router takes an entry's by its number at compile time, so a
+/// write names only what the controller has and cannot be refused.
 pub trait Controller {
-    /// The sources of the chip's interrupt matrix: `0..SOURCES`.
-    const SOURCES: u16;
-    /// The CPU lines of the hart's CLIC: `0..LINES`, at most 64.
-    const LINES: u8;
+    /// A source of the chip's interrupt matrix.
+    type Source: Copy + 'static;
+    /// A CPU line of the hart's CLIC.
+    type Line: Copy + 'static;
+    /// Every source of the chip's interrupt matrix, source `n` at `n`.
+    const SOURCES: &'static [Self::Source];
+    /// Every CPU line of the hart's CLIC, line `n` at `n`: at most 64.
+    const LINES: &'static [Self::Line];
     /// The level bits of a line's control byte (`CLIC_INT_CONFIG.MNLBITS`).
     const LEVEL_BITS: LevelBits;
 
@@ -42,41 +49,25 @@ pub trait Controller {
     /// against its chip facts, before installation and before enabling IRQs.
     fn verify_configuration(&self) -> Result<(), Error>;
     /// Route `source` to `line` on this hart.
-    ///
-    /// # Errors
-    ///
-    /// [`Error::NoSuchSource`] or [`Error::NoSuchLine`]; nothing is written.
-    fn route(&mut self, source: u16, line: u8) -> Result<(), Error>;
+    fn route(&mut self, source: Self::Source, line: Self::Line);
     /// Route `source` nowhere on this hart.
-    ///
-    /// # Errors
-    ///
-    /// [`Error::NoSuchSource`]; nothing is written.
-    fn silence(&mut self, source: u16) -> Result<(), Error>;
-    /// The line `source` is routed to on this hart; `None` when silent.
-    fn routed(&self, source: u16) -> Option<u8>;
+    fn silence(&mut self, source: Self::Source);
+    /// The number of the line `source` is routed to on this hart, as the
+    /// hardware reads it; `None` when silent.
+    fn routed(&self, source: Self::Source) -> Option<u8>;
     /// Bind `line` at the level of `control`: enabled, hardware-vectored,
     /// with the trigger the chip's lines have, keeping its pending bit. The
     /// line is never enabled with another attribute or control.
-    ///
-    /// # Errors
-    ///
-    /// [`Error::NoSuchLine`]; nothing is written.
-    fn bind(&mut self, line: u8, control: Control) -> Result<(), Error>;
+    fn bind(&mut self, line: Self::Line, control: Control);
     /// Disable `line`, keeping its pending bit.
-    ///
-    /// # Errors
-    ///
-    /// [`Error::NoSuchLine`]; nothing is written.
-    fn disable(&mut self, line: u8) -> Result<(), Error>;
+    fn disable(&mut self, line: Self::Line);
     /// Check `line` against what the table left in it: a disabled line is
     /// not enabled, a bound one holds exactly its binding.
     ///
     /// # Errors
     ///
-    /// [`Error::WrongLine`] with the line's observation, or
-    /// [`Error::NoSuchLine`].
-    fn check(&self, line: u8, expected: LineExpectation) -> Result<(), Error>;
+    /// The line's observation when it holds something else.
+    fn check(&self, line: Self::Line, expected: LineExpectation) -> Result<(), LineObservation>;
 }
 
 /// What the table leaves in a line: the family's own value, which names no
@@ -117,8 +108,8 @@ impl LineObservation {
     }
 }
 
-/// How a hart's routes and lines disagree with the table, or a write its
-/// controller refuses: a typed boot failure.
+/// How a hart's controller or its routes and lines disagree with the chip
+/// facts and the table: a typed boot failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
     /// Implemented CLICINTCTL bits differ from the chip facts.
@@ -138,10 +129,6 @@ pub enum Error {
         observed: LineObservation,
         expected: LineExpectation,
     },
-    /// `source` is no source of the controller's matrix (`0..SOURCES`).
-    NoSuchSource { source: u16 },
-    /// `line` is no line of the controller's CLIC (`0..LINES`).
-    NoSuchLine { line: u8 },
     /// `level` is no level of the controller's lines
     /// (`1..=1 << LEVEL_BITS`).
     NoSuchLevel { level: u8 },
@@ -222,14 +209,14 @@ pub struct Router<C: Controller, const H: u8, T: Table> {
 
 /// Whether `sources` holds a source, and each lies inside a matrix of
 /// `count` sources: a part's sources at compile time.
-const fn inside_matrix(sources: &[u16], count: u16) -> bool {
+const fn inside_matrix(sources: &[u16], count: usize) -> bool {
     if sources.is_empty() {
         return false;
     }
     let mut rest = sources;
     while let [source, tail @ ..] = rest {
         rest = tail;
-        if *source >= count {
+        if *source as usize >= count {
             return false;
         }
     }
@@ -238,14 +225,14 @@ const fn inside_matrix(sources: &[u16], count: u16) -> bool {
 
 /// Whether every entry `table` declares that the build holds lies inside a
 /// controller of `sources`, `lines` and `levels`: the table at compile time.
-const fn table_inside(table: &[Declared], sources: u16, lines: u8, levels: u16) -> bool {
+const fn table_inside(table: &[Declared], sources: usize, lines: usize, levels: u16) -> bool {
     let mut rest = table;
     while let [entry, tail @ ..] = rest {
         rest = tail;
         let binding = &entry.binding;
         if entry.present
             && (!inside_matrix(entry.sources, sources)
-                || binding.line >= lines
+                || binding.line as usize >= lines
                 || binding.level == 0
                 || binding.level as u16 > levels)
         {
@@ -277,6 +264,31 @@ const fn table_binds(table: &[Declared], sources: &[u16]) -> bool {
         }
     }
     false
+}
+
+/// The `n`th of `all`; `None` past its end: a controller's line or source
+/// by its number, at compile time.
+const fn nth<V: Copy>(all: &[V], n: usize) -> Option<V> {
+    let mut rest = all;
+    let mut at = 0;
+    while let [first, tail @ ..] = rest {
+        if at == n {
+            return Some(*first);
+        }
+        rest = tail;
+        at += 1;
+    }
+    None
+}
+
+/// Each of the controller's sources whose number `numbers` holds, with its
+/// number, in the order of the numbers.
+fn sources_of<C: Controller>(numbers: &'static [u16]) -> impl Iterator<Item = (C::Source, u16)> {
+    C::SOURCES
+        .iter()
+        .copied()
+        .zip(0u16..)
+        .filter(move |(_, number)| numbers.contains(number))
 }
 
 /// The entries of `table` the build holds, on `hart`.
@@ -352,9 +364,14 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
     /// controller did not take a write.
     pub fn install(mut controller: C, table: T) -> Result<Self, Error> {
         const {
-            assert!(C::LINES <= 64, "a controller has at most 64 lines");
+            assert!(C::LINES.len() <= 64, "a controller has at most 64 lines");
             assert!(
-                table_inside(T::DECLARED, C::SOURCES, C::LINES, C::LEVEL_BITS.levels()),
+                table_inside(
+                    T::DECLARED,
+                    C::SOURCES.len(),
+                    C::LINES.len(),
+                    C::LEVEL_BITS.levels()
+                ),
                 "an entry of the table lies outside the controller"
             );
         };
@@ -363,11 +380,11 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
             return Err(Error::WrongHart { hart: H, current });
         }
         controller.verify_configuration()?;
-        for source in 0..C::SOURCES {
-            controller.silence(source)?;
+        for &source in C::SOURCES {
+            controller.silence(source);
         }
-        for line in 0..C::LINES {
-            controller.disable(line)?;
+        for &line in C::LINES {
+            controller.disable(line);
         }
         let router = Self { controller, table };
         router.verify()?;
@@ -421,9 +438,10 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
     ///
     /// # Errors
     ///
-    /// A binding that cannot claim storage, install its handler or write its
-    /// controller returns its [`Quarantined`] owners: the image must record
-    /// the fault and reset. Nothing else refuses it.
+    /// A binding that cannot claim storage or install its handler returns
+    /// its [`Quarantined`] owners: the image must record the fault and
+    /// reset. Nothing else refuses it: the controller's writes name only its
+    /// own line and sources, at compile time.
     pub fn bind<E: Entry<Table = T>>(
         &mut self,
         token: E,
@@ -431,12 +449,8 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
     ) -> Result<Bound<E>, Quarantined<E>> {
         const {
             assert!(
-                inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES),
+                inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES.len()),
                 "the entry's source is no source of the controller"
-            );
-            assert!(
-                E::LINE < C::LINES,
-                "the entry's line is no line of the controller"
             );
             assert!(
                 E::LEVEL >= 1 && E::LEVEL as u16 <= C::LEVEL_BITS.levels(),
@@ -472,27 +486,23 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
                 place,
             ));
         }
-        if let Err(error) = self.controller.bind(
-            E::LINE,
+        let line = const {
+            match nth(C::LINES, E::LINE as usize) {
+                Some(line) => line,
+                None => panic!("the entry's line is no line of the controller"),
+            }
+        };
+        self.controller.bind(
+            line,
             const {
                 match C::LEVEL_BITS.control(E::LEVEL as u16) {
                     Ok(control) => control,
                     Err(_) => panic!("the entry's level is no level of the controller"),
                 }
             },
-        ) {
-            return Err(Quarantined::installed(
-                fault(source, BindFaultKind::LineRefused(error)),
-                token,
-            ));
-        }
-        for &source in sources {
-            if let Err(error) = self.controller.route(source, E::LINE) {
-                return Err(Quarantined::installed(
-                    fault(source, BindFaultKind::RouteRefused(error)),
-                    token,
-                ));
-            }
+        );
+        for (source, _) in sources_of::<C>(sources) {
+            self.controller.route(source, line);
         }
         let _consumed = token;
         Ok(Bound {
@@ -530,7 +540,7 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
     pub fn silent<P: InterruptSources>(&self) -> Result<Silent<P>, Error> {
         const {
             assert!(
-                inside_matrix(P::SOURCES, C::SOURCES),
+                inside_matrix(P::SOURCES, C::SOURCES.len()),
                 "the part's source is no source of the controller"
             );
             assert!(
@@ -538,9 +548,12 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
                 "an entry of the table binds the part's source"
             );
         };
-        for &source in P::SOURCES {
+        for (source, number) in sources_of::<C>(P::SOURCES) {
             if let Some(line) = self.controller.routed(source) {
-                return Err(Error::ForeignRoute { source, line });
+                return Err(Error::ForeignRoute {
+                    source: number,
+                    line,
+                });
             }
         }
         Ok(Silent {
@@ -562,26 +575,38 @@ impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
         // Bit `line` of the lines a routed source holds; a line past 63
         // is no line of a controller (`LINES` is at most 64).
         let mut routed_lines = 0u64;
-        for source in 0..C::SOURCES {
-            let Some(line) = self.controller.routed(source) else {
+        for (typed, source) in C::SOURCES.iter().copied().zip(0u16..) {
+            let Some(line) = self.controller.routed(typed) else {
                 continue;
             };
-            let Some(binding) = present(self.table.bindings(), hart)
-                .find(|binding| binding.source == source && binding.line == line)
-            else {
+            if !present(self.table.bindings(), hart)
+                .any(|binding| binding.source == source && binding.line == line)
+            {
                 return Err(Error::ForeignRoute { source, line });
-            };
+            }
             routed_lines |= 1u64.checked_shl(u32::from(line)).unwrap_or(0);
-            let control = C::LEVEL_BITS
-                .control(u16::from(binding.level))
-                .map_err(|_| Error::NoSuchLevel {
-                    level: binding.level,
-                })?;
-            self.controller
-                .check(line, LineExpectation::Bound(control))?;
         }
-        for line in (0..C::LINES).filter(|&line| routed_lines >> line & 1 == 0) {
-            self.controller.check(line, LineExpectation::Disabled)?;
+        for (typed, line) in C::LINES.iter().copied().zip(0u8..) {
+            let expected = match present(self.table.bindings(), hart)
+                .find(|binding| binding.line == line)
+                .filter(|_| routed_lines >> line & 1 == 1)
+            {
+                Some(binding) => LineExpectation::Bound(
+                    C::LEVEL_BITS
+                        .control(u16::from(binding.level))
+                        .map_err(|_| Error::NoSuchLevel {
+                            level: binding.level,
+                        })?,
+                ),
+                None => LineExpectation::Disabled,
+            };
+            self.controller
+                .check(typed, expected)
+                .map_err(|observed| Error::WrongLine {
+                    line,
+                    observed,
+                    expected,
+                })?;
         }
         Ok(())
     }

@@ -1203,8 +1203,18 @@ macro_rules! __fake_controller {
         }
 
         impl $crate::Controller for FakeController {
-            const SOURCES: u16 = 8;
-            const LINES: u8 = 48;
+            type Source = u16;
+            type Line = u8;
+            const SOURCES: &'static [u16] = &[0, 1, 2, 3, 4, 5, 6, 7];
+            const LINES: &'static [u8] = &{
+                let mut lines = [0u8; 48];
+                let mut line = 0;
+                while line < 48 {
+                    lines[line] = line as u8;
+                    line += 1;
+                }
+                lines
+            };
             const LEVEL_BITS: $crate::__private::clic::LevelBits =
                 $crate::__private::clic::LevelBits::constant::<3>();
             fn hart(&self) -> u8 {
@@ -1213,57 +1223,31 @@ macro_rules! __fake_controller {
             fn verify_configuration(&self) -> Result<(), $crate::Error> {
                 Ok(())
             }
-            fn route(&mut self, source: u16, line: u8) -> Result<(), $crate::Error> {
-                if line >= Self::LINES {
-                    return Err($crate::Error::NoSuchLine { line });
-                }
-                *self
-                    .routes
-                    .get_mut(usize::from(source))
-                    .ok_or($crate::Error::NoSuchSource { source })? = Some(line);
+            fn route(&mut self, source: u16, line: u8) {
+                self.routes[usize::from(source)] = Some(line);
                 self.writes.push(Write::Route { source, line });
-                Ok(())
             }
-            fn silence(&mut self, source: u16) -> Result<(), $crate::Error> {
-                *self
-                    .routes
-                    .get_mut(usize::from(source))
-                    .ok_or($crate::Error::NoSuchSource { source })? = None;
+            fn silence(&mut self, source: u16) {
+                self.routes[usize::from(source)] = None;
                 self.writes.push(Write::Silence { source });
-                Ok(())
             }
             fn routed(&self, source: u16) -> Option<u8> {
                 self.routes[usize::from(source)]
             }
-            fn bind(
-                &mut self,
-                line: u8,
-                control: $crate::__private::clic::Control,
-            ) -> Result<(), $crate::Error> {
-                *self
-                    .lines
-                    .get_mut(usize::from(line))
-                    .ok_or($crate::Error::NoSuchLine { line })? = FakeLine::Bound(control);
+            fn bind(&mut self, line: u8, control: $crate::__private::clic::Control) {
+                self.lines[usize::from(line)] = FakeLine::Bound(control);
                 self.writes.push(Write::Bind { line, control });
-                Ok(())
             }
-            fn disable(&mut self, line: u8) -> Result<(), $crate::Error> {
-                *self
-                    .lines
-                    .get_mut(usize::from(line))
-                    .ok_or($crate::Error::NoSuchLine { line })? = FakeLine::Disabled;
+            fn disable(&mut self, line: u8) {
+                self.lines[usize::from(line)] = FakeLine::Disabled;
                 self.writes.push(Write::Disable { line });
-                Ok(())
             }
             fn check(
                 &self,
                 line: u8,
                 expected: $crate::LineExpectation,
-            ) -> Result<(), $crate::Error> {
-                let held = *self
-                    .lines
-                    .get(usize::from(line))
-                    .ok_or($crate::Error::NoSuchLine { line })?;
+            ) -> Result<(), $crate::LineObservation> {
+                let held = self.lines[usize::from(line)];
                 let holds = match expected {
                     $crate::LineExpectation::Disabled => held == FakeLine::Disabled,
                     $crate::LineExpectation::Bound(control) => held == FakeLine::Bound(control),
@@ -1271,11 +1255,7 @@ macro_rules! __fake_controller {
                 if holds {
                     Ok(())
                 } else {
-                    Err($crate::Error::WrongLine {
-                        line,
-                        observed: $crate::LineObservation::of_word(held.word()),
-                        expected,
-                    })
+                    Err($crate::LineObservation::of_word(held.word()))
                 }
             }
         }
