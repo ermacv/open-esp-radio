@@ -286,10 +286,10 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
         clippy::too_many_arguments,
         reason = "each is one capability the run consumes"
     )]
-    pub fn run<T, R: crate::task::Roots, W, C, const H: u8, U: UrgentSources>(
+    pub fn run<T, R: crate::task::Roots, W, C, const H: u8, IT, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
-        router: &mut oer_chips_family_platform_interrupt_table::Router<C, H>,
+        router: &mut oer_chips_family_platform_interrupt_table::Router<C, H, IT>,
         wake: W,
         part: W::Part,
         _urgent: U,
@@ -297,14 +297,15 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
         init: impl FnOnce(&Spawner<T>),
     ) -> Result<
         core::convert::Infallible,
-        Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::BindError<W>>,
+        Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::Quarantined<W>>,
     >
     where
         Self: SignalExecutor,
         T: Tasks<Binding = B, Mode = Thread>,
-        W: Entry,
+        W: Entry<Table = IT>,
         W::Part: oer_chips_family_platform_interrupt_table::InterruptSource,
         C: oer_chips_family_platform_interrupt_table::Controller,
+        IT: oer_chips_family_platform_interrupt_table::Table,
     {
         const {
             if <W::Part as oer_chips_family_platform_interrupt_table::InterruptSource>::SOURCE
@@ -320,7 +321,7 @@ impl<B: Binding, const SWI: u8> Executor<B, SWI> {
         let _ = (self.not_send, self.binding);
         let _bound = router
             .bind(wake, part)
-            .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))?;
+            .map_err(|held| Failure::new(Fault::binding(&held), held))?;
         claim_core::<B>(SWI);
         URGENT[usize::from(SWI)]
             .set(U::SOURCES)
@@ -418,22 +419,24 @@ impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
     /// # Errors
     /// A refused route returns its token and part in quarantine. A foreign
     /// hart's entry fails at compile time; duplicate startup records a fault.
-    pub fn start<T, W, C, const H: u8, U: UrgentSources>(
+    pub fn start<T, W, C, const H: u8, IT, U: UrgentSources>(
         self,
         _hart: &Hart<H>,
-        router: &mut oer_chips_family_platform_interrupt_table::Router<C, H>,
+        router: &mut oer_chips_family_platform_interrupt_table::Router<C, H, IT>,
         wake: W,
         part: W::Part,
         _urgent: U,
     ) -> Result<
         Spawner<T>,
-        Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::BindError<W>>,
+        Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::Quarantined<W>>,
     >
     where
         T: Tasks<Binding = B, Mode = InterruptMode>,
-        W: oer_chips_family_platform_interrupt_table::ExecutorEntry<Handler = Round<T>>,
+        W: oer_chips_family_platform_interrupt_table::ExecutorEntry<Handler = Round<T>>
+            + Entry<Table = IT>,
         W::Part: oer_chips_family_platform_interrupt_table::InterruptSource,
         C: oer_chips_family_platform_interrupt_table::Controller,
+        IT: oer_chips_family_platform_interrupt_table::Table,
     {
         const {
             if <W::Part as oer_chips_family_platform_interrupt_table::InterruptSource>::SOURCE
@@ -456,7 +459,7 @@ impl<B: Binding, const SWI: u8> InterruptExecutor<B, SWI> {
         INTERRUPT_MODE[usize::from(SWI)].store(true, Ordering::Release);
         let _bound = router
             .bind(wake, part)
-            .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))?;
+            .map_err(|held| Failure::new(Fault::binding(&held), held))?;
         Ok(Spawner::new())
     }
 }

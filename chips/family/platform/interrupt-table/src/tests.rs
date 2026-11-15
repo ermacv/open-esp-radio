@@ -5,7 +5,7 @@ crate::__fake_table!();
 
 #[test]
 fn install_silences_every_source_and_disables_every_line_before_it_checks() {
-    let router = Router::<_, 0>::install(FakeController::new(0), INTERRUPT_TABLE).unwrap();
+    let router = Router::<_, 0, _>::install(FakeController::new(0), InterruptTable).unwrap();
     let controller = &router.controller;
     assert!(controller.routes.iter().all(Option::is_none));
     assert!(
@@ -82,7 +82,7 @@ fn verify_refuses_a_foreign_route_a_wrong_line_and_a_stray_enabled_line() {
 #[test]
 fn a_router_of_one_hart_refuses_the_controller_of_another() {
     assert_eq!(
-        Router::<_, 0>::install(FakeController::new(1), INTERRUPT_TABLE).err(),
+        Router::<_, 0, _>::install(FakeController::new(1), InterruptTable).err(),
         Some(Error::WrongHart {
             hart: 0,
             current: 1
@@ -103,87 +103,11 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     let before = zero.controller.writes.len();
     let (token, radio_part) = (tokens.radio, RadioIrq);
 
-    // A table cannot reinterpret a token's class or route it to a handler
-    // that reads another cell. Both refusals precede placement and writes.
-    let original = &INTERRUPT_TABLE[0];
-    let table = |class, handler| {
-        std::boxed::Box::leak(std::boxed::Box::new([crate::Binding {
-            source: original.source,
-            line: original.line,
-            level: original.level,
-            hart: original.hart,
-            class,
-            handler: Some(handler),
-        }])) as &'static crate::Table
-    };
-    let mut wrong_class = Router::<_, 0>::install(
-        FakeController::new(0),
-        table(crate::Class::Executor, timer_handler),
-    )
-    .unwrap();
-    let before_class = wrong_class.controller.writes.len();
-    let crate::BindError::Refused {
-        error,
-        token: timer,
-        part,
-    } = wrong_class
-        .bind(tokens.timer, TimerIrq::default())
-        .unwrap_err()
-    else {
-        panic!("class mismatch must return the unchanged owners");
-    };
-    assert_eq!(
-        error,
-        Error::WrongClass {
-            source: 3,
-            table: crate::Class::Executor,
-            entry: crate::Class::Hardware
-        }
-    );
-    assert_eq!(wrong_class.controller.writes.len(), before_class);
-    assert!(
-        wrong_class
-            .controller
-            .lines
-            .iter()
-            .all(|line| *line == FakeLine::Disabled)
-    );
-
-    static OTHER_CELL: oer_portable_memory::HandlerCell<TimerIrq> =
-        oer_portable_memory::HandlerCell::new();
-    extern "C" fn other_cell_handler() {
-        let _ = OTHER_CELL.with(on_timer);
-    }
-    let mut wrong_cell = Router::<_, 0>::install(
-        FakeController::new(0),
-        table(TimerToken::CLASS, other_cell_handler as extern "C" fn()),
-    )
-    .unwrap();
-    let before_cell = wrong_cell.controller.writes.len();
-    let crate::BindError::Refused {
-        error,
-        token: timer,
-        part,
-    } = wrong_cell.bind(timer, part).unwrap_err()
-    else {
-        panic!("cell mismatch must return the unchanged owners");
-    };
-    assert_eq!(error, Error::HandlerCellMismatch { source: 3 });
-    assert_eq!(wrong_cell.controller.writes.len(), before_cell);
-    assert!(
-        wrong_cell
-            .controller
-            .lines
-            .iter()
-            .all(|line| *line == FakeLine::Disabled)
-    );
-    assert!(OTHER_CELL.with(|_| ()).is_none());
-
     // Before its binding the timer's handler finds no part and runs nothing.
     assert!(<TimerToken as Entry>::cell().with(|_| ()).is_none());
     timer_handler();
 
-    let _bound: crate::Bound<TimerToken> = zero.bind(timer, part).unwrap();
+    let _bound: crate::Bound<TimerToken> = zero.bind(tokens.timer, TimerIrq::default()).unwrap();
     assert_eq!(crate::Bound::<TimerToken>::SOURCE, 3);
     assert_eq!(
         zero.controller.writes[before..],
@@ -245,9 +169,7 @@ fn a_binding_places_the_part_then_writes_the_line_then_the_route() {
     #[allow(clippy::disallowed_methods, reason = "regression for a forged token")]
     let forged = TimerToken(crate::__private::Unique::new());
     let before = zero.controller.writes.len();
-    let crate::BindError::Fault(fault) = zero.bind(forged, TimerIrq::default()).unwrap_err() else {
-        panic!("a duplicate token must retain its part in quarantine");
-    };
+    let fault = zero.bind(forged, TimerIrq::default()).unwrap_err();
     assert_eq!(fault.fault.kind, crate::BindFaultKind::StorageClaimed);
     assert_eq!(zero.controller.writes.len(), before);
     timer_handler();
@@ -304,50 +226,6 @@ fn the_table_lays_out_each_entry_as_the_tools_read_it() {
     assert!(absent.handler.is_none());
 }
 
-extern "C" fn no_handler() {}
-
-/// A table whose one entry of hart 0 is `binding`, as a table of wider
-/// `Lines` than the controller's would hold it.
-fn table_of(source: u16, line: u8, level: u8) -> &'static crate::Table {
-    std::boxed::Box::leak(std::boxed::Box::new([crate::Binding {
-        source,
-        line,
-        level,
-        class: crate::Class::Hardware,
-        hart: 0,
-        handler: Some(no_handler),
-    }]))
-}
-
-#[test]
-fn install_refuses_an_entry_outside_the_controller_before_any_write() {
-    for (table, error) in [
-        (table_of(84, 20, 3), Error::NoSuchSource { source: 84 }),
-        (table_of(3, 60, 3), Error::NoSuchLine { line: 60 }),
-        (table_of(3, 48, 3), Error::NoSuchLine { line: 48 }),
-        (table_of(3, 20, 9), Error::NoSuchLevel { level: 9 }),
-        (table_of(3, 20, 0), Error::NoSuchLevel { level: 0 }),
-    ] {
-        assert_eq!(
-            Router::<_, 0>::install(FakeController::new(0), table).err(),
-            Some(error)
-        );
-    }
-    // Another hart's entry is its own router's to check.
-    let other = std::boxed::Box::leak(std::boxed::Box::new([crate::Binding {
-        hart: 1,
-        ..crate::Binding {
-            source: 84,
-            line: 60,
-            level: 3,
-            class: crate::Class::Hardware,
-            hart: 0,
-            handler: Some(no_handler),
-        }
-    }]));
-    assert!(Router::<_, 0>::install(FakeController::new(0), other).is_ok());
-}
-
 #[test]
 fn a_controller_refuses_a_source_or_line_it_lacks_and_writes_nothing() {
     use crate::Controller;
@@ -378,20 +256,8 @@ fn only_a_silent_source_no_entry_binds_gets_the_polling_proof() {
     let mut router = fake_router::<0>();
     // The absent entry's build leaves it out: nothing binds source 6.
     let _silent: crate::Silent<AbsentIrq> = router.silent().unwrap();
-    // The timer's entry binds source 3, the radio's (hart one) source 5.
-    assert_eq!(
-        router.silent::<TimerIrq>().err(),
-        Some(Error::Bindable { source: 3 })
-    );
-    assert_eq!(
-        router.silent::<RadioIrq>().err(),
-        Some(Error::Bindable { source: 5 })
-    );
-    // A part of several sources is silent only when each of them is.
-    assert_eq!(
-        router.silent::<PairIrq>().err(),
-        Some(Error::Bindable { source: 4 })
-    );
+    // A part an entry binds has no silence: it fails to compile
+    // (`Router::silent`).
     router.controller.routes[6] = Some(30);
     assert_eq!(
         router.silent::<AbsentIrq>().err(),

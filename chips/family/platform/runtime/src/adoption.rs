@@ -48,24 +48,28 @@ pub fn prepare<B: Binding>(
 impl<B: Binding> Prepared<B> {
     /// Complete stage-two adoption after any image startup diagnostics.
     #[cfg(target_arch = "riscv32")]
-    pub fn adopt<Board: crate::AdoptsBootstrapMapping, H>(
+    pub fn adopt<
+        Board: crate::AdoptsBootstrapMapping,
+        H,
+        T: oer_chips_family_platform_interrupt_table::Table,
+    >(
         self,
         handoff: crate::Handoff<B::Platform>,
-        table: &'static crate::InterruptTable,
+        table: T,
         board: Board,
         previous_records: impl FnOnce(),
         before_adoption: impl FnOnce(B::Hardware) -> H,
-    ) -> Result<Runtime<H, B::Controller, Board::Mapping>, BootError> {
+    ) -> Result<Runtime<H, B::Controller, T, Board::Mapping>, BootError> {
         self.finish(before_adoption, |interrupts| {
             handoff.adopt(table, interrupts, B::controller, board, previous_records)
         })
     }
 
-    fn finish<H, M>(
+    fn finish<H, T: oer_chips_family_platform_interrupt_table::Table, M>(
         self,
         before_adoption: impl FnOnce(B::Hardware) -> H,
-        adopt: impl FnOnce(B::Interrupts) -> Result<(M, Adopted<B::Controller>), BootError>,
-    ) -> Result<Runtime<H, B::Controller, M>, BootError> {
+        adopt: impl FnOnce(B::Interrupts) -> Result<(M, Adopted<B::Controller, T>), BootError>,
+    ) -> Result<Runtime<H, B::Controller, T, M>, BootError> {
         let (hardware, grant) = B::split(self.parts);
         let hardware = before_adoption(hardware);
         let (mapping, interrupts) = adopt(grant)?;
@@ -80,14 +84,14 @@ impl<B: Binding> Prepared<B> {
 /// A fully adopted runtime. Only the runner constructs one, after driver
 /// initialization and mapping/context adoption have both succeeded.
 #[must_use = "the runtime retains the adopted mapping and platform owners"]
-pub struct Runtime<H, C: Controller, M> {
+pub struct Runtime<H, C: Controller, T: oer_chips_family_platform_interrupt_table::Table, M> {
     hardware: H,
     mapping: M,
-    interrupts: Adopted<C>,
+    interrupts: Adopted<C, T>,
 }
 
-impl<H, C: Controller, M> Runtime<H, C, M> {
-    pub fn into_parts(self) -> (H, M, Adopted<C>) {
+impl<H, C: Controller, T: oer_chips_family_platform_interrupt_table::Table, M> Runtime<H, C, T, M> {
+    pub fn into_parts(self) -> (H, M, Adopted<C, T>) {
         (self.hardware, self.mapping, self.interrupts)
     }
 }
@@ -119,26 +123,31 @@ impl Error {
 /// Adopt hardware, then report retained records, accept the existing PSRAM
 /// mapping and install the image's interrupt context. Interrupts stay disabled.
 #[cfg(target_arch = "riscv32")]
-pub fn run<B: Binding, Board: crate::AdoptsBootstrapMapping, H>(
+pub fn run<
+    B: Binding,
+    Board: crate::AdoptsBootstrapMapping,
+    H,
+    T: oer_chips_family_platform_interrupt_table::Table,
+>(
     handoff: crate::Handoff<B::Platform>,
     owners: driver::Owners<B::Driver>,
-    table: &'static crate::InterruptTable,
+    table: T,
     board: Board,
     previous_records: impl FnOnce(),
     before_adoption: impl FnOnce(B::Hardware) -> H,
-) -> Result<Runtime<H, B::Controller, Board::Mapping>, Error> {
-    complete::<B, _, _>(owners, before_adoption, |interrupts| {
+) -> Result<Runtime<H, B::Controller, T, Board::Mapping>, Error> {
+    complete::<B, _, _, _>(owners, before_adoption, |interrupts| {
         handoff.adopt(table, interrupts, B::controller, board, previous_records)
     })
 }
 
 // The injectable continuation is private: only the real Handoff path above
 // can publish a Runtime outside this crate. Host tests exercise this same order.
-fn complete<B: Binding, H, M>(
+fn complete<B: Binding, H, T: oer_chips_family_platform_interrupt_table::Table, M>(
     owners: driver::Owners<B::Driver>,
     before_adoption: impl FnOnce(B::Hardware) -> H,
-    adopt: impl FnOnce(B::Interrupts) -> Result<(M, Adopted<B::Controller>), BootError>,
-) -> Result<Runtime<H, B::Controller, M>, Error> {
+    adopt: impl FnOnce(B::Interrupts) -> Result<(M, Adopted<B::Controller, T>), BootError>,
+) -> Result<Runtime<H, B::Controller, T, M>, Error> {
     prepare::<B>(owners)
         .map_err(Error::Initialization)?
         .finish(before_adoption, adopt)

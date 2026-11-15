@@ -460,7 +460,7 @@ impl<P: oer_chips_family_platform_port::SecondaryStart, const H: u8> SecondaryHa
     /// grant becomes its controller here, on the hart, and the router over
     /// it silences every route of the hart's bank and disables every line of
     /// its own CLIC, then checks them against `table`, the image's
-    /// `INTERRUPT_TABLE`; the hart's CLIC threshold is set to admit every
+    /// `InterruptTable`; the hart's CLIC threshold is set to admit every
     /// level. The returned context binds the hart's entries and
     /// enables its interrupts ([`Adopted::enable_interrupts`](crate::Adopted)).
     ///
@@ -469,10 +469,10 @@ impl<P: oer_chips_family_platform_port::SecondaryStart, const H: u8> SecondaryHa
     /// [`BootError::WrongHart`](crate::BootError) when the grant or its
     /// controller is another hart's; a controller disagreement with its chip
     /// facts or the table.
-    pub fn adopt(
+    pub fn adopt<T: oer_chips_family_platform_interrupt_table::Table>(
         self,
-        table: &'static crate::InterruptTable,
-    ) -> Result<crate::Adopted<P::Controller, H>, crate::BootError>
+        table: T,
+    ) -> Result<crate::Adopted<P::Controller, T, H>, crate::BootError>
     where
         P::Controller: oer_chips_family_platform_interrupt_table::Controller,
     {

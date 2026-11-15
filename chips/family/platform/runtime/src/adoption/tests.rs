@@ -3,7 +3,7 @@ use super::*;
 #[path = "../../../../boot/tests/support/adoption.rs"]
 mod support;
 use oer_chips_family_boot::adoption::InitError;
-use oer_chips_family_platform_interrupt_table::Router;
+use oer_chips_family_platform_interrupt_table::{NoBindings, Router};
 use oer_portable_time::Duration;
 use support::{Fake, Hardware, Log, Op};
 
@@ -31,9 +31,9 @@ impl<'a> Binding for Chip<'a> {
         Ok(interrupts)
     }
 }
-fn context(controller: FakeController) -> Adopted<FakeController> {
+fn context(controller: FakeController) -> Adopted<FakeController, NoBindings> {
     Adopted {
-        router: Router::install(controller, &[]).unwrap(),
+        router: Router::install(controller, NoBindings).unwrap(),
         #[cfg(chip_vectors)]
         admission: crate::PreAdmission::new(),
     }
@@ -42,7 +42,7 @@ fn context(controller: FakeController) -> Adopted<FakeController> {
 #[test]
 fn runtime_is_published_after_driver_arming_image_preparation_and_mapping() {
     let log = Log::new(None);
-    let ready = complete::<Chip<'_>, _, _>(
+    let ready = complete::<Chip<'_>, _, _, _>(
         log.owners(),
         |hardware| {
             log.push(Op::BeforeMapping);
@@ -101,7 +101,7 @@ fn initialization_failure_never_reaches_mapping_or_the_image_callback() {
         InitError::CoreControlInstalled,
     ] {
         let log = Log::new(Some(error));
-        let result = complete::<Chip<'_>, _, ()>(
+        let result = complete::<Chip<'_>, _, NoBindings, ()>(
             log.owners(),
             |_| panic!("no image callback before successful initialization"),
             |_| panic!("no adoption on initialization failure"),
@@ -118,10 +118,11 @@ fn context_failure_returns_the_original_observation_without_replaying_initializa
         actual: 1,
         expected: 0,
     };
-    let result = complete::<Chip<'_>, _, ()>(log.owners(), core::convert::identity, |_| {
-        log.push(Op::Mapping);
-        Err(failure)
-    });
+    let result =
+        complete::<Chip<'_>, _, NoBindings, ()>(log.owners(), core::convert::identity, |_| {
+            log.push(Op::Mapping);
+            Err(failure)
+        });
     assert!(matches!(result, Err(Error::Context(actual)) if actual == failure));
     assert_eq!(
         log.operations().iter().filter(|op| **op == Op::Cpu).count(),
@@ -159,7 +160,7 @@ fn early_reset_and_retained_output_survives_context_admission_failure() {
         b"previous boot failure",
     )
     .unwrap();
-    let result = complete::<Chip<'_>, _, ()>(
+    let result = complete::<Chip<'_>, _, NoBindings, ()>(
         log.owners(),
         |hardware| {
             assert!(log.operations().contains(&Op::Console));

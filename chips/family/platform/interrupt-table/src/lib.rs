@@ -68,7 +68,7 @@
 #![deny(unsafe_code, clippy::undocumented_unsafe_blocks)]
 
 mod binding;
-pub use binding::{BindError, BindFault, BindFaultCode, BindFaultKind, Quarantined};
+pub use binding::{BindFault, BindFaultCode, BindFaultKind, Quarantined};
 mod router;
 pub use router::{
     Bound, Controller, Error, EventAuthority, LineExpectation, LineObservation, Router, Silent,
@@ -134,8 +134,30 @@ const _: () = {
     assert!(size_of::<Binding>() == 8 + size_of::<usize>());
 };
 
-/// An image's table.
-pub type Table = [Binding];
+/// An image's table, as a type: [`interrupt_table!`] declares it
+/// (`InterruptTable`) beside its entries, and [`NoBindings`] is the table of
+/// none. Sealed: only the macro and this crate implement it, so an entry's
+/// table ([`Entry::Table`]) is the one its declaration lists it in.
+pub trait Table: __private::SealedTable + Copy + 'static {
+    /// Every entry of the table, as its declaration lists it.
+    #[doc(hidden)]
+    const DECLARED: &'static [__private::Declared];
+    /// The table's bindings, as the image exports them.
+    fn bindings(self) -> &'static [Binding];
+}
+
+/// The table with no entry: a session or an image that binds nothing.
+#[derive(Clone, Copy, Debug)]
+pub struct NoBindings;
+
+impl __private::SealedTable for NoBindings {}
+
+impl Table for NoBindings {
+    const DECLARED: &'static [__private::Declared] = &[];
+    fn bindings(self) -> &'static [Binding] {
+        &[]
+    }
+}
 
 /// The token of one table entry: the only way to bind its part.
 ///
@@ -155,6 +177,9 @@ pub trait Entry: Sized {
     const PROOF: __private::EntryProof<Self>;
     /// The interrupt part the entry's handler holds.
     type Part: InterruptSources + Send + 'static;
+    /// The table that declares the entry: a router binds it only over that
+    /// table.
+    type Table: Table;
     const LINE: u8;
     const LEVEL: u8;
     const HART: u8;
@@ -493,6 +518,7 @@ macro_rules! interrupt_table {
             $(#[cfg($cfg)])*
             impl $crate::Entry for $token {
                 type Part = $part;
+                type Table = InterruptTable;
                 const PROOF: $crate::__private::EntryProof<Self> = {
                     static CELL: $crate::__private::HandlerCell<$part> = $crate::__private::HandlerCell::new();
                     #[allow(clippy::disallowed_methods, reason = "the table owns its handler and cell mapping")]
@@ -590,6 +616,20 @@ macro_rules! interrupt_table {
         /// build holds, one without a handler for each it leaves out.
         static __OER_BINDINGS: [$crate::Binding; $crate::__private::count(__OER_DECLARED)] =
             $crate::__private::bindings(__OER_DECLARED);
+
+        /// The image's interrupt table, as the type its entries and its
+        /// router name.
+        #[derive(Clone, Copy, Debug)]
+        pub struct InterruptTable;
+
+        impl $crate::__private::SealedTable for InterruptTable {}
+
+        impl $crate::Table for InterruptTable {
+            const DECLARED: &'static [$crate::__private::Declared] = __OER_DECLARED;
+            fn bindings(self) -> &'static [$crate::Binding] {
+                &__OER_BINDINGS
+            }
+        }
 
         $crate::__private::link_fn! {
             table $crate::__private::InterruptTableSlot =>
@@ -750,6 +790,10 @@ pub mod __private {
             self.cell
         }
     }
+
+    /// The seal of [`crate::Table`]: the table macro and this crate alone
+    /// implement it.
+    pub trait SealedTable {}
 
     pub enum InterruptTableSlot {}
     #[allow(
@@ -1273,8 +1317,8 @@ macro_rules! __fake_table {
         }
 
         /// A router of hart `H` over a fresh fake controller and the table.
-        pub fn fake_router<const H: u8>() -> $crate::Router<FakeController, H> {
-            $crate::Router::install(FakeController::new(H), INTERRUPT_TABLE)
+        pub fn fake_router<const H: u8>() -> $crate::Router<FakeController, H, InterruptTable> {
+            $crate::Router::install(FakeController::new(H), InterruptTable)
                 .expect("a fresh fake installs")
         }
     };

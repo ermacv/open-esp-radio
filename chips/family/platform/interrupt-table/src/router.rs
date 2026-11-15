@@ -19,7 +19,7 @@
 
 use oer_portable_mmio::{InterruptSource, InterruptSources};
 
-use crate::{BindError, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table};
+use crate::{__private::Declared, BindFault, BindFaultKind, Binding, Entry, Quarantined, Table};
 
 use oer_portable_riscv::clic::{Control, LevelBits};
 
@@ -117,8 +117,8 @@ impl LineObservation {
     }
 }
 
-/// How a hart's routes and lines disagree with the table, or a binding the
-/// table refuses: a typed boot failure.
+/// How a hart's routes and lines disagree with the table, or a write its
+/// controller refuses: a typed boot failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
     /// Implemented CLICINTCTL bits differ from the chip facts.
@@ -129,16 +129,6 @@ pub enum Error {
     WrongLevelBits { actual: u8, expected: u8 },
     /// A router of `hart` was installed over the controller of `current`.
     WrongHart { hart: u8, current: u8 },
-    /// The table holds no entry of the token's source, line, level and hart.
-    NotInTable { source: u16 },
-    /// The token and table assign different handler classes to this source.
-    WrongClass {
-        source: u16,
-        table: crate::Class,
-        entry: crate::Class,
-    },
-    /// The table's vector and token do not identify the same handler cell.
-    HandlerCellMismatch { source: u16 },
     /// `source` is routed to `line`, which no entry of this hart binds it to.
     ForeignRoute { source: u16, line: u8 },
     /// `line` is observed as `observed`, not what the table's entries leave
@@ -155,8 +145,6 @@ pub enum Error {
     /// `level` is no level of the controller's lines
     /// (`1..=1 << LEVEL_BITS`).
     NoSuchLevel { level: u8 },
-    /// An entry of the table binds `source`, so no silence of it holds.
-    Bindable { source: u16 },
 }
 
 /// The proof that an entry's handler holds its interrupt part and its line
@@ -223,11 +211,13 @@ mod sealed {
     impl<P: super::InterruptSources> Sealed for super::Silent<P> {}
 }
 
-/// The one writer of hart `H`'s routes and lines, by the image's table. A
-/// binding of an entry of another hart fails to compile.
-pub struct Router<C: Controller, const H: u8> {
+/// The one writer of hart `H`'s routes and lines, by the image's table `T`.
+/// A binding of an entry of another table or another hart fails to compile.
+/// It keeps the controller and its table; an entry's storage and handler
+/// cell are the entry's own.
+pub struct Router<C: Controller, const H: u8, T: Table> {
     pub(crate) controller: C,
-    table: &'static Table,
+    table: T,
 }
 
 /// Whether `sources` holds a source, and each lies inside a matrix of
@@ -246,34 +236,131 @@ const fn inside_matrix(sources: &[u16], count: u16) -> bool {
     true
 }
 
+/// Whether every entry `table` declares that the build holds lies inside a
+/// controller of `sources`, `lines` and `levels`: the table at compile time.
+const fn table_inside(table: &[Declared], sources: u16, lines: u8, levels: u16) -> bool {
+    let mut rest = table;
+    while let [entry, tail @ ..] = rest {
+        rest = tail;
+        let binding = &entry.binding;
+        if entry.present
+            && (!inside_matrix(entry.sources, sources)
+                || binding.line >= lines
+                || binding.level == 0
+                || binding.level as u16 > levels)
+        {
+            return false;
+        }
+    }
+    true
+}
+
+/// Whether an entry `table` declares that the build holds binds one of
+/// `sources`, on any hart: the table at compile time.
+const fn table_binds(table: &[Declared], sources: &[u16]) -> bool {
+    let mut rest = table;
+    while let [entry, tail @ ..] = rest {
+        rest = tail;
+        if !entry.present {
+            continue;
+        }
+        let mut wanted = sources;
+        while let [source, more @ ..] = wanted {
+            wanted = more;
+            let mut held = entry.sources;
+            while let [bound, others @ ..] = held {
+                held = others;
+                if *bound == *source {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// The entries of `table` the build holds, on `hart`.
-fn present(table: &Table, hart: u8) -> impl Iterator<Item = &Binding> {
+fn present(table: &[Binding], hart: u8) -> impl Iterator<Item = &Binding> {
     table
         .iter()
         .filter(move |binding| binding.handler.is_some() && binding.hart == hart)
 }
 
-impl<C: Controller, const H: u8> Router<C, H> {
-    /// Take `controller`'s hart for `table`, the image's
-    /// `INTERRUPT_TABLE`: silence every source and disable every line of the
-    /// hart, then [`verify`](Self::verify). Interrupts must stay disabled on
-    /// the hart until it returns.
+impl<C: Controller, const H: u8, T: Table> Router<C, H, T> {
+    /// Take `controller`'s hart for `table`, the image's `InterruptTable`:
+    /// silence every source and disable every line of the hart, then
+    /// [`verify`](Self::verify). Interrupts must stay disabled on the hart
+    /// until it returns.
+    ///
+    /// A table whose entry names a source, a line or a level the controller
+    /// has not fails to compile, on any hart:
+    ///
+    /// ```compile_fail,E0080
+    /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+    /// # oer_chips_family_platform_interrupt_table::__fake_controller!();
+    /// # pub fn on_timer(_: &mut TimerIrq) {}
+    /// // The table's lines reach past the controller's 48.
+    /// const WIDE: oer_chips_family_platform_interrupt_table::Lines =
+    ///     oer_chips_family_platform_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1, tie_break: oer_chips_family_platform_interrupt_table::TieBreak::HighestLine };
+    /// oer_chips_family_platform_interrupt_table::interrupt_table! {
+    ///     lines: WIDE,
+    ///     handler_attributes: [];
+    ///     contexts { radio: 3; }
+    ///     timer: TimerToken = TimerIrq => on_timer, line 60, context radio, hart 0, Hardware;
+    /// }
+    /// let _ = oer_chips_family_platform_interrupt_table::Router::<_, 0, _>::install(FakeController::new(0), InterruptTable);
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+    /// # oer_chips_family_platform_interrupt_table::__fake_controller!();
+    /// /// A source past the fake controller's eight.
+    /// pub struct FarIrq;
+    /// impl oer_chips_family_platform_interrupt_table::InterruptSource for FarIrq {
+    ///     const SOURCE: u16 = 84;
+    /// }
+    /// # pub fn on_far(_: &mut FarIrq) {}
+    /// oer_chips_family_platform_interrupt_table::interrupt_table! {
+    ///     lines: FAKE_LINES,
+    ///     handler_attributes: [];
+    ///     contexts { radio: 3; }
+    ///     far: FarToken = FarIrq => on_far, line 20, context radio, hart 1, Hardware;
+    /// }
+    /// let _ = oer_chips_family_platform_interrupt_table::Router::<_, 0, _>::install(FakeController::new(0), InterruptTable);
+    /// ```
+    ///
+    /// ```compile_fail,E0080
+    /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+    /// # oer_chips_family_platform_interrupt_table::__fake_controller!();
+    /// # pub fn on_timer(_: &mut TimerIrq) {}
+    /// // Levels the controller's three level bits do not hold.
+    /// const DEEP: oer_chips_family_platform_interrupt_table::Lines =
+    ///     oer_chips_family_platform_interrupt_table::Lines { first: 16, count: 32, levels: 15, harts: 1, tie_break: oer_chips_family_platform_interrupt_table::TieBreak::HighestLine };
+    /// oer_chips_family_platform_interrupt_table::interrupt_table! {
+    ///     lines: DEEP,
+    ///     handler_attributes: [];
+    ///     contexts { deep: 12; }
+    ///     timer: TimerToken = TimerIrq => on_timer, line 20, context deep, hart 0, Hardware;
+    /// }
+    /// let _ = oer_chips_family_platform_interrupt_table::Router::<_, 0, _>::install(FakeController::new(0), InterruptTable);
+    /// ```
     ///
     /// # Errors
     ///
     /// [`Error::WrongHart`] when `controller` is another hart's than `H`,
-    /// before any write; [`Error::NoSuchSource`], [`Error::NoSuchLine`] or
-    /// [`Error::NoSuchLevel`] when an entry of the hart lies outside the
-    /// controller, before any write; otherwise as
-    /// [`verify`](Self::verify): the controller did not take a write.
-    pub fn install(mut controller: C, table: &'static Table) -> Result<Self, Error> {
-        const { assert!(C::LINES <= 64, "a controller has at most 64 lines") };
+    /// before any write; otherwise as [`verify`](Self::verify): the
+    /// controller did not take a write.
+    pub fn install(mut controller: C, table: T) -> Result<Self, Error> {
+        const {
+            assert!(C::LINES <= 64, "a controller has at most 64 lines");
+            assert!(
+                table_inside(T::DECLARED, C::SOURCES, C::LINES, C::LEVEL_BITS.levels()),
+                "an entry of the table lies outside the controller"
+            );
+        };
         let current = controller.hart();
         if current != H {
             return Err(Error::WrongHart { hart: H, current });
-        }
-        for binding in present(table, H) {
-            Self::inside(binding.source, binding.line, binding.level)?;
         }
         controller.verify_configuration()?;
         for source in 0..C::SOURCES {
@@ -291,55 +378,25 @@ impl<C: Controller, const H: u8> Router<C, H> {
     /// reaches it, configure and enable the entry's line, then route each
     /// of the part's sources ([`InterruptSources`]) to it.
     ///
-    /// # Errors
+    /// The entry is the router's table's by type, at the line, level, class
+    /// and handler its one declaration gives both; an entry of another table
+    /// fails to compile:
     ///
-    /// [`Error::NotInTable`] when the router's table lacks the entry;
-    /// nothing changes and `BindError::Refused` returns the token and part.
-    /// An admitted binding that cannot claim storage, install its handler or
-    /// write its controller returns `BindError::Fault`: its owners stay in
-    /// quarantine and the image must record the fault and reset. An entry whose
-    /// source, line or level lies outside the controller fails to compile:
-    ///
-    /// ```compile_fail,E0080
+    /// ```compile_fail,E0271
     /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
     /// # oer_chips_family_platform_interrupt_table::__fake_controller!();
     /// # pub fn on_timer(_: &mut TimerIrq) {}
-    /// // The table's lines reach past the controller's 48.
-    /// const WIDE: oer_chips_family_platform_interrupt_table::Lines =
-    ///     oer_chips_family_platform_interrupt_table::Lines { first: 16, count: 64, levels: 8, harts: 1, tie_break: oer_chips_family_platform_interrupt_table::TieBreak::HighestLine };
-    /// oer_chips_family_platform_interrupt_table::interrupt_table! {
-    ///     lines: WIDE,
-    ///     handler_attributes: [];
-    ///     contexts { radio: 3; }
-    ///     timer: TimerToken = TimerIrq => on_timer, line 60, context radio, hart 0, Hardware;
-    /// }
-    /// fn bind(router: &mut oer_chips_family_platform_interrupt_table::Router<FakeController, 0>) {
-    ///     let tokens = Interrupts::take().unwrap();
-    ///     let _ = router.bind(tokens.timer, TimerIrq::default());
-    /// }
-    /// # bind(&mut oer_chips_family_platform_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
-    /// ```
-    ///
-    /// ```compile_fail,E0080
-    /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
-    /// # oer_chips_family_platform_interrupt_table::__fake_controller!();
-    /// /// A source past the fake controller's eight.
-    /// pub struct FarIrq;
-    /// impl oer_chips_family_platform_interrupt_table::InterruptSource for FarIrq {
-    ///     const SOURCE: u16 = 84;
-    /// }
-    /// # pub fn on_far(_: &mut FarIrq) {}
     /// oer_chips_family_platform_interrupt_table::interrupt_table! {
     ///     lines: FAKE_LINES,
     ///     handler_attributes: [];
     ///     contexts { radio: 3; }
-    ///     far: FarToken = FarIrq => on_far, line 20, context radio, hart 0, Hardware;
+    ///     timer: TimerToken = TimerIrq => on_timer, line 20, context radio, hart 0, Hardware;
     /// }
-    /// fn bind(router: &mut oer_chips_family_platform_interrupt_table::Router<FakeController, 0>) {
+    /// // A router of the table of no entry.
+    /// fn bind(router: &mut oer_chips_family_platform_interrupt_table::Router<FakeController, 0, oer_chips_family_platform_interrupt_table::NoBindings>) {
     ///     let tokens = Interrupts::take().unwrap();
-    ///     let _ = router.bind(tokens.far, FarIrq);
+    ///     let _ = router.bind(tokens.timer, TimerIrq::default());
     /// }
-    /// # bind(&mut oer_chips_family_platform_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
     /// ```
     ///
     /// An entry of another hart than the router's fails to compile too:
@@ -355,13 +412,23 @@ impl<C: Controller, const H: u8> Router<C, H> {
     ///     timer: TimerToken = TimerIrq => on_timer, line 20, context radio, hart 1, Hardware;
     /// }
     /// // Hart zero's router.
-    /// fn bind(router: &mut oer_chips_family_platform_interrupt_table::Router<FakeController, 0>) {
+    /// fn bind(router: &mut oer_chips_family_platform_interrupt_table::Router<FakeController, 0, InterruptTable>) {
     ///     let tokens = Interrupts::take().unwrap();
     ///     let _ = router.bind(tokens.timer, TimerIrq::default());
     /// }
-    /// # bind(&mut oer_chips_family_platform_interrupt_table::Router::install(FakeController::new(0), INTERRUPT_TABLE).unwrap());
+    /// # bind(&mut oer_chips_family_platform_interrupt_table::Router::install(FakeController::new(0), InterruptTable).unwrap());
     /// ```
-    pub fn bind<E: Entry>(&mut self, token: E, part: E::Part) -> Result<Bound<E>, BindError<E>> {
+    ///
+    /// # Errors
+    ///
+    /// A binding that cannot claim storage, install its handler or write its
+    /// controller returns its [`Quarantined`] owners: the image must record
+    /// the fault and reset. Nothing else refuses it.
+    pub fn bind<E: Entry<Table = T>>(
+        &mut self,
+        token: E,
+        part: E::Part,
+    ) -> Result<Bound<E>, Quarantined<E>> {
         const {
             assert!(
                 inside_matrix(<E::Part as InterruptSources>::SOURCES, C::SOURCES),
@@ -383,33 +450,7 @@ impl<C: Controller, const H: u8> Router<C, H> {
             [first, ..] => *first,
             [] => 0,
         };
-        let refuse = |error, token, part| Err(BindError::Refused { error, token, part });
         let proof = E::PROOF;
-        for &source in sources {
-            let Some(binding) = present(self.table, H).find(|binding| {
-                binding.source == source && binding.line == E::LINE && binding.level == E::LEVEL
-            }) else {
-                return refuse(Error::NotInTable { source }, token, part);
-            };
-            if binding.class != E::CLASS {
-                return refuse(
-                    Error::WrongClass {
-                        source,
-                        table: binding.class,
-                        entry: E::CLASS,
-                    },
-                    token,
-                    part,
-                );
-            }
-            if !binding
-                .handler
-                .is_some_and(|handler| core::ptr::fn_addr_eq(handler, proof.handler()))
-                || !core::ptr::eq(E::cell(), proof.cell())
-            {
-                return refuse(Error::HandlerCellMismatch { source }, token, part);
-            }
-        }
         let fault = |source, kind| BindFault {
             source,
             line: E::LINE,
@@ -417,19 +458,19 @@ impl<C: Controller, const H: u8> Router<C, H> {
             kind,
         };
         let Some(storage) = E::storage().try_uninit() else {
-            return Err(BindError::Fault(Quarantined::owned(
+            return Err(Quarantined::owned(
                 fault(source, BindFaultKind::StorageClaimed),
                 token,
                 part,
-            )));
+            ));
         };
         let place = storage.write(part);
         if let Err(place) = proof.cell().install(place) {
-            return Err(BindError::Fault(Quarantined::placed(
+            return Err(Quarantined::placed(
                 fault(source, BindFaultKind::HandlerOccupied),
                 token,
                 place,
-            )));
+            ));
         }
         if let Err(error) = self.controller.bind(
             E::LINE,
@@ -440,17 +481,17 @@ impl<C: Controller, const H: u8> Router<C, H> {
                 }
             },
         ) {
-            return Err(BindError::Fault(Quarantined::installed(
+            return Err(Quarantined::installed(
                 fault(source, BindFaultKind::LineRefused(error)),
                 token,
-            )));
+            ));
         }
         for &source in sources {
             if let Err(error) = self.controller.route(source, E::LINE) {
-                return Err(BindError::Fault(Quarantined::installed(
+                return Err(Quarantined::installed(
                     fault(source, BindFaultKind::RouteRefused(error)),
                     token,
-                )));
+                ));
             }
         }
         let _consumed = token;
@@ -464,25 +505,40 @@ impl<C: Controller, const H: u8> Router<C, H> {
     /// never routes them then. A driver that polls `P`'s events takes the
     /// proof before it enables them.
     ///
+    /// A part a table's entry binds, on any hart, has no silence: it fails
+    /// to compile.
+    ///
+    /// ```compile_fail,E0080
+    /// # oer_chips_family_platform_interrupt_table::__fake_parts!();
+    /// # oer_chips_family_platform_interrupt_table::__fake_controller!();
+    /// # pub fn on_timer(_: &mut TimerIrq) {}
+    /// oer_chips_family_platform_interrupt_table::interrupt_table! {
+    ///     lines: FAKE_LINES,
+    ///     handler_attributes: [];
+    ///     contexts { radio: 3; }
+    ///     timer: TimerToken = TimerIrq => on_timer, line 20, context radio, hart 1, Hardware;
+    /// }
+    /// fn silent(router: &oer_chips_family_platform_interrupt_table::Router<FakeController, 0, InterruptTable>) {
+    ///     let _ = router.silent::<TimerIrq>();
+    /// }
+    /// # silent(&oer_chips_family_platform_interrupt_table::Router::install(FakeController::new(0), InterruptTable).unwrap());
+    /// ```
+    ///
     /// # Errors
     ///
-    /// [`Error::Bindable`] when an entry of the table, on any hart, binds a
-    /// source; [`Error::ForeignRoute`] when a source is routed.
+    /// [`Error::ForeignRoute`] when a source is routed.
     pub fn silent<P: InterruptSources>(&self) -> Result<Silent<P>, Error> {
         const {
             assert!(
                 inside_matrix(P::SOURCES, C::SOURCES),
                 "the part's source is no source of the controller"
             );
+            assert!(
+                !table_binds(T::DECLARED, P::SOURCES),
+                "an entry of the table binds the part's source"
+            );
         };
         for &source in P::SOURCES {
-            if self
-                .table
-                .iter()
-                .any(|binding| binding.handler.is_some() && binding.source == source)
-            {
-                return Err(Error::Bindable { source });
-            }
             if let Some(line) = self.controller.routed(source) {
                 return Err(Error::ForeignRoute { source, line });
             }
@@ -490,21 +546,6 @@ impl<C: Controller, const H: u8> Router<C, H> {
         Ok(Silent {
             _part: core::marker::PhantomData,
         })
-    }
-
-    /// Check that an entry's source, line and level lie inside the
-    /// controller.
-    fn inside(source: u16, line: u8, level: u8) -> Result<(), Error> {
-        if source >= C::SOURCES {
-            return Err(Error::NoSuchSource { source });
-        }
-        if line >= C::LINES {
-            return Err(Error::NoSuchLine { line });
-        }
-        if level == 0 || u16::from(level) > C::LEVEL_BITS.levels() {
-            return Err(Error::NoSuchLevel { level });
-        }
-        Ok(())
     }
 
     /// Check the hart's routes and lines against the table: every routed
@@ -525,7 +566,7 @@ impl<C: Controller, const H: u8> Router<C, H> {
             let Some(line) = self.controller.routed(source) else {
                 continue;
             };
-            let Some(binding) = present(self.table, hart)
+            let Some(binding) = present(self.table.bindings(), hart)
                 .find(|binding| binding.source == source && binding.line == line)
             else {
                 return Err(Error::ForeignRoute { source, line });

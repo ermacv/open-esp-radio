@@ -40,17 +40,17 @@ macro_rules! interrupt_table {
     };
 }
 
-/// Retain a binding refusal or invariant fault and reset with every setup,
-/// handler and interrupted owner held, through the image's platform `P`. No
-/// owner recovery or retry is issued.
+/// Retain a binding's invariant fault and reset with every setup, handler and
+/// interrupted owner held, through the image's platform `P`. No owner
+/// recovery or retry is issued.
 #[cfg(all(target_arch = "riscv32", chip_vectors))]
 pub fn reset_binding<
     P: oer_chips_family_platform_port::Platform,
     E: oer_chips_family_platform_interrupt_table::Entry,
 >(
-    error: oer_chips_family_platform_interrupt_table::BindError<E>,
+    held: oer_chips_family_platform_interrupt_table::Quarantined<E>,
 ) -> ! {
-    let held = core::mem::ManuallyDrop::new(error);
-    let (code, observations) = held.diagnostic();
+    let held = core::mem::ManuallyDrop::new(held);
+    let (code, observations) = held.fault.diagnostic();
     crate::panic::reset_fault::<P>(code.into(), observations)
 }

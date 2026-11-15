@@ -210,7 +210,7 @@ enum TimeSetupOwners<P: ExecutorPlatform, A: Entry> {
         _part: A::Part,
     },
     Binding {
-        _error: oer_chips_family_platform_interrupt_table::BindError<A>,
+        _error: oer_chips_family_platform_interrupt_table::Quarantined<A>,
     },
 }
 
@@ -238,16 +238,17 @@ pub struct TimeDriverReady<B: Binding> {
 /// # Errors
 /// A stuck counter latch or refused route returns the supplied inputs in
 /// quarantine. Duplicate installation records a fault and resets.
-pub fn init<B: Binding, const WRITER_SWI: u8, A, C, const H: u8>(
+pub fn init<B: Binding, const WRITER_SWI: u8, A, C, const H: u8, IT>(
     systimer: SystemTimer<PortOf<B>>,
-    router: &mut oer_chips_family_platform_interrupt_table::Router<C, H>,
+    router: &mut oer_chips_family_platform_interrupt_table::Router<C, H, IT>,
     alarm: A,
     part: A::Part,
 ) -> Result<TimeDriverReady<B>, SetupFailure<B, A>>
 where
-    A: Entry,
+    A: Entry<Table = IT>,
     A::Part: AlarmPart,
     C: oer_chips_family_platform_interrupt_table::Controller,
+    IT: oer_chips_family_platform_interrupt_table::Table,
 {
     let identity = const { SoftwareInterrupt::constant::<WRITER_SWI>() };
     let writer = WRITER.load(Ordering::Acquire);
@@ -282,7 +283,7 @@ where
     crate::hart_binding::check::<H, A>();
     let mut part = part;
     assign::<B, WRITER_SWI, A>(identity, &mut part);
-    route::<B, WRITER_SWI, A, C, H>(router, alarm, part)
+    route::<B, WRITER_SWI, A, C, H, IT>(router, alarm, part)
         .map(|()| TimeDriverReady {
             writer: identity,
             _binding: PhantomData,
@@ -303,21 +304,22 @@ where
 /// # Errors
 /// A refused route returns its token and part in quarantine. Duplicate
 /// assignment or an unavailable timer bank records a fault and resets.
-pub fn bind<B: Binding, const SWI: u8, A, C, const H: u8>(
+pub fn bind<B: Binding, const SWI: u8, A, C, const H: u8, IT>(
     ready: &mut TimeDriverReady<B>,
-    router: &mut oer_chips_family_platform_interrupt_table::Router<C, H>,
+    router: &mut oer_chips_family_platform_interrupt_table::Router<C, H, IT>,
     alarm: A,
     part: A::Part,
-) -> Result<(), Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::BindError<A>>>
+) -> Result<(), Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::Quarantined<A>>>
 where
-    A: Entry,
+    A: Entry<Table = IT>,
     A::Part: AlarmPart,
     C: oer_chips_family_platform_interrupt_table::Controller,
+    IT: oer_chips_family_platform_interrupt_table::Table,
 {
     crate::hart_binding::check::<H, A>();
     let mut part = part;
     assign::<B, SWI, A>(ready.writer, &mut part);
-    route::<B, SWI, A, C, H>(router, alarm, part)
+    route::<B, SWI, A, C, H, IT>(router, alarm, part)
 }
 
 /// Executor `SWI`'s comparator, bound by the writer and ready to be routed
@@ -370,16 +372,18 @@ where
     ///
     /// # Errors
     /// A refused route returns its token and part in quarantine.
-    pub fn bind<const H: u8, C>(
+    pub fn bind<const H: u8, C, IT>(
         self,
         _hart: &oer_chips_family_platform_runtime::Hart<H>,
-        router: &mut oer_chips_family_platform_interrupt_table::Router<C, H>,
-    ) -> Result<(), Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::BindError<A>>>
+        router: &mut oer_chips_family_platform_interrupt_table::Router<C, H, IT>,
+    ) -> Result<(), Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::Quarantined<A>>>
     where
+        A: Entry<Table = IT>,
         C: oer_chips_family_platform_interrupt_table::Controller,
+        IT: oer_chips_family_platform_interrupt_table::Table,
     {
         crate::hart_binding::check::<H, A>();
-        route::<B, SWI, A, C, H>(router, self.alarm, self.part)
+        route::<B, SWI, A, C, H, IT>(router, self.alarm, self.part)
     }
 }
 
@@ -448,20 +452,21 @@ where
 }
 
 /// Route `alarm` with the running hart's router.
-fn route<B: Binding, const SWI: u8, A, C, const H: u8>(
-    router: &mut oer_chips_family_platform_interrupt_table::Router<C, H>,
+fn route<B: Binding, const SWI: u8, A, C, const H: u8, IT>(
+    router: &mut oer_chips_family_platform_interrupt_table::Router<C, H, IT>,
     alarm: A,
     part: A::Part,
-) -> Result<(), Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::BindError<A>>>
+) -> Result<(), Failure<PortOf<B>, oer_chips_family_platform_interrupt_table::Quarantined<A>>>
 where
-    A: Entry,
+    A: Entry<Table = IT>,
     A::Part: AlarmPart,
     C: oer_chips_family_platform_interrupt_table::Controller,
+    IT: oer_chips_family_platform_interrupt_table::Table,
 {
     router
         .bind(alarm, part)
         .map(|_bound| ())
-        .map_err(|refused| Failure::new(Fault::binding(SWI, &refused), refused))
+        .map_err(|held| Failure::new(Fault::binding(&held), held))
 }
 
 /// Program `comparator` for `deadline` (microseconds), in the writer's
