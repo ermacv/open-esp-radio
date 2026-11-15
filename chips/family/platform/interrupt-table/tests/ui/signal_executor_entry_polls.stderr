@@ -1,0 +1,21 @@
+error[E0080]: evaluation panicked: an interrupt-mode executor's entry must poll its tasks
+ --> $RUST/core/src/panic.rs
+  |
+  |         $crate::panicking::panic_display(&$arg);
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `oer_chips_family_platform_interrupt_table::signal::IrqSignal::<oer_chips_family_platform_interrupt_table::signal::host::Deferred>::new::<oer_chips_family_platform_interrupt_table::signal::FromHandler<IrqToken>, ExecutorToken>::{constant#0}` failed here
+  |
+ ::: src/signal.rs
+  |
+  |                 Err(why) => panic!("{}", why),
+  |                             ----------------- in this macro invocation
+
+note: erroneous constant encountered
+ --> src/signal.rs
+  |
+  | /         const {
+  | |             match binding::executor_context::<E, Target>() {
+  | |                 Ok(executor) => {
+  | |                     if let Err(why) = R::CONTEXTS.check(executor) {
+... |
+  | |         };
+  | |_________^
