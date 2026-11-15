@@ -584,3 +584,59 @@ fn each_banks_controller_names_its_own_hart() {
     .expect("hart 1 builds its own controller");
     assert_eq!(controller.hart(), 1);
 }
+
+#[test]
+fn a_bound_line_with_any_one_of_its_four_facts_wrong_is_no_binding() {
+    let level = Control::level::<3, LEVEL_BITS>();
+    let expected = LineExpectation::Bound(level);
+    // Each fact of the binding undone alone, with the word it leaves: level
+    // byte 0x5f (bits 24..32), vectored (16), enabled (8) as bound.
+    let cases: [(&str, fn(&mut clic::ctrl::W), u32); 4] = [
+        (
+            "enable",
+            |word| {
+                word.set_ie(false);
+            },
+            0x5f01_0000,
+        ),
+        (
+            "vectoring",
+            |word| {
+                word.set_attr_shv(false);
+            },
+            0x5f00_0100,
+        ),
+        (
+            "trigger",
+            |word| {
+                word.set_attr_trig(clic::ctrl::AttrTrig::PositiveEdge);
+            },
+            0x5f03_0100,
+        ),
+        (
+            "level",
+            |word| {
+                word.set_ctl(Control::level::<1, LEVEL_BITS>().bits());
+            },
+            0x1f01_0100,
+        ),
+    ];
+    for (fact, undo, word) in cases {
+        let mut memory = Memory::filled(0);
+        let mut controller = memory.controller();
+        controller.bind(20, level).expect("line 20 is the CLIC's");
+        assert_eq!(controller.check(20, expected), Ok(()), "{fact}");
+        drop(controller);
+        memory.clic().modify_ctrl(line(20), |w| undo(w));
+        let controller = memory.controller();
+        assert_eq!(
+            controller.check(20, expected),
+            Err(Error::WrongLine {
+                line: 20,
+                observed: LineObservation::of_word(word),
+                expected,
+            }),
+            "{fact}"
+        );
+    }
+}
