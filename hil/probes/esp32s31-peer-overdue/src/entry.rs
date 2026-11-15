@@ -210,10 +210,10 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((runtime_system_timer, runtime_software_interrupts, runtime_watchdogs, reset_causes, hart1), _psram, mut adopted) =
-        match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _>(
+        match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _, _>(
             handoff,
             root.into_runtime(),
-            INTERRUPT_TABLE,
+            InterruptTable,
             board::BootstrapPsram,
             oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
             |hardware| {
@@ -259,7 +259,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
         fail(oer_portable_diagnostics::name!("channel-claimed"; 32));
     };
     let timer = runtime_system_timer;
-    let timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>(
+    let timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -367,13 +367,13 @@ fn hart1_main(handoff: SecondaryHandoff<Port, 1>, parts: Hart1Parts) -> ! {
         server,
         liveness,
     } = parts;
-    let mut adopted = match handoff.adopt(INTERRUPT_TABLE) {
+    let mut adopted = match handoff.adopt(InterruptTable) {
         Ok(adopted) => adopted,
         Err(error) => fail(error.name()),
     };
     let (hart, router) = adopted.parts();
     let spawner = executor
-        .start::<Hart1Tasks, _, _, 1, _>(hart, router, token, irq, ())
+        .start::<Hart1Tasks, _, _, 1, _, _>(hart, router, token, irq, ())
         .unwrap_or_else(|failure| failure.reset());
     if Hart1Tasks::respond(&spawner, server).is_err() || Hart1Tasks::beat(&spawner, liveness).is_err()
     {

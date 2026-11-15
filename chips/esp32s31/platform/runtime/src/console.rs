@@ -3,7 +3,9 @@ use crate::Esp32s31;
 use oer_chips_esp32s31_hal::{peripherals::usb_serial_jtag as hw, system::platform::Port};
 use oer_chips_family_drivers_usb_serial_jtag::{Endpoint, Interrupt};
 use oer_chips_family_platform_executor::Executor;
-use oer_chips_family_platform_interrupt_table::{Controller, Entry, InterruptSource, Router};
+use oer_chips_family_platform_interrupt_table::{
+    Controller, Entry, InterruptSource, Router, Table,
+};
 
 pub struct Pads(hw::UsbPads);
 impl Pads {
@@ -32,13 +34,13 @@ impl Binding {
     pub fn interrupt(&'static self, part: &mut hw::ConsoleInterrupt) {
         self.0.service(part);
     }
-    pub fn open<const H: u8, I>(
+    pub fn open<const H: u8, I, T: Table>(
         &'static self,
-        router: &mut Router<impl Controller, H>,
+        router: &mut Router<impl Controller, H, T>,
         token: I,
     ) -> Result<(Console, Pads), Unavailable>
     where
-        I: Entry<Part = hw::ConsoleInterrupt>,
+        I: Entry<Part = hw::ConsoleInterrupt, Table = T>,
     {
         let (endpoint, interrupt, pads) =
             hw::retire_early_writer().map_err(|error| match error {

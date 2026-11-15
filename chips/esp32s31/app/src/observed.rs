@@ -963,6 +963,7 @@ pub(crate) fn hart1(
     router: &mut oer_chips_family_platform_interrupt_table::Router<
         impl oer_chips_family_platform_interrupt_table::Controller,
         1,
+        super::InterruptTable,
     >,
     token: super::Sampler1Token,
 ) -> Hart1 {

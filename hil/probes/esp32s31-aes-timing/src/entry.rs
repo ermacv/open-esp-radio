@@ -78,10 +78,10 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
         fail(oer_portable_diagnostics::name!("root-taken"; 32));
     };
     let ((timer, software, watchdogs, aes), _psram, mut adopted) =
-        match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _>(
+        match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _, _>(
             handoff,
             root.into_runtime(),
-            INTERRUPT_TABLE,
+            InterruptTable,
             board::BootstrapPsram,
             oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
             |hardware| {
@@ -99,7 +99,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<Port>) -> ! {
     let Some(interrupts) = Interrupts::take() else {
         fail(oer_portable_diagnostics::name!("interrupt-table"; 32));
     };
-    let _timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>(
+    let _timers = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,

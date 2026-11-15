@@ -2,7 +2,9 @@
 //! The image selects entries, priorities, tasks and terminal policy.
 use crate::Esp32s31;
 use oer_chips_esp32s31_hal::{peripherals as hw, system::root};
-use oer_chips_family_platform_interrupt_table::{Controller, Entry, InterruptSource, Router};
+use oer_chips_family_platform_interrupt_table::{
+    Controller, Entry, InterruptSource, Router, Table,
+};
 use oer_chips_family_platform_port::AlarmPart;
 use oer_portable_embassy_time::EmbassyClock;
 
@@ -86,9 +88,9 @@ impl Entropy {
 /// Install the existing P2 writer and P1 comparator without changing routes,
 /// and return the time driver's authority with the comparator left for an
 /// executor of another hart (`oer_chips_family_platform_executor::grant`).
-pub fn timers<const H: u8, A, R>(
+pub fn timers<const H: u8, A, R, T: Table>(
     timer: hw::system_timer::SystemTimer,
-    router: &mut Router<impl Controller, H>,
+    router: &mut Router<impl Controller, H, T>,
     app: A,
     radio: R,
 ) -> (
@@ -96,10 +98,10 @@ pub fn timers<const H: u8, A, R>(
     hw::system_timer::SystimerAlarm2,
 )
 where
-    A: Entry<Part = hw::system_timer::SystimerAlarm1>,
-    R: Entry<Part = hw::system_timer::SystimerAlarm0>,
+    A: Entry<Part = hw::system_timer::SystimerAlarm1, Table = T>,
+    R: Entry<Part = hw::system_timer::SystimerAlarm0, Table = T>,
 {
-    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _>(
+    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -109,7 +111,7 @@ where
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _>(
+    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _, _>(
         &mut timer_ready,
         router,
         app,

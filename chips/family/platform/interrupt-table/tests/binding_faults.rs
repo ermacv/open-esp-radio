@@ -1,7 +1,7 @@
 //! Each injected fault owns its own entry, allocation and counter.
 use oer_chips_family_platform_interrupt_table::{
-    BindError, BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, LineExpectation,
-    LineObservation, Router,
+    BindFault, BindFaultCode, BindFaultKind, Controller, Entry, Error, LineExpectation,
+    LineObservation, Quarantined, Router,
 };
 use oer_portable_riscv::clic::{Control, LevelBits};
 use std::sync::{
@@ -88,14 +88,19 @@ impl Controller for Injected {
         self.inner.lock().unwrap().check(line, expected)
     }
 }
-fn router(refusal: Option<Refuse>) -> (Router<Injected, 0>, Arc<Mutex<FakeController>>) {
+fn router(
+    refusal: Option<Refuse>,
+) -> (
+    Router<Injected, 0, InterruptTable>,
+    Arc<Mutex<FakeController>>,
+) {
     let inner = Arc::new(Mutex::new(FakeController::new(0)));
-    let router = Router::<_, 0>::install(
+    let router = Router::<_, 0, _>::install(
         Injected {
             inner: Arc::clone(&inner),
             refusal,
         },
-        INTERRUPT_TABLE,
+        InterruptTable,
     )
     .unwrap();
     inner.lock().unwrap().writes.clear();
@@ -105,11 +110,9 @@ fn drops() -> Arc<AtomicUsize> {
     Arc::new(AtomicUsize::new(0))
 }
 fn fault<E: Entry>(
-    result: Result<oer_chips_family_platform_interrupt_table::Bound<E>, BindError<E>>,
-) -> BindError<E> {
-    let error = result.unwrap_err();
-    assert!(matches!(error, BindError::Fault(_)), "{error:?}");
-    error
+    result: Result<oer_chips_family_platform_interrupt_table::Bound<E>, Quarantined<E>>,
+) -> Quarantined<E> {
+    result.unwrap_err()
 }
 
 #[test]
@@ -122,7 +125,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let storage_drops = drops();
     let error = fault(router.bind(tokens.storage, Owned(Arc::clone(&storage_drops))));
     assert_eq!(
-        error.diagnostic(),
+        error.fault.diagnostic(),
         (BindFaultCode::StorageClaimed, [20 << 16, 0, 0, 0])
     );
     drop(error);
@@ -135,7 +138,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let handler_drops = drops();
     let error = fault(router.bind(tokens.handler, Owned(Arc::clone(&handler_drops))));
     assert_eq!(
-        error.diagnostic(),
+        error.fault.diagnostic(),
         (BindFaultCode::HandlerOccupied, [(21 << 16) | 1, 0, 0, 0])
     );
     drop(error);
@@ -149,7 +152,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     let line_drops = drops();
     let error = fault(router.bind(tokens.line, Owned(Arc::clone(&line_drops))));
     assert_eq!(
-        error.diagnostic(),
+        error.fault.diagnostic(),
         (BindFaultCode::LineRefused, [(22 << 16) | 2, 9, 22, 0])
     );
     drop(error);
@@ -166,7 +169,7 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
         },
     ));
     assert_eq!(
-        error.diagnostic(),
+        error.fault.diagnostic(),
         (BindFaultCode::RouteRefused, [(23 << 16) | 7, 4, 0, 255])
     );
     drop(error);
@@ -188,7 +191,12 @@ fn each_failed_binding_retains_owners_and_stops_before_later_writes() {
     );
 }
 
-fn router_with(refusal: Refuse) -> (Router<Injected, 0>, Arc<Mutex<FakeController>>) {
+fn router_with(
+    refusal: Refuse,
+) -> (
+    Router<Injected, 0, InterruptTable>,
+    Arc<Mutex<FakeController>>,
+) {
     // Installation disables line 22 too; the failure is of its binding alone.
     router(Some(refusal))
 }

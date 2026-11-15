@@ -51,9 +51,11 @@ twice fails to compile. For each entry the macro defines:
   `EntryProof::new` calls; only the macro's constructor statements allow them.
   Another entry's proof does not type-check. This is a lint policy: an
   explicit waiver can still supply false scheduling metadata to compile-time
-  context checks. `Router::bind` checks source, line, level, hart, class and
-  handler/cell identity before placement or controller writes. Mismatches
-  return typed refusals; claimed storage yields `StorageClaimed` in quarantine;
+  context checks. The macro also declares the table's type,
+  `InterruptTable`, and makes it every entry's `Entry::Table`: an entry, its
+  table element, its class and its handler and cell come from one
+  declaration, so `Router::bind` asks nothing of the table at run time.
+  Claimed storage yields `StorageClaimed` in quarantine;
 - for an `Exempt(VIOLATION, "reason")` entry, the reason's bytes exported as
   `__OER_INTERRUPT_EXEMPT_` followed by the handler's symbol, for the image
   gate's report;
@@ -101,14 +103,14 @@ disconnects the released hart's bank; each router silences its own at
 `install`) and each router routes only its hart's entries, so a source no
 entry binds is routed on no bank:
 
-- `Router<C, H>` names its hart in its type. `Router::install` refuses a
-  controller of another hart than `H` (`Error::WrongHart`) before any
-  write, checks the controller's implemented geometry and level
-  bits against its chip facts (`Controller::verify_configuration`), refuses
-  an entry of the hart whose source, line or level lies outside the
-  controller (`Error::NoSuchSource`, `NoSuchLine`, `NoSuchLevel`) before any
-  write, silences every source and disables every line of the hart, then
-  verifies;
+- `Router<C, H, T>` names its hart and its table in its type (`T` is the
+  image's `InterruptTable`, or `NoBindings`, the table of no entry). A table
+  whose entry names a source, a line or a level the controller has not fails
+  to compile. `Router::install` refuses a controller of another hart than `H`
+  (`Error::WrongHart`) before any write, checks the controller's
+  implemented geometry and level bits against its chip facts
+  (`Controller::verify_configuration`), silences every source and disables
+  every line of the hart, then verifies;
 - `Router::bind` consumes an entry's token and its part, moves the part where
   only the entry's handler reaches it, binds the entry's line at its level
   (`Controller::bind` with its control byte, `oer_portable_riscv::clic::Control`:
@@ -116,11 +118,13 @@ entry binds is routed on no bank:
   and only then routes each of the part's
   sources to it, and returns
   `Bound<Entry>`, carrying `LEVEL`, `HART` and `CONTEXT` from that entry, the proof a driver takes before it enables the peripheral's
-  interrupt; an entry the table lacks comes back with its token and part,
-  and an entry of another hart than the router's or outside the controller
-  fails to compile;
+  interrupt. An entry of another table or another hart than the router's
+  fails to compile; what `bind` can still answer is the hardware's (storage
+  claimed, a handler cell occupied, a write the controller refused), with
+  its owners in `Quarantined`;
 - `Router::silent` returns `Silent<Part>`, the proof that each of the part's
-  sources is routed nowhere and no entry of the table binds it, which a driver that
+  sources is routed nowhere (read from the hardware) and no entry of the
+  table binds it (at compile time), which a driver that
   polls the part's events takes instead of `Bound` (both implement the
   sealed `EventAuthority`);
 - a controller refuses a source or line outside it and writes nothing; it
@@ -131,8 +135,7 @@ entry binds is routed on no bank:
   on its line, every routed line holds its entry's level, and every other
   line is disabled.
 
-A refused or faulted binding records four words (`BindFault::diagnostic`,
-`BindError::diagnostic`): the context (the source in bits 0..16, the line
+A faulted binding records four words (`BindFault::diagnostic`): the context (the source in bits 0..16, the line
 in 16..24, the hart from 24), the error's tag, and its two payload words.
 A wrong line's (tag 7) are the line's register word as the chip read it
 (`LineObservation`), and the line with what the table expected of it: the

@@ -2,7 +2,7 @@ use oer_chips_esp32s31_hal::{
     system::cores::Released,
     system::platform::{Hart1Controller, Hart1Grant, InterruptController, InterruptGrant},
 };
-use oer_chips_family_platform_interrupt_table::Router;
+use oer_chips_family_platform_interrupt_table::{NoBindings, Router};
 
 fn send<T: Send>() {}
 fn keep(_: Hart1Grant) {}
@@ -31,5 +31,5 @@ pub fn stays_local() {
     #[cfg(ui_reject)]
     send::<Hart1Controller>(); // ui-error: E0277
     #[cfg(ui_reject)]
-    send::<Router<InterruptController, 0>>(); // ui-error: E0277
+    send::<Router<InterruptController, 0, NoBindings>>(); // ui-error: E0277
 }

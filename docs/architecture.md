@@ -415,7 +415,10 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   hart, `SecondaryHandoff::adopt` for a secondary hart) makes it a
   controller, on that hart (a runtime hart check), and the controller and
   its router stay there (`!Send`). The router names its hart in its type
-  (`Router<C, H>`): a binding of another hart's entry fails to compile. Each hart sets its own CLIC's level bits.
+  (`Router<C, H, T>`, with its table `T`): a binding of another hart's or
+  another table's entry fails to compile, and so does a table whose entry
+  lies outside the controller; the router asks its table nothing at run
+  time. Each hart sets its own CLIC's level bits.
   A hart's interrupt enable consumes its `PreAdmission<H>` and returns its
   router with `Hart<H>`.
 - Each executor starts with a borrowed affine `Hart<H>`; its interrupt entry
@@ -526,16 +529,17 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   bound activation then publishes the same ten runtime events as later
   sessions through the task owner alone. No task accesses the handler cell.
   Polling retains `Silent` after the same pre-bind discard.
-  Binding returns a recoverable input refusal before placement. A failed
-  admitted placement, handler installation or controller write returns a named
-  fault with source observations, retaining its token and part in quarantine.
+  A binding is refused for nothing of the table's: an entry's membership,
+  class, handler and cell are its table's by type. A failed placement,
+  handler installation or controller write returns a named fault with source
+  observations, retaining its token and part in quarantine.
   The image records/resets through the existing retained slot, without
   publishing `Bound`, releasing owners or rolling back an unconfirmed write.
   Fault capture stores numeric reasons without reading cached text. Next-boot
   thread reporting decodes their names. The boot-zeroed claim preserves the
   current boot's first fault while allowing it to replace an unconsumed record
-  from an older boot. Console and Wi-Fi input bind refusals terminate as image
-  configuration faults through this same path.
+  from an older boot. Console and Wi-Fi binding faults terminate through this
+  same path.
   The table fails to compile when two entries share a line, or two entries or
   one part list a source twice, and a binding when its entry lies outside
   the chip's interrupt controller.

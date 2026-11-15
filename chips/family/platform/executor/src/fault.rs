@@ -71,20 +71,9 @@ impl Fault {
 
     #[cfg(feature = "chip")]
     pub(crate) fn binding<E: oer_chips_family_platform_interrupt_table::Entry>(
-        executor: u8,
-        error: &oer_chips_family_platform_interrupt_table::BindError<E>,
+        held: &oer_chips_family_platform_interrupt_table::Quarantined<E>,
     ) -> Self {
-        match error {
-            oer_chips_family_platform_interrupt_table::BindError::Refused { error, .. } => {
-                Self::Route {
-                    executor,
-                    error: *error,
-                }
-            }
-            oer_chips_family_platform_interrupt_table::BindError::Fault(held) => {
-                Self::Binding(held.fault)
-            }
-        }
+        Self::Binding(held.fault)
     }
 
     /// A bounded diagnostic, without formatting or loss of source words.
@@ -222,22 +211,6 @@ fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {
             FaultReason::RouteWrongHart,
             [executor, hart.into(), current.into(), 0],
         ),
-        Error::WrongClass {
-            source,
-            table,
-            entry,
-        } => (
-            FaultReason::RouteWrongClass,
-            [executor, source.into(), table as u32, entry as u32],
-        ),
-        Error::HandlerCellMismatch { source } => (
-            FaultReason::RouteHandlerCellMismatch,
-            [executor, source.into(), 0, 0],
-        ),
-        Error::NotInTable { source } => (
-            FaultReason::RouteNotInTable,
-            [executor, source.into(), 0, 0],
-        ),
         Error::ForeignRoute { source, line } => (
             FaultReason::RouteForeignRoute,
             [executor, source.into(), line.into(), 0],
@@ -259,7 +232,6 @@ fn route_diagnostic(executor: u8, error: Error) -> (FaultReason, [u32; 4]) {
             FaultReason::RouteNoSuchLevel,
             [executor, level.into(), 0, 0],
         ),
-        Error::Bindable { source } => (FaultReason::RouteBindable, [executor, source.into(), 0, 0]),
     }
 }
 
@@ -320,25 +292,6 @@ mod tests {
         assert_eq!(
             fault.diagnostic(),
             (FaultReason::ExecutorClaimed, [2, 0xfedc_ba98, 0, 0])
-        );
-    }
-
-    #[test]
-    fn binding_identity_refusals_keep_their_typed_reason_and_classes() {
-        assert_eq!(
-            route_diagnostic(
-                3,
-                Error::WrongClass {
-                    source: 5,
-                    table: oer_chips_family_platform_interrupt_table::Class::Hardware,
-                    entry: oer_chips_family_platform_interrupt_table::Class::Executor,
-                }
-            ),
-            (FaultReason::RouteWrongClass, [3, 5, 0, 1])
-        );
-        assert_eq!(
-            route_diagnostic(3, Error::HandlerCellMismatch { source: 5 }),
-            (FaultReason::RouteHandlerCellMismatch, [3, 5, 0, 0])
         );
     }
 

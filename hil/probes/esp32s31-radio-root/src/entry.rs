@@ -49,10 +49,10 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<oer_chips_esp32s31_h
         ),
         _psram,
         mut adopted,
-    ) = match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _>(
+    ) = match oer_chips_family_platform_runtime::adoption::run::<oer_chips_esp32s31_platform_runtime::Esp32s31, _, _, _>(
         handoff,
         root.into_runtime(),
-        INTERRUPT_TABLE,
+        InterruptTable,
         board::BootstrapPsram,
         oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
         |hardware| {
@@ -109,7 +109,7 @@ fn main(handoff: oer_chips_family_platform_runtime::Handoff<oer_chips_esp32s31_h
         fail(oer_portable_diagnostics::name!("interrupt-table"; 32));
     };
     let timer = runtime_system_timer;
-    let _timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _>(
+    let _timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 0, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,

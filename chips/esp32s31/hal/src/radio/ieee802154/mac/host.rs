@@ -135,9 +135,12 @@ impl oer_chips_family_platform_interrupt_table::Controller for NoRoutes {
 /// without entries.
 pub(crate) fn silent<'a>()
 -> oer_chips_family_platform_interrupt_table::Silent<super::Ieee802154InterruptOwner<Host<'a>>> {
-    oer_chips_family_platform_interrupt_table::Router::<_, 0>::install(NoRoutes, &[])
-        .and_then(|router| router.silent())
-        .expect("a table without entries leaves the MAC's source silent")
+    oer_chips_family_platform_interrupt_table::Router::<_, 0, _>::install(
+        NoRoutes,
+        oer_chips_family_platform_interrupt_table::NoBindings,
+    )
+    .and_then(|router| router.silent())
+    .expect("a table without entries leaves the MAC's source silent")
 }
 
 /// Drive the startup atom contract on host owners, testing every phase.

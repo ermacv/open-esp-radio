@@ -6588,8 +6588,14 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         35,
         BY_RADIO_SYSTEM,
     ),
-    ("chips/family/platform/executor/src/fault.rs", 4, BY_NONE),
+    ("chips/family/platform/executor/src/executor.rs", 2, BY_NONE),
+    ("chips/family/platform/executor/src/fault.rs", 5, BY_NONE),
     ("chips/family/platform/executor/src/task.rs", 6, BY_NONE),
+    (
+        "chips/family/platform/executor/src/time_driver.rs",
+        4,
+        BY_NONE,
+    ),
     (
         "chips/family/platform/interrupt-table/src/binding.rs",
         12,
@@ -6602,7 +6608,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/family/platform/interrupt-table/src/router.rs",
-        5,
+        6,
         BY_NONE,
     ),
     (
@@ -6612,7 +6618,7 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     ),
     (
         "chips/family/platform/runtime/src/interrupts.rs",
-        1,
+        2,
         BY_NONE,
     ),
     (

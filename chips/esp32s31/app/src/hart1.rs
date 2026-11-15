@@ -33,7 +33,7 @@ use oer_portable_embassy_time::EmbassyClock;
 
 use super::{
     Error, Esp32s31, GroupBoot, GroupPeripherals, GroupStarted, Hart1AlarmToken, Hart1WakeToken,
-    INTERRUPT_TABLE, WakeToken, fail, run_app, run_net,
+    InterruptTable, WakeToken, fail, run_app, run_net,
 };
 
 /// The application's executor, on hart 0.
@@ -189,7 +189,7 @@ pub fn hart1_main<H: GroupStarted>(
     #[cfg_attr(not(feature = "observe"), allow(unused_mut))]
     let mut group = GroupBoot::new();
     let mut adopted = handoff
-        .adopt(INTERRUPT_TABLE)
+        .adopt(InterruptTable)
         .unwrap_or_else(|error| fail(error.name()));
     {
         let (hart, router) = adopted.parts();

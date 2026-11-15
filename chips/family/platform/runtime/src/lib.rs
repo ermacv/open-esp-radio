@@ -110,9 +110,6 @@ pub use oer_chips_family_platform_interrupt_table as __interrupt_table;
 #[doc(hidden)]
 pub use oer_chips_family_platform_port as __port;
 
-/// The image's interrupt table as [`interrupt_table!`] declares it.
-pub type InterruptTable = oer_chips_family_platform_interrupt_table::Table;
-
 pub use oer_chips_family_platform_layout::handoff::AdoptsBootstrapMapping;
 
 #[doc(hidden)]
@@ -217,7 +214,7 @@ impl<P: oer_chips_family_platform_port::EarlyText> Handoff<P> {
     /// `interrupts` writes. Interrupts stay disabled until
     /// [`Adopted::enable_interrupts`].
     ///
-    /// `interrupt_table` is the image's `INTERRUPT_TABLE`
+    /// `interrupt_table` is the image's `InterruptTable`
     /// ([`interrupt_table!`]). Installing it silences every source of the
     /// boot hart's bank and disables every line of its CLIC, so from here a
     /// source is routed only by binding its entry.
@@ -236,14 +233,15 @@ impl<P: oer_chips_family_platform_port::EarlyText> Handoff<P> {
         B: AdoptsBootstrapMapping,
         I,
         C: oer_chips_family_platform_interrupt_table::Controller,
+        T: oer_chips_family_platform_interrupt_table::Table,
     >(
         mut self,
-        interrupt_table: &'static InterruptTable,
+        interrupt_table: T,
         interrupts: I,
         controller: impl FnOnce(I) -> Result<C, oer_chips_family_platform_port::ForeignHart>,
         board: B,
         previous_records: impl FnOnce(),
-    ) -> Result<(B::Mapping, Adopted<C>), BootError> {
+    ) -> Result<(B::Mapping, Adopted<C, T>), BootError> {
         panic::report_previous_fault::<P>();
         previous_records();
         let mapping = oer_chips_family_boot::adoption::adopt_mapping(board, &self.proof);
@@ -279,9 +277,10 @@ impl<P: oer_chips_family_platform_port::EarlyText> Handoff<P> {
 #[must_use = "interrupts stay disabled until `enable_interrupts`"]
 pub struct Adopted<
     C: oer_chips_family_platform_interrupt_table::Controller,
+    T: oer_chips_family_platform_interrupt_table::Table,
     const H: u8 = DEFAULT_HART,
 > {
-    router: oer_chips_family_platform_interrupt_table::Router<C, H>,
+    router: oer_chips_family_platform_interrupt_table::Router<C, H, T>,
     #[cfg(chip_vectors)]
     admission: PreAdmission<H>,
 }
@@ -292,20 +291,25 @@ const DEFAULT_HART: u8 = BOOT_HART;
 #[cfg(not(chip_vectors))]
 const DEFAULT_HART: u8 = 0;
 
-impl<C: oer_chips_family_platform_interrupt_table::Controller, const H: u8> Adopted<C, H> {
+impl<
+    C: oer_chips_family_platform_interrupt_table::Controller,
+    T: oer_chips_family_platform_interrupt_table::Table,
+    const H: u8,
+> Adopted<C, T, H>
+{
     /// Borrow the local execution identity and router together before admission.
     #[cfg(chip_vectors)]
     pub fn parts(
         &mut self,
     ) -> (
         &Hart<H>,
-        &mut oer_chips_family_platform_interrupt_table::Router<C, H>,
+        &mut oer_chips_family_platform_interrupt_table::Router<C, H, T>,
     ) {
         (self.admission.hart(), &mut self.router)
     }
 
     /// The hart's router: bind entries before interrupts are enabled.
-    pub fn router(&mut self) -> &mut oer_chips_family_platform_interrupt_table::Router<C, H> {
+    pub fn router(&mut self) -> &mut oer_chips_family_platform_interrupt_table::Router<C, H, T> {
         &mut self.router
     }
 
@@ -326,7 +330,7 @@ impl<C: oer_chips_family_platform_interrupt_table::Controller, const H: u8> Adop
         self,
     ) -> Result<
         (
-            oer_chips_family_platform_interrupt_table::Router<C, H>,
+            oer_chips_family_platform_interrupt_table::Router<C, H, T>,
             Hart<H>,
         ),
         BootError,
