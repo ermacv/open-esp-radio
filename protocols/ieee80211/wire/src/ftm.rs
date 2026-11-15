@@ -180,7 +180,7 @@ pub struct FtmRequestParameters {
     burst_duration: FtmBurstDuration,
     min_delta_ftm_100us: u8,
     partial_tsf_timer: Option<u16>,
-    asap: bool,
+    asap: FtmAsap,
     ftms_per_burst: oer_portable_wire::U8<5>,
     format_and_bandwidth: FtmFormatAndBandwidth,
     burst_period_100ms: u16,
@@ -196,7 +196,7 @@ impl FtmRequestParameters {
         burst_duration: FtmBurstDuration,
         min_delta_ftm_100us: u8,
         partial_tsf_timer: Option<u16>,
-        asap: bool,
+        asap: FtmAsap,
         ftms_per_burst: u8,
         format_and_bandwidth: FtmFormatAndBandwidth,
         burst_period_100ms: u16,
@@ -246,7 +246,7 @@ impl FtmRequestParameters {
         self.partial_tsf_timer
     }
 
-    pub const fn asap(self) -> bool {
+    pub const fn asap(self) -> FtmAsap {
         self.asap
     }
 
@@ -278,7 +278,7 @@ impl FtmRequestParameters {
         crate::encoding::write_array::<5, _, _>(&mut element, &partial_tsf);
         fields = fields
             .with_no_partial_tsf(self.partial_tsf_timer.is_none())
-            .with_asap(self.asap);
+            .with_asap(self.asap.bit());
         fields = fields.with_ftms(self.ftms_per_burst);
         element[7] = fields.to_bytes()[5];
         fields = fields.with_bandwidth(oer_portable_wire::U8::from_low_bits(
@@ -314,7 +314,11 @@ impl FtmRequestParameters {
             } else {
                 None
             },
-            FtmParameterFields::from_bytes(fields).asap(),
+            if FtmParameterFields::from_bytes(fields).asap() {
+                FtmAsap::AsSoonAsPossible
+            } else {
+                FtmAsap::AtPartialTsf
+            },
             FtmParameterFields::from_bytes(fields).ftms().get(),
             FtmFormatAndBandwidth::from_wire(
                 FtmParameterFields::from_bytes(fields).bandwidth().get(),

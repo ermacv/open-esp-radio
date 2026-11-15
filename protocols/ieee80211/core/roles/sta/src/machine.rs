@@ -2453,7 +2453,11 @@ fn handover_data<T: StaTokens, K>(
     let header = oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate::new(
         address,
         bssid,
-        connected.qos,
+        if connected.qos {
+            oer_protocols_ieee80211_wire::data::PeerQos::Qos
+        } else {
+            oer_protocols_ieee80211_wire::data::PeerQos::NonQos
+        },
         if keyed {
             oer_protocols_ieee80211_wire::security::LinkProtection::Ccmp
         } else {
@@ -6462,7 +6466,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             TxBlockAckOwed::Delba { tid } => {
                 let Ok(delba) = oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
                     tid,
-                    true,
+                    oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
                     reason_code::TIMEOUT,
                 ) else {
                     return Some(Err(StaDisconnectReason::Encode));
@@ -7601,7 +7605,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     ) -> Result<StaTransmit<'id, T, K>, EapolUnsent> {
         let priority = eapol_priority(admission)?;
         let credit = self.reserve_transmit(events)?;
-        let peer_qos = qos.is_some();
+        let peer_qos = if qos.is_some() {
+            oer_protocols_ieee80211_wire::data::PeerQos::Qos
+        } else {
+            oer_protocols_ieee80211_wire::data::PeerQos::NonQos
+        };
         // A TID's next number is the station's to write while it holds the
         // link; its holder writes it once it has the link.
         let (sequence_number, number) = match qos {

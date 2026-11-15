@@ -125,7 +125,7 @@ pub(crate) fn contention(
         oer_portable_trace_recorder::emit(&EdcaTable {
             role,
             count: wmm.parameter_set_count,
-            uapsd: wmm.uapsd,
+            uapsd: wmm.uapsd == oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::Supported,
         });
         for category in WmmAccessCategory::ALL {
             oer_portable_trace_recorder::emit(&EdcaRecord {

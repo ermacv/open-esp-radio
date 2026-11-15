@@ -1251,17 +1251,27 @@ impl RateDecode {
         ) {
             // A rate with no such form goes at the vendor station's
             // fallback, as one without a portable rate does.
-            Some(PhyRate::Ht(rate)) if rate.short_gi() != self.ht_short_gi => {
-                HtRate::new(rate.mcs(), rate.bandwidth(), self.ht_short_gi)
-                    .map_or_else(|| self.fallback(), PhyRate::Ht)
-            }
+            Some(PhyRate::Ht(rate)) if rate.short_gi() != self.ht_short_gi => HtRate::new(
+                rate.mcs(),
+                rate.bandwidth(),
+                if self.ht_short_gi {
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                } else {
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                },
+            )
+            .map_or_else(|| self.fallback(), PhyRate::Ht),
             Some(PhyRate::He(rate)) if self.he_ldpc => HeRate::new(
                 rate.mcs(),
                 rate.spatial_streams(),
                 rate.bandwidth(),
                 rate.gi_ltf(),
                 FecCoding::Ldpc,
-                rate.dcm(),
+                if rate.dcm() {
+                    oer_protocols_ieee80211_wire::phy::Dcm::Used
+                } else {
+                    oer_protocols_ieee80211_wire::phy::Dcm::NotUsed
+                },
             )
             .map_or_else(|| self.fallback(), PhyRate::He),
             Some(PhyRate::Legacy(rate)) => PhyRate::Legacy(self.legacy_rates.constrain(rate)),
@@ -1274,7 +1284,11 @@ impl RateDecode {
     /// on an HT association, at its width, or the highest negotiated legacy
     /// rate no faster than 54 Mb/s.
     fn fallback(self) -> PhyRate {
-        match HtRate::new(HtMcs::SINGLE_STREAM_MAX, self.ht_bandwidth, false) {
+        match HtRate::new(
+            HtMcs::SINGLE_STREAM_MAX,
+            self.ht_bandwidth,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+        ) {
             Some(rate) if self.high_throughput => PhyRate::Ht(rate),
             _ => PhyRate::Legacy(self.legacy_rates.constrain(LegacyRate::Ofdm54M)),
         }

@@ -48,7 +48,7 @@ impl StaDataHeaderTemplate {
     pub fn new(
         source: OwnAddress,
         bssid: Bssid,
-        peer_qos: bool,
+        peer_qos: PeerQos,
         protection: LinkProtection,
     ) -> Option<Self> {
         validate_peer(bssid.get()).ok()?;
@@ -63,19 +63,23 @@ impl StaDataHeaderTemplate {
             },
             WmmUserPriority::UP0,
             peer_qos,
-            false,
+            QosAckPolicy::Normal,
         );
         let mut reader = oer_portable_wire::Reader::new(&plan.header);
         let header = MacHeader::decode(reader.take(usize::from(plan.header_len)).ok()?)?;
         Some(Self {
-            header: header.with_protected(matches!(protection, LinkProtection::Ccmp)),
+            header: header.with_protected(protection.frame_protection()),
             protection,
         })
     }
 
     /// Whether the access point negotiated QoS: QoS Data with a TID.
-    pub const fn peer_qos(&self) -> bool {
-        self.header.qos().is_some()
+    pub const fn peer_qos(&self) -> PeerQos {
+        if self.header.qos().is_some() {
+            PeerQos::Qos
+        } else {
+            PeerQos::NonQos
+        }
     }
 
     /// How the association's data is protected.
@@ -88,7 +92,7 @@ impl StaDataHeaderTemplate {
         &self,
         source: OwnAddress,
         bssid: Bssid,
-        peer_qos: bool,
+        peer_qos: PeerQos,
         protection: LinkProtection,
     ) -> bool {
         self.header.address1() == bssid.get()
@@ -106,10 +110,10 @@ impl StaDataHeaderTemplate {
         const QOS_CCMP: usize =
             IEEE80211_QOS_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN;
         match (self.peer_qos(), self.protection) {
-            (false, LinkProtection::Open) => LEGACY_OPEN,
-            (true, LinkProtection::Open) => QOS_OPEN,
-            (false, LinkProtection::Ccmp) => LEGACY_CCMP,
-            (true, LinkProtection::Ccmp) => QOS_CCMP,
+            (PeerQos::NonQos, LinkProtection::Open) => LEGACY_OPEN,
+            (PeerQos::Qos, LinkProtection::Open) => QOS_OPEN,
+            (PeerQos::NonQos, LinkProtection::Ccmp) => LEGACY_CCMP,
+            (PeerQos::Qos, LinkProtection::Ccmp) => QOS_CCMP,
         }
     }
 
@@ -174,7 +178,7 @@ mod tests {
 
     /// Today's full encode of the same MPDU without payload: the oracle.
     fn encoded(
-        peer_qos: bool,
+        peer_qos: PeerQos,
         protection: LinkProtection,
         fields: StaDataHeaderFields,
         output: &mut [u8],
@@ -207,11 +211,11 @@ mod tests {
         .unwrap()
     }
 
-    const MODES: [(bool, LinkProtection); 4] = [
-        (false, LinkProtection::Open),
-        (true, LinkProtection::Open),
-        (false, LinkProtection::Ccmp),
-        (true, LinkProtection::Ccmp),
+    const MODES: [(PeerQos, LinkProtection); 4] = [
+        (PeerQos::NonQos, LinkProtection::Open),
+        (PeerQos::Qos, LinkProtection::Open),
+        (PeerQos::NonQos, LinkProtection::Ccmp),
+        (PeerQos::Qos, LinkProtection::Ccmp),
     ];
 
     #[test]
@@ -275,7 +279,7 @@ mod tests {
             );
             assert_eq!(
                 header.qos().map(|qos| qos.tid().get()),
-                peer_qos.then_some(2)
+                (peer_qos == PeerQos::Qos).then_some(2)
             );
             assert_eq!(
                 header.control().protected(),
@@ -311,13 +315,14 @@ mod tests {
     #[test]
     fn a_template_serves_only_the_association_inputs_it_was_built_from() {
         let template =
-            StaDataHeaderTemplate::new(source(), bssid(), true, LinkProtection::Ccmp).unwrap();
-        assert!(template.serves(source(), bssid(), true, LinkProtection::Ccmp));
-        assert!(!template.serves(source(), bssid(), false, LinkProtection::Ccmp));
-        assert!(!template.serves(source(), bssid(), true, LinkProtection::Open));
+            StaDataHeaderTemplate::new(source(), bssid(), PeerQos::Qos, LinkProtection::Ccmp)
+                .unwrap();
+        assert!(template.serves(source(), bssid(), PeerQos::Qos, LinkProtection::Ccmp));
+        assert!(!template.serves(source(), bssid(), PeerQos::NonQos, LinkProtection::Ccmp));
+        assert!(!template.serves(source(), bssid(), PeerQos::Qos, LinkProtection::Open));
         let other = OwnAddress::new(IndividualAddress::new([2, 0, 0, 0, 0, 9]).unwrap());
-        assert!(!template.serves(other, bssid(), true, LinkProtection::Ccmp));
+        assert!(!template.serves(other, bssid(), PeerQos::Qos, LinkProtection::Ccmp));
         let other = Bssid::new(IndividualAddress::new([2, 0, 0, 0, 0, 9]).unwrap()).unwrap();
-        assert!(!template.serves(source(), other, true, LinkProtection::Ccmp));
+        assert!(!template.serves(source(), other, PeerQos::Qos, LinkProtection::Ccmp));
     }
 }

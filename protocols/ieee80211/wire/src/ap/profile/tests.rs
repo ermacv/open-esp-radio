@@ -15,7 +15,7 @@ pub(crate) const TEST_ADVERTISEMENT: crate::ap::profile::Advertisement = {
         crate::ht::HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01),
         WmmParameters::new(
             4,
-            false,
+            crate::extensions::wmm::Uapsd::NotSupported,
             [
                 WmmAcParameters {
                     admission_control_mandatory: false,
@@ -87,11 +87,12 @@ fn wmm_parameters_round_trip_each_access_category_and_admission_bit() {
             txop_limit_units_32_us: 41,
         },
     ];
-    let parameters = WmmParameters::new(11, true, categories).unwrap();
+    let parameters =
+        WmmParameters::new(11, crate::extensions::wmm::Uapsd::Supported, categories).unwrap();
     let element = parameters.element();
     let decoded = parse_wmm_parameter_element(&element).unwrap();
     assert_eq!(decoded.parameter_set_count, 11);
-    assert!(decoded.uapsd);
+    assert_eq!(decoded.uapsd, crate::extensions::wmm::Uapsd::Supported);
     for (category, expected) in [
         WmmAccessCategory::BestEffort,
         WmmAccessCategory::Background,
@@ -126,7 +127,11 @@ fn beacon_association_and_peer_rate_admission_use_the_supplied_profile() {
     .unwrap();
     let protection = crate::protection::ApBssProtection {
         non_erp_present: true,
-        erp: crate::protection::ErpProtection::new(true, false),
+        erp: crate::protection::ErpProtection::new(
+            crate::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(false),
+        ),
         ht: crate::protection::HtOperationProtection::default(),
     };
     let address = [2, 0, 0, 0, 0, 1];

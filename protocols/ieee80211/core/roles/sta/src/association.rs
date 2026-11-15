@@ -68,7 +68,11 @@ pub fn erp_protection(
         Ok(elements) => ErpProtection::from_information(
             elements.information().reduce(|merged, next| merged | next),
         ),
-        Err(_) => ErpProtection::new(true, true),
+        Err(_) => ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true),
+        ),
     }
 }
 

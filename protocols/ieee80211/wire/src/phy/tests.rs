@@ -2,7 +2,14 @@ use super::*;
 
 #[test]
 fn mpdu_spacing_rounds_exact_symbol_rates_up_to_octets() {
-    let ht = PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, true).unwrap());
+    let ht = PhyRate::Ht(
+        HtRate::new(
+            HtMcs::new(7).unwrap(),
+            PpduBandwidth::Mhz20,
+            crate::phy::HtGuardInterval::Short,
+        )
+        .unwrap(),
+    );
     // 260 bits / 3.6 us, multiplied by each spacing then divided by eight.
     for (encoding, bytes) in [0, 3, 5, 10, 19, 37, 73, 145].into_iter().enumerate() {
         assert_eq!(ht.minimum_mpdu_spacing_bytes(encoding as u8), Some(bytes));
@@ -19,7 +26,7 @@ fn mpdu_spacing_rounds_exact_symbol_rates_up_to_octets() {
             PpduBandwidth::Mhz160,
             HeGiLtf::Ltf2xGi800Ns,
             FecCoding::Ldpc,
-            false,
+            crate::phy::Dcm::NotUsed,
         )
         .unwrap(),
     );
@@ -30,8 +37,22 @@ fn mpdu_spacing_rounds_exact_symbol_rates_up_to_octets() {
 #[test]
 fn ht_rates_exist_only_at_20_and_40_mhz() {
     let mcs = HtMcs::new(7).unwrap();
-    assert!(HtRate::new(mcs, PpduBandwidth::Mhz40, true).is_some());
-    assert!(HtRate::new(mcs, PpduBandwidth::Mhz80, false).is_none());
+    assert!(
+        HtRate::new(
+            mcs,
+            PpduBandwidth::Mhz40,
+            crate::phy::HtGuardInterval::Short
+        )
+        .is_some()
+    );
+    assert!(
+        HtRate::new(
+            mcs,
+            PpduBandwidth::Mhz80,
+            crate::phy::HtGuardInterval::Normal
+        )
+        .is_none()
+    );
     assert_eq!(HtMcs::new(31).unwrap().spatial_streams(), 4);
     assert_eq!(HtMcs::new(32), None);
 }
@@ -49,11 +70,14 @@ fn he_dcm_is_limited_to_its_standard_mcs_and_streams() {
         )
     };
     for mcs in 0..=11 {
-        assert!(rate(mcs, 1, false).is_some());
-        assert_eq!(rate(mcs, 1, true).is_some(), matches!(mcs, 0 | 1 | 3 | 4));
+        assert!(rate(mcs, 1, crate::phy::Dcm::NotUsed).is_some());
+        assert_eq!(
+            rate(mcs, 1, crate::phy::Dcm::Used).is_some(),
+            matches!(mcs, 0 | 1 | 3 | 4)
+        );
     }
-    assert!(rate(0, 2, true).is_some());
-    assert!(rate(0, 3, true).is_none());
+    assert!(rate(0, 2, crate::phy::Dcm::Used).is_some());
+    assert!(rate(0, 3, crate::phy::Dcm::Used).is_none());
     assert_eq!(HeMcs::new(12), None);
     assert_eq!(SpatialStreams::new(0), None);
     assert_eq!(SpatialStreams::new(9), None);
@@ -72,13 +96,25 @@ fn legacy_rates_report_their_modulation_and_rate() {
 
 #[test]
 fn nominal_rates_follow_the_standard_tables() {
-    let ht = |mcs, bandwidth, short_gi| {
-        PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap())
+    let ht = |mcs, bandwidth, guard_interval| {
+        PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, guard_interval).unwrap())
     };
-    assert_eq!(ht(0, PpduBandwidth::Mhz20, false).nominal_kbps(), 6_500);
-    assert_eq!(ht(7, PpduBandwidth::Mhz20, true).nominal_kbps(), 72_200);
-    assert_eq!(ht(7, PpduBandwidth::Mhz40, false).nominal_kbps(), 135_000);
-    assert_eq!(ht(15, PpduBandwidth::Mhz40, true).nominal_kbps(), 300_000);
+    assert_eq!(
+        ht(0, PpduBandwidth::Mhz20, crate::phy::HtGuardInterval::Normal).nominal_kbps(),
+        6_500
+    );
+    assert_eq!(
+        ht(7, PpduBandwidth::Mhz20, crate::phy::HtGuardInterval::Short).nominal_kbps(),
+        72_200
+    );
+    assert_eq!(
+        ht(7, PpduBandwidth::Mhz40, crate::phy::HtGuardInterval::Normal).nominal_kbps(),
+        135_000
+    );
+    assert_eq!(
+        ht(15, PpduBandwidth::Mhz40, crate::phy::HtGuardInterval::Short).nominal_kbps(),
+        300_000
+    );
 
     let he = |mcs, gi_ltf, dcm| {
         PhyRate::He(
@@ -94,13 +130,22 @@ fn nominal_rates_follow_the_standard_tables() {
         )
     };
     // 117 bits per 13.6 µs symbol.
-    assert_eq!(he(0, HeGiLtf::Ltf2xGi800Ns, false).nominal_kbps(), 8_602);
-    assert_eq!(he(9, HeGiLtf::Ltf2xGi800Ns, false).nominal_kbps(), 114_705);
     assert_eq!(
-        he(11, HeGiLtf::Ltf4xGi3200Ns, false).nominal_kbps(),
+        he(0, HeGiLtf::Ltf2xGi800Ns, crate::phy::Dcm::NotUsed).nominal_kbps(),
+        8_602
+    );
+    assert_eq!(
+        he(9, HeGiLtf::Ltf2xGi800Ns, crate::phy::Dcm::NotUsed).nominal_kbps(),
+        114_705
+    );
+    assert_eq!(
+        he(11, HeGiLtf::Ltf4xGi3200Ns, crate::phy::Dcm::NotUsed).nominal_kbps(),
         121_875
     );
-    assert_eq!(he(1, HeGiLtf::Ltf2xGi1600Ns, true).nominal_kbps(), 8_125);
+    assert_eq!(
+        he(1, HeGiLtf::Ltf2xGi1600Ns, crate::phy::Dcm::Used).nominal_kbps(),
+        8_125
+    );
     assert_eq!(
         PhyRate::Legacy(LegacyRate::Cck5M5(DsssPreamble::Short)).nominal_kbps(),
         5_500
@@ -126,19 +171,34 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
     );
     // HT20 MCS 7, long GI, 1500 octets: 260 bits a symbol,
     // (16 + 12000 + 6) / 260 -> 47 symbols after the 36 us preamble.
-    let ht = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap();
+    let ht = HtRate::new(
+        HtMcs::new(7).unwrap(),
+        PpduBandwidth::Mhz20,
+        crate::phy::HtGuardInterval::Normal,
+    )
+    .unwrap();
     assert_eq!(
         PhyRate::Ht(ht).max_ppdu_duration_micros(1_500).unwrap(),
         36 + 47 * 4 + 6
     );
     // The short GI keeps the symbols and shortens them to 3.6 us.
-    let short = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, true).unwrap();
+    let short = HtRate::new(
+        HtMcs::new(7).unwrap(),
+        PpduBandwidth::Mhz20,
+        crate::phy::HtGuardInterval::Short,
+    )
+    .unwrap();
     assert_eq!(
         PhyRate::Ht(short).max_ppdu_duration_micros(1_500).unwrap(),
         36 + 4 * 43 + 6
     );
     // HT40 doubles the bits a symbol.
-    let ht40 = HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz40, false).unwrap();
+    let ht40 = HtRate::new(
+        HtMcs::new(7).unwrap(),
+        PpduBandwidth::Mhz40,
+        crate::phy::HtGuardInterval::Normal,
+    )
+    .unwrap();
     assert!(
         PhyRate::Ht(ht40).max_ppdu_duration_micros(1_500).unwrap()
             < PhyRate::Ht(ht).max_ppdu_duration_micros(1_500).unwrap()
@@ -151,7 +211,7 @@ fn ppdu_durations_follow_the_txtime_of_each_format() {
         PpduBandwidth::Mhz20,
         HeGiLtf::Ltf2xGi800Ns,
         FecCoding::Bcc,
-        false,
+        crate::phy::Dcm::NotUsed,
     )
     .unwrap();
     assert_eq!(
@@ -210,7 +270,16 @@ fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
     for (bandwidth, long, short) in ht_rows {
         for index in 0..32 {
             for short_gi in [false, true] {
-                let rate = HtRate::new(HtMcs::new(index).unwrap(), bandwidth, short_gi).unwrap();
+                let rate = HtRate::new(
+                    HtMcs::new(index).unwrap(),
+                    bandwidth,
+                    if short_gi {
+                        crate::phy::HtGuardInterval::Short
+                    } else {
+                        crate::phy::HtGuardInterval::Normal
+                    },
+                )
+                .unwrap();
                 let streams = u32::from(index / 8 + 1);
                 let row = if short_gi { short } else { long };
                 assert_eq!(rate.nominal_kbps(), row[usize::from(index % 8)] * streams);
@@ -259,7 +328,11 @@ fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
                                 bandwidth,
                                 gi,
                                 fec,
-                                dcm,
+                                if dcm {
+                                    crate::phy::Dcm::Used
+                                } else {
+                                    crate::phy::Dcm::NotUsed
+                                },
                             );
                             if dcm && (!matches!(index, 0 | 1 | 3 | 4) || streams > 2) {
                                 assert!(rate.is_none());
@@ -288,8 +361,14 @@ fn every_const_rate_and_symbol_fraction_matches_the_standard_formula() {
 #[test]
 fn an_ht_mixed_ppdu_lasts_at_most_what_the_l_sig_length_carries() {
     assert_eq!(HT_MIXED_MAX_TXTIME_MICROS, 5_484);
-    let mcs7 =
-        PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap());
+    let mcs7 = PhyRate::Ht(
+        HtRate::new(
+            HtMcs::new(7).unwrap(),
+            PpduBandwidth::Mhz20,
+            crate::phy::HtGuardInterval::Normal,
+        )
+        .unwrap(),
+    );
     assert_eq!(mcs7.max_txtime_micros(), Some(5_484));
     assert_eq!(
         PhyRate::Legacy(LegacyRate::Ofdm54M).max_txtime_micros(),
@@ -302,8 +381,8 @@ fn an_ht_mixed_ppdu_lasts_at_most_what_the_l_sig_length_carries() {
     assert!(mcs7.max_ppdu_duration_micros(29 * subframe).unwrap() > 5_484);
 }
 
-fn ht(mcs: u8, bandwidth: PpduBandwidth, short_gi: bool) -> PhyRate {
-    PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap())
+fn ht(mcs: u8, bandwidth: PpduBandwidth, guard_interval: crate::phy::HtGuardInterval) -> PhyRate {
+    PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, guard_interval).unwrap())
 }
 
 #[test]
@@ -313,24 +392,52 @@ fn an_octet_is_sent_at_the_end_of_the_symbol_that_carries_it() {
     // SERVICE and the PSDU through the octet, worked by hand.
     for (rate, offset, nanos) in [
         // HT20 MCS 0, 26 bits per 4-us symbol: 24, 144 and 272 bits.
-        (ht(0, Mhz20, false), 0, 40_000),
-        (ht(0, Mhz20, false), 15, 60_000),
-        (ht(0, Mhz20, false), 31, 80_000),
+        (ht(0, Mhz20, crate::phy::HtGuardInterval::Normal), 0, 40_000),
+        (
+            ht(0, Mhz20, crate::phy::HtGuardInterval::Normal),
+            15,
+            60_000,
+        ),
+        (
+            ht(0, Mhz20, crate::phy::HtGuardInterval::Normal),
+            31,
+            80_000,
+        ),
         // Its short GI: the same symbols of 3.6 us.
-        (ht(0, Mhz20, true), 0, 39_600),
-        (ht(0, Mhz20, true), 31, 75_600),
+        (ht(0, Mhz20, crate::phy::HtGuardInterval::Short), 0, 39_600),
+        (ht(0, Mhz20, crate::phy::HtGuardInterval::Short), 31, 75_600),
         // HT20 MCS 7, 260 bits: 1, 1 and 2 symbols.
-        (ht(7, Mhz20, false), 0, 40_000),
-        (ht(7, Mhz20, false), 15, 40_000),
-        (ht(7, Mhz20, false), 31, 44_000),
+        (ht(7, Mhz20, crate::phy::HtGuardInterval::Normal), 0, 40_000),
+        (
+            ht(7, Mhz20, crate::phy::HtGuardInterval::Normal),
+            15,
+            40_000,
+        ),
+        (
+            ht(7, Mhz20, crate::phy::HtGuardInterval::Normal),
+            31,
+            44_000,
+        ),
         // HT40 MCS 0, 54 bits: 1, 3 and 6 symbols.
-        (ht(0, Mhz40, false), 0, 40_000),
-        (ht(0, Mhz40, false), 15, 48_000),
-        (ht(0, Mhz40, true), 31, 57_600),
+        (ht(0, Mhz40, crate::phy::HtGuardInterval::Normal), 0, 40_000),
+        (
+            ht(0, Mhz40, crate::phy::HtGuardInterval::Normal),
+            15,
+            48_000,
+        ),
+        (ht(0, Mhz40, crate::phy::HtGuardInterval::Short), 31, 57_600),
         // HT40 MCS 7, 540 bits; 1500 octets end in symbol 23.
-        (ht(7, Mhz40, false), 0, 40_000),
-        (ht(7, Mhz40, true), 749, 36_000 + 12 * 3_600),
-        (ht(7, Mhz40, true), 1_499, 36_000 + 23 * 3_600),
+        (ht(7, Mhz40, crate::phy::HtGuardInterval::Normal), 0, 40_000),
+        (
+            ht(7, Mhz40, crate::phy::HtGuardInterval::Short),
+            749,
+            36_000 + 12 * 3_600,
+        ),
+        (
+            ht(7, Mhz40, crate::phy::HtGuardInterval::Short),
+            1_499,
+            36_000 + 23 * 3_600,
+        ),
         // Non-HT: 24 bits per 4-us symbol after 20 us; DSSS bit by bit after
         // the long preamble.
         (PhyRate::Legacy(LegacyRate::Ofdm6M), 0, 24_000),
@@ -348,12 +455,12 @@ fn an_octet_is_sent_at_the_end_of_the_symbol_that_carries_it() {
 fn the_ppdu_ends_after_its_last_octet_by_tail_padding_and_signal_extension_only() {
     use PpduBandwidth::{Mhz20, Mhz40};
     for rate in [
-        ht(0, Mhz20, false),
-        ht(0, Mhz20, true),
-        ht(7, Mhz20, true),
-        ht(0, Mhz40, false),
-        ht(7, Mhz40, true),
-        ht(15, Mhz40, true),
+        ht(0, Mhz20, crate::phy::HtGuardInterval::Normal),
+        ht(0, Mhz20, crate::phy::HtGuardInterval::Short),
+        ht(7, Mhz20, crate::phy::HtGuardInterval::Short),
+        ht(0, Mhz40, crate::phy::HtGuardInterval::Normal),
+        ht(7, Mhz40, crate::phy::HtGuardInterval::Short),
+        ht(15, Mhz40, crate::phy::HtGuardInterval::Short),
         PhyRate::Legacy(LegacyRate::Ofdm54M),
     ] {
         for octets in [1_u32, 2, 33, 100, 1_554, 49_918] {
@@ -376,18 +483,18 @@ fn the_ppdu_ends_after_its_last_octet_by_tail_padding_and_signal_extension_only(
 fn sixty_four_short_mpdus_land_after_the_preamble_and_a_lone_one_within_its_data() {
     // The first of 64 A-MPDU subframes of 44-octet MPDUs ends at octet 47
     // of the PSDU: in the first 3.6-us symbol after the 36-us preamble.
-    let rate = ht(7, PpduBandwidth::Mhz40, true);
+    let rate = ht(7, PpduBandwidth::Mhz40, crate::phy::HtGuardInterval::Short);
     assert_eq!(rate.psdu_octet_sent_nanos(47), Some(39_600));
     // One 32-octet MPDU without a delimiter at HT20 MCS 0: 272 bits, the
     // 11th symbol, 80 us; its PPDU ends 6 us of signal extension later.
-    let lone = ht(0, PpduBandwidth::Mhz20, false);
+    let lone = ht(0, PpduBandwidth::Mhz20, crate::phy::HtGuardInterval::Normal);
     assert_eq!(lone.psdu_octet_sent_nanos(31), Some(80_000));
     assert_eq!(lone.max_ppdu_duration_micros(32), Some(86));
 }
 
 #[test]
 fn an_offset_past_the_counting_range_is_refused() {
-    let rate = ht(0, PpduBandwidth::Mhz20, false);
+    let rate = ht(0, PpduBandwidth::Mhz20, crate::phy::HtGuardInterval::Normal);
     assert!(rate.psdu_octet_sent_nanos(u32::MAX).is_some());
     let dsss = PhyRate::Legacy(LegacyRate::Dsss1M);
     assert!(dsss.psdu_octet_sent_nanos(u32::MAX).is_some());

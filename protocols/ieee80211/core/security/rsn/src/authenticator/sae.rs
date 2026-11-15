@@ -402,7 +402,15 @@ impl<const N: usize> ApSaeResponder<N> {
             }
         }
         let h2e = status == status_code::SAE_HASH_TO_ELEMENT;
-        let commit = match SaeReceivedCommit::parse(body, h2e).and_then(|commit| {
+        let commit = match SaeReceivedCommit::parse(
+            body,
+            if h2e {
+                oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
+            } else {
+                oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
+            },
+        )
+        .and_then(|commit| {
             if valid_peer_commit(&commit.values) {
                 Ok(commit)
             } else {
@@ -685,7 +693,15 @@ fn commit_step_with(
         return ApSaeOutput::fault(session.fault());
     };
     let mut body = [0_u8; SAE_COMMIT_LEN];
-    let len = match own.values().encode(None, session.h2e, &mut body) {
+    let len = match own.values().encode(
+        None,
+        if session.h2e {
+            oer_protocols_ieee80211_wire::security::SaePwe::HashToElement
+        } else {
+            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking
+        },
+        &mut body,
+    ) {
         Ok(len) => len,
         Err(error) => {
             return ApSaeOutput::fault(ApSaeFault::Crypto {

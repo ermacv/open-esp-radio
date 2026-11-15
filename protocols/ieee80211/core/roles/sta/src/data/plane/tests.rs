@@ -26,7 +26,14 @@ const BE: WmmUserPriority = WmmUserPriority::UP0;
 const VIDEO: WmmUserPriority = WmmUserPriority::UP5;
 
 fn ht() -> PhyRate {
-    PhyRate::Ht(HtRate::new(HtMcs::new(7).unwrap(), PpduBandwidth::Mhz20, false).unwrap())
+    PhyRate::Ht(
+        HtRate::new(
+            HtMcs::new(7).unwrap(),
+            PpduBandwidth::Mhz20,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+        )
+        .unwrap(),
+    )
 }
 
 /// The port-checked rates a test publishes at.
@@ -75,7 +82,7 @@ fn link(protection: LinkProtection) -> DataLink {
         header: StaDataHeaderTemplate::new(
             OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
             Bssid::new(IndividualAddress::new(ACCESS_POINT).unwrap()).unwrap(),
-            true,
+            oer_protocols_ieee80211_wire::data::PeerQos::Qos,
             protection,
         )
         .unwrap(),
@@ -1052,7 +1059,7 @@ fn he() -> PhyRate {
             PpduBandwidth::Mhz20,
             HeGiLtf::Ltf2xGi800Ns,
             FecCoding::Bcc,
-            false,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
         )
         .unwrap(),
     )

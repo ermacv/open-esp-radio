@@ -269,7 +269,15 @@ fn addba_on_a_pmf_link_requires_authentication_and_responds_with_protection_once
         let (mut world, ptk, _) = connected(mint);
         let clock = oer_portable_time_virtual::VirtualClock::<8>::starting_at(at(40));
         world.frames.clear();
-        let body = encode_addba_request(17, 15, 16, 0, true, SequenceNumber::ZERO).unwrap();
+        let body = encode_addba_request(
+            17,
+            15,
+            16,
+            0,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
+            SequenceNumber::ZERO,
+        )
+        .unwrap();
         let mut request = plain_disconnect(0xd0, 0);
         request.truncate(24);
         request.extend_from_slice(&body);

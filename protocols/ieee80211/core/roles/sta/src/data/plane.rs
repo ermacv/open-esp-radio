@@ -521,7 +521,7 @@ impl DataPlane {
     /// `None` without a link or an admitted access category.
     pub fn tid(&self, priority: WmmUserPriority) -> Option<WmmUserPriority> {
         let link = self.link.as_ref()?;
-        if link.header.peer_qos() {
+        if link.header.peer_qos() == oer_protocols_ieee80211_wire::data::PeerQos::Qos {
             link.admission.admitted_user_priority(priority)
         } else {
             Some(WmmUserPriority::UP0)
@@ -744,19 +744,21 @@ impl DataPlane {
         let header = link.header;
         // The final priority names the frame's TID, its sequence space and
         // its access category; a non-QoS link has one queue, best effort.
-        let (tid, access_category) = if header.peer_qos() {
-            match link.admission.admitted_user_priority(msdu.priority) {
-                Some(tid) => (tid, tid.access_category()),
-                None => return refused(msdu, IntakeRefusal::NoAdmittedAccessCategory),
-            }
-        } else {
-            (WmmUserPriority::UP0, WmmAccessCategory::BestEffort)
-        };
+        let (tid, access_category) =
+            if header.peer_qos() == oer_protocols_ieee80211_wire::data::PeerQos::Qos {
+                match link.admission.admitted_user_priority(msdu.priority) {
+                    Some(tid) => (tid, tid.access_category()),
+                    None => return refused(msdu, IntakeRefusal::NoAdmittedAccessCategory),
+                }
+            } else {
+                (WmmUserPriority::UP0, WmmAccessCategory::BestEffort)
+            };
         let protection = match header.protection() {
             LinkProtection::Open => DataProtection::Open,
             LinkProtection::Ccmp => DataProtection::Ccmp(()),
         };
-        if header.peer_qos() != numbers.qos() {
+        if (header.peer_qos() == oer_protocols_ieee80211_wire::data::PeerQos::Qos) != numbers.qos()
+        {
             return refused(msdu, IntakeRefusal::Numbering);
         }
         if protection == DataProtection::Ccmp(()) && numbers.key().is_none() {

@@ -10,7 +10,7 @@ fn edca(restricted: &[WmmAccessCategory]) -> WmmParameterSet {
     };
     WmmParameterSet::new(
         1,
-        false,
+        oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
         [
             record(WmmAccessCategory::BestEffort),
             record(WmmAccessCategory::Background),

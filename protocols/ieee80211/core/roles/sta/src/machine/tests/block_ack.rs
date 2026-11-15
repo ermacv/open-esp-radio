@@ -14,7 +14,15 @@ fn unsupported_addba_receives_an_explicit_decline() {
         let clock = VirtualClock::<8>::starting_at(at(40));
         // The backend accepts TIDs 0..=7. A parsed request for TID 15 still
         // needs a response, without allocating a receive agreement.
-        let body = encode_addba_request(17, 15, 16, 0, true, SequenceNumber::ZERO).unwrap();
+        let body = encode_addba_request(
+            17,
+            15,
+            16,
+            0,
+            oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported,
+            SequenceNumber::ZERO,
+        )
+        .unwrap();
         let mut request = std::vec![0; 24];
         request[0] = 0xd0;
         request[4..10].copy_from_slice(&LOCAL);

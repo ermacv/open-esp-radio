@@ -1030,7 +1030,11 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         };
         ApBssProtection {
             non_erp_present,
-            erp: ErpProtection::new(non_erp_present, barker_preamble),
+            erp: ErpProtection::new(
+                oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                    .with_use_protection(non_erp_present)
+                    .with_barker(barker_preamble),
+            ),
             ht: HtOperationProtection {
                 mode,
                 non_greenfield_present,

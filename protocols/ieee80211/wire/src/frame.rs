@@ -20,6 +20,24 @@ pub const QOS_DATA_TO_DS: u16 = 0x0188;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FrameControl(u16);
 
+/// The Protected Frame subfield of a Frame Control field: the frame body
+/// is encapsulated by a cryptographic protocol, or not (IEEE Std
+/// 802.11-2020, 9.2.4.1.9).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrameProtection {
+    Protected,
+    Unprotected,
+}
+
+/// The Retry subfield of a Frame Control field: the frame is a
+/// retransmission of an earlier frame, or its first transmission (IEEE Std
+/// 802.11-2020, 9.2.4.1.6).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Retry {
+    First,
+    Retransmission,
+}
+
 impl FrameControl {
     const fn fields(self) -> FrameControlFields {
         FrameControlFields::from_bytes(self.0.to_le_bytes())
@@ -43,19 +61,21 @@ impl FrameControl {
         self.0
     }
 
-    /// Select the Protected flag while retaining the validated frame kind.
-    pub const fn with_protected(self, protected: bool) -> Self {
+    /// Select the Protected Frame subfield while retaining the validated
+    /// frame kind.
+    pub const fn with_protected(self, protection: FrameProtection) -> Self {
         Self(u16::from_le_bytes(
             FrameControlFields::from_bytes(self.0.to_le_bytes())
-                .with_protected(protected)
+                .with_protected(matches!(protection, FrameProtection::Protected))
                 .to_bytes(),
         ))
     }
-    /// Select Retry without changing the frame's kind, protection or direction.
-    pub const fn with_retry(self, retry: bool) -> Self {
+    /// Select the Retry subfield without changing the frame's kind,
+    /// protection or direction.
+    pub const fn with_retry(self, retry: Retry) -> Self {
         Self(u16::from_le_bytes(
             FrameControlFields::from_bytes(self.0.to_le_bytes())
-                .with_retry(retry)
+                .with_retry(matches!(retry, Retry::Retransmission))
                 .to_bytes(),
         ))
     }
@@ -521,19 +541,12 @@ impl QosAckPolicy {
 }
 
 impl QosControl {
-    /// The QoS Control field of a QoS data frame.
-    pub const fn new(
-        tid: oer_portable_wire::U8<4>,
-        end_of_service_period: bool,
-        ack_policy: QosAckPolicy,
-        amsdu_present: bool,
-        high: u8,
-    ) -> Self {
+    /// The QoS Control field of a QoS data frame, its EOSP and A-MSDU
+    /// Present bits clear: a caller sets them with their fields' setters.
+    pub const fn new(tid: oer_portable_wire::U8<4>, ack_policy: QosAckPolicy, high: u8) -> Self {
         Self::from_bytes([0, high])
             .with_tid(tid)
-            .with_eosp(end_of_service_period)
             .with_ack_policy(ack_policy.field())
-            .with_amsdu(amsdu_present)
     }
 }
 
@@ -648,9 +661,9 @@ impl MacHeader {
         self.ht_control
     }
 
-    /// The same header with the Protected flag `protected`.
-    pub const fn with_protected(mut self, protected: bool) -> Self {
-        self.control = self.control.with_protected(protected);
+    /// The same header with the Protected Frame subfield `protection`.
+    pub const fn with_protected(mut self, protection: FrameProtection) -> Self {
+        self.control = self.control.with_protected(protection);
         self
     }
     /// The same header with Address 1 `address1`.

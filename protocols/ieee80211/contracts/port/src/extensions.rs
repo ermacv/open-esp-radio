@@ -355,7 +355,18 @@ mod tests {
 
     fn ht(mcs: u8, bandwidth: PpduBandwidth, gi: Gi) -> PhyRate {
         let short_gi = matches!(gi, Gi::Short);
-        PhyRate::Ht(HtRate::new(HtMcs::new(mcs).unwrap(), bandwidth, short_gi).unwrap())
+        PhyRate::Ht(
+            HtRate::new(
+                HtMcs::new(mcs).unwrap(),
+                bandwidth,
+                if short_gi {
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Short
+                } else {
+                    oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal
+                },
+            )
+            .unwrap(),
+        )
     }
 
     fn he(mcs: u8, bandwidth: PpduBandwidth, gi_ltf: HeGiLtf) -> PhyRate {
@@ -366,7 +377,7 @@ mod tests {
                 bandwidth,
                 gi_ltf,
                 FecCoding::Ldpc,
-                false,
+                oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
             )
             .unwrap(),
         )

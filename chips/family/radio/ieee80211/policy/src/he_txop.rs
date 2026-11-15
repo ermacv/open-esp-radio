@@ -319,7 +319,11 @@ mod tests {
                             PpduBandwidth::Mhz20,
                             gi_ltf,
                             FecCoding::Bcc,
-                            dcm,
+                            if dcm {
+                                oer_protocols_ieee80211_wire::phy::Dcm::Used
+                            } else {
+                                oer_protocols_ieee80211_wire::phy::Dcm::NotUsed
+                            },
                         )
                         .expect("admitted HE20 rate");
                         for padding in [
@@ -348,7 +352,7 @@ mod tests {
             PpduBandwidth::Mhz20,
             HeGiLtf::Ltf2xGi800Ns,
             FecCoding::Bcc,
-            false,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
         )
         .unwrap()
     }

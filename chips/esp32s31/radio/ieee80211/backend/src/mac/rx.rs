@@ -692,7 +692,14 @@ pub fn decode_rx_he_mu_sig_b(buffer: &[u8]) -> Option<RxHeMuSigBInfo<'_>> {
         bit_length,
         common_info_raw: prefix.he_mu_common().common_info(),
         selected_user_info_raw,
-        selected_user: HeMuSigBUser::decode(selected_user_info_raw, signal.sig_b_compression),
+        selected_user: HeMuSigBUser::decode(
+            selected_user_info_raw,
+            if signal.sig_b_compression {
+                oer_protocols_ieee80211_wire::he::SigBCompression::Compressed
+            } else {
+                oer_protocols_ieee80211_wire::he::SigBCompression::Uncompressed
+            },
+        ),
         ru_size: prefix.he_mu_ru_size().ru_size(),
         ru_position: prefix.he_mu_ru_position().ru_position(),
         complete_bytes,

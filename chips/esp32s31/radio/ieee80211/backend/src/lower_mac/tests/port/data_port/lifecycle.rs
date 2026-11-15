@@ -86,7 +86,12 @@ fn plan<R>(rate: R, transmissions: u8) -> RetryPlan<R> {
 
 fn ht(mcs: u8) -> PhyRate {
     PhyRate::Ht(
-        HtRate::new(HtMcs::new(mcs).expect("MCS"), PpduBandwidth::Mhz20, false).expect("HT rate"),
+        HtRate::new(
+            HtMcs::new(mcs).expect("MCS"),
+            PpduBandwidth::Mhz20,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
+        )
+        .expect("HT rate"),
     )
 }
 
@@ -98,7 +103,7 @@ fn he() -> PhyRate {
             PpduBandwidth::Mhz20,
             HeGiLtf::Ltf2xGi800Ns,
             FecCoding::Ldpc,
-            false,
+            oer_protocols_ieee80211_wire::phy::Dcm::NotUsed,
         )
         .expect("HE rate"),
     )

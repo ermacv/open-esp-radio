@@ -45,8 +45,8 @@ fn decode_all(bytes: &[u8]) {
         let control = header.control();
         let _ = (
             control.get(),
-            control.with_protected(true),
-            control.with_retry(true),
+            control.with_protected(FrameProtection::Protected),
+            control.with_retry(Retry::Retransmission),
             control.retry(),
             control.is_data(),
             control.protected(),

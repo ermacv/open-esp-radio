@@ -210,7 +210,7 @@ fn a_port_rate_carries_no_ack_and_a_block_ack_request_only_where_the_rate_allows
         oer_protocols_ieee80211_wire::phy::HtRate::new(
             oer_protocols_ieee80211_wire::phy::HtMcs::new(7).unwrap(),
             oer_protocols_ieee80211_wire::phy::PpduBandwidth::Mhz20,
-            false,
+            oer_protocols_ieee80211_wire::phy::HtGuardInterval::Normal,
         )
         .unwrap(),
     );

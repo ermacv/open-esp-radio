@@ -1,5 +1,6 @@
 use super::*;
-use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader};
+use oer_protocols_ieee80211_wire::data::{DataInterfaceRole, MsduHeader, PeerQos};
+use oer_protocols_ieee80211_wire::frame::QosAckPolicy;
 
 #[test]
 fn queue_class_and_descriptor_byte_match_every_priority() {
@@ -36,32 +37,62 @@ fn portable_data_intent_preserves_every_existing_s31_queue_and_packet_profile() 
         (WmmAccessCategory::Voice, 0, 10),
     ];
     let frames = [
-        (DataInterfaceRole::Station, false, false, [0x08, 0x01], 24),
-        (DataInterfaceRole::Station, true, false, [0x08, 0x01], 24),
-        (DataInterfaceRole::Station, false, true, [0x88, 0x01], 26),
-        (DataInterfaceRole::Station, true, true, [0x88, 0x01], 26),
+        (
+            DataInterfaceRole::Station,
+            false,
+            PeerQos::NonQos,
+            [0x08, 0x01],
+            24,
+        ),
+        (
+            DataInterfaceRole::Station,
+            true,
+            PeerQos::NonQos,
+            [0x08, 0x01],
+            24,
+        ),
+        (
+            DataInterfaceRole::Station,
+            false,
+            PeerQos::Qos,
+            [0x88, 0x01],
+            26,
+        ),
+        (
+            DataInterfaceRole::Station,
+            true,
+            PeerQos::Qos,
+            [0x88, 0x01],
+            26,
+        ),
         (
             DataInterfaceRole::AccessPoint,
             false,
-            false,
+            PeerQos::NonQos,
             [0x08, 0x02],
             24,
         ),
         (
             DataInterfaceRole::AccessPoint,
             true,
-            false,
+            PeerQos::NonQos,
             [0x08, 0x02],
             24,
         ),
         (
             DataInterfaceRole::AccessPoint,
             false,
-            true,
+            PeerQos::Qos,
             [0x88, 0x02],
             26,
         ),
-        (DataInterfaceRole::AccessPoint, true, true, [0x08, 0x02], 24),
+        (
+            DataInterfaceRole::AccessPoint,
+            true,
+            PeerQos::Qos,
+            [0x08, 0x02],
+            24,
+        ),
     ];
 
     for (priority, (category, queue, qos_packet_type)) in priorities.into_iter().enumerate() {
@@ -80,7 +111,7 @@ fn portable_data_intent_preserves_every_existing_s31_queue_and_packet_profile() 
                 msdu,
                 WmmUserPriority::new(priority as u8).unwrap(),
                 peer_qos,
-                false,
+                QosAckPolicy::Normal,
             );
 
             assert_eq!(plan.access_category, category);

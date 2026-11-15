@@ -170,7 +170,14 @@ mod associated_peer {
                 .contains(oer_protocols_ieee80211_wire::phy::LegacyRate::Ofdm54M)
         );
         let protection = peer.protection;
-        assert_eq!(protection.erp, ErpProtection::new(true, true));
+        assert_eq!(
+            protection.erp,
+            ErpProtection::new(
+                oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                    .with_use_protection(true)
+                    .with_barker(true)
+            )
+        );
         assert_eq!(protection.ht, HtProtectionMode::NonHtMixed);
         assert!(protection.short_preamble);
         assert_eq!(

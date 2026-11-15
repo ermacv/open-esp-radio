@@ -246,11 +246,22 @@ fn sae_peers() -> (SaeCommit, SaeCommit) {
 fn sae_parsers(count: usize) {
     let (_, peer) = sae_peers();
     let mut plain = [0; 98];
-    let length = peer.values().encode(None, false, &mut plain).unwrap();
+    let length = peer
+        .values()
+        .encode(
+            None,
+            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+            &mut plain,
+        )
+        .unwrap();
     let mut with_token = [0; 98 + 32 + 3];
     let token_length = peer
         .values()
-        .encode(Some(&[7; 32]), true, &mut with_token)
+        .encode(
+            Some(&[7; 32]),
+            oer_protocols_ieee80211_wire::security::SaePwe::HashToElement,
+            &mut with_token,
+        )
         .unwrap();
     let mut tokens = SaeComebackTokens::new();
     let issued = tokens.issue(
@@ -263,13 +274,16 @@ fn sae_parsers(count: usize) {
         count,
         200,
         |bytes| {
-            for h2e in [false, true] {
-                let _ = SaeCommitValues::parse(bytes, h2e);
-                if let Ok(commit) = SaeReceivedCommit::parse(bytes, h2e) {
+            for pwe in [
+                oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+                oer_protocols_ieee80211_wire::security::SaePwe::HashToElement,
+            ] {
+                let _ = SaeCommitValues::parse(bytes, pwe);
+                if let Ok(commit) = SaeReceivedCommit::parse(bytes, pwe) {
                     let _ = commit.rejects_offered_group();
                     let _ = valid_peer_commit(&commit.values);
                 }
-                let _ = anti_clogging_token(bytes, h2e);
+                let _ = anti_clogging_token(bytes, pwe);
             }
             let _ = tokens.check([2, 0, 0, 0, 0, 3], bytes);
         },
@@ -293,10 +307,20 @@ fn sae_exchange(count: usize) {
     let peer_keys = peer.process(own.values()).unwrap();
     let confirm = peer_keys.own_confirm(1);
     let mut commit = [0; 98];
-    let length = peer.values().encode(None, false, &mut commit).unwrap();
+    let length = peer
+        .values()
+        .encode(
+            None,
+            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+            &mut commit,
+        )
+        .unwrap();
     inputs(&[&confirm, &commit[..length]], count, 120, |bytes| {
         let _ = keys.verify_peer_confirm(bytes);
-        if let Ok(values) = SaeCommitValues::parse(bytes, false) {
+        if let Ok(values) = SaeCommitValues::parse(
+            bytes,
+            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+        ) {
             let _ = own.process(values);
         }
     });

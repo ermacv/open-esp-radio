@@ -171,7 +171,11 @@ impl TxBlockAckSession {
             self.config.tid,
             self.config.window,
             self.config.timeout_tu,
-            self.config.amsdu,
+            if self.config.amsdu {
+                oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::Supported
+            } else {
+                oer_protocols_ieee80211_wire::block_ack::frame::AmsduSupport::NotSupported
+            },
             starting_sequence,
         )
         .map_err(|error| match error {

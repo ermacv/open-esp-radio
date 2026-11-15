@@ -1775,7 +1775,14 @@ fn bss_protection_follows_associated_erp_ht_and_preamble_membership() {
         .unwrap();
     let mixed = service.bss_protection(true);
     assert!(mixed.non_erp_present);
-    assert_eq!(mixed.erp, ErpProtection::new(true, true));
+    assert_eq!(
+        mixed.erp,
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true)
+        )
+    );
     assert_eq!(mixed.erp_information(), 0x07);
     assert_eq!(mixed.ht.mode, HtProtectionMode::NonHtMixed);
 }

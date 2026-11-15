@@ -38,7 +38,7 @@ const fn ac(aifsn: U8<4>, ecw_min: U8<4>, ecw_max: U8<4>, txop: u16) -> WmmAcPar
 pub const ADVERTISEMENT: Advertisement = {
     let Some(wmm) = WmmParameters::new(
         4,
-        false,
+        oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
         [
             ac(
                 U8::constant::<3>(),

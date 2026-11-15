@@ -50,11 +50,19 @@ fn each_beacon_sets_its_own_erp_requirements() {
     // Within one beacon every ERP element counts, in either order.
     assert_eq!(
         last_erp(&[42, 1, 0x02, 42, 1, 0x00]),
-        ErpProtection::new(true, false)
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(false)
+        )
     );
     assert_eq!(
         last_erp(&[42, 1, 0x00, 42, 1, 0x02]),
-        ErpProtection::new(true, false)
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(false)
+        )
     );
     // The next sound beacon sets the requirements anew: none accumulate.
     assert_eq!(last_erp(&[42, 1, 0x00]), ErpProtection::NONE);
@@ -62,9 +70,20 @@ fn each_beacon_sets_its_own_erp_requirements() {
     // A damaged ERP element fails closed for that beacon alone.
     assert_eq!(
         last_erp(&[42, 2, 0x02, 0x02]),
-        ErpProtection::new(true, true)
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true)
+        )
     );
-    assert_eq!(last_erp(&[42, 1, 0x04]), ErpProtection::new(false, true));
+    assert_eq!(
+        last_erp(&[42, 1, 0x04]),
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(false)
+                .with_barker(true)
+        )
+    );
 }
 
 #[test]

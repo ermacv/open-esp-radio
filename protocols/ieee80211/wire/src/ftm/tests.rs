@@ -6,7 +6,7 @@ fn request_parameters() -> FtmRequestParameters {
         FtmBurstDuration::Millis8,
         2,
         None,
-        true,
+        FtmAsap::AsSoonAsPossible,
         8,
         FtmFormatAndBandwidth::HtMixed20Mhz,
         0,

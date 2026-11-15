@@ -153,7 +153,10 @@ fn ap_amsdu_encodes_multiple_open_and_ccmp_subframes_in_order() {
     }
     .encode(&mut protected)
     .unwrap();
-    assert_eq!(protected_len, ap_amsdu_frame_length(&frames, true).unwrap());
+    assert_eq!(
+        protected_len,
+        ap_amsdu_frame_length(&frames, crate::security::LinkProtection::Ccmp).unwrap()
+    );
     assert_eq!(&protected[..2], &0x6288_u16.to_le_bytes());
     assert_eq!(&protected[4..10], &peer);
     assert_eq!(&protected[22..24], &0x00b0_u16.to_le_bytes());
@@ -221,7 +224,7 @@ fn ap_amsdu_fails_before_mutating_output_on_peer_or_capacity_miss() {
     assert_eq!(output, [0xa5; 80]);
 
     let frames = [first, first];
-    let required = ap_amsdu_frame_length(&frames, true).unwrap();
+    let required = ap_amsdu_frame_length(&frames, crate::security::LinkProtection::Ccmp).unwrap();
     let mut short = [0x5a; 64];
     assert!(short.len() < required);
     assert_eq!(
@@ -423,10 +426,23 @@ fn tim_bitmap_update_matches_aid_bit_selection() {
     use crate::beacon::{TimAssociationId, TimVirtualBitmap};
 
     let mut bitmap = TimVirtualBitmap::<2>::try_new().unwrap();
-    bitmap.set(TimAssociationId::new(7).unwrap(), true).unwrap();
-    bitmap.set(TimAssociationId::new(8).unwrap(), true).unwrap();
     bitmap
-        .set(TimAssociationId::new(15).unwrap(), true)
+        .set(
+            TimAssociationId::new(7).unwrap(),
+            crate::station_beacon::BufferedTraffic::Buffered,
+        )
+        .unwrap();
+    bitmap
+        .set(
+            TimAssociationId::new(8).unwrap(),
+            crate::station_beacon::BufferedTraffic::Buffered,
+        )
+        .unwrap();
+    bitmap
+        .set(
+            TimAssociationId::new(15).unwrap(),
+            crate::station_beacon::BufferedTraffic::Buffered,
+        )
         .unwrap();
     assert_eq!(bitmap.partial().bitmap_offset(), 0);
     assert_eq!(bitmap.partial().octets(), &[0x80, 0x81]);

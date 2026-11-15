@@ -34,7 +34,7 @@ const ADVERTISEMENT: Advertisement = match Advertisement::new(
     HtLocalCapabilities::new(0x100c, 0x03, 0xff, 0x01),
     match WmmParameters::new(
         4,
-        false,
+        oer_protocols_ieee80211_wire::extensions::wmm::Uapsd::NotSupported,
         [WmmAcParameters {
             admission_control_mandatory: false,
             aifsn: oer_portable_wire::U8::constant::<3>(),

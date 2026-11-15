@@ -1233,8 +1233,13 @@ impl<'s, T: 'static> Bench<'_, 's, T> {
         let address = OwnAddress::new(IndividualAddress::new(STATION).unwrap());
         let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
         let data = DataLink {
-            header: StaDataHeaderTemplate::new(address, bssid, false, LinkProtection::Open)
-                .unwrap(),
+            header: StaDataHeaderTemplate::new(
+                address,
+                bssid,
+                oer_protocols_ieee80211_wire::data::PeerQos::NonQos,
+                LinkProtection::Open,
+            )
+            .unwrap(),
             admission: AcAdmission::OPEN,
             retry: None,
             ht: None,

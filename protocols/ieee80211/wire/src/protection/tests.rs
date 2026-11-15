@@ -5,8 +5,14 @@ fn erp_information_round_trips_protection_and_membership_bits() {
     let erp = ErpProtection::from_information(Some(0x07));
     assert!(erp.use_protection());
     assert!(erp.long_preamble_required());
-    assert_eq!(erp.information(false), 0x06);
-    assert_eq!(ErpProtection::new(true, false).information(true), 0x03);
+    assert_eq!(erp.information().to_bytes(), [0x06]);
+    assert_eq!(
+        ErpProtection::new(ErpInformation::from_bytes([0]).with_use_protection(true))
+            .information()
+            .with_non_erp(true)
+            .to_bytes(),
+        [0x03]
+    );
     assert_eq!(ErpProtection::from_information(None), ErpProtection::NONE);
 }
 

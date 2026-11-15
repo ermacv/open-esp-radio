@@ -305,7 +305,7 @@ fn protected_data_frame_selects_the_recovered_legacy_or_qos_layout() {
         destination: [0x20, 0x21, 0x22, 0x23, 0x24, 0x25],
         sequence_number: seq(0x123),
         user_priority: 7,
-        peer_qos: true,
+        peer_qos: crate::data::PeerQos::Qos,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
         ether_type: 0x888e,
         payload: &[1, 2, 3],
@@ -319,7 +319,7 @@ fn protected_data_frame_selects_the_recovered_legacy_or_qos_layout() {
     assert_eq!(&output[42..len], &[1, 2, 3]);
 
     let len = StaProtectedDataFrame {
-        peer_qos: false,
+        peer_qos: crate::data::PeerQos::NonQos,
         ..frame
     }
     .encode(&mut output)
@@ -344,7 +344,7 @@ fn protected_data_frame_fully_overwrites_a_reused_dma_slot() {
         destination: [0x20, 0x21, 0x22, 0x23, 0x24, 0x25],
         sequence_number: seq(0x123),
         user_priority: 7,
-        peer_qos: true,
+        peer_qos: crate::data::PeerQos::Qos,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
         ether_type: 0x888e,
         payload: &[1, 2, 3],
@@ -373,7 +373,7 @@ fn protected_he_control_keeps_ccmp_immediately_after_qos() {
         destination: [0x20, 0x21, 0x22, 0x23, 0x24, 0x25],
         sequence_number: seq(0x123),
         user_priority: 0,
-        peer_qos: true,
+        peer_qos: crate::data::PeerQos::Qos,
         ccmp_header: [3, 0, 0, 0x20, 0, 0, 0, 0],
         ether_type: 0x0806,
         payload: &[1, 2, 3],
@@ -602,7 +602,7 @@ fn station_encoders_admit_complete_capacity_before_writing() {
         destination: BSSID,
         sequence_number,
         user_priority: 7,
-        peer_qos: true,
+        peer_qos: crate::data::PeerQos::Qos,
         ccmp_header: [0; CCMP_HEADER_LEN],
         ether_type: 0x0800,
         payload: &[1, 2, 3],
@@ -659,20 +659,31 @@ fn station_encoders_admit_complete_capacity_before_writing() {
     }
 }
 
-/// The RSN association of `akm`, without management protection unless
-/// `management` holds.
-fn rsn_association(akm: AssociationAkm, spp: Spp, management: bool) -> RsnAssociation {
+/// The RSN association of `akm`, with BIP-CMAC-128 when `management`
+/// protects management frames.
+fn rsn_association(
+    akm: AssociationAkm,
+    spp: Spp,
+    management: crate::security::ManagementProtection,
+) -> RsnAssociation {
     RsnAssociation {
         akm,
         spp,
-        management: management.then_some(crate::security::GroupManagementCipher::BipCmac128),
+        management: management
+            .capable()
+            .then_some(crate::security::GroupManagementCipher::BipCmac128),
         pmkid: None,
     }
 }
 
-/// SPP A-MSDU capable, then MFPC and MFPR when `protected`.
-const fn capabilities(protected: bool) -> u16 {
-    0x0400 | if protected { 0x00c0 } else { 0 }
+/// SPP A-MSDU capable, then the MFPC and MFPR of `management`.
+const fn capabilities(management: crate::security::ManagementProtection) -> u16 {
+    0x0400
+        | match management {
+            crate::security::ManagementProtection::Disabled => 0,
+            crate::security::ManagementProtection::Capable => 0x0080,
+            crate::security::ManagementProtection::Required => 0x00c0,
+        }
 }
 
 fn h2e() -> crate::security::rsn::RsnExtendedCapabilities {
@@ -682,8 +693,12 @@ fn h2e() -> crate::security::rsn::RsnExtendedCapabilities {
 #[test]
 fn a_selection_encodes_one_suite_and_the_chosen_capabilities() {
     let selected = SelectedRsn::rsn(
-        rsn_association(AssociationAkm::Psk, Spp::NotNegotiated, false),
-        capabilities(false),
+        rsn_association(
+            AssociationAkm::Psk,
+            Spp::NotNegotiated,
+            crate::security::ManagementProtection::Disabled,
+        ),
+        capabilities(crate::security::ManagementProtection::Disabled),
         None,
     );
     let bytes = selected.as_bytes();
@@ -702,9 +717,9 @@ fn a_selection_encodes_one_suite_and_the_chosen_capabilities() {
         rsn_association(
             AssociationAkm::Sae(SaePwe::HashToElement),
             Spp::Negotiated,
-            true,
+            crate::security::ManagementProtection::Required,
         ),
-        capabilities(true),
+        capabilities(crate::security::ManagementProtection::Required),
         Some(h2e()),
     );
     // MFPC, MFPR and SPP A-MSDU capable, then the RSNXE announcing H2E.
@@ -724,9 +739,9 @@ fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
         rsn_association(
             AssociationAkm::Sae(SaePwe::HuntingAndPecking),
             Spp::Negotiated,
-            true,
+            crate::security::ManagementProtection::Required,
         ),
-        capabilities(true),
+        capabilities(crate::security::ManagementProtection::Required),
         Some(h2e()),
     );
     let resumed = selected.with_pmkid(Pmkid([0x5a; 16])).unwrap();
@@ -741,8 +756,12 @@ fn a_resumed_sae_selection_lists_its_pmkid_before_the_rsnxe_once() {
     assert_eq!(resumed.with_pmkid(Pmkid([0xa5; 16])), None);
     assert_eq!(
         SelectedRsn::rsn(
-            rsn_association(AssociationAkm::Psk, Spp::Negotiated, false),
-            capabilities(false),
+            rsn_association(
+                AssociationAkm::Psk,
+                Spp::Negotiated,
+                crate::security::ManagementProtection::Disabled
+            ),
+            capabilities(crate::security::ManagementProtection::Disabled),
             None,
         )
         .with_pmkid(Pmkid([0x5a; 16])),
@@ -762,7 +781,7 @@ fn an_open_qos_data_frame_carries_its_tid_and_decodes_back() {
         destination: [0x30; 6],
         sequence_number: seq(0x12),
         priority: crate::qos::WmmUserPriority::UP5,
-        peer_qos: true,
+        peer_qos: crate::data::PeerQos::Qos,
         ether_type: 0x0800,
         payload: &[1, 2, 3],
     };
@@ -785,7 +804,7 @@ fn an_open_qos_data_frame_carries_its_tid_and_decodes_back() {
     // Without QoS the same MSDU is a plain data frame; a short output is
     // refused.
     let plain = StaOpenDataFrame {
-        peer_qos: false,
+        peer_qos: crate::data::PeerQos::NonQos,
         ..frame
     };
     let len = plain.encode(&mut output).unwrap();

@@ -283,11 +283,19 @@ fn every_erp_element_of_a_frame_counts_in_either_order_and_without_a_limit() {
     // Use Protection asserted first or last: it counts either way.
     assert_eq!(
         erp_of(&erp_beacon(&[0x02, 0x00])),
-        ErpProtection::new(true, false)
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(false)
+        )
     );
     assert_eq!(
         erp_of(&erp_beacon(&[0x00, 0x02])),
-        ErpProtection::new(true, false)
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(false)
+        )
     );
     // Five clear elements ask for nothing; there is no storage threshold.
     let five_clear = erp_beacon(&[0; 5]);
@@ -305,7 +313,14 @@ fn every_erp_element_of_a_frame_counts_in_either_order_and_without_a_limit() {
     let mut many = [0_u8; 200];
     many[180] = 0x04;
     many[199] = 0x02;
-    assert_eq!(erp_of(&erp_beacon(&many)), ErpProtection::new(true, true));
+    assert_eq!(
+        erp_of(&erp_beacon(&many)),
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true)
+        )
+    );
     // No element asks for nothing.
     assert_eq!(erp_of(&erp_beacon(&[])), ErpProtection::NONE);
 }
@@ -320,7 +335,14 @@ fn damaged_erp_elements_fail_closed() {
         ScanFrame::parse(&odd).unwrap().erp_elements(),
         Err(ErpElementsError::ErpLength)
     );
-    assert_eq!(erp_of(&odd), ErpProtection::new(true, true));
+    assert_eq!(
+        erp_of(&odd),
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true)
+        )
+    );
     // So is an element whose Length runs past the frame.
     let mut overrun = erp_beacon(&[0x00]);
     overrun.extend_from_slice(&[221, 9, 0]);
@@ -328,7 +350,14 @@ fn damaged_erp_elements_fail_closed() {
         ScanFrame::parse(&overrun).unwrap().erp_elements(),
         Err(ErpElementsError::MalformedElements)
     );
-    assert_eq!(erp_of(&overrun), ErpProtection::new(true, true));
+    assert_eq!(
+        erp_of(&overrun),
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true)
+        )
+    );
 }
 
 #[test]
@@ -358,7 +387,14 @@ fn a_damaged_frame_keeps_the_record_but_fails_its_erp_closed_until_a_sound_one()
             == oer_protocols_ieee80211_wire::scan::ElementList::Complete
     );
     assert_eq!(kept.record.ssid_bytes(), b"ap");
-    assert_eq!(erp(&table), ErpProtection::new(true, true));
+    assert_eq!(
+        erp(&table),
+        ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(true)
+        )
+    );
     // Repeating the damaged frame changes nothing.
     assert_eq!(
         table.observe_management(&damaged, 6, Some(-50), None),
@@ -382,7 +418,11 @@ fn the_scan_table_keeps_the_stations_erp_decision() {
     ));
     assert_eq!(
         table.observations().next().unwrap().erp,
-        oer_protocols_ieee80211_wire::protection::ErpProtection::new(true, false)
+        oer_protocols_ieee80211_wire::protection::ErpProtection::new(
+            oer_protocols_ieee80211_wire::protection::ErpInformation::from_bytes([0])
+                .with_use_protection(true)
+                .with_barker(false)
+        )
     );
 }
 

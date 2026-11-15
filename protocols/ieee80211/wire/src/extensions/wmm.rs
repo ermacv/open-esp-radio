@@ -35,11 +35,20 @@ pub struct WmmAcParameters {
     pub txop_limit_units_32_us: u16,
 }
 
+/// The U-APSD bit of a WMM Parameter Element's QoS Info field: the access
+/// point supports unscheduled automatic power-save delivery, or not (Wi-Fi
+/// Alliance WMM Specification 1.2, 2.2.1, Figure 6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Uapsd {
+    Supported,
+    NotSupported,
+}
+
 /// Complete WMM Parameter Set indexed by the standard ACI value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WmmParameterSet {
     pub parameter_set_count: u8,
-    pub uapsd: bool,
+    pub uapsd: Uapsd,
     access_categories: [WmmAcParameters; 4],
 }
 
@@ -48,7 +57,7 @@ impl WmmParameterSet {
     /// category, indexed by ACI.
     pub const fn new(
         parameter_set_count: u8,
-        uapsd: bool,
+        uapsd: Uapsd,
         access_categories: [WmmAcParameters; 4],
     ) -> Self {
         Self {
@@ -68,7 +77,7 @@ impl WmmParameterSet {
     /// ACI order.
     pub const STANDARD_DEFAULT: Self = Self::new(
         0,
-        false,
+        Uapsd::NotSupported,
         [
             // AC_BE: aCWmin, aCWmax, AIFSN 3.
             WmmAcParameters::contention(
@@ -106,7 +115,7 @@ impl WmmParameterSet {
     /// (AIFSN 2) with aCWmin 15 and aCWmax 1023 and holds no TXOP.
     pub const DCF: Self = Self::new(
         0,
-        false,
+        Uapsd::NotSupported,
         [WmmAcParameters::contention(
             oer_portable_wire::U8::constant::<2>(),
             oer_portable_wire::U8::constant::<4>(),
@@ -139,7 +148,7 @@ impl WmmAcParameters {
 /// no numeric category index or offset calculation participates in encoding.
 pub(crate) const fn encode_wmm_parameter_element(
     parameter_set_count: u8,
-    uapsd: bool,
+    uapsd: Uapsd,
     categories: [WmmAcParameters; 4],
 ) -> [u8; WMM_PARAMETER_ELEMENT_LEN] {
     const fn record(category: WmmAccessCategory, parameters: WmmAcParameters) -> [u8; 4] {
@@ -177,7 +186,7 @@ pub(crate) const fn encode_wmm_parameter_element(
         WMM_PARAMETER_SUBTYPE,
         WMM_VERSION,
         QosInfo::from_bytes([parameter_set_count])
-            .with_uapsd(uapsd)
+            .with_uapsd(matches!(uapsd, Uapsd::Supported))
             .to_bytes()[0],
         0, // Reserved octet before the AC records.
         be0,
@@ -267,7 +276,11 @@ pub fn parse_wmm_parameter_element(element: &[u8]) -> Option<WmmParameterSet> {
 
     Some(WmmParameterSet {
         parameter_set_count: QosInfo::from_bytes([qos_info]).count(),
-        uapsd: QosInfo::from_bytes([qos_info]).uapsd(),
+        uapsd: if QosInfo::from_bytes([qos_info]).uapsd() {
+            Uapsd::Supported
+        } else {
+            Uapsd::NotSupported
+        },
         access_categories,
     })
 }

@@ -112,6 +112,22 @@ impl HtMcs {
     }
 }
 
+/// The guard interval of an HT PPDU: 800 ns, or the short 400 ns one
+/// (IEEE Std 802.11-2020, 19.3.9.4.6, the Short GI field of HT-SIG).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum HtGuardInterval {
+    Normal,
+    Short,
+}
+
+/// Whether an HE SU PPDU uses dual carrier modulation (IEEE 802.11ax-2021,
+/// 27.3.12.10, the DCM field of HE-SIG-A).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum Dcm {
+    Used,
+    NotUsed,
+}
+
 /// One HT rate.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct HtRate {
@@ -122,12 +138,16 @@ pub struct HtRate {
 
 impl HtRate {
     /// An HT rate; `None` for a bandwidth HT does not have (80 or 160 MHz).
-    pub const fn new(mcs: HtMcs, bandwidth: PpduBandwidth, short_gi: bool) -> Option<Self> {
+    pub const fn new(
+        mcs: HtMcs,
+        bandwidth: PpduBandwidth,
+        guard_interval: HtGuardInterval,
+    ) -> Option<Self> {
         match bandwidth {
             PpduBandwidth::Mhz20 | PpduBandwidth::Mhz40 => Some(Self {
                 mcs,
                 bandwidth,
-                short_gi,
+                short_gi: matches!(guard_interval, HtGuardInterval::Short),
             }),
             PpduBandwidth::Mhz80 | PpduBandwidth::Mhz160 => None,
         }
@@ -374,8 +394,9 @@ impl HeRate {
         bandwidth: PpduBandwidth,
         gi_ltf: HeGiLtf,
         fec: FecCoding,
-        dcm: bool,
+        dcm: Dcm,
     ) -> Option<Self> {
+        let dcm = matches!(dcm, Dcm::Used);
         if dcm && (!matches!(mcs.0, 0 | 1 | 3 | 4) || spatial_streams.0 > 2) {
             return None;
         }

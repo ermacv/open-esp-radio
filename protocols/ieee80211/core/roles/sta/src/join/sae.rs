@@ -202,14 +202,14 @@ impl StaSaeAuthentication {
         let StaSaePhase::Committed { commit, pwe } = &self.phase else {
             return StaSaeEvent::Irrelevant(self);
         };
-        let h2e = matches!(pwe, SaePwe::HashToElement);
+        let pwe = *pwe;
         if status == status_code::ANTI_CLOGGING_TOKEN_REQUIRED {
-            let token = match anti_clogging_token(body, h2e) {
+            let token = match anti_clogging_token(body, pwe) {
                 Ok(token) if token.len() <= STA_SAE_TOKEN_CAPACITY => token,
                 Ok(_) => return StaSaeEvent::Failed(StaSaeFailure::TokenTooLong),
                 Err(error) => return StaSaeEvent::Failed(StaSaeFailure::Protocol(error.into())),
             };
-            return match encode_commit(commit, *pwe, Some(token)) {
+            return match encode_commit(commit, pwe, Some(token)) {
                 Ok(transmission) => StaSaeEvent::Transmit {
                     authentication: self,
                     transmission,
@@ -217,7 +217,7 @@ impl StaSaeAuthentication {
                 Err(error) => StaSaeEvent::Failed(error),
             };
         }
-        if status != commit_status(*pwe) {
+        if status != commit_status(pwe) {
             return StaSaeEvent::Failed(
                 if matches!(
                     status,
@@ -231,7 +231,7 @@ impl StaSaeAuthentication {
                 },
             );
         }
-        let peer = match SaeCommitValues::parse(body, h2e) {
+        let peer = match SaeCommitValues::parse(body, pwe) {
             Ok(peer) => peer,
             Err(error) => return StaSaeEvent::Failed(StaSaeFailure::Protocol(error.into())),
         };
@@ -299,7 +299,7 @@ fn encode_commit(
     let mut bytes = [0; STA_SAE_BODY_CAPACITY];
     let length = commit
         .values()
-        .encode(token, matches!(pwe, SaePwe::HashToElement), &mut bytes)
+        .encode(token, pwe, &mut bytes)
         .map_err(|error| StaSaeFailure::Protocol(error.into()))?;
     let body = heapless::Vec::from_slice(
         bytes

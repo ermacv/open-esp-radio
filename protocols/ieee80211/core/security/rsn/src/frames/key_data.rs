@@ -139,7 +139,7 @@ impl<const N: usize> RsnPlainKeyData<N> {
             .split_first_chunk_mut::<GTK_KDE_LEN>()
             .ok_or(RsnFrameError::CapacityExceeded)?;
         *gtk_kde = GtkKde {
-            info: GtkKdeInfo::new(gtk.key_id, gtk.transmit),
+            info: GtkKdeInfo::new(gtk.key_id).with_transmit(gtk.transmit),
             key: gtk.key(),
         }
         .encode();

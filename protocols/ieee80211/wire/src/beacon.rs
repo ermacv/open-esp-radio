@@ -91,7 +91,7 @@ impl<const OCTETS: usize> TimVirtualBitmap<OCTETS> {
     pub fn set(
         &mut self,
         association_id: TimAssociationId,
-        buffered: bool,
+        traffic: crate::station_beacon::BufferedTraffic,
     ) -> Result<(), TimBitmapError> {
         let association_id = association_id.get();
         let octet = usize::from(association_id / 8);
@@ -102,7 +102,7 @@ impl<const OCTETS: usize> TimVirtualBitmap<OCTETS> {
             });
         };
         let mask = 1_u8 << (association_id % 8);
-        if buffered {
+        if traffic == crate::station_beacon::BufferedTraffic::Buffered {
             *value |= mask;
         } else {
             *value &= !mask;
@@ -571,7 +571,11 @@ pub fn write_tim_partial_virtual_bitmap(
 /// (IEEE Std 802.11-2020 9.4.1.10): the transmitter writes the TSF there as
 /// the beacon goes out. The DTIM count and its group indication, the beacon
 /// that carries them, and `(count, period)`.
-pub fn stamp(bytes: &mut [u8], tsf: u64, group_pending: bool) -> Option<(u8, u8)> {
+pub fn stamp(
+    bytes: &mut [u8],
+    tsf: u64,
+    group: crate::station_beacon::BufferedTraffic,
+) -> Option<(u8, u8)> {
     const FIXED_BEACON_LENGTH: usize = 24 + 8 + 2 + 2;
     if bytes.len() < FIXED_BEACON_LENGTH {
         return None;
@@ -600,7 +604,7 @@ pub fn stamp(bytes: &mut [u8], tsf: u64, group_pending: bool) -> Option<(u8, u8)
     // released by the corresponding TX-done edge.
     let bitmap_control = bytes.get_mut(tim_offset.checked_add(4)?)?;
     *bitmap_control = TimBitmapControl::from_bytes([*bitmap_control])
-        .with_group(count == 0 && group_pending)
+        .with_group(count == 0 && group == crate::station_beacon::BufferedTraffic::Buffered)
         .to_bytes()[0];
     Some((count, period))
 }

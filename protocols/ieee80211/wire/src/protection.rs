@@ -25,21 +25,15 @@ impl ErpProtection {
     /// carries no protection requirement.
     pub const fn from_information(information: Option<u8>) -> Self {
         match information {
-            Some(value) => Self::new(
-                ErpInformation::from_bytes([value]).use_protection(),
-                ErpInformation::from_bytes([value]).barker(),
-            ),
+            Some(value) => Self::new(ErpInformation::from_bytes([value])),
             None => Self::NONE,
         }
     }
 
-    pub const fn new(use_protection: bool, long_preamble_required: bool) -> Self {
-        Self(
-            ErpInformation::from_bytes([0])
-                .with_use_protection(use_protection)
-                .with_barker(long_preamble_required)
-                .to_bytes()[0],
-        )
+    /// The requirements of the ERP Information `information`: its
+    /// NonERP_Present bit is not kept.
+    pub const fn new(information: ErpInformation) -> Self {
+        Self(information.with_non_erp(false).to_bytes()[0])
     }
 
     pub const fn use_protection(self) -> bool {
@@ -51,11 +45,10 @@ impl ErpProtection {
         ErpInformation::from_bytes([self.0]).barker()
     }
 
-    /// Encode the ERP Information payload with NonERP_Present.
-    pub const fn information(self, non_erp_present: bool) -> u8 {
+    /// The ERP Information field, NonERP_Present clear: the advertiser
+    /// sets it ([`ErpInformation::with_non_erp`]).
+    pub const fn information(self) -> ErpInformation {
         ErpInformation::from_bytes([self.0])
-            .with_non_erp(non_erp_present)
-            .to_bytes()[0]
     }
 }
 
@@ -129,7 +122,10 @@ pub struct ApBssProtection {
 
 impl ApBssProtection {
     pub const fn erp_information(self) -> u8 {
-        self.erp.information(self.non_erp_present)
+        self.erp
+            .information()
+            .with_non_erp(self.non_erp_present)
+            .to_bytes()[0]
     }
 }
 

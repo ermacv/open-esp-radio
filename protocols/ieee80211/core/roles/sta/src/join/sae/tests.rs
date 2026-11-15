@@ -35,7 +35,11 @@ fn access_point_commit(access_point: &SaeCommit) -> Vec<u8> {
     let mut body = [0; SAE_COMMIT_LEN];
     access_point
         .values()
-        .encode(None, false, &mut body)
+        .encode(
+            None,
+            oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+            &mut body,
+        )
         .unwrap();
     from_access_point(1, 0, &body)
 }
@@ -59,7 +63,11 @@ fn a_full_exchange_yields_the_access_point_pmk() {
     let access_point = commit(BSSID, LOCAL, 0x40);
     let (station, sent) = start(Instant::EPOCH);
     assert_eq!((sent.transaction, sent.status_code), (1, 0));
-    let station_values = SaeCommitValues::parse(sent.body(), false).unwrap();
+    let station_values = SaeCommitValues::parse(
+        sent.body(),
+        oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+    )
+    .unwrap();
     let StaSaeEvent::Transmit {
         authentication: station,
         transmission: confirm,
@@ -145,7 +153,11 @@ fn a_wrong_password_or_a_refusal_fails() {
         [0x41; 32],
     )
     .unwrap();
-    let values = SaeCommitValues::parse(sent.body(), false).unwrap();
+    let values = SaeCommitValues::parse(
+        sent.body(),
+        oer_protocols_ieee80211_wire::security::SaePwe::HuntingAndPecking,
+    )
+    .unwrap();
     let StaSaeEvent::Transmit {
         authentication: station,
         ..
