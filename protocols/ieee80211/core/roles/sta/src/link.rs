@@ -45,9 +45,7 @@
 use oer_protocols_ieee80211_contracts_port::{
     Ieee80211Capabilities, LayoutError, RxMetadata, TxBufferClass, TxBufferMemory,
 };
-use oer_protocols_ieee80211_core_upper_mac::ccmp::{
-    CcmpRxReplayEpoch, CcmpTxPacketNumber, InstalledCcmpTxKey,
-};
+use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch;
 use oer_protocols_ieee80211_core_upper_mac::receive::{AdmittedData, Integrity, RxDropReason};
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
@@ -60,23 +58,14 @@ pub use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_radio_port::PoolPath;
 
 use crate::data::MsduDelivery;
-use crate::data::plane::{DataLink, TxWindow};
 use crate::epoch::LinkEpoch;
 use crate::machine::{
     EapolProtection, StaEapol, StaFrame, StaInput, StaReceived, StaRxError, StaTokens, StaTransmit,
     TxRefusal, sta_frame,
 };
 use crate::receive::{Received, sort};
-
-/// The space a station frame's Sequence Number comes from.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LinkSpace {
-    /// The station's own space: its management frames, its non-QoS data
-    /// and EAPOL, and every data MPDU of a non-QoS BSS.
-    Station,
-    /// A TID's space of a QoS BSS, which the data of that TID shares.
-    Tid(WmmUserPriority),
-}
+use oer_protocols_ieee80211_core_datapath::numbers::{LinkSpace, TxNumbers};
+use oer_protocols_ieee80211_core_datapath::plane::{DataLink, TxWindow};
 
 /// Who numbers a station frame.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -99,128 +88,52 @@ pub enum FrameNumber {
     Keyed,
 }
 
-/// A pairwise key whose transmit packet numbers the link draws from.
-pub trait TxKey {
-    /// The key's transmit packet numbers.
-    fn packet_numbers(&self) -> &CcmpTxPacketNumber;
+/// Number one station frame of the link from `numbers`: a frame the
+/// station left to the link ([`FrameNumber::Link`]) takes the next Sequence
+/// Number of its space, written into its MAC header in its buffer and into
+/// its frame description; any other frame stays as the station wrote it.
+/// The number is taken whether or not the frame goes later, as the
+/// station's own numbering does. Its packet number is the caller's to draw
+/// from [`TxNumbers::key`], once its rate is known.
+///
+/// # Errors
+///
+/// A TID's space on a non-QoS BSS ([`TxRefusal::LinkChanged`]), or a
+/// buffer whose memory or header no longer holds the frame
+/// ([`TxRefusal::Layout`]).
+pub fn number<P, T: StaTokens, K: Ieee80211Capabilities>(
+    numbers: &mut TxNumbers<P>,
+    transmit: &mut StaTransmit<'_, T, K>,
+) -> Result<(), TxRefusal> {
+    number_frame(
+        numbers,
+        transmit.number,
+        &mut transmit.frame,
+        &mut transmit.buffer,
+        transmit.plan,
+    )
 }
 
-impl<K> TxKey for InstalledCcmpTxKey<K> {
-    fn packet_numbers(&self) -> &CcmpTxPacketNumber {
-        InstalledCcmpTxKey::packet_numbers(self)
-    }
-}
-
-/// The link's transmit numbers: the station's own sequence space, each
-/// TID's space on a QoS BSS and the pairwise key `P` of a protected link,
-/// whose packet numbers every protected MPDU of the link draws from.
-pub struct TxNumbers<P> {
-    station: SequenceCounter,
-    tids: Option<[SequenceCounter; 8]>,
-    key: Option<P>,
-}
-
-impl<P> TxNumbers<P> {
-    pub(crate) const fn new(
-        station: SequenceCounter,
-        tids: Option<[SequenceCounter; 8]>,
-        key: Option<P>,
-    ) -> Self {
-        Self { station, tids, key }
-    }
-
-    /// Whether the link is a QoS BSS's: a sequence space per TID.
-    pub const fn qos(&self) -> bool {
-        self.tids.is_some()
-    }
-
-    /// The link's pairwise key; `None` on an open link.
-    pub const fn key(&self) -> Option<&P> {
-        self.key.as_ref()
-    }
-
-    /// The next Sequence Number of data of `tid`: its TID's on a QoS BSS,
-    /// the station's own otherwise.
-    pub fn next(&self, tid: WmmUserPriority) -> SequenceNumber {
-        match &self.tids {
-            Some(tids) => tid.select(tids).peek(),
-            None => self.station.peek(),
-        }
-    }
-
-    /// The counter data of `tid` takes its numbers from, and the key its
-    /// packet numbers come from.
-    pub(crate) fn data_and_key(
-        &mut self,
-        tid: WmmUserPriority,
-    ) -> (&mut SequenceCounter, Option<&P>) {
-        let counter = match &mut self.tids {
-            Some(tids) => tid.select_mut(tids),
-            None => &mut self.station,
-        };
-        (counter, self.key.as_ref())
-    }
-
-    /// The counter of `space`; `None` for a TID of a non-QoS BSS.
-    fn space(&mut self, space: LinkSpace) -> Option<&mut SequenceCounter> {
-        match (space, &mut self.tids) {
-            (LinkSpace::Station, _) => Some(&mut self.station),
-            (LinkSpace::Tid(tid), Some(tids)) => Some(tid.select_mut(tids)),
-            (LinkSpace::Tid(_), None) => None,
-        }
-    }
-
-    /// Number one station frame of the link: a frame the station left to
-    /// the link ([`FrameNumber::Link`]) takes the next Sequence Number of
-    /// its space, written into its MAC header in its buffer and into its
-    /// frame description; any other frame stays as the station wrote it.
-    /// The number is taken whether or not the frame goes later, as the
-    /// station's own numbering does. Its packet number is the caller's to
-    /// draw from [`Self::key`], once its rate is known.
-    ///
-    /// # Errors
-    ///
-    /// A TID's space on a non-QoS BSS ([`TxRefusal::LinkChanged`]), or a
-    /// buffer whose memory or header no longer holds the frame
-    /// ([`TxRefusal::Layout`]).
-    pub fn number<T: StaTokens, K: Ieee80211Capabilities>(
-        &mut self,
-        transmit: &mut StaTransmit<'_, T, K>,
-    ) -> Result<(), TxRefusal> {
-        self.number_frame(
-            transmit.number,
-            &mut transmit.frame,
-            &mut transmit.buffer,
-            transmit.plan,
-        )
-    }
-
-    /// Number one station frame of the link from its parts, as
-    /// [`Self::number`] does for a whole transmission: the frame's
-    /// description `frame`, the `buffer` holding it, its rate `plan` and who
-    /// numbers it (`number`).
-    ///
-    /// # Errors
-    ///
-    /// As [`Self::number`].
-    pub fn number_frame<K: Ieee80211Capabilities, C: TxBufferClass>(
-        &mut self,
-        number: FrameNumber,
-        frame: &mut StaFrame<K, C>,
-        buffer: &mut impl TxBufferMemory,
-        plan: crate::machine::StaRatePlan,
-    ) -> Result<(), TxRefusal> {
-        let FrameNumber::Link { space, .. } = number else {
-            // The station numbered it.
-            return Ok(());
-        };
-        let sequence = self.space(space).ok_or(TxRefusal::LinkChanged)?.take();
-        renumber(frame, buffer, plan, sequence)
-    }
-
-    pub(crate) fn into_parts(self) -> (SequenceCounter, Option<[SequenceCounter; 8]>, Option<P>) {
-        (self.station, self.tids, self.key)
-    }
+/// Number one station frame of the link from its parts, as [`number`]
+/// does for a whole transmission: the frame's description `frame`, the
+/// `buffer` holding it, its rate `plan` and who numbers it (`number`).
+///
+/// # Errors
+///
+/// As [`number`].
+pub fn number_frame<P, K: Ieee80211Capabilities, C: TxBufferClass>(
+    numbers: &mut TxNumbers<P>,
+    number: FrameNumber,
+    frame: &mut StaFrame<K, C>,
+    buffer: &mut impl TxBufferMemory,
+    plan: crate::machine::StaRatePlan,
+) -> Result<(), TxRefusal> {
+    let FrameNumber::Link { space, .. } = number else {
+        // The station numbered it.
+        return Ok(());
+    };
+    let sequence = numbers.take(space).ok_or(TxRefusal::LinkChanged)?;
+    renumber(frame, buffer, plan, sequence)
 }
 
 /// Write `sequence` into the Sequence Control of the frame `buffer` holds

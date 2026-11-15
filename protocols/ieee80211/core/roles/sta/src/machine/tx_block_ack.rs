@@ -35,7 +35,7 @@ pub struct StaTxBlockAckPolicy {
     /// How long an agreement may carry no data before the station ends it.
     pub inactivity: Duration,
     /// How long an aggregate's missing member is retried.
-    pub retry_members: crate::data::AggregateRetry,
+    pub retry_members: oer_protocols_ieee80211_core_datapath::AggregateRetry,
 }
 
 /// Why a policy builds no originator.
@@ -70,7 +70,7 @@ pub struct StaTxBlockAck {
     originator: TxBlockAckOriginator<TX_BLOCK_ACK_MAX_TIDS>,
     retry: TxBlockAckRetry,
     inactivity: Duration,
-    retry_members: crate::data::AggregateRetry,
+    retry_members: oer_protocols_ieee80211_core_datapath::AggregateRetry,
     /// When data of each TID last came while the association admits agreements.
     traffic: [Option<Instant>; TX_BLOCK_ACK_MAX_TIDS],
     /// TIDs whose ended agreement owes the access point a DELBA, one bit each.
@@ -273,7 +273,9 @@ impl StaTxBlockAck {
     }
 
     /// How long an aggregate's missing member is retried.
-    pub(crate) const fn retry_members(&self) -> crate::data::AggregateRetry {
+    pub(crate) const fn retry_members(
+        &self,
+    ) -> oer_protocols_ieee80211_core_datapath::AggregateRetry {
         self.retry_members
     }
 

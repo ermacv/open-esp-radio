@@ -1333,6 +1333,10 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
         protocol_role("protocols/bluetooth/hci"),
         Some(ProtocolRole::Core)
     );
+    assert_eq!(
+        protocol_role("protocols/ieee80211/core/datapath"),
+        Some(ProtocolRole::Core)
+    );
     for path in [
         "protocols/radio/port",
         "protocols/hil/protocol",
@@ -6297,11 +6301,7 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         2,
         BY_P3,
     ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/data/plane.rs",
-        1,
-        BY_P3,
-    ),
+    ("protocols/ieee80211/core/datapath/src/plane.rs", 1, BY_P3),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs",
         2,
@@ -7239,11 +7239,7 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         1,
         BY_P3,
     ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/data/plane.rs",
-        1,
-        BY_P3,
-    ),
+    ("protocols/ieee80211/core/datapath/src/plane.rs", 1, BY_P3),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs",
         1,
@@ -9367,27 +9363,27 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::ArenaBook.published",
+        "protocols/ieee80211/core/datapath/src/plane.rs::ArenaBook.published",
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::ArenaBook.right",
+        "protocols/ieee80211/core/datapath/src/plane.rs::ArenaBook.right",
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataLink.retry",
+        "protocols/ieee80211/core/datapath/src/plane.rs::DataLink.retry",
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataPlane.link",
+        "protocols/ieee80211/core/datapath/src/plane.rs::DataPlane.link",
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/data/plane.rs::DataPlane.rate",
+        "protocols/ieee80211/core/datapath/src/plane.rs::DataPlane.rate",
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/events.rs::AggregateSettled.rate",
+        "protocols/ieee80211/core/datapath/src/events.rs::AggregateSettled.rate",
         BY_P3,
     ),
     (
@@ -9407,15 +9403,11 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/link.rs::LinkReturn.tids",
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/link.rs::RxLink.replay",
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/link.rs::TxNumbers.tids",
+        "protocols/ieee80211/core/datapath/src/numbers.rs::TxNumbers.tids",
         BY_P3,
     ),
     (

@@ -323,10 +323,10 @@ impl<'p, 'id: 'p> World<'p, 'id> {
 /// The holes of the settlement it saw.
 struct Holes(Option<Option<u32>>);
 
-impl EventSink<StaEvent> for Holes {
+impl EventSink<DataEvent> for Holes {
     const ENABLED: bool = true;
-    fn event(&mut self, event: StaEvent) {
-        if let StaEvent::AggregateSettled(settled) = event {
+    fn event(&mut self, event: DataEvent) {
+        if let DataEvent::AggregateSettled(settled) = event {
             self.0 = Some(settled.holes);
         }
     }
