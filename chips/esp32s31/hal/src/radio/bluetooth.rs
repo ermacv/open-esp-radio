@@ -1203,8 +1203,8 @@ impl InterruptOutputPreparedOwner {
             registers: self.registers.stage_for_handler(),
             #[cfg(feature = "bluetooth-engine")]
             diagnostic_selection: DiagnosticSelection::None,
-            fault_acknowledged: false,
-            released: false,
+            fault: registers::FaultHistory::None,
+            output: Output::Held,
         }
     }
 
@@ -1236,8 +1236,16 @@ pub struct InterruptRegistersOwner {
     registers: BluetoothInterruptRegisters,
     #[cfg(feature = "bluetooth-engine")]
     diagnostic_selection: DiagnosticSelection,
-    fault_acknowledged: bool,
-    released: bool,
+    fault: registers::FaultHistory,
+    output: Output,
+}
+
+/// Whether the output of the handler's epoch is released: once it is, no
+/// scheduler-run group is enabled again.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Output {
+    Held,
+    Released,
 }
 
 #[cfg(feature = "bluetooth-engine")]
@@ -1253,7 +1261,7 @@ impl InterruptRegistersOwner {
     pub fn prepare_scheduler_run_interrupts(
         &mut self,
     ) -> Option<BluetoothSchedulerRunInterruptsPrepared> {
-        if self.released {
+        if self.output == Output::Released {
             return None;
         }
         Some(self.registers.prepare_scheduler_run_interrupts())
@@ -1282,7 +1290,9 @@ impl InterruptRegistersOwner {
     /// fault it acknowledges refuses the output release of this epoch.
     pub fn capture_primary_and_acknowledge(&mut self) -> Option<BluetoothPrimaryInterruptEpoch> {
         let epoch = self.registers.capture_primary_and_acknowledge()?;
-        self.fault_acknowledged |= epoch.fault_sources().is_fault();
+        if epoch.fault_sources().is_fault() {
+            self.fault = registers::FaultHistory::Acknowledged;
+        }
         Some(epoch)
     }
 
@@ -1405,7 +1415,7 @@ impl InterruptRegistersOwner {
     ) -> Result<BluetoothOutputIdleSampled, BluetoothControllerOutputReleaseError> {
         let busy = self.release_busy_sample(settle)?;
         self.registers
-            .sample_idle_output(busy, self.fault_acknowledged, _admitted.task_enable)?;
+            .sample_idle_output(busy, self.fault, _admitted.task_enable)?;
         Ok(BluetoothOutputIdleSampled { _private: () })
     }
 
@@ -1418,7 +1428,7 @@ impl InterruptRegistersOwner {
         _heads: &BluetoothSchedulerHeadsAbsent,
     ) -> Result<BluetoothDynamicSourcesMasked, BluetoothControllerOutputReleaseError> {
         self.registers
-            .mask_output_dynamic_sources(self.fault_acknowledged, _heads.task_enable)?;
+            .mask_output_dynamic_sources(self.fault, _heads.task_enable)?;
         Ok(BluetoothDynamicSourcesMasked { _private: () })
     }
 
@@ -1443,14 +1453,14 @@ impl InterruptRegistersOwner {
     ) -> Result<BluetoothOutputReleased, BluetoothControllerOutputReleaseError> {
         let busy = self.release_busy_sample(settle)?;
         self.registers
-            .release_idle_output(busy, self.fault_acknowledged, _run.task_enable)?;
-        self.released = true;
+            .release_idle_output(busy, self.fault, _run.task_enable)?;
+        self.output = Output::Released;
         Ok(BluetoothOutputReleased { _private: () })
     }
 
     /// Whether the output of this epoch is released.
     pub const fn output_released(&self) -> bool {
-        self.released
+        matches!(self.output, Output::Released)
     }
 
     /// The released bank, leaving its handler. Performs no MMIO.
@@ -1462,7 +1472,7 @@ impl InterruptRegistersOwner {
         self,
         _released: BluetoothOutputReleased,
     ) -> Result<InterruptOutputReleasedOwner, Self> {
-        if !self.released {
+        if self.output == Output::Held {
             return Err(self);
         }
         Ok(InterruptOutputReleasedOwner {
@@ -2114,8 +2124,8 @@ impl ControllerHal<'_> {
         scheduler_execution_lock::clear_start(self.registers, &mut lock);
     }
 
-    /// Admit one execution modify of `index`, in list-deletion mode when
-    /// `list_deletion`. Nothing is written until its first step.
+    /// Admit one execution modify of `index`, of `kind`. Nothing is written
+    /// until its first step.
     ///
     /// The engine's reconciliation or deletion state selects `index` and retains
     /// this execution-modify state through command-one START clear.
@@ -2123,9 +2133,9 @@ impl ControllerHal<'_> {
     pub(crate) fn admit_scheduler_execution_modify(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
-        list_deletion: bool,
+        kind: scheduler_execution_modify::ExecutionModifyKind,
     ) -> BluetoothSchedulerExecutionModify {
-        BluetoothSchedulerExecutionModify::new(index, list_deletion)
+        BluetoothSchedulerExecutionModify::new(index, kind)
     }
 
     /// Advance one finite execution-modify step under interrupt

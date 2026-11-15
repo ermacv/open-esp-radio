@@ -63,6 +63,7 @@ pub use controller::{
 };
 pub use device_table::BluetoothDeviceTablePublished;
 pub use direction_finding::BluetoothDirectionFindingDisabledBaselinePrepared;
+pub(crate) use interrupt::retirement::FaultHistory;
 pub use interrupt::{
     BluetoothInterruptOutputPrepared, BluetoothNrtInterruptAcknowledged,
     BluetoothNrtInterruptFault, BluetoothPrimaryFaultSources, BluetoothPrimaryInterruptEpoch,

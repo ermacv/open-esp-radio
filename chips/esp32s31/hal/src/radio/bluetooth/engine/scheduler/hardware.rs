@@ -14,6 +14,7 @@
 #![deny(unsafe_code)]
 
 use crate::radio::bluetooth::engine::SchedulerItemLink;
+use crate::radio::bluetooth::scheduler_execution_modify::ExecutionModifyKind;
 
 use crate::radio::bluetooth::engine::scheduler::{
     SchedulerAction, SchedulerIdleInsertion, SchedulerObservation, SchedulerTransactionFault,
@@ -53,7 +54,7 @@ pub(crate) trait SchedulerHardwareBackend {
 
     fn publish_execution_lock(&mut self, at: SchedulerItemLink) -> Lock<Self>;
     fn release_execution_lock(&mut self, lock: Lock<Self>);
-    fn publish_execution_modify(&mut self, list_deletion: bool) -> Modify<Self>;
+    fn publish_execution_modify(&mut self, kind: ExecutionModifyKind) -> Modify<Self>;
     fn release_execution_modify(&mut self, modify: Modify<Self>);
     fn publish_lock_modify(&mut self, at: SchedulerItemLink) -> LockModify<Self>;
     fn publish_head(&mut self, head: Option<SchedulerItemLink>);
@@ -324,10 +325,11 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
                 backend.release_execution_lock(self.lock.take().expect("admitted"));
             }
             SchedulerAction::PublishExecutionModify => {
-                self.modify = Some(backend.publish_execution_modify(false));
+                self.modify = Some(backend.publish_execution_modify(ExecutionModifyKind::Modify));
             }
             SchedulerAction::PublishExecutionModifyListDeletion => {
-                self.modify = Some(backend.publish_execution_modify(true));
+                self.modify =
+                    Some(backend.publish_execution_modify(ExecutionModifyKind::ListDeletion));
             }
             SchedulerAction::ReleaseExecutionModify => {
                 backend.release_execution_modify(self.modify.take().expect("admitted"));

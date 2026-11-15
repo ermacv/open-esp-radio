@@ -31,27 +31,44 @@ use oer_portable_time::settle::Unsettled;
 
 use oer_chips_family_radio_bluetooth_ports::phase::ExecutionModifyPhase as Phase;
 
+/// What an execution modify publishes: the modify itself, or the deletion
+/// of its list.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ExecutionModifyKind {
+    Modify,
+    ListDeletion,
+}
+
+/// Whether a published attempt found a conflicting progress state, so its
+/// START is cleared and the attempt starts over once it settles.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Repeat {
+    #[default]
+    No,
+    Again,
+}
+
 /// One execution-modify request of one hardware list and its progress.
 #[derive(Debug)]
 #[must_use = "an admitted execution modify must be stepped and its START cleared"]
 pub struct BluetoothSchedulerExecutionModify {
     index: BluetoothSchedulerHardwareListIndex,
-    list_deletion: bool,
+    kind: ExecutionModifyKind,
     phase: Phase,
-    repeat: bool,
+    repeat: Repeat,
     published: Option<BluetoothSchedulerExecutionModifyPublished>,
 }
 
 impl BluetoothSchedulerExecutionModify {
     pub(crate) const fn new(
         index: BluetoothSchedulerHardwareListIndex,
-        list_deletion: bool,
+        kind: ExecutionModifyKind,
     ) -> Self {
         Self {
             index,
-            list_deletion,
+            kind,
             phase: Phase::Preamble,
-            repeat: false,
+            repeat: Repeat::No,
             published: None,
         }
     }
@@ -73,7 +90,7 @@ trait Control {
     fn publish(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
-        list_deletion: bool,
+        kind: ExecutionModifyKind,
     ) -> Self::Published;
     async fn repeats(&mut self) -> Result<bool, Self::Error>;
     fn ready(&mut self) -> bool;
@@ -85,9 +102,9 @@ trait Control {
 
 struct State<'a, P> {
     index: BluetoothSchedulerHardwareListIndex,
-    list_deletion: bool,
+    kind: ExecutionModifyKind,
     phase: &'a mut Phase,
-    repeat: &'a mut bool,
+    repeat: &'a mut Repeat,
     published: &'a mut Option<P>,
 }
 
@@ -103,7 +120,7 @@ async fn step<C: Control>(
                     return Ok(Pending);
                 }
                 hw.select_progress().await?;
-                *state.published = Some(hw.publish(state.index, state.list_deletion));
+                *state.published = Some(hw.publish(state.index, state.kind));
                 *state.phase = Phase::Progress { selected: true };
             }
             Phase::Progress { selected } => {
@@ -111,7 +128,7 @@ async fn step<C: Control>(
                     hw.select_progress().await?;
                 }
                 if hw.repeats().await? {
-                    *state.repeat = true;
+                    *state.repeat = Repeat::Again;
                     *state.phase = Phase::Progress { selected: false };
                     return Ok(Pending);
                 }
@@ -131,7 +148,7 @@ async fn step<C: Control>(
                     *state.phase = Phase::Settle { selected: false };
                     return Ok(Pending);
                 }
-                if core::mem::take(state.repeat) {
+                if core::mem::take(state.repeat) == Repeat::Again {
                     let published = state
                         .published
                         .take()
@@ -177,12 +194,11 @@ impl<D: SchedulerDoorbell> Control for Hardware<'_, D> {
     fn publish(
         &mut self,
         index: BluetoothSchedulerHardwareListIndex,
-        list_deletion: bool,
+        kind: ExecutionModifyKind,
     ) -> BluetoothSchedulerExecutionModifyPublished {
-        if list_deletion {
-            self.task.publish_execution_modify_deletion(index)
-        } else {
-            self.task.publish_execution_modify(index)
+        match kind {
+            ExecutionModifyKind::ListDeletion => self.task.publish_execution_modify_deletion(index),
+            ExecutionModifyKind::Modify => self.task.publish_execution_modify(index),
         }
     }
     async fn repeats(&mut self) -> Result<bool, SchedulerInterruptError> {
@@ -216,7 +232,7 @@ pub(crate) async fn step_hardware<D: SchedulerDoorbell>(
     step(
         State {
             index: modify.index,
-            list_deletion: modify.list_deletion,
+            kind: modify.kind,
             phase: &mut modify.phase,
             repeat: &mut modify.repeat,
             published: &mut modify.published,

@@ -565,7 +565,9 @@ fn typed_register_masks_remove_the_cleanup_features_and_task17() {
             w.set_source_17(true);
             w.set_scheduler_run(true);
         });
-    interrupts.mask_output_dynamic_sources(false, 0).unwrap();
+    interrupts
+        .mask_output_dynamic_sources(super::FaultHistory::None, 0)
+        .unwrap();
     task.disable_scheduler_run();
     let observed = crate::radio::bluetooth::BluetoothInterruptPolicyObservation {
         primary: crate::radio::bluetooth::observation::primary(

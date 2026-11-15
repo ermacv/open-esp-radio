@@ -2,6 +2,7 @@ use std::vec::Vec;
 
 use crate::radio::bluetooth::engine::SchedulerItemLink;
 use crate::radio::bluetooth::engine::sram_link::model_link;
+use crate::radio::bluetooth::scheduler_execution_modify::ExecutionModifyKind;
 use crate::radio::bluetooth::{
     BluetoothSchedulerCancellationDisposition, BluetoothSchedulerExecutionLockDisposition,
     BluetoothSchedulerLockModifyObservation, BluetoothSchedulerSkipDisposition,
@@ -55,11 +56,10 @@ impl SchedulerHardwareBackend for Recorder {
     fn release_execution_lock(&mut self, (): ()) {
         self.calls.push(Call::Action(Action::ReleaseExecutionLock));
     }
-    fn publish_execution_modify(&mut self, list_deletion: bool) {
-        self.calls.push(Call::Action(if list_deletion {
-            Action::PublishExecutionModifyListDeletion
-        } else {
-            Action::PublishExecutionModify
+    fn publish_execution_modify(&mut self, kind: ExecutionModifyKind) {
+        self.calls.push(Call::Action(match kind {
+            ExecutionModifyKind::ListDeletion => Action::PublishExecutionModifyListDeletion,
+            ExecutionModifyKind::Modify => Action::PublishExecutionModify,
         }));
     }
     fn release_execution_modify(&mut self, (): ()) {
