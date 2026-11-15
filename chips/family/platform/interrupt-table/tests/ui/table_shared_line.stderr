@@ -1,0 +1,16 @@
+error[E0080]: evaluation panicked: two entries share a line and hart
+  --> tests/ui/table_shared_line.rs:8:9
+   |
+ 8 | /         oer_chips_family_platform_interrupt_table::interrupt_table! { // ui-error: E0080: evaluation panicked: two entries share a...
+ 9 | |             lines: FAKE_LINES,
+10 | |             handler_attributes: [];
+11 | |             contexts { low: 1; radio: 3; }
+12 | |             timer: TimerToken = TimerIrq => timer, line 17, context low, hart 0, Hardware;
+13 | |             radio: RadioToken = RadioIrq => radio, line $second, context radio, hart 0, Hardware;
+14 | |         }
+   | |_________^ evaluation of `_` failed here
+...
+18 |   table!(17);
+   |   ---------- in this macro invocation
+   |
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `table` (in Nightly builds, run with -Z macro-backtrace for more info)

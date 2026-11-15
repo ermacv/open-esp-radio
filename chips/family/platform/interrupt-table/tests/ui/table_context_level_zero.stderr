@@ -1,0 +1,15 @@
+error[E0080]: evaluation panicked: a context's level is no level a line can hold
+  --> tests/ui/table_context_level_zero.rs:7:9
+   |
+ 7 | /         oer_chips_family_platform_interrupt_table::interrupt_table! { // ui-error: E0080: evaluation panicked: a context's level i...
+ 8 | |             lines: FAKE_LINES,
+ 9 | |             handler_attributes: [];
+10 | |             contexts { radio: 3; idle: $level; }
+11 | |             timer: TimerToken = TimerIrq => timer, line 17, context radio, hart 0, Hardware;
+12 | |         }
+   | |_________^ evaluation of `_` failed here
+...
+16 |   table!(0);
+   |   --------- in this macro invocation
+   |
+   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `table` (in Nightly builds, run with -Z macro-backtrace for more info)

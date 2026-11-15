@@ -750,10 +750,7 @@ macro_rules! __exemption {
         $crate::__private::link_fn! {
             exemption $crate::__private::ExemptionSlot<$hart, $line, { REASON.len() }>, hart $hart, line $line =>
             #[used]
-            static EXEMPTION: [u8; REASON.len()] = match $crate::__private::bytes(REASON) {
-                Ok(bytes) => bytes,
-                Err(why) => panic!("{}", why),
-            };
+            static EXEMPTION: [u8; REASON.len()] = $crate::__private::bytes(REASON);
         }
     };
 }
@@ -1077,8 +1074,9 @@ pub mod __private {
         false
     }
 
-    /// The bytes of `text`, which holds `N`; why not otherwise.
-    pub const fn bytes<const N: usize>(text: &str) -> Result<[u8; N], &'static str> {
+    /// The bytes of `text`, which holds `N`: the table's exemption macro
+    /// takes `N` as the text's own length.
+    pub const fn bytes<const N: usize>(text: &str) -> [u8; N] {
         let mut out = [0; N];
         let mut from = text.as_bytes();
         let mut to: &mut [u8] = &mut out;
@@ -1087,10 +1085,7 @@ pub mod __private {
             from = from_tail;
             to = to_tail;
         }
-        if !from.is_empty() {
-            return Err("the reason holds its length");
-        }
-        Ok(out)
+        out
     }
 
     /// The private part of a token.
