@@ -452,11 +452,10 @@ fn run(
                 resume.answer(
                     proof,
                     match answer {
-                        "ok" => CallInput::Accepted(Ok(())),
-                        "full" => CallInput::NotAccepted(()),
-                        "faulted" => CallInput::Accepted(Err(CleanupRefused::Faulted(Fault))),
-                        "later" => CallInput::Accepted(Err(CleanupRefused::Unavailable(Fault))),
-                        _ => CallInput::Accepted(Err(CleanupRefused::Stale)),
+                        "ok" => Ok(()),
+                        "faulted" => Err(CleanupRefused::Faulted(Fault)),
+                        "later" => Err(CleanupRefused::Unavailable(Fault)),
+                        _ => Err(CleanupRefused::Stale),
                     },
                 )
             }
@@ -571,7 +570,7 @@ fn answers_of(name: &str) -> &'static [&'static str] {
         "stop" => &["ok", "pending", "unconfirmed"],
         "stop_data" => &["stopped", "going"],
         "take_unconsumed" | "take_freed" => &["none", "kept", "stale"],
-        "clean" => &["ok", "full", "faulted", "later", "stale"],
+        "clean" => &["ok", "faulted", "later", "stale"],
         "retire" => &["ok", "refused", "refused_fault", "stale"],
         "reinstall" => &["ok", "refused", "stale"],
         "release" => &["ok", "stale"],
@@ -587,7 +586,7 @@ fn refusal(name: &str, answer: &str) -> bool {
             | ("stop", "unconfirmed")
             | ("stop_data", "going")
             | ("take_unconsumed" | "take_freed", "kept" | "stale")
-            | ("clean", "full" | "faulted" | "later" | "stale")
+            | ("clean", "faulted" | "later" | "stale")
             | ("retire", "refused" | "refused_fault" | "stale")
             | ("reinstall", "refused" | "stale")
             | ("release", "stale")
@@ -613,7 +612,6 @@ fn wakes(name: &str, answer: &str) -> bool {
         ("start" | "stop", "pending")
             | ("stop_data", "going")
             | ("take_unconsumed" | "take_freed", "kept")
-            | ("clean", "full")
             | ("retire", "refused")
     )
 }

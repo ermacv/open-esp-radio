@@ -851,13 +851,14 @@ pub trait DataPort<'id> {
     ) -> Result<Unconsumed, crate::StaleProof<()>>;
 
     /// The cleanup the stop leaves to the port (a backend's write that
-    /// releases hardware a failed operation left in use), by the lifecycle
-    /// owner that stopped it, whether or not the datapath actor still runs.
+    /// releases hardware a failed operation left in use), asked by the
+    /// installation machine of the port it stopped.
     /// The owners the cleanup frees leave through their terminals in
     /// `sink`, each once; a terminal the sink refuses stays with the port
     /// for [`Self::take_unconsumed`]. A port whose cleanup did not finish
     /// does not retire. Nothing calls it on its own: each call is the
-    /// owner's.
+    /// owner's. A cleanup is always accepted: its input is a type with no
+    /// value, so no answer says that nothing was cleaned.
     ///
     /// The answer's refusal says why the cleanup did not finish
     /// ([`CleanupRefused`]).
@@ -865,13 +866,17 @@ pub trait DataPort<'id> {
     /// # Errors
     ///
     /// A freed terminal the call could neither give `sink` nor keep, beside
-    /// its answer ([`Unkeeping`]). An item an earlier call left refuses
-    /// this one before it cleans anything: [`Input::NotAccepted`] of `()`.
+    /// its answer ([`Unkeeping`], whose input is the cleanup's answer).
     fn clean(
         &mut self,
         stopped: &crate::Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<'id, Self::Types, (), Result<(), CleanupRefused<Self::Fault>>>;
+    ) -> PortAnswer<
+        'id,
+        Self::Types,
+        core::convert::Infallible,
+        Result<(), CleanupRefused<Self::Fault>>,
+    >;
 
     /// End the stopped installation's use of what it holds: its proof that
     /// nothing blocks its end.

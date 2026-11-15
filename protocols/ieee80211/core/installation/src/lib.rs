@@ -70,9 +70,9 @@ use core::mem::{self, MaybeUninit};
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    CleanupRefused, FaultKept, Input as CallInput, Outstanding, ProofRefused, Recovered,
-    ReinstallRefused, ReleaseRefused, Retired, StaleProof, StartFailure, StartPoll, StartProgress,
-    StartProof, StartRefused, Starting, StopRight, StopUnconfirmed, Stopped, Unconsumed,
+    CleanupRefused, FaultKept, Outstanding, ProofRefused, Recovered, ReinstallRefused,
+    ReleaseRefused, Retired, StaleProof, StartFailure, StartPoll, StartProgress, StartProof,
+    StartRefused, Starting, StopRight, StopUnconfirmed, Stopped, Unconsumed,
 };
 
 /// The brand of one port's installations, invariant in `'id`.
@@ -1308,13 +1308,12 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskTake> {
 }
 
 impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskClean> {
-    /// The port's answer, without an item it handed back, with the stop's
-    /// proof it borrowed: the cleanup's own answer, or that it found the
-    /// sink full and cleaned nothing.
+    /// The cleanup's answer, without an item it handed back, with the stop's
+    /// proof it borrowed. A cleanup is always accepted.
     pub fn answer(
         self,
         stopped: Stopped<'id>,
-        answer: CallInput<(), Result<(), CleanupRefused<F>>>,
+        answer: Result<(), CleanupRefused<F>>,
     ) -> Step<'m, 'id, C, F> {
         let Self {
             port,
@@ -1322,24 +1321,16 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskClean> {
             kind: AskClean { run },
         } = self;
         match answer {
-            CallInput::Accepted(Ok(())) => {
-                Step::TakeFreed(stopped, port.resume(now, AskTakeFreed { run }))
-            }
-            CallInput::NotAccepted(()) => {
-                *port.at = At::Stopped(stopped, run);
-                port.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
-            }
-            CallInput::Accepted(Err(CleanupRefused::Stale)) => {
+            Ok(()) => Step::TakeFreed(stopped, port.resume(now, AskTakeFreed { run })),
+            Err(CleanupRefused::Stale) => {
                 drop(stopped);
                 port.lost(run, now)
             }
-            CallInput::Accepted(Err(CleanupRefused::Faulted(_))) => {
+            Err(CleanupRefused::Faulted(_)) => {
                 *port.at = At::Stopped(stopped, run);
                 port.recover(AfterRecover::Again, now)
             }
-            CallInput::Accepted(Err(
-                refused @ (CleanupRefused::Unavailable(_) | CleanupRefused::Held(_)),
-            )) => {
+            Err(refused @ (CleanupRefused::Unavailable(_) | CleanupRefused::Held(_))) => {
                 *port.at = At::Stopped(stopped, run);
                 port.say(Waiting::Cleanup(refused), Next::Rest(Again::Timer), now)
             }

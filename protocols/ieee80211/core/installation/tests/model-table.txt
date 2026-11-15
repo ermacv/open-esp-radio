@@ -1,4 +1,4 @@
-environment states visited: 6291; machine states: 351; ways of a step: 2101
+environment states visited: 6291; machine states: 351; ways of a step: 1974
 dead ends: 0
 | released | - | fault | — | released | — | wake |
 | released | - | network_stopped | — | released | — | wake |
@@ -61,8 +61,6 @@ dead ends: 0
 | running | - | release_stays | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | running | - | release_stays | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | running | - | release_stays | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| running | - | release_stays | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| running | - | release_stays | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | running | - | release_stays | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | running | - | release_stays | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | running | - | release_stays | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -83,8 +81,6 @@ dead ends: 0
 | running | - | release_stays | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | running | - | release_stays | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | running | - | release_stays | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| running | - | release_stays | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| running | - | release_stays | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | running | - | release_stays | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | running | - | release_stays | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | running | - | release_stays | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -110,8 +106,6 @@ dead ends: 0
 | running | - | release_stops | ok, going, none, faulted, clear | stopped | stop_network, stop, stop_data, take_unconsumed, clean, recover | round |
 | running | - | release_stops | ok, going, none, faulted, recovered | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | running | - | release_stops | ok, going, none, faulted, recovered | stopped | stop_network, stop, stop_data, take_unconsumed, clean, recover | round |
-| running | - | release_stops | ok, going, none, full | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| running | - | release_stops | ok, going, none, full | stopped | stop_network, stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | running | - | release_stops | ok, going, none, later | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | running | - | release_stops | ok, going, none, later | stopped | stop_network, stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | running | - | release_stops | ok, going, none, ok, kept | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -132,8 +126,6 @@ dead ends: 0
 | running | - | release_stops | ok, stopped, none, faulted, kept | stopped | stop_network, stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | running | - | release_stops | ok, stopped, none, faulted, recovered | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | running | - | release_stops | ok, stopped, none, faulted, recovered | stopped | stop_network, stop, stop_data, take_unconsumed, clean, recover | round |
-| running | - | release_stops | ok, stopped, none, full | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| running | - | release_stops | ok, stopped, none, full | stopped | stop_network, stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | running | - | release_stops | ok, stopped, none, later | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | running | - | release_stops | ok, stopped, none, later | stopped | stop_network, stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | running | - | release_stops | ok, stopped, none, ok, kept | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -159,8 +151,6 @@ dead ends: 0
 | running | - | restart | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | running | - | restart | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | running | - | restart | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| running | - | restart | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| running | - | restart | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | running | - | restart | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | running | - | restart | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | running | - | restart | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -181,8 +171,6 @@ dead ends: 0
 | running | - | restart | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | running | - | restart | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | running | - | restart | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| running | - | restart | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| running | - | restart | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | running | - | restart | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | running | - | restart | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | running | - | restart | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -257,8 +245,6 @@ dead ends: 0
 | stopped | - | release_stays | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | - | release_stays | going, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | release_stays | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | - | release_stays | going, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | release_stays | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | release_stays | going, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stays | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stays | going, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -280,9 +266,6 @@ dead ends: 0
 | stopped | - | release_stays | none, faulted, kept | stopped | take_unconsumed, clean, recover, held/fault | wake |
 | stopped | - | release_stays | none, faulted, recovered | stopped | end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | release_stays | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | - | release_stays | none, full | stopped | end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | release_stays | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | - | release_stays | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | release_stays | none, later | stopped | end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stays | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | - | release_stays | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
@@ -319,8 +302,6 @@ dead ends: 0
 | stopped | - | release_stays | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | - | release_stays | stopped, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | release_stays | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | - | release_stays | stopped, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | release_stays | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | release_stays | stopped, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stays | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stays | stopped, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -347,8 +328,6 @@ dead ends: 0
 | stopped | - | release_stops | going, none, faulted, clear | stopped | stop_network, stop_data, take_unconsumed, clean, recover | round |
 | stopped | - | release_stops | going, none, faulted, recovered | stopped | stop_network, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | release_stops | going, none, faulted, recovered | stopped | stop_network, stop_data, take_unconsumed, clean, recover | round |
-| stopped | - | release_stops | going, none, full | stopped | stop_network, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | release_stops | going, none, full | stopped | stop_network, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | release_stops | going, none, later | stopped | stop_network, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stops | going, none, later | stopped | stop_network, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stops | going, none, ok, kept | stopped | stop_network, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -370,9 +349,6 @@ dead ends: 0
 | stopped | - | release_stops | none, faulted, kept | stopped | stop_network, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | - | release_stops | none, faulted, recovered | stopped | stop_network, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | release_stops | none, faulted, recovered | stopped | stop_network, take_unconsumed, clean, recover | round |
-| stopped | - | release_stops | none, full | stopped | stop_network, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | release_stops | none, full | stopped | stop_network, take_unconsumed, clean | wake |
-| stopped | - | release_stops | none, full | stopped | stop_network, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | release_stops | none, later | stopped | stop_network, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stops | none, later | stopped | stop_network, take_unconsumed, clean | timer |
 | stopped | - | release_stops | none, later | stopped | stop_network, take_unconsumed, clean, held/cleanup | timer |
@@ -409,8 +385,6 @@ dead ends: 0
 | stopped | - | release_stops | stopped, none, faulted, kept | stopped | stop_network, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | - | release_stops | stopped, none, faulted, recovered | stopped | stop_network, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | release_stops | stopped, none, faulted, recovered | stopped | stop_network, stop_data, take_unconsumed, clean, recover | round |
-| stopped | - | release_stops | stopped, none, full | stopped | stop_network, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | release_stops | stopped, none, full | stopped | stop_network, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | release_stops | stopped, none, later | stopped | stop_network, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stops | stopped, none, later | stopped | stop_network, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | release_stops | stopped, none, ok, kept | stopped | stop_network, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -437,8 +411,6 @@ dead ends: 0
 | stopped | - | restart | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | - | restart | going, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | restart | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | - | restart | going, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | restart | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | restart | going, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | restart | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | restart | going, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -460,9 +432,6 @@ dead ends: 0
 | stopped | - | restart | none, faulted, kept | stopped | take_unconsumed, clean, recover, held/fault | wake |
 | stopped | - | restart | none, faulted, recovered | stopped | end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | restart | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | - | restart | none, full | stopped | end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | restart | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | - | restart | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | restart | none, later | stopped | end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | restart | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | - | restart | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
@@ -499,8 +468,6 @@ dead ends: 0
 | stopped | - | restart | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | - | restart | stopped, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | - | restart | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | - | restart | stopped, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | - | restart | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | - | restart | stopped, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | restart | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | - | restart | stopped, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -558,7 +525,6 @@ dead ends: 0
 | stopped | release_stays | network_stopped | going, kept | stopped | stop_data, end_tokens, take_unconsumed, held/unconsumed | wake |
 | stopped | release_stays | network_stopped | going, none, faulted, clear | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | release_stays | network_stopped | going, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
-| stopped | release_stays | network_stopped | going, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | network_stopped | going, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | network_stopped | going, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | release_stays | network_stopped | going, none, ok, none | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed | wake |
@@ -569,8 +535,6 @@ dead ends: 0
 | stopped | release_stays | network_stopped | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | release_stays | network_stopped | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | release_stays | network_stopped | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | release_stays | network_stopped | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | release_stays | network_stopped | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | network_stopped | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | release_stays | network_stopped | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | network_stopped | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -595,7 +559,6 @@ dead ends: 0
 | stopped | release_stays | network_stopped | stopped, none, faulted, clear | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | release_stays | network_stopped | stopped, none, faulted, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | release_stays | network_stopped | stopped, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
-| stopped | release_stays | network_stopped | stopped, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | network_stopped | stopped, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | network_stopped | stopped, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | release_stays | network_stopped | stopped, none, ok, none | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed | wake |
@@ -609,7 +572,6 @@ dead ends: 0
 | stopped | release_stays | tokens_ended | going, kept | stopped | stop_data, take_unconsumed, held/unconsumed | wake |
 | stopped | release_stays | tokens_ended | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | release_stays | tokens_ended | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stays | tokens_ended | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | tokens_ended | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | tokens_ended | going, none, ok, kept | stopped | stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | release_stays | tokens_ended | going, none, ok, none | stopped | stop_data, take_unconsumed, clean, take_freed | wake |
@@ -620,8 +582,6 @@ dead ends: 0
 | stopped | release_stays | tokens_ended | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | release_stays | tokens_ended | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | release_stays | tokens_ended | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | release_stays | tokens_ended | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | release_stays | tokens_ended | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | tokens_ended | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | release_stays | tokens_ended | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | tokens_ended | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -644,7 +604,6 @@ dead ends: 0
 | stopped | release_stays | tokens_ended | stopped, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | release_stays | tokens_ended | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | release_stays | tokens_ended | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stays | tokens_ended | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | tokens_ended | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | tokens_ended | stopped, none, ok, kept | stopped | stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | release_stays | tokens_ended | stopped, none, ok, none, ok | retired | stop_data, take_unconsumed, clean, take_freed, retire | round |
@@ -670,8 +629,6 @@ dead ends: 0
 | stopped | release_stays | turn | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | release_stays | turn | going, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | release_stays | turn | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stays | turn | going, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | release_stays | turn | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | turn | going, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | turn | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | turn | going, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -688,8 +645,6 @@ dead ends: 0
 | stopped | release_stays | turn | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | release_stays | turn | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | release_stays | turn | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | release_stays | turn | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | release_stays | turn | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | turn | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | release_stays | turn | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | turn | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -718,8 +673,6 @@ dead ends: 0
 | stopped | release_stays | turn | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | release_stays | turn | stopped, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | release_stays | turn | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stays | turn | stopped, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | release_stays | turn | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stays | turn | stopped, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | turn | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stays | turn | stopped, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -758,8 +711,6 @@ dead ends: 0
 | stopped | release_stops | network_stopped | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | release_stops | network_stopped | going, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | release_stops | network_stopped | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stops | network_stopped | going, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | release_stops | network_stopped | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | network_stopped | going, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | network_stopped | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | network_stopped | going, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -776,8 +727,6 @@ dead ends: 0
 | stopped | release_stops | network_stopped | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | release_stops | network_stopped | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | release_stops | network_stopped | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | release_stops | network_stopped | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | release_stops | network_stopped | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | network_stopped | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | release_stops | network_stopped | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | network_stopped | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -806,8 +755,6 @@ dead ends: 0
 | stopped | release_stops | network_stopped | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | release_stops | network_stopped | stopped, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | release_stops | network_stopped | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stops | network_stopped | stopped, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | release_stops | network_stopped | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | network_stopped | stopped, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | network_stopped | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | network_stopped | stopped, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -835,7 +782,6 @@ dead ends: 0
 | stopped | release_stops | tokens_ended | going, kept | stopped | stop_data, take_unconsumed, held/unconsumed | wake |
 | stopped | release_stops | tokens_ended | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | release_stops | tokens_ended | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stops | tokens_ended | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | tokens_ended | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | tokens_ended | going, none, ok, kept | stopped | stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | release_stops | tokens_ended | going, none, ok, none | stopped | stop_data, take_unconsumed, clean, take_freed | wake |
@@ -846,8 +792,6 @@ dead ends: 0
 | stopped | release_stops | tokens_ended | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | release_stops | tokens_ended | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | release_stops | tokens_ended | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | release_stops | tokens_ended | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | release_stops | tokens_ended | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | tokens_ended | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | release_stops | tokens_ended | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | tokens_ended | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -870,7 +814,6 @@ dead ends: 0
 | stopped | release_stops | tokens_ended | stopped, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | release_stops | tokens_ended | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | release_stops | tokens_ended | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stops | tokens_ended | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | tokens_ended | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | tokens_ended | stopped, none, ok, kept | stopped | stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | release_stops | tokens_ended | stopped, none, ok, none, ok | retired | stop_data, take_unconsumed, clean, take_freed, retire | round |
@@ -896,8 +839,6 @@ dead ends: 0
 | stopped | release_stops | turn | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | release_stops | turn | going, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | release_stops | turn | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stops | turn | going, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | release_stops | turn | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | turn | going, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | turn | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | turn | going, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -914,8 +855,6 @@ dead ends: 0
 | stopped | release_stops | turn | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | release_stops | turn | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | release_stops | turn | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | release_stops | turn | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | release_stops | turn | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | turn | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | release_stops | turn | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | turn | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -944,8 +883,6 @@ dead ends: 0
 | stopped | release_stops | turn | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | release_stops | turn | stopped, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | release_stops | turn | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | release_stops | turn | stopped, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | release_stops | turn | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | release_stops | turn | stopped, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | turn | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | release_stops | turn | stopped, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -981,7 +918,6 @@ dead ends: 0
 | stopped | restart | network_stopped | going, kept | stopped | stop_data, end_tokens, take_unconsumed, held/unconsumed | wake |
 | stopped | restart | network_stopped | going, none, faulted, clear | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | restart | network_stopped | going, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
-| stopped | restart | network_stopped | going, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | network_stopped | going, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | network_stopped | going, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | restart | network_stopped | going, none, ok, none | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed | wake |
@@ -992,8 +928,6 @@ dead ends: 0
 | stopped | restart | network_stopped | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | restart | network_stopped | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | restart | network_stopped | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | restart | network_stopped | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | restart | network_stopped | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | network_stopped | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | restart | network_stopped | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | network_stopped | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -1018,7 +952,6 @@ dead ends: 0
 | stopped | restart | network_stopped | stopped, none, faulted, clear | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | restart | network_stopped | stopped, none, faulted, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | restart | network_stopped | stopped, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
-| stopped | restart | network_stopped | stopped, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | network_stopped | stopped, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | network_stopped | stopped, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | restart | network_stopped | stopped, none, ok, none | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed | wake |
@@ -1032,7 +965,6 @@ dead ends: 0
 | stopped | restart | tokens_ended | going, kept | stopped | stop_data, take_unconsumed, held/unconsumed | wake |
 | stopped | restart | tokens_ended | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | restart | tokens_ended | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | restart | tokens_ended | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | tokens_ended | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | tokens_ended | going, none, ok, kept | stopped | stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | restart | tokens_ended | going, none, ok, none | stopped | stop_data, take_unconsumed, clean, take_freed | wake |
@@ -1043,8 +975,6 @@ dead ends: 0
 | stopped | restart | tokens_ended | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | restart | tokens_ended | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | restart | tokens_ended | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | restart | tokens_ended | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | restart | tokens_ended | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | tokens_ended | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | restart | tokens_ended | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | tokens_ended | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -1067,7 +997,6 @@ dead ends: 0
 | stopped | restart | tokens_ended | stopped, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | restart | tokens_ended | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | restart | tokens_ended | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | restart | tokens_ended | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | tokens_ended | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | tokens_ended | stopped, none, ok, kept | stopped | stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopped | restart | tokens_ended | stopped, none, ok, none, ok | retired | stop_data, take_unconsumed, clean, take_freed, retire | round |
@@ -1093,8 +1022,6 @@ dead ends: 0
 | stopped | restart | turn | going, none, faulted, clear | stopped | stop_data, take_unconsumed, clean, recover | round |
 | stopped | restart | turn | going, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | restart | turn | going, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | restart | turn | going, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | restart | turn | going, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | turn | going, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | turn | going, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | turn | going, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1111,8 +1038,6 @@ dead ends: 0
 | stopped | restart | turn | kept | stopped | take_unconsumed, held/unconsumed | wake |
 | stopped | restart | turn | none, faulted, clear | stopped | take_unconsumed, clean, recover | round |
 | stopped | restart | turn | none, faulted, recovered | stopped | take_unconsumed, clean, recover | round |
-| stopped | restart | turn | none, full | stopped | take_unconsumed, clean | wake |
-| stopped | restart | turn | none, full | stopped | take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | turn | none, later | stopped | take_unconsumed, clean | timer |
 | stopped | restart | turn | none, later | stopped | take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | turn | none, ok, kept | stopped | take_unconsumed, clean, take_freed | wake |
@@ -1141,8 +1066,6 @@ dead ends: 0
 | stopped | restart | turn | stopped, none, faulted, kept | stopped | stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopped | restart | turn | stopped, none, faulted, recovered | stopped | stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopped | restart | turn | stopped, none, faulted, recovered | stopped | stop_data, take_unconsumed, clean, recover | round |
-| stopped | restart | turn | stopped, none, full | stopped | stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopped | restart | turn | stopped, none, full | stopped | stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopped | restart | turn | stopped, none, later | stopped | stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | turn | stopped, none, later | stopped | stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopped | restart | turn | stopped, none, ok, kept | stopped | stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1214,8 +1137,6 @@ dead ends: 0
 | stopping | - | release_stays | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | - | release_stays | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | - | release_stays | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | - | release_stays | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | - | release_stays | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | release_stays | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stays | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stays | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1231,7 +1152,6 @@ dead ends: 0
 | stopping | - | release_stays | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | - | release_stays | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | - | release_stays | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | - | release_stays | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | release_stays | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stays | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | - | release_stays | ok, none, ok, none | stopped | stop, take_unconsumed, clean, take_freed | wake |
@@ -1257,8 +1177,6 @@ dead ends: 0
 | stopping | - | release_stays | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | - | release_stays | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | - | release_stays | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | - | release_stays | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | - | release_stays | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | release_stays | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stays | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stays | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1287,8 +1205,6 @@ dead ends: 0
 | stopping | - | release_stops | ok, going, none, faulted, clear | stopped | stop_network, stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | - | release_stops | ok, going, none, faulted, recovered | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | - | release_stops | ok, going, none, faulted, recovered | stopped | stop_network, stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | - | release_stops | ok, going, none, full | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | - | release_stops | ok, going, none, full | stopped | stop_network, stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | release_stops | ok, going, none, later | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stops | ok, going, none, later | stopped | stop_network, stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stops | ok, going, none, ok, kept | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1304,7 +1220,6 @@ dead ends: 0
 | stopping | - | release_stops | ok, kept | stopped | stop_network, stop, take_unconsumed, held/unconsumed | wake |
 | stopping | - | release_stops | ok, none, faulted, clear | stopped | stop_network, stop, take_unconsumed, clean, recover | round |
 | stopping | - | release_stops | ok, none, faulted, recovered | stopped | stop_network, stop, take_unconsumed, clean, recover | round |
-| stopping | - | release_stops | ok, none, full | stopped | stop_network, stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | release_stops | ok, none, later | stopped | stop_network, stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stops | ok, none, ok, kept | stopped | stop_network, stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | - | release_stops | ok, none, ok, none | stopped | stop_network, stop, take_unconsumed, clean, take_freed | wake |
@@ -1330,8 +1245,6 @@ dead ends: 0
 | stopping | - | release_stops | ok, stopped, none, faulted, kept | stopped | stop_network, stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | - | release_stops | ok, stopped, none, faulted, recovered | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | - | release_stops | ok, stopped, none, faulted, recovered | stopped | stop_network, stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | - | release_stops | ok, stopped, none, full | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | - | release_stops | ok, stopped, none, full | stopped | stop_network, stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | release_stops | ok, stopped, none, later | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stops | ok, stopped, none, later | stopped | stop_network, stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | release_stops | ok, stopped, none, ok, kept | stopped | stop_network, stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1360,8 +1273,6 @@ dead ends: 0
 | stopping | - | restart | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | - | restart | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | - | restart | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | - | restart | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | - | restart | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | restart | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | restart | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | restart | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1377,7 +1288,6 @@ dead ends: 0
 | stopping | - | restart | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | - | restart | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | - | restart | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | - | restart | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | restart | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | restart | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | - | restart | ok, none, ok, none | stopped | stop, take_unconsumed, clean, take_freed | wake |
@@ -1403,8 +1313,6 @@ dead ends: 0
 | stopping | - | restart | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | - | restart | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | - | restart | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | - | restart | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | - | restart | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | - | restart | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | restart | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | - | restart | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1498,7 +1406,6 @@ dead ends: 0
 | stopping | release_stays | network_stopped | ok, going, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stays | network_stopped | ok, going, none, faulted, clear | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | release_stays | network_stopped | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
-| stopping | release_stays | network_stopped | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | network_stopped | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | network_stopped | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stays | network_stopped | ok, going, none, ok, none | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed | wake |
@@ -1508,7 +1415,6 @@ dead ends: 0
 | stopping | release_stays | network_stopped | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stays | network_stopped | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | release_stays | network_stopped | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | release_stays | network_stopped | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | network_stopped | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | network_stopped | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stays | network_stopped | ok, none, ok, none | stopped | stop, take_unconsumed, clean, take_freed | wake |
@@ -1529,7 +1435,6 @@ dead ends: 0
 | stopping | release_stays | network_stopped | ok, stopped, none, faulted, clear | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | release_stays | network_stopped | ok, stopped, none, faulted, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | release_stays | network_stopped | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
-| stopping | release_stays | network_stopped | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | network_stopped | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | network_stopped | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stays | network_stopped | ok, stopped, none, ok, none | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed | wake |
@@ -1544,7 +1449,6 @@ dead ends: 0
 | stopping | release_stays | tokens_ended | ok, going, kept | stopped | stop, stop_data, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stays | tokens_ended | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | release_stays | tokens_ended | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stays | tokens_ended | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | tokens_ended | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | tokens_ended | ok, going, none, ok, kept | stopped | stop, stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stays | tokens_ended | ok, going, none, ok, none | stopped | stop, stop_data, take_unconsumed, clean, take_freed | wake |
@@ -1554,7 +1458,6 @@ dead ends: 0
 | stopping | release_stays | tokens_ended | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stays | tokens_ended | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | release_stays | tokens_ended | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | release_stays | tokens_ended | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | tokens_ended | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | tokens_ended | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stays | tokens_ended | ok, none, ok, none, ok | retired | stop, take_unconsumed, clean, take_freed, retire | round |
@@ -1575,7 +1478,6 @@ dead ends: 0
 | stopping | release_stays | tokens_ended | ok, stopped, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | release_stays | tokens_ended | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | release_stays | tokens_ended | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stays | tokens_ended | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | tokens_ended | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | tokens_ended | ok, stopped, none, ok, kept | stopped | stop, stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stays | tokens_ended | ok, stopped, none, ok, none, ok | retired | stop, stop_data, take_unconsumed, clean, take_freed, retire | round |
@@ -1597,8 +1499,6 @@ dead ends: 0
 | stopping | release_stays | turn | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | release_stays | turn | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | release_stays | turn | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stays | turn | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | release_stays | turn | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | turn | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | turn | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | turn | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1614,7 +1514,6 @@ dead ends: 0
 | stopping | release_stays | turn | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stays | turn | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | release_stays | turn | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | release_stays | turn | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | turn | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | turn | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stays | turn | ok, none, ok, none | stopped | stop, take_unconsumed, clean, take_freed | wake |
@@ -1640,8 +1539,6 @@ dead ends: 0
 | stopping | release_stays | turn | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | release_stays | turn | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | release_stays | turn | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stays | turn | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | release_stays | turn | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stays | turn | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | turn | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stays | turn | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1686,8 +1583,6 @@ dead ends: 0
 | stopping | release_stops | network_stopped | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | release_stops | network_stopped | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | release_stops | network_stopped | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stops | network_stopped | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | release_stops | network_stopped | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | network_stopped | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | network_stopped | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | network_stopped | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1703,7 +1598,6 @@ dead ends: 0
 | stopping | release_stops | network_stopped | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stops | network_stopped | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | release_stops | network_stopped | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | release_stops | network_stopped | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | network_stopped | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | network_stopped | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stops | network_stopped | ok, none, ok, none | stopped | stop, take_unconsumed, clean, take_freed | wake |
@@ -1729,8 +1623,6 @@ dead ends: 0
 | stopping | release_stops | network_stopped | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | release_stops | network_stopped | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | release_stops | network_stopped | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stops | network_stopped | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | release_stops | network_stopped | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | network_stopped | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | network_stopped | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | network_stopped | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1755,7 +1647,6 @@ dead ends: 0
 | stopping | release_stops | tokens_ended | ok, going, kept | stopped | stop, stop_data, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stops | tokens_ended | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | release_stops | tokens_ended | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stops | tokens_ended | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | tokens_ended | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | tokens_ended | ok, going, none, ok, kept | stopped | stop, stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stops | tokens_ended | ok, going, none, ok, none | stopped | stop, stop_data, take_unconsumed, clean, take_freed | wake |
@@ -1765,7 +1656,6 @@ dead ends: 0
 | stopping | release_stops | tokens_ended | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stops | tokens_ended | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | release_stops | tokens_ended | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | release_stops | tokens_ended | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | tokens_ended | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | tokens_ended | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stops | tokens_ended | ok, none, ok, none, ok | retired | stop, take_unconsumed, clean, take_freed, retire | round |
@@ -1786,7 +1676,6 @@ dead ends: 0
 | stopping | release_stops | tokens_ended | ok, stopped, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | release_stops | tokens_ended | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | release_stops | tokens_ended | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stops | tokens_ended | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | tokens_ended | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | tokens_ended | ok, stopped, none, ok, kept | stopped | stop, stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stops | tokens_ended | ok, stopped, none, ok, none, ok | retired | stop, stop_data, take_unconsumed, clean, take_freed, retire | round |
@@ -1808,8 +1697,6 @@ dead ends: 0
 | stopping | release_stops | turn | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | release_stops | turn | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | release_stops | turn | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stops | turn | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | release_stops | turn | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | turn | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | turn | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | turn | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1825,7 +1712,6 @@ dead ends: 0
 | stopping | release_stops | turn | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | release_stops | turn | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | release_stops | turn | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | release_stops | turn | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | turn | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | turn | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | release_stops | turn | ok, none, ok, none | stopped | stop, take_unconsumed, clean, take_freed | wake |
@@ -1851,8 +1737,6 @@ dead ends: 0
 | stopping | release_stops | turn | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | release_stops | turn | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | release_stops | turn | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | release_stops | turn | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | release_stops | turn | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | release_stops | turn | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | turn | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | release_stops | turn | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -1894,7 +1778,6 @@ dead ends: 0
 | stopping | restart | network_stopped | ok, going, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, held/unconsumed | wake |
 | stopping | restart | network_stopped | ok, going, none, faulted, clear | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | restart | network_stopped | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
-| stopping | restart | network_stopped | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | network_stopped | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | network_stopped | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | restart | network_stopped | ok, going, none, ok, none | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed | wake |
@@ -1904,7 +1787,6 @@ dead ends: 0
 | stopping | restart | network_stopped | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | restart | network_stopped | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | restart | network_stopped | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | restart | network_stopped | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | network_stopped | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | network_stopped | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | restart | network_stopped | ok, none, ok, none | stopped | stop, take_unconsumed, clean, take_freed | wake |
@@ -1925,7 +1807,6 @@ dead ends: 0
 | stopping | restart | network_stopped | ok, stopped, none, faulted, clear | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | restart | network_stopped | ok, stopped, none, faulted, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | restart | network_stopped | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
-| stopping | restart | network_stopped | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | network_stopped | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | network_stopped | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | restart | network_stopped | ok, stopped, none, ok, none | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed | wake |
@@ -1940,7 +1821,6 @@ dead ends: 0
 | stopping | restart | tokens_ended | ok, going, kept | stopped | stop, stop_data, take_unconsumed, held/unconsumed | wake |
 | stopping | restart | tokens_ended | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | restart | tokens_ended | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | restart | tokens_ended | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | tokens_ended | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | tokens_ended | ok, going, none, ok, kept | stopped | stop, stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | restart | tokens_ended | ok, going, none, ok, none | stopped | stop, stop_data, take_unconsumed, clean, take_freed | wake |
@@ -1950,7 +1830,6 @@ dead ends: 0
 | stopping | restart | tokens_ended | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | restart | tokens_ended | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | restart | tokens_ended | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | restart | tokens_ended | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | tokens_ended | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | tokens_ended | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | restart | tokens_ended | ok, none, ok, none, ok | retired | stop, take_unconsumed, clean, take_freed, retire | round |
@@ -1971,7 +1850,6 @@ dead ends: 0
 | stopping | restart | tokens_ended | ok, stopped, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | restart | tokens_ended | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | restart | tokens_ended | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | restart | tokens_ended | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | tokens_ended | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | tokens_ended | ok, stopped, none, ok, kept | stopped | stop, stop_data, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | restart | tokens_ended | ok, stopped, none, ok, none, ok | retired | stop, stop_data, take_unconsumed, clean, take_freed, retire | round |
@@ -1993,8 +1871,6 @@ dead ends: 0
 | stopping | restart | turn | ok, going, none, faulted, clear | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
 | stopping | restart | turn | ok, going, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | restart | turn | ok, going, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | restart | turn | ok, going, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | restart | turn | ok, going, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | turn | ok, going, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | turn | ok, going, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | turn | ok, going, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |
@@ -2010,7 +1886,6 @@ dead ends: 0
 | stopping | restart | turn | ok, kept | stopped | stop, take_unconsumed, held/unconsumed | wake |
 | stopping | restart | turn | ok, none, faulted, clear | stopped | stop, take_unconsumed, clean, recover | round |
 | stopping | restart | turn | ok, none, faulted, recovered | stopped | stop, take_unconsumed, clean, recover | round |
-| stopping | restart | turn | ok, none, full | stopped | stop, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | turn | ok, none, later | stopped | stop, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | turn | ok, none, ok, kept | stopped | stop, take_unconsumed, clean, take_freed, held/unconsumed | wake |
 | stopping | restart | turn | ok, none, ok, none | stopped | stop, take_unconsumed, clean, take_freed | wake |
@@ -2036,8 +1911,6 @@ dead ends: 0
 | stopping | restart | turn | ok, stopped, none, faulted, kept | stopped | stop, stop_data, take_unconsumed, clean, recover, held/fault | wake |
 | stopping | restart | turn | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, recover | round |
 | stopping | restart | turn | ok, stopped, none, faulted, recovered | stopped | stop, stop_data, take_unconsumed, clean, recover | round |
-| stopping | restart | turn | ok, stopped, none, full | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/unconsumed | wake |
-| stopping | restart | turn | ok, stopped, none, full | stopped | stop, stop_data, take_unconsumed, clean, held/unconsumed | wake |
 | stopping | restart | turn | ok, stopped, none, later | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | turn | ok, stopped, none, later | stopped | stop, stop_data, take_unconsumed, clean, held/cleanup | timer |
 | stopping | restart | turn | ok, stopped, none, ok, kept | stopped | stop, stop_data, end_tokens, take_unconsumed, clean, take_freed, held/unconsumed | wake |

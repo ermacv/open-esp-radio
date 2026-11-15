@@ -96,11 +96,16 @@ pub fn drive<'id, P: DataPort<'id>, S: PortSink<'id, P::Types>>(
                 resume.answer(stopped, answer)
             }
             Step::Clean(stopped, resume) => {
+                // A cleanup is always accepted: an item it hands back is
+                // the data plane's, and the machine takes its answer.
                 let answer = match port.clean(&stopped, *sink) {
-                    Ok(cleaned) => CallInput::Accepted(cleaned),
+                    Ok(cleaned) => cleaned,
                     Err(Unkeeping { unkept, input }) => {
                         parties.deliver(unkept);
-                        input
+                        match input {
+                            CallInput::Accepted(cleaned) => cleaned,
+                            CallInput::NotAccepted(never) => match never {},
+                        }
                     }
                 };
                 resume.answer(stopped, answer)
