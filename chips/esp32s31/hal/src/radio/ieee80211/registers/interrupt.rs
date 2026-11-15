@@ -129,11 +129,12 @@ impl MacInterruptSnapshot {
     }
 
     pub fn rx_causes(&self) -> MacRxInterrupts {
-        rx_lanes(
-            self.0.rx_associated_auxiliary_5(),
-            self.0.rx_success(),
-            self.0.rx_associated_auxiliary_24(),
-        )
+        Set::of_bit(self.0.rx_associated_auxiliary_5(), MacRxLane::Auxiliary5)
+            .union(Set::of_bit(self.0.rx_success(), MacRxLane::Success))
+            .union(Set::of_bit(
+                self.0.rx_associated_auxiliary_24(),
+                MacRxLane::Auxiliary24,
+            ))
     }
 
     /// Consume this sample, retaining only selected RX lanes for acknowledgement.
@@ -301,13 +302,6 @@ members! {
 
 /// A set of WDEVPWR causes.
 pub type MacPowerInterruptObservation = Set<MacPowerInterruptCause>;
-
-/// The RX lanes of three generated readers' bits.
-fn rx_lanes(auxiliary_5: bool, success: bool, auxiliary_24: bool) -> MacRxInterrupts {
-    Set::of_bit(auxiliary_5, MacRxLane::Auxiliary5)
-        .union(Set::of_bit(success, MacRxLane::Success))
-        .union(Set::of_bit(auxiliary_24, MacRxLane::Auxiliary24))
-}
 
 /// Proof that the connected-STA hardware policy was applied.
 ///
@@ -568,11 +562,12 @@ impl<M: MacPlacement> MacInterruptRegisters<M> {
     /// Read each RX delivery-enable lane independently.
     pub fn mac_rx_interrupt_enable(&self) -> MacRxInterrupts {
         let value = self.mac.read_enable();
-        rx_lanes(
-            value.rx_associated_auxiliary_5(),
-            value.rx_success(),
-            value.rx_associated_auxiliary_24(),
-        )
+        Set::of_bit(value.rx_associated_auxiliary_5(), MacRxLane::Auxiliary5)
+            .union(Set::of_bit(value.rx_success(), MacRxLane::Success))
+            .union(Set::of_bit(
+                value.rx_associated_auxiliary_24(),
+                MacRxLane::Auxiliary24,
+            ))
     }
 
     /// Observe the four opaque station delivery lanes independently, including
