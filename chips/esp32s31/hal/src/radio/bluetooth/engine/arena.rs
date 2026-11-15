@@ -123,9 +123,17 @@ pub struct Engine<M: ControllerMemory> {
     pub(super) scheduler_interrupts: Option<scheduler::interrupt::SchedulerTaskHalf>,
     pub(super) direction_finding_publication:
         Option<crate::radio::bluetooth::DirectionFindingDisabledBaselineOwner>,
-    pub(super) faulted: bool,
-    pub(super) initialized: bool,
-    pub(super) phy_initialized: bool,
+    pub(super) lifecycle: Lifecycle,
+}
+
+/// How far the engine's initialization went, or that it faulted: a fault
+/// is never cleared, and after it nothing reads how far it went.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Lifecycle {
+    Fresh,
+    HalReady,
+    PhyReady,
+    Faulted,
 }
 
 impl<
@@ -290,9 +298,7 @@ impl<
                 scheduler_interrupts: None,
                 registers,
                 direction_finding_publication: None,
-                faulted: false,
-                initialized: false,
-                phy_initialized: false,
+                lifecycle: Lifecycle::Fresh,
                 memory: ArenaMemory {
                     root,
                     dtm: SchedulerRolePool::from_parts(dtm, &placement, dtm_plan, epoch),

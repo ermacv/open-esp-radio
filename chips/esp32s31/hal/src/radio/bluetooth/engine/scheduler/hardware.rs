@@ -15,6 +15,7 @@
 
 use crate::radio::bluetooth::engine::SchedulerItemLink;
 use crate::radio::bluetooth::scheduler_execution_modify::ExecutionModifyKind;
+use crate::set::Set;
 
 use crate::radio::bluetooth::engine::scheduler::{
     SchedulerAction, SchedulerIdleInsertion, SchedulerObservation, SchedulerTransactionFault,
@@ -295,15 +296,24 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
         if self.faulted {
             return Err(SchedulerHardwareError::OutOfOrder);
         }
-        let mut state = Admission {
-            lock: self.lock.is_some(),
-            modify: self.modify.is_some(),
-            lock_modify: self.lock_modify.is_some(),
-            indexed: self.indexed.is_some(),
-            acknowledged: self.acknowledged.is_some(),
-            cancellation: self.cancellation.is_some(),
-            skip: self.skip.is_some(),
-        };
+        let mut state = Admission(
+            Set::of_bit(self.lock.is_some(), Publication::Lock)
+                .union(Set::of_bit(self.modify.is_some(), Publication::Modify))
+                .union(Set::of_bit(
+                    self.lock_modify.is_some(),
+                    Publication::LockModify,
+                ))
+                .union(Set::of_bit(self.indexed.is_some(), Publication::Indexed))
+                .union(Set::of_bit(
+                    self.acknowledged.is_some(),
+                    Publication::Acknowledged,
+                ))
+                .union(Set::of_bit(
+                    self.cancellation.is_some(),
+                    Publication::Cancellation,
+                ))
+                .union(Set::of_bit(self.skip.is_some(), Publication::Skip)),
+        );
         for action in actions {
             if !state.apply(action) {
                 return Err(SchedulerHardwareError::OutOfOrder);
@@ -367,50 +377,59 @@ impl<P: SchedulerPublications> SchedulerHardware<P> {
     }
 }
 
-/// Which publications exist while a step is validated.
-struct Admission {
-    lock: bool,
-    modify: bool,
-    lock_modify: bool,
-    indexed: bool,
-    acknowledged: bool,
-    cancellation: bool,
-    skip: bool,
+crate::set::members! {
+    /// A publication a step can hold open.
+    enum Publication {
+        Lock,
+        Modify,
+        LockModify,
+        Indexed,
+        Acknowledged,
+        Cancellation,
+        Skip,
+    }
 }
+
+/// Which publications exist while a step is validated.
+struct Admission(Set<Publication>);
 
 impl Admission {
     /// Apply one action; `false` when it does not continue the publications.
     fn apply(&mut self, action: SchedulerAction) -> bool {
-        fn open(slot: &mut bool) -> bool {
-            !core::mem::replace(slot, true)
+        use Publication::{Acknowledged, Cancellation, Indexed, Lock, LockModify, Modify, Skip};
+        fn open(set: &mut Set<Publication>, slot: Publication) -> bool {
+            let was = set.contains(slot);
+            *set = set.union(slot.set());
+            !was
         }
-        fn close(slot: &mut bool) -> bool {
-            core::mem::replace(slot, false)
+        fn close(set: &mut Set<Publication>, slot: Publication) -> bool {
+            let was = set.contains(slot);
+            *set = set.without(slot.set());
+            was
         }
+        let set = &mut self.0;
         match action {
-            SchedulerAction::PublishExecutionLock(_) => open(&mut self.lock),
+            SchedulerAction::PublishExecutionLock(_) => open(set, Lock),
             SchedulerAction::ReleaseExecutionLock => {
                 // A lock-modify request ends at its terminal observation,
                 // which comes before this release.
-                !self.lock_modify && close(&mut self.lock)
+                !set.contains(LockModify) && close(set, Lock)
             }
             SchedulerAction::PublishExecutionModify
-            | SchedulerAction::PublishExecutionModifyListDeletion => open(&mut self.modify),
-            SchedulerAction::ReleaseExecutionModify => close(&mut self.modify),
-            SchedulerAction::PublishLockModify(_) => self.lock && open(&mut self.lock_modify),
+            | SchedulerAction::PublishExecutionModifyListDeletion => open(set, Modify),
+            SchedulerAction::ReleaseExecutionModify => close(set, Modify),
+            SchedulerAction::PublishLockModify(_) => set.contains(Lock) && open(set, LockModify),
             SchedulerAction::PublishHead(_) => true,
-            SchedulerAction::IndexCancellation => !self.cancellation && open(&mut self.indexed),
+            SchedulerAction::IndexCancellation => !set.contains(Cancellation) && open(set, Indexed),
             SchedulerAction::AcknowledgeCancellationSource => {
-                self.indexed && open(&mut self.acknowledged)
+                set.contains(Indexed) && open(set, Acknowledged)
             }
             SchedulerAction::RequestCancellation => {
-                close(&mut self.indexed)
-                    && close(&mut self.acknowledged)
-                    && open(&mut self.cancellation)
+                close(set, Indexed) && close(set, Acknowledged) && open(set, Cancellation)
             }
-            SchedulerAction::PublishSkip(_) => self.cancellation && open(&mut self.skip),
-            SchedulerAction::ClearSkip => close(&mut self.skip),
-            SchedulerAction::ReleaseCancellation => !self.skip && close(&mut self.cancellation),
+            SchedulerAction::PublishSkip(_) => set.contains(Cancellation) && open(set, Skip),
+            SchedulerAction::ClearSkip => close(set, Skip),
+            SchedulerAction::ReleaseCancellation => !set.contains(Skip) && close(set, Cancellation),
         }
     }
 }

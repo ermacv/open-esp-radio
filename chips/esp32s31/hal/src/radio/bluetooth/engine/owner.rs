@@ -2,7 +2,7 @@
 
 use oer_chips_family_radio_bluetooth_ports::port::OutputTaskPort;
 
-use super::{ControllerMemory, Engine, scheduler};
+use super::{ControllerMemory, Engine, Lifecycle, scheduler};
 use crate::radio::bluetooth::{self, ControllerHalBorrow};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -193,10 +193,10 @@ impl<M: ControllerMemory> Engine<M> {
         if self.is_quarantined() {
             return Err(EngineInitError::Quarantined);
         }
-        if self.initialized {
+        if matches!(self.lifecycle, Lifecycle::HalReady | Lifecycle::PhyReady) {
             return Err(EngineInitError::AlreadyInitialized);
         }
-        self.initialized = true;
+        self.lifecycle = Lifecycle::HalReady;
         initialize(&mut self.registers, config);
         Ok(())
     }
@@ -252,13 +252,13 @@ impl<M: ControllerMemory> Engine<M> {
         if self.is_quarantined() {
             return Err(EngineInitError::Quarantined);
         }
-        if !self.initialized {
+        if self.lifecycle == Lifecycle::Fresh {
             return Err(EngineInitError::HalNotInitialized);
         }
-        if self.phy_initialized {
+        if self.lifecycle == Lifecycle::PhyReady {
             return Err(EngineInitError::AlreadyInitialized);
         }
-        self.phy_initialized = true;
+        self.lifecycle = Lifecycle::PhyReady;
         self.direction_finding_publication = Some(initialize(&mut self.registers, &self.memory));
         Ok(())
     }
@@ -271,7 +271,7 @@ impl<M: ControllerMemory> Engine<M> {
     }
 
     pub const fn is_quarantined(&self) -> bool {
-        self.faulted
+        matches!(self.lifecycle, Lifecycle::Faulted)
             || match &self.scheduler_interrupts {
                 Some(task) => !task.is_quiet(),
                 None => false,
@@ -292,7 +292,7 @@ impl<M: ControllerMemory> Engine<M> {
         bell: &impl scheduler::interrupt::SchedulerDoorbell,
     ) -> Result<(), scheduler::interrupt::SchedulerInterruptError> {
         use scheduler::interrupt::SchedulerInterruptError;
-        if self.faulted {
+        if self.lifecycle == Lifecycle::Faulted {
             return Err(SchedulerInterruptError::Quarantined);
         }
         self.scheduler_interrupts
@@ -330,7 +330,9 @@ impl<M: ControllerMemory> Engine<M> {
     }
 
     pub fn retirement_ready(&self) -> bool {
-        !self.faulted && self.scheduler_interrupts.is_none() && self.memory.retirement_ready()
+        self.lifecycle != Lifecycle::Faulted
+            && self.scheduler_interrupts.is_none()
+            && self.memory.retirement_ready()
     }
 
     /// The stop receipt remains inside the owning engine while a task drains
@@ -414,9 +416,7 @@ impl<M: ControllerMemory> Engine<M> {
             epoch: _,
             scheduler_interrupts: _,
             direction_finding_publication,
-            faulted: _,
-            initialized: _,
-            phy_initialized: _,
+            lifecycle: _,
         } = self;
         match reset_registers(registers, output, stopped) {
             Ok(controller) => Ok(EngineResetTimerPending { controller, memory }),

@@ -441,14 +441,28 @@ pub enum PeripheralConnectionPhase {
     Active { event: bool },
 }
 
+/// Which of the two TX packets is the current one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TxBuffer {
+    First,
+    Second,
+}
+
+/// Whether a TX packet waits for its completion.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TxSlot {
+    Idle,
+    Pending,
+}
+
 /// CPU-side state of one instance.
 #[doc(hidden)]
 #[derive(Clone, Copy)]
 pub struct PeripheralConnectionState {
     phase: PeripheralConnectionPhase,
     rx: Option<LeRxRing<RX_PACKETS>>,
-    tx_current_second: bool,
-    tx_pending: bool,
+    tx_current: TxBuffer,
+    tx: TxSlot,
 }
 
 impl sealed::Sealed for PeripheralConnectionStorage {}
@@ -471,8 +485,8 @@ impl SchedulerRoleStorage for PeripheralConnectionStorage {
     const INITIAL_STATE: PeripheralConnectionState = PeripheralConnectionState {
         phase: PeripheralConnectionPhase::Empty,
         rx: None,
-        tx_current_second: false,
-        tx_pending: false,
+        tx_current: TxBuffer::First,
+        tx: TxSlot::Idle,
     };
 
     fn addresses<D: crate::radio::bluetooth::engine::ControllerDmaSpace>(
@@ -746,7 +760,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
         instance: &SchedulerRoleInstance<'pool, 'epoch>,
     ) -> bool {
         self.shared(instance)
-            .is_ok_and(|(_, _, state)| !state.tx_pending)
+            .is_ok_and(|(_, _, state)| state.tx == TxSlot::Idle)
     }
 
     /// Queue one packet. `Ok(false)` keeps the pending packet and its
@@ -764,7 +778,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
         if cpu.state.phase == PeripheralConnectionPhase::Empty {
             return Err(PeripheralConnectionError::State);
         }
-        if cpu.state.tx_pending {
+        if cpu.state.tx == TxSlot::Pending {
             return Ok(false);
         }
         let graph = &mut *cpu.graph;
@@ -772,7 +786,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
             .tx_packet
             .prepare_pdu(kind.llid(), payload)
             .map_err(PeripheralConnectionError::Transmit)?;
-        let (current, next, next_address) = if cpu.state.tx_current_second {
+        let (current, next, next_address) = if cpu.state.tx_current == TxBuffer::Second {
             (
                 &graph.tx_successor,
                 &graph.tx_sentinel,
@@ -793,7 +807,7 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
             .layout
             .tx_tail()
             .write(BleLinkStateTxTail::ZERO.with_address(Some(next_address.reference())));
-        cpu.state.tx_pending = true;
+        cpu.state.tx = TxSlot::Pending;
         Ok(true)
     }
 
@@ -807,10 +821,10 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
         let cpu = self
             .cpu(instance)
             .map_err(PeripheralConnectionError::Pool)?;
-        if !cpu.state.tx_pending {
+        if cpu.state.tx == TxSlot::Idle {
             return Ok(false);
         }
-        let (header, address) = if cpu.state.tx_current_second {
+        let (header, address) = if cpu.state.tx_current == TxBuffer::Second {
             (&cpu.graph.tx_sentinel, cpu.binding.tx_sentinel)
         } else {
             (&cpu.graph.tx_successor, cpu.binding.tx_successor)
@@ -826,8 +840,11 @@ impl<'pool, 'epoch, const N: usize> PeripheralConnectionPool<'pool, 'epoch, N> {
             .layout
             .tx_head()
             .write(BleLinkStateTxHead::ZERO.with_address(Some(address.reference())));
-        cpu.state.tx_current_second = !cpu.state.tx_current_second;
-        cpu.state.tx_pending = false;
+        cpu.state.tx_current = match cpu.state.tx_current {
+            TxBuffer::First => TxBuffer::Second,
+            TxBuffer::Second => TxBuffer::First,
+        };
+        cpu.state.tx = TxSlot::Idle;
         Ok(true)
     }
 }

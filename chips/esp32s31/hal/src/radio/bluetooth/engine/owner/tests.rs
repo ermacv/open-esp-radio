@@ -439,7 +439,7 @@ fn reset_failure_is_absorbing_and_keeps_the_whole_arena() {
 #[test]
 fn uncertain_hardware_reachability_blocks_all_graph_access_even_after_late_stop() {
     let (mut engine, output, _timer) = model();
-    engine.faulted = true;
+    engine.lifecycle = super::Lifecycle::Faulted;
     engine.stopped_for_host_test();
     assert!(engine.is_quarantined());
     assert!(engine.dtm().is_err());
