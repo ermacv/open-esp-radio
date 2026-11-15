@@ -2398,6 +2398,22 @@ enum Sending {
     BlockAckRequest { tid: u8 },
 }
 
+/// The DELBA body that ends the station's own transmit agreement of `tid`
+/// after its inactivity: the station is its originator (IEEE Std
+/// 802.11-2020, 9.6.5.5, 10.25.5).
+fn own_delba(
+    tid: u8,
+) -> Result<
+    [u8; oer_protocols_ieee80211_wire::block_ack::frame::DELBA_ACTION_BODY_LEN],
+    oer_protocols_ieee80211_wire::block_ack::frame::AddbaRequestError,
+> {
+    oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
+        tid,
+        oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
+        reason_code::TIMEOUT,
+    )
+}
+
 /// The station's transmit agreements in `connected`'s association, started
 /// afresh at their first use in it.
 fn tx_agreements<'c, T: StaTokens, K>(
@@ -6464,11 +6480,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 return self.owe_block_ack_request(connected, tid, start, events);
             }
             TxBlockAckOwed::Delba { tid } => {
-                let Ok(delba) = oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
-                    tid,
-                    oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
-                    reason_code::TIMEOUT,
-                ) else {
+                let Ok(delba) = own_delba(tid) else {
                     return Some(Err(StaDisconnectReason::Encode));
                 };
                 Body::Delba(tid, delba)

@@ -103,3 +103,20 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
         assert_eq!(world.station.buffers.len(), 2);
     });
 }
+
+/// The DELBA the station sends to end its own transmit agreement names it
+/// the originator, with the TID and the timeout's reason.
+#[test]
+fn the_station_s_own_delba_names_it_the_agreement_s_originator() {
+    for tid in 0..8 {
+        let body = super::super::own_delba(tid).unwrap();
+        assert_eq!(
+            parse_block_ack_action(&body),
+            Some(BlockAckAction::Delba {
+                tid,
+                initiator: true,
+                reason: oer_protocols_ieee80211_wire::status::reason_code::TIMEOUT,
+            })
+        );
+    }
+}
