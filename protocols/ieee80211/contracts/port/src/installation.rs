@@ -305,7 +305,6 @@ mod tests {
             lent: 3,
             removals: 0,
             retained_groups: 0,
-            unconsumed: 0,
             transmit_out: 0,
             queued: [0; crate::ACCESS_CATEGORIES],
             running: 0,

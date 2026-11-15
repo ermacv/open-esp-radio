@@ -58,8 +58,6 @@ pub struct Outstanding<F> {
     pub removals: usize,
     /// Station group keys retained after their removal was asked.
     pub retained_groups: usize,
-    /// Items a sink refused that the port keeps.
-    pub unconsumed: usize,
     /// Transmit buffers of the installation out of the port's bank.
     pub transmit_out: usize,
     /// Attempts queued, by access category ([`Self::queued_in`]).
@@ -83,8 +81,6 @@ pub mod class {
     pub const REMOVALS: u32 = 1 << 3;
     /// A group key is retained.
     pub const RETAINED_GROUPS: u32 = 1 << 4;
-    /// Refused items are kept.
-    pub const UNCONSUMED: u32 = 1 << 5;
     /// Transmit buffers are out of the bank.
     pub const TRANSMIT_OUT: u32 = 1 << 6;
     /// Attempts are queued.
@@ -119,7 +115,6 @@ impl<F> Outstanding<F> {
             class::RECEIVED => self.received,
             class::REMOVALS => self.removals,
             class::RETAINED_GROUPS => self.retained_groups,
-            class::UNCONSUMED => self.unconsumed,
             class::TRANSMIT_OUT => self.transmit_out,
             class::QUEUED => self.queued.iter().sum(),
             class::RUNNING => self.running,
@@ -142,7 +137,6 @@ impl<F> Outstanding<F> {
         out(self.received != 0, class::RECEIVED);
         out(self.removals != 0, class::REMOVALS);
         out(self.retained_groups != 0, class::RETAINED_GROUPS);
-        out(self.unconsumed != 0, class::UNCONSUMED);
         out(self.transmit_out != 0, class::TRANSMIT_OUT);
         out(self.queued.iter().any(|queued| *queued != 0), class::QUEUED);
         out(self.running != 0, class::RUNNING);
@@ -164,7 +158,6 @@ impl<F> Outstanding<F> {
             lent: self.lent,
             removals: self.removals,
             retained_groups: self.retained_groups,
-            unconsumed: self.unconsumed,
             transmit_out: self.transmit_out,
             queued: self.queued,
             running: self.running,
@@ -185,7 +178,6 @@ mod tests {
             lent: 0,
             removals: 0,
             retained_groups: 0,
-            unconsumed: 0,
             transmit_out: 0,
             queued: [0; 4],
             running: 0,
@@ -199,7 +191,7 @@ mod tests {
         assert!(empty().is_empty());
         let lent = Outstanding { lent: 3, ..empty() };
         assert!(lent.is_empty(), "lent units do not hold the installation");
-        let cases: [(Outstanding<u8>, u32); 10] = [
+        let cases: [(Outstanding<u8>, u32); 9] = [
             (
                 Outstanding {
                     phase: RunPhase::Recovering,
@@ -234,13 +226,6 @@ mod tests {
                     ..empty()
                 },
                 class::RETAINED_GROUPS,
-            ),
-            (
-                Outstanding {
-                    unconsumed: 2,
-                    ..empty()
-                },
-                class::UNCONSUMED,
             ),
             (
                 Outstanding {

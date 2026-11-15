@@ -704,21 +704,6 @@ pub trait AccessPointCommands<'id> {
     ) -> AccessPointCommand<'id, Self::Types, Self::Caps>;
 }
 
-/// The answer of [`AccessPointPort::access_point_command`] of the port `P`.
-pub type AccessPointCommandAnswer<'id, P> = crate::PortAnswer<
-    'id,
-    <P as crate::DataPort<'id>>::Types,
-    AccessPointCommand<'id, <P as crate::DataPort<'id>>::Types, <P as crate::DataPort<'id>>::Caps>,
-    Result<
-        AccessPointProgress<
-            'id,
-            <P as crate::DataPort<'id>>::Types,
-            <P as crate::DataPort<'id>>::Caps,
-        >,
-        AccessPointCommandFailed<'id, P>,
-    >,
->;
-
 /// The access-point role of a shared port: its entry points beside the
 /// station's, over the same physical owner, queues and sink.
 pub trait AccessPointPort<'id>:
@@ -767,21 +752,19 @@ pub trait AccessPointPort<'id>:
 
     /// Run one access-point command, or hold it at its barrier.
     ///
-    /// The answer's failure is the backend's contract fault, with the
-    /// command when the port did not take its owners
-    /// ([`CommandFailed`](crate::CommandFailed)).
-    ///
     /// # Errors
     ///
-    /// An item the call could neither give `sink` nor keep
-    /// ([`Unkeeping`](crate::Unkeeping)): found before the command was
-    /// accepted, the command comes back whole; after, the answer.
+    /// The backend's contract fault, with the command when the port did not
+    /// take its owners ([`CommandFailed`](crate::CommandFailed)).
     fn access_point_command(
         &mut self,
         command: AccessPointCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> AccessPointCommandAnswer<'id, Self>;
+    ) -> Result<
+        AccessPointProgress<'id, Self::Types, Self::Caps>,
+        AccessPointCommandFailed<'id, Self>,
+    >;
 }
 
 #[cfg(test)]

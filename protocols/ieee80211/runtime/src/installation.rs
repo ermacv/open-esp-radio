@@ -8,11 +8,11 @@
 //! port's transitions in the repository, by type: six of the eight take a
 //! proof and two the stop's right, which only the machine holds.
 //!
-//! Three answers of the port carry an owner that is not the machine's, and
+//! Two answers of the port carry an owner that is not the machine's, and
 //! `drive` splits them: a reinstall's `Installed` goes to the controller in
-//! the one call that delivers the restart's end (`Parties::reinstalled`), a
-//! release's device stays with the binding that holds the port, and an item
-//! a cleanup hands back (`Unkeeping`) goes to the data plane. The machine gets what is left. A stop's answer is the
+//! the one call that delivers the restart's end (`Parties::reinstalled`),
+//! and a release's device stays with the binding that holds the port. What
+//! a cleanup frees goes to the caller's sink. The machine gets what is left. A stop's answer is the
 //! port's `Poll`, and the wait is the pump's: `drive` answers `Ready` with
 //! the contract's `Result` and `Pending` with `pending`. That is the whole
 //! of the mapping.
@@ -20,9 +20,7 @@
 use core::task::{Context, Poll};
 
 use oer_portable_time::Instant;
-use oer_protocols_ieee80211_contracts_port::{
-    DataPort, Input as CallInput, PortSink, SupportedChannel, Unkeeping, Unkept,
-};
+use oer_protocols_ieee80211_contracts_port::{DataPort, PortSink, SupportedChannel};
 use oer_protocols_ieee80211_core_installation::{
     DataStop, Ended, Input, Machine, Rest, Step, Tell, Waiting,
 };
@@ -38,9 +36,6 @@ pub type MachineOf<'id, P> = Machine<'id, ChannelOf<'id, P>, <P as DataPort<'id>
 pub trait Parties<'id, P: DataPort<'id>> {
     /// The data plane: stop the data, answered at once.
     fn stop_data(&mut self) -> DataStop;
-    /// The data plane: an item a cleanup could neither give the sink nor
-    /// keep, to deliver.
-    fn deliver(&mut self, unkept: Unkept<'id, P::Types>);
     /// A message to its party: the controller's tokens' end, the network's
     /// stop, or the data plane's flow.
     fn tell(&mut self, tell: Tell<'id>);
@@ -91,27 +86,8 @@ pub fn drive<'id, P: DataPort<'id>, S: PortSink<'id, P::Types>>(
                 Poll::Pending => resume.pending(),
             },
             Step::StopData(resume) => resume.answer(parties.stop_data()),
-            Step::TakeUnconsumed(stopped, resume) => {
-                let answer = port.take_unconsumed(&stopped, *sink);
-                resume.answer(stopped, answer)
-            }
             Step::Clean(stopped, resume) => {
-                // A cleanup is always accepted: an item it hands back is
-                // the data plane's, and the machine takes its answer.
-                let answer = match port.clean(&stopped, *sink) {
-                    Ok(cleaned) => cleaned,
-                    Err(Unkeeping { unkept, input }) => {
-                        parties.deliver(unkept);
-                        match input {
-                            CallInput::Accepted(cleaned) => cleaned,
-                            CallInput::NotAccepted(never) => match never {},
-                        }
-                    }
-                };
-                resume.answer(stopped, answer)
-            }
-            Step::TakeFreed(stopped, resume) => {
-                let answer = port.take_unconsumed(&stopped, *sink);
+                let answer = port.clean(&stopped, *sink);
                 resume.answer(stopped, answer)
             }
             Step::Retire(stopped, resume) => resume.answer(port.retire(stopped)),

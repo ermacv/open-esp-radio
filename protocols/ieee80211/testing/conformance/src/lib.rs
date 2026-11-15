@@ -26,13 +26,6 @@
 //! from actual submitted and returned owners, never from the expected
 //! identities.
 
-/// A port call's own answer; an item it could not keep, or a submission
-/// it did not accept, is the case's violation `unkept` (the cases' sinks
-/// take what the port gives).
-pub(crate) fn answered<R, E, V>(answer: Result<R, E>, unkept: V) -> Result<R, V> {
-    answer.map_err(|_| unkept)
-}
-
 pub mod access_point;
 
 /// Whether a fixture keeps an operation of its port at its barrier or lets

@@ -113,7 +113,7 @@ impl<Id: SlotIdentity, const B: usize> Sink<'_, Id, B> {
         }
     }
     /// A sink that takes the core's completions.
-    const fn taking() -> Self {
+    pub(super) const fn taking() -> Self {
         Self {
             completed: heapless::Vec::new(),
             takes_completions: true,
@@ -158,38 +158,18 @@ pub(super) type Admitted<'id, Id, D, const B: usize> = (
 /// Where the driver's steps post what they produce and read the settings
 /// they need: the data port's settings and its turn's sink.
 pub(super) trait DriverEnv<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations> {
-    /// The call's right to hand out one item, which a step obtains before
-    /// it takes the owner the item carries ([`Self::vacancy`]).
-    type Vacancy;
-    /// The right to hand out one item, while the call has it: without it a
-    /// step takes no owner, and the rest stay with the driver.
-    fn vacancy(&mut self) -> Option<Self::Vacancy>;
-    /// Give back a right a step did not use.
-    fn vacate(&mut self, vacancy: Self::Vacancy);
     /// Whether the radio stops: queued attempts end withdrawn.
     fn stopping(&self) -> bool;
     /// The MSDU lifetime of `category` on interface `vif`.
     fn lifetime(&self, vif: usize, category: WmmAccessCategory) -> Duration;
     /// Count MSDUs that expired before publication.
     fn count_expired(&mut self, msdus: u32);
-    /// A single MPDU's terminal, at its ticket's `place`, handed out under
-    /// `vacancy`.
-    fn tx_completed(
-        &mut self,
-        vacancy: Self::Vacancy,
-        place: u8,
-        completed: brand::OwnedTxCompleted<'id, Id, D, B, O>,
-    );
+    /// A single MPDU's terminal, at its ticket's `place`.
+    fn tx_completed(&mut self, place: u8, completed: brand::OwnedTxCompleted<'id, Id, D, B, O>);
     /// A TBTT of the station's schedule.
     fn tbtt(&mut self, event: TbttEvent);
-    /// A unit a receive cut drained, ahead of the cut's terminal, handed
-    /// out under `vacancy`.
-    fn received(
-        &mut self,
-        vacancy: Self::Vacancy,
-        frame: ReceiveBuffer<'id, Id, D::Receive>,
-        meta: Esp32s31RxMeta,
-    ) -> Result<(), Fault>;
+    /// A unit a receive cut drained, ahead of the cut's terminal.
+    fn received(&mut self, frame: ReceiveBuffer<'id, Id, D::Receive>, meta: Esp32s31RxMeta);
     /// The next key installation serial.
     fn serial(&mut self) -> u64;
     /// The installation's cross-context storage.
@@ -199,8 +179,6 @@ pub(super) trait DriverEnv<'id, Id: SlotIdentity, D: Device<B>, const B: usize, 
     /// Whether a diagnostic image rejects the next group replacement.
     #[cfg(oer_debug_control)]
     fn reject_group_replacement(&mut self) -> bool;
-    /// Whether the call stopped on an item it could not keep.
-    fn halted(&self) -> bool;
 }
 
 /// The attempts one access category's queue holds. Every queued or
@@ -421,10 +399,6 @@ pub(super) struct Driver<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O:
     /// lease its buffer refused back ([`Self::strand`]): the cleanup after
     /// the confirmed stop ends it with this, never with a guess.
     stranded: [Option<Left>; 4],
-    /// Completions the core gave a call that halted before it brought them
-    /// home, newest first: the next collection takes them first, and no
-    /// sink takes the core's completions while any wait here.
-    uncollected: heapless::Vec<Completion<'id, Id, B>, 4>,
     /// The station's two data arenas over the A-MPDU chains, from
     /// preparation until retirement returns their chains and tickets.
     pub(super) arena: Option<DataArenas<'id, Id, B>>,
@@ -505,7 +479,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             queues: [const { heapless::Deque::new() }; 4],
             running: [const { None }; 4],
             stranded: [None; 4],
-            uncollected: heapless::Vec::new(),
             arena: None,
             retained_group: None,
             barrier: None,
@@ -584,7 +557,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn finish<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         env: &mut E,
-        vacancy: E::Vacancy,
         pending: Pending<'id, Id, D, B, O>,
         outcome: SingleOutcome<Ack, Infallible>,
     ) {
@@ -607,7 +579,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             },
             None => brand::OwnedTxCompleted::Single(completed),
         };
-        env.tx_completed(vacancy, place, completed);
+        env.tx_completed(place, completed);
     }
     // The retained barrier is also the withdrawal marker; no owner or result
     // is moved out of its AC while an earlier owner can still complete.
@@ -648,9 +620,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 continue;
             }
             // A selective barrier cannot return an owner past either a
-            // published head or an earlier unaffected queued owner. Each
-            // owner leaves under the call's right, obtained before it
-            // leaves: without it the rest stay queued.
+            // published head or an earlier unaffected queued owner.
             while let Some(cause) = self
                 .queues
                 .get(index)
@@ -659,18 +629,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     global.or_else(|| self.withdrawal(pending.role(), pending.key()))
                 })
             {
-                let Some(vacancy) = env.vacancy() else {
-                    break;
-                };
                 let Some(queued) = self
                     .queues
                     .get_mut(index)
                     .and_then(heapless::Deque::pop_front)
                 else {
-                    env.vacate(vacancy);
                     break;
                 };
-                self.finish(env, vacancy, queued, TxOutcome::Withdrawn(cause));
+                self.finish(env, queued, TxOutcome::Withdrawn(cause));
             }
         }
         !self
@@ -719,21 +685,15 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         };
         let (front, back) = queue.as_mut_slices();
         to_head(front, back, at);
-        // The beacon leaves under the call's right, obtained before it
-        // leaves: without it, it stays queued for the next call.
         if !queue.front().is_some_and(late) {
             return;
         }
-        let Some(vacancy) = env.vacancy() else {
-            return;
-        };
-        match self
+        if let Some(pending) = self
             .queues
             .get_mut(index)
             .and_then(heapless::Deque::pop_front)
         {
-            Some(pending) => self.finish(env, vacancy, pending, TxOutcome::Expired { msdus: 1 }),
-            None => env.vacate(vacancy),
+            self.finish(env, pending, TxOutcome::Expired { msdus: 1 });
         }
     }
     /// A transmission ended without delivery: `end` if the plan is spent, a
@@ -754,13 +714,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             None
         }
     }
-    /// Bring every completion of one service home, then answer the first
-    /// fault: an owner a completion cannot return keeps its place with the
-    /// fault, and the completions after it still go home.
-    ///
-    /// Without the call's right no further completion leaves: the rest
-    /// wait in the driver ([`Self::completion_sink`]), and the next
-    /// collection brings them home first.
+    /// Bring every completion of one service home, oldest first, then
+    /// answer the first fault: an owner a completion cannot return keeps its
+    /// place with the fault, and the completions after it still go home.
     pub(super) fn collect<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         env: &mut E,
@@ -768,35 +724,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         stopping: bool,
     ) -> Result<(), Fault> {
         let mut first = None;
-        // Each completion leaves under the call's right, obtained before it
-        // leaves: after the first refusal the rest of the batch stays with
-        // the driver.
-        while let Some(vacancy) = env.vacancy() {
-            let Some(completion) = self.uncollected.pop() else {
-                env.vacate(vacancy);
-                break;
-            };
-            if let Err(fault) = self.complete(env, vacancy, completion, stopping) {
+        for completion in core::mem::take(&mut sink.completed) {
+            if let Err(fault) = self.complete(env, completion, stopping) {
                 first.get_or_insert(fault);
             }
-        }
-        // Newest first, so that the oldest leaves first.
-        let mut batch = core::mem::take(&mut sink.completed);
-        batch.reverse();
-        while let Some(vacancy) = env.vacancy() {
-            let Some(completion) = batch.pop() else {
-                env.vacate(vacancy);
-                break;
-            };
-            if let Err(fault) = self.complete(env, vacancy, completion, stopping) {
-                first.get_or_insert(fault);
-            }
-        }
-        if !batch.is_empty() {
-            // The sink took completions, so none waited when it was made
-            // ([`Self::completion_sink`]), and the loop above took none
-            // since: the driver's list is empty here.
-            self.uncollected = batch;
         }
         if let Some(tbtt) = sink.tbtt.take() {
             env.tbtt(tbtt);
@@ -807,21 +738,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.withdraw(env);
         Ok(())
     }
-    /// How many completions a halted call left here.
-    #[cfg(test)]
-    pub(super) fn uncollected_for_test(&self) -> usize {
-        self.uncollected.len()
-    }
-    /// The sink of a core call: it takes the core's completions unless
-    /// completions a halted call left wait in the driver, which come home
-    /// first; the core keeps its own until then.
-    pub(super) fn completion_sink(&self) -> Sink<'id, Id, B> {
-        if self.uncollected.is_empty() {
-            Sink::taking()
-        } else {
-            Sink::refusing()
-        }
-    }
     /// Bring one completion's owners home: its queue place, its ticket,
     /// its descriptor and the memory the descriptor held, then the attempt
     /// to its terminal or its next try. An owner whose home is taken or
@@ -830,7 +746,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     fn complete<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         env: &mut E,
-        vacancy: E::Vacancy,
         completion: Completion<'id, Id, B>,
         stopping: bool,
     ) -> Result<(), Fault> {
@@ -857,7 +772,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 home.return_value(memory);
             }
             self.free.put_paired(free, slot);
-            env.vacate(vacancy);
             return Err(*first.get_or_insert(Fault::CompletionWithoutPending { queue: at }));
         };
         // The lease leaves the queue's descriptor whole, back to its buffer.
@@ -882,24 +796,21 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 // The lease stays whole on the descriptor, which went home:
                 // the attempt waits beside it with what its end says.
                 self.keep_stranded(category, pending, Left::Ended { end, rate });
-                env.vacate(vacancy);
                 return Err(*first.get_or_insert(fault));
             }
             Err(fault) => {
                 // Its memory is not back: the attempt stays published.
                 self.keep_running(category, pending);
-                env.vacate(vacancy);
                 return Err(*first.get_or_insert(fault));
             }
         }
-        self.conclude(env, vacancy, pending, end, rate, stopping)
+        self.conclude(env, pending, end, rate, stopping)
     }
     /// End an attempt whose lease is back with its buffer by its known
     /// publication `end`: its terminal, or its next try.
     fn conclude<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         env: &mut E,
-        vacancy: E::Vacancy,
         mut pending: Pending<'id, Id, D, B, O>,
         end: PublicationEnd,
         rate: PhyRate,
@@ -952,9 +863,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             }
         };
         if let Some(outcome) = outcome {
-            self.finish(env, vacancy, pending, outcome);
+            self.finish(env, pending, outcome);
         } else {
-            env.vacate(vacancy);
             // A queue holds every ticket's attempt (`QUEUE_DEPTH`), so this
             // push has room; refused, the retry stays where it was.
             if let Err(pending) = self.enqueue(index, pending, true) {
@@ -1070,7 +980,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         if arena_ended || !self.arena_on_air() {
             // No arena to offer the edge: the MPDUs' settles are the core's
             // own.
-            let mut sink = self.completion_sink();
+            let mut sink = Sink::taking();
             // What the service completed goes home even when a later queue
             // of the same service faulted; the service's fault comes first.
             let served = core_views::service::<Id, D, B>(
@@ -1095,7 +1005,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             events: crate::mac::irq::EVENT_TX_TIMEOUT,
         };
         let before = settling(self);
-        let mut sink = self.completion_sink();
+        let mut sink = Sink::taking();
         let served =
             core_views::service::<Id, D, B>(self.core.view(), device.hardware()?, wake, &mut sink);
         let collected = self.collect(env, &mut sink, stopping);
@@ -1105,7 +1015,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         let (done, again) =
             self.service_arena(device, if settled { timeout } else { wake }, now)?;
         if again {
-            let mut sink = self.completion_sink();
+            let mut sink = Sink::taking();
             let served = core_views::service::<Id, D, B>(
                 self.core.view(),
                 device.hardware()?,
@@ -1123,22 +1033,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     pub(super) fn receive<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         env: &mut E,
-        vacancy: E::Vacancy,
         device: &mut D,
         unit: D::Receive,
     ) -> Result<(), Fault> {
         let shared = env.shared();
-        match self.admit(device, env.rx_out(), shared, unit) {
-            Ok(Some((frame, meta))) => env.received(vacancy, frame, meta),
-            Ok(None) => {
-                env.vacate(vacancy);
-                Ok(())
-            }
-            Err(fault) => {
-                env.vacate(vacancy);
-                Err(fault)
-            }
+        if let Some((frame, meta)) = self.admit(device, env.rx_out(), shared, unit)? {
+            env.received(frame, meta);
         }
+        Ok(())
     }
     /// The caller's received unit, counted in `rx_out`, or
     /// `None` once the unit is back in the ring because no receive rule
@@ -1197,7 +1099,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         &mut self,
         device: &mut D,
         env: &mut E,
-        vacancy: E::Vacancy,
         index: usize,
         mut pending: Pending<'id, Id, D, B, O>,
     ) -> Result<(), Fault> {
@@ -1260,29 +1161,23 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             ),
         };
         if let Some(refusal) = refusal {
-            return Err(self.back_to_queue(env, vacancy, index, pending, refusal));
+            return Err(self.back_to_queue(env, index, pending, refusal));
         }
         let Ok((mut core, admitted_at, key_handle)) = checked else {
-            return Err(self.requeue(env, vacancy, index, pending, refused(PublishStep::Values)));
+            return Err(self.requeue(env, index, pending, refused(PublishStep::Values)));
         };
         // The registers first: a device that holds none takes nothing of
         // the attempt, which goes back to the head of its queue.
         let hardware = match device.hardware() {
             Ok(hardware) => hardware,
-            Err(fault) => return Err(self.requeue(env, vacancy, index, pending, fault)),
+            Err(fault) => return Err(self.requeue(env, index, pending, fault)),
         };
         let Some(observations) = self.observations.as_mut() else {
-            return Err(self.requeue(
-                env,
-                vacancy,
-                index,
-                pending,
-                refused(PublishStep::Observations),
-            ));
+            return Err(self.requeue(env, index, pending, refused(PublishStep::Observations)));
         };
         let backoff_slots = core.draw_backoff(role, pending.category, observations);
         let Some(core_ticket) = self.tickets.take() else {
-            return Err(self.requeue(env, vacancy, index, pending, refused(PublishStep::Ticket)));
+            return Err(self.requeue(env, index, pending, refused(PublishStep::Ticket)));
         };
         let admission = match key_handle {
             Some(Installed::Transmit(key)) => match core.admit_key(key, core_ticket) {
@@ -1291,7 +1186,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     self.tickets.put(refusal.ticket);
                     return Err(self.requeue(
                         env,
-                        vacancy,
                         index,
                         pending,
                         refused(PublishStep::KeyAdmission),
@@ -1300,13 +1194,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             },
             Some(Installed::Receive(_)) => {
                 self.tickets.put(core_ticket);
-                return Err(self.requeue(
-                    env,
-                    vacancy,
-                    index,
-                    pending,
-                    refused(PublishStep::ReceiveKey),
-                ));
+                return Err(self.requeue(env, index, pending, refused(PublishStep::ReceiveKey)));
             }
             None => TxAdmission::Open(core_ticket),
         };
@@ -1317,7 +1205,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Err(self.unadmit(
                 hardware,
                 env,
-                vacancy,
                 index,
                 (pending, admission),
                 None,
@@ -1328,7 +1215,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Err(self.unadmit(
                 hardware,
                 env,
-                vacancy,
                 index,
                 (pending, admission),
                 Some((queue, Some(slot))),
@@ -1347,7 +1233,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Err(self.unadmit(
                 hardware,
                 env,
-                vacancy,
                 index,
                 (pending, admission),
                 Some((queue, Some(slot))),
@@ -1358,7 +1243,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return self.unwind(
                 hardware,
                 env,
-                vacancy,
                 index,
                 (pending, admission),
                 (queue, slot),
@@ -1373,7 +1257,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Err(self.unadmit(
                 hardware,
                 env,
-                vacancy,
                 index,
                 (pending, admission),
                 Some((queue, None)),
@@ -1396,7 +1279,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     return self.unwind(
                         hardware,
                         env,
-                        vacancy,
                         index,
                         (pending, admission),
                         (queue, memory.into_slot()),
@@ -1410,7 +1292,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return self.unwind(
                 hardware,
                 env,
-                vacancy,
                 index,
                 (pending, admission),
                 (queue, memory.into_slot()),
@@ -1448,7 +1329,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 return self.unwind(
                     hardware,
                     env,
-                    vacancy,
                     index,
                     (pending, admission),
                     (queue, slot),
@@ -1497,7 +1377,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             return Err(self.put_back(
                 hardware,
                 env,
-                vacancy,
                 index,
                 (pending, admission),
                 (queue, slot),
@@ -1508,7 +1387,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // published place, which no attempt of this queue holds while its
         // queue place was home.
         self.keep_running(pending.category, pending);
-        env.vacate(vacancy);
         #[cfg(all(oer_trace, oer_debug_control))]
         oer_portable_trace_recorder::emit(&publication);
         Ok(())
@@ -1522,7 +1400,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     fn requeue<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         env: &mut E,
-        vacancy: E::Vacancy,
         index: usize,
         pending: Pending<'id, Id, D, B, O>,
         fault: Fault,
@@ -1533,8 +1410,8 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             _ => None,
         };
         match whole {
-            Some(refusal) => self.back_to_queue(env, vacancy, index, pending, refusal),
-            None => self.requeue_beside(env, vacancy, index, pending, fault),
+            Some(refusal) => self.back_to_queue(env, index, pending, refusal),
+            None => self.requeue_beside(env, index, pending, fault),
         }
     }
     /// Put `pending` back at the head of its queue with `fault`, which an
@@ -1542,12 +1419,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     fn requeue_beside<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         env: &mut E,
-        vacancy: E::Vacancy,
         index: usize,
         pending: Pending<'id, Id, D, B, O>,
         fault: Fault,
     ) -> Fault {
-        match self.back_to_queue(env, vacancy, index, pending, Unpublished::CoreView) {
+        match self.back_to_queue(env, index, pending, Unpublished::CoreView) {
             Fault::Unpublished(_) => fault,
             full => full,
         }
@@ -1556,15 +1432,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// descriptor back to its queue's place, then the attempt to the head of
     /// its queue: `fault` names the refusal. An admission the core does not
     /// take back is that fault instead.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the attempt's owners, its environment and the call's right are distinct values"
-    )]
     fn unadmit<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         hardware: &mut D::Hardware,
         env: &mut E,
-        vacancy: E::Vacancy,
         index: usize,
         (pending, admission): (
             Pending<'id, Id, D, B, O>,
@@ -1583,21 +1454,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             None => {}
         }
         self.returned_ticket(hardware, admission);
-        self.requeue(env, vacancy, index, pending, fault)
+        self.requeue(env, index, pending, fault)
     }
     /// A publication the core refused at its submission: the memory
     /// rejoins the buffer when the descriptor gives it up (otherwise it
     /// stays attached, and the descriptor keeps it from every pool), then
     /// every owner goes back as at a refusal before the submission.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the attempt's owners, its environment and the call's right are distinct values"
-    )]
     fn put_back<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         hardware: &mut D::Hardware,
         env: &mut E,
-        vacancy: E::Vacancy,
         index: usize,
         (mut pending, admission): (
             Pending<'id, Id, D, B, O>,
@@ -1615,19 +1481,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
             .buffer
             .take_back(slot.as_mut())
         {
-            return self.strand(
-                hardware,
-                env,
-                vacancy,
-                index,
-                (pending, admission),
-                (queue, slot),
-            );
+            return self.strand(hardware, index, (pending, admission), (queue, slot));
         }
         self.unadmit(
             hardware,
             env,
-            vacancy,
             index,
             (pending, admission),
             Some((queue, Some(slot))),
@@ -1640,15 +1498,9 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// queue's published place, which no attempt of this queue holds while
     /// its queue place was taken. The ticket goes back. Both stay there
     /// until the cleanup after a confirmed stop ([`Self::rejoin_stranded`]).
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the attempt's owners, its environment and the call's right are distinct values"
-    )]
-    fn strand<E: DriverEnv<'id, Id, D, B, O>>(
+    fn strand(
         &mut self,
         hardware: &mut D::Hardware,
-        env: &mut E,
-        vacancy: E::Vacancy,
         index: usize,
         (pending, admission): (
             Pending<'id, Id, D, B, O>,
@@ -1659,7 +1511,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.free.put_paired(queue, slot);
         self.returned_ticket(hardware, admission);
         self.keep_stranded(pending.category, pending, Left::Unpublished);
-        env.vacate(vacancy);
         Fault::ReturnRefused { queue: index as u8 }
     }
     /// After a confirmed stop, which released every descriptor's DMA: each
@@ -1668,9 +1519,7 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// ends with what is known of it ([`Left`]): a completed attempt by its
     /// publication's end, as a completion during a stop ends it (a delivery
     /// stays delivered), one never published withdrawn as unpublishable.
-    /// The attempts queued behind it, never sent, end withdrawn. Each
-    /// leaves under the call's right; without it the rest wait for the next
-    /// call.
+    /// The attempts queued behind it, never sent, end withdrawn.
     ///
     /// # Errors
     ///
@@ -1691,15 +1540,11 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                     })
                 });
             if stranded {
-                let Some(vacancy) = env.vacancy() else {
-                    return Ok(());
-                };
                 let (Some(mut pending), Some(mut slot)) = (
                     self.running.get_mut(index).and_then(Option::take),
                     self.free.descriptors.get_mut(index).and_then(Option::take),
                 ) else {
                     // Both were checked present above.
-                    env.vacate(vacancy);
                     return Ok(());
                 };
                 let rejoined = self.rejoin(&mut pending, slot.as_mut());
@@ -1708,18 +1553,16 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 }
                 if rejoined.is_err() {
                     self.keep_running(pending.category, pending);
-                    env.vacate(vacancy);
                     return Err(Fault::ReturnRefused { queue: index as u8 });
                 }
                 // The attempt ends with what was known of it: a completed
                 // one by its end, one never published withdrawn.
                 match self.stranded.get_mut(index).and_then(Option::take) {
                     Some(Left::Ended { end, rate }) => {
-                        self.conclude(env, vacancy, pending, end, rate, true)?;
+                        self.conclude(env, pending, end, rate, true)?;
                     }
                     Some(Left::Unpublished) | None => self.finish(
                         env,
-                        vacancy,
                         pending,
                         TxOutcome::Withdrawn(WithdrawCause::Unpublishable),
                     ),
@@ -1734,23 +1577,14 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
                 .get(index)
                 .is_some_and(|queue| !queue.is_empty())
             {
-                let Some(vacancy) = env.vacancy() else {
-                    return Ok(());
-                };
                 let Some(queued) = self
                     .queues
                     .get_mut(index)
                     .and_then(heapless::Deque::pop_front)
                 else {
-                    env.vacate(vacancy);
                     break;
                 };
-                self.finish(
-                    env,
-                    vacancy,
-                    queued,
-                    TxOutcome::Withdrawn(WithdrawCause::Disabled),
-                );
+                self.finish(env, queued, TxOutcome::Withdrawn(WithdrawCause::Disabled));
             }
         }
         Ok(())
@@ -1760,7 +1594,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     fn back_to_queue<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         env: &mut E,
-        vacancy: E::Vacancy,
         index: usize,
         pending: Pending<'id, Id, D, B, O>,
         refusal: Unpublished,
@@ -1769,20 +1602,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         // The attempt left this queue in the same call, and a queue holds
         // every ticket's attempt (`QUEUE_DEPTH`): the push has room.
         match self.enqueue(index, pending, true) {
-            Ok(()) => {
-                env.vacate(vacancy);
-                Fault::Unpublished(refusal)
-            }
+            Ok(()) => Fault::Unpublished(refusal),
             Err(pending) => {
                 // Refused all the same: the attempt ends withdrawn with
                 // every owner, under the right its publication took, and
                 // the fault stops the port.
-                self.finish(
-                    env,
-                    vacancy,
-                    pending,
-                    TxOutcome::Withdrawn(WithdrawCause::Disabled),
-                );
+                self.finish(env, pending, TxOutcome::Withdrawn(WithdrawCause::Disabled));
                 Fault::QueueFull { queue }
             }
         }
@@ -1796,15 +1621,10 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
     /// [`WithdrawCause::Unpublishable`] with every owner, and the port runs
     /// on. An owner that cannot go back keeps all of them with the
     /// quarantine.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the attempt's owners, its environment and the call's right are distinct values"
-    )]
     fn unwind<E: DriverEnv<'id, Id, D, B, O>>(
         &mut self,
         hardware: &mut D::Hardware,
         env: &mut E,
-        vacancy: E::Vacancy,
         index: usize,
         (mut pending, admission): (
             Pending<'id, Id, D, B, O>,
@@ -1828,20 +1648,12 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         {
             Ok(()) => {}
             Err(TakeBackRefused::Refused) => {
-                return Err(self.strand(
-                    hardware,
-                    env,
-                    vacancy,
-                    index,
-                    (pending, admission),
-                    (queue, slot),
-                ));
+                return Err(self.strand(hardware, index, (pending, admission), (queue, slot)));
             }
             Err(TakeBackRefused::Missing) => {
                 return Err(self.unadmit(
                     hardware,
                     env,
-                    vacancy,
                     index,
                     (pending, admission),
                     Some((queue, Some(slot))),
@@ -1853,7 +1665,6 @@ impl<'id, Id: SlotIdentity, D: Device<B>, const B: usize, O: Observations>
         self.returned_ticket(hardware, admission);
         self.finish(
             env,
-            vacancy,
             pending,
             TxOutcome::Withdrawn(WithdrawCause::Unpublishable),
         );

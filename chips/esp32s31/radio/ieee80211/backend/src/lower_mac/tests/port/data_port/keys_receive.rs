@@ -29,27 +29,16 @@ enum Seen<'id, Id: radio::SlotIdentity + 'id> {
 /// A sink that keeps cut units and terminals in one ordered list.
 struct Ordered<'id, Id: radio::SlotIdentity + 'id>(Vec<Seen<'id, Id>>);
 impl<'id, Id: radio::SlotIdentity + 'id> PortSink<'id, Family<Id>> for Ordered<'id, Id> {
-    fn terminal(
-        &mut self,
-        terminal: LowerMacTerminal<'id, Family<Id>>,
-    ) -> Result<(), LowerMacTerminal<'id, Family<Id>>> {
+    fn terminal(&mut self, terminal: LowerMacTerminal<'id, Family<Id>>) {
         self.0.push(Seen::Terminal(terminal));
-        Ok(())
     }
     fn tbtt(&mut self, _: TbttEvent) {}
     fn received(
         &mut self,
         frame: ReceiveBuffer<'id, Id, TestReceive>,
         _: crate::lower_mac::Esp32s31RxMeta,
-    ) -> Result<
-        (),
-        (
-            ReceiveBuffer<'id, Id, TestReceive>,
-            crate::lower_mac::Esp32s31RxMeta,
-        ),
-    > {
+    ) {
         self.0.push(Seen::Received(frame));
-        Ok(())
     }
 }
 
@@ -154,7 +143,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let mut command = command;
         for _ in 0..16 {
             let now = self.now();
-            match self.port.command(command, now, sink).unwrap() {
+            match self.port.command(command, now, sink) {
                 Ok(CommandProgress::Held(held)) => command = held,
                 Ok(other) => return other,
                 Err(fault) => panic!("the command faulted: {fault:?}"),
@@ -401,7 +390,6 @@ fn a_gtk_mutation_behind_a_published_frame_outlasts_its_bound_while_the_frame_ho
         fixture
             .port
             .submit(attempt, now, &mut fixture.outbox)
-            .unwrap()
             .ok()
             .expect("published");
         let configure = DataPortHarness::configure(fixture).expect("permission");
@@ -410,16 +398,11 @@ fn a_gtk_mutation_behind_a_published_frame_outlasts_its_bound_while_the_frame_ho
             fixture
                 .port
                 .command(configure, now, &mut fixture.outbox)
-                .unwrap()
                 .is_ok()
         );
         for _ in 0..6 {
             let now = fixture.now();
-            match fixture
-                .port
-                .command(command, now, &mut fixture.outbox)
-                .unwrap()
-            {
+            match fixture.port.command(command, now, &mut fixture.outbox) {
                 Ok(CommandProgress::Held(held)) => command = held,
                 other => panic!("the frame holds the mutation: {:?}", other.is_ok()),
             }
@@ -438,22 +421,14 @@ fn a_gtk_mutation_held_at_its_cut_comes_back_refused_by_a_stopped_port_and_runs_
             let cuts = fixture.observed.borrow().resumed_cuts;
             fixture.observed.borrow_mut().hold_cut = true;
             let now = fixture.now();
-            let held = match fixture
-                .port
-                .command(command, now, &mut fixture.outbox)
-                .unwrap()
-            {
+            let held = match fixture.port.command(command, now, &mut fixture.outbox) {
                 Ok(CommandProgress::Held(held)) => held,
                 _ => panic!("{mutation:?}: the cut holds the mutation"),
             };
             fixture.stop();
             // The stopped port returns the command and its owners unchanged.
             let now = fixture.now();
-            let refused = match fixture
-                .port
-                .command(held, now, &mut fixture.outbox)
-                .unwrap()
-            {
+            let refused = match fixture.port.command(held, now, &mut fixture.outbox) {
                 Ok(CommandProgress::Refused(refused, CommandRefusal::NotEnabled)) => refused,
                 _ => panic!("{mutation:?}: a stopped port refuses the held mutation"),
             };
@@ -488,11 +463,7 @@ fn a_gtk_mutation_waits_for_units_the_network_holds_past_its_bound() {
             observed.cut_by_units = true;
         }
         let now = fixture.now();
-        let mut held = match fixture
-            .port
-            .command(command, now, &mut fixture.outbox)
-            .unwrap()
-        {
+        let mut held = match fixture.port.command(command, now, &mut fixture.outbox) {
             Ok(CommandProgress::Held(held)) => held,
             _ => panic!("the cut holds the mutation"),
         };
@@ -500,11 +471,7 @@ fn a_gtk_mutation_waits_for_units_the_network_holds_past_its_bound() {
         for _ in 0..3 {
             fixture.advance(Duration::from_micros(COMMAND_BOUND.as_micros() - 1000));
             let now = fixture.now();
-            held = match fixture
-                .port
-                .command(held, now, &mut fixture.outbox)
-                .unwrap()
-            {
+            held = match fixture.port.command(held, now, &mut fixture.outbox) {
                 Ok(CommandProgress::Held(held)) => held,
                 _ => panic!("the units decide: {:?}", fixture.port.fault()),
             };
@@ -569,21 +536,13 @@ fn a_gtk_mutation_refused_by_a_stop_measures_its_bound_from_the_restart() {
         let (command, owners) = fixture.group_command(Mutation::Replace);
         fixture.observed.borrow_mut().hold_cut = true;
         let now = fixture.now();
-        let held = match fixture
-            .port
-            .command(command, now, &mut fixture.outbox)
-            .unwrap()
-        {
+        let held = match fixture.port.command(command, now, &mut fixture.outbox) {
             Ok(CommandProgress::Held(held)) => held,
             _ => panic!("the cut holds the mutation"),
         };
         fixture.stop();
         let now = fixture.now();
-        let refused = match fixture
-            .port
-            .command(held, now, &mut fixture.outbox)
-            .unwrap()
-        {
+        let refused = match fixture.port.command(held, now, &mut fixture.outbox) {
             Ok(CommandProgress::Refused(refused, CommandRefusal::NotEnabled)) => refused,
             _ => panic!("a stopped port refuses the held mutation"),
         };
@@ -612,21 +571,13 @@ fn a_gtk_mutation_refused_by_a_stop_leaves_no_hold_on_single_mpdus_after_the_res
             let (command, _) = fixture.group_command(mutation);
             fixture.observed.borrow_mut().hold_cut = true;
             let now = fixture.now();
-            let held = match fixture
-                .port
-                .command(command, now, &mut fixture.outbox)
-                .unwrap()
-            {
+            let held = match fixture.port.command(command, now, &mut fixture.outbox) {
                 Ok(CommandProgress::Held(held)) => held,
                 _ => panic!("{mutation:?}: the cut holds the mutation"),
             };
             fixture.stop();
             let now = fixture.now();
-            let refused = match fixture
-                .port
-                .command(held, now, &mut fixture.outbox)
-                .unwrap()
-            {
+            let refused = match fixture.port.command(held, now, &mut fixture.outbox) {
                 Ok(CommandProgress::Refused(refused, CommandRefusal::NotEnabled)) => refused,
                 _ => panic!("{mutation:?}: a stopped port refuses the held mutation"),
             };
@@ -641,7 +592,6 @@ fn a_gtk_mutation_refused_by_a_stop_leaves_no_hold_on_single_mpdus_after_the_res
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
-                .unwrap()
                 .unwrap_or_else(|_| panic!("{mutation:?}: submitted"));
             // The device reports its publications at the next turn's facts.
             let _ = fixture.turn();
@@ -672,11 +622,7 @@ fn every_stalled_gtk_mutation_is_refused_expired_at_its_own_deadline_and_runs_ag
             let mut command = command;
             for _ in 0..100_000 {
                 let now = fixture.now();
-                match fixture
-                    .port
-                    .command(command, now, &mut fixture.outbox)
-                    .unwrap()
-                {
+                match fixture.port.command(command, now, &mut fixture.outbox) {
                     Ok(CommandProgress::Held(held)) => command = held,
                     Ok(CommandProgress::Refused(refused, CommandRefusal::Expired)) => {
                         assert_eq!(now, bound, "{mutation:?}: expired at its own bound");
@@ -755,7 +701,6 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                 now,
                 &mut self.outbox,
             )
-            .unwrap()
             .map(|completed| assert!(completed.is_none()))
     }
 
@@ -763,7 +708,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     /// The stopped port's cleanup, with the fixture's stop's proof.
     fn clean(&mut self) -> Result<(), CleanupRefused<Fault>> {
         let stopped = self.stopped.as_ref().expect("stopped");
-        self.port.clean(stopped, &mut self.outbox).unwrap()
+        self.port.clean(stopped, &mut self.outbox)
     }
 }
 
@@ -1249,15 +1194,12 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
             Err(Fault::ReceiveLost)
         ));
         assert!(matches!(
-            fixture
-                .port
-                .service_tx(
-                    TxFacts::DUE,
-                    oer_protocols_ieee80211_contracts_port::Signal::Quiet,
-                    now,
-                    &mut fixture.outbox
-                )
-                .unwrap(),
+            fixture.port.service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut fixture.outbox
+            ),
             Err(Fault::ReceiveLost)
         ));
         let waker = fixture.waker();
@@ -1267,8 +1209,7 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox)
-                .unwrap(),
+                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox),
             Err(CommandFailed::Returned {
                 fault: Fault::ReceiveLost,
                 ..
@@ -1279,7 +1220,6 @@ fn a_dropped_received_buffer_is_a_receive_lost_fault_until_the_stop_and_its_unit
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
-                .unwrap()
                 .is_err()
         );
         assert_eq!(
@@ -1501,7 +1441,6 @@ fn each_set_edca_table_reaches_the_next_publications_contention_draw() {
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
-                .unwrap()
                 .expect("submitted");
             for _ in 0..4 {
                 fixture.turn();
@@ -1554,7 +1493,6 @@ fn a_set_edca_lifetime_expires_a_queued_mpdu_at_its_exact_deadline() {
         fixture
             .port
             .submit(attempt, admitted, &mut fixture.outbox)
-            .unwrap()
             .expect("queued");
         let expiry = admitted.saturating_add(lifetime);
         assert_eq!(
@@ -1620,7 +1558,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     {
         for _ in 0..16 {
             let now = self.now();
-            match self.port.command(command, now, &mut self.outbox).unwrap()? {
+            match self.port.command(command, now, &mut self.outbox)? {
                 CommandProgress::Held(held) => command = held,
                 other => return Ok(other),
             }

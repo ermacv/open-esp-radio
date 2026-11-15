@@ -263,20 +263,8 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
         command: ModelAccessPointCommand<'id, Id, C, X>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        ModelAccessPointCommand<'id, Id, C, X>,
-        Result<ModelAccessPointProgress<'id, Id, C, X>, AccessPointCommandFailed<'id, Self>>,
-    > {
-        if let Some(unkept) = self.unkept_before_acceptance(sink) {
-            return Err(Unkeeping {
-                unkept,
-                input: Input::NotAccepted(command),
-            });
-        }
-        #[allow(clippy::redundant_closure_call, reason = "the call's own answer, then its unkept item")]
-        let answer = (|| -> Result<ModelAccessPointProgress<'id, Id, C, X>, AccessPointCommandFailed<'id, Self>> {
+    ) -> Result<ModelAccessPointProgress<'id, Id, C, X>, AccessPointCommandFailed<'id, Self>> {
+        {
             if self.air.take_access_point_fault() {
                 self.air.poison();
             }
@@ -309,7 +297,9 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
                 .is_none_or(|(held, _)| held != kind)
             {
                 self.access_point_held_key = match &command {
-                    AccessPointCommand::RemovePairwise { key, .. } => Some(HeldKey::of(&key.identity)),
+                    AccessPointCommand::RemovePairwise { key, .. } => {
+                        Some(HeldKey::of(&key.identity))
+                    }
                     AccessPointCommand::RemoveGroup { key, .. } => Some(HeldKey::of(&key.identity)),
                     _ => None,
                 };
@@ -318,7 +308,8 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
             self.drain(sink);
             if let Err(fault) = self.check(ModelPortCall::Command) {
                 return Err(match progress {
-                    AccessPointProgress::Held(command) | AccessPointProgress::Refused(command, _) => {
+                    AccessPointProgress::Held(command)
+                    | AccessPointProgress::Refused(command, _) => {
                         CommandFailed::Returned { command, fault }
                     }
                     AccessPointProgress::Done => CommandFailed::Taken(fault),
@@ -353,7 +344,6 @@ impl<'id, Id: SlotIdentity + 'id, C: AccessPointCapabilities + 'id, X: ModelCont
             };
             self.refresh_deadline(now);
             Ok(progress)
-        })();
-        self.answer(answer)
+        }
     }
 }

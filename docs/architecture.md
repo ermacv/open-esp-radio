@@ -215,7 +215,7 @@ The Wi-Fi runtime (`oer-protocols-ieee80211-runtime`) holds
 is one sans-IO machine a port: it decides every transition of the port's
 installation for every role (start, retune, halt, restart, release),
 through the port's stop, the data plane's, the controller's tokens, the
-drain of what a sink refused, the network's stop, the retirement, the
+stopped port's cleanup, the network's stop, the retirement, the
 reinstall and the release. A step yields one thing at a time and is resumed
 with the port contract's own answer; `drive` answers each ask at once,
 passes each message and end on to its party and returns the step's rest,

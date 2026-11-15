@@ -365,7 +365,6 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let now = self.now();
         self.port
             .submit(attempt, now, &mut self.outbox)
-            .unwrap()
             .expect("submitted");
     }
 
@@ -777,10 +776,7 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         drop(key);
         fixture.port.uninstall_keys_for_test();
         let now = fixture.now();
-        let _ = fixture
-            .port
-            .submit(attempt, now, &mut fixture.outbox)
-            .unwrap();
+        let _ = fixture.port.submit(attempt, now, &mut fixture.outbox);
         assert_eq!(
             fixture.port.fault(),
             Some(Fault::Unpublished(crate::port::Unpublished::Key))
@@ -800,11 +796,7 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         let attempt = fixture.mpdu(None).expect("attempt");
         let now = fixture.now();
         assert_eq!(
-            fixture
-                .port
-                .submit(attempt, now, &mut fixture.outbox)
-                .unwrap()
-                .err(),
+            fixture.port.submit(attempt, now, &mut fixture.outbox).err(),
             Some(oer_protocols_ieee80211_contracts_port::SubmitRefusal::Stopping)
         );
         assert_eq!(fixture.take_completed(), 1, "a new one is refused back");
@@ -823,7 +815,6 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         second
             .port
             .submit(attempt, now, &mut second.outbox)
-            .unwrap()
             .ok()
             .expect("the new installation publishes");
         let _ = second.turn();
@@ -856,10 +847,7 @@ fn a_publication_refused_with_its_key_installed_restarts_into_a_working_port() {
         let attempt = fixture.protected_mpdu(&key).expect("attempt");
         fixture.port.refuse_publication_for_test();
         let now = fixture.now();
-        let _ = fixture
-            .port
-            .submit(attempt, now, &mut fixture.outbox)
-            .unwrap();
+        let _ = fixture.port.submit(attempt, now, &mut fixture.outbox);
         assert_eq!(
             fixture.port.fault(),
             Some(Fault::Unpublished(crate::port::Unpublished::Key))
@@ -887,7 +875,6 @@ fn a_publication_refused_with_its_key_installed_restarts_into_a_working_port() {
         second
             .port
             .submit(attempt, now, &mut second.outbox)
-            .unwrap()
             .ok()
             .expect("the new installation publishes");
         let _ = second.turn();
@@ -922,7 +909,6 @@ fn a_publication_refused_past_its_attachment_ends_withdrawn_with_every_owner_and
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
-                .unwrap()
                 .is_ok()
         );
         assert_eq!(fixture.port.fault(), None, "an own refusal is no fault");
@@ -953,7 +939,6 @@ fn a_publication_refused_past_its_attachment_ends_withdrawn_with_every_owner_and
         second
             .port
             .submit(attempt, now, &mut second.outbox)
-            .unwrap()
             .ok()
             .expect("the new installation publishes");
         let _ = second.turn();
@@ -1077,15 +1062,11 @@ fn a_pairwise_removal_waits_until_the_last_arena_frame_its_key_encrypted_leaves(
             .unwrap_or_else(|_| panic!("retained"));
         // The retained frame keeps the key: its removal is held.
         let now = fixture.now();
-        let removal = match fixture
-            .port
-            .command(
-                PortCommand::RemovePairwise { association, key },
-                now,
-                &mut fixture.outbox,
-            )
-            .unwrap()
-        {
+        let removal = match fixture.port.command(
+            PortCommand::RemovePairwise { association, key },
+            now,
+            &mut fixture.outbox,
+        ) {
             Ok(CommandProgress::Held(removal)) => removal,
             _ => panic!("the removal waits for the arena"),
         };
@@ -1156,14 +1137,11 @@ fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
         fixture.start();
         let now = fixture.now();
         assert!(matches!(
-            fixture
-                .port
-                .command(
-                    PortCommand::SetBssColor(BssColor::new(0x2a).expect("color")),
-                    now,
-                    &mut fixture.outbox,
-                )
-                .unwrap(),
+            fixture.port.command(
+                PortCommand::SetBssColor(BssColor::new(0x2a).expect("color")),
+                now,
+                &mut fixture.outbox,
+            ),
             Ok(CommandProgress::Done)
         ));
         fixture.turn();
@@ -1210,8 +1188,7 @@ fn he_after(
             assert!(matches!(
                 fixture
                     .port
-                    .command(PortCommand::SetHe(he), now, &mut fixture.outbox)
-                    .unwrap(),
+                    .command(PortCommand::SetHe(he), now, &mut fixture.outbox),
                 Ok(CommandProgress::Done)
             ));
             fixture.turn();
@@ -1330,16 +1307,12 @@ fn an_arena_past_its_cancel_on_the_air_is_a_named_fault() {
         let watchdog = fixture.port.arena().deadline().expect("the last watchdog");
         fixture.advance(watchdog.saturating_duration_since(fixture.now()));
         let now = fixture.now();
-        let Err(fault) = fixture
-            .port
-            .service_tx(
-                TxFacts::DUE,
-                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
-                now,
-                &mut fixture.outbox,
-            )
-            .unwrap()
-        else {
+        let Err(fault) = fixture.port.service_tx(
+            TxFacts::DUE,
+            oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+            now,
+            &mut fixture.outbox,
+        ) else {
             panic!("the last watchdog quarantines");
         };
         assert_eq!(
@@ -1411,15 +1384,12 @@ fn a_device_fault_is_named_and_quarantines_the_mpdus_and_the_ring_and_the_stop_i
         );
         let now = fixture.now();
         assert!(matches!(
-            fixture
-                .port
-                .service_tx(
-                    TxFacts::DUE,
-                    oer_protocols_ieee80211_contracts_port::Signal::Quiet,
-                    now,
-                    &mut fixture.outbox
-                )
-                .unwrap(),
+            fixture.port.service_tx(
+                TxFacts::DUE,
+                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+                now,
+                &mut fixture.outbox
+            ),
             Err(Fault::RemovalMismatch)
         ));
         assert!(matches!(
@@ -1696,10 +1666,7 @@ fn a_refused_retune_refuses_the_start_with_its_cause_and_leaves_the_port_stopped
             let attempt = fixture.station_mpdu().expect("attempt");
             let now = fixture.now();
             assert_eq!(
-                fixture
-                    .port
-                    .submit(attempt, now, &mut fixture.outbox)
-                    .unwrap(),
+                fixture.port.submit(attempt, now, &mut fixture.outbox),
                 Err(SubmitRefusal::NotEnabled),
                 "the port stayed stopped"
             );
@@ -1916,10 +1883,7 @@ fn a_station_command_offered_to_a_faulted_port_comes_back_and_the_port_recovers(
         let Err(CommandFailed::Returned {
             command: PortCommand::Configure { permission, .. },
             fault: found,
-        }) = fixture
-            .port
-            .command(command, now, &mut fixture.outbox)
-            .unwrap()
+        }) = fixture.port.command(command, now, &mut fixture.outbox)
         else {
             panic!("the command comes back beside the fault");
         };
@@ -2029,14 +1993,11 @@ fn a_removal_the_registers_refuse_comes_back_and_leaves_the_key_installed() {
         let Err(CommandFailed::Returned {
             command: PortCommand::RemovePairwise { key, .. },
             fault: Fault::HardwareUnavailable,
-        }) = fixture
-            .port
-            .command(
-                PortCommand::RemovePairwise { association, key },
-                now,
-                &mut fixture.outbox,
-            )
-            .unwrap()
+        }) = fixture.port.command(
+            PortCommand::RemovePairwise { association, key },
+            now,
+            &mut fixture.outbox,
+        )
         else {
             panic!("the removal comes back beside the fault");
         };
@@ -2076,14 +2037,11 @@ fn late_removal_receipt(after_stop: bool) {
         let cleared = fixture.observed.borrow().key_clears;
         let now = fixture.now();
         assert!(matches!(
-            fixture
-                .port
-                .command(
-                    PortCommand::RemovePairwise { association, key },
-                    now,
-                    &mut fixture.outbox,
-                )
-                .unwrap(),
+            fixture.port.command(
+                PortCommand::RemovePairwise { association, key },
+                now,
+                &mut fixture.outbox,
+            ),
             Ok(CommandProgress::Done)
         ));
         assert!(
@@ -2180,17 +2138,14 @@ fn a_removal_beside_a_waiting_one_ends_with_its_own_rights_and_the_waiting_one_w
         let _ = fixture.turn();
         let now = fixture.now();
         assert!(matches!(
-            fixture
-                .port
-                .command(
-                    PortCommand::RemovePairwise {
-                        association,
-                        key: pairwise,
-                    },
-                    now,
-                    &mut fixture.outbox,
-                )
-                .unwrap(),
+            fixture.port.command(
+                PortCommand::RemovePairwise {
+                    association,
+                    key: pairwise,
+                },
+                now,
+                &mut fixture.outbox,
+            ),
             Ok(CommandProgress::Done)
         ));
         assert!(fixture.outbox.terminals.is_empty(), "its key is in use");
@@ -2255,19 +2210,13 @@ fn a_publication_the_registers_refuse_ends_once_at_the_stop_with_its_owners() {
         fixture.observed.borrow_mut().hardware_unavailable = true;
         let attempt = fixture.station_mpdu().expect("attempt");
         let now = fixture.now();
-        let _submitted = fixture
-            .port
-            .submit(attempt, now, &mut fixture.outbox)
-            .unwrap();
-        let _served = fixture
-            .port
-            .service_tx(
-                TxFacts::DUE,
-                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
-                now,
-                &mut fixture.outbox,
-            )
-            .unwrap();
+        let _submitted = fixture.port.submit(attempt, now, &mut fixture.outbox);
+        let _served = fixture.port.service_tx(
+            TxFacts::DUE,
+            oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+            now,
+            &mut fixture.outbox,
+        );
         assert_eq!(
             fixture.port.fault(),
             Some(Fault::Unpublished(crate::port::Unpublished::Registers))
@@ -2449,15 +2398,12 @@ fn serve_once<'id, Id: radio::SlotIdentity + 'id>(fixture: &mut Fixture<'id, Id>
     let waker = fixture.waker();
     let now = fixture.now();
     let facts = fixture.port.poll_facts(&mut Context::from_waker(&waker));
-    let _served = fixture
-        .port
-        .service_tx(
-            facts.tx.unwrap_or(TxFacts::DUE),
-            facts.tbtt,
-            now,
-            &mut fixture.outbox,
-        )
-        .unwrap();
+    let _served = fixture.port.service_tx(
+        facts.tx.unwrap_or(TxFacts::DUE),
+        facts.tbtt,
+        now,
+        &mut fixture.outbox,
+    );
 }
 
 /// The single MPDU that ended last, and its outcome.
@@ -2495,10 +2441,7 @@ fn a_submission_its_queue_refuses_ends_withdrawn_with_its_owners_beside_the_faul
             .port
             .refuse_for_test(crate::port::TestRefusal::QueuePush);
         let now = fixture.now();
-        let _submitted = fixture
-            .port
-            .submit(attempt, now, &mut fixture.outbox)
-            .unwrap();
+        let _submitted = fixture.port.submit(attempt, now, &mut fixture.outbox);
         assert!(matches!(
             fixture.port.fault(),
             Some(Fault::QueueFull { .. })
@@ -2636,7 +2579,7 @@ fn a_refused_return_s_lease_goes_home_at_the_cleanup_and_the_port_reinstalls() {
                 fixture.stopped.as_ref().expect("stopped"),
                 &mut fixture.outbox
             ),
-            Ok(Ok(()))
+            Ok(())
         ));
         let [LowerMacTerminal::TxCompleted(TxCompleted::Single(completed))] =
             fixture.outbox.terminals.as_slice()
@@ -2691,7 +2634,7 @@ fn a_completion_without_its_attempt_returns_a_bank_lease_to_its_place() {
                 fixture.stopped.as_ref().expect("stopped"),
                 &mut fixture.outbox
             ),
-            Ok(Ok(()))
+            Ok(())
         ));
         assert!(
             reinstall(fixture, installations).is_ok(),
@@ -2711,10 +2654,7 @@ fn a_submission_the_core_refuses_goes_back_to_its_queue_with_its_ticket() {
             .refuse_for_test(crate::port::TestRefusal::Submit);
         let published = fixture.observed.borrow().publications;
         let now = fixture.now();
-        let _submitted = fixture
-            .port
-            .submit(attempt, now, &mut fixture.outbox)
-            .unwrap();
+        let _submitted = fixture.port.submit(attempt, now, &mut fixture.outbox);
         assert_eq!(
             fixture.port.fault(),
             Some(Fault::Core(crate::lower_mac::LowerMacFault::KeyUseMismatch))
@@ -2758,15 +2698,12 @@ fn a_completion_ahead_of_a_faulting_queue_in_one_service_still_comes_back() {
         let _ = fixture.port.poll_facts(&mut Context::from_waker(&waker));
         let _ = fixture.port.poll_facts(&mut Context::from_waker(&waker));
         let now = fixture.now();
-        let served = fixture
-            .port
-            .service_tx(
-                TxFacts::DUE,
-                oer_protocols_ieee80211_contracts_port::Signal::Quiet,
-                now,
-                &mut fixture.outbox,
-            )
-            .unwrap();
+        let served = fixture.port.service_tx(
+            TxFacts::DUE,
+            oer_protocols_ieee80211_contracts_port::Signal::Quiet,
+            now,
+            &mut fixture.outbox,
+        );
         assert!(matches!(served, Err(Fault::Core(_))), "{served:?}");
         assert!(matches!(
             last_outcome(fixture),

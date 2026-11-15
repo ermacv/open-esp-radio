@@ -405,8 +405,6 @@ impl Case {
 /// What a case found wrong.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Violation {
-    /// A call returned an item it could neither give its sink nor keep.
-    Unkept,
     /// The port did not start or stop within the case's steps.
     Lifecycle,
     /// The fixture could not set up the case.
@@ -513,12 +511,9 @@ pub fn service<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), V
     let now = harness.now();
     let (port, sink) = harness.parts();
     let facts = port.poll_facts(&mut Context::from_waker(&waker));
-    crate::answered(
-        port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink),
-        Violation::Unkept,
-    )?
-    .map(|_| ())
-    .map_err(|_| Violation::Fault)
+    port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink)
+        .map(|_| ())
+        .map_err(|_| Violation::Fault)
 }
 
 /// Submit an admitted attempt the port must accept; its ticket.
@@ -530,7 +525,7 @@ pub fn submit<'id, H: AccessPointHarness<'id>>(
     let ticket = H::ticket(&attempt);
     let now = harness.now();
     let (port, sink) = harness.parts();
-    crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
+    port.submit(attempt, now, sink)
         .map_err(|_| Violation::Refusal)?;
     Ok(ticket)
 }
@@ -543,11 +538,8 @@ pub fn run<'id, H: AccessPointHarness<'id>>(
     let command = command.ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    crate::answered(
-        port.access_point_command(command, now, sink),
-        Violation::Unkept,
-    )?
-    .map_err(|_| Violation::Fault)
+    port.access_point_command(command, now, sink)
+        .map_err(|_| Violation::Fault)
 }
 
 /// Run an access-point command the port must finish with nothing of the
@@ -631,7 +623,8 @@ pub fn station_command<'id, H: AccessPointHarness<'id>>(
     let command = command.ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    match crate::answered(port.command(command, now, sink), Violation::Unkept)?
+    match port
+        .command(command, now, sink)
         .map_err(|_| Violation::Fault)?
     {
         CommandProgress::Done => Ok(None),
@@ -887,9 +880,7 @@ fn stopped_beacon<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<()
     let ticket = H::ticket(&beacon);
     let now = harness.now();
     let (port, sink) = harness.parts();
-    if crate::answered(port.submit(beacon, now, sink), Violation::Unkept)?
-        != Err(SubmitRefusal::NotEnabled)
-    {
+    if port.submit(beacon, now, sink) != Err(SubmitRefusal::NotEnabled) {
         return Err(Violation::Refusal);
     }
     ends(
@@ -983,7 +974,7 @@ fn stale_beacon<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), 
     let ticket = H::ticket(&sealed);
     let now = harness.now();
     let (port, sink) = harness.parts();
-    match crate::answered(port.submit(sealed, now, sink), Violation::Unkept)? {
+    match port.submit(sealed, now, sink) {
         Err(SubmitRefusal::StalePermission {
             issued,
             installation,
@@ -1113,7 +1104,7 @@ fn stale_frame_key<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
     let ticket = H::ticket(&sealed);
     let now = harness.now();
     let (port, sink) = harness.parts();
-    match crate::answered(port.submit(sealed, now, sink), Violation::Unkept)? {
+    match port.submit(sealed, now, sink) {
         Err(SubmitRefusal::StalePermission {
             issued,
             installation,
@@ -1324,10 +1315,7 @@ fn expire<'id, H: AccessPointHarness<'id>>(
     harness.advance(bound);
     let now = harness.now();
     let (port, sink) = harness.parts();
-    match crate::answered(
-        port.access_point_command(command, now, sink),
-        Violation::Unkept,
-    )? {
+    match port.access_point_command(command, now, sink) {
         Err(_) => Err(Violation::Fault),
         Ok(AccessPointProgress::Refused(command, AccessPointRefusal::Expired))
             if command.kind() == kind =>

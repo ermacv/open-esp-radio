@@ -433,8 +433,8 @@ pairwise key removal waits while an arena holds a key right.
 
 A key removal whose key still has an admitted use when its command runs
 is done for its command (`Done`): the core clears the key once its last
-use returns and keeps the receipt in the removal's core place (every
-sink refuses receipts), and the port keeps the command's rights in the
+use returns and keeps the receipt in the removal's core place (the
+port's core sinks refuse every receipt), and the port keeps the command's rights in the
 key's own table place, which the removal emptied (`KeyPlace::Removing`):
 no second removal can name that place while they wait there, and no
 installation reuses it. Each later service, a stopped port's
@@ -451,39 +451,19 @@ only a receipt of their own kind. A key of another kind than the rights
 is refused before anything is taken (`RemovalMismatch`, the command back
 whole).
 
-A terminal or a cut unit the caller's sink refuses stays with the port
-(`port/unconsumed.rs`): a terminal in the place of its token (its ticket,
-the gate, its interface's configure permission, its pairwise key slot or
-its group permission), a unit in one of `RX_HELD` places, one relative
-sequence over both. While the radio has not confirmed a stop the port
-offers them again, oldest first, at the start of `service_tx`, `submit`,
-`command` and `access_point_command`, and a newer terminal waits behind
-them; after a confirmed stop only `take_unconsumed` offers them. Nothing
-the port keeps makes its deadline due or raises a fact, and a port that
-keeps one does not retire. An item the store cannot keep (a taken or
-missing place: a token that was not unique) goes to the call's one unkept
-place and comes back beside the call's answer (`Unkeeping`). The place has
-one right to fill it (`unconsumed::Vacancy`, neither `Clone` nor `Copy`):
-the first is made with the empty place, and a later one only by the
-`settle` that took a held item out beside an answer; no call makes one of
-its own. Every producer obtains it before it takes the owner an item
-carries (through `DriverEnv::vacancy` in the driver's steps); a given or
-kept item gives the right back, a held one ends it there. A submission
-without the right takes nothing of its attempt and returns it whole
-(`SubmitHalt::NotAccepted`); a call that ends with neither the right nor
-an item lost it, which the port records as its permanent fault
-(`Fault::RightLost`). Without the right the owner stays where it is:
-queued withdrawals
-and a late beacon stay queued, completions the core already gave wait in
-the driver and come home first at the next call (no sink takes the core's
-completions meanwhile), after the first refusal the rest of a batch stays
-in the driver, waiting removals, the configuration and gate terminals, a
-key command (held) and the receive cut wait for the next call. A second
-item of one call never reaches a delivery, so none is dropped. The stopped
-port's cleanup (`clean`) first brings home the completions the
-driver still keeps, under the same right and without a hardware call; a
-refused one comes back beside the cleanup and the rest stay in the
-driver.
+Every terminal and cut unit a call makes goes to the call's sink inside
+that call, in the order the port makes it: the sink takes each, and the
+port keeps none. The completions one core call gives leave in the order the
+core gave them (its scan of the queues: voice, video, best effort,
+background). A stopping port's next service hands the published heads'
+terminals, then withdraws the queued attempts, in their order. A group
+mutation's receive cut hands at most one unit a call, ahead of the
+command's terminal, which leaves only once the cut answers that it
+drained. The access point's configuration hands the barrier's completions
+before its `Configured` terminal: they are another role's, and no order
+binds them. The stopped port's cleanup (`clean`) takes back an attempt a
+refused return left beside its lease and ends a retained group
+replacement.
 
 A station group key mutation and an access point's are commands of their
 own role (`StationGroupCommand`, `AccessPointGroupCommand`). A step of

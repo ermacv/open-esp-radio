@@ -30,10 +30,9 @@
 //!   is reached ([`Case::StopFailsOnce`]).
 //! - A deadline ends the request with what is waited for, and the next
 //!   request goes on from there ([`Case::Deadline`]).
-//! - After a group a failed replacement retained, a release's cleanup frees
-//!   its removal's terminal into a sink that refuses it: the drain goes on
-//!   only when the sink has room, and the retirement is asked after a take
-//!   that left nothing ([`Case::CleanupTerminal`]).
+//! - After a group a failed replacement retained, a release's cleanup hands
+//!   its sink the removal's terminal, once, and the release ends
+//!   ([`Case::CleanupTerminal`]).
 
 extern crate alloc;
 
@@ -42,7 +41,7 @@ use core::mem::MaybeUninit;
 use core::task::Context;
 
 use oer_portable_time::Duration;
-use oer_protocols_ieee80211_contracts_port::{DataPort, RxPull, TxFacts, Unkeeping, Unkept};
+use oer_protocols_ieee80211_contracts_port::{DataPort, RxPull, TxFacts};
 use oer_protocols_ieee80211_core_installation::{
     DataStop, End, Ended, Input, Network, Order, Permit, Request, Rest, Tell, Unreached, Waited,
     Waiting,
@@ -136,15 +135,6 @@ impl<'id, P: DataPort<'id>> Parties<'id, P> for Recorder<'id, P> {
         // No data plane runs in the cases: the data is home at once.
         DataStop::Stopped
     }
-    fn deliver(&mut self, unkept: Unkept<'id, P::Types>) {
-        // The data plane would deliver it; here it is dropped, and its
-        // owners go home: on both ports a terminal's transmit buffer returns
-        // by its own `Drop` (the model's `BufferOut`, the S31 port's
-        // `ReturnableBuffer`) and its ticket to the bank that minted it; a
-        // received unit's buffer goes back to its ring (the model's
-        // `OwnedRxBuffer`, the S31 port's ring return).
-        drop(unkept);
-    }
     fn tell(&mut self, tell: Tell<'id>) {
         match tell {
             Tell::EndTokens(order) => self.orders.push(order),
@@ -194,9 +184,7 @@ pub enum Case {
     /// A deadline ends the request, and the next request goes on.
     Deadline,
     /// After a group a failed replacement retained, a release's cleanup
-    /// frees its removal's terminal into a sink that refuses it: the drain
-    /// goes on only when the sink has room, and the retirement is asked
-    /// after a take that left nothing.
+    /// hands its sink the removal's terminal, once, and the release ends.
     CleanupTerminal,
 }
 
@@ -317,13 +305,12 @@ pub fn check<'id, H: InstallationHarness<'id>>(
             run.harness.retain_group().map_err(|_| Violation::Fixture)?;
             // The command's fault ends the run; the recovery takes it back.
             run.until("interrupted", |heard| heard.interrupted == 1)?;
-            // The sink refuses the terminal at the cleanup and at the take
-            // after it: the machine waits for its room.
-            run.harness.refuse(2);
+            let before = run.harness.sink_terminals();
             run.ask(|permit| Ok(Request::release(permit, Network::Stays, None)))?;
             run.until("released", Recorder::released)?;
-            // The take after the cleanup found the terminal kept.
-            if run.recorder.held.contains(&Waited::Unconsumed) {
+            // The cleanup handed the sink the removal's terminal, once.
+            let after = run.harness.sink_terminals();
+            if after.removals == before.removals + 1 {
                 Ok(())
             } else {
                 Err(Violation::Held)
@@ -441,15 +428,9 @@ impl<'id, H: InstallationHarness<'id>> Run<'_, 'id, H> {
         let facts = port.poll_facts(&mut cx);
         let returned = port.poll_lent_returned(&mut cx).is_ready();
         let came_home = facts.rx.is_raised() || returned;
-        let faulted = match port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink)
-        {
-            Ok(Ok(_completed)) => false,
-            Ok(Err(_fault)) => true,
-            Err(Unkeeping { unkept, .. }) => {
-                drop(unkept);
-                false
-            }
-        };
+        let faulted = port
+            .service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink)
+            .is_err();
         (faulted.then(|| self.step(Input::Fault)), came_home)
     }
 
@@ -471,11 +452,7 @@ impl<'id, H: InstallationHarness<'id>> Run<'_, 'id, H> {
             if let Some(faulted) = faulted {
                 rest = faulted;
             }
-            // Room in the sink wakes a machine that waits for what it
-            // refused, as the refusing sink's own wake does.
-            let room = self.harness.refusals_left() == 0
-                && self.machine.waiting().class() == Waited::Unconsumed;
-            let woken = came_home || room || self.harness.wakes() != self.woken;
+            let woken = came_home || self.harness.wakes() != self.woken;
             // The port names the earliest instant a call must run without a
             // fact (`DataPort::deadline`): a call is due then as at a time a
             // rest names.
