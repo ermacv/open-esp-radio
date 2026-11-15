@@ -156,12 +156,7 @@ impl ModemLpTimerStatus {
     /// the readers of the cause word's five fields.
     pub fn causes(&self) -> ModemLpTimerCauses {
         let status = self.0.read_word_0038_opaque();
-        if status.bit_0_opaque()
-            || status.rollover_status()
-            || status.bits_2_17_opaque() != 0
-            || status.compare_software_status()
-            || status.bits_19_31_opaque().get() != 0
-        {
+        if registers::modem_timer::any_cause(status) {
             ModemLpTimerCauses::Raised {
                 record: status.record_word(),
             }

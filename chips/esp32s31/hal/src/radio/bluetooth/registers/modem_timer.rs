@@ -248,6 +248,21 @@ fn execute_modem_lp_timer_stop(
     pending
 }
 
+/// Whether a field of the LP cause word is set: a cause selects the
+/// handler. The five readers cover the word.
+pub(crate) const fn any_cause(status: word_0038_opaque::R) -> bool {
+    status.bit_0_opaque() || status.rollover_status() || any_cause_but_rollover(status)
+}
+
+/// Whether a field of the LP cause word other than `ROLLOVER_STATUS` is
+/// set: anything but the measured rollover.
+pub(crate) const fn any_cause_but_rollover(status: word_0038_opaque::R) -> bool {
+    status.bit_0_opaque()
+        || status.bits_2_17_opaque() != 0
+        || status.compare_software_status()
+        || status.bits_19_31_opaque().get() != 0
+}
+
 fn execute_modem_lp_timer_stopped_interrupt(
     transaction: &mut impl ModemLpTimerStopTransaction,
     epoch: &mut BluetoothModemLpTimerEpoch,
@@ -263,13 +278,8 @@ fn execute_modem_lp_timer_stopped_interrupt(
             BluetoothModemLpTimerStoppedInterruptFault::SoftwarePending { status, pending },
         );
     }
-    // The measured rollover alone, or nothing: no field but
-    // `ROLLOVER_STATUS` is set.
-    if observed.bit_0_opaque()
-        || observed.bits_2_17_opaque() != 0
-        || observed.compare_software_status()
-        || observed.bits_19_31_opaque().get() != 0
-    {
+    // The measured rollover alone, or nothing.
+    if any_cause_but_rollover(observed) {
         return Err(
             BluetoothModemLpTimerStoppedInterruptFault::UnexpectedStatus { status, pending },
         );
@@ -367,14 +377,7 @@ enum ModemLpTimerHandlerRegisterDisposition {
 fn execute_modem_lp_timer_interrupt(
     transaction: &mut impl ModemLpTimerInterruptTransaction,
 ) -> ModemLpTimerInterruptDisposition {
-    // None of the word's five fields is set: no cause selects the handler.
-    let status = transaction.read_status_0038();
-    if !(status.bit_0_opaque()
-        || status.rollover_status()
-        || status.bits_2_17_opaque() != 0
-        || status.compare_software_status()
-        || status.bits_19_31_opaque().get() != 0)
-    {
+    if !any_cause(transaction.read_status_0038()) {
         return ModemLpTimerInterruptDisposition::Spurious;
     }
 

@@ -1214,3 +1214,27 @@ fn read_only_status_capability_remains_after_the_timer_owner_leaves() {
     }
     assert_eq!(memory, before);
 }
+
+#[test]
+fn each_field_of_the_cause_word_alone_is_a_cause_and_the_rollover_alone_is_no_other() {
+    // One word of each field set alone, at both ends of a wider field.
+    for (word, field) in [
+        (1 << 0, "BIT_0_OPAQUE"),
+        (1 << 1, "ROLLOVER_STATUS"),
+        (1 << 2, "BITS_2_17_OPAQUE"),
+        (1 << 17, "BITS_2_17_OPAQUE"),
+        (1 << 18, "COMPARE_SOFTWARE_STATUS"),
+        (1 << 19, "BITS_19_31_OPAQUE"),
+        (1 << 31, "BITS_19_31_OPAQUE"),
+    ] {
+        let status = status_read(word);
+        assert!(super::any_cause(status), "{field}");
+        assert_eq!(
+            super::any_cause_but_rollover(status),
+            field != "ROLLOVER_STATUS",
+            "{field}"
+        );
+    }
+    assert!(!super::any_cause(status_read(0)));
+    assert!(!super::any_cause_but_rollover(status_read(0)));
+}
