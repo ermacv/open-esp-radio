@@ -12,8 +12,8 @@ use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::tsf::{TsfDuration, TsfInstant};
 use oer_protocols_ieee80211_wire::twt::{
     INDIVIDUAL_TWT_FLOW_CAPACITY, INDIVIDUAL_TWT_SETUP_BODY_LEN, INDIVIDUAL_TWT_TEARDOWN_BODY_LEN,
-    IndividualTwtAction, IndividualTwtControl, IndividualTwtFlowId, IndividualTwtParameterSet,
-    IndividualTwtSetup, IndividualTwtSetupCommand, IndividualTwtTeardown, TwtWakeDurationUnit,
+    IndividualTwtAction, IndividualTwtFlowId, IndividualTwtParameterSet, IndividualTwtSetup,
+    IndividualTwtSetupCommand, IndividualTwtTeardown, TwtControlFields, TwtWakeDurationUnit,
     TwtWireError,
 };
 
@@ -85,20 +85,20 @@ impl IndividualTwtRequesterConfig {
 /// Request parameters supplied before a Dialog Token is allocated.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IndividualTwtProposal {
-    pub control: IndividualTwtControl,
+    pub control: TwtControlFields,
     pub parameters: IndividualTwtParameterSet,
 }
 
 impl IndividualTwtProposal {
     pub fn validate(self) -> Result<Self, IndividualTwtRequesterError> {
-        if !self.parameters.requesting_sta {
+        if !self.parameters.requesting_sta() {
             return Err(TwtWireError::RequestCommandFromResponder.into());
         }
-        if !self.parameters.setup_command.is_requester_command() {
+        if !self.parameters.setup_command().is_requester_command() {
             return Err(TwtWireError::ResponseCommandFromRequester.into());
         }
         self.parameters.validate(self.control)?;
-        if !self.parameters.implicit {
+        if !self.parameters.implicit() {
             return Err(
                 IndividualTwtRequesterError::ExplicitTwtInformationUnsupported(
                     IndividualTwtInformationFrontier::from_fields(self.control, self.parameters),
@@ -124,14 +124,11 @@ pub struct IndividualTwtInformationFrontier {
 }
 
 impl IndividualTwtInformationFrontier {
-    const fn from_fields(
-        control: IndividualTwtControl,
-        parameters: IndividualTwtParameterSet,
-    ) -> Self {
+    const fn from_fields(control: TwtControlFields, parameters: IndividualTwtParameterSet) -> Self {
         Self {
-            flow_id: parameters.flow_id,
+            flow_id: parameters.flow_id(),
             initial_target_wake_time: TsfInstant::from_micros(parameters.target_wake_time_tsf),
-            information_frames_disabled: control.information_frames_disabled,
+            information_frames_disabled: control.information_disabled(),
         }
     }
 }
@@ -140,7 +137,7 @@ impl IndividualTwtInformationFrontier {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IndividualTwtAgreement {
     pub flow_id: IndividualTwtFlowId,
-    pub control: IndividualTwtControl,
+    pub control: TwtControlFields,
     pub trigger: bool,
     pub implicit: bool,
     pub flow_type: oer_protocols_ieee80211_wire::twt::IndividualTwtFlowType,
@@ -154,12 +151,12 @@ impl IndividualTwtAgreement {
     fn from_response(response: IndividualTwtSetup) -> Result<Self, TwtWireError> {
         let parameters = response.parameters.validate(response.control)?;
         Ok(Self {
-            flow_id: parameters.flow_id,
+            flow_id: parameters.flow_id(),
             control: response.control,
-            trigger: parameters.trigger,
-            implicit: parameters.implicit,
-            flow_type: parameters.flow_type,
-            protection: parameters.protection,
+            trigger: parameters.trigger(),
+            implicit: parameters.implicit(),
+            flow_type: parameters.flow_type(),
+            protection: parameters.protection(),
             target_wake_time: TsfInstant::from_micros(parameters.target_wake_time_tsf),
             wake_interval: TsfDuration::from_micros(parameters.wake_interval_micros()?),
             wake_duration: TsfDuration::from_micros(u64::from(
@@ -176,7 +173,7 @@ impl IndividualTwtAgreement {
             Some(IndividualTwtInformationFrontier {
                 flow_id: self.flow_id,
                 initial_target_wake_time: self.target_wake_time,
-                information_frames_disabled: self.control.information_frames_disabled,
+                information_frames_disabled: self.control.information_disabled(),
             })
         }
     }
@@ -423,10 +420,10 @@ impl IndividualTwtIdleFlow<'_> {
     ) -> Result<(), IndividualTwtRequesterError> {
         let proposal = proposal.validate()?;
         let flow_id = self.owner.selected_flow;
-        if proposal.parameters.flow_id != flow_id {
+        if proposal.parameters.flow_id() != flow_id {
             return Err(IndividualTwtRequesterError::ProposalFlowMismatch {
                 selected: flow_id,
-                proposed: proposal.parameters.flow_id,
+                proposed: proposal.parameters.flow_id(),
             });
         }
         *flow_id.select_mut(&mut self.owner.flows) = FlowPhase::SetupQueued {
@@ -723,7 +720,7 @@ impl IndividualTwtRequester {
         response: IndividualTwtSetup,
     ) -> Result<IndividualTwtSetupDisposition, IndividualTwtRequesterError> {
         response.validate()?;
-        let flow_id = response.parameters.flow_id;
+        let flow_id = response.parameters.flow_id();
 
         let FlowPhase::AwaitingResponse {
             proposal,
@@ -734,12 +731,12 @@ impl IndividualTwtRequester {
         else {
             return Ok(IndividualTwtSetupDisposition::Stale);
         };
-        if response.dialog_token != dialog_token || response.parameters.requesting_sta {
+        if response.dialog_token != dialog_token || response.parameters.requesting_sta() {
             return Ok(IndividualTwtSetupDisposition::Stale);
         }
 
-        if response.parameters.setup_command == IndividualTwtSetupCommand::Accept
-            && !response.parameters.implicit
+        if response.parameters.setup_command() == IndividualTwtSetupCommand::Accept
+            && !response.parameters.implicit()
         {
             let frontier = IndividualTwtInformationFrontier::from_fields(
                 response.control,
@@ -757,7 +754,7 @@ impl IndividualTwtRequester {
             );
         }
 
-        match response.parameters.setup_command {
+        match response.parameters.setup_command() {
             IndividualTwtSetupCommand::Reject => {
                 *flow_id.select_mut(&mut self.flows) = FlowPhase::Idle;
                 Ok(IndividualTwtSetupDisposition::Rejected { flow_id })
@@ -773,7 +770,7 @@ impl IndividualTwtRequester {
                 })
             }
             IndividualTwtSetupCommand::Accept => {
-                if proposal.parameters.setup_command == IndividualTwtSetupCommand::Demand
+                if proposal.parameters.setup_command() == IndividualTwtSetupCommand::Demand
                     && !demand_response_matches(proposal, response)
                 {
                     *flow_id.select_mut(&mut self.flows) = FlowPhase::Idle;
@@ -998,15 +995,15 @@ impl IndividualTwtRequester {
 fn demand_response_matches(proposal: IndividualTwtProposal, response: IndividualTwtSetup) -> bool {
     let requested = proposal.parameters;
     let accepted = response.parameters;
-    proposal.control.wake_duration_unit == response.control.wake_duration_unit
-        && requested.trigger == accepted.trigger
-        && requested.implicit == accepted.implicit
-        && requested.flow_type == accepted.flow_type
-        && requested.protection == accepted.protection
+    proposal.control.wake_duration_unit() == response.control.wake_duration_unit()
+        && requested.trigger() == accepted.trigger()
+        && requested.implicit() == accepted.implicit()
+        && requested.flow_type() == accepted.flow_type()
+        && requested.protection() == accepted.protection()
         && requested.target_wake_time_tsf == accepted.target_wake_time_tsf
         && requested.nominal_minimum_wake_duration == accepted.nominal_minimum_wake_duration
         && requested.wake_interval_mantissa == accepted.wake_interval_mantissa
-        && requested.wake_interval_exponent == accepted.wake_interval_exponent
+        && requested.request.wake_interval_exponent() == accepted.request.wake_interval_exponent()
         && requested.twt_channel == accepted.twt_channel
 }
 
@@ -1147,12 +1144,11 @@ pub const fn individual_twt_control(
     responder_power_save: bool,
     information_frames_disabled: bool,
     wake_duration_unit: TwtWakeDurationUnit,
-) -> IndividualTwtControl {
-    IndividualTwtControl {
-        responder_power_save,
-        information_frames_disabled,
-        wake_duration_unit,
-    }
+) -> TwtControlFields {
+    TwtControlFields::REQUEST
+        .with_responder_pm(responder_power_save)
+        .with_information_disabled(information_frames_disabled)
+        .with_duration_unit(matches!(wake_duration_unit, TwtWakeDurationUnit::Tu1024))
 }
 
 #[cfg(test)]

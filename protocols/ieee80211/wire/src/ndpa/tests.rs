@@ -72,16 +72,12 @@ fn fails_closed_on_non_he_or_partial_station_info() {
 
 #[test]
 fn encodes_the_complete_vendor_he20_sounding_exchange_ndpa() {
-    let station = HeNdpaStationEncoding {
-        association_id: 29,
-        resource_unit_start_index: 0,
-        resource_unit_end_index: 8,
-        feedback_type_and_ng_encoding: 0,
-        disambiguation: true,
-        codebook_size: false,
-        nc_encoding: 0,
-    };
-    assert_eq!(station.encode(), Ok(0x0820_001d));
+    let station = NdpaStationFields::from_bytes([0; 4])
+        .with_association_id(29)
+        .and_then(|fields| fields.with_resource_unit_end_index(8))
+        .unwrap()
+        .with_disambiguation(true);
+    assert_eq!(u32::from_le_bytes(station.to_bytes()), 0x0820_001d);
 
     let encoding = HeNdpaEncoding {
         duration: 100,
@@ -113,55 +109,31 @@ fn encodes_the_complete_vendor_he20_sounding_exchange_ndpa() {
 
 #[test]
 fn ndpa_encoder_rejects_every_unowned_boundary() {
-    let valid = HeNdpaStationEncoding {
-        association_id: 1,
-        resource_unit_start_index: 0,
-        resource_unit_end_index: 8,
-        feedback_type_and_ng_encoding: 0,
-        disambiguation: true,
-        codebook_size: false,
-        nc_encoding: 0,
-    };
+    let valid = NdpaStationFields::from_bytes([0; 4])
+        .with_association_id(1)
+        .and_then(|fields| fields.with_resource_unit_end_index(8))
+        .unwrap()
+        .with_disambiguation(true);
+    // A value past its field is refused by the field's setter.
+    for refused in [
+        valid.with_association_id(0x0800),
+        valid.with_resource_unit_end_index(0x80),
+        valid.with_feedback_type_and_ng_encoding(4),
+        valid.with_nc_encoding(8),
+    ] {
+        assert_eq!(refused, Err(oer_portable_wire::Error::ValueOutOfRange));
+    }
+    let reversed = valid.with_resource_unit_start_index(9).unwrap();
     assert_eq!(
-        HeNdpaStationEncoding {
-            association_id: 0x0800,
-            ..valid
+        HeNdpaEncoding {
+            duration: 100,
+            receiver_address: RA,
+            transmitter_address: TA,
+            dialog_token: 1,
+            stations: core::slice::from_ref(&reversed),
         }
-        .encode(),
-        Err(HeNdpaEncodingError::AssociationIdOutOfRange)
-    );
-    assert_eq!(
-        HeNdpaStationEncoding {
-            resource_unit_start_index: 9,
-            resource_unit_end_index: 8,
-            ..valid
-        }
-        .encode(),
+        .encode(&mut [0_u8; 21]),
         Err(HeNdpaEncodingError::ReversedResourceUnitRange)
-    );
-    assert_eq!(
-        HeNdpaStationEncoding {
-            resource_unit_end_index: 0x80,
-            ..valid
-        }
-        .encode(),
-        Err(HeNdpaEncodingError::ResourceUnitIndexOutOfRange)
-    );
-    assert_eq!(
-        HeNdpaStationEncoding {
-            feedback_type_and_ng_encoding: 4,
-            ..valid
-        }
-        .encode(),
-        Err(HeNdpaEncodingError::FeedbackTypeAndNgOutOfRange)
-    );
-    assert_eq!(
-        HeNdpaStationEncoding {
-            nc_encoding: 8,
-            ..valid
-        }
-        .encode(),
-        Err(HeNdpaEncodingError::NcOutOfRange)
     );
 
     let encoding = HeNdpaEncoding {

@@ -40,11 +40,9 @@ pub enum TwtWireError {
     UnsupportedControl(u8),
     UnsupportedNegotiationType(u8),
     InvalidFlowId(u8),
-    InvalidSetupCommand(u8),
     UnsupportedSetupCommand(IndividualTwtSetupCommand),
     RequestCommandFromResponder,
     ResponseCommandFromRequester,
-    InvalidWakeIntervalExponent(u8),
     ZeroWakeIntervalMantissa,
     ZeroWakeDuration,
     WakeDurationExceedsInterval,
@@ -101,6 +99,24 @@ impl IndividualTwtFlowId {
     pub const fn get(self) -> u8 {
         self.0 as u8
     }
+    /// The flow a three-bit Flow Identifier field names: each of its eight
+    /// values names one.
+    pub const fn from_field(field: oer_portable_wire::U8<3>) -> Self {
+        Self(match field.get() {
+            0 => FlowNumber::Flow0,
+            1 => FlowNumber::Flow1,
+            2 => FlowNumber::Flow2,
+            3 => FlowNumber::Flow3,
+            4 => FlowNumber::Flow4,
+            5 => FlowNumber::Flow5,
+            6 => FlowNumber::Flow6,
+            _ => FlowNumber::Flow7,
+        })
+    }
+    /// The flow's three-bit Flow Identifier field.
+    pub const fn field(self) -> oer_portable_wire::U8<3> {
+        oer_portable_wire::U8::from_low_bits(self.get())
+    }
     pub const fn index(self) -> usize {
         self.get() as usize
     }
@@ -149,18 +165,24 @@ pub enum IndividualTwtSetupCommand {
 }
 
 impl IndividualTwtSetupCommand {
-    const fn parse(value: u8) -> Result<Self, TwtWireError> {
-        match value {
-            0 => Ok(Self::Request),
-            1 => Ok(Self::Suggest),
-            2 => Ok(Self::Demand),
-            3 => Ok(Self::Grouping),
-            4 => Ok(Self::Accept),
-            5 => Ok(Self::Alternate),
-            6 => Ok(Self::Dictate),
-            7 => Ok(Self::Reject),
-            _ => Err(TwtWireError::InvalidSetupCommand(value)),
+    /// The command a three-bit TWT Setup Command field names: each of its
+    /// eight values names one.
+    pub const fn from_field(field: oer_portable_wire::U8<3>) -> Self {
+        match field.get() {
+            0 => Self::Request,
+            1 => Self::Suggest,
+            2 => Self::Demand,
+            3 => Self::Grouping,
+            4 => Self::Accept,
+            5 => Self::Alternate,
+            6 => Self::Dictate,
+            _ => Self::Reject,
         }
+    }
+
+    /// The command's three-bit TWT Setup Command field.
+    pub const fn field(self) -> oer_portable_wire::U8<3> {
+        oer_portable_wire::U8::from_low_bits(self as u8)
     }
 
     pub const fn is_requester_command(self) -> bool {
@@ -196,34 +218,25 @@ impl TwtWakeDurationUnit {
     }
 }
 
-/// Supported fixed portion of the individual TWT Control field.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct IndividualTwtControl {
-    pub responder_power_save: bool,
-    pub information_frames_disabled: bool,
-    pub wake_duration_unit: TwtWakeDurationUnit,
-}
+impl TwtControlFields {
+    /// A requester's control: no responder power save, information frames
+    /// enabled, a wake duration in units of 256 us.
+    pub const REQUEST: Self = Self::from_bytes([0]);
 
-impl IndividualTwtControl {
-    pub const REQUEST: Self = Self {
-        responder_power_save: false,
-        information_frames_disabled: false,
-        wake_duration_unit: TwtWakeDurationUnit::Micros256,
-    };
-
-    const fn encode(self) -> u8 {
-        TwtControlFields::from_bytes([0])
-            .with_responder_pm(self.responder_power_save)
-            .with_information_disabled(self.information_frames_disabled)
-            .with_duration_unit(matches!(
-                self.wake_duration_unit,
-                TwtWakeDurationUnit::Tu1024
-            ))
-            .to_bytes()[0]
+    /// The unit of the Nominal Minimum TWT Wake Duration.
+    pub const fn wake_duration_unit(self) -> TwtWakeDurationUnit {
+        if self.duration_unit() {
+            TwtWakeDurationUnit::Tu1024
+        } else {
+            TwtWakeDurationUnit::Micros256
+        }
     }
 
-    const fn parse(value: u8) -> Result<Self, TwtWireError> {
-        let fields = TwtControlFields::from_bytes([value]);
+    /// The control field of an individual TWT of negotiation type zero,
+    /// without NDP paging and with its reserved bits clear: the supported
+    /// fixed portion.
+    const fn supported(value: u8) -> Result<Self, TwtWireError> {
+        let fields = Self::from_bytes([value]);
         let negotiation_type = fields.negotiation_type();
         if negotiation_type != 0 {
             return Err(TwtWireError::UnsupportedNegotiationType(negotiation_type));
@@ -231,29 +244,15 @@ impl IndividualTwtControl {
         if fields.ndp_paging() || fields.reserved() != 0 {
             return Err(TwtWireError::UnsupportedControl(value));
         }
-        Ok(Self {
-            responder_power_save: fields.responder_pm(),
-            information_frames_disabled: fields.information_disabled(),
-            wake_duration_unit: if !fields.duration_unit() {
-                TwtWakeDurationUnit::Micros256
-            } else {
-                TwtWakeDurationUnit::Tu1024
-            },
-        })
+        Ok(fields)
     }
 }
 
-/// One fixed individual TWT parameter set.
+/// One fixed individual TWT parameter set: its Request Type field and the
+/// fields after it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IndividualTwtParameterSet {
-    pub requesting_sta: bool,
-    pub setup_command: IndividualTwtSetupCommand,
-    pub trigger: bool,
-    pub implicit: bool,
-    pub flow_type: IndividualTwtFlowType,
-    pub flow_id: IndividualTwtFlowId,
-    pub wake_interval_exponent: u8,
-    pub protection: bool,
+    pub request: TwtRequestFields,
     pub target_wake_time_tsf: u64,
     pub nominal_minimum_wake_duration: u8,
     pub wake_interval_mantissa: u16,
@@ -261,45 +260,74 @@ pub struct IndividualTwtParameterSet {
 }
 
 impl IndividualTwtParameterSet {
-    pub const fn wake_interval_micros(self) -> Result<u64, TwtWireError> {
-        if self.wake_interval_exponent > 31 {
-            return Err(TwtWireError::InvalidWakeIntervalExponent(
-                self.wake_interval_exponent,
-            ));
+    pub const fn requesting_sta(self) -> bool {
+        self.request.requesting_sta()
+    }
+
+    pub const fn setup_command(self) -> IndividualTwtSetupCommand {
+        IndividualTwtSetupCommand::from_field(self.request.setup_command())
+    }
+
+    pub const fn trigger(self) -> bool {
+        self.request.trigger()
+    }
+
+    pub const fn implicit(self) -> bool {
+        self.request.implicit()
+    }
+
+    pub const fn flow_type(self) -> IndividualTwtFlowType {
+        if self.request.flow_type() {
+            IndividualTwtFlowType::Unannounced
+        } else {
+            IndividualTwtFlowType::Announced
         }
+    }
+
+    pub const fn flow_id(self) -> IndividualTwtFlowId {
+        IndividualTwtFlowId::from_field(self.request.flow_id())
+    }
+
+    pub const fn protection(self) -> bool {
+        self.request.protection()
+    }
+
+    pub const fn wake_interval_micros(self) -> Result<u64, TwtWireError> {
         if self.wake_interval_mantissa == 0 {
             return Err(TwtWireError::ZeroWakeIntervalMantissa);
         }
-        Ok((self.wake_interval_mantissa as u64) << self.wake_interval_exponent)
+        // The exponent's five bits shift a sixteen-bit mantissa within 64.
+        Ok((self.wake_interval_mantissa as u64) << self.request.wake_interval_exponent().get())
     }
 
     pub const fn wake_duration_micros(
         self,
-        control: IndividualTwtControl,
+        control: TwtControlFields,
     ) -> Result<u32, TwtWireError> {
         if self.nominal_minimum_wake_duration == 0 {
             return Err(TwtWireError::ZeroWakeDuration);
         }
         Ok((self.nominal_minimum_wake_duration as u32)
-            .saturating_mul(control.wake_duration_unit.micros()))
+            .saturating_mul(control.wake_duration_unit().micros()))
     }
 
-    pub fn validate(self, control: IndividualTwtControl) -> Result<Self, TwtWireError> {
-        if matches!(self.setup_command, IndividualTwtSetupCommand::Grouping) {
+    pub fn validate(self, control: TwtControlFields) -> Result<Self, TwtWireError> {
+        let command = self.setup_command();
+        if matches!(command, IndividualTwtSetupCommand::Grouping) {
             return Err(TwtWireError::UnsupportedSetupCommand(
                 IndividualTwtSetupCommand::Grouping,
             ));
         }
-        if self.requesting_sta && !self.setup_command.is_requester_command() {
+        if self.requesting_sta() && !command.is_requester_command() {
             return Err(TwtWireError::ResponseCommandFromRequester);
         }
-        if !self.requesting_sta && !self.setup_command.is_responder_command() {
+        if !self.requesting_sta() && !command.is_responder_command() {
             return Err(TwtWireError::RequestCommandFromResponder);
         }
         if self.twt_channel != 0 {
             return Err(TwtWireError::UnsupportedTwtChannel(self.twt_channel));
         }
-        if self.setup_command != IndividualTwtSetupCommand::Reject {
+        if command != IndividualTwtSetupCommand::Reject {
             let interval = self.wake_interval_micros()?;
             let duration = self.wake_duration_micros(control)?;
             if duration as u64 > interval {
@@ -309,50 +337,15 @@ impl IndividualTwtParameterSet {
         Ok(self)
     }
 
-    fn encode_request_type(self) -> Result<u16, TwtWireError> {
-        let fields = TwtRequestFields::from_bytes([0; 2])
-            .with_requesting_sta(self.requesting_sta)
-            .with_trigger(self.trigger)
-            .with_implicit(self.implicit)
-            .with_flow_type(matches!(self.flow_type, IndividualTwtFlowType::Unannounced))
-            .with_protection(self.protection);
-        let fields = fields
-            .with_setup_command(self.setup_command as u8)
-            .map_err(|_| TwtWireError::InvalidSetupCommand(self.setup_command as u8))?;
-        let fields = fields
-            .with_flow_id(self.flow_id.get())
-            .map_err(|_| TwtWireError::InvalidFlowId(self.flow_id.get()))?;
-        let fields = fields
-            .with_wake_interval_exponent(self.wake_interval_exponent)
-            .map_err(|_| TwtWireError::InvalidWakeIntervalExponent(self.wake_interval_exponent))?;
-        Ok(u16::from_le_bytes(fields.to_bytes()))
-    }
-
-    fn parse(request_type: u16, bytes: &[u8; 12]) -> Result<Self, TwtWireError> {
+    fn parse(request_type: u16, bytes: &[u8; 12]) -> Self {
         let [t0, t1, t2, t3, t4, t5, t6, t7, duration, m0, m1, channel] = *bytes;
-        let fields = TwtRequestFields::from_bytes(request_type.to_le_bytes());
-        let flow_value = fields.flow_id();
-        let flow_id =
-            IndividualTwtFlowId::new(flow_value).ok_or(TwtWireError::InvalidFlowId(flow_value))?;
-        let setup_value = fields.setup_command();
-        Ok(Self {
-            requesting_sta: fields.requesting_sta(),
-            setup_command: IndividualTwtSetupCommand::parse(setup_value)?,
-            trigger: fields.trigger(),
-            implicit: fields.implicit(),
-            flow_type: if !fields.flow_type() {
-                IndividualTwtFlowType::Announced
-            } else {
-                IndividualTwtFlowType::Unannounced
-            },
-            flow_id,
-            wake_interval_exponent: fields.wake_interval_exponent(),
-            protection: fields.protection(),
+        Self {
+            request: TwtRequestFields::from_bytes(request_type.to_le_bytes()),
             target_wake_time_tsf: u64::from_le_bytes([t0, t1, t2, t3, t4, t5, t6, t7]),
             nominal_minimum_wake_duration: duration,
             wake_interval_mantissa: u16::from_le_bytes([m0, m1]),
             twt_channel: channel,
-        })
+        }
     }
 }
 
@@ -360,7 +353,7 @@ impl IndividualTwtParameterSet {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IndividualTwtSetup {
     pub dialog_token: u8,
-    pub control: IndividualTwtControl,
+    pub control: TwtControlFields,
     pub parameters: IndividualTwtParameterSet,
 }
 
@@ -390,11 +383,9 @@ impl IndividualTwtSetup {
         body[2] = self.dialog_token;
         body[3] = TWT_ELEMENT_ID;
         body[4] = INDIVIDUAL_TWT_ELEMENT_BODY_LEN;
-        body[5] = self.control.encode();
-        crate::encoding::write_array::<6, _, _>(
-            &mut body,
-            &self.parameters.encode_request_type()?.to_le_bytes(),
-        );
+        let [control] = self.control.to_bytes();
+        body[5] = control;
+        crate::encoding::write_array::<6, _, _>(&mut body, &self.parameters.request.to_bytes());
         crate::encoding::write_array::<8, _, _>(
             &mut body,
             &self.parameters.target_wake_time_tsf.to_le_bytes(),
@@ -439,9 +430,9 @@ impl IndividualTwtSetup {
         {
             return Err(TwtWireError::InvalidElement);
         }
-        let control = IndividualTwtControl::parse(control)?;
+        let control = TwtControlFields::supported(control)?;
         let request_type = u16::from_le_bytes([request_type_low, request_type_high]);
-        let parameters = IndividualTwtParameterSet::parse(request_type, &parameters)?;
+        let parameters = IndividualTwtParameterSet::parse(request_type, &parameters);
         Self {
             dialog_token,
             control,
@@ -577,12 +568,12 @@ oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11-2020, 9.4.2.199 (TWT Request Type field).
     pub struct TwtRequestFields[2] (little) {
         pub requesting_sta, with_requesting_sta: bool = 0..1;
-        pub setup_command, with_setup_command: u8 = 1..4;
+        pub setup_command, with_setup_command: (u8) = 1..4;
         pub trigger, with_trigger: bool = 4..5;
         pub implicit, with_implicit: bool = 5..6;
         pub flow_type, with_flow_type: bool = 6..7;
-        pub flow_id, with_flow_id: u8 = 7..10;
-        pub wake_interval_exponent, with_wake_interval_exponent: u8 = 10..15;
+        pub flow_id, with_flow_id: (u8) = 7..10;
+        pub wake_interval_exponent, with_wake_interval_exponent: (u8) = 10..15;
         pub protection, with_protection: bool = 15..16;
     }
 }
@@ -602,19 +593,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejected_setup_still_requires_a_representable_exponent_before_writing() {
-        let mut setup = IndividualTwtSetup {
+    fn a_rejected_setup_with_the_largest_exponent_round_trips() {
+        let setup = IndividualTwtSetup {
             dialog_token: 9,
-            control: IndividualTwtControl::REQUEST,
+            control: TwtControlFields::REQUEST,
             parameters: IndividualTwtParameterSet {
-                requesting_sta: false,
-                setup_command: IndividualTwtSetupCommand::Reject,
-                trigger: false,
-                implicit: false,
-                flow_type: IndividualTwtFlowType::Announced,
-                flow_id: IndividualTwtFlowId::ALL[0],
-                wake_interval_exponent: 31,
-                protection: false,
+                request: TwtRequestFields::from_bytes([0; 2])
+                    .with_setup_command(IndividualTwtSetupCommand::Reject.field())
+                    .with_flow_id(IndividualTwtFlowId::ALL[0].field())
+                    .with_wake_interval_exponent(oer_portable_wire::U8::from_low_bits(31)),
                 target_wake_time_tsf: 0,
                 nominal_minimum_wake_duration: 0,
                 wake_interval_mantissa: 0,
@@ -627,35 +614,26 @@ mod tests {
                 .and_then(|body| IndividualTwtSetup::parse(&body)),
             Ok(setup)
         );
-        for exponent in [32, 255] {
-            setup.parameters.wake_interval_exponent = exponent;
-            let mut output = [0xa5; INDIVIDUAL_TWT_SETUP_BODY_LEN];
-            assert_eq!(
-                setup.encode(&mut output),
-                Err(TwtWireError::InvalidWakeIntervalExponent(exponent))
-            );
-            assert_eq!(output, [0xa5; INDIVIDUAL_TWT_SETUP_BODY_LEN]);
-        }
     }
 
     #[test]
     fn a_setup_body_has_the_bytes_of_every_field() {
         let setup = IndividualTwtSetup {
             dialog_token: 9,
-            control: IndividualTwtControl {
-                responder_power_save: true,
-                information_frames_disabled: true,
-                wake_duration_unit: TwtWakeDurationUnit::Tu1024,
-            },
+            control: TwtControlFields::REQUEST
+                .with_responder_pm(true)
+                .with_information_disabled(true)
+                .with_duration_unit(true),
             parameters: IndividualTwtParameterSet {
-                requesting_sta: true,
-                setup_command: IndividualTwtSetupCommand::Demand,
-                trigger: true,
-                implicit: true,
-                flow_type: IndividualTwtFlowType::Unannounced,
-                flow_id: IndividualTwtFlowId::ALL[5],
-                wake_interval_exponent: 10,
-                protection: true,
+                request: TwtRequestFields::from_bytes([0; 2])
+                    .with_requesting_sta(true)
+                    .with_setup_command(IndividualTwtSetupCommand::Demand.field())
+                    .with_trigger(true)
+                    .with_implicit(true)
+                    .with_flow_type(true)
+                    .with_flow_id(IndividualTwtFlowId::ALL[5].field())
+                    .with_wake_interval_exponent(oer_portable_wire::U8::from_low_bits(10))
+                    .with_protection(true),
                 target_wake_time_tsf: 0x0123_4567_89ab_cdef,
                 nominal_minimum_wake_duration: 0x40,
                 wake_interval_mantissa: 0x1234,
