@@ -7,7 +7,7 @@ plane's, the controller's tokens, the drain of what a sink refused, the
 network's stop, the retirement, the reinstall and the release. It forbids
 unsafe code, has no runtime panic path, and touches no port, no frame and
 no clock. Its design is `design/installation-machine-2026-11-14.md` of the
-notes, and its executable model `design/installation-machine-model.py`.
+notes, and its executable model `design/installation-machine-model-b3a.py`.
 
 **A step yields one thing at a time and is resumed with its answer.**
 `Machine::step(input, now)` returns a `Step` that borrows the machine. A
@@ -54,5 +54,5 @@ The crate's test is the model's search over the real machine
 (`src/tests.rs`): the model's environment, bounds and eight checks, with
 the machine built from each state of the model and read back into one. The
 table it finds equals `tests/model-table.txt`, the output of `python3 -I
-design/installation-machine-model.py --table`, line for line; the same
+design/installation-machine-model-b3a.py --table`, line for line; the same
 search holds at the model's wider bounds.

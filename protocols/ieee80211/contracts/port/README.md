@@ -36,14 +36,11 @@ Installation commands come only from the backend's issuer
 (`PortCommands`), which mints the identity the installed key will carry.
 Terminals, TBTTs and the units a group mutation's receive cut drained go to
 the turn's `PortSink`, in the order the port produced them; a data arena's
-end returns from `service_tx` itself. A sink may refuse a terminal or a unit
-it has no room for (`PortSink::terminal` / `received` return it): the port
-keeps it whole in a place of its own token and offers what it keeps again,
-oldest first and before anything newer, at its next call with a sink while
-the radio has not confirmed a stop; after a confirmed stop only
-`DataPort::take_unconsumed` offers it, each once. The port signals nothing
-for what it keeps: the refusing sink registers its own wake for room and
-checks its room again before its task sleeps. After a confirmed stop the
+end returns from `service_tx` itself. A sink takes every item it is handed,
+inside the call that made it: every owner a terminal or a unit carries has
+its home with the sink's task, so a sink has no refusal, the port keeps
+nothing a sink did not take, and each call answers its own answer alone.
+After a confirmed stop the
 installation machine asks `DataPort::clean` with the stop's proof, once
 per call, for the cleanup the stop leaves to the backend (a hardware write that
 releases what a failed operation left in use); its result (`CleanupRefused`:

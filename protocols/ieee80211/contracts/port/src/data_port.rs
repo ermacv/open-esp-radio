@@ -177,164 +177,21 @@ pub enum RxPull<F, M> {
 }
 
 /// Where the port puts what a call produced besides its return value, in
-/// the order it produced it: the turn's outbox.
+/// the order it produced it, inside the call that produced it: the turn's
+/// outbox.
 ///
-/// A sink may refuse a terminal or a unit it has no room for now: it comes
-/// back, and the port keeps it, with every owner and its outcome, in a
-/// place of its own token. The port offers what it keeps again, oldest
-/// first and before anything newer, at its next call with a sink while the
-/// radio has not confirmed a stop, and after a confirmed stop only through
-/// [`DataPort::take_unconsumed`]. The port signals nothing for what it
-/// keeps: a sink that refuses registers its own wake for room, then checks
-/// its room again, before its task sleeps, and its task then makes a call
-/// with a sink.
+/// A sink takes everything it is handed: every owner a terminal or a unit
+/// carries has its home with the sink's task, so a sink has no refusal and
+/// the port keeps nothing a sink did not take. A terminal and a unit leave
+/// the port once.
 pub trait PortSink<'id, T: PortTypes<'id>> {
     /// A command's or a single MPDU's terminal.
-    ///
-    /// # Errors
-    ///
-    /// The sink has no room for it now: the terminal, whole, which the port
-    /// keeps.
-    fn terminal(
-        &mut self,
-        terminal: LowerMacTerminal<'id, T>,
-    ) -> Result<(), LowerMacTerminal<'id, T>>;
+    fn terminal(&mut self, terminal: LowerMacTerminal<'id, T>);
     /// A TBTT of the station's schedule.
     fn tbtt(&mut self, event: TbttEvent);
     /// A unit a group mutation's receive cut drained: it precedes the
-    /// mutation's terminal.
-    ///
-    /// # Errors
-    ///
-    /// The sink has no room for it now: the unit and its metadata, which
-    /// the port keeps, counted among the caller's held units.
-    fn received(
-        &mut self,
-        frame: T::RxBuffer,
-        meta: T::RxMeta,
-    ) -> Result<(), (T::RxBuffer, T::RxMeta)>;
-}
-
-/// A terminal or a received unit a port call could neither give its sink
-/// nor keep, whole: the call took no further owner after it, and what it
-/// had not taken stays in its place for a later call.
-pub enum Unkept<'id, T: PortTypes<'id>> {
-    /// A terminal, with every owner it carries.
-    Terminal(LowerMacTerminal<'id, T>),
-    /// A received unit and its metadata, still owed to a recycle.
-    Received(T::RxBuffer, T::RxMeta),
-}
-
-/// What became of a call's input beside an [`Unkept`].
-pub enum Input<I, R> {
-    /// The call found the unkept item before it accepted its input: the
-    /// input, whole, with every owner it carries.
-    NotAccepted(I),
-    /// The call had accepted its input: its own answer.
-    Accepted(R),
-}
-
-/// A port call that stopped on an [`Unkept`], and its input's state. A
-/// separate error from the port's `Copy` fault: the port records no fault
-/// for it.
-#[must_use = "an unkept item and an unaccepted input hold owners"]
-pub struct Unkeeping<'id, T: PortTypes<'id>, I, R> {
-    /// The item the call could not keep.
-    pub unkept: Unkept<'id, T>,
-    /// The call's input, whole, or its answer.
-    pub input: Input<I, R>,
-}
-
-/// Names the item, not its owners, which carry no `Debug`.
-impl<'id, T: PortTypes<'id>> core::fmt::Debug for Unkept<'id, T> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(match self {
-            Self::Terminal(_) => "Unkept::Terminal",
-            Self::Received(..) => "Unkept::Received",
-        })
-    }
-}
-
-/// Names the input's state, not its owners.
-impl<I, R> core::fmt::Debug for Input<I, R> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(match self {
-            Self::NotAccepted(_) => "Input::NotAccepted",
-            Self::Accepted(_) => "Input::Accepted",
-        })
-    }
-}
-
-impl<'id, T: PortTypes<'id>, I, R> core::fmt::Debug for Unkeeping<'id, T, I, R> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Unkeeping")
-            .field("unkept", &self.unkept)
-            .field("input", &self.input)
-            .finish()
-    }
-}
-
-/// The answer of a producing port call with the input `I`: its own answer
-/// `R`, or the [`Unkept`] it stopped on beside its input.
-pub type PortAnswer<'id, T, I, R> = Result<R, Unkeeping<'id, T, I, R>>;
-
-/// The answer of [`DataPort::service_tx`] of the port `P`. Its input is
-/// the call itself (`()`): [`Input::NotAccepted`] says the call served
-/// nothing, as it found an item an earlier call could not keep.
-pub type ServiceAnswer<'id, P> = PortAnswer<
-    'id,
-    <P as DataPort<'id>>::Types,
-    (),
-    Result<Option<PortCompleted<'id, P>>, <P as DataPort<'id>>::Fault>,
->;
-
-/// The answer of [`DataPort::command`] of the port `P`.
-pub type CommandAnswer<'id, P> = PortAnswer<
-    'id,
-    <P as DataPort<'id>>::Types,
-    PortCommand<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
-    Result<
-        CommandProgress<'id, <P as DataPort<'id>>::Types, <P as DataPort<'id>>::Caps>,
-        PortCommandFailed<'id, P>,
-    >,
->;
-
-/// Why [`DataPort::submit`] gave no answer of its own: the [`Unkept`] it
-/// stopped on beside its attempt or its answer, or its attempt, never
-/// accepted, when the port had no right to hand out the attempt's
-/// terminal.
-#[must_use = "an unkept item and an unaccepted attempt hold owners"]
-pub enum SubmitHalt<'id, T: PortTypes<'id>, A> {
-    /// The call stopped on an item it could neither give its sink nor keep.
-    Unkeeping(Unkeeping<'id, T, A, Result<(), SubmitRefusal>>),
-    /// The port held no right to hand out the attempt's terminal, so it did
-    /// not accept the attempt: the attempt, whole, with every owner it
-    /// carries. Nothing ran and the port keeps nothing new.
-    NotAccepted(A),
-}
-
-/// Names the halt, not its owners.
-impl<'id, T: PortTypes<'id>, A> core::fmt::Debug for SubmitHalt<'id, T, A> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Unkeeping(unkeeping) => f.debug_tuple("Unkeeping").field(unkeeping).finish(),
-            Self::NotAccepted(_) => f.write_str("SubmitHalt::NotAccepted"),
-        }
-    }
-}
-
-/// The answer of [`DataPort::submit`] with the attempt `A`: its own answer,
-/// or why it gave none ([`SubmitHalt`]).
-pub type SubmitAnswer<'id, T, A> = Result<Result<(), SubmitRefusal>, SubmitHalt<'id, T, A>>;
-
-/// What [`DataPort::take_unconsumed`] left with the port.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Unconsumed {
-    /// The port keeps nothing a sink refused.
-    None,
-    /// The sink refused the oldest again: it and everything newer stay
-    /// with the port, in order.
-    Kept,
+    /// mutation's terminal. It counts among the caller's held units.
+    fn received(&mut self, frame: T::RxBuffer, meta: T::RxMeta);
 }
 
 /// Why [`DataPort::clean_stopped`] did not finish the cleanup the stop
@@ -639,21 +496,18 @@ pub trait DataPort<'id> {
     /// terminals, expired queued ones end, the next queued ones publish.
     /// A published data arena's end returns here.
     ///
-    /// The answer is the backend's contract fault, or the arena's end.
+    /// The answer is the arena's end.
     ///
     /// # Errors
     ///
-    /// An item the call could neither give `sink` nor keep, beside its
-    /// answer ([`Unkeeping`]); nothing more was taken after it. An item an
-    /// earlier call left refuses this one before it serves anything:
-    /// [`Input::NotAccepted`] of `()`.
+    /// The backend's contract fault.
     fn service_tx(
         &mut self,
         tx: TxFacts,
         tbtt: Signal,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> ServiceAnswer<'id, Self>;
+    ) -> Result<Option<PortCompleted<'id, Self>>, Self::Fault>;
 
     /// Serve the published data arena alone on the completion events
     /// `tx`, for a caller that publishes the next arena before anything
@@ -688,17 +542,13 @@ pub trait DataPort<'id> {
     ///
     /// # Errors
     ///
-    /// An item the call could neither give `sink` nor keep
-    /// ([`SubmitHalt::Unkeeping`]): found before the attempt was accepted,
-    /// the attempt comes back whole; after, the answer. A port without the
-    /// right to hand out the attempt's terminal returns the attempt whole,
-    /// unaccepted ([`SubmitHalt::NotAccepted`]).
+    /// Why the port did not take the attempt ([`SubmitRefusal`]).
     fn submit(
         &mut self,
         attempt: Self::Admitted,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> SubmitAnswer<'id, Self::Types, Self::Admitted>;
+    ) -> Result<(), SubmitRefusal>;
 
     /// One received unit, while the caller holds fewer than `room`.
     ///
@@ -777,20 +627,16 @@ pub trait DataPort<'id> {
 
     /// Run one command, or hold it at its barrier.
     ///
-    /// The answer's failure is the backend's contract fault, with the
-    /// command when the port did not take its owners ([`CommandFailed`]).
-    ///
     /// # Errors
     ///
-    /// An item the call could neither give `sink` nor keep ([`Unkeeping`]):
-    /// found before the command was accepted, the command comes back whole;
-    /// after, the answer.
+    /// The backend's contract fault, with the command when the port did not
+    /// take its owners ([`CommandFailed`]).
     fn command(
         &mut self,
         command: PortCommand<'id, Self::Types, Self::Caps>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> CommandAnswer<'id, Self>;
+    ) -> Result<CommandProgress<'id, Self::Types, Self::Caps>, PortCommandFailed<'id, Self>>;
 
     /// Everything the installation has out, read whole; it changes
     /// nothing.
@@ -838,48 +684,23 @@ pub trait DataPort<'id> {
         now: Instant,
     ) -> Poll<Result<crate::Stopped<'id>, crate::StopUnconfirmed<Self::Fault>>>;
 
-    /// Offer what a sink refused and the port keeps to `sink`, oldest
-    /// first, each once, until the sink refuses one again, which stays with
-    /// everything newer. Each terminal and unit leaves the port once, with
-    /// its own outcome and owners.
-    ///
-    /// # Errors
-    ///
-    /// The proof is stale (the port moved since its issue): nothing was
-    /// offered.
-    fn take_unconsumed(
-        &mut self,
-        stopped: &crate::Stopped<'id>,
-        sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> Result<Unconsumed, crate::StaleProof<()>>;
-
     /// The cleanup the stop leaves to the port (a backend's write that
     /// releases hardware a failed operation left in use), asked by the
     /// installation machine of the port it stopped.
     /// The owners the cleanup frees leave through their terminals in
-    /// `sink`, each once; a terminal the sink refuses stays with the port
-    /// for [`Self::take_unconsumed`]. A port whose cleanup did not finish
-    /// does not retire. Nothing calls it on its own: each call is the
+    /// `sink`, each once. A port whose cleanup did not finish does not
+    /// retire. Nothing calls it on its own: each call is the
     /// owner's. A cleanup is always accepted: its input is a type with no
     /// value, so no answer says that nothing was cleaned.
     ///
-    /// The answer's refusal says why the cleanup did not finish
-    /// ([`CleanupRefused`]).
-    ///
     /// # Errors
     ///
-    /// A freed terminal the call could neither give `sink` nor keep, beside
-    /// its answer ([`Unkeeping`], whose input is the cleanup's answer).
+    /// Why the cleanup did not finish ([`CleanupRefused`]).
     fn clean(
         &mut self,
         stopped: &crate::Stopped<'id>,
         sink: &mut impl PortSink<'id, Self::Types>,
-    ) -> PortAnswer<
-        'id,
-        Self::Types,
-        core::convert::Infallible,
-        Result<(), CleanupRefused<Self::Fault>>,
-    >;
+    ) -> Result<(), CleanupRefused<Self::Fault>>;
 
     /// End the stopped installation's use of what it holds: its proof that
     /// nothing blocks its end.

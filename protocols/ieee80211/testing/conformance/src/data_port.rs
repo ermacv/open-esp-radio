@@ -27,9 +27,9 @@
 //!   stop's right ([`Case::Proofs`]);
 //! - each reinstall is at the port's next TSF epoch, and a port at its last
 //!   refuses with the proof back ([`Case::Epochs`]);
-//! - after a stop with a group retained, a cleanup whose sink refuses the
-//!   removal's terminal is done and the port keeps the terminal, names it
-//!   and refuses a retirement until a take with room gave it once
+//! - after a stop with a group retained, a retirement before the cleanup is
+//!   refused and names the group, the cleanup hands its sink exactly the
+//!   removal's terminal, and the retirement is granted
 //!   ([`Case::RetainedGroup`]);
 //! - a stop not confirmed yet names what comes next, a wake or its
 //!   deadline within the command bound ([`Case::StopPendingNamesItsCall`]).
@@ -162,11 +162,8 @@ pub trait DataPortHarness<'id> {
     /// itself (its own and its kept station MPDU's): what it was handed and
     /// has not handed the port.
     fn buffers_held(&self) -> usize;
-    /// Make the sink refuse its next `count` deliveries, terminals and
-    /// units alike.
-    fn refuse(&mut self, count: usize);
-    /// The refusals [`Self::refuse`] asked that the sink has not made yet.
-    fn refusals_left(&self) -> usize;
+    /// The terminals the sink holds now, by kind.
+    fn sink_terminals(&self) -> SinkTerminals;
     /// Fail the fixture's hardware at the port's next service: a fault
     /// that leaves every owner whole, or one that holds owners no stop
     /// returns, as `reach` says.
@@ -402,10 +399,10 @@ pub enum Case {
     /// Each reinstall is at the port's next TSF epoch; a port at its last
     /// refuses `Epochs` with the proof back.
     Epochs,
-    /// After a stop with a group retained, a cleanup whose sink refuses the
-    /// removal's terminal is done, the port keeps the terminal and names
-    /// it, a retirement is refused, a take with room gives it once, and the
-    /// retirement is granted.
+    /// After a stop with a group retained, a retirement asked before the
+    /// cleanup is refused and names the group, the cleanup is done and its
+    /// sink got exactly one terminal, the removal's, no group stays
+    /// retained, and the retirement is granted.
     RetainedGroup,
     /// A stop not confirmed yet names what comes next: the waker it was
     /// lent is woken, or the port's deadline names its next call within
@@ -441,11 +438,18 @@ impl Case {
     ];
 }
 
+/// The terminals a fixture's sink holds, by kind.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SinkTerminals {
+    /// Key removals' terminals.
+    pub removals: usize,
+    /// Every other terminal.
+    pub other: usize,
+}
+
 /// What a case found wrong.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Violation {
-    /// A call returned an item it could neither give its sink nor keep.
-    Unkept,
     /// A call woke its caller's task.
     SelfWake,
     /// The port did not start or stop within the case's steps.
@@ -569,11 +573,8 @@ fn service<'id, H: DataPortHarness<'id>>(
     let now = harness.now();
     let (port, sink) = harness.parts();
     let facts = port.poll_facts(&mut Context::from_waker(&waker));
-    crate::answered(
-        port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink),
-        Violation::Unkept,
-    )?
-    .map_err(|_| Violation::Fault)
+    port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink)
+        .map_err(|_| Violation::Fault)
 }
 
 fn quiet_calls<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
@@ -585,11 +586,8 @@ fn quiet_calls<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Viol
     let mut cx = Context::from_waker(&waker);
     let facts = port.poll_facts(&mut cx);
     let _ = port.deadline();
-    crate::answered(
-        port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink),
-        Violation::Unkept,
-    )?
-    .map_err(|_| Violation::Fault)?;
+    port.service_tx(facts.tx.unwrap_or(TxFacts::DUE), facts.tbtt, now, sink)
+        .map_err(|_| Violation::Fault)?;
     match port.receive(8, now).map_err(|_| Violation::Fault)? {
         RxPull::Unit { frame, .. } => {
             let _recycled = port.recycle(frame);
@@ -610,9 +608,7 @@ fn refusals<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violati
     let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    if crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
-        != Err(SubmitRefusal::NotEnabled)
-    {
+    if port.submit(attempt, now, sink) != Err(SubmitRefusal::NotEnabled) {
         return Err(Violation::Refusal);
     }
     // The refused attempt ended withdrawn at once: its terminal returns its
@@ -623,7 +619,8 @@ fn refusals<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violati
     let command = harness.configure().ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    match crate::answered(port.command(command, now, sink), Violation::Unkept)?
+    match port
+        .command(command, now, sink)
         .map_err(|_| Violation::Fault)?
     {
         CommandProgress::Refused(command, CommandRefusal::NotEnabled)
@@ -674,7 +671,8 @@ fn configure_barrier<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<()
     for _ in 0..2 {
         let now = harness.now();
         let (port, sink) = harness.parts();
-        command = match crate::answered(port.command(command, now, sink), Violation::Unkept)?
+        command = match port
+            .command(command, now, sink)
             .map_err(|_| Violation::Fault)?
         {
             CommandProgress::Held(command) => command,
@@ -693,7 +691,8 @@ fn configure_barrier<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<()
         if let Some(command) = held.take() {
             let now = harness.now();
             let (port, sink) = harness.parts();
-            match crate::answered(port.command(command, now, sink), Violation::Unkept)?
+            match port
+                .command(command, now, sink)
                 .map_err(|_| Violation::Fault)?
             {
                 CommandProgress::Held(command) => held = Some(command),
@@ -719,7 +718,7 @@ fn deadline<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violati
     let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
+    port.submit(attempt, now, sink)
         .map_err(|_| Violation::Refusal)?;
     let _ = service(harness)?;
     let published = {
@@ -858,13 +857,8 @@ fn refuses_stale_stop<'id, H: DataPortHarness<'id>>(
     if port.outstanding() != before {
         return Err(Violation::Proof(step));
     }
-    if crate::answered(port.clean(&stale, sink), Violation::Unkept)? != Err(CleanupRefused::Stale)
-        || port.outstanding() != before
-    {
+    if port.clean(&stale, sink) != Err(CleanupRefused::Stale) || port.outstanding() != before {
         return Err(Violation::Proof(step + 1));
-    }
-    if port.take_unconsumed(&stale, sink).is_ok() || port.outstanding() != before {
-        return Err(Violation::Proof(step + 2));
     }
     let stale = match port.retire(stale) {
         Err(ProofRefused::Stale(refused)) if refused.proof == *copy => refused.proof,
@@ -1030,7 +1024,7 @@ fn stop_pending_names_its_call<'id, H: DataPortHarness<'id>>(
 }
 
 fn retained_group<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
-    use oer_protocols_ieee80211_contracts_port::{Recovered, Unconsumed, outstanding::class};
+    use oer_protocols_ieee80211_contracts_port::{Recovered, outstanding::class};
     start(harness)?;
     harness.retain_group()?;
     // The command's fault leaves every owner whole: the recovery takes it
@@ -1045,33 +1039,27 @@ fn retained_group<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), V
     if port.outstanding().classes() & class::RETAINED_GROUPS == 0 {
         return Err(Violation::Retained(1));
     }
-    // The cleanup frees the group: its removal's terminal goes to a sink
-    // that refuses it, and the cleanup is done with the terminal kept.
-    harness.refuse(1);
-    let (port, sink) = harness.parts();
-    if crate::answered(port.clean(&stopped, sink), Violation::Unkept)? != Ok(()) {
-        return Err(Violation::Retained(2));
-    }
-    let out = port.outstanding();
-    if out.classes() & class::RETAINED_GROUPS != 0 || out.unconsumed != 1 {
-        return Err(Violation::Retained(3));
-    }
-    // A retirement is refused for the terminal the port keeps.
+    // A port whose cleanup did not finish does not retire: the retirement
+    // asked before it names the retained group.
     let stopped = match port.retire(stopped) {
-        Err(ProofRefused::Refused(stopped, out)) if out.classes() & class::UNCONSUMED != 0 => {
+        Err(ProofRefused::Refused(stopped, out)) if out.classes() & class::RETAINED_GROUPS != 0 => {
             stopped
         }
-        _ => return Err(Violation::Retained(4)),
+        _ => return Err(Violation::Retained(2)),
     };
-    // A take with room gives it once.
-    if harness.refusals_left() != 0 {
-        return Err(Violation::Fixture);
-    }
+    // The cleanup frees the group: its sink gets exactly one terminal, the
+    // removal's.
+    let before = harness.sink_terminals();
     let (port, sink) = harness.parts();
-    if port.take_unconsumed(&stopped, sink) != Ok(Unconsumed::None)
-        || port.outstanding().unconsumed != 0
-        || port.take_unconsumed(&stopped, sink) != Ok(Unconsumed::None)
-    {
+    if port.clean(&stopped, sink) != Ok(()) {
+        return Err(Violation::Retained(3));
+    }
+    let after = harness.sink_terminals();
+    if after.removals != before.removals + 1 || after.other != before.other {
+        return Err(Violation::Retained(4));
+    }
+    let (port, _) = harness.parts();
+    if port.outstanding().classes() & class::RETAINED_GROUPS != 0 {
         return Err(Violation::Retained(5));
     }
     // Then the retirement is granted.
@@ -1134,8 +1122,6 @@ struct Ledger {
     lent: usize,
     /// Attempts it submitted whose terminal it has not taken.
     in_flight: usize,
-    /// Terminals the sink refused, which the port keeps.
-    refused: usize,
     /// Whether an aggregate arena it published has not settled.
     arena: LedgerArena,
     /// Whether the port reported a fault it has not taken back.
@@ -1192,17 +1178,14 @@ impl Ledger {
         if outstanding.fault.is_some() != matches!(self.fault, LedgerFault::Held) {
             classes |= class::FAULT;
         }
-        if outstanding.unconsumed != self.refused {
-            classes |= class::UNCONSUMED;
-        }
         if (outstanding.arenas == oer_protocols_ieee80211_contracts_port::ArenaState::Held)
             != matches!(self.arena, LedgerArena::Unsettled)
         {
             classes |= class::ARENAS;
         }
-        // Every buffer the installation issued is with the fixture, in an
-        // attempt out, or in a refused terminal the port keeps.
-        if outstanding.transmit_out != held + self.in_flight + self.refused {
+        // Every buffer the installation issued is with the fixture or in an
+        // attempt out.
+        if outstanding.transmit_out != held + self.in_flight {
             classes |= class::TRANSMIT_OUT;
         }
         classes
@@ -1277,15 +1260,13 @@ fn conservation<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
     let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
+    port.submit(attempt, now, sink)
         .map_err(|_| Violation::Refusal)?;
     ledger.in_flight += 1;
     ledger.check(harness, 6)?;
     let _served = service(harness)?;
     ledger.check(harness, 14)?;
-    // The station MPDU's terminal refused by the sink at the stop: the
-    // port keeps it.
-    harness.refuse(1);
+    // The stop withdraws the station MPDU: its terminal goes to the sink.
     harness.hold_air(crate::Hold::Released);
     let mut stop = None;
     for _ in 0..PROGRESS_STEPS {
@@ -1311,21 +1292,16 @@ fn conservation<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
         if harness.take_completed() > 0 {
             ledger.in_flight -= 1;
         }
-        if harness.refusals_left() == 0 && ledger.in_flight > 0 {
-            // The sink refused the MPDU's terminal: the port keeps it.
-            ledger.in_flight -= 1;
-            ledger.refused += 1;
-        }
         ledger.radio = LedgerRadio::Active;
         ledger.check(harness, 15)?;
     }
     let stopped = stop.ok_or(Violation::Lifecycle)?;
     ledger.radio = LedgerRadio::Stopped;
-    if ledger.refused != 1 {
-        // The stop withdrew the MPDU, and the sink refused its terminal.
+    if ledger.in_flight != 0 {
+        // The stop withdrew the MPDU, and its terminal reached the sink.
         return Err(Violation::Conserved {
             step: 7,
-            classes: oer_protocols_ieee80211_contracts_port::outstanding::class::UNCONSUMED,
+            classes: oer_protocols_ieee80211_contracts_port::outstanding::class::QUEUED,
         });
     }
     if ledger.arena == LedgerArena::Unsettled {
@@ -1336,36 +1312,8 @@ fn conservation<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
         });
     }
     ledger.check(harness, 7)?;
-    // A retirement with the refused terminal kept names it, and changes
-    // nothing.
     harness.end_tokens();
     ledger.check(harness, 8)?;
-    let (port, _) = harness.parts();
-    let stopped = match port.retire(stopped) {
-        Err(ProofRefused::Refused(stopped, out))
-            if out.classes()
-                & oer_protocols_ieee80211_contracts_port::outstanding::class::UNCONSUMED
-                != 0 =>
-        {
-            stopped
-        }
-        _ => {
-            return Err(Violation::Conserved {
-                step: 9,
-                classes: 0,
-            });
-        }
-    };
-    ledger.check(harness, 9)?;
-    // The kept terminal comes once after the stop; its owners go home.
-    let (port, sink) = harness.parts();
-    if port.take_unconsumed(&stopped, sink).is_err() {
-        return Err(Violation::Lifecycle);
-    }
-    ledger.refused = 0;
-    let _ended = harness.take_completed();
-    harness.end_tokens();
-    ledger.check(harness, 10)?;
     // The retirement, then the next installation with the network's unit
     // still lent across it.
     let (port, _) = harness.parts();
@@ -1400,7 +1348,7 @@ fn fault_conservation<'id, H: DataPortHarness<'id>>(
     let attempt = harness.station_mpdu().ok_or(Violation::Fixture)?;
     let now = harness.now();
     let (port, sink) = harness.parts();
-    crate::answered(port.submit(attempt, now, sink), Violation::Unkept)?
+    port.submit(attempt, now, sink)
         .map_err(|_| Violation::Refusal)?;
     ledger.in_flight += 1;
     let _served = service(harness)?;

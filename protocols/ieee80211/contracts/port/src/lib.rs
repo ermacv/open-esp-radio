@@ -68,12 +68,11 @@ mod issued;
 pub use issued::{IssuedSlot, IssuedSlots, SlotGrant, first_stale};
 pub mod access_point;
 pub use access_point::{
-    AccessPointCapabilities, AccessPointCommand, AccessPointCommandAnswer,
-    AccessPointCommandFailed, AccessPointCommandKind, AccessPointCommands,
-    AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress, AccessPointReceive,
-    AccessPointRefusal, AccessPointServices, AccessPointSubmission, AccessPointTypes,
-    AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant, BeaconParts,
-    BeaconPermission, BeaconPool, BeaconStamp, BeaconSubmission, BeaconTimestamp,
+    AccessPointCapabilities, AccessPointCommand, AccessPointCommandFailed, AccessPointCommandKind,
+    AccessPointCommands, AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress,
+    AccessPointReceive, AccessPointRefusal, AccessPointServices, AccessPointSubmission,
+    AccessPointTypes, AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant,
+    BeaconParts, BeaconPermission, BeaconPool, BeaconStamp, BeaconSubmission, BeaconTimestamp,
     SealedBeaconParts, SupportedTsfControl, TsfControl,
 };
 pub mod arena;
@@ -88,10 +87,9 @@ mod command;
 pub use command::{CommandKind, CommandTypes, PairwiseIssue, PortCommand, PortCommands};
 mod data_port;
 pub use data_port::{
-    CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, Input,
-    PortAnswer, PortArena, PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
-    RxPull, Signal, StartFailure, StationSubmission, StopCause, SubmitAnswer, SubmitHalt,
-    SubmitRefusal, TxFacts, Unconsumed, Unkeeping, Unkept,
+    CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, PortArena,
+    PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink, RxPull, Signal,
+    StartFailure, StationSubmission, StopCause, SubmitRefusal, TxFacts,
 };
 mod layout;
 pub use layout::{

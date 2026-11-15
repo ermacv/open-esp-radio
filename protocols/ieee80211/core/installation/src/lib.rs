@@ -72,7 +72,7 @@ use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
     CleanupRefused, FaultKept, Outstanding, ProofRefused, Recovered, ReinstallRefused,
     ReleaseRefused, Retired, StaleProof, StartFailure, StartPoll, StartProgress, StartProof,
-    StartRefused, Starting, StopRight, StopUnconfirmed, Stopped, Unconsumed,
+    StartRefused, Starting, StopRight, StopUnconfirmed, Stopped,
 };
 
 /// The brand of one port's installations, invariant in `'id`.
@@ -236,8 +236,6 @@ pub enum Waiting<F> {
     Radio(StopUnconfirmed<F>),
     /// A fault the port keeps.
     Fault(FaultKept<F>),
-    /// What a sink refused, which the port keeps.
-    Unconsumed,
     /// The cleanup, which cannot finish now.
     Cleanup(CleanupRefused<F>),
     /// What is out, which a retirement waits for.
@@ -253,8 +251,6 @@ pub enum Waited {
     Radio,
     /// A fault the port keeps.
     Fault,
-    /// What a sink refused.
-    Unconsumed,
     /// The cleanup.
     Cleanup,
     /// What is out.
@@ -268,7 +264,6 @@ impl<F> Waiting<F> {
             Self::Nothing => Waited::Nothing,
             Self::Radio(_) => Waited::Radio,
             Self::Fault(_) => Waited::Fault,
-            Self::Unconsumed => Waited::Unconsumed,
             Self::Cleanup(_) => Waited::Cleanup,
             Self::Outstanding(_) => Waited::Outstanding,
         }
@@ -350,14 +345,9 @@ pub enum Step<'m, 'id, C, F> {
     Stop(Resume<'m, 'id, C, F, AskStop>),
     /// Ask the data plane to stop the data.
     StopData(Resume<'m, 'id, C, F, AskStopData<'id>>),
-    /// Take what a sink refused, under the stop's proof, which comes back
-    /// with the answer.
-    TakeUnconsumed(Stopped<'id>, Resume<'m, 'id, C, F, AskTake>),
     /// Clean what the stop left, under the stop's proof, which comes back
     /// with the answer.
     Clean(Stopped<'id>, Resume<'m, 'id, C, F, AskClean>),
-    /// The take after a cleanup that finished.
-    TakeFreed(Stopped<'id>, Resume<'m, 'id, C, F, AskTakeFreed>),
     /// Retire the installation.
     Retire(Stopped<'id>, Resume<'m, 'id, C, F, AskRetire>),
     /// Reinstall the next installation: [`Resume::installed`] with the
@@ -418,18 +408,8 @@ pub struct AskStopData<'id> {
     run: Run,
 }
 
-/// The unconsumed are asked.
-pub struct AskTake {
-    run: Run,
-}
-
 /// The cleanup is asked.
 pub struct AskClean {
-    run: Run,
-}
-
-/// The take after a cleanup that finished is asked.
-pub struct AskTakeFreed {
     run: Run,
 }
 
@@ -550,7 +530,7 @@ enum Tokens {
     Ended,
 }
 
-/// What a run may have left unconsumed.
+/// The cleanup a run leaves to the port.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Drain {
     Owed,
@@ -1096,10 +1076,12 @@ impl<'m, 'id, C: Copy, F> Port<'m, 'id, C, F> {
         }
     }
 
-    /// What a run may have left unconsumed, then the retirement.
+    /// The cleanup a run leaves to the port, then the retirement. The
+    /// sink takes everything the cleanup frees: nothing waits with the
+    /// port to be taken before or after it.
     fn drain(self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'m, 'id, C, F> {
         match run.drain {
-            Drain::Owed => Step::TakeUnconsumed(stopped, self.resume(now, AskTake { run })),
+            Drain::Owed => Step::Clean(stopped, self.resume(now, AskClean { run })),
             Drain::Done => self.retire(stopped, run, now),
         }
     }
@@ -1254,47 +1236,32 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStopData<'id>> {
     }
 }
 
-impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskTake> {
-    /// The port's answer, with the stop's proof it borrowed.
-    pub fn answer(
-        self,
-        stopped: Stopped<'id>,
-        answer: Result<Unconsumed, StaleProof<()>>,
-    ) -> Step<'m, 'id, C, F> {
-        let Self {
-            port,
-            now,
-            kind: AskTake { run },
-        } = self;
-        match answer {
-            Ok(Unconsumed::None) => Step::Clean(stopped, port.resume(now, AskClean { run })),
-            Ok(Unconsumed::Kept) => {
-                *port.at = At::Stopped(stopped, run);
-                port.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
-            }
-            Err(StaleProof { proof: () }) => {
-                drop(stopped);
-                port.lost(run, now)
-            }
-        }
-    }
-}
-
 impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskClean> {
-    /// The cleanup's answer, without an item it handed back, with the stop's
-    /// proof it borrowed. A cleanup is always accepted.
+    /// The cleanup's answer, with the stop's proof it borrowed. A cleanup
+    /// is always accepted; one that finished freed what it frees through
+    /// the sink, and the drain is done.
     pub fn answer(
         self,
         stopped: Stopped<'id>,
         answer: Result<(), CleanupRefused<F>>,
     ) -> Step<'m, 'id, C, F> {
         let Self {
-            port,
+            mut port,
             now,
             kind: AskClean { run },
         } = self;
         match answer {
-            Ok(()) => Step::TakeFreed(stopped, port.resume(now, AskTakeFreed { run })),
+            Ok(()) => {
+                port.clear(Waited::Cleanup);
+                port.retire(
+                    stopped,
+                    Run {
+                        drain: Drain::Done,
+                        ..run
+                    },
+                    now,
+                )
+            }
             Err(CleanupRefused::Stale) => {
                 drop(stopped);
                 port.lost(run, now)
@@ -1306,44 +1273,6 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskClean> {
             Err(refused @ (CleanupRefused::Unavailable(_) | CleanupRefused::Held(_))) => {
                 *port.at = At::Stopped(stopped, run);
                 port.say(Waiting::Cleanup(refused), Next::Rest(Again::Timer), now)
-            }
-        }
-    }
-}
-
-impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskTakeFreed> {
-    /// The port's answer, with the stop's proof it borrowed: the drain is
-    /// done only when it keeps nothing of what the cleanup freed.
-    pub fn answer(
-        self,
-        stopped: Stopped<'id>,
-        answer: Result<Unconsumed, StaleProof<()>>,
-    ) -> Step<'m, 'id, C, F> {
-        let Self {
-            mut port,
-            now,
-            kind: AskTakeFreed { run },
-        } = self;
-        match answer {
-            Ok(Unconsumed::None) => {
-                port.clear(Waited::Unconsumed);
-                port.clear(Waited::Cleanup);
-                port.retire(
-                    stopped,
-                    Run {
-                        drain: Drain::Done,
-                        ..run
-                    },
-                    now,
-                )
-            }
-            Ok(Unconsumed::Kept) => {
-                *port.at = At::Stopped(stopped, run);
-                port.say(Waiting::Unconsumed, Next::Rest(Again::Wake), now)
-            }
-            Err(StaleProof { proof: () }) => {
-                drop(stopped);
-                port.lost(run, now)
             }
         }
     }
