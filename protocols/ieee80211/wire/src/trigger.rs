@@ -50,18 +50,7 @@ pub enum TriggerParseError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TriggerEncodeError {
     OutputTooSmall { required: usize },
-    UplinkLengthOutOfRange,
-    UplinkBandwidthOutOfRange,
-    HeLtfSymbolsOutOfRange,
-    ApTxPowerOutOfRange,
-    PreFecPaddingOutOfRange,
-    HeSigA2ReservedOutOfRange,
     AssociationIdOutOfRange,
-    RuAllocationOutOfRange,
-    McsOutOfRange,
-    StartingSpatialStreamOutOfRange,
-    SpatialStreamCountOutOfRange,
-    TargetRssiOutOfRange,
     BasicDependentInfoOutOfRange,
 }
 
@@ -83,9 +72,17 @@ impl TriggerType {
     // These public value conversions have always selected the low four bits.
     // The raw conversions generated above retain unknown encodings verbatim.
     pub const fn from_encoding(value: u8) -> Self {
-        Self::from_raw(TriggerCommonFields::from_bytes([value, 0, 0, 0, 0, 0, 0, 0]).trigger_type())
+        Self::from_raw(
+            TriggerCommonFields::from_bytes([value, 0, 0, 0, 0, 0, 0, 0])
+                .trigger_type()
+                .get(),
+        )
     }
     pub const fn encoding(self) -> u8 {
+        self.field().get()
+    }
+    /// The four bits of the Trigger Type subfield.
+    const fn field(self) -> oer_portable_wire::U8<4> {
         TriggerCommonFields::from_bytes([self.raw(), 0, 0, 0, 0, 0, 0, 0]).trigger_type()
     }
 }
@@ -126,173 +123,6 @@ impl TriggerGiLtf {
     }
 }
 
-/// Fields used to encode one Trigger Common Info value.
-///
-/// This is deliberately separate from [`TriggerCommonInfo`]: the parsed type
-/// also contains derived physical-unit values, while an encoder must have only
-/// one authoritative representation for every wire field.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TriggerCommonEncoding {
-    pub uplink_length: u16,
-    pub more_trigger_frames: bool,
-    pub carrier_sense_required: bool,
-    pub uplink_bandwidth_encoding: u8,
-    pub gi_ltf: TriggerGiLtf,
-    pub mu_mimo_ltf_mode: bool,
-    pub he_ltf_symbols_and_midamble_periodicity: u8,
-    pub uplink_stbc: bool,
-    pub ldpc_extra_symbol_segment: bool,
-    pub ap_tx_power_encoding: u8,
-    pub pre_fec_padding_factor_encoding: u8,
-    pub packet_extension_disambiguity: bool,
-    pub uplink_spatial_reuse: u16,
-    pub doppler: bool,
-    pub uplink_he_sig_a2_reserved: u16,
-    pub trailing_reserved: bool,
-}
-
-impl TriggerCommonEncoding {
-    /// Encode Common Info using the inverse of the complete blob decoder.
-    ///
-    /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_COMMON_INFO]: complete
-    /// `libpp.a[hal_debug.o]::dbg_dump_trig_common_info`. This method
-    /// reverses only its instruction-proven shifts and masks; it does not
-    /// choose policy values for reserved or scheduling fields.
-    pub fn encode(
-        self,
-        trigger_type: TriggerType,
-    ) -> Result<[u8; TRIGGER_COMMON_INFO_LEN], TriggerEncodeError> {
-        if self.uplink_length > 0x0fff {
-            return Err(TriggerEncodeError::UplinkLengthOutOfRange);
-        }
-        if self.uplink_bandwidth_encoding > 0x03 {
-            return Err(TriggerEncodeError::UplinkBandwidthOutOfRange);
-        }
-        if self.he_ltf_symbols_and_midamble_periodicity > 0x07 {
-            return Err(TriggerEncodeError::HeLtfSymbolsOutOfRange);
-        }
-        if self.ap_tx_power_encoding > 0x3f {
-            return Err(TriggerEncodeError::ApTxPowerOutOfRange);
-        }
-        if self.pre_fec_padding_factor_encoding > 0x03 {
-            return Err(TriggerEncodeError::PreFecPaddingOutOfRange);
-        }
-        if self.uplink_he_sig_a2_reserved > 0x01ff {
-            return Err(TriggerEncodeError::HeSigA2ReservedOutOfRange);
-        }
-
-        let mut fields = TriggerCommonFields::from_bytes([0; 8]);
-        fields = fields
-            .with_trigger_type(
-                TriggerCommonFields::from_bytes([trigger_type.encoding(), 0, 0, 0, 0, 0, 0, 0])
-                    .trigger_type(),
-            )
-            .map_err(|_| TriggerEncodeError::UplinkLengthOutOfRange)?;
-        fields = fields
-            .with_uplink_length(self.uplink_length)
-            .map_err(|_| TriggerEncodeError::UplinkLengthOutOfRange)?;
-        fields = fields.with_more_trigger_frames(self.more_trigger_frames);
-        fields = fields.with_carrier_sense_required(self.carrier_sense_required);
-        fields = fields
-            .with_uplink_bandwidth_encoding(self.uplink_bandwidth_encoding)
-            .map_err(|_| TriggerEncodeError::UplinkBandwidthOutOfRange)?;
-        fields = fields
-            .with_gi_ltf(self.gi_ltf.encoding())
-            .map_err(|_| TriggerEncodeError::UplinkBandwidthOutOfRange)?;
-        fields = fields.with_mu_mimo_ltf_mode(self.mu_mimo_ltf_mode);
-        fields = fields
-            .with_he_ltf_symbols_and_midamble_periodicity(
-                self.he_ltf_symbols_and_midamble_periodicity,
-            )
-            .map_err(|_| TriggerEncodeError::HeLtfSymbolsOutOfRange)?;
-        fields = fields.with_uplink_stbc(self.uplink_stbc);
-        fields = fields.with_ldpc_extra_symbol_segment(self.ldpc_extra_symbol_segment);
-        fields = fields
-            .with_ap_tx_power_encoding(self.ap_tx_power_encoding)
-            .map_err(|_| TriggerEncodeError::ApTxPowerOutOfRange)?;
-        fields = fields
-            .with_pre_fec_padding_factor_encoding(self.pre_fec_padding_factor_encoding)
-            .map_err(|_| TriggerEncodeError::PreFecPaddingOutOfRange)?;
-        fields = fields.with_packet_extension_disambiguity(self.packet_extension_disambiguity);
-        fields = fields
-            .with_uplink_spatial_reuse(self.uplink_spatial_reuse)
-            .map_err(|_| TriggerEncodeError::HeSigA2ReservedOutOfRange)?;
-        fields = fields.with_doppler(self.doppler);
-        fields = fields
-            .with_uplink_he_sig_a2_reserved(self.uplink_he_sig_a2_reserved)
-            .map_err(|_| TriggerEncodeError::HeSigA2ReservedOutOfRange)?;
-        fields = fields.with_trailing_reserved(self.trailing_reserved);
-        Ok(fields.to_bytes())
-    }
-}
-
-/// Scheduled spatial-stream fields for one Trigger User Info value.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TriggerScheduledUserEncoding {
-    pub association_id: u16,
-    pub ru_allocation_region: bool,
-    pub ru_allocation: u8,
-    pub coding_type: bool,
-    pub mcs: u8,
-    pub dcm: bool,
-    pub starting_spatial_stream_encoding: u8,
-    pub spatial_stream_count_encoding: u8,
-    pub target_rssi_encoding: u8,
-    pub reserved: bool,
-}
-
-impl TriggerScheduledUserEncoding {
-    /// Encode User Info using the inverse of the complete blob decoder.
-    ///
-    /// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_USER_SS]: complete
-    /// `libpp.a[hal_debug.o]::dbg_dump_trig_user_ss`.
-    pub fn encode(self) -> Result<[u8; TRIGGER_USER_INFO_LEN], TriggerEncodeError> {
-        if self.association_id == 0 || self.association_id > 0x0fff {
-            return Err(TriggerEncodeError::AssociationIdOutOfRange);
-        }
-        if self.ru_allocation > 0x7f {
-            return Err(TriggerEncodeError::RuAllocationOutOfRange);
-        }
-        if self.mcs > 0x0f {
-            return Err(TriggerEncodeError::McsOutOfRange);
-        }
-        if self.starting_spatial_stream_encoding > 0x07 {
-            return Err(TriggerEncodeError::StartingSpatialStreamOutOfRange);
-        }
-        if self.spatial_stream_count_encoding > 0x07 {
-            return Err(TriggerEncodeError::SpatialStreamCountOutOfRange);
-        }
-        if self.target_rssi_encoding > 0x7f {
-            return Err(TriggerEncodeError::TargetRssiOutOfRange);
-        }
-
-        let mut fields = TriggerScheduledUserFields::from_bytes([0; 5]);
-        fields = fields
-            .with_aid12(self.association_id)
-            .map_err(|_| TriggerEncodeError::AssociationIdOutOfRange)?;
-        fields = fields.with_ru_allocation_region(self.ru_allocation_region);
-        fields = fields
-            .with_ru_allocation(self.ru_allocation)
-            .map_err(|_| TriggerEncodeError::RuAllocationOutOfRange)?;
-        fields = fields.with_coding_type(self.coding_type);
-        fields = fields
-            .with_mcs(self.mcs)
-            .map_err(|_| TriggerEncodeError::McsOutOfRange)?;
-        fields = fields.with_dcm(self.dcm);
-        fields = fields
-            .with_starting_spatial_stream_encoding(self.starting_spatial_stream_encoding)
-            .map_err(|_| TriggerEncodeError::StartingSpatialStreamOutOfRange)?;
-        fields = fields
-            .with_spatial_stream_count_encoding(self.spatial_stream_count_encoding)
-            .map_err(|_| TriggerEncodeError::SpatialStreamCountOutOfRange)?;
-        fields = fields
-            .with_target_rssi_encoding(self.target_rssi_encoding)
-            .map_err(|_| TriggerEncodeError::TargetRssiOutOfRange)?;
-        fields = fields.with_reserved(self.reserved);
-        Ok(fields.to_bytes())
-    }
-}
-
 impl TriggerBasicDependentInfo {
     /// Encode Basic Trigger-dependent User Info.
     ///
@@ -322,6 +152,16 @@ impl TriggerBasicDependentInfo {
 
 /// One Basic Trigger control MPDU with exactly one scheduled user.
 ///
+/// `common` and `user` are the fields' values, each set by its own setter,
+/// which refuses a value its field cannot hold; `encode` writes the Basic
+/// trigger type into `common`.
+///
+/// SOURCE(esp32s31)\[BLOB_LIBPP_DBG_DUMP_TRIG_COMMON_INFO] and
+/// \[BLOB_LIBPP_DBG_DUMP_TRIG_USER_SS]: complete
+/// `libpp.a[hal_debug.o]::dbg_dump_trig_common_info` and
+/// `dbg_dump_trig_user_ss`, whose shifts and masks the two fields' clauses
+/// reverse.
+///
 /// `encode` omits the FCS. A host injection interface or radio DMA owner must
 /// add it according to that interface's contract.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -329,8 +169,8 @@ pub struct BasicTriggerFrameEncoding {
     pub duration: u16,
     pub receiver_address: [u8; 6],
     pub transmitter_address: [u8; 6],
-    pub common: TriggerCommonEncoding,
-    pub user: TriggerScheduledUserEncoding,
+    pub common: TriggerCommonFields,
+    pub user: TriggerScheduledUserFields,
     pub dependent: TriggerBasicDependentInfo,
 }
 
@@ -341,8 +181,16 @@ impl BasicTriggerFrameEncoding {
                 required: TRIGGER_BASIC_FRAME_LEN,
             });
         }
-        let common = self.common.encode(TriggerType::Basic)?;
-        let user = self.user.encode()?;
+        // AID 0 names no associated station (IEEE Std 802.11ax-2021,
+        // 9.3.1.22): the AID12 field holds it, so its setter cannot refuse it.
+        if self.user.aid12() == 0 {
+            return Err(TriggerEncodeError::AssociationIdOutOfRange);
+        }
+        let common = self
+            .common
+            .with_trigger_type(TriggerType::Basic.field())
+            .to_bytes();
+        let user = self.user.to_bytes();
         let dependent = self.dependent.encode()?;
         let fields: [&[u8]; 7] = [
             &0x0024_u16.to_le_bytes(),
@@ -486,27 +334,23 @@ impl TriggerApTxPower {
     }
 }
 
+/// A parsed Trigger Common Info field: the field's value and what is
+/// derived from it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TriggerCommonInfo {
-    pub trigger_type: TriggerType,
-    pub uplink_length: u16,
-    pub more_trigger_frames: bool,
-    pub carrier_sense_required: bool,
-    pub uplink_bandwidth_encoding: u8,
-    pub gi_ltf: TriggerGiLtf,
-    pub mu_mimo_ltf_mode: bool,
-    pub he_ltf_symbols_and_midamble_periodicity: u8,
-    pub uplink_stbc: bool,
-    pub ldpc_extra_symbol_segment: bool,
-    pub ap_tx_power_encoding: u8,
+    pub fields: TriggerCommonFields,
     pub ap_tx_power: TriggerApTxPower,
-    pub pre_fec_padding_factor_encoding: u8,
+    /// The pre-FEC padding factor, 4 for the encoding 0.
     pub pre_fec_padding_factor: u8,
-    pub packet_extension_disambiguity: bool,
-    pub uplink_spatial_reuse: u16,
-    pub doppler: bool,
-    pub uplink_he_sig_a2_reserved: u16,
-    pub trailing_reserved: bool,
+}
+
+impl TriggerCommonInfo {
+    pub const fn trigger_type(&self) -> TriggerType {
+        TriggerType::from_raw(self.fields.trigger_type().get())
+    }
+    pub const fn gi_ltf(&self) -> TriggerGiLtf {
+        TriggerGiLtf::from_encoding(self.fields.gi_ltf())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -537,7 +381,7 @@ impl<'a> TriggerFrame<'a> {
     /// Groupcast MU-BAR and reserved Trigger types have no layout this
     /// iterator admits; it reports them as an error instead of guessing.
     pub const fn users(&self) -> TriggerUserIterator<'a> {
-        TriggerUserIterator::new(self.common.trigger_type, self.user_info_and_padding)
+        TriggerUserIterator::new(self.common.trigger_type(), self.user_info_and_padding)
     }
 }
 
@@ -702,47 +546,23 @@ pub fn parse_trigger_common_info(bytes: &[u8]) -> Result<TriggerCommonInfo, Trig
     let ap_tx_power_encoding = fields.ap_tx_power_encoding();
     let pre_fec_padding_factor_encoding = fields.pre_fec_padding_factor_encoding();
     Ok(TriggerCommonInfo {
-        trigger_type: TriggerType::from_encoding(fields.trigger_type()),
-        uplink_length: fields.uplink_length(),
-        more_trigger_frames: fields.more_trigger_frames(),
-        carrier_sense_required: fields.carrier_sense_required(),
-        uplink_bandwidth_encoding: fields.uplink_bandwidth_encoding(),
-        gi_ltf: TriggerGiLtf::from_encoding(fields.gi_ltf()),
-        mu_mimo_ltf_mode: fields.mu_mimo_ltf_mode(),
-        he_ltf_symbols_and_midamble_periodicity: fields.he_ltf_symbols_and_midamble_periodicity(),
-        uplink_stbc: fields.uplink_stbc(),
-        ldpc_extra_symbol_segment: fields.ldpc_extra_symbol_segment(),
-        ap_tx_power_encoding,
+        fields,
         ap_tx_power: TriggerApTxPower::from_common_encoding(oer_portable_wire::U8::from_low_bits(
             ap_tx_power_encoding,
         )),
-        pre_fec_padding_factor_encoding,
         pre_fec_padding_factor: if pre_fec_padding_factor_encoding == 0 {
             4
         } else {
             pre_fec_padding_factor_encoding
         },
-        packet_extension_disambiguity: fields.packet_extension_disambiguity(),
-        uplink_spatial_reuse: fields.uplink_spatial_reuse(),
-        doppler: fields.doppler(),
-        uplink_he_sig_a2_reserved: fields.uplink_he_sig_a2_reserved(),
-        trailing_reserved: fields.trailing_reserved(),
     })
 }
 
+/// A parsed random-access Trigger User Info field and its target RSSI.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TriggerUserRuInfo {
-    pub aid12: u16,
-    pub ru_allocation_region: bool,
-    pub ru_allocation: u8,
-    pub coding_type: bool,
-    pub mcs: u8,
-    pub dcm: bool,
-    pub number_of_ra_ru: u8,
-    pub more_ra_ru: bool,
-    pub target_rssi_encoding: u8,
+    pub fields: TriggerRandomAccessUserFields,
     pub target_rssi: TriggerTargetRssi,
-    pub reserved: bool,
 }
 
 /// Parse the random-access RU form of a five-byte Trigger User Info field.
@@ -751,39 +571,21 @@ pub struct TriggerUserRuInfo {
 /// `libpp.a[hal_debug.o]::dbg_dump_trig_user_ru`.
 pub fn parse_trigger_user_ru(bytes: &[u8]) -> Result<TriggerUserRuInfo, TriggerParseError> {
     let fields = TriggerRandomAccessUserFields::from_bytes(*chunk(bytes)?);
-    let target_rssi_encoding = fields.target_rssi_encoding();
     Ok(TriggerUserRuInfo {
-        aid12: fields.aid12(),
-        ru_allocation_region: fields.ru_allocation_region(),
-        ru_allocation: fields.ru_allocation(),
-        coding_type: fields.coding_type(),
-        mcs: fields.mcs(),
-        dcm: fields.dcm(),
-        number_of_ra_ru: fields.number_of_ra_ru(),
-        more_ra_ru: fields.more_ra_ru(),
-        target_rssi_encoding,
+        fields,
         target_rssi: TriggerTargetRssi::from_user_encoding(oer_portable_wire::U8::from_low_bits(
-            target_rssi_encoding,
+            fields.target_rssi_encoding(),
         )),
-        reserved: fields.reserved(),
     })
 }
 
+/// A parsed scheduled Trigger User Info field and what is derived from it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TriggerUserSpatialStreamInfo {
-    pub aid12: u16,
-    pub ru_allocation_region: bool,
-    pub ru_allocation: u8,
-    pub coding_type: bool,
-    pub mcs: u8,
-    pub dcm: bool,
-    pub starting_spatial_stream_encoding: u8,
+    pub fields: TriggerScheduledUserFields,
     pub starting_spatial_stream: u8,
-    pub spatial_stream_count_encoding: u8,
     pub spatial_stream_count: u8,
-    pub target_rssi_encoding: u8,
     pub target_rssi: TriggerTargetRssi,
-    pub reserved: bool,
 }
 
 /// Parse the scheduled spatial-stream form of Trigger User Info.
@@ -796,25 +598,13 @@ pub fn parse_trigger_user_spatial_stream(
     bytes: &[u8],
 ) -> Result<TriggerUserSpatialStreamInfo, TriggerParseError> {
     let fields = TriggerScheduledUserFields::from_bytes(*chunk(bytes)?);
-    let starting_spatial_stream_encoding = fields.starting_spatial_stream_encoding();
-    let spatial_stream_count_encoding = fields.spatial_stream_count_encoding();
-    let target_rssi_encoding = fields.target_rssi_encoding();
     Ok(TriggerUserSpatialStreamInfo {
-        aid12: fields.aid12(),
-        ru_allocation_region: fields.ru_allocation_region(),
-        ru_allocation: fields.ru_allocation(),
-        coding_type: fields.coding_type(),
-        mcs: fields.mcs(),
-        dcm: fields.dcm(),
-        starting_spatial_stream_encoding,
-        starting_spatial_stream: starting_spatial_stream_encoding.saturating_add(1),
-        spatial_stream_count_encoding,
-        spatial_stream_count: spatial_stream_count_encoding.saturating_add(1),
-        target_rssi_encoding,
+        fields,
+        starting_spatial_stream: fields.starting_spatial_stream_encoding().saturating_add(1),
+        spatial_stream_count: fields.spatial_stream_count_encoding().saturating_add(1),
         target_rssi: TriggerTargetRssi::from_user_encoding(oer_portable_wire::U8::from_low_bits(
-            target_rssi_encoding,
+            fields.target_rssi_encoding(),
         )),
-        reserved: fields.reserved(),
     })
 }
 
@@ -901,18 +691,12 @@ pub fn parse_trigger_nfrp_user(bytes: &[u8]) -> Result<TriggerNfrpUserInfo, Trig
     })
 }
 
+/// A parsed TRS Control field and what is derived from it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TriggerResponseSchedulingControl {
-    pub control_id: u8,
-    pub uplink_data_symbols: u8,
-    pub ru_allocation_region: bool,
-    pub ru_allocation: u8,
-    pub ap_tx_power_encoding: u8,
+    pub fields: TrsFields,
     pub ap_tx_power: TriggerApTxPower,
-    pub uplink_target_rssi_encoding: u8,
     pub uplink_target_rssi: TriggerTargetRssi,
-    pub mcs: u8,
-    pub trailing_reserved: bool,
 }
 
 /// Parse the 32-bit Trigger Response Scheduling HE-control information.
@@ -923,22 +707,13 @@ pub fn parse_trigger_response_scheduling_control(
     bytes: &[u8],
 ) -> Result<TriggerResponseSchedulingControl, TriggerParseError> {
     let fields = TrsFields::from_bytes(*chunk(bytes)?);
-    let ap_tx_power_encoding = fields.ap_tx_power_encoding();
-    let uplink_target_rssi_encoding = fields.uplink_target_rssi_encoding();
     Ok(TriggerResponseSchedulingControl {
-        control_id: fields.control_id(),
-        uplink_data_symbols: fields.uplink_data_symbols(),
-        ru_allocation_region: fields.ru_allocation_region(),
-        ru_allocation: fields.ru_allocation(),
-        ap_tx_power_encoding: fields.ap_tx_power_encoding(),
-        uplink_target_rssi_encoding: fields.uplink_target_rssi_encoding(),
-        mcs: fields.mcs(),
-        trailing_reserved: fields.trailing_reserved(),
+        fields,
         ap_tx_power: TriggerApTxPower::from_trs_encoding(oer_portable_wire::U8::from_low_bits(
-            ap_tx_power_encoding,
+            fields.ap_tx_power_encoding(),
         )),
         uplink_target_rssi: TriggerTargetRssi::from_trs_encoding(
-            oer_portable_wire::U8::from_low_bits(uplink_target_rssi_encoding),
+            oer_portable_wire::U8::from_low_bits(fields.uplink_target_rssi_encoding()),
         ),
     })
 }
@@ -979,7 +754,7 @@ fn chunk<const N: usize>(bytes: &[u8]) -> Result<&[u8; N], TriggerParseError> {
 oer_portable_wire::bitfield! {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.3.1.22 (Trigger frame format).
     pub struct TriggerCommonFields[8] (little) {
-        pub trigger_type, with_trigger_type: u8 = 0..4;
+        pub trigger_type, with_trigger_type: (u8) = 0..4;
         pub uplink_length, with_uplink_length: u16 = 4..16;
         pub more_trigger_frames, with_more_trigger_frames: bool = 16..17;
         pub carrier_sense_required, with_carrier_sense_required: bool = 17..18;

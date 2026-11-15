@@ -36,13 +36,23 @@ pub enum StaBeaconError {
     MalformedTim,
 }
 
+/// Whether the access point buffers traffic, as a TIM element indicates it
+/// (IEEE Std 802.11-2020, 9.4.2.5).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BufferedTraffic {
+    Buffered,
+    Clear,
+}
+
 /// Traffic indication decoded for the connected station's Association ID.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaTimObservation {
     pub dtim_count: u8,
     pub dtim_period: u8,
-    pub unicast_buffered: bool,
-    pub group_buffered: bool,
+    /// The partial virtual bitmap's bit of the station's AID.
+    pub unicast: BufferedTraffic,
+    /// Group traffic buffered, indicated in a DTIM beacon.
+    pub group: BufferedTraffic,
 }
 
 /// Fixed connected-beacon fields that may outlive the borrowed MPDU.
@@ -205,9 +215,18 @@ pub fn parse_sta_beacon(
             tim = Some(StaTimObservation {
                 dtim_count,
                 dtim_period,
-                unicast_buffered,
-                group_buffered: dtim_count == 0
-                    && crate::beacon::TimBitmapControl::from_bytes([bitmap_control]).group(),
+                unicast: if unicast_buffered {
+                    BufferedTraffic::Buffered
+                } else {
+                    BufferedTraffic::Clear
+                },
+                group: if dtim_count == 0
+                    && crate::beacon::TimBitmapControl::from_bytes([bitmap_control]).group()
+                {
+                    BufferedTraffic::Buffered
+                } else {
+                    BufferedTraffic::Clear
+                },
             });
         }
         match (id, body) {

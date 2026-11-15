@@ -625,50 +625,47 @@ impl HeDcmConstellation {
     }
 }
 
+/// A parsed HE Capabilities element of a 2.4 GHz, 20 MHz peer: its HE PHY
+/// Capabilities Information field and its two one-stream HE-MCS maps, and
+/// what is derived from them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct He20Capabilities {
+    pub phy: HePhyCapabilities,
     pub receive_mcs_map: u16,
     pub transmit_mcs_map: u16,
-    pub receive_nss1: HeMcsNssSupport,
-    pub transmit_nss1: HeMcsNssSupport,
-    /// The peer can receive the optional HE SU 1x HE-LTF / 0.8-us GI form.
-    ///
-    /// SOURCE(esp32s31)\[LINUX_IEEE80211_HE_PHY_CAP1_GI_2026_07_29]: Linux v6.12
-    /// `include/linux/ieee80211.h` names HE PHY capability byte 1 bit `0x40`
-    /// `HE_LTF_AND_GI_FOR_HE_PPDUS_0_8US`. The S31 oracle's ordinary
-    /// `libpp[pp_he.o]::ppSelectTxFormat` never emits GI/LTF selector zero,
-    /// while hardware tests against a peer with this bit clear rejected
-    /// selector zero for MCS0 through MCS9 and accepted selectors one through
-    /// three.
-    pub one_ltf_800ns_gi: bool,
-    /// The peer can decode LDPC coding in an HE payload.
-    ///
-    /// SOURCE(esp32s31)\[BLOB_LIBNET80211_HE_CAP_LDPC]: complete
-    /// `libnet80211[ieee80211_he.o]::ieee80211_parse_hecap`
-    /// (size `0x2d8`) reads HE PHY capability byte one at element offset ten,
-    /// shifts it by five and masks one before publishing the decoded field in
-    /// its complete capability diagnostic. The same function subsequently
-    /// copies the complete 24-byte bounded prefix into peer state. This is
-    /// independent of the peer's DCM receive constellation.
-    pub ldpc_coding_in_payload: bool,
-    /// The peer can transmit HE STBC below 80 MHz.
-    ///
-    /// HE PHY capability byte 2 bit 2; local receive support is a separate
-    /// backend capability.
-    pub stbc_transmit_under_80_mhz: bool,
-    /// The peer can receive HE STBC below 80 MHz.
-    ///
-    /// SOURCE(esp32s31)\[BLOB_LIBNET80211_HE_CAP_STBC]: complete
-    /// `libnet80211[ieee80211_he.o]::ieee80211_add_hecap` copies
-    /// `g_phy_cap_rx_stbc` into HE PHY capability byte 2 bit 3. Complete
-    /// `esp_wifi_enable_rx_stbc` owns that one-byte capability flag and the
-    /// corresponding interface-state bits.
-    pub stbc_receive_under_80_mhz: bool,
+}
+
+impl He20Capabilities {
+    /// The HE-MCS the peer receives on one stream.
+    pub const fn receive_nss1(self) -> HeMcsNssSupport {
+        HeMcsNssSupport::one_stream_from_map(self.receive_mcs_map)
+    }
+
+    /// The HE-MCS the peer transmits on one stream.
+    pub const fn transmit_nss1(self) -> HeMcsNssSupport {
+        HeMcsNssSupport::one_stream_from_map(self.transmit_mcs_map)
+    }
+
+    pub const fn supports_bidirectional_mcs9(self) -> bool {
+        self.receive_nss1().supports_mcs9() && self.transmit_nss1().supports_mcs9()
+    }
+
+    pub const fn supports_one_ltf_800ns_gi(self) -> bool {
+        self.phy.one_ltf_800ns_gi()
+    }
+
+    pub const fn supports_ldpc_coding_in_payload(self) -> bool {
+        self.phy.ldpc_coding_in_payload()
+    }
+
     /// Maximum DCM constellation the peer can transmit.
     ///
     /// HE PHY capability byte 3 bits 1:0. This is useful for the open RX
     /// policy, but is deliberately separate from [`Self::dcm_receive`].
-    pub dcm_transmit: HeDcmConstellation,
+    pub const fn dcm_transmit(self) -> HeDcmConstellation {
+        HeDcmConstellation::from_encoding(self.phy.dcm_transmit())
+    }
+
     /// Maximum DCM constellation the peer can receive.
     ///
     /// SOURCE(esp32s31)\[LINUX_IEEE80211_HE_PHY_CAP3_DCM_2026_07_29]: Linux
@@ -676,49 +673,35 @@ pub struct He20Capabilities {
     /// 4:3 `DCM_MAX_CONST_RX`. `libpp[trc.o]::rcGetDCMMaxRate`
     /// independently maps the same four capability levels to disabled,
     /// BPSK/MCS0, QPSK/MCS1 and 16-QAM/MCS3 for the vendor BCC path.
-    pub dcm_receive: HeDcmConstellation,
-    /// The peer can send SU beamforming feedback in a Trigger frame response.
-    pub triggered_su_beamforming_feedback: bool,
-    /// The peer can send partial-bandwidth MU feedback in a Trigger response.
-    pub triggered_mu_beamforming_partial_bandwidth_feedback: bool,
-    /// The peer can send CQI feedback in a Trigger frame response.
-    ///
-    /// HE PHY capability byte 6 bit 4. This is distinct from
-    /// [`Self::non_triggered_cqi_feedback`].
-    pub triggered_cqi_feedback: bool,
-    /// The peer can send CQI feedback without a Trigger frame.
-    ///
-    /// HE PHY capability byte 9 bit 1.
-    pub non_triggered_cqi_feedback: bool,
-}
-
-impl He20Capabilities {
-    pub const fn supports_bidirectional_mcs9(self) -> bool {
-        self.receive_nss1.supports_mcs9() && self.transmit_nss1.supports_mcs9()
-    }
-
-    pub const fn supports_one_ltf_800ns_gi(self) -> bool {
-        self.one_ltf_800ns_gi
-    }
-
-    pub const fn supports_ldpc_coding_in_payload(self) -> bool {
-        self.ldpc_coding_in_payload
-    }
-
-    pub const fn dcm_receive_constellation(self) -> HeDcmConstellation {
-        self.dcm_receive
+    pub const fn dcm_receive(self) -> HeDcmConstellation {
+        HeDcmConstellation::from_encoding(self.phy.dcm_receive())
     }
 }
 
+/// A parsed HE Operation element: its HE Operation Parameters and BSS
+/// Color Information and its Basic HE-MCS And NSS Set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct He20Operation {
-    pub bss_color: u8,
-    pub bss_color_enabled: bool,
-    pub partial_bss_color: bool,
-    pub basic_mcs_nss_map: u16,
+    pub fields: HeOperationFields,
 }
 
 impl He20Operation {
+    pub const fn bss_color(self) -> u8 {
+        self.fields.bss_color()
+    }
+
+    pub const fn bss_color_enabled(self) -> bool {
+        !self.fields.bss_color_disabled()
+    }
+
+    pub const fn partial_bss_color(self) -> bool {
+        self.fields.partial_bss_color()
+    }
+
+    pub const fn basic_mcs_nss_map(self) -> u16 {
+        self.fields.basic_mcs_nss()
+    }
+
     /// Return the BSS color published in an HE-SIG-A1 transmit vector.
     ///
     /// SOURCE(esp32s31): complete `libnet80211[ieee80211_he.o]::ieee80211_parse_heopr` passes HE Operation byte-six bit seven inverted
@@ -729,25 +712,22 @@ impl He20Operation {
     /// color separate from this effective transmit value prevents a disabled
     /// BSS color such as `0xae` from becoming active color 46.
     pub const fn effective_bss_color(self) -> u8 {
-        if self.bss_color_enabled {
-            self.bss_color
+        if self.bss_color_enabled() {
+            self.bss_color()
         } else {
             0
         }
     }
 }
 
-/// Bounded HE20 peer state consumed by a chip-specific register backend.
+/// Bounded HE20 peer state consumed by a chip-specific register backend:
+/// the HE Capabilities element's fixed prefix, the padding it implies, the
+/// HE Operation element's fixed fields and its optional indicator.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct He20PeerState {
     pub capability_prefix: [u8; HE_CAPABILITIES_IE_MIN_LEN],
     pub packet_padding_eight_us: u8,
-    pub default_packet_extension_duration: u8,
-    pub bss_color: u8,
-    pub bss_color_enabled: bool,
-    pub partial_bss_color: bool,
-    pub basic_mcs_nss_map: u16,
-    pub rts_threshold: Option<u16>,
+    pub operation: HeOperationFields,
     /// The HE Operation's Max Co-Hosted BSSID Indicator, present exactly
     /// when its Co-Hosted BSS bit is set.
     ///
@@ -757,18 +737,50 @@ pub struct He20PeerState {
     /// the byte at element offset 12 with the VHT Operation Information
     /// (byte four bit six) or 9 without it to `hal_he_set_co_hosted_bss`.
     pub max_co_hosted_bssid_indicator: Option<u8>,
+}
+
+impl He20PeerState {
+    pub const fn default_packet_extension_duration(self) -> u8 {
+        self.operation.default_pe()
+    }
+
+    pub const fn bss_color(self) -> u8 {
+        self.operation.bss_color()
+    }
+
+    pub const fn bss_color_enabled(self) -> bool {
+        !self.operation.bss_color_disabled()
+    }
+
+    pub const fn partial_bss_color(self) -> bool {
+        self.operation.partial_bss_color()
+    }
+
+    pub const fn basic_mcs_nss_map(self) -> u16 {
+        self.operation.basic_mcs_nss()
+    }
+
+    /// The HE Operation's TXOP Duration RTS Threshold; `None` for 0 and
+    /// 1023, which disable it.
+    pub const fn rts_threshold(self) -> Option<u16> {
+        match self.operation.rts_threshold() {
+            0 | 0x03ff => None,
+            threshold => Some(threshold),
+        }
+    }
+
     /// Raw HE Operation `ER-SU-Disable` bit.
     ///
     /// SOURCE(esp32s31): complete
     /// `libnet80211[ieee80211_he.o]::ieee80211_parse_heopr`
     /// logs complete-IE byte five bit zero as `ER-SU-Disable`, stores it at
     /// peer-state bit 10 and passes it unchanged to `libpp[hal_mac_ctl.o]::hal_he_set_ersu`.
-    pub extended_range_single_user_disabled: bool,
-}
+    pub const fn extended_range_single_user_disabled(self) -> bool {
+        self.operation.er_su_disabled()
+    }
 
-impl He20PeerState {
     pub const fn extended_range_single_user_permitted(self) -> bool {
-        !self.extended_range_single_user_disabled
+        !self.extended_range_single_user_disabled()
     }
 }
 
@@ -897,21 +909,9 @@ pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeEle
     let receive_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
     let transmit_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
     Ok(He20Capabilities {
+        phy,
         receive_mcs_map,
         transmit_mcs_map,
-        receive_nss1: HeMcsNssSupport::one_stream_from_map(receive_mcs_map),
-        transmit_nss1: HeMcsNssSupport::one_stream_from_map(transmit_mcs_map),
-        one_ltf_800ns_gi: phy.one_ltf_800ns_gi(),
-        ldpc_coding_in_payload: phy.ldpc_coding_in_payload(),
-        stbc_transmit_under_80_mhz: phy.stbc_transmit_under_80_mhz(),
-        stbc_receive_under_80_mhz: phy.stbc_receive_under_80_mhz(),
-        dcm_transmit: HeDcmConstellation::from_encoding(phy.dcm_transmit()),
-        dcm_receive: HeDcmConstellation::from_encoding(phy.dcm_receive()),
-        triggered_su_beamforming_feedback: phy.triggered_su_beamforming_feedback(),
-        triggered_mu_beamforming_partial_bandwidth_feedback: phy
-            .triggered_mu_beamforming_partial_bandwidth_feedback(),
-        triggered_cqi_feedback: phy.triggered_cqi_feedback(),
-        non_triggered_cqi_feedback: phy.non_triggered_cqi_feedback(),
     })
 }
 
@@ -930,12 +930,7 @@ pub fn parse_he20_operation(element: &[u8]) -> Result<He20Operation, HeElementEr
     reader.take(3).map_err(|_| HeElementError::TooShort)?;
     let fields =
         HeOperationFields::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
-    Ok(He20Operation {
-        bss_color: fields.bss_color(),
-        bss_color_enabled: !fields.bss_color_disabled(),
-        partial_bss_color: fields.partial_bss_color(),
-        basic_mcs_nss_map: fields.basic_mcs_nss(),
-    })
+    Ok(He20Operation { fields })
 }
 
 /// Recover the peer fields installed by the pinned HE capability and
@@ -1001,21 +996,11 @@ pub fn parse_he20_peer_state(
         None
     };
 
-    let encoded_rts_threshold = fields.rts_threshold();
-    let rts_threshold =
-        (!matches!(encoded_rts_threshold, 0 | 0x03ff)).then_some(encoded_rts_threshold);
-
     Ok(He20PeerState {
         capability_prefix,
         packet_padding_eight_us,
-        default_packet_extension_duration: fields.default_pe(),
-        bss_color: fields.bss_color(),
-        bss_color_enabled: !fields.bss_color_disabled(),
-        partial_bss_color: fields.partial_bss_color(),
-        basic_mcs_nss_map: fields.basic_mcs_nss(),
-        rts_threshold,
+        operation: fields,
         max_co_hosted_bssid_indicator,
-        extended_range_single_user_disabled: fields.er_su_disabled(),
     })
 }
 
@@ -1080,10 +1065,39 @@ oer_portable_wire::bitfield! {
     pub struct HePhyCapabilities[11] (little) {
         pub channel_width_set, with_channel_width_set: (u8) = 1..8;
         pub device_class_a, with_device_class_a: bool = 12..13;
+        /// The peer can decode LDPC coding in an HE payload.
+        ///
+        /// SOURCE(esp32s31)\[BLOB_LIBNET80211_HE_CAP_LDPC]: complete
+        /// `libnet80211[ieee80211_he.o]::ieee80211_parse_hecap`
+        /// (size `0x2d8`) reads HE PHY capability byte one at element offset ten,
+        /// shifts it by five and masks one before publishing the decoded field in
+        /// its complete capability diagnostic. The same function subsequently
+        /// copies the complete 24-byte bounded prefix into peer state. This is
+        /// independent of the peer's DCM receive constellation.
         pub ldpc_coding_in_payload, with_ldpc_coding_in_payload: bool = 13..14;
+        /// The peer can receive the optional HE SU 1x HE-LTF / 0.8-us GI form.
+        ///
+        /// SOURCE(esp32s31)\[LINUX_IEEE80211_HE_PHY_CAP1_GI_2026_07_29]: Linux v6.12
+        /// `include/linux/ieee80211.h` names HE PHY capability byte 1 bit `0x40`
+        /// `HE_LTF_AND_GI_FOR_HE_PPDUS_0_8US`. The S31 oracle's ordinary
+        /// `libpp[pp_he.o]::ppSelectTxFormat` never emits GI/LTF selector zero,
+        /// while hardware tests against a peer with this bit clear rejected
+        /// selector zero for MCS0 through MCS9 and accepted selectors one through
+        /// three.
         pub one_ltf_800ns_gi, with_one_ltf_800ns_gi: bool = 14..15;
         pub ndp_4x_ltf_3200ns_gi, with_ndp_4x_ltf_3200ns_gi: bool = 17..18;
+        /// The peer can transmit HE STBC below 80 MHz.
+        ///
+        /// HE PHY capability byte 2 bit 2; local receive support is a separate
+        /// backend capability.
         pub stbc_transmit_under_80_mhz, with_stbc_transmit_under_80_mhz: bool = 18..19;
+        /// The peer can receive HE STBC below 80 MHz.
+        ///
+        /// SOURCE(esp32s31)\[BLOB_LIBNET80211_HE_CAP_STBC]: complete
+        /// `libnet80211[ieee80211_he.o]::ieee80211_add_hecap` copies
+        /// `g_phy_cap_rx_stbc` into HE PHY capability byte 2 bit 3. Complete
+        /// `esp_wifi_enable_rx_stbc` owns that one-byte capability flag and the
+        /// corresponding interface-state bits.
         pub stbc_receive_under_80_mhz, with_stbc_receive_under_80_mhz: bool = 19..20;
         pub ul_mu_partial_bandwidth_mu_mimo, with_ul_mu_partial_bandwidth_mu_mimo: bool = 23..24;
         pub dcm_transmit, with_dcm_transmit: u8 = 24..26;
@@ -1094,11 +1108,20 @@ oer_portable_wire::bitfield! {
         pub ng16_mu_feedback, with_ng16_mu_feedback: bool = 47..48;
         pub codebook_size_42_su, with_codebook_size_42_su: bool = 48..49;
         pub codebook_size_75_mu, with_codebook_size_75_mu: bool = 49..50;
+        /// The peer can send SU beamforming feedback in a Trigger frame response.
         pub triggered_su_beamforming_feedback, with_triggered_su_beamforming_feedback: bool = 50..51;
+        /// The peer can send partial-bandwidth MU feedback in a Trigger response.
         pub triggered_mu_beamforming_partial_bandwidth_feedback, with_triggered_mu_beamforming_partial_bandwidth_feedback: bool = 51..52;
+        /// The peer can send CQI feedback in a Trigger frame response.
+        ///
+        /// HE PHY capability byte 6 bit 4. This is distinct from
+        /// [`Self::non_triggered_cqi_feedback`].
         pub triggered_cqi_feedback, with_triggered_cqi_feedback: bool = 52..53;
         pub ppe_present, with_ppe_present: bool = 55..56;
         pub he_ppdu_20_mhz_in_40_mhz_2g, with_he_ppdu_20_mhz_in_40_mhz_2g: bool = 65..66;
+        /// The peer can send CQI feedback without a Trigger frame.
+        ///
+        /// HE PHY capability byte 9 bit 1.
         pub non_triggered_cqi_feedback, with_non_triggered_cqi_feedback: bool = 73..74;
         pub nominal_padding, with_nominal_padding: (u8) = 78..80;
         pub mu_ppdu_more_than_one_ru_maximum_ltf, with_mu_ppdu_more_than_one_ru_maximum_ltf: bool = 80..81;

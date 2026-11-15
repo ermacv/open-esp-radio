@@ -129,7 +129,7 @@ pub struct ApUnprotectedDataFrame<'frame> {
     pub access_point: [u8; 6],
     pub peer: [u8; 6],
     pub sequence_number: SequenceNumber,
-    pub more_data: bool,
+    pub more_data: crate::data::MoreData,
     pub msdu: MsduParts<'frame>,
 }
 
@@ -153,7 +153,7 @@ impl ApUnprotectedDataFrame<'_> {
         if plan.header[4..10] != self.peer {
             return Err(ApDataFrameError::InvalidPeer);
         }
-        if self.more_data {
+        if self.more_data == crate::data::MoreData::Buffered {
             plan.set_more_data(true);
         }
         let mut header = plan.header;
@@ -184,10 +184,10 @@ pub struct ApProtectedDataFrame<'frame> {
     pub peer: [u8; 6],
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
-    pub peer_qos: bool,
-    /// Set the IEEE 802.11 More Data bit for a frame released from an AP
-    /// power-save queue while further traffic remains buffered.
-    pub more_data: bool,
+    pub peer_qos: crate::data::PeerQos,
+    /// `Buffered` for a frame released from an AP power-save queue while
+    /// further traffic remains buffered.
+    pub more_data: crate::data::MoreData,
     pub ccmp_header: [u8; CCMP_HEADER_LEN],
     pub msdu: MsduParts<'frame>,
 }
@@ -226,8 +226,8 @@ pub struct ApProtectedDataPrefix {
     pub peer: [u8; 6],
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
-    pub peer_qos: bool,
-    pub more_data: bool,
+    pub peer_qos: crate::data::PeerQos,
+    pub more_data: crate::data::MoreData,
     pub msdu: MsduHeader,
 }
 
@@ -291,8 +291,8 @@ impl ProtectedDataPlan {
         peer: [u8; 6],
         sequence_number: SequenceNumber,
         user_priority: u8,
-        peer_qos: bool,
-        more_data: bool,
+        peer_qos: crate::data::PeerQos,
+        more_data: crate::data::MoreData,
         msdu: MsduHeader,
     ) -> Result<Self, ApDataFrameError> {
         if crate::address::AddressFlags::from_bytes([access_point[0]]).group()
@@ -308,14 +308,14 @@ impl ProtectedDataPlan {
             access_point,
             msdu,
             priority,
-            peer_qos,
+            matches!(peer_qos, crate::data::PeerQos::Qos),
             false,
         );
         if plan.header[4..10] != peer {
             return Err(ApDataFrameError::InvalidPeer);
         }
         plan.set_protected(true);
-        if more_data {
+        if more_data == crate::data::MoreData::Buffered {
             plan.set_more_data(true);
         }
         crate::encoding::write_array::<22, _, _>(
@@ -349,7 +349,7 @@ pub struct ApAmsduFrame<'a> {
     pub peer: [u8; 6],
     pub sequence_number: SequenceNumber,
     pub user_priority: u8,
-    pub more_data: bool,
+    pub more_data: crate::data::MoreData,
     pub ccmp_header: Option<[u8; CCMP_HEADER_LEN]>,
     pub msdus: &'a [MsduParts<'a>],
 }
@@ -428,7 +428,7 @@ impl ApAmsduFrame<'_> {
         if self.ccmp_header.is_some() {
             plan.set_protected(true);
         }
-        if self.more_data {
+        if self.more_data == crate::data::MoreData::Buffered {
             plan.set_more_data(true);
         }
         plan.set_amsdu(true);
@@ -502,17 +502,25 @@ pub enum ApManagementRequest<'a> {
 /// Exact on-air security facts from one Association Request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApAssociationSecurityObservation<'a> {
-    pub privacy: bool,
+    /// The request's Capability Information field.
+    pub capability: crate::management::CapabilityInformation,
     pub rsn_ie: Option<&'a [u8]>,
     pub rsn_ie_count: u8,
     pub rsnxe: Option<&'a [u8]>,
     pub rsnxe_count: u8,
-    /// A legacy WPA vendor IE (00:50:f2:01) was present. It is never an
-    /// acceptable substitute for RSN and makes a mixed request invalid.
-    pub legacy_wpa_present: bool,
-    /// At least one IE header or payload was truncated. Absence inferred from
+    /// A legacy WPA vendor IE (00:50:f2:01). It is never an acceptable
+    /// substitute for RSN and makes a mixed request invalid.
+    pub legacy_wpa: crate::scan::ElementPresence,
+    /// Whether an IE header or payload was truncated. Absence inferred from
     /// a malformed tail is never an Open-security proof.
-    pub malformed_elements: bool,
+    pub information_elements: crate::scan::ElementList,
+}
+
+impl ApAssociationSecurityObservation<'_> {
+    /// The Privacy subfield of the request's Capability Information.
+    pub const fn privacy(&self) -> bool {
+        self.capability.privacy()
+    }
 }
 
 /// Parse requests addressed to this AP, including broadcast probe discovery.
@@ -647,8 +655,7 @@ pub fn parse_ap_management_request<'a>(
                     information_elements,
                     crate::management::CapabilityInformation::from_bytes(
                         capabilities.to_le_bytes(),
-                    )
-                    .privacy(),
+                    ),
                 ),
                 maximum_legacy_rate_500kbps: maximum_ap_legacy_rate(profile, information_elements),
                 ht_capabilities,
@@ -826,21 +833,21 @@ fn supports_wmm(bytes: &[u8]) -> bool {
 )]
 fn association_security_observation(
     bytes: &[u8],
-    privacy: bool,
+    capability: crate::management::CapabilityInformation,
 ) -> ApAssociationSecurityObservation<'_> {
     let mut remaining = oer_portable_wire::Reader::new(bytes);
     let mut observation = ApAssociationSecurityObservation {
-        privacy,
+        capability,
         rsn_ie: None,
         rsn_ie_count: 0,
         rsnxe: None,
         rsnxe_count: 0,
-        legacy_wpa_present: false,
-        malformed_elements: false,
+        legacy_wpa: crate::scan::ElementPresence::Absent,
+        information_elements: crate::scan::ElementList::Complete,
     };
     while !remaining.is_empty() {
         let [id, length, ..] = *remaining.remaining() else {
-            observation.malformed_elements = true;
+            observation.information_elements = crate::scan::ElementList::Truncated;
             break;
         };
         let length = usize::from(length);
@@ -848,7 +855,7 @@ fn association_security_observation(
             .checked_add(2)
             .and_then(|record_len| remaining.take(record_len).ok())
         else {
-            observation.malformed_elements = true;
+            observation.information_elements = crate::scan::ElementList::Truncated;
             break;
         };
         if id == 48 {
@@ -860,7 +867,7 @@ fn association_security_observation(
             observation.rsnxe.get_or_insert(record);
         }
         if id == 221 && length >= 4 && matches!(record, [_, _, 0x00, 0x50, 0xf2, 0x01, ..]) {
-            observation.legacy_wpa_present = true;
+            observation.legacy_wpa = crate::scan::ElementPresence::Present;
         }
     }
     observation

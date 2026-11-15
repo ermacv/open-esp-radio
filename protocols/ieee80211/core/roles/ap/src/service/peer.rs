@@ -138,22 +138,24 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
             return Err(ApServiceError::WrongPeerPhase);
         }
         let policy = self.security_policy();
-        let association_security =
-            match if security.malformed_elements || security.legacy_wpa_present {
-                Err(ApAssociationSecurityError::InvalidElements)
-            } else {
-                Self::validated_association_security(policy, security)
-            } {
-                Ok(admitted) => admitted,
-                Err(error) => {
-                    error.peer_rejection()?;
-                    return Ok(ApMlmeAction::AssociationResponse {
-                        peer,
-                        status: status_code::INVALID_ELEMENT,
-                        association_id: None,
-                    });
-                }
-            };
+        let association_security = match if (security.information_elements
+            == oer_protocols_ieee80211_wire::scan::ElementList::Truncated)
+            || (security.legacy_wpa == oer_protocols_ieee80211_wire::scan::ElementPresence::Present)
+        {
+            Err(ApAssociationSecurityError::InvalidElements)
+        } else {
+            Self::validated_association_security(policy, security)
+        } {
+            Ok(admitted) => admitted,
+            Err(error) => {
+                error.peer_rejection()?;
+                return Ok(ApMlmeAction::AssociationResponse {
+                    peer,
+                    status: status_code::INVALID_ELEMENT,
+                    association_id: None,
+                });
+            }
+        };
         let akm = association_security.association.akm.akm();
         let resumed = if policy == ApSecurityPolicy::Wpa3Personal {
             match self.resume_sae_pmk(

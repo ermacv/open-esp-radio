@@ -98,7 +98,7 @@ impl PowerSaveView {
     /// A beacon of the station's BSS with `tim`: what the station does.
     pub fn beacon(&self, tim: Option<StaTimObservation>) -> PowerSaveDecision {
         match tim {
-            Some(tim) if *self == Self::AwakeUnconfirmed && tim.unicast_buffered => {
+            Some(tim) if *self == Self::AwakeUnconfirmed && tim.unicast == oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered => {
                 PowerSaveDecision::SendActive
             }
             _ => PowerSaveDecision::Keep,
@@ -119,8 +119,12 @@ mod tests {
         Some(StaTimObservation {
             dtim_count: 0,
             dtim_period: 1,
-            unicast_buffered,
-            group_buffered: false,
+            unicast: if unicast_buffered {
+                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Buffered
+            } else {
+                oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear
+            },
+            group: oer_protocols_ieee80211_wire::station_beacon::BufferedTraffic::Clear,
         })
     }
 

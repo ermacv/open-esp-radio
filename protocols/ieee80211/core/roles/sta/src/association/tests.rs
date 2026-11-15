@@ -70,13 +70,13 @@ mod associated_peer {
             capability_info: 0,
             status_code,
             association_id: 7,
-            ht_capability: true,
+            ht_capability: oer_protocols_ieee80211_wire::scan::ElementPresence::Present,
             he: oer_protocols_ieee80211_wire::station::ResponseHeElements::new(
                 &HE20_MCS9_CAPABILITY,
                 &HE20_OPERATION,
             )
             .unwrap(),
-            wmm: true,
+            wmm_element: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
             wmm_parameters: None,
             association_comeback_tu: None,
         }

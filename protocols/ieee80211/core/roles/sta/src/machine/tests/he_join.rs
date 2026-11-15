@@ -188,7 +188,7 @@ fn an_he_access_point_gets_the_he_request_and_an_he_link() {
         assert!(
             peer.associated
                 .he_peer_state
-                .is_some_and(|state| state.extended_range_single_user_disabled)
+                .is_some_and(|state| state.extended_range_single_user_disabled())
         );
         assert!(world.take().iter().any(|seen| matches!(
             seen,
@@ -314,7 +314,7 @@ fn the_response_s_bss_color_is_the_link_s() {
     let peer = peer.unwrap();
     assert_eq!(peer.phy, PhyMode::He20);
     assert_eq!(peer.he_bss_color, 5);
-    assert_eq!(peer.he_peer_state.unwrap().bss_color, 5);
+    assert_eq!(peer.he_peer_state.unwrap().bss_color(), 5);
     // Its other HE Operation parameters are the response's too: default PE
     // 2 and ER-SU permitted where the beacon said 4 and disabled.
     let mut operation = HE_OPERATION;
@@ -322,7 +322,7 @@ fn the_response_s_bss_color_is_the_link_s() {
     operation[5] = 0x00;
     let (_, peer, _) = answered(&[&HE_CAPABILITY, &operation]);
     let state = peer.unwrap().he_peer_state.unwrap();
-    assert_eq!(state.default_packet_extension_duration, 2);
+    assert_eq!(state.default_packet_extension_duration(), 2);
     assert!(state.extended_range_single_user_permitted());
 }
 

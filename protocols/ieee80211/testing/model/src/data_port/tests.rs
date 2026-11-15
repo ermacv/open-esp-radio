@@ -904,14 +904,11 @@ fn the_latest_he_setting_is_the_station_interface_s() {
         let peer = oer_protocols_ieee80211_wire::he::He20PeerState {
             capability_prefix: [0; 24],
             packet_padding_eight_us: 2,
-            default_packet_extension_duration: 0,
-            bss_color: 3,
-            bss_color_enabled: true,
-            partial_bss_color: false,
-            basic_mcs_nss_map: 0xfffc,
-            rts_threshold: None,
+            operation: oer_protocols_ieee80211_wire::he::HeOperationFields::from_bytes([0; 6])
+                .with_bss_color(3)
+                .and_then(|fields| fields.with_basic_mcs_nss(0xfffc))
+                .unwrap(),
             max_co_hosted_bssid_indicator: None,
-            extended_range_single_user_disabled: false,
         };
         let he = StationHe::He20(He20Association::new(&peer, 1, 0).unwrap());
         assert!(matches!(

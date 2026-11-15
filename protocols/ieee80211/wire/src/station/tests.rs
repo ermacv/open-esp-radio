@@ -545,8 +545,11 @@ fn parses_association_response_and_masks_aid() {
     let response = parse_association_response(&frame[..58], LOCAL, BSSID).unwrap();
     assert_eq!(response.status_code, 0);
     assert_eq!(response.association_id, 42);
-    assert!(response.ht_capability);
-    assert!(response.wmm);
+    assert_eq!(
+        response.ht_capability,
+        crate::scan::ElementPresence::Present
+    );
+    assert!(response.wmm());
 }
 
 #[test]
@@ -792,4 +795,24 @@ fn an_open_qos_data_frame_carries_its_tid_and_decodes_back() {
         plain.encode(&mut [0; 30]),
         Err(StationFrameError::OutputTooSmall { required: 35 })
     );
+}
+
+#[test]
+fn wmm_is_accepted_by_a_wmm_element_ht_or_he_alone() {
+    use crate::scan::ElementPresence::{Absent, Present};
+    let response = |ht_capability, wmm_element, he| AssociationResponse {
+        capability_info: 0,
+        status_code: 0,
+        association_id: 1,
+        ht_capability,
+        he,
+        wmm_element,
+        wmm_parameters: None,
+        association_comeback_tu: None,
+    };
+    let he = ResponseHeElements::new(&[255, 4, 35, 0, 0, 0], &[]).unwrap();
+    assert!(!response(Absent, Absent, ResponseHeElements::NONE).wmm());
+    assert!(response(Absent, Present, ResponseHeElements::NONE).wmm());
+    assert!(response(Present, Absent, ResponseHeElements::NONE).wmm());
+    assert!(response(Absent, Absent, he).wmm());
 }

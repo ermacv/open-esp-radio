@@ -40,11 +40,7 @@ pub enum HeNdpaEncodingError {
     OutputTooShort,
     NoStations,
     DialogTokenOutOfRange,
-    AssociationIdOutOfRange,
-    ResourceUnitIndexOutOfRange,
     ReversedResourceUnitRange,
-    FeedbackTypeAndNgOutOfRange,
-    NcOutOfRange,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -173,62 +169,6 @@ impl HeNdpaStationInfo {
     }
 }
 
-/// One owned HE NDPA STA Info field.
-///
-/// SOURCE\[HIL_VENDOR_HE20_NDPA_CBF_2026_07_24]: hardware monitor capture.
-/// Frame 1374 is a complete vendor AP-to-S31 HE20 NDPA. Its STA Info word
-/// `0x0820001d` selects AID 29, RU indices 0..8, feedback/Ng encoding zero,
-/// disambiguation one, codebook zero and Nc zero. Frame 1376, 14.39 us later,
-/// is the S31's HE Compressed Beamforming and CQI Action-No-Ack response.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct HeNdpaStationEncoding {
-    pub association_id: u16,
-    pub resource_unit_start_index: u8,
-    pub resource_unit_end_index: u8,
-    pub feedback_type_and_ng_encoding: u8,
-    pub disambiguation: bool,
-    pub codebook_size: bool,
-    pub nc_encoding: u8,
-}
-
-impl HeNdpaStationEncoding {
-    pub const fn encode(self) -> Result<u32, HeNdpaEncodingError> {
-        let mut fields = NdpaStationFields::from_bytes([0; 4]);
-        macro_rules! field {
-            ($result:expr, $error:ident) => {
-                match $result {
-                    Ok(value) => value,
-                    Err(_) => return Err(HeNdpaEncodingError::$error),
-                }
-            };
-        }
-        fields = field!(
-            fields.with_association_id(self.association_id),
-            AssociationIdOutOfRange
-        );
-        fields = field!(
-            fields.with_resource_unit_start_index(self.resource_unit_start_index),
-            ResourceUnitIndexOutOfRange
-        );
-        fields = field!(
-            fields.with_resource_unit_end_index(self.resource_unit_end_index),
-            ResourceUnitIndexOutOfRange
-        );
-        if self.resource_unit_start_index > self.resource_unit_end_index {
-            return Err(HeNdpaEncodingError::ReversedResourceUnitRange);
-        }
-        fields = field!(
-            fields.with_feedback_type_and_ng_encoding(self.feedback_type_and_ng_encoding),
-            FeedbackTypeAndNgOutOfRange
-        );
-        fields = fields
-            .with_disambiguation(self.disambiguation)
-            .with_codebook_size(self.codebook_size);
-        fields = field!(fields.with_nc_encoding(self.nc_encoding), NcOutOfRange);
-        Ok(u32::from_le_bytes(fields.to_bytes()))
-    }
-}
-
 /// Owned, allocation-free HE NDPA encoder input.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeNdpaEncoding<'a> {
@@ -236,7 +176,14 @@ pub struct HeNdpaEncoding<'a> {
     pub receiver_address: [u8; 6],
     pub transmitter_address: [u8; 6],
     pub dialog_token: u8,
-    pub stations: &'a [HeNdpaStationEncoding],
+    /// The STA Info fields, each set by its own setters.
+    ///
+    /// SOURCE\[HIL_VENDOR_HE20_NDPA_CBF_2026_07_24]: hardware monitor capture.
+    /// Frame 1374 is a complete vendor AP-to-S31 HE20 NDPA. Its STA Info word
+    /// `0x0820001d` selects AID 29, RU indices 0..8, feedback/Ng encoding zero,
+    /// disambiguation one, codebook zero and Nc zero. Frame 1376, 14.39 us later,
+    /// is the S31's HE Compressed Beamforming and CQI Action-No-Ack response.
+    pub stations: &'a [NdpaStationFields],
 }
 
 impl HeNdpaEncoding<'_> {
@@ -275,8 +222,11 @@ impl HeNdpaEncoding<'_> {
         }
         let mut writer = oer_portable_wire::Writer::new(body);
         for station in self.stations {
+            if station.resource_unit_start_index() > station.resource_unit_end_index() {
+                return Err(HeNdpaEncodingError::ReversedResourceUnitRange);
+            }
             writer
-                .write(&station.encode()?.to_le_bytes())
+                .write(&station.to_bytes())
                 .map_err(|_| HeNdpaEncodingError::OutputTooShort)?;
         }
         Ok(length)

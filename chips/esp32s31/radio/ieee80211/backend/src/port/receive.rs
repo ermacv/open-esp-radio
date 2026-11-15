@@ -71,8 +71,8 @@ mod tests {
             peer: receiver,
             sequence_number: SequenceNumber::new(7).expect("SN"),
             user_priority: 0,
-            peer_qos: true,
-            more_data: false,
+            peer_qos: oer_protocols_ieee80211_wire::data::PeerQos::Qos,
+            more_data: oer_protocols_ieee80211_wire::data::MoreData::Clear,
             ccmp_header: CcmpHeader::new(
                 CcmpPacketNumber::new(7).expect("PN"),
                 CcmpKeyId::new(key_id).expect("KeyID"),

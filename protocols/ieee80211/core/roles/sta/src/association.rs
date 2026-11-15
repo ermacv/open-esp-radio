@@ -340,7 +340,7 @@ impl StaAssociatedPeer {
                 erp,
                 ht: HtProtectionMode::from_operation_ie(access_point.ht_operation_ie_bytes()),
                 he_txop_rts_threshold: he_peer_state
-                    .and_then(|state| state.rts_threshold)
+                    .and_then(|state| state.rts_threshold())
                     .and_then(HeTxopDurationRtsThreshold::new),
                 he_packet_padding: if he_capability.is_empty() {
                     HePacketPadding::None

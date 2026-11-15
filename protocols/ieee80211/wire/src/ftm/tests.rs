@@ -21,8 +21,8 @@ fn response_parameters() -> FtmResponseParameters {
         burst_duration: FtmBurstDuration::Millis8,
         min_delta_ftm_100us: 3,
         partial_tsf_timer: 0x1234,
-        asap_capable: true,
-        asap: true,
+        asap_capable: FtmAsapCapability::Capable,
+        asap: FtmAsap::AsSoonAsPossible,
         ftms_per_burst: 8,
         format_and_bandwidth: FtmFormatAndBandwidth::HtMixed20Mhz,
         burst_period_100ms: 0,
@@ -215,4 +215,26 @@ fn every_prefix_of_a_body_is_handled() {
             &mut output[..len.min(FTM_MEASUREMENT_PREFIX_LEN)],
         );
     }
+}
+
+#[test]
+fn a_response_element_has_the_bytes_of_its_fields() {
+    assert_eq!(
+        response_parameters().encode_element(),
+        Ok([
+            0xce, 0x09, 0x01, 0x70, 0x03, 0x34, 0x12, 0x46, 0x24, 0x00, 0x00
+        ])
+    );
+}
+
+#[test]
+fn clear_asap_bits_are_an_incapable_responder_at_the_partial_tsf() {
+    let mut response = response_parameters();
+    response.asap_capable = FtmAsapCapability::Incapable;
+    response.asap = FtmAsap::AtPartialTsf;
+    let element = response.encode_element().unwrap();
+    assert_eq!(
+        FtmResponseParameters::decode_element(&element),
+        Ok(response)
+    );
 }

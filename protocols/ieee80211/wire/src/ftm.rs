@@ -331,6 +331,34 @@ pub enum FtmResponseStatus {
     Failed { retry_after_seconds: u8 },
 }
 
+/// The ASAP Capable subfield: whether the responding STA can start a burst
+/// as soon as possible (IEEE Std 802.11-2020, 9.4.2.167).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FtmAsapCapability {
+    Capable,
+    Incapable,
+}
+
+impl FtmAsapCapability {
+    const fn bit(self) -> bool {
+        matches!(self, Self::Capable)
+    }
+}
+
+/// The ASAP subfield: whether the first burst starts as soon as possible or
+/// at the partial TSF timer (IEEE Std 802.11-2020, 9.4.2.167).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FtmAsap {
+    AsSoonAsPossible,
+    AtPartialTsf,
+}
+
+impl FtmAsap {
+    const fn bit(self) -> bool {
+        matches!(self, Self::AsSoonAsPossible)
+    }
+}
+
 /// Negotiated parameters carried by the initial FTM Measurement frame.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FtmResponseParameters {
@@ -339,8 +367,8 @@ pub struct FtmResponseParameters {
     pub burst_duration: FtmBurstDuration,
     pub min_delta_ftm_100us: u8,
     pub partial_tsf_timer: u16,
-    pub asap_capable: bool,
-    pub asap: bool,
+    pub asap_capable: FtmAsapCapability,
+    pub asap: FtmAsap,
     pub ftms_per_burst: u8,
     pub format_and_bandwidth: FtmFormatAndBandwidth,
     pub burst_period_100ms: u16,
@@ -386,8 +414,16 @@ impl FtmResponseParameters {
             burst_duration,
             min_delta_ftm_100us: fields[2],
             partial_tsf_timer: u16::from_le_bytes([fields[3], fields[4]]),
-            asap_capable: FtmParameterFields::from_bytes(fields).asap_capable(),
-            asap: FtmParameterFields::from_bytes(fields).asap(),
+            asap_capable: if FtmParameterFields::from_bytes(fields).asap_capable() {
+                FtmAsapCapability::Capable
+            } else {
+                FtmAsapCapability::Incapable
+            },
+            asap: if FtmParameterFields::from_bytes(fields).asap() {
+                FtmAsap::AsSoonAsPossible
+            } else {
+                FtmAsap::AtPartialTsf
+            },
             ftms_per_burst: FtmParameterFields::from_bytes(fields).ftms().get(),
             format_and_bandwidth,
             burst_period_100ms,
@@ -424,8 +460,8 @@ impl FtmResponseParameters {
             &self.partial_tsf_timer.to_le_bytes(),
         );
         fields = fields
-            .with_asap_capable(self.asap_capable)
-            .with_asap(self.asap);
+            .with_asap_capable(self.asap_capable.bit())
+            .with_asap(self.asap.bit());
         fields = fields.with_ftms(ftms);
         element[7] = fields.to_bytes()[5];
         fields = fields.with_bandwidth(oer_portable_wire::U8::from_low_bits(

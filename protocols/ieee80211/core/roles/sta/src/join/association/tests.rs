@@ -135,9 +135,9 @@ fn association_runtime_accepts_only_selected_peer_response() {
             capability_info: 0x0431,
             status_code: 0,
             association_id: 42,
-            ht_capability: false,
+            ht_capability: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
             he: oer_protocols_ieee80211_wire::station::ResponseHeElements::NONE,
-            wmm: false,
+            wmm_element: oer_protocols_ieee80211_wire::scan::ElementPresence::Absent,
             wmm_parameters: None,
             association_comeback_tu: None,
         }

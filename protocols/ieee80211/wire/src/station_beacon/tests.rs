@@ -33,8 +33,8 @@ fn decodes_dtim_group_and_partial_virtual_bitmap_for_local_aid() {
             tim: Some(StaTimObservation {
                 dtim_count: 0,
                 dtim_period: 3,
-                unicast_buffered: true,
-                group_buffered: true,
+                unicast: BufferedTraffic::Buffered,
+                group: BufferedTraffic::Buffered,
             }),
             protection: StaBeaconProtection::UNPROTECTED,
             edca: None,
@@ -248,8 +248,8 @@ fn the_highest_association_id_reads_the_last_bit_of_its_octet() {
         .observation
         .tim
         .unwrap();
-    assert!(tim.unicast_buffered);
-    assert!(!tim.group_buffered);
+    assert_eq!(tim.unicast, BufferedTraffic::Buffered);
+    assert_eq!(tim.group, BufferedTraffic::Clear);
     // A TIM without a bitmap octet, or with DTIM period zero, is malformed.
     for tim in [
         &[TIM_ELEMENT_ID, 3, 0, 3, 0][..],

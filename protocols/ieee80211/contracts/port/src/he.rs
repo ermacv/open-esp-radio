@@ -61,15 +61,15 @@ pub struct HeBssColor {
 impl HeBssColor {
     /// The color `operation` names.
     pub const fn of(operation: &He20Operation) -> Option<Self> {
-        match BssColor::new(operation.bss_color) {
+        match BssColor::new(operation.bss_color()) {
             Some(color) => Some(Self {
                 color,
-                used: if operation.bss_color_enabled {
+                used: if operation.bss_color_enabled() {
                     BssColorUse::Enabled
                 } else {
                     BssColorUse::Disabled
                 },
-                scope: if operation.partial_bss_color {
+                scope: if operation.partial_bss_color() {
                     BssColorScope::Partial
                 } else {
                     BssColorScope::Full
@@ -164,9 +164,9 @@ impl He20Association {
                 peer.packet_padding_eight_us,
             ));
         }
-        if peer.default_packet_extension_duration > Self::MAX_DEFAULT_PACKET_EXTENSION {
+        if peer.default_packet_extension_duration() > Self::MAX_DEFAULT_PACKET_EXTENSION {
             return Err(He20AssociationError::DefaultPacketExtension(
-                peer.default_packet_extension_duration,
+                peer.default_packet_extension_duration(),
             ));
         }
         if let Some(indicator) = peer.max_co_hosted_bssid_indicator
@@ -174,18 +174,18 @@ impl He20Association {
         {
             return Err(He20AssociationError::MaxCoHostedBssidIndicator(indicator));
         }
-        let Some(color) = BssColor::new(peer.bss_color) else {
-            return Err(He20AssociationError::BssColor(peer.bss_color));
+        let Some(color) = BssColor::new(peer.bss_color()) else {
+            return Err(He20AssociationError::BssColor(peer.bss_color()));
         };
         Ok(Self {
             color: HeBssColor {
                 color,
-                used: if peer.bss_color_enabled {
+                used: if peer.bss_color_enabled() {
                     BssColorUse::Enabled
                 } else {
                     BssColorUse::Disabled
                 },
-                scope: if peer.partial_bss_color {
+                scope: if peer.partial_bss_color() {
                     BssColorScope::Partial
                 } else {
                     BssColorScope::Full
@@ -194,9 +194,9 @@ impl He20Association {
             association_id,
             minimum_mpdu_start_spacing,
             packet_padding_eight_us: peer.packet_padding_eight_us,
-            default_packet_extension: peer.default_packet_extension_duration,
+            default_packet_extension: peer.default_packet_extension_duration(),
             max_co_hosted_bssid_indicator: peer.max_co_hosted_bssid_indicator,
-            extended_range_single_user_disabled: peer.extended_range_single_user_disabled,
+            extended_range_single_user_disabled: peer.extended_range_single_user_disabled(),
         })
     }
 

@@ -46,7 +46,7 @@ impl<'peers, S: SppScope> AccessPointService<'peers, S> {
         policy: ApSecurityPolicy,
         security: ApAssociationSecurityObservation<'_>,
     ) -> Result<AdmittedRsn, ApAssociationSecurityError> {
-        if !security.privacy
+        if !security.privacy()
             || security.rsn_ie_count != 1
             || security.rsnxe_count > 1
             || security.rsnxe_count == 0 && security.rsnxe.is_some()
@@ -610,11 +610,13 @@ pub fn admit_association_security<S: SppScope>(
     policy: ApSecurityPolicy,
     security: ApAssociationSecurityObservation<'_>,
 ) -> Result<AssociationSecurity, ApAssociationSecurityError> {
-    if security.malformed_elements || security.legacy_wpa_present {
+    if (security.information_elements == oer_protocols_ieee80211_wire::scan::ElementList::Truncated)
+        || (security.legacy_wpa == oer_protocols_ieee80211_wire::scan::ElementPresence::Present)
+    {
         return Err(ApAssociationSecurityError::InvalidElements);
     }
     match policy.link_protection() {
-        LinkProtection::Open => (!security.privacy
+        LinkProtection::Open => (!security.privacy()
             && security.rsn_ie_count == 0
             && security.rsn_ie.is_none()
             && security.rsnxe_count == 0

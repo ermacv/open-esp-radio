@@ -78,7 +78,7 @@ fn a_wpa3_beacon_carries_its_rsne_and_rsnxe_to_the_scan_record() {
     assert!(beacon.ends_with(&test_elements::SAE_H2E_RSNXE));
 
     let record = parse_management(beacon).unwrap();
-    assert!(record.privacy);
+    assert!(record.privacy());
     assert_eq!(record.rsn_ie_bytes(), test_elements::WPA3_PERSONAL_RSNE);
     assert_eq!(record.rsnxe_bytes(), test_elements::SAE_H2E_RSNXE);
 }

@@ -1296,7 +1296,7 @@ impl RateControl for EspressifRateControl {
         // at MCS 9.
         let peer_highest_rate = he
             .filter(|_| peer.phy == PhyMode::He20)
-            .and_then(|capability| match capability.receive_nss1 {
+            .and_then(|capability| match capability.receive_nss1() {
                 HeMcsNssSupport::Mcs0To7 => HeMcs::new(7),
                 HeMcsNssSupport::Mcs0To9 | HeMcsNssSupport::Mcs0To11 => HeMcs::new(9),
                 HeMcsNssSupport::NotSupported => None,
@@ -1310,7 +1310,7 @@ impl RateControl for EspressifRateControl {
             long_range_rates_present: false,
             he_low_metric_report: HeLowMetricReportFeatures {
                 dcm_receive_supported: he.is_some_and(|capability| {
-                    capability.dcm_receive_constellation() != HeDcmConstellation::NotSupported
+                    capability.dcm_receive() != HeDcmConstellation::NotSupported
                 }),
                 extended_range_single_user_permitted: peer
                     .he_peer_state
