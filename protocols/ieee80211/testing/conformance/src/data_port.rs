@@ -23,8 +23,10 @@
 //!   across it is refused, one dropped is asked again), a start's proof is
 //!   refused once a stop began, a proof of the installation before a
 //!   reinstall is refused at every call, a refusal returns its proof and
-//!   leaves what the port has out as it was, and a released port's stop
-//!   gives no proof ([`Case::Proofs`]).
+//!   leaves what the port has out as it was, and a release takes the
+//!   stop's right ([`Case::Proofs`]);
+//! - each reinstall is at the port's next TSF epoch, and a port at its last
+//!   refuses with the proof back ([`Case::Epochs`]).
 
 use core::num::NonZeroU8;
 use core::task::{Context, Waker};
@@ -55,13 +57,18 @@ pub trait DataPortHarness<'id> {
     fn parts(&mut self) -> (&mut Self::Port, &mut Self::Sink);
     /// The port and the stop's right the harness holds, borrowed together
     /// for a stop or a recovery: the port gave the right with its first
-    /// installation.
+    /// installation. `None` once a release took it.
     fn stop_parts(
         &mut self,
-    ) -> (
+    ) -> Option<(
         &mut Self::Port,
         &mut oer_protocols_ieee80211_contracts_port::StopRight<'id>,
-    );
+    )>;
+    /// Take the stop's right from the harness, for a release: `None` once
+    /// one took it.
+    fn take_right(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::StopRight<'id>>;
+    /// Keep the stop's right a refused release gave back.
+    fn keep_right(&mut self, right: oer_protocols_ieee80211_contracts_port::StopRight<'id>);
     /// Take the stop's proof the harness keeps: the port's installation
     /// starts stopped, so the harness holds one until a start takes it.
     fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>>;
@@ -150,6 +157,11 @@ pub trait DataPortHarness<'id> {
     fn hold_start(&mut self, hold: crate::Hold);
     /// Hold every stop of the port unconfirmed, while `hold` is set.
     fn hold_stop(&mut self, hold: crate::Hold);
+    /// The TSF epoch the port's installation runs at, as the fixture reads
+    /// it: the contract does not show it.
+    fn epoch(&self) -> u32;
+    /// Put the port at its last TSF epoch, which no reinstall can raise.
+    fn last_epoch(&mut self);
     /// Reinstall the port in place with `retired`, from the fixture's
     /// installations (the port raises its TSF epoch): the new
     /// installation's stop. Its
@@ -365,6 +377,9 @@ pub enum Case {
     RetryHistory,
     /// A proof holds only while the state it proves lasts.
     Proofs,
+    /// Each reinstall is at the port's next TSF epoch; a port at its last
+    /// refuses `Epochs` with the proof back.
+    Epochs,
     /// What the installation issued is home or out, class by class, after
     /// every call, by the suite's own ledger.
     Conservation,
@@ -378,7 +393,7 @@ pub enum Case {
 
 impl Case {
     /// Every case, in suite order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::QuietCalls,
         Self::Refusals,
         Self::ReceiveRoom,
@@ -386,6 +401,7 @@ impl Case {
         Self::Deadline,
         Self::RetryHistory,
         Self::Proofs,
+        Self::Epochs,
         Self::Conservation,
         Self::FaultWhole,
         Self::FaultHolding,
@@ -418,6 +434,10 @@ pub enum Violation {
     /// return its proof or changed what the port has out: the step of
     /// [`Case::Proofs`] that found it.
     Proof(u8),
+    /// A reinstall was not at the port's next TSF epoch, or a port at its
+    /// last epoch did not refuse with the proof back: the step of
+    /// [`Case::Epochs`] that found it.
+    Epoch(u8),
     /// What the port has out differs from the suite's ledger after the
     /// `step` of [`Case::Conservation`], in the classes `classes`
     /// ([`outstanding::class`](oer_protocols_ieee80211_contracts_port::outstanding::class)).
@@ -451,6 +471,7 @@ pub fn check<'id, H: DataPortHarness<'id>>(harness: &mut H, case: Case) -> Resul
         Case::Deadline => deadline(harness),
         Case::RetryHistory => retry_history(harness),
         Case::Proofs => proofs(harness),
+        Case::Epochs => epochs(harness),
         Case::Conservation => conservation(harness),
         Case::FaultWhole => fault_conservation(harness, crate::FaultReach::Whole),
         Case::FaultHolding => fault_conservation(harness, crate::FaultReach::Holding),
@@ -757,7 +778,7 @@ fn stopped<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<Stopped<'id>
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
-        let (port, right) = harness.stop_parts();
+        let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
         match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
             core::task::Poll::Ready(Ok(stopped)) => return Ok(stopped),
             core::task::Poll::Ready(Err(_)) => return Err(Violation::Lifecycle),
@@ -834,15 +855,18 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
     // A stop of the retired port stops it again under a new proof, which
     // the port takes; the retirement held across it is refused.
     let again = stopped(harness)?;
+    let right = harness.take_right().ok_or(Violation::Fixture)?;
     let (port, _) = harness.parts();
     let before = port.outstanding();
-    let retired = match port.release(retired) {
-        Err(refused) => refused.proof,
+    let refused = match port.release(retired, right) {
+        Err(refused) => refused,
         Ok(_) => return Err(Violation::Proof(6)),
     };
     if port.outstanding() != before {
         return Err(Violation::Proof(6));
     }
+    harness.keep_right(refused.right);
+    let retired = refused.proof;
     if !matches!(harness.reinstall(retired), Err(ProofRefused::Stale(_))) {
         return Err(Violation::Proof(7));
     }
@@ -867,15 +891,17 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
     // A retirement's proof has no second copy: one made at the first
     // installation's serial, after the port moved, is refused by a release
     // and a reinstall, and nothing of what the port has out changes.
+    let right = harness.take_right().ok_or(Violation::Fixture)?;
     let (port, _) = harness.parts();
     let before = port.outstanding();
     let forged = Retired::issue(oer_protocols_ieee80211_contracts_port::StateSerial::FIRST);
-    let Err(refused) = port.release(forged) else {
+    let Err(refused) = port.release(forged, right) else {
         return Err(Violation::Proof(15));
     };
     if port.outstanding() != before {
         return Err(Violation::Proof(15));
     }
+    harness.keep_right(refused.right);
     if !matches!(
         harness.reinstall(refused.proof),
         Err(ProofRefused::Stale(_))
@@ -889,7 +915,7 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
     let channel = harness.channel();
     let waker = harness.waker();
     let now = harness.now();
-    let (port, right) = harness.stop_parts();
+    let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
     let Ok(StartProgress::Pending(starting)) =
         port.poll_start(&mut Context::from_waker(&waker), next.into(), channel, now)
     else {
@@ -922,20 +948,54 @@ fn proofs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation
     let Ok(retired) = port.retire(stop) else {
         return Err(Violation::Proof(19));
     };
-    if port.release(retired).is_err() {
+    let Some(right) = harness.take_right() else {
+        return Err(Violation::Fixture);
+    };
+    let (port, _) = harness.parts();
+    // The release takes the right: no stop of the released port can be
+    // written (the contract's compile-fail case `stop_after_release`).
+    if port.release(retired, right).is_err() {
         return Err(Violation::Proof(20));
     }
-    // A released port holds no installation: its stop gives no proof.
-    let waker = harness.waker();
-    let now = harness.now();
-    let (port, right) = harness.stop_parts();
-    match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
-        core::task::Poll::Ready(Err(unconfirmed))
-            if unconfirmed.cause == oer_protocols_ieee80211_contracts_port::StopCause::Released => {
-        }
-        _ => return Err(Violation::Proof(21)),
-    }
     Ok(())
+}
+
+fn epochs<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Violation> {
+    let first = harness.take_stopped().ok_or(Violation::Fixture)?;
+    harness.end_tokens();
+    let (port, _) = harness.parts();
+    let Ok(retired) = port.retire(first) else {
+        return Err(Violation::Epoch(0));
+    };
+    // Each reinstall is at the port's next epoch.
+    let before = harness.epoch();
+    let next = harness
+        .reinstall(retired)
+        .map_err(|_| Violation::Epoch(1))?;
+    if Some(harness.epoch()) != before.checked_add(1) {
+        return Err(Violation::Epoch(1));
+    }
+    harness.end_tokens();
+    let (port, _) = harness.parts();
+    let Ok(retired) = port.retire(next) else {
+        return Err(Violation::Epoch(2));
+    };
+    // A port at its last epoch refuses with the proof back, and stays at it.
+    harness.last_epoch();
+    let last = harness.epoch();
+    let retired = match harness.reinstall(retired) {
+        Err(ProofRefused::Refused(retired, ReinstallRefused::Epochs)) => retired,
+        _ => return Err(Violation::Epoch(3)),
+    };
+    if harness.epoch() != last {
+        return Err(Violation::Epoch(3));
+    }
+    // The proof came back whole: the port refuses it again for the epoch,
+    // not as stale.
+    match harness.reinstall(retired) {
+        Err(ProofRefused::Refused(_, ReinstallRefused::Epochs)) => Ok(()),
+        _ => Err(Violation::Epoch(4)),
+    }
 }
 
 /// The suite's own ledger of what the port handed it and what it gave
@@ -1110,7 +1170,7 @@ fn conservation<'id, H: DataPortHarness<'id>>(harness: &mut H) -> Result<(), Vio
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
-        let (port, right) = harness.stop_parts();
+        let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
         match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
             core::task::Poll::Ready(Ok(stopped)) => {
                 stop = Some(stopped);
@@ -1209,7 +1269,7 @@ fn fault_conservation<'id, H: DataPortHarness<'id>>(
     harness: &mut H,
     reach: crate::FaultReach,
 ) -> Result<(), Violation> {
-    use oer_protocols_ieee80211_contracts_port::{Recovery, outstanding::class};
+    use oer_protocols_ieee80211_contracts_port::{FaultKept, Recovered, outstanding::class};
     let whole = reach == crate::FaultReach::Whole;
     let mut ledger = Ledger::default();
     start(harness)?;
@@ -1241,12 +1301,12 @@ fn fault_conservation<'id, H: DataPortHarness<'id>>(
     ledger.fault = LedgerFault::Held;
     ledger.in_flight -= harness.take_completed().min(ledger.in_flight);
     ledger.check(harness, 31)?;
-    let (port, right) = harness.stop_parts();
+    let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
     let before = port.outstanding();
     match port.recover_for_stop(right) {
-        Recovery::TakenBack if whole => ledger.fault = LedgerFault::Clear,
+        Ok(Recovered::TakenBack) if whole => ledger.fault = LedgerFault::Clear,
         // The kept fault comes with what it leaves out, as the port has it.
-        Recovery::Kept(_, out) if !whole && out == before => {}
+        Err(FaultKept { outstanding, .. }) if !whole && outstanding == before => {}
         _ => {
             return Err(Violation::Conserved {
                 step: 32,
@@ -1260,7 +1320,7 @@ fn fault_conservation<'id, H: DataPortHarness<'id>>(
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
-        let (port, right) = harness.stop_parts();
+        let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
         match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
             core::task::Poll::Ready(Ok(stopped)) => {
                 stop = Some(stopped);

@@ -388,12 +388,12 @@ impl<'a, 'id, Id: radio::SlotIdentity + 'id> AccessPointHarness<'id> for ApFixtu
     }
     fn stop_parts(
         &mut self,
-    ) -> (
+    ) -> Option<(
         &mut Self::Port,
         &mut oer_protocols_ieee80211_contracts_port::StopRight<'id>,
-    ) {
+    )> {
         let fixture = self.f();
-        (&mut fixture.port, &mut fixture.stop_right)
+        Some((&mut fixture.port, fixture.stop_right.as_mut()?))
     }
     fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>> {
         self.f().stopped.take()
@@ -1059,9 +1059,11 @@ fn returned_access_point_command<Id: radio::SlotIdentity>(
     if !matches!(
         {
             let fixture = harness.f();
-            fixture.port.recover_for_stop(&mut fixture.stop_right)
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right"))
         },
-        oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
+        Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
     ) || harness.f().port.fault().is_some()
     {
         return Err(CaseViolation::Owners);

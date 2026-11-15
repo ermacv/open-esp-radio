@@ -25,13 +25,13 @@ use oer_protocols_ieee80211_contracts_port::arena::{
     Settlement, TxArena,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input,
-    PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed, PortCommands,
+    CommandFailed, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, FaultKept,
+    Input, PairwiseIssue, PortAnswer, PortArena, PortCommand, PortCommandFailed, PortCommands,
     PortCompleted, PortRxBuffer, PortRxPull, PortSink, ProofRefused, ReceiveAccounting,
-    ReceiveOperation, Recovery, RecycleRefused, ReinstallRefused, Retired, RxPull, StaleProof,
-    StartFailure, StartPoll, StartProgress, StartProof, StartRefused, Starting, StateSerial,
-    StationSubmission, StopCause, StopRight, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt,
-    SubmitRefusal, TxFacts, Unconsumed, Unkeeping,
+    ReceiveOperation, Recovered, RecycleRefused, ReinstallRefused, ReleaseRefused, Retired, RxPull,
+    StaleProof, StartFailure, StartPoll, StartProgress, StartProof, StartRefused, Starting,
+    StateSerial, StationSubmission, StopCause, StopRight, StopUnconfirmed, Stopped, SubmitAnswer,
+    SubmitHalt, SubmitRefusal, TxFacts, Unconsumed, Unkeeping,
 };
 use oer_protocols_radio_port::{Installation as Receipt, Installations, Minted};
 
@@ -368,8 +368,6 @@ pub struct Esp32s31Port<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usiz
     serial: StateSerial,
     /// The serial of the last stop: a stopped port's answer to a stop.
     stop_serial: StateSerial,
-    /// The port released its installations: it holds none.
-    released: bool,
     /// The caller's waker from its last [`DataPort::poll_facts`]: a held
     /// receive cut registers the caller's own task with the receive session,
     /// so the image keeps one waker vtable.
@@ -684,7 +682,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             core_disabled: false,
             serial: StateSerial::FIRST,
             stop_serial: StateSerial::FIRST,
-            released: false,
             waker: None,
             fault: prepared.err(),
             unconsumed: unconsumed::Store::new(),
@@ -798,6 +795,18 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
     /// buffer, which every later call answers with.
     fn recorded_fault(&self) -> Option<Fault> {
         self.check().err()
+    }
+
+    /// The TSF epoch the port's installation runs at.
+    #[cfg(test)]
+    pub(crate) const fn tsf_epoch_for_test(&self) -> u32 {
+        self.config.tsf_epoch
+    }
+
+    /// Put the port at its last TSF epoch, which no reinstall can raise.
+    #[cfg(test)]
+    pub(crate) const fn exhaust_epochs_for_test(&mut self) {
+        self.config.tsf_epoch = u32::MAX;
     }
 
     /// Refuse the next publication as a missing key, with its key
@@ -3060,13 +3069,6 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         now: Instant,
     ) -> Poll<Result<Stopped<'id>, StopUnconfirmed<Fault>>> {
         self.now = now;
-        if self.released {
-            // No installation is left to stop, and no proof to give.
-            return Poll::Ready(Err(StopUnconfirmed {
-                cause: StopCause::Released,
-                outstanding: self.held_out(),
-            }));
-        }
         let since = match self.state {
             // The stop's proof while nothing moved the port since; after a
             // retirement the port is stopped again under a new serial, so
@@ -3140,7 +3142,10 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
         }
     }
 
-    fn recover_for_stop(&mut self, _right: &mut StopRight<'id>) -> Recovery<Fault> {
+    fn recover_for_stop(
+        &mut self,
+        _right: &mut StopRight<'id>,
+    ) -> Result<Recovered, FaultKept<Fault>> {
         // A faulted port keeps no command: the call that faulted returned
         // it to its caller.
         // Units of buffers dropped unrecycled are back in the ring: they
@@ -3163,8 +3168,11 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
                 // held and lost counts and the port's cause stay as they
                 // were, and no recovery follows a failed settlement.
                 return match self.fault {
-                    Some(fault) => Recovery::Kept(fault, self.held_out()),
-                    None => Recovery::Clear,
+                    Some(fault) => Err(FaultKept {
+                        fault,
+                        outstanding: self.held_out(),
+                    }),
+                    None => Ok(Recovered::Clear),
                 };
             };
             self.rx_out.set(held);
@@ -3173,10 +3181,13 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.record(Fault::ReceiveLost);
         }
         let Some(fault) = self.fault else {
-            return Recovery::Clear;
+            return Ok(Recovered::Clear);
         };
         if !fault.leaves_owners_whole() {
-            return Recovery::Kept(fault, self.held_out());
+            return Err(FaultKept {
+                fault,
+                outstanding: self.held_out(),
+            });
         }
         self.fault = None;
         if matches!(self.state, PortState::Starting { .. } | PortState::Running) {
@@ -3187,7 +3198,7 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             self.forget_held();
             self.recompute_deadline();
         }
-        Recovery::TakenBack
+        Ok(Recovered::TakenBack)
     }
 
     fn clean(
@@ -3249,12 +3260,20 @@ impl<'id, Id: SlotIdentity + 'id, D: Device<B>, const B: usize, O: Observations>
             .map_err(|refused| ProofRefused::Refused(retired, refused))
     }
 
-    fn release(&mut self, retired: Retired<'id>) -> Result<&mut D, StaleProof<Retired<'id>>> {
+    fn release(
+        &mut self,
+        retired: Retired<'id>,
+        right: StopRight<'id>,
+    ) -> Result<&mut D, ReleaseRefused<'id>> {
         if !retired.is_of(self.serial) {
-            return Err(StaleProof { proof: retired });
+            return Err(ReleaseRefused {
+                proof: retired,
+                right,
+            });
         }
+        // The right ends here: no stop of the released port can be asked.
+        drop(right);
         self.raise();
-        self.released = true;
         let _reusable = self.retire_driver();
         Ok(&mut *self.device)
     }

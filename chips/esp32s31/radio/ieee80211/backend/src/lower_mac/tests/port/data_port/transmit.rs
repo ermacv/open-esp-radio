@@ -1150,7 +1150,7 @@ fn withdrawal_order(kind: Withdrawal) {
                 fixture
                     .port
                     .poll_stop(
-                        &mut fixture.stop_right,
+                        fixture.stop_right.as_mut().expect("the stop's right"),
                         &mut Context::from_waker(&waker),
                         now
                     )
@@ -1161,7 +1161,7 @@ fn withdrawal_order(kind: Withdrawal) {
                 fixture
                     .port
                     .poll_stop(
-                        &mut fixture.stop_right,
+                        fixture.stop_right.as_mut().expect("the stop's right"),
                         &mut Context::from_waker(&waker),
                         now
                     )
@@ -1369,7 +1369,7 @@ fn a_held_best_effort_head_keeps_its_queue_while_voice_and_video_complete() {
                     fixture
                         .port
                         .poll_stop(
-                            &mut fixture.stop_right,
+                            fixture.stop_right.as_mut().expect("the stop's right"),
                             &mut Context::from_waker(&waker),
                             now
                         )
@@ -1514,7 +1514,7 @@ fn a_publication_the_cancel_finds_on_the_air_faults_past_its_last_bound_and_keep
         assert!(matches!(
             fixture
                 .port
-                .poll_stop(&mut fixture.stop_right, &mut Context::from_waker(&waker), now),
+                .poll_stop(fixture.stop_right.as_mut().expect("the stop's right"), &mut Context::from_waker(&waker), now),
             Poll::Ready(Err(StopUnconfirmed {
                 cause: StopCause::Device(found),
                 ..
@@ -1635,7 +1635,7 @@ fn a_terminal_the_port_cannot_keep_halts_the_service_and_the_rest_wait_for_the_n
             fixture
                 .port
                 .poll_stop(
-                    &mut fixture.stop_right,
+                    fixture.stop_right.as_mut().expect("the stop's right"),
                     &mut Context::from_waker(&waker),
                     now
                 )

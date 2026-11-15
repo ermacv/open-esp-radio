@@ -557,12 +557,12 @@ impl<'s> AccessPointHarness<'s> for ApHarness<'s> {
     }
     fn stop_parts(
         &mut self,
-    ) -> (
+    ) -> Option<(
         &mut Port<'s>,
         &mut oer_protocols_ieee80211_contracts_port::StopRight<'s>,
-    ) {
+    )> {
         let harness = self.h();
-        (&mut harness.port, &mut harness.stop_right)
+        Some((&mut harness.port, harness.stop_right.as_mut()?))
     }
     fn take_stopped(&mut self) -> Option<Stopped<'s>> {
         self.h().stopped.take()

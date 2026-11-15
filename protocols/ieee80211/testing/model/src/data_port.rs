@@ -31,13 +31,13 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_contracts_port::{
     AccessPointCommandFailed, AdmittedTxParts, ArenaState, CleanupRefused, CommandFailed,
-    CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, Input,
+    CommandKind, CommandProgress, CommandRefusal, CommandTypes, DataPort, Facts, FaultKept, Input,
     LendRefusal, LendRefused, Outstanding, PairwiseIssue, PortAnswer, PortArena, PortCommand,
     PortCommandFailed, PortCommands, PortCompleted, PortRxBuffer, PortRxPull, PortSink,
-    ProofRefused, Recovery, ReinstallRefused, Removed, RemovedKey, Retired, RunPhase, RxPull,
-    StaleProof, StartFailure, StartPoll, StartProgress, StartProof, StartRefused, Starting,
-    StateSerial, StationSubmission, StopCause, StopUnconfirmed, Stopped, SubmitAnswer, SubmitHalt,
-    SubmitRefusal, TxFacts, Unconsumed, Unkeeping, Unkept,
+    ProofRefused, Recovered, ReinstallRefused, ReleaseRefused, Removed, RemovedKey, Retired,
+    RunPhase, RxPull, StaleProof, StartFailure, StartPoll, StartProgress, StartProof, StartRefused,
+    Starting, StateSerial, StationSubmission, StopCause, StopUnconfirmed, Stopped, SubmitAnswer,
+    SubmitHalt, SubmitRefusal, TxFacts, Unconsumed, Unkeeping, Unkept,
     arena::{
         Arena, ArenaId, ArenaPublication, Completion, IntakeRefused, PublishError, Settlement,
         TxArena,
@@ -505,8 +505,6 @@ pub struct ModelPort<
     serial: StateSerial,
     /// The serial of the last stop: a stopped port's answer to a stop.
     stop_serial: StateSerial,
-    /// The port released its installations: it holds none.
-    released: bool,
     /// The installation's TSF epoch, raised by the port at each reinstall.
     tsf_epoch: u32,
     loan: BodyLoan<'id, Id, Backend<Id, C, X>>,
@@ -602,7 +600,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
                 generation,
                 serial: StateSerial::FIRST,
                 stop_serial: StateSerial::FIRST,
-                released: false,
                 tsf_epoch: 0,
                 loan,
                 channel,
@@ -2038,10 +2035,6 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             };
             return Poll::Ready(Err(self.unconfirmed(StopCause::Device(fault))));
         }
-        if self.released {
-            // No installation is left to stop, and no proof to give.
-            return Poll::Ready(Err(self.unconfirmed(StopCause::Released)));
-        }
         let since = match self.radio {
             // The stop's proof while nothing moved the port since; after a
             // retirement the port is stopped again under a new serial.
@@ -2097,17 +2090,23 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         Poll::Pending
     }
 
-    fn recover_for_stop(&mut self, _right: &mut StopRight<'id>) -> Recovery<ModelPortFault> {
+    fn recover_for_stop(
+        &mut self,
+        _right: &mut StopRight<'id>,
+    ) -> Result<Recovered, FaultKept<ModelPortFault>> {
         let Some(fault) = self.fault.or_else(|| {
             self.air.failed().then(|| ModelPortFault::Quarantined {
                 call: ModelPortCall::Retire,
                 observation: self.observation(),
             })
         }) else {
-            return Recovery::Clear;
+            return Ok(Recovered::Clear);
         };
         if !self.air.recover() {
-            return Recovery::Kept(fault, DataPort::outstanding(self));
+            return Err(FaultKept {
+                fault,
+                outstanding: DataPort::outstanding(self),
+            });
         }
         self.fault = None;
         if self.radio == Radio::Running {
@@ -2115,7 +2114,7 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
             self.held.draining.set(true);
             self.raise();
         }
-        Recovery::TakenBack
+        Ok(Recovered::TakenBack)
     }
 
     fn outstanding(&self) -> ModelOutstanding {
@@ -2242,13 +2241,22 @@ impl<'id, Id: SlotIdentity + 'id, C: Ieee80211Capabilities + 'id, X: ModelContex
         Ok((self.stop_proof(), (commands, resources.lend(&self.loan))))
     }
 
-    fn release(&mut self, retired: Retired<'id>) -> Result<(), StaleProof<Retired<'id>>> {
+    fn release(
+        &mut self,
+        retired: Retired<'id>,
+        right: StopRight<'id>,
+    ) -> Result<(), ReleaseRefused<'id>> {
         if retired.is_of(self.serial) {
+            // The right ends here: no stop of the released port can be
+            // asked.
+            drop(right);
             self.raise();
-            self.released = true;
             Ok(())
         } else {
-            Err(StaleProof { proof: retired })
+            Err(ReleaseRefused {
+                proof: retired,
+                right,
+            })
         }
     }
 

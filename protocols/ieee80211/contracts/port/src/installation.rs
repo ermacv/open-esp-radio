@@ -245,20 +245,38 @@ pub struct StopUnconfirmed<F> {
     pub outstanding: crate::Outstanding<F>,
 }
 
-/// What a stop can do about a port's fault, as
+/// What a recovery for a stop did, as
 /// [`DataPort::recover_for_stop`](crate::DataPort::recover_for_stop)
-/// answers it.
-#[derive(Debug, Eq, PartialEq)]
-pub enum Recovery<F> {
+/// answers it when the stop can return every owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Recovered {
     /// The port holds no fault: there is nothing to take back.
     Clear,
     /// The fault leaves every owner whole: the port took it back, and its
     /// stop returns them; from then on the port admits and publishes
     /// nothing new, and only its service of what is out goes on.
     TakenBack,
-    /// The fault holds owners no stop returns: the fault, and what it
-    /// leaves out (`O`). The port keeps it.
-    Kept(F, crate::Outstanding<F>),
+}
+
+/// A fault that holds owners no stop returns, as
+/// [`DataPort::recover_for_stop`](crate::DataPort::recover_for_stop)
+/// refuses with it: the port keeps it.
+#[derive(Debug, Eq, PartialEq)]
+pub struct FaultKept<F> {
+    /// The fault.
+    pub fault: F,
+    /// What it leaves out.
+    pub outstanding: crate::Outstanding<F>,
+}
+
+/// A release that did not happen: the retirement's proof is stale, and it
+/// comes back with the stop's right the release took, both unchanged.
+#[derive(Debug)]
+pub struct ReleaseRefused<'id> {
+    /// The proof, unchanged.
+    pub proof: Retired<'id>,
+    /// The stop's right, back with its holder.
+    pub right: StopRight<'id>,
 }
 
 #[cfg(test)]

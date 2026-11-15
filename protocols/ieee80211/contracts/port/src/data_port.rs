@@ -502,9 +502,6 @@ pub enum StopCause<F> {
     /// A failed start had enabled the MAC: the port's next service
     /// disables it, and [`DataPort::poll_stop`] goes on from there.
     CoreEnabled,
-    /// The port released its installations: it holds none, so there is no
-    /// stop to confirm and no proof to give. Final: no later poll confirms.
-    Released,
 }
 
 /// The station's data arenas as a data port lends them for one turn
@@ -828,9 +825,9 @@ pub trait DataPort<'id> {
     /// on a port that retired since, a new stop's (the port is stopped
     /// again: a retirement's proof still held is stale, and the retirement
     /// is asked again). An unconfirmed stop says why, with everything the
-    /// port has out; a released port answers [`StopCause::Released`]. It
-    /// takes the stop's right ([`crate::StopRight`]), which only its holder
-    /// lends.
+    /// port has out. It takes the stop's right ([`crate::StopRight`]), which
+    /// only its holder lends; after a release no holder has it, so a
+    /// released port is never asked.
     fn poll_stop(
         &mut self,
         right: &mut crate::StopRight<'id>,
@@ -911,16 +908,18 @@ pub trait DataPort<'id> {
     >;
 
     /// End the port's installations: what the binding needs to give the
-    /// radio up. The port then holds no installation a later call could
-    /// run.
+    /// radio up. It takes the stop's right with the retirement: the port
+    /// then holds no installation, and no stop or recovery can be asked of
+    /// it.
     ///
     /// # Errors
     ///
-    /// A stale proof: nothing was released.
+    /// A stale proof, with the right back beside it: nothing was released.
     fn release(
         &mut self,
         retired: crate::Retired<'id>,
-    ) -> Result<Self::Released<'_>, crate::StaleProof<crate::Retired<'id>>>;
+        right: crate::StopRight<'id>,
+    ) -> Result<Self::Released<'_>, crate::ReleaseRefused<'id>>;
 
     /// Take back the fault the port holds, so that a stop can run and
     /// return the owners it holds: the recovery's proof, or the fault with
@@ -928,10 +927,15 @@ pub trait DataPort<'id> {
     /// nothing new, as a stopping port does, however late the stop comes;
     /// only its service of what is out goes on. It takes the stop's right
     /// ([`crate::StopRight`]), as a stop does.
+    ///
+    /// # Errors
+    ///
+    /// The fault, when it holds owners no stop returns, with what it leaves
+    /// out: the port keeps it.
     fn recover_for_stop(
         &mut self,
         right: &mut crate::StopRight<'id>,
-    ) -> crate::Recovery<Self::Fault>;
+    ) -> Result<crate::Recovered, crate::FaultKept<Self::Fault>>;
 
     /// A reading of the port's radio clock.
     ///

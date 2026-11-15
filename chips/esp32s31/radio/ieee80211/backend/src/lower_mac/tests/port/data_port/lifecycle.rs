@@ -12,7 +12,7 @@ use oer_protocols_ieee80211_contracts_port::arena::{
     AttemptEnd, FrameMask, PublishError, PublishRefused,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    CommandFailed, ProofRefused, StartFailure, StartPoll, SupportedBlockAck,
+    CommandFailed, ProofRefused, StartFailure, SupportedBlockAck,
 };
 use oer_protocols_ieee80211_wire::phy::{
     FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, PpduBandwidth, SpatialStreams,
@@ -181,10 +181,11 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
     fn poll_stop_now(&mut self) -> Poll<Result<(), StopUnconfirmed<Fault>>> {
         let waker = self.waker();
         let now = self.now();
-        match self
-            .port
-            .poll_stop(&mut self.stop_right, &mut Context::from_waker(&waker), now)
-        {
+        match self.port.poll_stop(
+            self.stop_right.as_mut().expect("the stop's right"),
+            &mut Context::from_waker(&waker),
+            now,
+        ) {
             Poll::Ready(Ok(stopped)) => {
                 self.stopped = Some(stopped);
                 Poll::Ready(Ok(()))
@@ -429,7 +430,7 @@ pub(super) fn reinstall<'id, Id: radio::SlotIdentity + 'id>(
                 commands,
                 resources,
                 stopped,
-                stop_right,
+                stop_right: stop_right.expect("the stop's right"),
             },
             observed,
             timer,
@@ -786,8 +787,10 @@ fn a_publication_refused_before_it_took_anything_restarts_into_a_working_port() 
         );
 
         assert!(matches!(
-            fixture.port.recover_for_stop(&mut fixture.stop_right),
-            oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         // The key is still missing: the next service withdraws the MPDU
         // instead of publishing it, so the refusal cannot recur.
@@ -862,8 +865,10 @@ fn a_publication_refused_with_its_key_installed_restarts_into_a_working_port() {
             Some(Fault::Unpublished(crate::port::Unpublished::Key))
         );
         assert!(matches!(
-            fixture.port.recover_for_stop(&mut fixture.stop_right),
-            oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         let _ = fixture.turn();
         assert_eq!(fixture.port.fault(), None);
@@ -1182,10 +1187,11 @@ fn an_he_rate_publishes_an_he_aggregate_program_and_its_block_ack_ends_it() {
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         drop(buffers);
-        let device = super::release_stopped(&mut port, stopped)
+        let device = super::release_stopped(&mut port, stopped, stop_right)
             .expect("the stopped port releases its device");
         assert_eq!(device.hardware.he.len(), 1, "one HE SU program");
         assert!(device.hardware.ht.is_empty());
@@ -1215,10 +1221,11 @@ fn he_after(
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         drop(buffers);
-        let device = super::release_stopped(&mut port, stopped)
+        let device = super::release_stopped(&mut port, stopped, stop_right)
             .expect("the stopped port releases its device");
         held = Some(device.hardware.he_association);
     });
@@ -1921,8 +1928,10 @@ fn a_station_command_offered_to_a_faulted_port_comes_back_and_the_port_recovers(
         assert!(fixture.outbox.terminals.is_empty(), "it did not run");
         // The port keeps no command: the fault yields to the stop.
         assert!(matches!(
-            fixture.port.recover_for_stop(&mut fixture.stop_right),
-            oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
+            fixture
+                .port
+                .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+            Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
         ));
         assert_eq!(fixture.port.fault(), None);
         fixture.stop();
@@ -2122,11 +2131,12 @@ fn late_removal_receipt(after_stop: bool) {
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         drop(buffers);
         assert!(
-            super::release_stopped(&mut port, stopped).is_ok(),
+            super::release_stopped(&mut port, stopped, stop_right).is_ok(),
             "the stopped port retires"
         );
     });
@@ -2223,11 +2233,12 @@ fn a_removal_beside_a_waiting_one_ends_with_its_own_rights_and_the_waiting_one_w
             mut port,
             buffers,
             stopped,
+            stop_right,
             ..
         } = fixture;
         drop(buffers);
         assert!(
-            super::release_stopped(&mut port, stopped).is_ok(),
+            super::release_stopped(&mut port, stopped, stop_right).is_ok(),
             "the stopped port retires"
         );
     });
@@ -2269,8 +2280,10 @@ fn a_publication_the_registers_refuse_ends_once_at_the_stop_with_its_owners() {
         let stops = fixture.observed.borrow().stops;
         assert!(
             matches!(
-                fixture.port.recover_for_stop(&mut fixture.stop_right),
-                oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
+                fixture
+                    .port
+                    .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+                Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
             ),
             "every owner is whole"
         );
@@ -2605,8 +2618,10 @@ fn a_refused_return_s_lease_goes_home_at_the_cleanup_and_the_port_reinstalls() {
         ));
         assert!(
             matches!(
-                fixture.port.recover_for_stop(&mut fixture.stop_right),
-                oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
+                fixture
+                    .port
+                    .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+                Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
             ),
             "every owner stays whole"
         );
@@ -2663,8 +2678,10 @@ fn a_completion_without_its_attempt_returns_a_bank_lease_to_its_place() {
         ));
         assert!(
             matches!(
-                fixture.port.recover_for_stop(&mut fixture.stop_right),
-                oer_protocols_ieee80211_contracts_port::Recovery::TakenBack
+                fixture
+                    .port
+                    .recover_for_stop(fixture.stop_right.as_mut().expect("the stop's right")),
+                Ok(oer_protocols_ieee80211_contracts_port::Recovered::TakenBack)
             ),
             "every owner is home"
         );

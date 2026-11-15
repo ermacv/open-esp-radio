@@ -184,13 +184,13 @@ pub trait AccessPointHarness<'id> {
     fn parts(&mut self) -> (&mut Self::Port, &mut Self::Sink);
     /// The port and the stop's right the harness holds, borrowed together
     /// for a stop or a recovery: the port gave the right with its first
-    /// installation.
+    /// installation. `None` once a release took it.
     fn stop_parts(
         &mut self,
-    ) -> (
+    ) -> Option<(
         &mut Self::Port,
         &mut oer_protocols_ieee80211_contracts_port::StopRight<'id>,
-    );
+    )>;
     /// Take the stop's proof the harness keeps: the port's installation
     /// starts stopped, so the harness holds one until a start takes it.
     fn take_stopped(&mut self) -> Option<oer_protocols_ieee80211_contracts_port::Stopped<'id>>;
@@ -1467,7 +1467,7 @@ pub fn stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(), Viol
     for _ in 0..PROGRESS_STEPS {
         let waker = harness.waker();
         let now = harness.now();
-        let (port, right) = harness.stop_parts();
+        let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
         match port.poll_stop(right, &mut Context::from_waker(&waker), now) {
             Poll::Ready(Ok(stopped)) => {
                 harness.keep_stopped(stopped);
@@ -1543,7 +1543,7 @@ fn shared_stop<'id, H: AccessPointHarness<'id>>(
     let waker = harness.waker();
     let now = harness.now();
     {
-        let (port, right) = harness.stop_parts();
+        let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
         if port
             .poll_stop(right, &mut Context::from_waker(&waker), now)
             .is_ready()
@@ -1666,7 +1666,7 @@ fn removal_at_stop<'id, H: AccessPointHarness<'id>>(harness: &mut H) -> Result<(
     // The stop begins with the removal waiting.
     let waker = harness.waker();
     let now = harness.now();
-    let (port, right) = harness.stop_parts();
+    let (port, right) = harness.stop_parts().ok_or(Violation::Fixture)?;
     let _begun = port.poll_stop(right, &mut Context::from_waker(&waker), now);
     ledger.take(harness);
     ledger.check(harness)?;
