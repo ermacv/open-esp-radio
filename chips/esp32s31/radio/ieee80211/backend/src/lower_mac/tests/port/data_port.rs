@@ -8,7 +8,7 @@ use oer_protocols_ieee80211_contracts_port::arena::{
     Arena, ArenaFormat, ArenaPublication, TxArena,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    ProofRefused, ReinstallRefused, Retired, Stopped, Unconsumed, outstanding,
+    ProofRefused, ReinstallRefused, Retired, Stopped, outstanding,
 };
 use oer_protocols_ieee80211_testing_conformance::data_port::{
     self as cases, Case, DataPortHarness,
@@ -75,20 +75,10 @@ struct Outbox<'id, Id: radio::SlotIdentity + 'id> {
         ReceiveBuffer<'id, Id, TestReceive>,
         crate::lower_mac::Esp32s31RxMeta,
     )>,
-    /// How many of the next terminals and units it refuses.
-    refuse: usize,
 }
 impl<'id, Id: radio::SlotIdentity + 'id> PortSink<'id, Family<Id>> for Outbox<'id, Id> {
-    fn terminal(
-        &mut self,
-        terminal: LowerMacTerminal<'id, Family<Id>>,
-    ) -> Result<(), LowerMacTerminal<'id, Family<Id>>> {
-        if let Some(left) = self.refuse.checked_sub(1) {
-            self.refuse = left;
-            return Err(terminal);
-        }
+    fn terminal(&mut self, terminal: LowerMacTerminal<'id, Family<Id>>) {
         self.terminals.push(terminal);
-        Ok(())
     }
     fn tbtt(&mut self, _: TbttEvent) {
         self.tbtt += 1;
@@ -97,19 +87,8 @@ impl<'id, Id: radio::SlotIdentity + 'id> PortSink<'id, Family<Id>> for Outbox<'i
         &mut self,
         frame: ReceiveBuffer<'id, Id, TestReceive>,
         meta: crate::lower_mac::Esp32s31RxMeta,
-    ) -> Result<
-        (),
-        (
-            ReceiveBuffer<'id, Id, TestReceive>,
-            crate::lower_mac::Esp32s31RxMeta,
-        ),
-    > {
-        if let Some(left) = self.refuse.checked_sub(1) {
-            self.refuse = left;
-            return Err((frame, meta));
-        }
+    ) {
         self.received.push((frame, meta));
-        Ok(())
     }
 }
 
@@ -218,7 +197,6 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                 terminals: Vec::new(),
                 tbtt: 0,
                 received: Vec::new(),
-                refuse: 0,
             },
             commands,
             observed,
@@ -331,7 +309,6 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
                 now,
                 &mut self.outbox,
             )
-            .unwrap()
             .expect("service")
     }
 
@@ -340,7 +317,7 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
         let command = DataPortHarness::configure(self).expect("permission");
         let now = self.now();
         assert!(matches!(
-            self.port.command(command, now, &mut self.outbox).unwrap(),
+            self.port.command(command, now, &mut self.outbox),
             Ok(CommandProgress::Done)
         ));
         for _ in 0..8 {
@@ -673,7 +650,6 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
         let now = self.now();
         self.port
             .submit(attempt, now, &mut self.outbox)
-            .unwrap()
             .map_err(|_| cases::Violation::Refusal)
     }
     fn take_station(&mut self) -> Option<cases::StationSent> {
@@ -728,11 +704,17 @@ impl<'id, Id: radio::SlotIdentity + 'id> DataPortHarness<'id> for Fixture<'id, I
     fn buffers_held(&self) -> usize {
         self.buffers.len() + usize::from(self.station.is_some())
     }
-    fn refuse(&mut self, count: usize) {
-        self.outbox.refuse = count;
-    }
-    fn refusals_left(&self) -> usize {
-        self.outbox.refuse
+    fn sink_terminals(&self) -> cases::SinkTerminals {
+        let removals = self
+            .outbox
+            .terminals
+            .iter()
+            .filter(|terminal| matches!(terminal, LowerMacTerminal::KeyRemoved(_)))
+            .count();
+        cases::SinkTerminals {
+            removals,
+            other: self.outbox.terminals.len() - removals,
+        }
     }
     fn fault(&mut self, reach: oer_protocols_ieee80211_testing_conformance::FaultReach) {
         self.observed.borrow_mut().fail_poll = Some(
@@ -928,7 +910,6 @@ impl<'id, Id: radio::SlotIdentity + 'id> Fixture<'id, Id> {
             match self
                 .port
                 .command(command, now, &mut self.outbox)
-                .unwrap()
                 .map_err(|failed| failed.fault())?
             {
                 CommandProgress::Held(held) => command = held,
@@ -992,7 +973,6 @@ fn no_data_port_call_wakes_its_caller() {
         fixture
             .port
             .submit(attempt, now, &mut fixture.outbox)
-            .unwrap()
             .ok()
             .expect("submitted");
         for _ in 0..4 {
@@ -1014,16 +994,14 @@ fn no_data_port_call_wakes_its_caller() {
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox)
-                .unwrap(),
+                .command(PortCommand::SetBssColor(color), now, &mut fixture.outbox),
             Ok(CommandProgress::Done)
         ));
         let edca = SupportedEdca::new(EdcaParameterSet::STANDARD_DEFAULT).expect("EDCA");
         assert!(matches!(
             fixture
                 .port
-                .command(PortCommand::SetEdca(edca), now, &mut fixture.outbox)
-                .unwrap(),
+                .command(PortCommand::SetEdca(edca), now, &mut fixture.outbox),
             Ok(CommandProgress::Done)
         ));
         let waker = fixture.waker();
@@ -1194,10 +1172,7 @@ fn a_refused_submission_and_command_return_their_owners_unchanged() {
     with_fixture(|fixture| {
         let attempt = fixture.station_mpdu().expect("attempt");
         let now = fixture.now();
-        let refused = fixture
-            .port
-            .submit(attempt, now, &mut fixture.outbox)
-            .unwrap();
+        let refused = fixture.port.submit(attempt, now, &mut fixture.outbox);
         assert_eq!(refused, Err(SubmitRefusal::NotEnabled));
         // The attempt ended withdrawn at once: its terminal returns its
         // owners.
@@ -1209,8 +1184,7 @@ fn a_refused_submission_and_command_return_their_owners_unchanged() {
         let gate = fixture.gate.take().expect("gate");
         let refused = fixture
             .port
-            .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox)
-            .unwrap();
+            .command(PortCommand::CloseGate(gate), now, &mut fixture.outbox);
         let Ok(CommandProgress::Refused(PortCommand::CloseGate(gate), CommandRefusal::NotEnabled)) =
             refused
         else {
@@ -1223,7 +1197,6 @@ fn a_refused_submission_and_command_return_their_owners_unchanged() {
         fixture
             .port
             .submit(attempt, now, &mut fixture.outbox)
-            .unwrap()
             .ok()
             .expect("submitted");
         assert!(matches!(
@@ -1267,7 +1240,6 @@ fn a_passed_receive_continuation_never_hides_a_later_transmit_deadline() {
         fixture
             .port
             .submit(attempt, admitted, &mut fixture.outbox)
-            .unwrap()
             .ok()
             .expect("queued");
         let expiry = admitted.saturating_add(
@@ -1335,7 +1307,6 @@ fn a_queued_mpdu_bounds_the_deadline_until_it_expires_behind_a_closed_gate() {
         fixture
             .port
             .submit(attempt, admitted, &mut fixture.outbox)
-            .unwrap()
             .ok()
             .expect("queued");
         let lifetime = EdcaParameterSet::STANDARD_DEFAULT
@@ -1384,15 +1355,10 @@ fn a_pairwise_removal_is_held_while_its_key_is_on_air_then_runs() {
         fixture
             .port
             .submit(attempt, now, &mut fixture.outbox)
-            .unwrap()
             .ok()
             .expect("published");
         let removal = PortCommand::RemovePairwise { association, key };
-        let removal = match fixture
-            .port
-            .command(removal, now, &mut fixture.outbox)
-            .unwrap()
-        {
+        let removal = match fixture.port.command(removal, now, &mut fixture.outbox) {
             Ok(CommandProgress::Held(removal)) => removal,
             _ => panic!("the removal waits for the published attempt"),
         };
@@ -1451,11 +1417,7 @@ fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_
                 .commands
                 .install_group(&association, permission, slot, key_id(1), group_key(1));
         let now = fixture.now();
-        let install = match fixture
-            .port
-            .command(install, now, &mut fixture.outbox)
-            .unwrap()
-        {
+        let install = match fixture.port.command(install, now, &mut fixture.outbox) {
             Ok(CommandProgress::Held(install)) => install,
             _ => panic!("the cut holds the installation"),
         };
@@ -1465,11 +1427,7 @@ fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_
         // The caller's turn registers its waker: the cut runs and holds.
         let _ = fixture.turn();
         let now = fixture.now();
-        let install = match fixture
-            .port
-            .command(install, now, &mut fixture.outbox)
-            .unwrap()
-        {
+        let install = match fixture.port.command(install, now, &mut fixture.outbox) {
             Ok(CommandProgress::Held(install)) => install,
             _ => panic!("the cut holds the installation"),
         };
@@ -1479,10 +1437,8 @@ fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_
         );
         fixture.advance(COMMAND_BOUND);
         let now = fixture.now();
-        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) = fixture
-            .port
-            .command(install, now, &mut fixture.outbox)
-            .unwrap()
+        let Ok(CommandProgress::Refused(install, CommandRefusal::Expired)) =
+            fixture.port.command(install, now, &mut fixture.outbox)
         else {
             panic!("the expired installation comes back refused");
         };
@@ -1497,7 +1453,6 @@ fn a_stalled_group_install_is_refused_expired_with_its_owners_and_the_port_runs_
             fixture
                 .port
                 .submit(attempt, now, &mut fixture.outbox)
-                .unwrap()
                 .is_ok()
         );
         let _ = fixture.turn();
@@ -1585,154 +1540,6 @@ fn a_running_port_refuses_its_reinstall_and_keeps_running() {
             "the radio runs, and the fixture holds its buffers"
         );
         fixture.stop();
-    });
-}
-
-/// The tickets of the single-MPDU terminals the outbox holds, in order.
-fn completed_tickets<Id: radio::SlotIdentity>(fixture: &Fixture<'_, Id>) -> Vec<u8> {
-    fixture
-        .outbox
-        .terminals
-        .iter()
-        .filter_map(|terminal| match terminal {
-            LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)) => {
-                Some(completed.ticket_index())
-            }
-            _ => None,
-        })
-        .collect()
-}
-
-/// Serve turns until the outbox refused what it was told to.
-fn refuse_one<Id: radio::SlotIdentity>(fixture: &mut Fixture<'_, Id>) {
-    fixture.outbox.refuse = 1;
-    for _ in 0..8 {
-        if fixture.outbox.refuse == 0 {
-            return;
-        }
-        let _ = fixture.turn();
-    }
-    panic!("the outbox refused a terminal");
-}
-
-#[test]
-fn a_terminal_the_sink_refuses_is_kept_whole_and_offered_again_first_on_the_s31_port() {
-    with_fixture(|fixture| {
-        fixture.start();
-        let now = fixture.now();
-        let first = fixture.station_mpdu().expect("attempt");
-        let first_ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&first);
-        assert!(
-            fixture
-                .port
-                .submit(first, now, &mut fixture.outbox)
-                .unwrap()
-                .is_ok()
-        );
-        refuse_one(fixture);
-        assert!(fixture.outbox.terminals.is_empty(), "the terminal is kept");
-        assert_eq!(fixture.port.fault(), None);
-        // What the port keeps makes nothing due: the sink owns the wake.
-        let now = fixture.now();
-        assert!(fixture.port.deadline().is_none_or(|at| at > now));
-        // Before a confirmed stop the port offers it itself: no stop's
-        // proof exists to take it otherwise.
-        let second = fixture.station_mpdu().expect("attempt");
-        let second_ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&second);
-        // The next call with a sink offers the kept terminal before its own.
-        assert!(
-            fixture
-                .port
-                .submit(second, now, &mut fixture.outbox)
-                .unwrap()
-                .is_ok()
-        );
-        assert_eq!(completed_tickets(fixture), [first_ticket]);
-        for _ in 0..4 {
-            let _ = fixture.turn();
-        }
-        assert_eq!(completed_tickets(fixture), [first_ticket, second_ticket]);
-        assert_eq!(fixture.take_completed(), 2);
-        fixture.stop();
-        assert_eq!(fixture.port.fault(), None);
-    });
-}
-
-#[test]
-fn a_terminal_kept_at_the_confirmed_stop_leaves_once_through_take_unconsumed_and_the_port_retires()
-{
-    with_installations(|mut fixture, _| {
-        fixture.start();
-        let now = fixture.now();
-        let attempt = fixture.station_mpdu().expect("attempt");
-        let ticket = <Fixture<'_, _> as DataPortHarness<'_>>::identity(&attempt);
-        assert!(
-            fixture
-                .port
-                .submit(attempt, now, &mut fixture.outbox)
-                .unwrap()
-                .is_ok()
-        );
-        refuse_one(&mut fixture);
-        // The sink stays full through the stop, which offers it again.
-        fixture.outbox.refuse = usize::MAX;
-        fixture.stop();
-        fixture.outbox.refuse = 0;
-        // After the confirmed stop the port's other calls offer nothing it
-        // keeps, and the kept terminal holds the port from retiring: a
-        // confirmed stop that holds an owner, not an unconfirmed one.
-        let _ = fixture.turn();
-        assert!(fixture.outbox.terminals.is_empty());
-        assert!(
-            matches!(fixture.retire(), Err(Unretired::Out(classes)) if classes & outstanding::class::UNCONSUMED != 0),
-            "the kept terminal holds the port"
-        );
-        // Refused again, it stays; then it leaves once, with its outcome.
-        fixture.outbox.refuse = 1;
-        assert_eq!(
-            fixture.port.take_unconsumed(
-                fixture.stopped.as_ref().expect("stopped"),
-                &mut fixture.outbox
-            ),
-            Ok(Unconsumed::Kept)
-        );
-        assert_eq!(
-            fixture.port.take_unconsumed(
-                fixture.stopped.as_ref().expect("stopped"),
-                &mut fixture.outbox
-            ),
-            Ok(Unconsumed::None)
-        );
-        assert_eq!(completed_tickets(&fixture), [ticket]);
-        assert!(matches!(
-            fixture.outbox.terminals.first(),
-            Some(LowerMacTerminal::TxCompleted(TxCompleted::Single(completed)))
-                if matches!(completed.outcome(), TxOutcome::Ended(SingleEnd::Delivered { .. }))
-        ));
-        assert_eq!(
-            fixture.port.take_unconsumed(
-                fixture.stopped.as_ref().expect("stopped"),
-                &mut fixture.outbox
-            ),
-            Ok(Unconsumed::None)
-        );
-        assert_eq!(fixture.take_completed(), 1);
-        let Fixture {
-            mut port,
-            buffers,
-            stopped,
-            stop_right,
-            ..
-        } = fixture;
-        drop(buffers);
-        let retired = port
-            .retire(stopped.expect("stopped"))
-            .ok()
-            .expect("nothing is kept: the port retires");
-        assert!(
-            port.release(retired, stop_right.expect("the stop's right"))
-                .is_ok()
-        );
     });
 }
 

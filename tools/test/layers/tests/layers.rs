@@ -4532,11 +4532,6 @@ const TRAIT_OBJECTS: &[(&str, usize, &str)] = &[
         "product: `&mut dyn FnMut()` of the masked section, removed in T8b",
     ),
     (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs",
-        1,
-        "product: `&mut dyn FindOldest`, removed in T8b",
-    ),
-    (
         "protocols/ieee802154/port/src/owner.rs",
         1,
         "product: `&dyn Release`, removed in T8b",
@@ -4828,7 +4823,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
         "Diagnostics::on",
         "predicate: the switchable diagnostics are on",
     ),
-    ("DriverEnv::halted", P2),
     ("DriverEnv::reject_group_replacement", P3),
     ("DriverEnv::stopping", P2),
     ("EarlyText::text", "predicate: the bytes are whole text"),
@@ -9022,26 +9016,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "chips/esp32s31/radio/ieee80211/backend/src/port/keys.rs::Removing.place",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::CallPlace.item",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::CallPlace.vacancy",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::Store.access_point_configure",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::Store.gate",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/unconsumed.rs::Store.station_configure",
         BY_P3,
     ),
     (

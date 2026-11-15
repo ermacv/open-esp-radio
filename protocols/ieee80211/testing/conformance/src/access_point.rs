@@ -405,8 +405,6 @@ impl Case {
 /// What a case found wrong.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Violation {
-    /// A call returned an item it could neither give its sink nor keep.
-    Unkept,
     /// The port did not start or stop within the case's steps.
     Lifecycle,
     /// The fixture could not set up the case.

@@ -564,7 +564,7 @@ proof of the one before it and gives the next state's:
 |---|---|---|---|
 | `poll_start` | `StartProof`: the stop's `Stopped`, or the start's `Starting` | `Ok(StartProgress)`: `Started`, `Pending(Starting)` | `Err(StartRefused)`: `Refused(Stopped, why)`, `Unstopped` (the port is stopping), `Stale` |
 | `poll_stop` | `&mut StopRight` | `Stopped` | `StopUnconfirmed` with `Outstanding` |
-| `take_unconsumed`, `clean` | `&Stopped` | what the port kept; the cleanup | a stale proof |
+| `clean` | `&Stopped` | the cleanup: its terminals to the sink | `CleanupRefused`: `Stale`, `Faulted`, `Unavailable` or `Held` |
 | `retire` | `Stopped` | `Retired` | the proof back with `Outstanding` |
 | `reinstall` | `Retired`, the installations | the next installation's `Stopped`, commands and tokens, under the TSF epoch the port raises | the proof back with `ReinstallRefused` (`Epochs` when the epoch cannot be raised) |
 | `release` | `Retired`, the `StopRight` | what the binding needs to give the radio up | `ReleaseRefused`: the stale proof and the right back |

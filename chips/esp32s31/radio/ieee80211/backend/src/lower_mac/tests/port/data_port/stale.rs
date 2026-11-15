@@ -326,10 +326,7 @@ fn a_station_frame_under_a_key_of_an_earlier_installation_is_refused_at_submit()
         let published = fixture.observed.borrow().publications;
         let now = fixture.now();
         assert_eq!(
-            fixture
-                .port
-                .submit(sealed, now, &mut fixture.outbox)
-                .unwrap(),
+            fixture.port.submit(sealed, now, &mut fixture.outbox),
             Err(SubmitRefusal::StalePermission {
                 issued: 0,
                 installation: 1,
@@ -363,10 +360,7 @@ fn a_frame_under_an_earlier_key_is_refused_as_stale_while_the_radio_is_stopped()
         let sealed = fixture.protected_mpdu(&key).expect("a frame");
         let now = fixture.now();
         assert_eq!(
-            fixture
-                .port
-                .submit(sealed, now, &mut fixture.outbox)
-                .unwrap(),
+            fixture.port.submit(sealed, now, &mut fixture.outbox),
             Err(SubmitRefusal::StalePermission {
                 issued: 0,
                 installation: 1,
