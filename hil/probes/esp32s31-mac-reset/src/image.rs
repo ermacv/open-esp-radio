@@ -462,15 +462,43 @@ impl Spread {
     }
 }
 
+// The session's future is built in a static place. Each of its large
+// steps is pinned where it is awaited and polled in a frame of its own
+// (`apart!`), and the PHY's operations answer in place (`poll_placed`), as
+// `Esp32s31Radio` runs them (`owned_operation::run`): inlined into one
+// poll, or built and returned on the radio executor's stack, their
+// temporaries would lie beside the PHY's deepest calls on its interrupt
+// stack.
+
+/// Await `$future` pinned in place, polled by [`poll_apart`].
+macro_rules! apart {
+    ($future:expr) => {{
+        let mut future = core::pin::pin!($future);
+        core::future::poll_fn(|context| poll_apart(future.as_mut(), context)).await
+    }};
+}
+type SessionRun = impl core::future::Future<Output = ()>;
+static SESSION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<SessionRun>> =
+    static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
+#[define_opaque(SessionRun)]
+fn session_future(parts: SessionParts, lp: LpClock<RcSlow>) -> SessionRun {
+    async move {
+        let Some(journal) = JOURNAL.try_take() else {
+            return;
+        };
+        journal.used = 0;
+        if let Err((phase, index)) = apart!(session(parts, &lp, journal)) {
+            journal.record(Kind::Failed, &[phase, index]);
+        }
+        let _ = DONE.install(journal);
+    }
+}
+
 async fn session_task(parts: SessionParts, lp: LpClock<RcSlow>) {
-    let Some(journal) = JOURNAL.try_take() else {
+    let Some(place) = SESSION.try_take() else {
         return;
     };
-    journal.used = 0;
-    if let Err((phase, index)) = session(parts, &lp, journal).await {
-        journal.record(Kind::Failed, &[phase, index]);
-    }
-    let _ = DONE.install(journal);
+    place.future(|| session_future(parts, lp)).await;
 }
 
 /// The phases a failure names.
@@ -498,6 +526,110 @@ mod phase {
 
 type Failure = (u32, u32);
 
+/// The session's radio, where it stays: taken by a PHY operation that
+/// owns it and put back by its answer, as `Esp32s31Radio` holds it.
+fn held(slot: &mut Option<Radio>) -> Result<&mut Radio, Failure> {
+    slot.as_mut().ok_or((phase::REGISTER, 9))
+}
+
+/// The PHY's registration over the radio in `slot`.
+async fn register(
+    slot: &mut Option<Radio>,
+    timer: &CooperativeTimer,
+    platform: &mut (),
+    clocks: &ChipClocks,
+    identity: PhyCalibrationIdentity,
+) -> Result<(), Failure> {
+    let radio = slot.take().ok_or((phase::REGISTER, 1))?;
+    let mut operation = core::pin::pin!(register_concurrent_phy::<_, (), RomShortDelay, _>(
+        timer,
+        radio,
+        platform,
+        clocks,
+        PhyRegisterConfig::new(identity),
+        NoopPhyTargetObserver,
+    ));
+    let mut completion = core::mem::MaybeUninit::uninit();
+    let (returned, result) = oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
+        .await
+        .split();
+    *slot = Some(returned.read());
+    // The outcome (its calibration path) is the registration's report, as
+    // `Esp32s31Radio::prepare` reads it.
+    let _outcome = result.read().map_err(|_| (phase::REGISTER, 0))?.outcome();
+    Ok(())
+}
+
+/// The PHY's tracking over the radio in `slot`.
+async fn maintain(
+    slot: &mut Option<Radio>,
+    timer: &CooperativeTimer,
+    platform: &mut (),
+    pilot: &mut phy_pilot::Client,
+) -> Result<(), Failure> {
+    let radio = slot.take().ok_or((phase::MAINTAIN, 1))?;
+    let mut operation = core::pin::pin!(maintain_concurrent_phy::<_, (), RomShortDelay, _>(
+        timer,
+        radio,
+        platform,
+        NoopPhyTargetObserver,
+        pilot,
+    ));
+    let mut completion = core::mem::MaybeUninit::uninit();
+    let (returned, result) = oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
+        .await
+        .split();
+    *slot = Some(returned.read());
+    result.read().map_err(|_| (phase::MAINTAIN, 0))?;
+    Ok(())
+}
+
+/// The channel's selection over the radio in `slot`: a 20 MHz channel is
+/// lowered to its primary number and CBW 0 (`radio-system`
+/// `channel::lower_ghz2_4_channel`).
+async fn tune(
+    slot: &mut Option<Radio>,
+    clocked: &mut WifiClocked,
+    timer: &CooperativeTimer,
+    platform: &mut (),
+    channel: Ghz2_4Channel,
+) -> Result<(), Failure> {
+    let radio = slot.take().ok_or((phase::CHANNEL, 2))?;
+    let transaction =
+        radio.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Channel);
+    let mut observer = NoopPhyTargetObserver;
+    let selection = clocked.channel_transaction(platform, transaction);
+    let mut operation = core::pin::pin!(select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
+        timer,
+        u16::from(channel.primary()),
+        0,
+        selection,
+        &mut observer,
+    ));
+    let mut completion = core::mem::MaybeUninit::uninit();
+    let (returned, result) = oer_portable_memory::poll_placed(operation.as_mut(), &mut completion)
+        .await
+        .split();
+    *slot = Some(returned.read());
+    result.read().map_err(|_| (phase::CHANNEL, 1))?;
+    Ok(())
+}
+
+/// The MAC's cold preparation.
+async fn cold(
+    radio: &mut Radio,
+    clocked: &mut WifiClocked,
+    sources: &mut Sources,
+    timer: &CooperativeTimer,
+    mac: MacColdStartConfig,
+) -> Result<(), ()> {
+    let mut hal = clocked.cold_mac_hal(radio);
+    initialize_wifi_mac(sources, &mut hal, timer, mac)
+        .await
+        .map(|_outcome| ())
+        .map_err(|_| ())
+}
+
 /// Bring Wi-Fi up in `Esp32s31Radio`'s order, then the series.
 async fn session(
     parts: SessionParts,
@@ -505,7 +637,7 @@ async fn session(
     journal: &mut Journal,
 ) -> Result<(), Failure> {
     let SessionParts {
-        mut radio,
+        radio,
         clocks,
         wifi,
         coex,
@@ -517,35 +649,25 @@ async fn session(
         station,
         ap,
     } = parts;
+    let mut slot = Some(radio);
     let timer = CooperativeTimer::new(EmbassyClock);
     let mut platform = ();
     // prepare: the PHY's registration.
-    let (returned, registered) = register_concurrent_phy::<_, (), RomShortDelay, _>(
-        &timer,
-        radio,
-        &mut platform,
-        &clocks,
-        PhyRegisterConfig::new(identity),
-        NoopPhyTargetObserver,
-    )
-    .await;
-    radio = returned;
-    // The outcome (its calibration path) is the registration's report, as
-    // `Esp32s31Radio::prepare` reads it.
-    let _outcome = registered.map_err(|_| (phase::REGISTER, 0))?.outcome();
+    apart!(register(&mut slot, &timer, &mut platform, &clocks, identity))?;
     // enter: coexistence, common power, the modem clocks, the PHY's client.
+    let radio = held(&mut slot)?;
     let (_coexisting, _participants) = radio.enter_coex(coex);
     let (powered, _power) = WifiCold::from_partition(wifi)
-        .power_up(&mut radio, &clocks)
+        .power_up(radio, &clocks)
         .map_err(|_| (phase::POWER, 0))?;
     let mut clocked = powered
-        .enable_clocks(&mut radio, &clocks)
+        .enable_clocks(radio, &clocks)
         .map_err(|_| (phase::CLOCKS, 0))?;
     clocked
-        .set_initialized(&mut radio, true)
+        .set_initialized(radio, true)
         .map_err(|_| (phase::INITIALIZED, 0))?;
     let (membership, acquired) = {
-        let ready = phy_ready(&mut radio).map_err(|_| (phase::JOIN, 0))?;
+        let ready = phy_ready(radio).map_err(|_| (phase::JOIN, 0))?;
         let PhyClientAccess::Available(available) = ready.client::<WifiPhyMembership>() else {
             return Err((phase::JOIN, 1));
         };
@@ -554,38 +676,13 @@ async fn session(
     };
     // track: the initial tracking, RX enable, the channel, the MAC.
     if acquired == ConcurrentAcquire::TrackingDue {
-        let (returned, maintained) = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
-            &timer,
-            radio,
-            &mut platform,
-            NoopPhyTargetObserver,
-            &mut pilot,
-        )
-        .await;
-        radio = returned;
-        maintained.map_err(|_| (phase::MAINTAIN, 0))?;
+        apart!(maintain(&mut slot, &timer, &mut platform, &mut pilot))?;
     }
-    set_wifi_rx(&mut radio, &membership, true).map_err(|_| (phase::RX_ENABLE, 0))?;
+    set_wifi_rx(held(&mut slot)?, &membership, true).map_err(|_| (phase::RX_ENABLE, 0))?;
     let channel = Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20)
         .map_err(|_| (phase::CHANNEL, 0))?;
-    {
-        let transaction =
-            radio.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Channel);
-        let mut observer = NoopPhyTargetObserver;
-        let selection = clocked.channel_transaction(&mut platform, transaction);
-        // A 20 MHz channel is lowered to its primary number and CBW 0
-        // (`radio-system` `channel::lower_ghz2_4_channel`).
-        let (returned, selected) = select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
-            &timer,
-            u16::from(channel.primary()),
-            0,
-            selection,
-            &mut observer,
-        )
-        .await;
-        radio = returned;
-        selected.map_err(|_| (phase::CHANNEL, 1))?;
-    }
+    apart!(tune(&mut slot, &mut clocked, &timer, &mut platform, channel))?;
+    let radio = held(&mut slot)?;
     let ceiling = Country::new(*b"DE")
         .ok()
         .and_then(RegulatoryDomain::of)
@@ -623,14 +720,68 @@ async fn session(
         station_address: station,
         access_point_address: ap,
     };
-    {
-        let mut hal = clocked.cold_mac_hal(&mut radio);
-        initialize_wifi_mac(&mut sources, &mut hal, &timer, mac)
-            .await
-            .map_err(|_| (phase::MAC_COLD, 0))?;
-    }
-    let (mut access, mut clocks_on) = clocked.into_running();
+    apart!(cold(radio, &mut clocked, &mut sources, &timer, mac)).map_err(|()| (phase::MAC_COLD, 0))?;
+    let (access, clocks_on) = clocked.into_running();
 
+    // The series is polled in a frame of its own: inlined into this
+    // function's poll, its temporaries would lie on the stack beside the
+    // PHY's deepest calls on the radio executor's interrupt stack.
+    let result = {
+        let mut series = core::pin::pin!(series(
+            Owners {
+                radio,
+                mac_irq: &mut mac_irq,
+                power_irq: &power_irq,
+                sources: &mut sources,
+                timer: &timer,
+            },
+            access,
+            clocks_on,
+            mac,
+            seed,
+            journal,
+        ));
+        core::future::poll_fn(|context| poll_apart(series.as_mut(), context)).await
+    };
+    // Every owner stays held until the leased host reset.
+    let _held = (slot, membership);
+    result
+}
+
+/// What the series borrows from the session.
+struct Owners<'a> {
+    radio: &'a mut Radio,
+    mac_irq: &'a mut MacInterruptRegisters,
+    power_irq: &'a MacPowerInterruptRegisters,
+    sources: &'a mut Sources,
+    timer: &'a CooperativeTimer,
+}
+
+/// Poll `future` in this function's frame, never inlined into its caller's.
+#[inline(never)]
+fn poll_apart<F: core::future::Future>(
+    future: core::pin::Pin<&mut F>,
+    context: &mut core::task::Context<'_>,
+) -> core::task::Poll<F::Output> {
+    future.poll(context)
+}
+
+/// The stops, then the pulses, over the running MAC.
+async fn series(
+    owners: Owners<'_>,
+    mut access: RadioAccess,
+    mut clocks_on: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
+    mac: MacColdStartConfig,
+    seed: u32,
+    journal: &mut Journal,
+) -> Result<(), Failure> {
+    let Owners {
+        radio,
+        mac_irq,
+        power_irq,
+        sources,
+        timer,
+    } = owners;
     // The receive ring, live, with the open promiscuous receive.
     let placed = RxDmaStorage::place(RX.take().ok_or((phase::RING, 0))?)
         .map_err(|_| (phase::RING, 1))?;
@@ -720,7 +871,7 @@ async fn session(
         let pulse_cycle = oer_portable_riscv::cycle32();
         let (pulsed, pulsed_clocks) = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
-            clocked.reset_mac(&mut radio);
+            clocked.reset_mac(radio);
             clocked.into_running()
         };
         access = pulsed;
@@ -748,8 +899,8 @@ async fn session(
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
-                let mut hal = clocked.cold_mac_hal(&mut radio);
-                initialize_wifi_mac(&mut sources, &mut hal, &timer, mac).await
+                let mut hal = clocked.cold_mac_hal(radio);
+                initialize_wifi_mac(sources, &mut hal, timer, mac).await
             };
             let (running, on) = clocked.into_running();
             access = running;
@@ -803,7 +954,7 @@ async fn session(
         .map_or(0, |elapsed| u32::try_from(elapsed.as_micros()).unwrap_or(u32::MAX));
     journal.record(Kind::End, &[series_cycles, series_micros]);
     // Every owner stays held until the leased host reset.
-    let _held = (radio, access, clocks_on, ring, membership);
+    let _held = (access, clocks_on, ring);
     Ok(())
 }
 
