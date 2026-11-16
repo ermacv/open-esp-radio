@@ -152,10 +152,10 @@ pub fn router_window(start: &Reading, end: &Reading, span: Duration) -> Value {
 fn named(rates: &Rates) -> Vec<(String, u32)> {
     let mut named = Vec::new();
     for (width, guard, counts) in [
-        (20, "LGI", &rates.ht20_long_gi),
-        (20, "SGI", &rates.ht20_short_gi),
-        (40, "LGI", &rates.ht40_long_gi),
-        (40, "SGI", &rates.ht40_short_gi),
+        (20, "LGI", &rates.ht.mhz20.long),
+        (20, "SGI", &rates.ht.mhz20.short),
+        (40, "LGI", &rates.ht.mhz40.long),
+        (40, "SGI", &rates.ht.mhz40.short),
     ] {
         for (mcs, count) in counts.iter().enumerate() {
             named.push((format!("HT{width} {guard} MCS{mcs}"), *count));
@@ -174,10 +174,10 @@ fn named(rates: &Rates) -> Vec<(String, u32)> {
 
 fn total(rates: &Rates) -> u64 {
     [
-        &rates.ht20_long_gi,
-        &rates.ht20_short_gi,
-        &rates.ht40_long_gi,
-        &rates.ht40_short_gi,
+        &rates.ht.mhz20.long,
+        &rates.ht.mhz20.short,
+        &rates.ht.mhz40.long,
+        &rates.ht.mhz40.short,
     ]
     .into_iter()
     .flatten()
@@ -200,10 +200,10 @@ fn histogram(rates: &Rates) -> Value {
             .sum()
     };
     let mcs7 = [
-        &rates.ht20_long_gi,
-        &rates.ht20_short_gi,
-        &rates.ht40_long_gi,
-        &rates.ht40_short_gi,
+        &rates.ht.mhz20.long,
+        &rates.ht.mhz20.short,
+        &rates.ht.mhz40.long,
+        &rates.ht.mhz40.short,
     ]
     .iter()
     .filter_map(|counts| counts.get(7))
@@ -219,8 +219,8 @@ fn histogram(rates: &Rates) -> Value {
                 "percent": share(u64::from(count)),
             }))
             .collect::<Vec<_>>(),
-        "ht40_percent": share(sum(&[&rates.ht40_long_gi, &rates.ht40_short_gi])),
-        "short_gi_percent": share(sum(&[&rates.ht20_short_gi, &rates.ht40_short_gi])),
+        "width_40_mhz_percent": share(sum(&[&rates.ht.mhz40.long, &rates.ht.mhz40.short])),
+        "short_gi_percent": share(sum(&[&rates.ht.mhz20.short, &rates.ht.mhz40.short])),
         "mcs7_percent": share(mcs7),
     })
 }
@@ -502,10 +502,10 @@ mod tests {
                 ..TxLink::default()
             },
         };
-        link.rx.mpdus.ht40_short_gi[7] = 900;
-        link.rx.mpdus.ht40_long_gi[6] = 60;
+        link.rx.mpdus.ht.mhz40.short[7] = 900;
+        link.rx.mpdus.ht.mhz40.long[6] = 60;
         link.rx.mpdus.non_ht = 40;
-        link.tx.mpdus.ht20_long_gi[7] = 1000;
+        link.tx.mpdus.ht.mhz20.long[7] = 1000;
         link.tx.mpdus.unknown = 2;
         let value = device(&link);
         let rx = &value["rx"];
@@ -514,7 +514,7 @@ mod tests {
         assert_eq!(rx["mpdus"]["rates"][0]["percent"], 90.0);
         assert_eq!(rx["mpdus"]["rates"][1]["rate"], "HT40 LGI MCS6");
         assert_eq!(rx["mpdus"]["rates"][2]["rate"], "non-HT");
-        assert_eq!(rx["mpdus"]["ht40_percent"], 96.0);
+        assert_eq!(rx["mpdus"]["width_40_mhz_percent"], 96.0);
         assert_eq!(rx["mpdus"]["short_gi_percent"], 90.0);
         assert_eq!(rx["mpdus"]["mcs7_percent"], 90.0);
         assert_eq!(rx["in_ampdu_percent"], 90.0);
@@ -526,7 +526,7 @@ mod tests {
             "1100 transmissions of 1000 single MPDUs on air"
         );
         assert_eq!(tx["transmissions_per_single"], 1.1);
-        assert_eq!(tx["mpdus"]["ht40_percent"], 0.0);
+        assert_eq!(tx["mpdus"]["width_40_mhz_percent"], 0.0);
         let line = summary(
             &router_window(&Ok(view(100, 10, 0)), &Ok(view(200, 20, 0)), SPAN),
             &value,

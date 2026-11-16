@@ -198,12 +198,12 @@ fn the_aggregates_histogram_wraps_at_two_to_the_sixteen() {
 #[test]
 fn the_link_keeps_every_rate_and_end() {
     let mut counted = link::Link::default();
-    counted.rx.mpdus.ht40_short_gi[7] = 11;
+    counted.rx.mpdus.ht.mhz40.short[7] = 11;
     counted.rx.in_ampdu = 5;
     counted.tx.mpdus.non_ht = 2;
     counted.tx.ack_timeouts = 1;
     let wire = link(&counted);
-    assert_eq!(wire.rx.mpdus.ht40_short_gi[7], 11);
+    assert_eq!(wire.rx.mpdus.ht.mhz40.short[7], 11);
     assert_eq!(wire.rx.in_ampdu, 5);
     assert_eq!(wire.tx.mpdus.non_ht, 2);
     assert_eq!(wire.tx.ack_timeouts, 1);
@@ -291,13 +291,13 @@ fn pages_of_samples_cover_every_kept_sample_once_and_stop_at_the_end() {
 #[test]
 fn the_link_window_takes_the_rates_differences() {
     let mut start = Snapshot::default();
-    start.link.rx.mpdus.ht20_long_gi[3] = 4;
+    start.link.rx.mpdus.ht.mhz20.long[3] = 4;
     start.link.tx.delivered = 1;
     let mut end = start;
-    end.link.rx.mpdus.ht20_long_gi[3] = 10;
+    end.link.rx.mpdus.ht.mhz20.long[3] = 10;
     end.link.tx.delivered = 5;
     let window = link_window(&start, &end);
-    assert_eq!(window.rx.mpdus.ht20_long_gi[3], 6);
+    assert_eq!(window.rx.mpdus.ht.mhz20.long[3], 6);
     assert_eq!(window.tx.delivered, 4);
 }
 

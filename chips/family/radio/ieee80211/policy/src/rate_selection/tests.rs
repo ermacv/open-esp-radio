@@ -104,7 +104,7 @@ fn legacy_peer() -> RatePeer {
     }
 }
 
-fn ht20_peer() -> RatePeer {
+fn ht_peer_at_20_mhz() -> RatePeer {
     let mut element = [0_u8; 28];
     element[..6].copy_from_slice(&[45, 26, 0x20, 0, 0x17, 0xff]);
     RatePeer {
@@ -249,7 +249,7 @@ fn an_aggregate_goes_once_at_the_controls_ampdu_rate_and_only_when_associated() 
     assert!(
         RateSelection::<Measured, Snr>::plan(&selection, FrameRates::Aggregate, Some).is_none()
     );
-    RateSelection::<Measured, Snr>::associated(&mut selection, &ht20_peer(), &metric(60));
+    RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_20_mhz(), &metric(60));
     let rate = selection.control().unwrap().ampdu_rate();
     assert_eq!(
         stages(&plan_of(&selection, FrameRates::Aggregate)),
@@ -289,7 +289,7 @@ fn an_aggregate_goes_once_at_the_controls_ampdu_rate_and_only_when_associated() 
 #[test]
 fn data_starts_at_the_controls_rate_and_steps_down_the_vendor_ladder_within_its_budget() {
     let mut selection = EspressifRateSelection::<Caps>::new();
-    RateSelection::<Measured, Snr>::associated(&mut selection, &ht20_peer(), &metric(60));
+    RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_20_mhz(), &metric(60));
     let control = selection.control().unwrap();
     let initial = control.mpdu_rate();
     let limit = schedule_publication_limit(control.association().current_schedule());
@@ -309,8 +309,9 @@ fn data_starts_at_the_controls_rate_and_steps_down_the_vendor_ladder_within_its_
 #[test]
 fn data_completions_adapt_the_rate_as_the_vendor_control_does() {
     let mut selection = EspressifRateSelection::<Caps>::new();
-    let mut reference = EspressifRateControl::for_peer((), &ht20_peer(), LinkMetric::new(60, 0));
-    RateSelection::<Measured, Snr>::associated(&mut selection, &ht20_peer(), &metric(60));
+    let mut reference =
+        EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(), LinkMetric::new(60, 0));
+    RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_20_mhz(), &metric(60));
     let before = plan_of(&selection, FrameRates::Data)
         .stages()
         .next()
@@ -376,7 +377,7 @@ fn the_control_records_a_station_uses_start_with_a_legacy_rate() {
 }
 
 /// An HT40 peer: what its association decodes at 40 MHz.
-fn ht40_peer() -> RatePeer {
+fn ht_peer_at_40_mhz() -> RatePeer {
     let mut element = [0_u8; 28];
     element[..6].copy_from_slice(&[45, 26, 0x02, 0, 0x17, 0xff]);
     RatePeer {
@@ -396,7 +397,7 @@ fn ht40_peer() -> RatePeer {
 #[test]
 fn on_a_20_mhz_channel_an_ht40_records_plan_keeps_its_20_mhz_stages() {
     let mut selection = EspressifRateSelection::<Caps>::new();
-    RateSelection::<Measured, Snr>::associated(&mut selection, &ht40_peer(), &metric(60));
+    RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_40_mhz(), &metric(60));
     let vendor = plan_of(&selection, FrameRates::Data);
     assert!(
         vendor
@@ -425,7 +426,7 @@ fn on_a_20_mhz_channel_an_ht40_records_plan_keeps_its_20_mhz_stages() {
 #[test]
 fn an_attempt_cut_before_the_air_leaves_the_rate_control_as_it_was() {
     let mut selection = EspressifRateSelection::<Caps>::new();
-    RateSelection::<Measured, Snr>::associated(&mut selection, &ht20_peer(), &metric(60));
+    RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_20_mhz(), &metric(60));
     let state = |selection: &EspressifRateSelection<Caps>| {
         std::format!("{:?}", selection.control().unwrap().association())
     };
@@ -452,7 +453,7 @@ fn an_attempt_cut_before_the_air_leaves_the_rate_control_as_it_was() {
 #[test]
 fn unknown_outcomes_and_contention_exhaustion_never_change_rate_state() {
     let mut selection = EspressifRateSelection::<Caps>::new();
-    RateSelection::<Measured, Snr>::associated(&mut selection, &ht20_peer(), &metric(60));
+    RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_20_mhz(), &metric(60));
     let before = std::format!("{:?}", selection.control().unwrap().association());
     for outcome in [
         Outcome::Indeterminate(IndeterminateCause::HardwareTimeout),
@@ -516,7 +517,7 @@ fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
             ])
             .unwrap(),
         ),
-        ..ht20_peer()
+        ..ht_peer_at_20_mhz()
     };
     for (supported, extended) in [
         (&[0x82, 0x84, 0x8b, 0x96][..], &[][..]),
@@ -528,7 +529,7 @@ fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
             &[12, 18, 24, 36, 48, 72, 96, 108][..],
         ),
     ] {
-        for mut peer in [legacy_peer(), ht20_peer(), ht40_peer(), he] {
+        for mut peer in [legacy_peer(), ht_peer_at_20_mhz(), ht_peer_at_40_mhz(), he] {
             peer.legacy_rates =
                 NegotiatedLegacyRates::from_rate_elements(supported, extended).unwrap();
             for signal in [-20, 0, 20, 60, 100] {
@@ -566,8 +567,9 @@ fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
 #[test]
 fn a_delivered_outcome_feeds_its_ack_snr_to_the_rate_control() {
     let mut selection = EspressifRateSelection::<Caps>::new();
-    let mut reference = EspressifRateControl::for_peer((), &ht20_peer(), LinkMetric::new(60, 0));
-    RateSelection::<Measured, Snr>::associated(&mut selection, &ht20_peer(), &metric(60));
+    let mut reference =
+        EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(), LinkMetric::new(60, 0));
+    RateSelection::<Measured, Snr>::associated(&mut selection, &ht_peer_at_20_mhz(), &metric(60));
     for snr in [30, 18, 25] {
         RateSelection::<Measured, Snr>::completed(
             &mut selection,

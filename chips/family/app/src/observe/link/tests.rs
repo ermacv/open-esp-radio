@@ -50,7 +50,7 @@ fn settlements_and_block_ack_requests_count_apart() {
     // The aggregate that went sent its subframes at its rate; the refused
     // one sent none.
     let sent = counter.link().tx.mpdus;
-    assert_eq!(sent.ht40_long_gi[7], 5);
+    assert_eq!(sent.ht.mhz40.long[7], 5);
     assert_eq!(sent.unknown, 0);
 }
 
@@ -102,10 +102,10 @@ fn each_rate_counts_in_its_own_bucket() {
     receive(Rate::Unknown, 8);
     let rx = counter.link().rx;
     let rates = rx.mpdus;
-    assert_eq!(rates.ht40_short_gi, [0, 0, 0, 0, 0, 0, 0, 5]);
-    assert_eq!(rates.ht40_long_gi, [0, 0, 0, 0, 0, 0, 0, 4]);
-    assert_eq!(rates.ht20_long_gi, [3, 0, 0, 0, 0, 0, 0, 0]);
-    assert_eq!(rates.ht20_short_gi, [0, 0, 0, 0, 0, 0, 2, 0]);
+    assert_eq!(rates.ht.mhz40.short, [0, 0, 0, 0, 0, 0, 0, 5]);
+    assert_eq!(rates.ht.mhz40.long, [0, 0, 0, 0, 0, 0, 0, 4]);
+    assert_eq!(rates.ht.mhz20.long, [3, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(rates.ht.mhz20.short, [0, 0, 0, 0, 0, 0, 2, 0]);
     assert_eq!(
         (rates.ht_other, rates.non_ht, rates.he, rates.unknown),
         (10, 6, 7, 8)

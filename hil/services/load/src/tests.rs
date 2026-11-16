@@ -327,10 +327,16 @@ fn full_stall() -> Stall {
 fn full_link() -> Link {
     let all = u32::MAX;
     let rates = Rates {
-        ht20_long_gi: [all; 8],
-        ht20_short_gi: [all; 8],
-        ht40_long_gi: [all; 8],
-        ht40_short_gi: [all; 8],
+        ht: HtCounts {
+            mhz20: GuardCounts {
+                long: [all; 8],
+                short: [all; 8],
+            },
+            mhz40: GuardCounts {
+                long: [all; 8],
+                short: [all; 8],
+            },
+        },
         ht_other: all,
         non_ht: all,
         he: all,
@@ -358,20 +364,20 @@ fn full_link() -> Link {
 #[test]
 fn a_link_window_takes_wrapping_differences_of_every_count() {
     let mut start = Link::default();
-    start.rx.mpdus.ht40_short_gi[7] = u32::MAX;
+    start.rx.mpdus.ht.mhz40.short[7] = u32::MAX;
     start.rx.in_ampdu = 10;
     start.tx.transmissions = 100;
     start.tx.mpdus.non_ht = 1;
     let mut end = start;
-    end.rx.mpdus.ht40_short_gi[7] = 9;
-    end.rx.mpdus.ht20_long_gi[0] = 2;
+    end.rx.mpdus.ht.mhz40.short[7] = 9;
+    end.rx.mpdus.ht.mhz20.long[0] = 2;
     end.rx.in_ampdu = 25;
     end.tx.transmissions = 130;
     end.tx.delivered = 20;
     end.tx.mpdus.non_ht = 4;
     let window = Link::window(&start, &end);
-    assert_eq!(window.rx.mpdus.ht40_short_gi, [0, 0, 0, 0, 0, 0, 0, 10]);
-    assert_eq!(window.rx.mpdus.ht20_long_gi[0], 2);
+    assert_eq!(window.rx.mpdus.ht.mhz40.short, [0, 0, 0, 0, 0, 0, 0, 10]);
+    assert_eq!(window.rx.mpdus.ht.mhz20.long[0], 2);
     assert_eq!(window.rx.in_ampdu, 15);
     assert_eq!(
         (
