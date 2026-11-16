@@ -3,13 +3,17 @@ use super::*;
 /// The capabilities record of a backend of these tests.
 const CAPS: crate::LowerMacCapabilities = crate::LowerMacCapabilities {
     bands: crate::BandSet::GHZ2_4,
-    widths: crate::WidthSet::MHZ20,
+    formats: crate::FormatWidths {
+        non_ht: crate::WidthSet::MHZ20,
+        ht: crate::WidthSet::MHZ20,
+        he: crate::WidthSet::MHZ20,
+    },
     rates: crate::RateSupport {
         dsss_cck: crate::Support::Supported,
         ofdm: crate::Support::Supported,
         ht_max_mcs: oer_protocols_ieee80211_wire::phy::HtMcs::new(7),
         he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9),
-        he_max_bandwidth_mhz: 20,
+
         he_dcm: crate::Support::Unsupported,
         he_ldpc: crate::Support::Unsupported,
         spatial_streams: 1,

@@ -61,9 +61,9 @@ use crate::{
 /// # use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 /// # const fn caps(bands: BandSet) -> LowerMacCapabilities {
 /// #     LowerMacCapabilities {
-/// #         bands, widths: WidthSet::MHZ20,
+/// #         bands, formats: oer_protocols_ieee80211_contracts_port::FormatWidths { non_ht: WidthSet::MHZ20, ht: WidthSet::MHZ20, he: WidthSet::MHZ20 },
 /// #         rates: RateSupport { dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported, ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported, ht_max_mcs: HtMcs::new(7),
-/// #             he_max_mcs: HeMcs::new(9), he_max_bandwidth_mhz: 20, he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
+/// #             he_max_mcs: HeMcs::new(9), he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 /// #             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported, spatial_streams: 1 },
 /// #         services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #         tx_power_ceiling_min_dbm: None,
@@ -93,9 +93,9 @@ use crate::{
 /// # use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 /// # const fn caps(bands: BandSet) -> LowerMacCapabilities {
 /// #     LowerMacCapabilities {
-/// #         bands, widths: WidthSet::MHZ20,
+/// #         bands, formats: oer_protocols_ieee80211_contracts_port::FormatWidths { non_ht: WidthSet::MHZ20, ht: WidthSet::MHZ20, he: WidthSet::MHZ20 },
 /// #         rates: RateSupport { dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported, ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported, ht_max_mcs: HtMcs::new(7),
-/// #             he_max_mcs: HeMcs::new(9), he_max_bandwidth_mhz: 20, he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
+/// #             he_max_mcs: HeMcs::new(9), he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 /// #             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported, spatial_streams: 1 },
 /// #         services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #         tx_power_ceiling_min_dbm: None,
@@ -247,10 +247,10 @@ fn control_plan(
 /// # struct Caps;
 /// # impl Ieee80211Capabilities for Caps { type SppScope = oer_protocols_ieee80211_wire::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
 /// # const PORT: LowerMacCapabilities = LowerMacCapabilities {
-/// #     bands: BandSet::GHZ2_4, widths: WidthSet::MHZ20,
+/// #     bands: BandSet::GHZ2_4, formats: oer_protocols_ieee80211_contracts_port::FormatWidths { non_ht: WidthSet::MHZ20, ht: WidthSet::MHZ20, he: WidthSet::MHZ20 },
 /// #     rates: RateSupport { dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported, ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
 /// #         ht_max_mcs: oer_protocols_ieee80211_wire::phy::HtMcs::new(7),
-/// #         he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9), he_max_bandwidth_mhz: 20,
+/// #         he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9),
 /// #         he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported, he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported, spatial_streams: 1 },
 /// #     services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #     tx_power_ceiling_min_dbm: None,
@@ -284,10 +284,10 @@ fn control_plan(
 /// # struct Caps;
 /// # impl Ieee80211Capabilities for Caps { type SppScope = oer_protocols_ieee80211_wire::security::spp::Association; const CAPS: LowerMacCapabilities = PORT; }
 /// # const PORT: LowerMacCapabilities = LowerMacCapabilities {
-/// #     bands: BandSet::GHZ2_4, widths: WidthSet::MHZ20,
+/// #     bands: BandSet::GHZ2_4, formats: oer_protocols_ieee80211_contracts_port::FormatWidths { non_ht: WidthSet::MHZ20, ht: WidthSet::MHZ20, he: WidthSet::MHZ20 },
 /// #     rates: RateSupport { dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported, ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
 /// #         ht_max_mcs: oer_protocols_ieee80211_wire::phy::HtMcs::new(7),
-/// #         he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9), he_max_bandwidth_mhz: 20,
+/// #         he_max_mcs: oer_protocols_ieee80211_wire::phy::HeMcs::new(9),
 /// #         he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported, he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported, spatial_streams: 1 },
 /// #     services: HardwareServices::FCS, vifs: 1, tx_queues: 4, max_mpdu_length: 2304,
 /// #     tx_power_ceiling_min_dbm: None,

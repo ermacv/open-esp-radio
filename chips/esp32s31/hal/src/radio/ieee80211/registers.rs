@@ -540,7 +540,7 @@ pub use he::{
         MacHeTbProgramError, MacHeTbTidLimit, MacHeTid, MacHeTriggerQueueConfiguration,
         MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot,
     },
-    peer::{MacHe20Association, MacHe20PeerConfig},
+    peer::{MacHeAssociation, MacHePeerConfig},
     tb::{MacHeTbStatistics, MacHeTbTxDiagnostics},
 };
 pub use interrupt::{

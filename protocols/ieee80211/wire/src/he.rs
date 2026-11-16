@@ -820,11 +820,42 @@ pub struct HeLocalCapabilities {
     pub transmit: HeMcsNssSupport,
 }
 
+/// The Supported Channel Width Set of an HE PHY Capabilities Information
+/// field, as far as a 24-octet element carries it: the widths up to 80 MHz,
+/// whose HE-MCS maps are the element's only ones.
+///
+/// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3 (HE PHY Capabilities
+/// Information field, Supported Channel Width Set: B0 40 MHz in the
+/// 2.4 GHz band, B1 40 and 80 MHz in the 5 and 6 GHz bands; B2 and B3 name
+/// 160 MHz and 80+80 MHz, whose maps this element does not hold); clause
+/// numbers as Linux `include/linux/ieee80211-he.h` cites them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HeChannelWidthSet(u8);
+
+impl HeChannelWidthSet {
+    /// 20 MHz only, in any band.
+    pub const MHZ20: Self = Self(0);
+    /// B0: 40 MHz in the 2.4 GHz band.
+    pub const GHZ2_4_MHZ40: Self = Self(1 << 0);
+    /// B1: 40 and 80 MHz in the 5 and 6 GHz bands.
+    pub const GHZ5_MHZ40_80: Self = Self(1 << 1);
+
+    /// The widths of either set.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// The field's value.
+    pub const fn field(self) -> oer_portable_wire::U8<7> {
+        oer_portable_wire::U8::from_low_bits(self.0)
+    }
+}
+
 /// The complete HE Capabilities element advertising `local`.
 ///
 /// The element's 24 octets fix three fields, which the encoder owns whatever
-/// `local` holds: the Channel Width Set of a 20 MHz-only station in the
-/// 2.4 GHz band (every bit clear), PPE Thresholds Present (clear: the element
+/// `local` holds: the Supported Channel Width Set (`widths`, at most 80 MHz),
+/// PPE Thresholds Present (clear: the element
 /// carries no PPE Thresholds field) and, in both HE-MCS maps, every spatial
 /// stream after the first as not supported. Without a 160 MHz or 80+80 MHz
 /// width the Supported HE-MCS And NSS Set holds only the ≤ 80 MHz maps.
@@ -833,11 +864,14 @@ pub struct HeLocalCapabilities {
 /// format) and 9.4.2.248.4 (Supported HE-MCS And NSS Set field); clause
 /// numbers as Linux `include/linux/ieee80211-he.h` cites them, the standard's
 /// text not consulted.
-pub const fn he_capability_ie(local: HeLocalCapabilities) -> [u8; HE_CAPABILITIES_IE_MIN_LEN] {
+pub const fn he_capability_ie(
+    local: HeLocalCapabilities,
+    widths: HeChannelWidthSet,
+) -> [u8; HE_CAPABILITIES_IE_MIN_LEN] {
     let [m0, m1, m2, m3, m4, m5] = local.mac.to_bytes();
     let [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10] = local
         .phy
-        .with_channel_width_set(oer_portable_wire::U8::ZERO)
+        .with_channel_width_set(widths.field())
         .with_ppe_present(false)
         .to_bytes();
     let [r0, r1] = local.receive.one_stream_map();

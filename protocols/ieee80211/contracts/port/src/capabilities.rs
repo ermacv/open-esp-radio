@@ -2,7 +2,8 @@
 
 use oer_protocols_ieee80211_wire::{
     channel::{Band, Channel, ChannelWidth},
-    phy::{FecCoding, HeMcs, HtMcs, PhyRate},
+    he::HeChannelWidthSet,
+    phy::{FecCoding, HeMcs, HtMcs, PhyRate, PpduBandwidth},
     qos::WmmAccessCategory,
 };
 
@@ -52,6 +53,16 @@ impl WidthSet {
         Self(self.0 | other.0)
     }
 
+    /// Whether this set includes a PPDU of `bandwidth`: 20 and 40 MHz are
+    /// the widths a set names.
+    pub const fn contains_bandwidth(self, bandwidth: PpduBandwidth) -> bool {
+        match bandwidth {
+            PpduBandwidth::Mhz20 => self.0 & Self::MHZ20.0 != 0,
+            PpduBandwidth::Mhz40 => self.0 & Self::MHZ40.0 != 0,
+            PpduBandwidth::Mhz80 | PpduBandwidth::Mhz160 => false,
+        }
+    }
+
     /// Whether this set includes the channel geometry `width`.
     pub const fn contains(self, width: ChannelWidth) -> bool {
         let bit = match width {
@@ -59,6 +70,28 @@ impl WidthSet {
             ChannelWidth::Mhz40Above | ChannelWidth::Mhz40Below => Self::MHZ40.0,
         };
         self.0 & bit != 0
+    }
+}
+
+/// A PPDU format.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum PhyFormat {
+    /// Non-HT: DSSS, CCK and OFDM.
+    NonHt,
+    /// High throughput.
+    Ht,
+    /// High efficiency.
+    He,
+}
+
+impl PhyFormat {
+    /// The format of `rate`.
+    pub const fn of_rate(rate: PhyRate) -> Self {
+        match rate {
+            PhyRate::Legacy(_) => Self::NonHt,
+            PhyRate::Ht(_) => Self::Ht,
+            PhyRate::He(_) => Self::He,
+        }
     }
 }
 
@@ -81,14 +114,75 @@ impl PhyFormatSet {
         Self(self.0 | other.0)
     }
 
+    /// The set of `format` alone.
+    pub const fn of(format: PhyFormat) -> Self {
+        match format {
+            PhyFormat::NonHt => Self::NON_HT,
+            PhyFormat::Ht => Self::HT,
+            PhyFormat::He => Self::HE,
+        }
+    }
+
+    /// Whether `format` is in the set.
+    pub const fn contains(self, format: PhyFormat) -> bool {
+        self.0 & Self::of(format).0 != 0
+    }
+
     /// Whether the format of `rate` is in the set.
     pub const fn contains_rate(self, rate: PhyRate) -> bool {
-        let bit = match rate {
-            PhyRate::Legacy(_) => Self::NON_HT.0,
-            PhyRate::Ht(_) => Self::HT.0,
-            PhyRate::He(_) => Self::HE.0,
-        };
-        self.0 & bit != 0
+        self.contains(PhyFormat::of_rate(rate))
+    }
+}
+
+/// The channel widths a backend sends and receives each PPDU format at: the
+/// pairs of a format and a width it offers.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct FormatWidths {
+    /// Non-HT.
+    pub non_ht: WidthSet,
+    /// HT.
+    pub ht: WidthSet,
+    /// HE.
+    pub he: WidthSet,
+}
+
+impl FormatWidths {
+    /// The widths `format` is offered at.
+    pub const fn of(self, format: PhyFormat) -> WidthSet {
+        match format {
+            PhyFormat::NonHt => self.non_ht,
+            PhyFormat::Ht => self.ht,
+            PhyFormat::He => self.he,
+        }
+    }
+
+    /// Every width some format is offered at: the channels the backend
+    /// tunes to.
+    pub const fn channels(self) -> WidthSet {
+        self.non_ht.union(self.ht).union(self.he)
+    }
+
+    /// The Supported Channel Width Set an HE Capabilities element carries
+    /// for HE's widths in `bands`, or `None` where a band's rule cannot say
+    /// them: in the 2.4 GHz band, B0 is 40 MHz; in the 5 GHz band, B1 is 40
+    /// and 80 MHz together, so 40 MHz alone has no encoding, and a set
+    /// naming no band has no element.
+    ///
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3; see
+    /// [`HeChannelWidthSet`].
+    pub const fn he_channel_width_set(self, bands: BandSet) -> Option<HeChannelWidthSet> {
+        let wide = self.he.contains_bandwidth(PpduBandwidth::Mhz40);
+        if bands.0 == 0 {
+            return None;
+        }
+        let mut field = HeChannelWidthSet::MHZ20;
+        if bands.contains(Band::Ghz2_4) && wide {
+            field = field.union(HeChannelWidthSet::GHZ2_4_MHZ40);
+        }
+        if bands.contains(Band::Ghz5) && wide {
+            return None;
+        }
+        Some(field)
     }
 }
 
@@ -119,8 +213,6 @@ pub struct RateSupport {
     pub ht_max_mcs: Option<HtMcs>,
     /// The highest HE SU MCS; `None` without HE.
     pub he_max_mcs: Option<HeMcs>,
-    /// The widest HE PPDU in MHz.
-    pub he_max_bandwidth_mhz: u16,
     /// HE dual carrier modulation.
     pub he_dcm: Support,
     /// LDPC coding of HE PPDUs.
@@ -130,8 +222,9 @@ pub struct RateSupport {
 }
 
 impl RateSupport {
-    /// Whether the backend sends `rate`; bandwidth against the channel is
-    /// checked by [`LowerMacCapabilities::supports_rate`].
+    /// Whether the backend sends `rate`; its bandwidth against the format's
+    /// widths and the channel is checked by
+    /// [`LowerMacCapabilities::supports_rate`].
     pub const fn supports(self, rate: PhyRate) -> bool {
         match rate {
             PhyRate::Legacy(rate) => {
@@ -152,7 +245,6 @@ impl RateSupport {
                 Some(max) => {
                     rate.mcs().index() <= max.index()
                         && rate.spatial_streams().count() <= self.spatial_streams
-                        && rate.bandwidth().mhz() <= self.he_max_bandwidth_mhz
                         && (!rate.dcm() || self.he_dcm.is_supported())
                         && (matches!(rate.fec(), FecCoding::Bcc) || self.he_ldpc.is_supported())
                 }
@@ -217,8 +309,8 @@ impl HardwareServices {
 pub struct LowerMacCapabilities {
     /// Radio bands the backend can tune to.
     pub bands: BandSet,
-    /// Supported channel widths and forty-megahertz geometries.
-    pub widths: WidthSet,
+    /// The widths each PPDU format is offered at.
+    pub formats: FormatWidths,
     /// Transmit rates and their PHY constraints.
     pub rates: RateSupport,
     /// MAC work the backend performs autonomously.
@@ -265,7 +357,7 @@ pub struct LowerMacCapabilities {
 impl LowerMacCapabilities {
     /// Whether the backend tunes to `channel`.
     pub const fn supports_channel(self, channel: Channel) -> bool {
-        self.bands.contains(channel.band()) && self.widths.contains(channel.width())
+        self.bands.contains(channel.band()) && self.formats.channels().contains(channel.width())
     }
 
     /// Whether the backend sends `rate` on `channel`.
@@ -274,6 +366,10 @@ impl LowerMacCapabilities {
             && matches!(rate, PhyRate::Legacy(legacy) if !legacy.is_ofdm());
         self.rates.supports(rate)
             && !dsss_in_5ghz
+            && self
+                .formats
+                .of(PhyFormat::of_rate(rate))
+                .contains_bandwidth(rate.bandwidth())
             && rate.bandwidth().mhz() <= channel.bandwidth_mhz()
     }
 
@@ -292,5 +388,83 @@ impl LowerMacCapabilities {
             VifRole::Station => self.station_receive_filters,
             VifRole::AccessPoint => self.access_point_receive_filters,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_protocols_ieee80211_wire::{
+        channel::Ghz2_4Channel,
+        phy::{Dcm, HeGiLtf, HeRate, HtGuardInterval, HtRate, SpatialStreams},
+    };
+
+    fn capabilities(ht: WidthSet) -> LowerMacCapabilities {
+        LowerMacCapabilities {
+            bands: BandSet::GHZ2_4,
+            formats: FormatWidths {
+                non_ht: WidthSet::MHZ20,
+                ht,
+                he: WidthSet::MHZ20,
+            },
+            rates: RateSupport {
+                dsss_cck: Support::Supported,
+                ofdm: Support::Supported,
+                ht_max_mcs: HtMcs::new(7),
+                he_max_mcs: HeMcs::new(9),
+                he_dcm: Support::Supported,
+                he_ldpc: Support::Supported,
+                spatial_streams: 1,
+            },
+            services: HardwareServices::FCS,
+            vifs: 2,
+            tx_queues: 4,
+            max_mpdu_length: 2304,
+            tx_power_ceiling_min_dbm: Some(0),
+            individual_no_ack: PhyFormatSet::NON_HT,
+            station_receive_filters: ReceiveFilter::BSS_MEMBER,
+            access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
+            rx_block_ack_max_tid: 7,
+            rx_block_ack_max_window: 64,
+            rx_amsdu_in_ampdu: true,
+            edca_max_aifsn: 15,
+            edca_max_cw_exponent: 10,
+            edca_max_txop_limit_units_32_us: u16::MAX,
+        }
+    }
+
+    /// A rate is sent at a bandwidth its format is offered at: on a 40 MHz
+    /// channel, with HT at 20 and 40 MHz and HE at 20 MHz, an HT rate at
+    /// 40 MHz is sent and an HE rate at 40 MHz is not; with HT at 20 MHz
+    /// only, neither is.
+    #[test]
+    fn a_rate_is_sent_at_the_widths_of_its_format() {
+        let channel = Channel::from(Ghz2_4Channel::new(6, ChannelWidth::Mhz40Above).unwrap());
+        let ht = PhyRate::Ht(
+            HtRate::new(
+                HtMcs::new(7).unwrap(),
+                PpduBandwidth::Mhz40,
+                HtGuardInterval::Normal,
+            )
+            .unwrap(),
+        );
+        let he = PhyRate::He(
+            HeRate::new(
+                HeMcs::new(7).unwrap(),
+                SpatialStreams::ONE,
+                PpduBandwidth::Mhz40,
+                HeGiLtf::Ltf2xGi800Ns,
+                FecCoding::Bcc,
+                Dcm::NotUsed,
+            )
+            .unwrap(),
+        );
+        let wide = capabilities(WidthSet::MHZ20.union(WidthSet::MHZ40));
+        assert!(wide.supports_channel(channel));
+        assert!(wide.supports_rate(ht, channel));
+        assert!(!wide.supports_rate(he, channel));
+        let narrow = capabilities(WidthSet::MHZ20);
+        assert!(!narrow.supports_rate(ht, channel));
+        assert!(!narrow.supports_rate(he, channel));
     }
 }

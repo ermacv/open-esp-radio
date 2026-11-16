@@ -6,13 +6,16 @@
 
 use crate::mac::capabilities::ESP32S31_MAC_SERVICE_CAPABILITIES;
 use crate::ordinary_tx::{TX_CCMP_MIC_SIZE, TX_FCS_SIZE, TX_METADATA_SIZE};
-use oer_chips_esp32s31_hal::types::{MacHe20Association, MacHeBssColor, MacPti, StaTbttSchedule};
+use oer_chips_esp32s31_hal::types::{MacHeAssociation, MacHeBssColor, MacPti, StaTbttSchedule};
 use oer_protocols_ieee80211_contracts_port::{
-    BandSet, BeaconTimingCapabilities, BssColorScope, BssColorUse, ConnectionFrame, LinkMetric,
-    LowerMacCapabilities, PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, RxMeta, RxMetadata,
-    SignalMetadata, VifRoleSet, WidthSet,
+    BandSet, BeaconTimingCapabilities, BssColorScope, BssColorUse, ConnectionFrame, FormatWidths,
+    LinkMetric, LowerMacCapabilities, PhyFormatSet, RateSupport, ReceiveFilter, RxEvidence, RxMeta,
+    RxMetadata, SignalMetadata, VifRoleSet, WidthSet,
 };
-use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
+use oer_protocols_ieee80211_wire::{
+    he::HeChannelWidthSet,
+    phy::{HeMcs, HtMcs},
+};
 
 pub mod ampdu;
 pub use ampdu::{
@@ -92,6 +95,28 @@ impl SignalMetadata for Esp32s31RxMeta {
 /// What the ESP32-S31 lower MAC accepts through this core, with TX slots of
 /// `buffer_size` bytes.
 ///
+/// The bands the ESP32-S31 tunes to: 5 GHz is absent from it.
+pub const ESP32S31_BANDS: BandSet = BandSet::GHZ2_4;
+
+/// The widths the ESP32-S31 offers each PPDU format at: non-HT at 20 MHz,
+/// HT at 20 and 40 MHz, HE at 20 MHz. The one fact of the backend's
+/// capabilities and of the HE element a station of it advertises
+/// ([`ESP32S31_HE_CHANNEL_WIDTH_SET`]).
+pub const ESP32S31_FORMAT_WIDTHS: FormatWidths = FormatWidths {
+    non_ht: WidthSet::MHZ20,
+    ht: WidthSet::MHZ20.union(WidthSet::MHZ40),
+    he: WidthSet::MHZ20,
+};
+
+/// The Supported Channel Width Set of the ESP32-S31's HE Capabilities
+/// element, from [`ESP32S31_FORMAT_WIDTHS`] in [`ESP32S31_BANDS`].
+pub const ESP32S31_HE_CHANNEL_WIDTH_SET: HeChannelWidthSet = match ESP32S31_FORMAT_WIDTHS
+    .he_channel_width_set(ESP32S31_BANDS)
+{
+    Some(field) => field,
+    None => panic!("the ESP32-S31's HE widths have no Supported Channel Width Set in its bands"),
+};
+
 /// The rates are those `TxPhyRate::try_from(PhyRate)` accepts: DSSS/CCK and
 /// OFDM, HT MCS 0-7 at 20 and 40 MHz, and HE SU MCS 0-9 at 20 MHz with BCC
 /// or LDPC and DCM; the DCM MCS limits are checked at submission. The
@@ -112,14 +137,14 @@ pub const fn esp32s31_lower_mac_capabilities(buffer_size: usize) -> LowerMacCapa
         programmable
     };
     LowerMacCapabilities {
-        bands: BandSet::GHZ2_4,
-        widths: WidthSet::MHZ20.union(WidthSet::MHZ40),
+        bands: ESP32S31_BANDS,
+        formats: ESP32S31_FORMAT_WIDTHS,
         rates: RateSupport {
             dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported,
             ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
             ht_max_mcs: HtMcs::new(7),
             he_max_mcs: HeMcs::new(9),
-            he_max_bandwidth_mhz: 20,
+
             he_dcm: oer_protocols_ieee80211_contracts_port::Support::Supported,
             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported,
             spatial_streams: 1,
@@ -221,11 +246,11 @@ pub trait RxBeaconPriorityHardware {
 pub trait StaHeHardware {
     /// Begin an HE BSS's connection before authentication: HE BSSID
     /// matching, the color bitmap cleared, the scanned BSS color.
-    fn connect_he20_bss(&mut self, color: MacHeBssColor, enabled: bool, partial: bool);
+    fn connect_he_bss(&mut self, color: MacHeBssColor, enabled: bool, partial: bool);
     /// Install the interface-zero HE20 association in the vendor's order.
-    fn install_he20_association(&mut self, association: MacHe20Association);
+    fn install_he_association(&mut self, association: MacHeAssociation);
     /// Remove the interface-zero HE association.
-    fn clear_he20_association(&mut self);
+    fn clear_he_association(&mut self);
 }
 
 /// An HE setting whose values the MAC's fields do not hold; the port
@@ -239,22 +264,22 @@ pub struct HeAssociationRange;
 /// The contract's AID (1..=2007), MMSS code (0..=7), padding (0..=16 us),
 /// default PE code (0..=7) and color (0..=63) lie within the MAC's fields, which the
 /// inline check below proves for each maximum.
-pub fn mac_he20_association(
-    association: &oer_protocols_ieee80211_contracts_port::He20Association,
-) -> Result<MacHe20Association, HeAssociationRange> {
+pub fn mac_he_association(
+    association: &oer_protocols_ieee80211_contracts_port::HeAssociation,
+) -> Result<MacHeAssociation, HeAssociationRange> {
     use oer_chips_esp32s31_hal::types::{
-        MacAssociationId, MacHe20PeerConfig, MacHeBssColor, MacHeDefaultPacketExtensionDuration,
-        MacHePacketPaddingDuration, MacMinimumMpduStartSpacing,
+        MacAssociationId, MacHeBssColor, MacHeDefaultPacketExtensionDuration,
+        MacHePacketPaddingDuration, MacHePeerConfig, MacMinimumMpduStartSpacing,
     };
-    use oer_protocols_ieee80211_contracts_port::He20Association;
+    use oer_protocols_ieee80211_contracts_port::HeAssociation;
     const {
-        if (He20Association::MAX_ASSOCIATION_ID as u32) > MacAssociationId::MAX
+        if (HeAssociation::MAX_ASSOCIATION_ID as u32) > MacAssociationId::MAX
             || MacAssociationId::MIN > 1
-            || (He20Association::MAX_MINIMUM_MPDU_START_SPACING as u32)
+            || (HeAssociation::MAX_MINIMUM_MPDU_START_SPACING as u32)
                 > MacMinimumMpduStartSpacing::MAX
-            || (He20Association::MAX_PACKET_PADDING_EIGHT_US as u32) * 8
+            || (HeAssociation::MAX_PACKET_PADDING_EIGHT_US as u32) * 8
                 > MacHePacketPaddingDuration::MAX
-            || (He20Association::MAX_DEFAULT_PACKET_EXTENSION as u32)
+            || (HeAssociation::MAX_DEFAULT_PACKET_EXTENSION as u32)
                 > MacHeDefaultPacketExtensionDuration::MAX
             || MacHeBssColor::MAX < 63
         {
@@ -262,8 +287,8 @@ pub fn mac_he20_association(
         }
     }
     let (color, color_enabled, partial_color) = association.color().get();
-    Ok(MacHe20Association {
-        peer: MacHe20PeerConfig {
+    Ok(MacHeAssociation {
+        peer: MacHePeerConfig {
             packet_padding_duration: MacHePacketPaddingDuration::new(
                 u32::from(association.packet_padding_eight_us()) * 8,
             )

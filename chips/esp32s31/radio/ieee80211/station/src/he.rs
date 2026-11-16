@@ -65,14 +65,17 @@ pub(crate) const HE20_HT: [u8; 28] = ht_capability_ie(
 // `esp_wifi_set_tf_padding_duration` admits 0..2) and Nominal Packet Padding
 // 16 us (the vendor default element, PHY byte 9 bits 7:6 = 2). Field
 // positions: IEEE Std 802.11ax-2021, 9.4.2.248.2 and .3, as Linux cites them.
-pub(crate) const HE20: [u8; 24] = he_capability_ie(HeLocalCapabilities {
-    mac: HeMacCapabilities::from_bytes([0; 6])
-        .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US),
-    phy: HePhyCapabilities::from_bytes([0; 11])
-        .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US),
-    receive: HeMcsNssSupport::Mcs0To9,
-    transmit: HeMcsNssSupport::Mcs0To9,
-});
+pub(crate) const HE20: [u8; 24] = he_capability_ie(
+    HeLocalCapabilities {
+        mac: HeMacCapabilities::from_bytes([0; 6])
+            .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US),
+        phy: HePhyCapabilities::from_bytes([0; 11])
+            .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US),
+        receive: HeMcsNssSupport::Mcs0To9,
+        transmit: HeMcsNssSupport::Mcs0To9,
+    },
+    oer_chips_esp32s31_radio_ieee80211_backend::facts::ESP32S31_HE_CHANNEL_WIDTH_SET,
+);
 // No Extended Capabilities element beside HE20: this station claims none
 // of its capabilities. The vendor's HE station path sets Event, Multiple
 // BSSID and TWT Requester (`libnet80211.a[ieee80211_output.o]::

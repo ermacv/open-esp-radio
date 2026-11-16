@@ -170,7 +170,7 @@ pub struct StaAssociatedPeer {
     pub he_bss_color: u8,
     /// What the station's MAC follows of an HE association: its peer
     /// state, the AID and the access point's minimum MPDU start spacing.
-    pub he_association: Option<oer_protocols_ieee80211_contracts_port::He20Association>,
+    pub he_association: Option<oer_protocols_ieee80211_contracts_port::HeAssociation>,
     /// The protection facts of the BSS the transmitter's planner applies.
     pub protection: oer_protocols_ieee80211_core_upper_mac::protection::BssProtection,
     /// The EDCA parameters the station's interface contends with: those
@@ -209,7 +209,7 @@ pub enum StaAssociatedPeerError {
     HeElementsUnusable,
     /// An HE association whose AID or HE parameters lie outside their
     /// fields.
-    HeAssociation(oer_protocols_ieee80211_contracts_port::He20AssociationError),
+    HeAssociation(oer_protocols_ieee80211_contracts_port::HeAssociationError),
 }
 
 impl StaAssociatedPeerError {
@@ -309,7 +309,7 @@ impl StaAssociatedPeer {
         // the AID to `hal_he_set_mmss_and_aid`.
         let he_association = match he_peer_state {
             Some(state) => Some(
-                oer_protocols_ieee80211_contracts_port::He20Association::new(
+                oer_protocols_ieee80211_contracts_port::HeAssociation::new(
                     &state,
                     response.association_id,
                     (ht_ampdu_parameters >> 2) & 0x07,

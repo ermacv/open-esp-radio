@@ -112,7 +112,7 @@ impl HeRate {
     ///
     /// The packet extension is an upper bound. `T_PE` follows the receiver's
     /// nominal packet padding, which the hardware takes from the HE packet
-    /// padding register that only `program_he20_peer` writes, and no
+    /// padding register that only `program_he_peer` writes, and no
     /// backend path calls it; the hardware's value is unknown. A 16-us
     /// nominal padding, the largest an HE PPDU admits, gives `T_PE = 4a` us,
     /// which bounds every smaller nominal padding at each `a`, so the

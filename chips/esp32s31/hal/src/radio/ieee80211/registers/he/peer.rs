@@ -15,7 +15,7 @@ use crate::radio::ieee80211::registers::{
 /// `libpp.a[hal_mac_ctl.o]` leaves. The protocol crate owns parsing;
 /// this type keeps the chip-specific register transform inside the HAL.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHe20PeerConfig {
+pub struct MacHePeerConfig {
     pub packet_padding_duration: MacHePacketPaddingDuration,
     pub default_packet_extension_duration: MacHeDefaultPacketExtensionDuration,
     /// The Association Response's BSS color, whether it is enabled and
@@ -33,8 +33,8 @@ pub struct MacHe20PeerConfig {
 /// station's association identifier and the access point's minimum MPDU
 /// start spacing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MacHe20Association {
-    pub peer: MacHe20PeerConfig,
+pub struct MacHeAssociation {
+    pub peer: MacHePeerConfig,
     pub association_id: MacAssociationId,
     pub minimum_mpdu_start_spacing: MacMinimumMpduStartSpacing,
 }
@@ -169,7 +169,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// `hal_mac_color_clr_bitmap()`, then `hal_he_set_bss_color(0, enabled,
     /// color, partial)` from the scanned HE Operation's BSS Color
     /// Information.
-    pub fn connect_he20_bss(&mut self, color: MacHeBssColor, enabled: bool, partial: bool) {
+    pub fn connect_he_bss(&mut self, color: MacHeBssColor, enabled: bool, partial: bool) {
         self.initialize_interface_zero_he_bssid();
         self.clear_he_color_bitmap();
         self.set_interface_zero_he_bss_color(enabled, color.get(), partial);
@@ -182,7 +182,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// +0x3c..0x27a), then the node's setup
     /// (`libnet80211.a[wl_cnx.o]::ic_set_sta` +0x13c..0x170: MMSS and AID,
     /// packet padding, BSR initialization). HE BSSID matching is
-    /// [`Self::connect_he20_bss`]'s, before authentication.
+    /// [`Self::connect_he_bss`]'s, before authentication.
     ///
     /// The color is the response's, always: `ieee80211_parse_heopr`
     /// +0x3c..0x62 writes it (`hal_he_set_bss_color(0, !b7, b5:0, b6)`)
@@ -199,8 +199,8 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// (`ic_set_sta` passes node byte 899; the station never enables
     /// Multiple BSSID, so `hal_he_set_mmss_and_aid` passes 0 for the low
     /// value).
-    pub fn install_he20_association(&mut self, association: MacHe20Association) {
-        let MacHe20Association {
+    pub fn install_he_association(&mut self, association: MacHeAssociation) {
+        let MacHeAssociation {
             peer,
             association_id,
             minimum_mpdu_start_spacing,
@@ -302,7 +302,7 @@ impl<M: MacPlacement> WifiRadioRegisters<M> {
     /// then `hal_he_set_bss_color(0, 0, 0, 0)`. The vendor leaves the AID,
     /// the broadcast RU, BSR and padding state of an earlier association in
     /// place; this does too.
-    pub fn clear_he20_association(&mut self) {
+    pub fn clear_he_association(&mut self) {
         self.mac
             .wifi_mac_he_init_suffix
             .modify_multi_bssid_control(|w| {

@@ -467,7 +467,7 @@ fn an_he_join_sets_its_bss_before_authentication_and_its_association_before_its_
             )
         });
         let edca = position(&seen, |seen| matches!(seen, Seen::Edca(_)));
-        let association = position(&seen, |seen| matches!(seen, Seen::He(StationHe::He20(_))));
+        let association = position(&seen, |seen| matches!(seen, Seen::He(StationHe::He(_))));
         let connected = position(&seen, |seen| {
             matches!(seen, Seen::Notify(StaNotice::Connected { .. }))
         });
@@ -481,7 +481,7 @@ fn an_he_join_sets_its_bss_before_authentication_and_its_association_before_its_
         );
         let settings = he_settings(&seen);
         assert_eq!(settings.len(), 2, "{seen:?}");
-        let StationHe::He20(association) = settings[1] else {
+        let StationHe::He(association) = settings[1] else {
             panic!("the association: {seen:?}");
         };
         // The response's AID (0xc02a less its two top bits), the access
@@ -528,7 +528,7 @@ fn he_then_ht_then_he_sets_each_bss_and_association_and_ends_each() {
         assert!(
             matches!(
                 first[..],
-                [StationHe::Bss(_), StationHe::He20(_), StationHe::Off]
+                [StationHe::Bss(_), StationHe::He(_), StationHe::Off]
             ),
             "{first:?}"
         );
@@ -550,7 +550,7 @@ fn he_then_ht_then_he_sets_each_bss_and_association_and_ends_each() {
         assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::He20);
         let again = he_settings(&world.take());
         assert!(
-            matches!(again[..], [StationHe::Bss(_), StationHe::He20(_)]),
+            matches!(again[..], [StationHe::Bss(_), StationHe::He(_)]),
             "{again:?}"
         );
     });
@@ -619,7 +619,7 @@ fn the_association_carries_the_response_s_color_over_the_scan_s() {
         operation[6] = 5;
         world.receive(at(31), &response(&[&HE_CAPABILITY, &operation]));
         let settings = he_settings(&world.take());
-        let [StationHe::Bss(scanned), StationHe::He20(association)] = settings[..] else {
+        let [StationHe::Bss(scanned), StationHe::He(association)] = settings[..] else {
             panic!("the BSS and the association: {settings:?}");
         };
         assert_eq!(scanned.get().0, BssColor::new(27).unwrap());
