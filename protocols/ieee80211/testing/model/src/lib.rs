@@ -94,6 +94,10 @@ pub const MODEL_AMPDU_LENGTH: u32 = 6_500;
 /// long guard interval, where one frame of the longest MPDU fits and two
 /// do not.
 pub const MODEL_SHORT_AMPDU_MCS: u8 = 7;
+// The table's entry below is the eighth MCS: the two say the same rate.
+const _: () = if MODEL_SHORT_AMPDU_MCS != 7 {
+    panic!("the short entry of the table is MCS 7")
+};
 
 /// The A-MPDU length at [`MODEL_SHORT_AMPDU_MCS`].
 pub const MODEL_SHORT_AMPDU_LENGTH: u32 = 3_000;
@@ -101,7 +105,8 @@ pub const MODEL_SHORT_AMPDU_LENGTH: u32 = 3_000;
 /// The model's A-MPDU lengths.
 pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = {
     let mut ht = [[[MODEL_AMPDU_LENGTH; 32]; 2]; 2];
-    ht[0][0][MODEL_SHORT_AMPDU_MCS as usize] = MODEL_SHORT_AMPDU_LENGTH;
+    let [[[_, _, _, _, _, _, _, seven, ..], _], _] = &mut ht;
+    *seven = MODEL_SHORT_AMPDU_LENGTH;
     AmpduLengthTable {
         ht,
         he: [[[MODEL_AMPDU_LENGTH; 12]; 3]; 4],
