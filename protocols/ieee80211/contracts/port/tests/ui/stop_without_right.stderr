@@ -1,31 +1,15 @@
-error[E0061]: this method takes 3 arguments but 2 arguments were supplied
-  --> tests/ui/stop_without_right.rs:12:25
-   |
-12 |     let _unasked = port.poll_stop(cx, now); // ui-error: E0061
-   |                         ^^^^^^^^^ -- argument #1 of type `&mut StopRight<'id>` is missing
-   |
+error[E0061]: this method takes 2 arguments but 1 argument was supplied
+ --> tests/ui/stop_without_right.rs:5:25
+  |
+5 |     let _unasked = port.stop(running); // ui-error: E0061
+  |                         ^^^^ ------- argument #1 of type `&mut StopRight<'id>` is missing
+  |
 note: method defined here
-  --> src/data_port.rs
-   |
-   |     fn poll_stop(
-   |        ^^^^^^^^^
+ --> src/life.rs
+  |
+  |     fn stop(&mut self, right: &mut StopRight<'id>, from: impl Into<Stopping<'id>>)
+  |        ^^^^
 help: provide the argument
-   |
-12 |     let _unasked = port.poll_stop(/* &mut StopRight<'id> */, cx, now); // ui-error: E0061
-   |                                   ++++++++++++++++++++++++++
-
-error[E0061]: this method takes 1 argument but 0 arguments were supplied
-  --> tests/ui/stop_without_right.rs:14:29
-   |
-14 |     let _unrecovered = port.recover_for_stop(); // ui-error: E0061
-   |                             ^^^^^^^^^^^^^^^^-- argument #1 of type `&mut StopRight<'id>` is missing
-   |
-note: method defined here
-  --> src/data_port.rs
-   |
-   |     fn recover_for_stop(
-   |        ^^^^^^^^^^^^^^^^
-help: provide the argument
-   |
-14 |     let _unrecovered = port.recover_for_stop(/* &mut StopRight<'id> */); // ui-error: E0061
-   |                                              +++++++++++++++++++++++++
+  |
+5 |     let _unasked = port.stop(/* &mut StopRight<'id> */, running); // ui-error: E0061
+  |                              ++++++++++++++++++++++++++

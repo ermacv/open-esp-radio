@@ -35,67 +35,30 @@
 
 //! The IEEE 802.11 lower-MAC radio port.
 //!
-//! The port is the contract between portable Wi-Fi MAC logic and the
-//! backend that puts frames on the air, whether a chip, a family driver or
-//! a host model. One actor owns the radio as a [`DataPort`], the shared
-//! physical owner, and runs the station lifecycle's [`PortCommand`]s and
-//! the access point's [`AccessPointCommand`]s ([`AccessPointPort`]) in its
-//! turns.
-//! One submitted operation owns its context, ticket and MPDU until its
-//! terminal. The backend executes the retry plan; a barrier waits for the
-//! current publication alone. Portable code selects rates and describes
-//! frames, while the backend numbers and publishes them. The services it
-//! performs autonomously are its [`LowerMacCapabilities::services`].
+//! The port is the boundary between a chip's port and the sans-IO cores
+//! (the installation machine, the engine), as
+//! `design/port-contract-2026-11-16.md` of the notes repository sets it:
+//! the radio's life ([`life`]: start, retune, stop, retire, release), the
+//! data path ([`data`]: aggregates as places filled and published once, a
+//! single a place a purpose, commands) and receive as a round
+//! ([`receive`]). No call returns an error of the port and the contract
+//! has no fault type; a call that needs a state takes its right, which
+//! only this crate builds, and the port's facts carry its one indication,
+//! that it needs a stop.
 //!
-//! The values that cross the port (attempts, settings, key installs,
-//! A-MPDU and beacon timing values, outcomes and the backend's service
-//! description) live beside it ([`tx`], [`control`], [`extensions`],
-//! [`contract`], [`monitor`]). Data frames go out on the two DMA arenas of
-//! [`TxArena`] ([`arena`]). Codecs, policy, vendor records and chip
-//! models live in the layers that own them.
-//!
-//! The PHY and channel values the port carries ([`Channel`], [`PhyRate`])
-//! are the portable ones of `oer-protocols-ieee80211-wire`. This package only declares
-//! the port and its values; it never waits on it.
+//! The values that cross the port (rates, frames, settings, outcomes and
+//! the backend's service description) live beside it ([`tx`],
+//! [`control`], [`extensions`], [`contract`]). The PHY and channel values
+//! it carries ([`Channel`], [`PhyRate`]) are the portable ones of
+//! `oer-protocols-ieee80211-wire`. This package only declares the port and
+//! its values; it never waits on it.
 
-mod in_flight;
-pub use in_flight::{
-    Admission, AdmissionOwners, BodyPayload, Completed, ExecutionPayload, InFlight, OwnedPayload,
-    TerminalAccess, TerminalParts, TransmitPool, TxMpdu,
-};
-
-mod issued;
-pub use issued::{IssuedSlot, IssuedSlots, SlotGrant, first_stale};
 pub mod access_point;
 pub use access_point::{
-    AccessPointCapabilities, AccessPointCommand, AccessPointCommandFailed, AccessPointCommandKind,
-    AccessPointCommands, AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress,
-    AccessPointReceive, AccessPointRefusal, AccessPointServices, AccessPointSubmission,
-    AccessPointTypes, AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant,
-    BeaconParts, BeaconPermission, BeaconPool, BeaconStamp, BeaconSubmission, BeaconTimestamp,
-    SealedBeaconParts, SupportedTsfControl, TsfControl,
+    AccessPointCapabilities, AccessPointReceive, AccessPointServices, BEACON_ACCESS_CATEGORY,
+    BeaconStamp, BeaconTimestamp, SupportedTsfControl, TsfControl,
 };
-pub mod arena;
-pub use arena::{
-    ARENA_FRAMES, Arena, ArenaCompleted, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd,
-    CompletedOf, Completion, CompletionOf, FrameIndex, FrameIter, FrameMask, IntakeRefused,
-    PublishError, PublishRefused, RetainError, RetainErrorOf, Settlement, TxArena,
-};
-pub mod association;
 pub mod capabilities;
-mod command;
-pub use command::{CommandKind, CommandTypes, PairwiseIssue, PortCommand, PortCommands};
-mod data_port;
-pub use data_port::{
-    CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, PortArena,
-    PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink, RxPull, Signal,
-    StartFailure, StationSubmission, StopCause, SubmitRefusal, TxFacts,
-};
-mod layout;
-pub use layout::{
-    CheckedTxSource, FreshSource, LaidOut, LayoutError, LayoutRefused, MpduKind, MpduLayout,
-    MpduProtection,
-};
 pub mod control;
 pub mod extensions;
 pub mod he;
@@ -167,42 +130,19 @@ pub use owner::{
     AccessPoint, AckHeader, AmpduRate, BssColor, FrameHeader, GroupAddress, HeaderSpec,
     Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
     NoAckHeader, PortRate, QosBody, QosControl, ReceiverAddress, ResponseHeader, ServicePeriod,
-    SizedFrame, Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca,
-    SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
-};
-pub mod installation;
-pub mod outstanding;
-pub use installation::{
-    FaultKept, ProofRefused, Recovered, ReinstallRefused, ReleaseRefused, Retired, StaleProof,
-    StartPoll, StartProgress, StartProof, StartRefused, Starting, StateSerial, StopRight,
-    StopUnconfirmed, Stopped,
-};
-pub use outstanding::{ACCESS_CATEGORIES, ArenaState, Outstanding, RunPhase};
-mod interface_commands;
-pub use interface_commands::{
-    ConfigurePermission, Configured, InterfaceCommandPool, InterfaceGrant, InterfacePermissions,
+    SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck, SupportedChannel,
+    SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub use rx::{
-    AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, ReceiveAccounting,
-    ReceiveOperation, RecycleRefused, RxBuffer, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata,
-    SignalMetadata,
+    LinkMetric, ReceiveOperation, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata,
 };
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
-    Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody,
-    TxEstimate, TxOutcome, TxPower, TxResponse, TxStatus, WithdrawCause,
+    Protection, RETRY_STAGES, RateSample, RetryPlan, RetryStage, SingleEnd, SingleOutcome,
+    SingleResponse, SnrSample, TxBody, TxEstimate, TxOutcome, TxPower, TxResponse, TxStatus,
+    WithdrawCause,
 };
-pub use types::{
-    AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt, AttemptKey,
-    BufferMemoryUnavailable, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed,
-    GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
-    NETWORK_MPDU_LEN, NETWORK_MSDU_PAYLOAD, NetworkCapacity, NetworkFrames, NetworkTxBuffer,
-    PoolMpdu, PoolPreparation, PoolSource, PortBlockAckSlot, PortSingleOutcome, PortTypes,
-    PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
-    RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
-    TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxCompleted, TxNetworkPool,
-    TxProtection, TxSource,
-};
+pub use types::{ArbiterAuthority, ArbiterPool, GateClosed, GateIssuer, GateOpen, GatePool};
 
 #[cfg(test)]
 extern crate alloc;
@@ -237,6 +177,20 @@ pub use monitor::{
 };
 
 pub mod backend;
+pub mod data;
 pub mod life;
+pub mod receive;
 
-pub use types::NumberedKey;
+pub use data::{
+    Agreement, AgreementSlot, Arena, ArenaSide, Command, CommandEnd, CommandPlace, CommandPoll,
+    Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet, GroupSlot, HEADROOM,
+    HeaderLen, IdleArena, InCommand, InFlight, InstalledGroup, InstalledPairwise, OnAir,
+    PairwiseSlot, Place, PortSink, QUEUES, QueueRight, Settled, Signal, SinglePlace, TxFacts,
+};
+pub use life::{
+    Install, MintData, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning, Running,
+    StartFailure, StartPoll, Starting, StopPoll, StopRight, Stopped, Stopping, UnitsHome,
+};
+pub use receive::{
+    Lendable, ReceivePort, Received, Rest, Round, RxHeader, Staged, StagedPlaces, Unit, UnitHandle,
+};

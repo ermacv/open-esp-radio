@@ -1,7 +1,6 @@
 //! Receive metadata of one MPDU.
 
 use crate::Ieee80211Stamp;
-use oer_protocols_ieee80211_wire::frame::DecodedHeader;
 use oer_protocols_ieee80211_wire::{channel::Channel, phy::PhyRate};
 
 /// Provenance of one receive value.
@@ -62,107 +61,11 @@ pub enum RxCryptoStatus {
     DecryptedAndIntegrityVerified,
 }
 
-/// The backend's memory of one received MPDU, lent with its pull: the MPDU
-/// from its header to the end of its body, without the FCS.
-///
-/// The consumer owns it until it passes the buffer to
-/// [`DataPort::recycle`](crate::DataPort::recycle). Dropping it does
-/// not satisfy that protocol; the host model poisons its installation on an
-/// unrecycled drop. A DMA backend can lend the receive buffer itself without
-/// copying the frame. A retained buffer occupies receive capacity, so an
-/// owner that needs longer storage may copy the frame and recycle this buffer.
-pub trait RxBuffer {
-    /// Borrow the MPDU bytes while retaining ownership of its receive buffer.
-    fn bytes(&self) -> &[u8];
-
-    /// The MPDU's MAC header over [`Self::bytes`], as
-    /// [`DecodedHeader::decode`] would decode it, `None` alike. A buffer
-    /// may decode it once when it takes the frame and give it again here,
-    /// for its own bytes only: no reader decodes the variable layout again.
-    fn header(&self) -> Option<DecodedHeader<'_>>;
-}
-
-/// A received buffer moved out of the port's receive capacity to a network
-/// owner ([`DataPort::lend`](crate::DataPort::lend)).
-///
-/// The storage starts at the MPDU's first byte, as [`RxBuffer::bytes`] lent
-/// it, and continues to the end of its allocation; every byte is
-/// initialized. The owner may rewrite it in place. Dropping the owner
-/// returns the memory to the backend, which counts the buffer as held by
-/// the network until then; the drop happens in a task, never in an
-/// interrupt handler.
-pub trait LentRxBuffer: Send + 'static {
-    /// The MPDU, then the rest of its allocation.
-    fn storage(&self) -> &[u8];
-    /// [`Self::storage`], mutably.
-    fn storage_mut(&mut self) -> &mut [u8];
-    /// The MPDU's length at the start of the storage.
-    fn mpdu_len(&self) -> usize;
-    /// Start the storage `by` bytes later, inside the MPDU, which shortens
-    /// by as much. A step past the MPDU is refused and changes nothing.
-    fn advance(&mut self, by: usize) -> Result<(), AdvanceRefused>;
-}
-
-/// A refused [`LentRxBuffer::advance`]: the step does not fit the MPDU.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AdvanceRefused {
-    /// The requested step.
-    pub by: usize,
-    /// The MPDU's length then.
-    pub mpdu_len: usize,
-}
-
-/// Why a backend kept a receive buffer instead of lending it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum LendRefusal {
-    /// The backend's buffers cannot leave its receive capacity.
-    Unsupported,
-    /// The network already holds every buffer the backend lends.
-    Capacity,
-    /// The installation is stopping or stopped; it lends nothing more.
-    Stopping,
-}
-
-/// A refused [`DataPort::lend`](crate::DataPort::lend): the
-/// unchanged buffer, still owed to
-/// [`DataPort::recycle`](crate::DataPort::recycle), and why.
-#[derive(Debug)]
-pub struct LendRefused<B> {
-    /// The buffer, unchanged.
-    pub buffer: B,
-    /// Why it was kept.
-    pub reason: LendRefusal,
-}
-
 /// The receive operation whose count did not hold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReceiveOperation {
     /// [`DataPort::recycle`](crate::DataPort::recycle).
     Recycle,
-}
-
-/// A receive count that did not hold: `operation` would return
-/// `requested` units while the port held `held` of the caller's.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ReceiveAccounting {
-    /// The operation the port refused.
-    pub operation: ReceiveOperation,
-    /// The caller's units the port held then.
-    pub held: usize,
-    /// The units the operation would return.
-    pub requested: usize,
-}
-
-/// A refused [`DataPort::recycle`](crate::DataPort::recycle): the port
-/// took nothing and recorded no fault. The unit comes back unchanged, and
-/// its count says why; a later recycle of the same unit is no repair, so
-/// its caller keeps it and ends with the refusal.
-#[derive(Debug)]
-pub struct RecycleRefused<B> {
-    /// The unit, unchanged.
-    pub unit: B,
-    /// The count that refused it.
-    pub fault: ReceiveAccounting,
 }
 
 /// The metadata a backend gives a received MPDU: the portable fields

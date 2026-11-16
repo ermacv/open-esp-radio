@@ -38,12 +38,6 @@ macro_rules! right {
         pub struct $name<'id> {
             brand: Brand<'id>,
         }
-
-        impl<'id> $name<'id> {
-            const fn new() -> Self {
-                Self { brand: PhantomData }
-            }
-        }
     };
 }
 
@@ -155,7 +149,7 @@ impl<'id> PortKey<'id> {
 
     /// The network returned every unit it held.
     pub const fn units_home(&self) -> UnitsHome<'id> {
-        UnitsHome::new()
+        UnitsHome { brand: PhantomData }
     }
 
     /// The installation is retired.
@@ -180,8 +174,8 @@ impl<'id> PortKey<'id> {
 pub const fn forge<'id>() -> (PortKey<'id>, Stopped<'id>, StopRight<'id>) {
     (
         PortKey { brand: PhantomData },
-        Stopped::new(),
-        StopRight::new(),
+        Stopped { brand: PhantomData },
+        StopRight { brand: PhantomData },
     )
 }
 
@@ -266,8 +260,8 @@ impl<D: MintData> PoolSet for PortPools<D> {
         let (gate, issuer) = builder.into_pools::<GatePool>();
         Install {
             key: PortKey { brand: PhantomData },
-            stopped: Stopped::new(),
-            right: StopRight::new(),
+            stopped: Stopped { brand: PhantomData },
+            right: StopRight { brand: PhantomData },
             data: D::mint(),
             gate,
             issuer,

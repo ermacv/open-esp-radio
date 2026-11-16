@@ -10,11 +10,11 @@ impl PoolSet for Wrapped {
     }
 }
 
-pub fn close<'id>(mint: Mint<'id, Wrapped>) {
-    let ((first, mut issuer), ((nested, _),)) = mint.into_pools();
+pub fn open<'id>(mint: Mint<'id, Wrapped>) {
+    let ((first, issuer), ((nested, _),)) = mint.into_pools();
     #[cfg(ui_reject)]
-    let closed = issuer.close(nested); // ui-error: E0308
+    let open = issuer.open(nested); // ui-error: E0308
     #[cfg(not(ui_reject))]
-    let closed = issuer.close(first);
-    let _open = issuer.open(closed);
+    let open = issuer.open(first);
+    let _closed = issuer.close(open);
 }

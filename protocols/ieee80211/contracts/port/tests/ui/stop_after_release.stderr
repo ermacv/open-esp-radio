@@ -1,23 +1,22 @@
 error[E0382]: borrow of moved value: `right`
-  --> tests/ui/stop_after_release.rs:15:33
+  --> tests/ui/stop_after_release.rs:11:28
    |
- 8 |     mut right: StopRight<'id>,
-   |     --------- move occurs because `right` has type `StopRight<'_>`, which does not implement the `Copy` trait
-...
-13 |     drop(port.release(retired, right));
+ 7 |     right: StopRight<'id>,
+   |     ----- move occurs because `right` has type `StopRight<'_>`, which does not implement the `Copy` trait
+ 8 | ) {
+ 9 |     drop(port.release(retired, right));
    |                                ----- value moved here
-14 |     #[cfg(all())]
-15 |     let _after = port.poll_stop(&mut right, cx, now); // ui-error: E0382
-   |                                 ^^^^^^^^^^ value borrowed here after move
+10 |     #[cfg(all())]
+11 |     let _after = port.stop(&mut right, running); // ui-error: E0382
+   |                            ^^^^^^^^^^ value borrowed here after move
 
-error[E0382]: borrow of moved value: `right`
-  --> tests/ui/stop_after_release.rs:21:40
+error[E0596]: cannot borrow `right` as mutable, as it is not declared as mutable
+  --> tests/ui/stop_after_release.rs:11:28
    |
-17 | pub fn recover<'id, P: DataPort<'id>>(port: &mut P, retired: Retired<'id>, mut right: StopRight<'id>) {
-   |                                                                            --------- move occurs because `right` has type `StopRight<'_>`, which does not implement the `Copy` trait
-18 |     let _recovered = port.recover_for_stop(&mut right);
-19 |     drop(port.release(retired, right));
-   |                                ----- value moved here
-20 |     #[cfg(all())]
-21 |     let _after = port.recover_for_stop(&mut right); // ui-error: E0382
-   |                                        ^^^^^^^^^^ value borrowed here after move
+11 |     let _after = port.stop(&mut right, running); // ui-error: E0382
+   |                            ^^^^^^^^^^ cannot borrow as mutable
+   |
+help: consider changing this to be mutable
+   |
+ 7 |     mut right: StopRight<'id>,
+   |     +++
