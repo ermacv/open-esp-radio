@@ -157,24 +157,26 @@ enum GateKind {}
 
 /// The gate component of a lower-MAC backend's pool set.
 ///
-/// The backend receives its open gate and issuer together when its one
-/// [`oer_protocols_radio_port::Mint`] is consumed. The unique place remains private.
+/// The backend receives its gate, closed, and its issuer together when its
+/// one [`oer_protocols_radio_port::Mint`] is consumed: the data of an
+/// installation is stopped, and the gate is closed whenever the data is
+/// stopped. The unique place remains private.
 ///
 /// ```compile_fail,E0432
 /// use oer_protocols_ieee80211_contracts_port::GatePlace;
 /// ```
 ///
 /// ```
-/// use oer_protocols_ieee80211_contracts_port::{GateIssuer, GateOpen, GatePool};
+/// use oer_protocols_ieee80211_contracts_port::{GateClosed, GateIssuer, GatePool};
 /// use oer_protocols_radio_port::Mint;
-/// fn gate<'id>(mint: Mint<'id, GatePool>) -> (GateOpen<'id>, GateIssuer<'id>) {
+/// fn gate<'id>(mint: Mint<'id, GatePool>) -> (GateClosed<'id>, GateIssuer<'id>) {
 ///     mint.into_pools()
 /// }
 /// ```
 pub struct GatePool;
 
 impl oer_protocols_radio_port::PoolSet for GatePool {
-    type Pools<'id, Path: PoolPath> = (GateOpen<'id, Path>, GateIssuer<'id, Path>);
+    type Pools<'id, Path: PoolPath> = (GateClosed<'id, Path>, GateIssuer<'id, Path>);
 
     fn build<'id, Path: PoolPath>(
         builder: oer_protocols_radio_port::PoolBuilder<'id, Path>,
@@ -192,9 +194,9 @@ struct GatePlace<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'i
 impl<'id, Path: PoolPath> GatePlace<'id, Path> {
     fn mint(
         [slot]: [Slot<'id, oer_protocols_radio_port::Slots<GateKind, 1>, Path>; 1],
-    ) -> (GateOpen<'id, Path>, GateIssuer<'id, Path>) {
+    ) -> (GateClosed<'id, Path>, GateIssuer<'id, Path>) {
         (
-            GateOpen {
+            GateClosed {
                 place: Self { slot },
             },
             GateIssuer {
@@ -1531,7 +1533,7 @@ pub struct ArbiterPool;
 
 impl oer_protocols_radio_port::PoolSet for ArbiterPool {
     type Pools<'id, Path: PoolPath> = (
-        GateOpen<'id, Path>,
+        GateClosed<'id, Path>,
         GateIssuer<'id, Path>,
         ArbiterAuthority<'id, Path>,
     );
@@ -1539,9 +1541,9 @@ impl oer_protocols_radio_port::PoolSet for ArbiterPool {
     fn build<'id, Path: PoolPath>(
         builder: oer_protocols_radio_port::PoolBuilder<'id, Path>,
     ) -> Self::Pools<'id, Path> {
-        let (open, issuer) = builder.into_pools::<GatePool>();
+        let (closed, issuer) = builder.into_pools::<GatePool>();
         (
-            open,
+            closed,
             issuer,
             ArbiterAuthority {
                 brand: core::marker::PhantomData,
