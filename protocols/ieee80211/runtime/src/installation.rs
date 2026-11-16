@@ -56,7 +56,7 @@ pub fn drive<'id, P: RadioPort<'id>>(
             Step::Start(ask, resume) => {
                 let starting = match ask {
                     StartAsk::Begin(stopped, channel) => port.start(stopped, channel, now),
-                    StartAsk::Poll(starting) => starting,
+                    StartAsk::Going(starting) => starting,
                 };
                 resume.answer(port.poll_start(starting, cx, now))
             }
@@ -65,7 +65,7 @@ pub fn drive<'id, P: RadioPort<'id>>(
                     RetuneAsk::Begin(running, channel, gate) => {
                         port.retune(running, channel, gate, now)
                     }
-                    RetuneAsk::Poll(retuning) => retuning,
+                    RetuneAsk::Going(retuning) => retuning,
                 };
                 resume.answer(port.poll_retune(retuning, cx, now))
             }
@@ -74,7 +74,7 @@ pub fn drive<'id, P: RadioPort<'id>>(
                     StopAsk::Running(running) => port.stop(resume.right(), running),
                     StopAsk::Starting(starting) => port.stop(resume.right(), starting),
                     StopAsk::Retuning(retuning) => port.stop(resume.right(), retuning),
-                    StopAsk::Poll(stopping) => stopping,
+                    StopAsk::Going(stopping) => stopping,
                 };
                 resume.answer(port.poll_stop(stopping, cx, now))
             }

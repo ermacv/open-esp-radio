@@ -824,11 +824,6 @@ enum ProtocolRole {
     /// A backend conformance suite under `testing/`: cases and observation
     /// checks over the port, which backends and models run.
     Conformance,
-    /// A testing package under `testing/` that joins a core with a port:
-    /// the installation machine over a real port. It may take the
-    /// installation core; the backends and the model take it as a
-    /// dev-dependency only.
-    CoreTesting,
     Model,
     Runtime,
 }
@@ -850,7 +845,6 @@ fn protocol_role(path: &str) -> Option<ProtocolRole> {
         (Some("contracts"), "port") => return Some(ProtocolRole::Port),
         (Some("contracts"), _) => return Some(ProtocolRole::Contract),
         (Some("testing"), "conformance") => return Some(ProtocolRole::Conformance),
-        (Some("testing"), "installation") => return Some(ProtocolRole::CoreTesting),
         _ => {}
     }
     Some(match leaf {
@@ -1318,7 +1312,6 @@ fn protocol_roles_and_the_explicit_chip_roles_follow_the_layout() {
             ("contracts/keys", ProtocolRole::Contract),
             ("contracts/port", ProtocolRole::Port),
             ("testing/conformance", ProtocolRole::Conformance),
-            ("testing/installation", ProtocolRole::CoreTesting),
             ("testing/model", ProtocolRole::Model),
             ("core/upper-mac", ProtocolRole::Core),
             ("core/security/cipher", ProtocolRole::Cipher),
@@ -1712,8 +1705,8 @@ fn portable_or_radio(path: &str) -> bool {
 /// The layer table of `docs/repository-layout.md`: the frame cipher takes
 /// only the wire formats, the security contract and portable support; the
 /// port takes the wire formats, the security contract, portable support and
-/// the radio vocabulary; the conformance suite takes the port, the formats
-/// and portable support; the reference model takes the port, its
+/// the radio vocabulary; the conformance suite takes the port, the formats,
+/// the security contract (the key a run installs) and portable support; the reference model takes the port, its
 /// conformance suite, the formats, the contract and the cipher beside them.
 fn ieee80211_layer_allows(package: &str, name: &str, path: &str) -> bool {
     const CONTRACT: &str = "oer-protocols-ieee80211-contracts-security";
@@ -1729,6 +1722,7 @@ fn ieee80211_layer_allows(package: &str, name: &str, path: &str) -> bool {
             [
                 "oer-protocols-ieee80211-contracts-port",
                 "oer-protocols-ieee80211-wire",
+                CONTRACT,
             ]
             .contains(&name)
                 || path.starts_with("portable/")
@@ -4184,72 +4178,131 @@ const HAL_MARKERS_IN_ATOMS: &[(&str, usize, &str)] = &[
     ),
 ];
 
-/// The calls that make a proof of a port's installation state.
-const PROOF_ISSUES: [&str; 4] = [
-    "Stopped::issue",
-    "Starting::issue",
-    "Retired::issue",
-    "StopRight::issue",
-];
-
-fn issues_a_proof(word: &str) -> bool {
-    PROOF_ISSUES.contains(&word)
+/// The packages of a manifest's `table` whose entry turns on `feature` of
+/// `package`, by the manifest's own features or the workspace entry it
+/// inherits; target-specific entries included.
+fn enables_feature(
+    manifest: &toml::Value,
+    workspace: &toml::Value,
+    table: &str,
+    package: &str,
+    feature: &str,
+) -> bool {
+    let targets = manifest
+        .get("target")
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flat_map(|targets| targets.values());
+    let names = |spec: &toml::Value| {
+        spec.get("features")
+            .and_then(toml::Value::as_array)
+            .is_some_and(|features| features.iter().any(|f| f.as_str() == Some(feature)))
+    };
+    core::iter::once(manifest)
+        .chain(targets)
+        .filter_map(|scope| scope.get(table).and_then(toml::Value::as_table))
+        .flat_map(|dependencies| dependencies.iter())
+        .any(|(alias, spec)| {
+            let inherited = (spec.get("workspace").and_then(toml::Value::as_bool) == Some(true))
+                .then(|| {
+                    workspace
+                        .get("dependencies")
+                        .and_then(|dependencies| dependencies.get(alias))
+                })
+                .flatten();
+            let name = inherited
+                .unwrap_or(spec)
+                .get("package")
+                .and_then(toml::Value::as_str)
+                .unwrap_or(alias);
+            name == package && (names(spec) || inherited.is_some_and(names))
+        })
 }
 
-/// Whether production code of the package at `path`, in `file`, may make a
-/// proof: the testing packages (the reference model, the conformance
-/// suite's forged proof).
-fn may_issue_proofs(file: &str) -> bool {
-    file.starts_with("protocols/ieee80211/testing/")
-}
-
-/// Only a port issues a proof of its state: outside its implementation and
-/// the tests, no production code makes one, so none skips the transition
-/// the proof stands for. The list of exceptions is empty.
+/// A right of the radio's life is made only by the port contract's key,
+/// which only an installation's mint hands out; the one door around it,
+/// `forge`, exists only with the contract's `test-support` feature. No
+/// normal or build dependency of any package turns that feature on, the
+/// contract's own defaults neither, so no image reaches `forge`; a
+/// dev-dependency does (the installation machine's tests), so the scan
+/// reads the manifests it names.
 #[test]
-fn only_a_port_and_its_tests_issue_its_proofs() {
+fn a_right_is_forged_only_by_tests() {
+    const CONTRACT: &str = "oer-protocols-ieee80211-contracts-port";
+    const FEATURE: &str = "test-support";
     let root = root();
     let workspace = read_toml(&root.join("Cargo.toml"));
-    let mut found = BTreeMap::new();
-    let mut issuers = 0;
-    // The proofs are the port contract's: only it and its dependents can
-    // name them.
-    let contract = "oer-protocols-ieee80211-contracts-port";
-    for (path, manifest) in packages(&root).into_iter().filter(|(_, manifest)| {
-        manifest["package"]["name"].as_str() == Some(contract)
-            || normal_dependencies(manifest, &workspace["workspace"]).contains(contract)
-    }) {
-        for crate_root in crate_roots(&root.join(&path), &manifest) {
-            for (file, count) in marker_counts(&root, &crate_root, &issues_a_proof) {
-                if may_issue_proofs(&file) {
-                    issuers += count;
-                } else {
-                    found.insert(file, count);
-                }
+    let workspace = &workspace["workspace"];
+    let mut found = Vec::new();
+    let mut tests = 0;
+    for (path, manifest) in packages(&root) {
+        for table in ["dependencies", "build-dependencies"] {
+            if enables_feature(&manifest, workspace, table, CONTRACT, FEATURE) {
+                found.push(format!("{path} [{table}]"));
             }
         }
+        if enables_feature(&manifest, workspace, "dev-dependencies", CONTRACT, FEATURE) {
+            tests += 1;
+        }
+        if manifest["package"]["name"].as_str() == Some(CONTRACT) {
+            let defaults = manifest
+                .get("features")
+                .and_then(|features| features.get("default"))
+                .and_then(toml::Value::as_array);
+            assert!(
+                !defaults
+                    .is_some_and(|defaults| defaults.iter().any(|f| f.as_str() == Some(FEATURE))),
+                "the contract turns its forging feature on by default"
+            );
+        }
     }
-    // The scan sees the ports' own issues: it reads the paths it names.
-    assert!(issuers > 0, "no port issues a proof");
-    assert!(found.is_empty(), "proofs made outside a port: {found:?}");
+    assert!(tests > 0, "no test turns the forging feature on");
+    assert!(found.is_empty(), "a product reaches `forge`: {found:?}");
 }
 
 #[test]
-fn the_proof_scan_reads_qualified_calls_and_skips_tests() {
-    let directory = tempfile::tempdir().expect("temporary directory");
-    let source = directory.path().join("lib.rs");
-    std::fs::write(
-        &source,
-        "fn forge() -> Retired<'static> { Retired::issue(StateSerial::FIRST) }
-         fn other() { slot.issue(3); Stopped::is_of(&p, s); }
-         #[cfg(test)]
-mod tests { fn t() { let _ = Stopped::issue(FIRST); } }
-",
+fn a_feature_turned_on_by_an_inherited_or_a_target_entry_is_found() {
+    let workspace: toml::Value = toml::from_str(
+        r#"[dependencies]
+        port = { package = "contract", path = "x", features = ["test-support"] }"#,
     )
-    .expect("source");
-    let mut found = Vec::new();
-    production_file_markers(&source, &issues_a_proof, &mut found);
-    assert_eq!(found, [format!("{}: Retired::issue", source.display())]);
+    .expect("workspace");
+    let inherited: toml::Value = toml::from_str(
+        r#"[dependencies]
+        port = { workspace = true }"#,
+    )
+    .expect("manifest");
+    assert!(enables_feature(
+        &inherited,
+        &workspace,
+        "dependencies",
+        "contract",
+        "test-support"
+    ));
+    let target: toml::Value = toml::from_str(
+        r#"[target.'cfg(test)'.dependencies]
+        contract = { path = "x", features = ["test-support"] }"#,
+    )
+    .expect("manifest");
+    assert!(enables_feature(
+        &target,
+        &workspace,
+        "dependencies",
+        "contract",
+        "test-support"
+    ));
+    let plain: toml::Value = toml::from_str(
+        r#"[dependencies]
+        contract = { path = "x" }"#,
+    )
+    .expect("manifest");
+    assert!(!enables_feature(
+        &plain,
+        &workspace,
+        "dependencies",
+        "contract",
+        "test-support"
+    ));
 }
 
 /// Marker counts of the production files reachable from `crate_root`, by
@@ -4570,21 +4623,6 @@ const TRAIT_OBJECTS: &[(&str, usize, &str)] = &[
         2,
         "stays: the facts' layer loader, a build-dependency of image crates and a host tool's",
     ),
-    (
-        "protocols/ieee80211/testing/model/src/air_time.rs",
-        2,
-        "stays: the IEEE 802.11 reference model, a testing package",
-    ),
-    (
-        "protocols/ieee80211/testing/model/src/data_port.rs",
-        1,
-        "stays: the IEEE 802.11 reference model, a testing package",
-    ),
-    (
-        "protocols/ieee80211/testing/model/src/lib.rs",
-        3,
-        "stays: the IEEE 802.11 reference model, a testing package",
-    ),
 ];
 
 #[test]
@@ -4739,14 +4777,6 @@ const PHASE_C: &str = "decision: phase C, the network owner in the network runti
 const RADIO_SYSTEM: &str = "decision: no package yet (the radio system and Bluetooth)";
 
 const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
-    ("AccessPointHarness::holds_beacon", HARNESS),
-    ("AccessPointHarness::idle", HARNESS),
-    ("AccessPointHarness::install_station_key", HARNESS),
-    ("AccessPointHarness::take_station_configured", HARNESS),
-    (
-        "AirWorld::land",
-        "predicate: a frame landed (reference model, testing package)",
-    ),
     ("Alarm::alarm_at", SAMPLED_BIT),
     ("Alarm::start", SAMPLED_BIT),
     ("AnalogI2cPowerAccess::analog_i2c_is_powered", SAMPLED_BIT),
@@ -4815,9 +4845,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ),
     ("Count::on", "predicate: the switchable diagnostics are on"),
     ("CounterLatch::valid", SAMPLED_BIT),
-    ("DataPort::lend_room", P3),
-    ("DataPortHarness::publish_held_arena", HARNESS),
-    ("DataPortHarness::take_configured", HARNESS),
     ("Device::is_running", P2),
     (
         "Diagnostics::on",
@@ -4959,8 +4986,6 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("SharedPhyAccess::analog_i2c_reset_is_released", SAMPLED_BIT),
     ("SharedPhyAccess::tx_dc_measurement_is_ready", SAMPLED_BIT),
     ("TaskControl::head_present", SAMPLED_BIT),
-    ("TxArena::claim_arenas", P3),
-    ("TxArena::event_waiting", P3),
     (
         "TxHardware::begin_tx_timeout_abort",
         "decision: P3, the transmit slot the hardware never ends",
@@ -5128,7 +5153,7 @@ fn the_hal_ratchet_fails_on_a_new_file_a_changed_count_and_a_gone_entry() {
 fn testing_role(role: Role) -> bool {
     matches!(
         role,
-        Role::Protocol(ProtocolRole::Conformance | ProtocolRole::Model | ProtocolRole::CoreTesting)
+        Role::Protocol(ProtocolRole::Conformance | ProtocolRole::Model)
     )
 }
 
@@ -5158,35 +5183,6 @@ fn no_product_package_depends_on_a_conformance_suite_or_a_model() {
             .any(|member| member.path == "protocols/ieee80211/testing/conformance")
     );
     let edges = testing_edges(&members, &workspace_roles());
-    assert!(edges.is_empty(), "{edges:?}");
-}
-
-/// The installation core over a real port joins a core with a port: no
-/// package takes it as a normal or build dependency, a model or a
-/// conformance suite included; the backends and the model run it as a
-/// dev-dependency.
-#[test]
-fn only_dev_dependencies_take_a_core_testing_package() {
-    let members = workspace_members();
-    let roles = workspace_roles();
-    assert!(
-        roles
-            .values()
-            .any(|role| *role == Role::Protocol(ProtocolRole::CoreTesting))
-    );
-    let edges: BTreeSet<Edge> = members
-        .iter()
-        .flat_map(|member| {
-            member
-                .dependencies
-                .iter()
-                .chain(&member.build_dependencies)
-                .filter(|dependency| {
-                    roles.get(*dependency) == Some(&Role::Protocol(ProtocolRole::CoreTesting))
-                })
-                .map(|dependency| (member.path.clone(), dependency.clone()))
-        })
-        .collect();
     assert!(edges.is_empty(), "{edges:?}");
 }
 
@@ -6176,16 +6172,6 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         1,
         BY_RADIO_SYSTEM,
     ),
-    (
-        "protocols/ieee80211/contracts/port/src/access_point.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/contracts/port/src/data_port.rs",
-        1,
-        BY_P3,
-    ),
     ("protocols/ieee80211/core/roles/sta/src/ftm.rs", 1, BY_P3),
     (
         "protocols/ieee80211/core/roles/sta/src/join/association.rs",
@@ -6285,7 +6271,6 @@ const DROPPED_RESULTS: &[(&str, usize, &str)] = &[
         2,
         BY_P3,
     ),
-    ("protocols/ieee80211/core/datapath/src/plane.rs", 1, BY_P3),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs",
         2,
@@ -6603,7 +6588,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         1,
         BY_RADIO_SYSTEM,
     ),
-    ("protocols/ieee80211/contracts/port/src/arena.rs", 1, BY_P3),
     ("protocols/ieee80211/contracts/port/src/lib.rs", 1, BY_P3),
     ("protocols/ieee802154/port/src/config.rs", 1, BY_NONE),
     ("protocols/ieee802154/port/src/lib.rs", 1, BY_NONE),
@@ -9126,10 +9110,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "protocols/ieee80211/core/datapath/src/plane.rs::ArenaBook.right",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/datapath/src/plane.rs::DataLink.retry",
         BY_P3,
     ),
     (

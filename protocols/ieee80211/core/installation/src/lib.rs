@@ -33,7 +33,6 @@
         clippy::disallowed_macros,
         clippy::disallowed_methods,
         clippy::wildcard_enum_match_arm,
-        clippy::struct_excessive_bools,
         clippy::type_complexity,
     )
 )]
@@ -332,8 +331,8 @@ pub enum Rest {
 pub enum StartAsk<'id, C> {
     /// Begin it on the channel.
     Begin(Stopped<'id>, C),
-    /// Poll the start in progress.
-    Poll(Starting<'id>),
+    /// The start in progress, asked again.
+    Going(Starting<'id>),
 }
 
 /// A retune the port is asked: begun from the running radio under the
@@ -342,8 +341,8 @@ pub enum StartAsk<'id, C> {
 pub enum RetuneAsk<'g, 'id, C> {
     /// Begin it on the channel, under the gate its request lent.
     Begin(Running<'id>, C, GateLent<'g, 'id>),
-    /// Poll the retune in progress.
-    Poll(Retuning<'id>),
+    /// The retune in progress, asked again.
+    Going(Retuning<'id>),
 }
 
 /// A stop the port is asked: begun from a running radio, a start or a
@@ -356,8 +355,8 @@ pub enum StopAsk<'id> {
     Starting(Starting<'id>),
     /// Begin the stop of a retune in progress.
     Retuning(Retuning<'id>),
-    /// Poll the stop in progress.
-    Poll(Stopping<'id>),
+    /// The stop in progress, asked again.
+    Going(Stopping<'id>),
 }
 
 /// A step of the machine: one thing asked, told or said, or its rest.
@@ -944,14 +943,14 @@ impl<'m, 'id, C: Copy, D> Port<'m, 'id, C, D> {
             },
             At::Starting(starting) => match goal {
                 Goal::Open { .. } => {
-                    Step::Start(StartAsk::Poll(starting), self.resume(now, AskStart(())))
+                    Step::Start(StartAsk::Going(starting), self.resume(now, AskStart(())))
                 }
                 Goal::None | Goal::Service => self.stop_section(StopAsk::Starting(starting), now),
             },
             At::Retuning(retuning) => match goal {
                 Goal::Open {
                     want: Want::Run(_), ..
-                } => Step::Retune(RetuneAsk::Poll(retuning), self.resume(now, AskRetune(()))),
+                } => Step::Retune(RetuneAsk::Going(retuning), self.resume(now, AskRetune(()))),
                 Goal::None
                 | Goal::Service
                 | Goal::Open {
@@ -959,7 +958,7 @@ impl<'m, 'id, C: Copy, D> Port<'m, 'id, C, D> {
                     ..
                 } => self.stop_section(StopAsk::Retuning(retuning), now),
             },
-            At::Stopping(stopping) => self.stop_section(StopAsk::Poll(stopping), now),
+            At::Stopping(stopping) => self.stop_section(StopAsk::Going(stopping), now),
             At::Stopped(stopped) => {
                 *self.at = At::Stopped(stopped);
                 self.stopped_section(Asked::Not, now)
@@ -988,7 +987,7 @@ impl<'m, 'id, C: Copy, D> Port<'m, 'id, C, D> {
                 StopAsk::Running(running) => At::Running(running),
                 StopAsk::Starting(starting) => At::Starting(starting),
                 StopAsk::Retuning(retuning) => At::Retuning(retuning),
-                StopAsk::Poll(stopping) => At::Stopping(stopping),
+                StopAsk::Going(stopping) => At::Stopping(stopping),
             };
             Step::StopData(self.resume(
                 now,
@@ -1192,7 +1191,7 @@ impl<'m, 'id, C: Copy, D> Resume<'m, 'id, C, D, AskStopData> {
                     At::Running(running) => StopAsk::Running(running),
                     At::Starting(starting) => StopAsk::Starting(starting),
                     At::Retuning(retuning) => StopAsk::Retuning(retuning),
-                    At::Stopping(stopping) => StopAsk::Poll(stopping),
+                    At::Stopping(stopping) => StopAsk::Going(stopping),
                     other @ (At::Stopped(_) | At::Retired(_) | At::Out(_)) => {
                         *port.at = other;
                         return port.wake();

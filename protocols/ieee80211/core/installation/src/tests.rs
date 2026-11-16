@@ -355,7 +355,7 @@ fn run(
             Step::Start(ask, resume) => {
                 let proof = match &ask {
                     StartAsk::Begin(..) => "stopped",
-                    StartAsk::Poll(_) => "starting",
+                    StartAsk::Going(_) => "starting",
                 };
                 let answer = ask!("start", Some(proof), project_port(&resume.port));
                 let _asked = ask;
@@ -368,7 +368,7 @@ fn run(
             Step::Retune(ask, resume) => {
                 let proof = match &ask {
                     RetuneAsk::Begin(..) => "running",
-                    RetuneAsk::Poll(_) => "retuning",
+                    RetuneAsk::Going(_) => "retuning",
                 };
                 let answer = ask!("retune", Some(proof), project_port(&resume.port));
                 let _asked = ask;
@@ -383,7 +383,7 @@ fn run(
                     StopAsk::Running(_) => "running",
                     StopAsk::Starting(_) => "starting",
                     StopAsk::Retuning(_) => "retuning",
-                    StopAsk::Poll(_) => "stopping",
+                    StopAsk::Going(_) => "stopping",
                 };
                 let _right = resume.right();
                 let answer = ask!("stop", Some(proof), project_port(&resume.port));
@@ -544,17 +544,36 @@ struct Env {
     open: Option<&'static str>,
     /// The controller was told to end this installation's tokens and has
     /// not yet.
-    tok: bool,
+    tok: Fact,
     /// The network was told to stop and has not yet said so.
-    net: bool,
+    net: Fact,
     /// The last rest named a turn.
-    turn: bool,
+    turn: Fact,
     permit: Option<&'static str>,
     /// The controller holds this installation's tokens.
-    live: bool,
+    live: Fact,
     /// The transmit gate as the controller holds it: closed from a retune
     /// it asks until a radio runs again.
-    gate_closed: bool,
+    gate_closed: Fact,
+}
+
+/// A fact of the search's environment: it holds, or not.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum Fact {
+    Holds,
+    Not,
+}
+
+impl Fact {
+    const fn holds(self) -> bool {
+        matches!(self, Self::Holds)
+    }
+}
+
+impl From<bool> for Fact {
+    fn from(holds: bool) -> Self {
+        if holds { Self::Holds } else { Self::Not }
+    }
 }
 
 /// Every way one step can go.
@@ -589,7 +608,7 @@ fn steps(
 fn inputs(env: &Env) -> Vec<(In, Budget)> {
     let (nreq, nind, nlate, nref) = env.budget;
     let mut out = Vec::new();
-    if env.turn {
+    if env.turn.holds() {
         out.push((In::of("turn"), env.budget));
     } else if nlate > 0 {
         out.push((In::of("turn"), (nreq, nind, nlate - 1, nref)));
@@ -608,12 +627,12 @@ fn inputs(env: &Env) -> Vec<(In, Budget)> {
     if nind > 0 && matches!(env.s.pos, "starting" | "running" | "retuning" | "stopping") {
         out.push((In::of("needs_stop"), (nreq, nind - 1, nlate, nref)));
     }
-    if env.tok {
+    if env.tok.holds() {
         out.push((In::of("tokens_ended"), env.budget));
-    } else if nlate > 0 && env.live {
+    } else if nlate > 0 && env.live.holds() {
         out.push((In::of("tokens_ended"), (nreq, nind, nlate - 1, nref)));
     }
-    if env.net {
+    if env.net.holds() {
         out.push((In::of("network_stopped"), env.budget));
     } else if nlate > 0 {
         out.push((In::of("network_stopped"), (nreq, nind, nlate - 1, nref)));
@@ -660,12 +679,12 @@ fn explore(budget: Budget, gate: &GateClosed<'_>) -> Search {
         },
         budget,
         open: None,
-        tok: false,
-        net: false,
-        turn: false,
+        tok: Fact::Not,
+        net: Fact::Not,
+        turn: Fact::Not,
         permit: Some("live"),
-        live: true,
-        gate_closed: false,
+        live: Fact::Holds,
+        gate_closed: Fact::Not,
     };
     let mut seen = HashSet::from([first]);
     let mut queue = VecDeque::from([first]);
@@ -679,9 +698,14 @@ fn explore(budget: Budget, gate: &GateClosed<'_>) -> Search {
         for (inp, budget2) in inputs(&env) {
             let s = env.s;
             for (ns, trace, rest, raw, after, used) in steps(&env, inp, budget2.3, gate) {
-                let (mut opened, mut tok, mut net, mut holds_permit, mut live) =
-                    (env.open, env.tok, env.net, env.permit, env.live);
-                let mut gate_closed = env.gate_closed;
+                let (mut opened, mut tok, mut net, mut holds_permit, mut live) = (
+                    env.open,
+                    env.tok.holds(),
+                    env.net.holds(),
+                    env.permit,
+                    env.live.holds(),
+                );
+                let mut gate_closed = env.gate_closed.holds();
                 let mut told = false;
                 if inp.kind == "request" && inp.request == "run" && s.pos == "running" {
                     // A retune is asked under a closed gate.
@@ -900,12 +924,12 @@ fn explore(budget: Budget, gate: &GateClosed<'_>) -> Search {
                     s: ns,
                     budget: (budget2.0, budget2.1, budget2.2, budget2.3 - used),
                     open: opened,
-                    tok,
-                    net,
-                    turn: rest != "wake" || woken,
+                    tok: tok.into(),
+                    net: net.into(),
+                    turn: (rest != "wake" || woken).into(),
                     permit: holds_permit,
-                    live,
-                    gate_closed,
+                    live: live.into(),
+                    gate_closed: gate_closed.into(),
                 };
                 outs.push(next);
                 if seen.insert(next) {
