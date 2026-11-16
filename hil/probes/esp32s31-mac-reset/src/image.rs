@@ -1,0 +1,976 @@
+//! The probe's boot and its radio session. The session holds the radio
+//! domain itself and brings Wi-Fi up by the public operations of the PHY
+//! crate and the HAL that `Esp32s31Radio` calls, in the same order
+//! (README, "The order"), so that `WifiClocked::reset_mac` can pulse the
+//! MAC's block reset with the receive walker live.
+use crate::usb;
+use oer_chips_esp32s31_hal::{
+    peripherals::usb_serial_jtag::ConsoleInterrupt,
+    peripherals::watchdog::{ArmedRtcWatchdog, RTC_WATCHDOG_FEED_PERIOD_MS, RwdtRegisters},
+    peripherals::{
+        efuse::{FactoryIdentity, Interface},
+        software_interrupt::{FromCpu0Irq, FromCpu2Irq},
+        system_timer::{SystimerAlarm0, SystimerAlarm1},
+    },
+    power::ChipClocks,
+    radio::domain::RadioDomain,
+    radio::ieee80211::{
+        client::{WifiClocked, WifiCold},
+        dma::{descriptor::RxDescriptor, rx_ring::RxRingLive, rx_storage::RxDmaStorage},
+        init::{
+            MAC_COLD_HANDSHAKE_DEADLINE, MacCoexEvent, MacCoexPti, MacCoexPtiSource,
+            MacColdStartConfig, MacDelayEntropy, MacSlowClockCalibration,
+            MacSlowClockCalibrationSource, MacTxPowerSource, initialize_wifi_mac,
+        },
+        registers::{MacCcmpKeyIdentity, MacKeyEntryIndex, MacKeyInstallOutcome},
+    },
+    system::owner::{MacInterruptRegisters, MacPowerInterruptRegisters, RadioAccess},
+    system::root::Root,
+    types::MacTxPowerPair,
+};
+use oer_chips_esp32s31_platform_board as board;
+use oer_chips_esp32s31_platform_runtime::Esp32s31;
+use oer_chips_esp32s31_radio_client::{LpClock, RcSlow};
+use oer_chips_esp32s31_radio_phy::{
+    NoopPhyTargetObserver, PhyCalibrationIdentity, PhyConfig, PhyRegisterConfig,
+    PhyTxTargetPowerProfile, RomShortDelay,
+    concurrent::{ConcurrentAcquire, ConcurrentPhy, PhyClientAccess, phy_ready},
+    maintain_concurrent_phy, phy_get_rf_cal_version, register_concurrent_phy,
+    select_concurrent_wifi_channel,
+    wifi_client::{WifiPhyMembership, join_wifi, set_wifi_rx},
+};
+use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
+use oer_portable_diagnostics::{Name, name};
+use oer_portable_embassy_time::EmbassyClock;
+use oer_portable_time::{Clock, Duration, Timer, settle::Settle, settle::SettleLimit};
+use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
+use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
+
+/// The descriptors of the receive ring and their buffers, as the RX-chain
+/// probe has them.
+const COUNT: usize = 32;
+const BUFFER: usize = 128;
+const NODES: usize = COUNT + 1;
+const WORDS: usize = BUFFER / 4;
+/// The stand's busy channel.
+const CHANNEL: u8 = 13;
+/// The pulses of one boot (questions 1, 2 and 3).
+const PULSES: usize = 100;
+/// The ordinary stops of one boot (question 4).
+const STOPS: usize = 1_000;
+/// How long a run receives before its pulse or its stop, and after a
+/// second run's start.
+const RECEIVE_MS: u32 = 20;
+/// The longest delay before a pulse, in microseconds: a pulse lands at a
+/// point spread over a received frame's time (a 1 500-octet frame at
+/// 1 Mb/s is 12 ms; at 54 Mb/s 0.25 ms).
+const PULSE_SPREAD_US: u32 = 2_000;
+/// How long the guard waits for the bus master after a pulse.
+const GUARD_MS: u32 = 50;
+/// A stop that has not ended in this time is recorded with its registers.
+const STOP_BOUND_MS: u32 = 10;
+/// The key entry the probe installs before its pulses.
+const KEY_ENTRY: u8 = 0;
+
+/// A reload doorbell's settle, as the backend names it.
+///
+/// SOURCE: `oer-chips-esp32s31-radio-ieee80211-backend` `rx::receive::RELOAD_SETTLE_LIMIT`
+/// (20 µs; the W1 runs of 2026-10-19).
+const RELOAD_SETTLE: SettleLimit = match SettleLimit::new(Duration::from_micros(20)) {
+    Some(limit) => limit,
+    None => panic!("20 µs is a valid settle limit"),
+};
+
+type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
+type Radio = RadioDomain<ChipClocks, ConcurrentPhy>;
+type CooperativeTimer = oer_chips_family_platform_executor::Cooperative<Esp32s31, EmbassyClock>;
+
+oer_chips_esp32s31_hal::dma_static! { static RX: Storage = zeroed in ".dma.bss.mac_reset_probe"; }
+
+use crate::phy_pilot;
+
+// SAFETY: the production runtime script maps .hot.text.* to executable SRAM;
+// each generated wrapper retains the interrupt-table ABI and owned part.
+oer_chips_family_platform_interrupt_table::interrupt_table! {
+    lines: oer_chips_family_platform_runtime::interrupts::LINES,
+    handler_attributes: [#[unsafe(link_section = ".hot.text.mac_reset_vectors")]];
+    contexts { app: 1; radio_exec: 2; radio_irq: 3; }
+    wake: WakeToken = FromCpu0Irq => oer_chips_family_platform_executor::wake_handler::<Esp32s31, 0, FromCpu0Irq>, line 40, context app, hart 0, Hardware;
+    // SOURCE: family.toml [interrupts]; HW23_S31_P2_ARBITRATION_20261027:
+    // only P2 line17 before16 is measured on S31.
+    phy: PhyToken = oer_chips_esp32s31_hal::peripherals::timg0_alarm::Timg0AlarmInterrupt => phy_pilot::interrupt, line 16, context radio_exec, hart 0, Exempt(ExecutorLevel, "SAR/PWDET steps between radio executor rounds");
+    radio: RadioToken = FromCpu2Irq => oer_chips_family_platform_executor::Round<RadioTasks>, line 17, context radio_exec, hart 0, Executor;
+    radio_alarm: RadioAlarm = SystimerAlarm0 => oer_chips_family_platform_executor::alarm_interrupt::<RadioTasks, 0, SystimerAlarm0>, line 18, context radio_irq, hart 0, Hardware;
+    console_usb: ConsoleUsb = ConsoleInterrupt => crate::usb::interrupt, line 41, context app, hart 0, Hardware;
+    app_alarm: AppAlarm = SystimerAlarm1 => oer_chips_family_platform_executor::alarm_interrupt::<AppTasks, 1, SystimerAlarm1>, line 42, context app, hart 0, Hardware;
+}
+
+/// What the session is given at boot.
+pub struct SessionParts {
+    radio: Radio,
+    clocks: ChipClocks,
+    wifi: oer_chips_esp32s31_hal::system::root::WifiPartition,
+    coex: oer_chips_esp32s31_hal::radio::domain::CoexAbsent<
+        oer_chips_esp32s31_hal::radio::domain::WifiClient,
+    >,
+    pilot: phy_pilot::Client,
+    identity: PhyCalibrationIdentity,
+    mac_irq: MacInterruptRegisters,
+    power_irq: MacPowerInterruptRegisters,
+    seed: u32,
+    station: [u8; 6],
+    ap: [u8; 6],
+}
+
+oer_chips_family_platform_executor::tasks! {
+    pub RadioTasks: InterruptExecutor<Esp32s31, 2> {
+        session(parts: SessionParts, lp: LpClock<RcSlow>) = session_task;
+    }
+}
+oer_chips_family_platform_executor::tasks! {
+    AppTasks: Executor<Esp32s31, 0> {
+        report(console: usb::Console, pads: oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads) = report;
+        watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) = feed_watchdog;
+    }
+}
+oer_chips_esp32s31_hal::phy_fault_reporter!(oer_chips_esp32s31_platform_runtime::phy_fault::reset);
+oer_chips_family_platform_runtime::entry!(
+    main,
+    oer_chips_esp32s31_hal::system::platform::Port,
+    hook = crate::diagnostic::panic,
+    exception = crate::diagnostic::exception
+);
+fn main(
+    handoff: oer_chips_family_platform_runtime::Handoff<
+        oer_chips_esp32s31_hal::system::platform::Port,
+    >,
+) -> ! {
+    let Some(root) = Root::take() else {
+        fail(name!("root"; 32));
+    };
+    let (
+        (
+            runtime_efuse,
+            runtime_radio,
+            runtime_timg0_alarm,
+            runtime_clocks,
+            runtime_system_timer,
+            runtime_wifi_interrupts,
+            runtime_software_interrupts,
+            runtime_entropy,
+            runtime_watchdogs,
+        ),
+        _psram,
+        mut adopted,
+    ) = match oer_chips_family_platform_runtime::adoption::run::<
+        oer_chips_esp32s31_platform_runtime::Esp32s31,
+        _,
+        _,
+        _,
+    >(
+        handoff,
+        root.into_runtime(),
+        InterruptTable,
+        board::BootstrapPsram,
+        oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
+        |hardware| {
+            let _reset_causes =
+                oer_chips_esp32s31_platform_runtime::reset_causes::read(hardware.reset_cause);
+            crate::diagnostic::report_previous();
+            (
+                hardware.efuse,
+                hardware.radio,
+                hardware.timg0_alarm,
+                hardware.clocks,
+                hardware.system_timer,
+                hardware.wifi_interrupts,
+                hardware.software_interrupts,
+                hardware.entropy,
+                hardware.watchdogs,
+            )
+        },
+    ) {
+        Ok(value) => value.into_parts(),
+        Err(error) => fail(error.name()),
+    };
+    let Some(interrupts) = Interrupts::take() else {
+        fail(name!("interrupts"; 32));
+    };
+    crate::diagnostic::phase(1);
+    let factory = FactoryIdentity::read(runtime_efuse);
+    let identity = PhyCalibrationIdentity {
+        rf_cal_version: phy_get_rf_cal_version(),
+        base_mac_address: factory.base_mac(),
+        mac_extension: factory.mac_extension(),
+    };
+    let station = factory.address(Interface::Station);
+    let ap = factory.address(Interface::AccessPoint);
+    let (radio, partitions) = runtime_radio
+        .split::<ChipClocks, _>(
+            ConcurrentPhy::new(),
+            oer_chips_esp32s31_platform_runtime::phy_fault::identity(),
+        )
+        .unwrap_or_else(|failure| {
+            let fault = failure.fault();
+            let _owners = failure;
+            oer_chips_esp32s31_platform_runtime::phy_fault::reset(fault)
+        });
+    let Some(lp) = LpClock::<RcSlow>::claim() else {
+        fail(name!("claim"; 32));
+    };
+    let pilot = crate::phy_pilot::init(runtime_timg0_alarm, adopted.router(), interrupts.phy);
+    let timer = runtime_system_timer;
+    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
+        oer_chips_family_platform_executor::systimer::SystemTimer {
+            comparators: timer.comparators,
+            counter: timer.counter,
+        },
+        adopted.router(),
+        interrupts.radio_alarm,
+        timer.alarm0,
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _, _>(
+        &mut timer_ready,
+        adopted.router(),
+        interrupts.app_alarm,
+        timer.alarm1,
+    )
+    .unwrap_or_else(|failure| failure.reset());
+    // No Wi-Fi interrupt consumer is installed: the session polls.
+    let mut wifi_irqs = runtime_wifi_interrupts;
+    wifi_irqs.mac.mask_all_mac_interrupts();
+    wifi_irqs.power.mask_all_power_interrupts();
+    let software = runtime_software_interrupts;
+    let (hart, router) = adopted.parts();
+    let radio_executor = InterruptExecutor::<Esp32s31, 2>::new(software.line2)
+        .start(hart, router, interrupts.radio, software.irq2, ())
+        .unwrap_or_else(|failure| failure.reset());
+    let mut rng =
+        oer_chips_esp32s31_hal::peripherals::entropy::Entropy::new(runtime_entropy, EmbassyClock);
+    let seed = match rng.random() {
+        Ok(word) => word,
+        Err(_) => fail(name!("entropy"; 32)),
+    };
+    let parts = SessionParts {
+        radio,
+        clocks: runtime_clocks,
+        wifi: partitions.wifi,
+        coex: partitions.wifi_coex,
+        pilot,
+        identity,
+        mac_irq: wifi_irqs.mac,
+        power_irq: wifi_irqs.power,
+        seed,
+        station,
+        ap,
+    };
+    if RadioTasks::session(&radio_executor, parts, lp).is_err() {
+        fail(name!("session-task"; 32));
+    }
+    let (console, pads) = match usb::open(adopted.router(), interrupts.console_usb) {
+        Ok(value) => value,
+        Err(error) => fail(error.reason()),
+    };
+    let (mut router, hart) = match adopted.enable_interrupts() {
+        Ok(value) => value,
+        Err(error) => fail(error.name()),
+    };
+    match Executor::<Esp32s31, 0>::new(software.line0)
+        .run(
+            &hart,
+            &mut router,
+            interrupts.wake,
+            software.irq0,
+            (),
+            (),
+            move |spawner| {
+                if AppTasks::report(spawner, console, pads).is_err()
+                    || AppTasks::watchdog(spawner, runtime_watchdogs.rtc).is_err()
+                {
+                    fail(name!("task"; 32));
+                }
+            },
+        )
+        .unwrap_or_else(|failure| failure.reset()) {}
+}
+
+fn fail<const B: usize>(reason: Name<B>) -> ! {
+    oer_chips_family_platform_runtime::fatal::boot_failure::<
+        oer_chips_esp32s31_hal::system::platform::Port,
+    >(reason.as_str(), || {
+        let _ = oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::fatal_note(
+            &oer_portable_diagnostics::Note::runtime_fail(reason),
+        );
+    })
+}
+
+async fn feed_watchdog(watchdog: ArmedRtcWatchdog<RwdtRegisters>) {
+    match watchdog
+        .feed_every(
+            &EmbassyClock,
+            Duration::from_millis(RTC_WATCHDOG_FEED_PERIOD_MS),
+        )
+        .await {}
+}
+
+// ---------------------------------------------------------------- journal
+
+/// What one record says.
+#[derive(Clone, Copy)]
+#[repr(u32)]
+enum Kind {
+    /// The bring-up's end: units received in the first run.
+    Up = 1,
+    /// One ordinary stop.
+    Stop = 2,
+    /// One pulse, its observations and the second run after it.
+    Pulse = 3,
+    /// The series' end: cycles and microseconds over it, for the rate.
+    End = 4,
+    /// A failure: its phase and its index.
+    Failed = 5,
+}
+
+const WIDTH: usize = 20;
+const ROWS: usize = 4 + STOPS + PULSES;
+
+/// The session's records, filled on hart 0's radio executor and printed by
+/// the console's task once the session has ended.
+#[derive(bytemuck::Zeroable)]
+struct Journal {
+    rows: [[u32; WIDTH]; ROWS],
+    used: usize,
+}
+
+impl Journal {
+    fn record(&mut self, kind: Kind, values: &[u32]) {
+        if let Some(row) = self.rows.get_mut(self.used) {
+            *row = [0; WIDTH];
+            if let Some(first) = row.first_mut() {
+                *first = kind as u32;
+            }
+            for (cell, value) in row.iter_mut().skip(1).zip(values) {
+                *cell = *value;
+            }
+            self.used = self.used.saturating_add(1);
+        }
+    }
+}
+
+static JOURNAL: oer_portable_memory::zeroed::ZeroedStatic<Journal> =
+    oer_portable_memory::zeroed::ZeroedStatic::new();
+static DONE: oer_portable_memory::ClaimCell<&'static mut Journal> =
+    oer_portable_memory::ClaimCell::new();
+
+async fn report(
+    mut console: usb::Console,
+    _pads: oer_chips_esp32s31_hal::peripherals::usb_serial_jtag::UsbPads,
+) {
+    use core::fmt::Write as _;
+    usb::text(&mut console, b"MACRESET boot v=1\n").await;
+    let journal = loop {
+        if let Ok(journal) = DONE.take() {
+            break journal;
+        }
+        match EmbassyClock.now().checked_add(Duration::from_millis(10)) {
+            Some(at) => EmbassyClock.wait_until(at).await,
+            None => return,
+        }
+    };
+    let mut line = heapless::String::<256>::new();
+    for row in journal.rows.iter().take(journal.used) {
+        line.clear();
+        let _ = line.push_str("R");
+        for value in row {
+            let _ = write!(line, " {value}");
+        }
+        let _ = line.push('\n');
+        usb::text(&mut console, line.as_bytes()).await;
+    }
+    let failed = journal
+        .rows
+        .iter()
+        .take(journal.used)
+        .any(|row| row.first() == Some(&(Kind::Failed as u32)));
+    if failed {
+        usb::text(&mut console, b"OER-RESULT: fail mac-reset\n").await;
+    } else {
+        usb::text(&mut console, b"OER-RESULT: pass mac-reset\n").await;
+    }
+}
+
+// ---------------------------------------------------------------- session
+
+/// The platform values the MAC cold start reads, as the radio system's
+/// `MacSources` answers them.
+///
+/// SOURCE: `oer-chips-esp32s31-radio-system` `mac_sources::MacSources` and
+/// `MAC_COEX_EVENTS` (the four events in `MacColdCoexPti::query` order).
+struct Sources {
+    pti: [MacCoexPti; 4],
+    tx_power: PhyTxTargetPowerProfile,
+    delay_random: u32,
+}
+
+impl MacCoexPtiSource for Sources {
+    fn mac_coex_pti(&mut self, event: MacCoexEvent) -> MacCoexPti {
+        let [one, three, ten, fifteen] = self.pti;
+        match event {
+            MacCoexEvent::Event1 => one,
+            MacCoexEvent::Event3 => three,
+            MacCoexEvent::Event10 => ten,
+            MacCoexEvent::Event15 => fifteen,
+        }
+    }
+}
+
+impl MacDelayEntropy for Sources {
+    fn mac_delay_random(&mut self) -> u32 {
+        self.delay_random
+    }
+}
+
+impl MacSlowClockCalibrationSource for Sources {
+    fn mac_slow_clock_calibration(&mut self) -> MacSlowClockCalibration {
+        MacSlowClockCalibration::Unavailable
+    }
+}
+
+impl MacTxPowerSource for Sources {
+    fn mac_tx_power_pair(&mut self, rate: u8) -> MacTxPowerPair {
+        let pair = self.tx_power.pair(rate);
+        MacTxPowerPair {
+            primary: pair.primary,
+            alternate: pair.alternate,
+        }
+    }
+}
+
+/// A small generator of the pulses' and the stops' delays.
+struct Spread(u32);
+
+impl Spread {
+    fn next(&mut self, bound: u32) -> u32 {
+        // xorshift32.
+        let mut x = self.0 | 1;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.0 = x;
+        x % bound.max(1)
+    }
+}
+
+async fn session_task(parts: SessionParts, lp: LpClock<RcSlow>) {
+    let Some(journal) = JOURNAL.try_take() else {
+        return;
+    };
+    journal.used = 0;
+    if let Err((phase, index)) = session(parts, &lp, journal).await {
+        journal.record(Kind::Failed, &[phase, index]);
+    }
+    let _ = DONE.install(journal);
+}
+
+/// The phases a failure names.
+mod phase {
+    pub const REGISTER: u32 = 1;
+    pub const POWER: u32 = 2;
+    pub const CLOCKS: u32 = 3;
+    pub const INITIALIZED: u32 = 4;
+    pub const JOIN: u32 = 5;
+    pub const MAINTAIN: u32 = 6;
+    pub const RX_ENABLE: u32 = 7;
+    pub const CHANNEL: u32 = 8;
+    pub const POWER_PROFILE: u32 = 9;
+    pub const MAC_COLD: u32 = 10;
+    pub const RING: u32 = 11;
+    pub const RECEIVE: u32 = 12;
+    pub const KEY: u32 = 13;
+    pub const STOP: u32 = 14;
+    pub const WALKER_STOP: u32 = 15;
+    pub const RESTART: u32 = 16;
+    pub const SECOND_COLD: u32 = 17;
+    pub const SECOND_RING: u32 = 18;
+    pub const CEILING: u32 = 19;
+}
+
+type Failure = (u32, u32);
+
+/// Bring Wi-Fi up in `Esp32s31Radio`'s order, then the series.
+async fn session(
+    parts: SessionParts,
+    _lp: &LpClock<RcSlow>,
+    journal: &mut Journal,
+) -> Result<(), Failure> {
+    let SessionParts {
+        mut radio,
+        clocks,
+        wifi,
+        coex,
+        mut pilot,
+        identity,
+        mut mac_irq,
+        power_irq,
+        seed,
+        station,
+        ap,
+    } = parts;
+    let timer = CooperativeTimer::new(EmbassyClock);
+    let mut platform = ();
+    // prepare: the PHY's registration.
+    let (returned, registered) = register_concurrent_phy::<_, (), RomShortDelay, _>(
+        &timer,
+        radio,
+        &mut platform,
+        &clocks,
+        PhyRegisterConfig::new(identity),
+        NoopPhyTargetObserver,
+    )
+    .await;
+    radio = returned;
+    // The outcome (its calibration path) is the registration's report, as
+    // `Esp32s31Radio::prepare` reads it.
+    let _outcome = registered.map_err(|_| (phase::REGISTER, 0))?.outcome();
+    // enter: coexistence, common power, the modem clocks, the PHY's client.
+    let (_coexisting, _participants) = radio.enter_coex(coex);
+    let (powered, _power) = WifiCold::from_partition(wifi)
+        .power_up(&mut radio, &clocks)
+        .map_err(|_| (phase::POWER, 0))?;
+    let mut clocked = powered
+        .enable_clocks(&mut radio, &clocks)
+        .map_err(|_| (phase::CLOCKS, 0))?;
+    clocked
+        .set_initialized(&mut radio, true)
+        .map_err(|_| (phase::INITIALIZED, 0))?;
+    let (membership, acquired) = {
+        let ready = phy_ready(&mut radio).map_err(|_| (phase::JOIN, 0))?;
+        let PhyClientAccess::Available(available) = ready.client::<WifiPhyMembership>() else {
+            return Err((phase::JOIN, 1));
+        };
+        let joined = join_wifi(available, &clocked, &timer).map_err(|_| (phase::JOIN, 2))?;
+        (joined.membership, joined.acquired)
+    };
+    // track: the initial tracking, RX enable, the channel, the MAC.
+    if acquired == ConcurrentAcquire::TrackingDue {
+        let (returned, maintained) = maintain_concurrent_phy::<_, (), RomShortDelay, _>(
+            &timer,
+            radio,
+            &mut platform,
+            NoopPhyTargetObserver,
+            &mut pilot,
+        )
+        .await;
+        radio = returned;
+        maintained.map_err(|_| (phase::MAINTAIN, 0))?;
+    }
+    set_wifi_rx(&mut radio, &membership, true).map_err(|_| (phase::RX_ENABLE, 0))?;
+    let channel = Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20)
+        .map_err(|_| (phase::CHANNEL, 0))?;
+    {
+        let transaction =
+            radio.detach(oer_chips_esp32s31_hal::radio::domain::transaction::Operation::Channel);
+        let mut observer = NoopPhyTargetObserver;
+        let selection = clocked.channel_transaction(&mut platform, transaction);
+        // A 20 MHz channel is lowered to its primary number and CBW 0
+        // (`radio-system` `channel::lower_ghz2_4_channel`).
+        let (returned, selected) = select_concurrent_wifi_channel::<RomShortDelay, _, _, _>(
+            &timer,
+            u16::from(channel.primary()),
+            0,
+            selection,
+            &mut observer,
+        )
+        .await;
+        radio = returned;
+        selected.map_err(|_| (phase::CHANNEL, 1))?;
+    }
+    let ceiling = Country::new(*b"DE")
+        .ok()
+        .and_then(RegulatoryDomain::of)
+        .and_then(|domain| {
+            domain
+                .permit(oer_protocols_ieee80211_contracts_port::RegulatedChannel::from(channel))
+                .ok()
+        })
+        .map(|permitted| {
+            permitted.tx_ceiling(board::wifi_power_limits(
+                i32::from(PhyConfig::production().highest_target_power_quarter_dbm()) * 25,
+                Some(1000),
+            ))
+        })
+        .ok_or((phase::CEILING, 0))?;
+    let tx_power = radio
+        .attachment()
+        .phy_state()
+        .map_err(|_| (phase::POWER_PROFILE, 0))?
+        .tx_target_power_profile()
+        .with_maximum_quarter_dbm(ceiling.quarter_dbm());
+    let events = [
+        MacCoexEvent::Event1,
+        MacCoexEvent::Event3,
+        MacCoexEvent::Event10,
+        MacCoexEvent::Event15,
+    ];
+    let mut sources = Sources {
+        pti: events.map(|event| MacCoexPti::from(radio.coex_pti(event.coex_event()))),
+        tx_power,
+        delay_random: seed,
+    };
+    let mac = MacColdStartConfig {
+        handshake_deadline: MAC_COLD_HANDSHAKE_DEADLINE,
+        station_address: station,
+        access_point_address: ap,
+    };
+    {
+        let mut hal = clocked.cold_mac_hal(&mut radio);
+        initialize_wifi_mac(&mut sources, &mut hal, &timer, mac)
+            .await
+            .map_err(|_| (phase::MAC_COLD, 0))?;
+    }
+    let (mut access, mut clocks_on) = clocked.into_running();
+
+    // The receive ring, live, with the open promiscuous receive.
+    let placed = RxDmaStorage::place(RX.take().ok_or((phase::RING, 0))?)
+        .map_err(|_| (phase::RING, 1))?;
+    let storage = placed.storage();
+    let prepared = placed
+        .prepare_ring(access.rx_dma())
+        .map_err(|_| (phase::RING, 2))?;
+    let ready = access.wifi_mac_hal().prepare_mac_runtime(prepared);
+    let stopped = ready
+        .publish(access.rx_dma())
+        .map_err(|_| (phase::RING, 3))?;
+    let mut ring = stopped
+        .try_start(access.rx_dma())
+        .map_err(|_| (phase::RING, 4))?;
+    let stale = mac_irq.mac_interrupt_raw();
+    mac_irq.acknowledge_mac_interrupt_raw(stale);
+    access.wifi_mac_hal().start_mac_runtime(&ring);
+    access.wifi_mac_hal().configure_open_promiscuous_receive();
+    let units = receive(storage, &mut ring, &mut access, RECEIVE_MS)
+        .await
+        .map_err(|code| (phase::RECEIVE, code))?;
+    journal.record(Kind::Up, &[units]);
+
+    let mut spread = Spread(seed);
+    let series_start_cycle = oer_portable_riscv::cycle32();
+    let series_start = EmbassyClock.now();
+
+    // Question 4: ordinary stops under receive.
+    for index in 0..STOPS {
+        let index32 = u32::try_from(index).unwrap_or(u32::MAX);
+        let units = receive(storage, &mut ring, &mut access, 1 + spread.next(5))
+            .await
+            .map_err(|code| (phase::RECEIVE, code))?;
+        let begin = oer_portable_riscv::cycle32();
+        access.wifi_mac_hal().request_channel_stop();
+        let requested = oer_portable_riscv::cycle32();
+        let halted = match ring.try_stop(access.rx_dma()) {
+            Ok(halted) => halted,
+            Err((_live, _error)) => return Err((phase::WALKER_STOP, index32)),
+        };
+        let walker_end = oer_portable_riscv::cycle32();
+        let bound = EmbassyClock
+            .now()
+            .checked_add(Duration::from_millis(STOP_BOUND_MS))
+            .ok_or((phase::STOP, index32))?;
+        let mut active = access.wifi_mac_hal().channel_active_state();
+        while active != 0 && EmbassyClock.now() < bound {
+            active = access.wifi_mac_hal().channel_active_state();
+        }
+        let idle = oer_portable_riscv::cycle32();
+        let snapshot = access.receive_dma_snapshot();
+        journal.record(
+            Kind::Stop,
+            &[
+                index32,
+                units,
+                requested.wrapping_sub(begin),
+                walker_end.wrapping_sub(begin),
+                idle.wrapping_sub(begin),
+                u32::from(active),
+                mac_irq.mac_interrupt_raw().bits(),
+                walker(&snapshot)[0],
+                walker(&snapshot)[1],
+            ],
+        );
+        // An ordinary start again: the ring rebuilt, the MAC released.
+        let stopped = storage
+            .prepare_halted(halted, access.rx_dma())
+            .map_err(|_| (phase::RESTART, index32))?;
+        access.wifi_mac_hal().reopen_mac_core(&stopped);
+        ring = stopped
+            .try_start(access.rx_dma())
+            .map_err(|_| (phase::RESTART, index32 | 0x8000_0000))?;
+        access.wifi_mac_hal().start_mac_runtime(&ring);
+    }
+
+    // Questions 1 to 3: pulses mid-run, each followed by a second run.
+    for index in 0..PULSES {
+        let index32 = u32::try_from(index).unwrap_or(u32::MAX);
+        let key = install_key(&mut access).map_err(|code| (phase::KEY, code))?;
+        let units_before = receive(storage, &mut ring, &mut access, RECEIVE_MS)
+            .await
+            .map_err(|code| (phase::RECEIVE, code))?;
+        let delay = spread.next(PULSE_SPREAD_US);
+        wait_micros(u64::from(delay)).await;
+        let before = access.receive_dma_snapshot();
+        let pulse_cycle = oer_portable_riscv::cycle32();
+        let (pulsed, pulsed_clocks) = {
+            let mut clocked = WifiClocked::from_running(access, clocks_on);
+            clocked.reset_mac(&mut radio);
+            clocked.into_running()
+        };
+        access = pulsed;
+        clocks_on = pulsed_clocks;
+        let pulsed_end = oer_portable_riscv::cycle32();
+        let active = access.wifi_mac_hal().channel_active_state();
+        let raw = mac_irq.mac_interrupt_raw().bits();
+        let power = power_causes(&power_irq.power_interrupt_status());
+        let after = access.receive_dma_snapshot();
+        let key_after = access
+            .wifi_mac_hal()
+            .ccmp_entry_is_valid(key);
+        // The guard: every buffer of the ring painted while its descriptors
+        // stay published to the walker; a bus master still running writes
+        // over the paint.
+        paint(storage, index32).map_err(|code| (phase::RING, code))?;
+        wait_micros(u64::from(GUARD_MS) * 1_000).await;
+        let changed = changed_words(storage, index32).map_err(|code| (phase::RING, code))?;
+        // The second run: the walker's stop, the owner's cold preparation,
+        // the ring rebuilt and an ordinary start.
+        let halted = match ring.try_stop(access.rx_dma()) {
+            Ok(halted) => halted,
+            Err((_live, _error)) => return Err((phase::WALKER_STOP, index32 | 0x4000_0000)),
+        };
+        let second_cold = {
+            let mut clocked = WifiClocked::from_running(access, clocks_on);
+            let result = {
+                let mut hal = clocked.cold_mac_hal(&mut radio);
+                initialize_wifi_mac(&mut sources, &mut hal, &timer, mac).await
+            };
+            let (running, on) = clocked.into_running();
+            access = running;
+            clocks_on = on;
+            result
+        };
+        second_cold.map_err(|_| (phase::SECOND_COLD, index32))?;
+        let stopped = storage
+            .prepare_halted(halted, access.rx_dma())
+            .map_err(|_| (phase::SECOND_RING, index32))?;
+        access.wifi_mac_hal().reopen_mac_core(&stopped);
+        ring = stopped
+            .try_start(access.rx_dma())
+            .map_err(|_| (phase::SECOND_RING, index32 | 0x8000_0000))?;
+        let stale = mac_irq.mac_interrupt_raw();
+        mac_irq.acknowledge_mac_interrupt_raw(stale);
+        access.wifi_mac_hal().start_mac_runtime(&ring);
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        let units_after = receive(storage, &mut ring, &mut access, RECEIVE_MS)
+            .await
+            .map_err(|code| (phase::RECEIVE, code | 0x4000_0000))?;
+        let key_second = access.wifi_mac_hal().ccmp_entry_is_valid(key);
+        access.wifi_mac_hal().clear_ccmp_entry(KEY_ENTRY);
+        journal.record(
+            Kind::Pulse,
+            &[
+                index32,
+                units_before,
+                delay,
+                pulse_cycle,
+                pulsed_end.wrapping_sub(pulse_cycle),
+                walker(&before)[0],
+                walker(&before)[1],
+                walker(&after)[0],
+                walker(&after)[1],
+                walker(&after)[2],
+                u32::from(active),
+                raw,
+                power,
+                u32::from(key_after),
+                changed,
+                units_after,
+                u32::from(key_second),
+            ],
+        );
+    }
+    let series_cycles = oer_portable_riscv::cycle32().wrapping_sub(series_start_cycle);
+    let series_micros = EmbassyClock
+        .now()
+        .checked_duration_since(series_start)
+        .map_or(0, |elapsed| u32::try_from(elapsed.as_micros()).unwrap_or(u32::MAX));
+    journal.record(Kind::End, &[series_cycles, series_micros]);
+    // Every owner stays held until the leased host reset.
+    let _held = (radio, access, clocks_on, ring, membership);
+    Ok(())
+}
+
+/// The power bank's latched causes, one bit each in their declared order:
+/// the four TSF timers, a cause no driver handles, the station's TBTT.
+fn power_causes(
+    snapshot: &oer_chips_esp32s31_hal::radio::ieee80211::registers::MacPowerInterruptSnapshot,
+) -> u32 {
+    use oer_chips_esp32s31_hal::radio::ieee80211::registers::MacPowerInterruptCause as Cause;
+    let observed = snapshot.observation();
+    [
+        Cause::TsfTimer0,
+        Cause::TsfTimer1,
+        Cause::TsfTimer2,
+        Cause::TsfTimer3,
+        Cause::Unhandled,
+        Cause::StaTbtt,
+    ]
+    .into_iter()
+    .enumerate()
+    .fold(0, |bits, (place, cause)| {
+        bits | u32::from(observed.contains(cause)) << place
+    })
+}
+
+/// The receive walker's state: its flags (bit 0 enabled, bit 1 a reload
+/// pending, bit 2 the upper next field nonzero), its next and its last
+/// descriptor.
+fn walker(
+    snapshot: &oer_chips_esp32s31_hal::radio::ieee80211::registers::MacRxDmaSnapshot,
+) -> [u32; 3] {
+    [
+        u32::from(snapshot.walker_enabled)
+            | u32::from(snapshot.reload_pending) << 1
+            | u32::from(snapshot.next_descriptor_upper_unknown) << 2,
+        snapshot.next_descriptor_low,
+        snapshot.last_descriptor_low,
+    ]
+}
+
+async fn wait_micros(micros: u64) {
+    if let Some(at) = EmbassyClock.now().checked_add(Duration::from_micros(micros)) {
+        EmbassyClock.wait_until(at).await;
+    }
+}
+
+/// Install a pairwise key in the probe's entry; its index.
+fn install_key(access: &mut RadioAccess) -> Result<MacKeyEntryIndex, u32> {
+    let index = MacKeyEntryIndex::new(u32::from(KEY_ENTRY)).ok_or(1_u32)?;
+    match access.wifi_mac_hal().install_station_ccmp_entry(
+        KEY_ENTRY,
+        MacCcmpKeyIdentity::Pairwise {
+            peer: [0x02, 0, 0, 0, 0, 0x84],
+        },
+        &[0x5a; 16],
+    ) {
+        MacKeyInstallOutcome::Installed => Ok(index),
+        MacKeyInstallOutcome::Occupied => Err(2),
+        MacKeyInstallOutcome::Rejected => Err(3),
+    }
+}
+
+/// Receive for `millis`, taking and recycling every completed unit; their
+/// count.
+async fn receive(
+    storage: &Storage,
+    ring: &mut RxRingLive<'_, COUNT>,
+    access: &mut RadioAccess,
+    millis: u32,
+) -> Result<u32, u32> {
+    let end = EmbassyClock
+        .now()
+        .checked_add(Duration::from_millis(millis))
+        .ok_or(1_u32)?;
+    let mut units = 0_u32;
+    while EmbassyClock.now() < end {
+        storage
+            .observe_reserved(ring, access.rx_dma())
+            .map_err(|_| 2_u32)?;
+        ring.complete_pending_reload(access.rx_dma(), Settle::new(RELOAD_SETTLE, &EmbassyClock))
+            .map_err(|_| 3_u32)?;
+        let frozen = ring.freeze_cursor(access.rx_dma()).map_err(|_| 4_u32)?;
+        if let Some(unit) = storage
+            .take_completed_unit(ring, frozen)
+            .map_err(|_| 5_u32)?
+        {
+            let credit = unit.retain_discard().ok_or(6_u32)?;
+            let _appended = credit.append(access.rx_dma()).map_err(|_| 7_u32)?;
+            units = units.saturating_add(1);
+        } else {
+            wait_micros(100).await;
+        }
+        ring.complete_pending_reload(access.rx_dma(), Settle::new(RELOAD_SETTLE, &EmbassyClock))
+            .map_err(|_| 8_u32)?;
+    }
+    Ok(units)
+}
+
+fn node(storage: &Storage, index: usize) -> Option<&RxDescriptor> {
+    if index == COUNT {
+        Some(storage.reserved_descriptor())
+    } else {
+        storage.descriptors().get(index)
+    }
+}
+
+/// The guard's word at `word` of buffer `index`, for pulse `pulse`.
+const fn pattern(pulse: u32, index: usize, word: usize) -> u32 {
+    0x5a00_0000 ^ (pulse << 16) ^ ((index as u32) << 8) ^ (word as u32)
+}
+
+/// The checked address of buffer `index` of the probe's own arena.
+fn buffer_address(storage: &Storage, index: usize) -> Result<usize, u32> {
+    let descriptor = node(storage, index).ok_or(20_u32)?;
+    let address = descriptor.buffer_address() as usize;
+    let base = core::ptr::from_ref(storage).addr();
+    let limit = base
+        .checked_add(core::mem::size_of::<Storage>())
+        .ok_or(21_u32)?;
+    let end = address.checked_add(BUFFER).ok_or(22_u32)?;
+    if !address.is_multiple_of(4)
+        || address < base
+        || end > limit
+        || usize::from(descriptor.word0().size()) != BUFFER
+    {
+        return Err(23);
+    }
+    Ok(address)
+}
+
+// This probe paints the ring's buffers after the pulse, while its
+// descriptors stay published: the question is whether the MAC's bus master
+// still writes them. Allowed in probe images (`docs/unsafe.md`).
+#[allow(unsafe_code, reason = "probe-only guard paint of the probe's own DMA arena")]
+fn paint(storage: &Storage, pulse: u32) -> Result<(), u32> {
+    for index in 0..NODES {
+        let address = buffer_address(storage, index)?;
+        for word in 0..WORDS {
+            // SAFETY: the address lies in the probe's own static arena, word
+            // aligned, inside its buffer's advertised capacity (checked
+            // above); only the MAC's DMA may write it besides this probe, and
+            // that write is what the guard looks for. No reference is made.
+            unsafe {
+                (address as *mut u32)
+                    .add(word)
+                    .write_volatile(pattern(pulse, index, word));
+            }
+        }
+    }
+    oer_portable_riscv::fence();
+    Ok(())
+}
+
+// The guard's read: CPU loads of SRAM, which are no traffic of the MAC's bus.
+#[allow(unsafe_code, reason = "probe-only volatile read of the probe's own DMA arena")]
+fn changed_words(storage: &Storage, pulse: u32) -> Result<u32, u32> {
+    oer_portable_riscv::fence();
+    let mut changed = 0_u32;
+    for index in 0..NODES {
+        let address = buffer_address(storage, index)?;
+        for word in 0..WORDS {
+            // SAFETY: as in `paint`; this load creates no reference.
+            let value = unsafe { (address as *const u32).add(word).read_volatile() };
+            changed = changed.saturating_add(u32::from(value != pattern(pulse, index, word)));
+        }
+    }
+    Ok(changed)
+}
+
+oer_chips_family_platform_executor::time_driver!(Esp32s31);
