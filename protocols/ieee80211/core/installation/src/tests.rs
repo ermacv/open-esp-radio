@@ -9,6 +9,7 @@
 
 extern crate std;
 
+use oer_protocols_ieee80211_contracts_port::GateClosed;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::string::{String, ToString};
 use std::vec::Vec;
@@ -251,19 +252,22 @@ fn permit_for<'id>(pos: &str, held: Option<&str>) -> Permit<'id> {
 
 /// The Rust input of the model's, and the instant of its step: a run of a
 /// running radio is a retune, asked under the installation's closed gate.
-fn input<'id>(
+fn input<'g, 'id>(
     inp: In,
     pos: &str,
     permit: Option<&str>,
-    gate: &GateClosed<'id>,
+    gate: &'g GateClosed<'id>,
     deadline: Option<Instant>,
-) -> (Input<'id, u8>, Instant) {
+) -> (Input<'g, 'id, u8>, Instant) {
     match inp.kind {
         "request" => {
             let request = match inp.request {
-                "run" if pos == "running" => {
-                    Request::retune(LiveRunning { brand: PhantomData }, CHANNEL, gate, deadline)
-                }
+                "run" if pos == "running" => Request::retune(
+                    LiveRunning { brand: PhantomData },
+                    CHANNEL,
+                    gate.lent(),
+                    deadline,
+                ),
                 "run" => Request::run(LiveStopped { brand: PhantomData }, CHANNEL, deadline),
                 "halt" => Request::halt(live(pos), deadline),
                 "release_stays" => {
@@ -354,7 +358,7 @@ fn run(
                     StartAsk::Poll(_) => "starting",
                 };
                 let answer = ask!("start", Some(proof), project_port(&resume.port));
-                drop(ask);
+                let _asked = ask;
                 resume.answer(match answer {
                     "started" => StartPoll::Running(running()),
                     "pending" => StartPoll::Pending(key.start(self::key().1)),
@@ -367,7 +371,7 @@ fn run(
                     RetuneAsk::Poll(_) => "retuning",
                 };
                 let answer = ask!("retune", Some(proof), project_port(&resume.port));
-                drop(ask);
+                let _asked = ask;
                 resume.answer(match answer {
                     "retuned" => RetunePoll::Running(running()),
                     "pending" => RetunePoll::Pending(key.retune(running())),
@@ -383,7 +387,7 @@ fn run(
                 };
                 let _right = resume.right();
                 let answer = ask!("stop", Some(proof), project_port(&resume.port));
-                drop(ask);
+                let _asked = ask;
                 resume.answer(match answer {
                     "ok" => StopPoll::Stopped(self::key().1),
                     _ => StopPoll::Pending(Stopping::from(running())),

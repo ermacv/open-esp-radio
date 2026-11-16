@@ -219,7 +219,7 @@ impl<'p, 'id, P: ReceivePort<'id>> Round<'p, 'id, P> {
 
     /// The next staged unit, in ring order: the ring is serviced once a
     /// round, at the first call.
-    pub fn next(&mut self) -> Option<Unit<'_, 'p, 'id, P>> {
+    pub fn staged(&mut self) -> Option<Unit<'_, 'p, 'id, P>> {
         if self.handed == 0 && self.next == 0 {
             self.staged = self.port.round_service(&self.seal);
         }

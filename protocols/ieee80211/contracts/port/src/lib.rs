@@ -142,7 +142,9 @@ pub use tx::{
     SingleResponse, SnrSample, TxBody, TxEstimate, TxOutcome, TxPower, TxResponse, TxStatus,
     WithdrawCause,
 };
-pub use types::{ArbiterAuthority, ArbiterPool, GateClosed, GateIssuer, GateOpen, GatePool};
+pub use types::{
+    ArbiterAuthority, ArbiterPool, GateClosed, GateIssuer, GateLent, GateOpen, GatePool,
+};
 
 #[cfg(test)]
 extern crate alloc;

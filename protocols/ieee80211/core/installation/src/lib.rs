@@ -33,6 +33,8 @@
         clippy::disallowed_macros,
         clippy::disallowed_methods,
         clippy::wildcard_enum_match_arm,
+        clippy::struct_excessive_bools,
+        clippy::type_complexity,
     )
 )]
 
@@ -74,12 +76,11 @@ use core::marker::PhantomData;
 use core::mem::{self, MaybeUninit};
 
 use oer_portable_time::Instant;
-use oer_protocols_ieee80211_contracts_port::GateClosed;
+use oer_protocols_ieee80211_contracts_port::GateLent;
 use oer_protocols_ieee80211_contracts_port::life::{
     Retired, RetunePoll, Retuning, Running, StartFailure, StartPoll, Starting, StopPoll, StopRight,
     Stopped, Stopping, UnitsHome,
 };
-use oer_protocols_radio_port::PoolPath;
 
 /// The brand of one port's installations, invariant in `'id`.
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
@@ -140,8 +141,10 @@ pub enum Network {
 
 /// What a request asks.
 #[derive(Clone, Copy, Debug)]
-enum Aim<C> {
+enum Aim<'g, 'id, C> {
     Run(C),
+    /// A retune, under the gate it is begun with.
+    Retune(C, GateLent<'g, 'id>),
     Halt,
     Release(Network),
 }
@@ -150,13 +153,13 @@ enum Aim<C> {
 /// its choice or none.
 #[must_use = "a request holds the controller's permit"]
 #[derive(Debug)]
-pub struct Request<'id, C> {
-    aim: Aim<C>,
+pub struct Request<'g, 'id, C> {
+    aim: Aim<'g, 'id, C>,
     deadline: Option<Instant>,
     brand: Brand<'id>,
 }
 
-impl<'id, C> Request<'id, C> {
+impl<'g, 'id, C> Request<'g, 'id, C> {
     /// The radio running on `channel`: a start of the radio, which is not
     /// running.
     pub const fn run(permit: LiveStopped<'id>, channel: C, deadline: Option<Instant>) -> Self {
@@ -169,17 +172,18 @@ impl<'id, C> Request<'id, C> {
     }
 
     /// The running radio moved to `channel`, asked under the transmit gate
-    /// of this installation the caller closed: the data stays as it is, and
-    /// nothing is told to the data plane.
-    pub const fn retune<P: PoolPath>(
+    /// of this installation the caller closed and lends for the step the
+    /// request is given to, where the port's retune begins under it: the
+    /// data stays as it is, and nothing is told to the data plane.
+    pub const fn retune(
         permit: LiveRunning<'id>,
         channel: C,
-        _closed: &GateClosed<'id, P>,
+        gate: GateLent<'g, 'id>,
         deadline: Option<Instant>,
     ) -> Self {
         let LiveRunning { brand } = permit;
         Self {
-            aim: Aim::Run(channel),
+            aim: Aim::Retune(channel, gate),
             deadline,
             brand,
         }
@@ -238,9 +242,9 @@ pub struct TokensEnded<'id> {
 
 /// What comes later.
 #[derive(Debug)]
-pub enum Input<'id, C> {
+pub enum Input<'g, 'id, C> {
     /// A request of the controller.
-    Request(Request<'id, C>),
+    Request(Request<'g, 'id, C>),
     /// "Look again": the pump's turn. It alone sees a request's deadline,
     /// when the step's `now` is not before it.
     Turn,
@@ -335,9 +339,9 @@ pub enum StartAsk<'id, C> {
 /// A retune the port is asked: begun from the running radio under the
 /// closed gate the request named, or polled.
 #[derive(Debug)]
-pub enum RetuneAsk<'id, C> {
-    /// Begin it on the channel.
-    Begin(Running<'id>, C),
+pub enum RetuneAsk<'g, 'id, C> {
+    /// Begin it on the channel, under the gate its request lent.
+    Begin(Running<'id>, C, GateLent<'g, 'id>),
     /// Poll the retune in progress.
     Poll(Retuning<'id>),
 }
@@ -362,7 +366,7 @@ pub enum Step<'m, 'id, C, D> {
     /// Ask the port's start.
     Start(StartAsk<'id, C>, Resume<'m, 'id, C, D, AskStart>),
     /// Ask the port's retune.
-    Retune(RetuneAsk<'id, C>, Resume<'m, 'id, C, D, AskRetune>),
+    Retune(RetuneAsk<'m, 'id, C>, Resume<'m, 'id, C, D, AskRetune>),
     /// Ask the port's stop, with the stop's right [`Resume::right`] lends.
     Stop(StopAsk<'id>, Resume<'m, 'id, C, D, AskStop>),
     /// Ask the data plane to stop the data.
@@ -406,7 +410,6 @@ pub struct Resume<'m, 'id, C, D, K> {
 #[must_use = "a step goes on only through its resume"]
 pub struct Releasing<'m, 'id, C, D> {
     machine: &'m mut Machine<'id, C, D>,
-    now: Instant,
 }
 
 /// A start is asked.
@@ -649,10 +652,10 @@ impl<'id, C: Copy, D> Machine<'id, C, D> {
     /// of the machine, is decided here, before the step: a release is only
     /// ever asked by a step that begins retired, and nothing is said before
     /// it in that step.
-    pub fn step(&mut self, input: Input<'id, C>, now: Instant) -> Step<'_, 'id, C, D> {
+    pub fn step<'s>(&'s mut self, input: Input<'s, 'id, C>, now: Instant) -> Step<'s, 'id, C, D> {
         if self.release_due(&input, now) {
             self.prepare_release(input);
-            return self.release(now);
+            return self.release();
         }
         let Self {
             life,
@@ -681,7 +684,7 @@ impl<'id, C: Copy, D> Machine<'id, C, D> {
     /// Whether this input leaves a retired installation due for its
     /// release in this step: its goal releases with the network staying or
     /// stopped, and no deadline passed.
-    fn release_due(&self, input: &Input<'id, C>, now: Instant) -> bool {
+    fn release_due(&self, input: &Input<'_, 'id, C>, now: Instant) -> bool {
         let Life::Port {
             at: At::Retired(_), ..
         } = &self.life
@@ -713,7 +716,7 @@ impl<'id, C: Copy, D> Machine<'id, C, D> {
     }
 
     /// The input's effect on a retired installation whose release is due.
-    fn prepare_release(&mut self, input: Input<'id, C>) {
+    fn prepare_release(&mut self, input: Input<'_, 'id, C>) {
         match input {
             Input::Request(Request { aim, deadline, .. }) => {
                 if let Aim::Release(Network::Stays) = aim {
@@ -738,13 +741,13 @@ impl<'id, C: Copy, D> Machine<'id, C, D> {
 
     /// The release of a retired installation, which takes the right with
     /// the retirement.
-    fn release(&mut self, now: Instant) -> Step<'_, 'id, C, D> {
+    fn release(&mut self) -> Step<'_, 'id, C, D> {
         match mem::replace(&mut self.life, Life::Releasing) {
             Life::Port {
                 right,
                 at: At::Retired(retired),
                 ..
-            } => Step::Release(retired, right, Releasing { machine: self, now }),
+            } => Step::Release(retired, right, Releasing { machine: self }),
             // `release_due` named a retired installation: anything else is
             // given back as it was.
             life @ (Life::Port { .. } | Life::Releasing | Life::Released) => {
@@ -813,7 +816,7 @@ impl<'m, 'id, C: Copy, D> Port<'m, 'id, C, D> {
         }
     }
 
-    fn step(self, input: Input<'id, C>, now: Instant) -> Step<'m, 'id, C, D> {
+    fn step(self, input: Input<'m, 'id, C>, now: Instant) -> Step<'m, 'id, C, D> {
         match input {
             Input::Request(request) => self.request(request, now),
             Input::Turn => match *self.goal {
@@ -845,14 +848,14 @@ impl<'m, 'id, C: Copy, D> Port<'m, 'id, C, D> {
         }
     }
 
-    fn request(self, request: Request<'id, C>, now: Instant) -> Step<'m, 'id, C, D> {
+    fn request(self, request: Request<'m, 'id, C>, now: Instant) -> Step<'m, 'id, C, D> {
         let Request {
             aim,
             deadline,
             brand: _,
         } = request;
         let want = match aim {
-            Aim::Run(channel) => Want::Run(channel),
+            Aim::Run(channel) | Aim::Retune(channel, _) => Want::Run(channel),
             Aim::Halt => Want::Halt,
             Aim::Release(Network::Stays) => Want::Release(NetworkStep::Stays),
             Aim::Release(Network::Stops) => Want::Release(NetworkStep::Told),
@@ -868,7 +871,28 @@ impl<'m, 'id, C: Copy, D> Port<'m, 'id, C, D> {
                     },
                 ),
             ),
+            Aim::Retune(channel, gate) => self.retune(channel, gate, now),
             Aim::Release(Network::Stays) | Aim::Run(_) | Aim::Halt => self.advance(now),
+        }
+    }
+
+    /// A retune asked of the running radio: begun in the request's step,
+    /// under the gate it lent.
+    fn retune(mut self, channel: C, gate: GateLent<'m, 'id>, now: Instant) -> Step<'m, 'id, C, D> {
+        match self.take() {
+            At::Running(running) => Step::Retune(
+                RetuneAsk::Begin(running, channel, gate),
+                self.resume(now, AskRetune(())),
+            ),
+            at @ (At::Stopped(_)
+            | At::Starting(_)
+            | At::Retuning(_)
+            | At::Stopping(_)
+            | At::Retired(_)
+            | At::Out(_)) => {
+                *self.at = at;
+                self.advance(now)
+            }
         }
     }
 
@@ -903,17 +927,15 @@ impl<'m, 'id, C: Copy, D> Port<'m, 'id, C, D> {
         let goal = *self.goal;
         match self.take() {
             At::Running(running) => match goal {
-                Goal::None => {
+                // A run of the running radio is a retune, begun in its
+                // request's step (`Port::retune`); it is not asked again.
+                Goal::None
+                | Goal::Open {
+                    want: Want::Run(_), ..
+                } => {
                     *self.at = At::Running(running);
                     self.wake()
                 }
-                Goal::Open {
-                    want: Want::Run(channel),
-                    ..
-                } => Step::Retune(
-                    RetuneAsk::Begin(running, channel),
-                    self.resume(now, AskRetune(())),
-                ),
                 Goal::Service
                 | Goal::Open {
                     want: Want::Halt | Want::Release(_),
@@ -1009,7 +1031,12 @@ impl<'m, 'id, C: Copy, D> Port<'m, 'id, C, D> {
                         StartAsk::Begin(stopped, channel),
                         self.resume(now, AskStart(())),
                     ),
-                    other => {
+                    other @ (At::Starting(_)
+                    | At::Running(_)
+                    | At::Retuning(_)
+                    | At::Stopping(_)
+                    | At::Retired(_)
+                    | At::Out(_)) => {
                         *self.at = other;
                         self.wake()
                     }
@@ -1197,7 +1224,12 @@ impl<'m, 'id, C: Copy, D> Resume<'m, 'id, C, D, AskUnits> {
         }
         let stopped = match port.take() {
             At::Stopped(stopped) => stopped,
-            other => {
+            other @ (At::Starting(_)
+            | At::Running(_)
+            | At::Retuning(_)
+            | At::Stopping(_)
+            | At::Retired(_)
+            | At::Out(_)) => {
                 *port.at = other;
                 return port.wake();
             }
@@ -1228,7 +1260,7 @@ impl<'m, 'id, C: Copy, D> Resume<'m, 'id, C, D, AskRetire> {
 impl<'m, 'id, C: Copy, D> Releasing<'m, 'id, C, D> {
     /// The port released: the end of the port, and of the stop's right.
     pub fn answer(self) -> Step<'m, 'id, C, D> {
-        let Self { machine, now: _ } = self;
+        let Self { machine } = self;
         machine.life = Life::Released;
         machine.goal = Goal::None;
         Step::Released(Ended::Released, Rest::Wake(None))

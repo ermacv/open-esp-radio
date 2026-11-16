@@ -269,6 +269,14 @@ pub fn every_right_is_in_exactly_one_place<'id, H, const S: usize, const G: usiz
     retire_whole(harness, rights);
 }
 
+/// The rights of `rights` back in their array, all of them.
+fn home<T, const N: usize>(rights: Vec<T>, what: &str) -> [T; N] {
+    match rights.try_into() {
+        Ok(home) => home,
+        Err(_) => panic!("{what}"),
+    }
+}
+
 /// Retire and release a stopped installation: every right is home, the gate
 /// closed.
 fn retire_whole<'id, H, const S: usize, const G: usize, const A: usize>(
@@ -446,8 +454,8 @@ pub fn a_stop_ends_everything_on_the_air<'id, H, const S: usize, const G: usize,
     rights.gate = Some(closed);
     rights.data = Some(DataRights {
         arenas: data.arenas,
-        singles: singles.try_into().ok().expect("every place is back"),
-        queues: queues.try_into().ok().expect("every queue's right is back"),
+        singles: home(singles, "every place is back"),
+        queues: home(queues, "every queue's right is back"),
         command,
         pairwise: data.pairwise,
         groups: data.groups,
@@ -493,11 +501,12 @@ pub fn a_unit_is_in_one_place<'id, H, const S: usize, const G: usize, const A: u
     harness.land(&data_mpdu(40));
     harness.land(&data_mpdu(40));
     let mut round = Round::open(harness.port(), NOW);
-    let first = round.next().expect("the ring held two units");
+    let first = round.staged().expect("the ring held two units");
     let handle = first.take();
-    let second = round.next().expect("the ring held two units");
-    drop(second);
-    assert!(round.next().is_none());
+    let Some(_second) = round.staged() else {
+        panic!("the ring held two units");
+    };
+    assert!(round.staged().is_none());
     let lendable = round
         .unit(&handle)
         .unwrap()
@@ -555,7 +564,7 @@ pub fn a_publication_sends_the_prefix_its_rate_admits<
     let rate = ht_rate::<H::Port>(harness.port());
     let on_air = harness.port().publish(arena, rate, &open, NOW);
     let sent = on_air.sent();
-    assert!(sent.len() >= 1, "one frame goes at least");
+    assert!(!sent.is_empty(), "one frame goes at least");
     assert!(
         u32::from(frames) > sent.len(),
         "the rate admits less than the arena holds"
@@ -628,8 +637,7 @@ pub fn a_round_services_the_ring_once<'id, H, const S: usize, const G: usize, co
     let before = services(harness);
     let mut round = Round::open(harness.port(), NOW);
     let mut handed = 0;
-    while let Some(unit) = round.next() {
-        drop(unit);
+    while let Some(_unit) = round.staged() {
         handed += 1;
     }
     let _ = round.close();

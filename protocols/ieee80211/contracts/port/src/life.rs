@@ -25,7 +25,7 @@ use core::marker::PhantomData;
 
 use oer_protocols_radio_port::{PoolBuilder, PoolPath, PoolSet, Root};
 
-use crate::{GateClosed, GateIssuer, GatePool};
+use crate::{GateClosed, GateIssuer, GateLent, GatePool};
 
 /// The brand of one installation, invariant in `'id`.
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
@@ -300,11 +300,11 @@ pub trait RadioPort<'id> {
 
     /// Begin a retune of the running radio to `channel`, under the
     /// installation's closed gate.
-    fn retune<Path: PoolPath>(
+    fn retune(
         &mut self,
         running: Running<'id>,
         channel: Self::Channel,
-        gate: &GateClosed<'id, Path>,
+        gate: GateLent<'_, 'id>,
         now: oer_portable_time::Instant,
     ) -> Retuning<'id>;
 

@@ -59,7 +59,7 @@
 
 extern crate std;
 
-use core::cell::RefCell;
+use core::cell::Cell;
 use core::num::NonZeroU16;
 use core::task::{Context, Poll};
 use std::collections::VecDeque;
@@ -72,7 +72,7 @@ use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AggregateOutcome, Air as OnAirAir, AmpduCapabilities, AmpduLengthTable,
     AmpduRate, Arena, ArenaSide, BandSet, BlockAckReport, Channel, Command, CommandEnd,
     CommandPlace, CommandPoll, Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet,
-    GateClosed, GateIssuer, GateOpen, HEADROOM, HardwareServices, HeaderLen, IdleArena,
+    GateClosed, GateIssuer, GateLent, GateOpen, HEADROOM, HardwareServices, HeaderLen, IdleArena,
     Ieee80211Capabilities, Ieee80211Instant, InCommand, IndeterminateCause, LowerMacCapabilities,
     MpduLength, OnAir, PhyFormatSet, Place, PortKey, PortSink, QueueRight, RadioPort, RateSupport,
     ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHeader, RxMeta,
@@ -253,28 +253,91 @@ pub struct Counts {
     pub decodes: u32,
 }
 
+/// A part of the modelled hardware that is on or off, or one of the
+/// model's own levers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Part {
+    /// The interrupts are unmasked.
+    Interrupts,
+    /// The queues are enabled.
+    Queues,
+    /// The receive walker runs.
+    Walker,
+    /// The MAC's runtime runs.
+    MacRuntime,
+    /// The gate is open.
+    Gate,
+    /// The pairwise key is installed.
+    Pairwise,
+    /// The port needs a stop.
+    NeedsStop,
+    /// The lever: the next stop's busy bits hold, so its last resort runs.
+    Busy,
+    /// The lever: the next command expires.
+    Expire,
+}
+
+/// A key or agreement slot of the modelled hardware.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Slot {
+    Held,
+    Empty,
+}
+
+/// The parts that are on.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Parts(u16);
+
+impl Parts {
+    const LEVERS: u16 = Self::bit(Part::Busy) | Self::bit(Part::Expire);
+
+    const fn bit(part: Part) -> u16 {
+        1 << part as u16
+    }
+
+    /// Whether `part` is on.
+    pub const fn has(self, part: Part) -> bool {
+        self.0 & Self::bit(part) != 0
+    }
+
+    const fn on(&mut self, part: Part) {
+        self.0 |= Self::bit(part);
+    }
+
+    const fn off(&mut self, part: Part) {
+        self.0 &= !Self::bit(part);
+    }
+
+    /// Whether `part` was on; it is off after.
+    const fn take(&mut self, part: Part) -> bool {
+        let was = self.has(part);
+        self.off(part);
+        was
+    }
+
+    /// The hardware's parts, without the model's levers.
+    const fn held(self) -> Self {
+        Self(self.0 & !Self::LEVERS)
+    }
+}
+
+/// The places of the mask `bits`, in order.
+fn places_of(bits: u64) -> Vec<u8> {
+    (0..64_u8)
+        .filter(|place| bits & 1_u64.checked_shl(u32::from(*place)).unwrap_or(0) != 0)
+        .collect()
+}
+
 /// What the modelled hardware holds that a stop must take down: compared
 /// before a start and after its stop.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HardwareState {
-    /// The interrupts are unmasked.
-    pub interrupts: bool,
-    /// The queues are enabled.
-    pub queues: bool,
-    /// The receive walker runs.
-    pub walker: bool,
-    /// The MAC's runtime runs.
-    pub mac_runtime: bool,
-    /// The gate is open.
-    pub gate: bool,
-    /// The pairwise key is installed.
-    pub pairwise: bool,
+    /// The parts of the hardware that are on.
+    pub parts: Parts,
     /// The group key slots installed.
     pub groups: [bool; MODEL_GROUPS],
     /// The agreements running.
     pub agreements: [bool; MODEL_AGREEMENTS],
-    /// The port needs a stop.
-    pub needs_stop: bool,
     /// A frame is on the air.
     pub on_air: bool,
     /// Units the network holds.
@@ -335,7 +398,7 @@ struct Running_<'id> {
 #[derive(Debug)]
 pub struct ModelLent {
     place: u8,
-    returns: Rc<RefCell<Vec<u8>>>,
+    returns: Rc<Cell<u64>>,
 }
 
 impl ModelLent {
@@ -347,7 +410,8 @@ impl ModelLent {
 
 impl Drop for ModelLent {
     fn drop(&mut self) {
-        self.returns.borrow_mut().push(self.place);
+        let place = 1_u64.checked_shl(u32::from(self.place)).unwrap_or(0);
+        self.returns.set(self.returns.get() | place);
     }
 }
 
@@ -358,24 +422,16 @@ pub struct ModelPort<'id, const SINGLES: usize> {
     phase: Phase,
     channel: SupportedChannel<ModelCaps>,
     start_failure: Option<StartFailure>,
-    busy: bool,
-    interrupts: bool,
-    queues_on: bool,
-    walker: bool,
-    mac_runtime: bool,
-    gate: bool,
-    pairwise: bool,
+    parts: Parts,
     groups: [bool; MODEL_GROUPS],
     agreements: [bool; MODEL_AGREEMENTS],
-    expire: bool,
-    needs_stop: bool,
     anomaly: Option<Anomaly>,
     arenas: [ArenaBuffer; 2],
     queues: [Queue; 4],
     singles: Vec<Vec<u8>>,
     ring: VecDeque<(Vec<u8>, RxMeta)>,
     places: Vec<Option<Unit>>,
-    returns: Rc<RefCell<Vec<u8>>>,
+    returns: Rc<Cell<u64>>,
     command: Option<Running_<'id>>,
     record: Vec<Programmed>,
     counts: Counts,
@@ -412,24 +468,16 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
             phase: Phase::Stopped,
             channel,
             start_failure: None,
-            busy: false,
-            interrupts: false,
-            queues_on: false,
-            walker: false,
-            mac_runtime: false,
-            gate: false,
-            pairwise: false,
+            parts: Parts(0),
             groups: [false; MODEL_GROUPS],
             agreements: [false; MODEL_AGREEMENTS],
-            expire: false,
-            needs_stop: false,
             anomaly: None,
             arenas: [ArenaBuffer::default(), ArenaBuffer::default()],
             queues: [Queue::default(); 4],
             singles: (0..SINGLES).map(|_| Vec::new()).collect(),
             ring: VecDeque::new(),
             places: (0..MODEL_PLACES).map(|_| None).collect(),
-            returns: Rc::new(RefCell::new(Vec::new())),
+            returns: Rc::new(Cell::new(0)),
             command: None,
             record: Vec::new(),
             counts: Counts::default(),
@@ -470,18 +518,18 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
 
     /// Keep the MAC busy: the next stop's last resort runs.
     pub const fn hold_busy(&mut self) {
-        self.busy = true;
+        self.parts.on(Part::Busy);
     }
 
     /// Make the next key or agreement command expire at its bound.
     pub const fn expire_next(&mut self) {
-        self.expire = true;
+        self.parts.on(Part::Expire);
     }
 
     /// The hardware sees `anomaly`: the port needs a stop.
     pub fn raise(&mut self, anomaly: Anomaly) {
         if self.phase != Phase::Stopped {
-            self.needs_stop = true;
+            self.parts.on(Part::NeedsStop);
             self.anomaly = Some(anomaly);
         }
     }
@@ -499,15 +547,9 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
     /// What the modelled hardware holds.
     pub fn state(&self) -> HardwareState {
         HardwareState {
-            interrupts: self.interrupts,
-            queues: self.queues_on,
-            walker: self.walker,
-            mac_runtime: self.mac_runtime,
-            gate: self.gate,
-            pairwise: self.pairwise,
+            parts: self.parts.held(),
             groups: self.groups,
             agreements: self.agreements,
-            needs_stop: self.needs_stop,
             on_air: self.queues.iter().any(|queue| queue.single.is_some())
                 || self.arenas.iter().any(|arena| arena.air.is_some()),
             lent: self
@@ -533,25 +575,25 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
 
     /// The start's programming, in order.
     fn program_start(&mut self) {
-        self.interrupts = true;
+        self.parts.on(Part::Interrupts);
         self.program(Programmed::Interrupts(true));
-        self.queues_on = true;
+        self.parts.on(Part::Queues);
         self.program(Programmed::Queues(true));
-        self.walker = true;
+        self.parts.on(Part::Walker);
         self.program(Programmed::Walker(true));
-        self.mac_runtime = true;
+        self.parts.on(Part::MacRuntime);
         self.program(Programmed::MacRuntime(true));
     }
 
     /// The stop's taking down, in the start's order reversed.
     fn take_down(&mut self) {
-        self.mac_runtime = false;
+        self.parts.off(Part::MacRuntime);
         self.program(Programmed::MacRuntime(false));
-        self.walker = false;
+        self.parts.off(Part::Walker);
         self.program(Programmed::Walker(false));
-        self.queues_on = false;
+        self.parts.off(Part::Queues);
         self.program(Programmed::Queues(false));
-        self.interrupts = false;
+        self.parts.off(Part::Interrupts);
         self.program(Programmed::Interrupts(false));
     }
 
@@ -627,11 +669,11 @@ impl<'id, const SINGLES: usize> RadioPort<'id> for ModelPort<'id, SINGLES> {
         StartPoll::Running(self.key.started(starting))
     }
 
-    fn retune<Path: oer_protocols_radio_port::PoolPath>(
+    fn retune(
         &mut self,
         running: Running<'id>,
         channel: Self::Channel,
-        _gate: &GateClosed<'id, Path>,
+        _gate: GateLent<'_, 'id>,
         _now: Instant,
     ) -> Retuning<'id> {
         self.call();
@@ -676,17 +718,17 @@ impl<'id, const SINGLES: usize> RadioPort<'id> for ModelPort<'id, SINGLES> {
         self.call();
         self.withdraw_air();
         self.take_down();
-        if core::mem::take(&mut self.busy) {
+        if self.parts.take(Part::Busy) {
             // The MAC did not go idle within the bound: its own block's
             // reset clears what the owner programmed when it took it, the
             // key table included, and the stop runs that programming again.
             self.program(Programmed::BlockReset);
-            self.pairwise = false;
+            self.parts.off(Part::Pairwise);
             self.groups = [false; MODEL_GROUPS];
             self.agreements = [false; MODEL_AGREEMENTS];
             self.program(Programmed::OwnerTaking);
         }
-        self.needs_stop = false;
+        self.parts.off(Part::NeedsStop);
         self.anomaly = None;
         self.phase = Phase::Stopped;
         StopPoll::Stopped(self.key.stopped(stopping))
@@ -694,7 +736,7 @@ impl<'id, const SINGLES: usize> RadioPort<'id> for ModelPort<'id, SINGLES> {
 
     fn poll_units_home(&mut self, _cx: &mut Context<'_>) -> Poll<UnitsHome<'id>> {
         self.call();
-        let returned: Vec<u8> = self.returns.borrow_mut().drain(..).collect();
+        let returned = places_of(self.returns.replace(0));
         for place in returned {
             if let Some(slot) = self.places.get_mut(usize::from(place)) {
                 *slot = None;
@@ -752,7 +794,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             } else {
                 Signal::Quiet
             },
-            needs_stop: if self.needs_stop {
+            needs_stop: if self.parts.has(Part::NeedsStop) {
                 Signal::Raised
             } else {
                 Signal::Quiet
@@ -955,7 +997,8 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
     fn serve(
         &mut self,
         _facts: TxFacts,
-        tbtt: Signal,
+        // The model has no station TBTT schedule.
+        _tbtt: Signal,
         _now: Instant,
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
     ) {
@@ -990,8 +1033,6 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             let (place, right) = self.key.single_end(place, *category);
             sink.single_ended(outcome, place, right);
         }
-        // The model has no station TBTT schedule.
-        let _ = tbtt;
     }
 
     fn write_single(
@@ -1051,47 +1092,52 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         let Some(Running_ { command: running }) = self.command.take() else {
             return CommandPoll::Pending(command);
         };
-        let expire = core::mem::take(&mut self.expire);
+        let expire = self.parts.take(Part::Expire);
+        let plain = if expire {
+            CommandEnd::Expired
+        } else {
+            CommandEnd::Done
+        };
         let end = match running {
             Command::InstallPairwise { slot, .. } => {
                 if expire {
-                    self.pairwise = false;
+                    self.parts.off(Part::Pairwise);
                     self.program(Programmed::Pairwise(false));
                     CommandEnd::PairwiseEmpty(slot)
                 } else {
-                    self.pairwise = true;
+                    self.parts.on(Part::Pairwise);
                     self.program(Programmed::Pairwise(true));
                     CommandEnd::PairwiseInstalled(self.key.pairwise_installed(slot))
                 }
             }
             Command::RemovePairwise(key) => {
-                self.pairwise = false;
+                self.parts.off(Part::Pairwise);
                 self.program(Programmed::Pairwise(false));
                 CommandEnd::PairwiseEmpty(self.key.pairwise_removed(key))
             }
             Command::InstallGroup { slot, .. } => {
                 let index = slot.index();
                 if expire {
-                    self.set_group(index, false);
+                    self.set_group(index, Slot::Empty);
                     CommandEnd::GroupEmpty(slot)
                 } else {
-                    self.set_group(index, true);
+                    self.set_group(index, Slot::Held);
                     CommandEnd::GroupInstalled(self.key.group_installed(slot))
                 }
             }
             Command::ReplaceGroup { installed, .. } | Command::SelectGroup(installed) => {
                 let index = installed.index();
                 if expire {
-                    self.set_group(index, false);
+                    self.set_group(index, Slot::Empty);
                     CommandEnd::GroupEmpty(self.key.group_removed(installed))
                 } else {
-                    self.set_group(index, true);
+                    self.set_group(index, Slot::Held);
                     CommandEnd::GroupInstalled(installed)
                 }
             }
             Command::RemoveGroup(installed) => {
                 let index = installed.index();
-                self.set_group(index, false);
+                self.set_group(index, Slot::Empty);
                 CommandEnd::GroupEmpty(self.key.group_removed(installed))
             }
             Command::AddAgreement { slot, .. } => {
@@ -1099,13 +1145,13 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                 if expire {
                     CommandEnd::AgreementEmpty(slot)
                 } else {
-                    self.set_agreement(index, true);
+                    self.set_agreement(index, Slot::Held);
                     CommandEnd::AgreementAdded(self.key.agreement_added(slot))
                 }
             }
             Command::EndAgreement(agreement) => {
                 let index = agreement.index();
-                self.set_agreement(index, false);
+                self.set_agreement(index, Slot::Empty);
                 CommandEnd::AgreementEmpty(self.key.agreement_ended(agreement))
             }
             Command::CloseGate(open) => {
@@ -1116,48 +1162,49 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                     });
                     return CommandPoll::Pending(command);
                 }
-                self.gate = false;
+                self.parts.off(Part::Gate);
                 self.program(Programmed::Gate(false));
                 CommandEnd::GateClosed(self.issuer.close(open))
             }
-            Command::Configure(_) => self.value(Programmed::Configure, expire),
-            Command::SetEdca(_) => self.value(Programmed::Edca, expire),
-            Command::SetBssColor(_) => self.value(Programmed::Color, expire),
-            Command::SetHe(_) => self.value(Programmed::He, expire),
+            Command::Configure(_) => self.value(Programmed::Configure, plain),
+            Command::SetEdca(_) => self.value(Programmed::Edca, plain),
+            Command::SetBssColor(_) => self.value(Programmed::Color, plain),
+            Command::SetHe(_) => self.value(Programmed::He, plain),
         };
         CommandPoll::Ended(self.key.command_ended(command), end)
     }
 
     fn open_gate(&mut self, gate: GateClosed<'id>) -> GateOpen<'id> {
         self.call();
-        self.gate = true;
+        self.parts.on(Part::Gate);
         self.program(Programmed::Gate(true));
         self.issuer.open(gate)
     }
 }
 
 impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
-    fn set_group(&mut self, index: u8, installed: bool) {
-        if let Some(slot) = self.groups.get_mut(usize::from(index)) {
-            *slot = installed;
+    fn set_group(&mut self, index: u8, slot: Slot) {
+        let installed = matches!(slot, Slot::Held);
+        if let Some(place) = self.groups.get_mut(usize::from(index)) {
+            *place = installed;
         }
         self.program(Programmed::Group(index, installed));
     }
 
-    fn set_agreement(&mut self, index: u8, running: bool) {
-        if let Some(slot) = self.agreements.get_mut(usize::from(index)) {
-            *slot = running;
+    fn set_agreement(&mut self, index: u8, slot: Slot) {
+        let running = matches!(slot, Slot::Held);
+        if let Some(place) = self.agreements.get_mut(usize::from(index)) {
+            *place = running;
         }
         self.program(Programmed::Agreement(index, running));
     }
 
-    fn value(&mut self, programmed: Programmed, expire: bool) -> CommandEnd<'id> {
-        if expire {
-            CommandEnd::Expired
-        } else {
+    /// A command with no slot: it expires when the lever said so.
+    fn value(&mut self, programmed: Programmed, end: CommandEnd<'id>) -> CommandEnd<'id> {
+        if let CommandEnd::Done = end {
             self.program(programmed);
-            CommandEnd::Done
         }
+        end
     }
 }
 
@@ -1168,7 +1215,7 @@ impl<'id, const SINGLES: usize> ReceivePort<'id> for ModelPort<'id, SINGLES> {
     fn round_open(&mut self, _seal: &Sealed, _now: Instant) -> usize {
         self.call();
         self.counts.rounds = self.counts.rounds.saturating_add(1);
-        let returned: Vec<u8> = self.returns.borrow_mut().drain(..).collect();
+        let returned = places_of(self.returns.replace(0));
         for &place in &returned {
             if let Some(slot) = self.places.get_mut(usize::from(place)) {
                 *slot = None;
@@ -1231,10 +1278,10 @@ impl<'id, const SINGLES: usize> ReceivePort<'id> for ModelPort<'id, SINGLES> {
         self.call();
         self.counts.closes = self.counts.closes.saturating_add(1);
         for place in 0..MODEL_PLACES {
-            if back & (1_u64 << place) != 0 {
-                if let Some(slot) = self.places.get_mut(place) {
-                    *slot = None;
-                }
+            if back & (1_u64 << place) != 0
+                && let Some(slot) = self.places.get_mut(place)
+            {
+                *slot = None;
             }
         }
         if !self.ring.is_empty() && self.free_places() > 0 {

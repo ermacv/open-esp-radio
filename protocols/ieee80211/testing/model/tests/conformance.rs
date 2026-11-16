@@ -1,5 +1,13 @@
 //! The conformance suite over the model port.
 
+#![allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_macros,
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "a test: its harness polls with a no-op waker and fails by panicking"
+)]
+
 use oer_protocols_ieee80211_contracts_port::{
     Channel, ChannelWidth, MpduLength, PortPools, RadioPort, RegulatedChannel, RxMeta,
     SupportedChannel,

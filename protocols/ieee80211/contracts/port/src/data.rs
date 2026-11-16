@@ -121,7 +121,7 @@ impl FrameSet {
         if count >= 64 {
             Self(u64::MAX)
         } else {
-            Self((1_u64 << count) - 1)
+            Self((1_u64 << count).wrapping_sub(1))
         }
     }
 

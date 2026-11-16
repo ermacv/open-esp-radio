@@ -90,6 +90,32 @@ pub struct GateClosed<'id, Path: PoolPath = Root<oer_protocols_radio_port::Local
     place: GatePlace<'id, Path>,
 }
 
+impl<'id, Path: PoolPath> GateClosed<'id, Path> {
+    /// The closed gate lent to a retune: it stays closed for the loan.
+    pub const fn lent(&self) -> GateLent<'_, 'id> {
+        GateLent {
+            brand: core::marker::PhantomData,
+        }
+    }
+}
+
+/// The installation's closed gate, lent for as long as `'g`: a retune is
+/// asked and begun under it. Only a [`GateClosed`] lends it.
+///
+/// ```compile_fail,E0451
+/// # use oer_protocols_ieee80211_contracts_port::GateLent;
+/// fn forge<'g, 'id>() -> GateLent<'g, 'id> {
+///     GateLent { brand: core::marker::PhantomData }
+/// }
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct GateLent<'g, 'id> {
+    brand: core::marker::PhantomData<(&'g (), Brand<'id>)>,
+}
+
+/// The brand of one installation, invariant in `'id`.
+type Brand<'id> = fn(&'id ()) -> &'id ();
+
 /// The backend's authority to convert its one gate place between states.
 ///
 /// One issuer is retained by the backend per install and never reaches the
