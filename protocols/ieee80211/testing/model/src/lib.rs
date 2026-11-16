@@ -74,7 +74,7 @@ use oer_protocols_ieee80211_contracts_port::{
     Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet, GateClosed, GateIssuer,
     GateLent, GateOpen, HEADROOM, HardwareServices, HeaderLen, IdleArena, Ieee80211Capabilities,
     Ieee80211Instant, InCommand, IndeterminateCause, LowerMacCapabilities, MpduLength, OnAir,
-    PhyFormatSet, Place, PortKey, PortSink, Ppdu, QueueRight, RadioPort, RateSupport,
+    PhyFormatSet, Place, PortKey, PortSink, Ppdu, Protection, QueueRight, RadioPort, RateSupport,
     ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead, RxMeta,
     Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces,
     StartFailure, StartPoll, Starting, StopPoll, StopRight, Stopped, Stopping, SupportedChannel,
@@ -191,6 +191,9 @@ pub struct Publication {
     pub single: Went,
     /// The rate it went at.
     pub rate: PhyRate,
+    /// The protection it went behind: an aggregate's, or each stage's of a
+    /// single's plan.
+    pub protection: Vec<Protection>,
     /// The MPDUs' fronts as they went, the Retry bit set on a frame that
     /// went before.
     pub frames: Vec<Vec<u8>>,
@@ -1038,9 +1041,16 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                     front
                 })
                 .collect();
+            let protection = match (how, buffer.went) {
+                (Ppdu::Aggregate { protection, .. }, Went::Aggregate) => std::vec![protection],
+                (Ppdu::Single(plan) | Ppdu::Aggregate { alone: plan, .. }, _) => {
+                    plan.stages().map(|stage| stage.protection).collect()
+                }
+            };
             record = Some(Publication {
                 single: buffer.went,
                 rate: went_at,
+                protection,
                 frames,
             });
         }
@@ -1071,17 +1081,25 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
     ) -> Option<Ended<'_, Self::Ack, Self::BlockAck, Self::Denial>> {
         self.call();
         let acknowledge = self.acknowledge;
+        // The air answers at the end, as it is set then.
+        let now_air = self.air_of(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort);
         let buffer = self.arenas.get_mut(side_index(on_air.side()))?;
         let rate = buffer.rate?;
         if buffer.ended.is_none() {
-            let air = match buffer.air {
-                None | Some(Air::Hold) => return None,
-                Some(air) => air,
+            let air = match (buffer.air, now_air) {
+                (None, _) | (Some(_), Air::Hold) => return None,
+                (Some(_), air) => air,
             };
             buffer.air = None;
             let (outcome, acknowledged) = match (buffer.went, air) {
-                (_, Air::Timeout) => (
+                (Went::Single, Air::Timeout) => (
                     ArenaOutcome::Single(TxOutcome::Indeterminate(
+                        IndeterminateCause::HardwareTimeout,
+                    )),
+                    FrameSet::EMPTY,
+                ),
+                (Went::Aggregate, Air::Timeout) => (
+                    ArenaOutcome::Aggregate(TxOutcome::Indeterminate(
                         IndeterminateCause::HardwareTimeout,
                     )),
                     FrameSet::EMPTY,
