@@ -147,7 +147,7 @@
 //! ```
 //! # use oer_protocols_ieee80211_contracts_port::{DataPort, PortRate, PhyRate};
 //! # use oer_protocols_ieee80211_wire::phy::LegacyRate;
-//! fn rate<'id, P: DataPort<'id>>(port: &P) -> Option<PortRate<'_, P::Caps>> {
+//! fn rate<'id, P: DataPort<'id>>(port: &P) -> Option<PortRate<'id, P::Caps>> {
 //!     port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
 //! }
 //! ```
