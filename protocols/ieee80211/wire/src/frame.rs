@@ -64,20 +64,23 @@ impl FrameControl {
     /// Select the Protected Frame subfield while retaining the validated
     /// frame kind.
     pub const fn with_protected(self, protection: FrameProtection) -> Self {
-        Self(u16::from_le_bytes(
-            FrameControlFields::from_bytes(self.0.to_le_bytes())
-                .with_protected(matches!(protection, FrameProtection::Protected))
-                .to_bytes(),
-        ))
+        Self::of_fields(
+            self.fields()
+                .with_protected(matches!(protection, FrameProtection::Protected)),
+        )
     }
     /// Select the Retry subfield without changing the frame's kind,
     /// protection or direction.
     pub const fn with_retry(self, retry: Retry) -> Self {
-        Self(u16::from_le_bytes(
-            FrameControlFields::from_bytes(self.0.to_le_bytes())
-                .with_retry(matches!(retry, Retry::Retransmission))
-                .to_bytes(),
-        ))
+        Self::of_fields(
+            self.fields()
+                .with_retry(matches!(retry, Retry::Retransmission)),
+        )
+    }
+
+    /// The field of `fields`, which keep a validated frame kind.
+    const fn of_fields(fields: FrameControlFields) -> Self {
+        Self(u16::from_le_bytes(fields.to_bytes()))
     }
     /// This MPDU repeats an earlier transmission.
     pub const fn retry(self) -> bool {
@@ -709,31 +712,36 @@ impl MacHeader {
         }
     }
 
+    /// The header's octets in transmission order (IEEE Std 802.11-2020,
+    /// 9.2.3: Frame Control, Duration/ID, Address 1 to 3, Sequence Control,
+    /// Address 4, QoS Control, HT Control), [`Self::header_len`] of them.
+    pub fn octets(&self) -> impl Iterator<Item = u8> + use<> {
+        self.control
+            .fields()
+            .to_bytes()
+            .into_iter()
+            .chain(self.duration.to_le_bytes())
+            .chain(self.address1)
+            .chain(self.address2)
+            .chain(self.address3)
+            .chain(self.sequence_control.to_le_bytes())
+            .chain(self.address4.into_iter().flatten())
+            .chain(self.qos.map(QosControl::to_bytes).into_iter().flatten())
+            .chain(self.ht_control.into_iter().flatten())
+    }
+
     /// Write the header at the start of `out` and return its length. A
     /// shorter `out` is refused before any octet is written.
     pub fn encode(&self, out: &mut [u8]) -> Result<usize, oer_portable_wire::Error> {
         let len = self.header_len();
-        if out.len() < len {
+        let Some(header) = out.get_mut(..len) else {
             return Err(oer_portable_wire::Error::Truncated {
                 required: len,
                 remaining: out.len(),
             });
-        }
-        let mut writer = oer_portable_wire::Writer::new(out);
-        writer.u16_le(self.control.get())?;
-        writer.u16_le(self.duration)?;
-        writer.write(&self.address1)?;
-        writer.write(&self.address2)?;
-        writer.write(&self.address3)?;
-        writer.u16_le(self.sequence_control)?;
-        if let Some(address4) = self.address4 {
-            writer.write(&address4)?;
-        }
-        if let Some(qos) = self.qos {
-            writer.write(&qos.to_bytes())?;
-        }
-        if let Some(ht_control) = self.ht_control {
-            writer.write(&ht_control)?;
+        };
+        for (place, octet) in header.iter_mut().zip(self.octets()) {
+            *place = octet;
         }
         Ok(len)
     }

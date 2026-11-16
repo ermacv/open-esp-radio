@@ -7253,7 +7253,7 @@ const RAW_BYTES: &[(&str, usize, &str)] = &[
         9,
         BY_P3,
     ),
-    ("protocols/ieee80211/wire/src/frame.rs", 17, BY_P3),
+    ("protocols/ieee80211/wire/src/frame.rs", 16, BY_P3),
     ("protocols/ieee80211/wire/src/ftm.rs", 19, BY_P3),
     ("protocols/ieee80211/wire/src/he.rs", 11, BY_P3),
     ("protocols/ieee80211/wire/src/ht.rs", 6, BY_P3),

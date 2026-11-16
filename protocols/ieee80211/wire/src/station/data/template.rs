@@ -101,20 +101,57 @@ impl StaDataHeaderTemplate {
             && self.protection == protection
     }
 
-    /// The length of the prefix [`Self::write`] writes.
+    /// The longest prefix a template writes: a QoS data header, the CCMP
+    /// header and LLC/SNAP.
+    pub const MAX_PREFIX_LEN: usize =
+        IEEE80211_QOS_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN;
+
+    /// The length of the prefix [`Self::write`] and [`Self::write_before`]
+    /// write.
     pub const fn prefix_len(&self) -> usize {
         const LEGACY_OPEN: usize = IEEE80211_LEGACY_DATA_HEADER_LEN + LLC_SNAP_HEADER_LEN;
         const QOS_OPEN: usize = IEEE80211_QOS_DATA_HEADER_LEN + LLC_SNAP_HEADER_LEN;
         const LEGACY_CCMP: usize =
             IEEE80211_LEGACY_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN;
-        const QOS_CCMP: usize =
-            IEEE80211_QOS_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN;
         match (self.peer_qos(), self.protection) {
             (PeerQos::NonQos, LinkProtection::Open) => LEGACY_OPEN,
             (PeerQos::Qos, LinkProtection::Open) => QOS_OPEN,
             (PeerQos::NonQos, LinkProtection::Ccmp) => LEGACY_CCMP,
-            (PeerQos::Qos, LinkProtection::Ccmp) => QOS_CCMP,
+            (PeerQos::Qos, LinkProtection::Ccmp) => Self::MAX_PREFIX_LEN,
         }
+    }
+
+    /// The MAC header of the MPDU of `fields`.
+    fn header(&self, fields: StaDataHeaderFields) -> MacHeader {
+        let header = self
+            .header
+            .with_address3(fields.destination)
+            .with_sequence_control(fields.sequence_number.sequence_control());
+        match header.qos() {
+            // User priorities are three-bit values; the TID field is four
+            // bits.
+            Some(qos) => header
+                .with_qos(qos.with_tid(
+                    oer_portable_wire::U8::<3>::from_low_bits(fields.priority.value()).widen(),
+                ))
+                .unwrap_or(header),
+            None => header,
+        }
+    }
+
+    /// The prefix's octets: the MAC header, a zero CCMP header on a
+    /// protected link (the backend writes the packet number and key ID) and
+    /// LLC/SNAP naming `ether_type`; [`Self::prefix_len`] of them.
+    fn octets(&self, header: &MacHeader, ether_type: u16) -> impl Iterator<Item = u8> + use<> {
+        let ccmp = match self.protection {
+            LinkProtection::Open => 0,
+            LinkProtection::Ccmp => CCMP_HEADER_LEN,
+        };
+        header
+            .octets()
+            .chain(core::iter::repeat_n(0, ccmp))
+            .chain(RFC1042_LLC_SNAP_PREFIX)
+            .chain(ether_type.to_be_bytes())
     }
 
     /// Write the prefix of the MPDU of `fields` at the start of `output`
@@ -126,37 +163,52 @@ impl StaDataHeaderTemplate {
         output: &mut [u8],
     ) -> Result<MacHeader, StationFrameError> {
         let required = self.prefix_len();
-        let too_small = StationFrameError::OutputTooSmall { required };
-        let prefix = output.get_mut(..required).ok_or(too_small)?;
-        let header = self
-            .header
-            .with_address3(fields.destination)
-            .with_sequence_control(fields.sequence_number.sequence_control());
-        let header = match header.qos() {
-            // User priorities are three-bit values; the TID field is four
-            // bits.
-            Some(qos) => header
-                .with_qos(qos.with_tid(
-                    oer_portable_wire::U8::<3>::from_low_bits(fields.priority.value()).widen(),
-                ))
-                .unwrap_or(header),
-            None => header,
-        };
-        let ccmp: &[u8] = match self.protection {
-            LinkProtection::Open => &[],
-            // The backend writes the packet number and key ID.
-            LinkProtection::Ccmp => &[0; CCMP_HEADER_LEN],
-        };
-        let [p0, p1, p2, p3, p4, p5] = RFC1042_LLC_SNAP_PREFIX;
-        let [e0, e1] = fields.ether_type.to_be_bytes();
-        let written = header.encode(prefix).map_err(|_| too_small)?;
-        let mut writer =
-            oer_portable_wire::Writer::new(prefix.get_mut(written..).ok_or(too_small)?);
-        writer.write(ccmp).map_err(|_| too_small)?;
-        writer
-            .write(&[p0, p1, p2, p3, p4, p5, e0, e1])
-            .map_err(|_| too_small)?;
+        let prefix = output
+            .get_mut(..required)
+            .ok_or(StationFrameError::OutputTooSmall { required })?;
+        let header = self.header(fields);
+        for (place, octet) in prefix
+            .iter_mut()
+            .zip(self.octets(&header, fields.ether_type))
+        {
+            *place = octet;
+        }
         Ok(header)
+    }
+
+    /// Write the prefix of the MPDU of `fields` flush against the end of
+    /// `headroom`, the octets in front of the MPDU's body, and return its
+    /// MAC header; the prefix begins [`Self::prefix_len`] octets before the
+    /// end. It cannot fail: `headroom` holds the longest prefix, which the
+    /// build checks.
+    ///
+    /// ```compile_fail,E0080
+    /// # use oer_protocols_ieee80211_wire::station::{StaDataHeaderFields, StaDataHeaderTemplate};
+    /// fn short(template: &StaDataHeaderTemplate, fields: StaDataHeaderFields) {
+    ///     let mut headroom = [0; StaDataHeaderTemplate::MAX_PREFIX_LEN - 1];
+    ///     let _ = template.write_before(fields, &mut headroom);
+    /// }
+    /// // Instantiated, so its check runs.
+    /// let _: fn(&StaDataHeaderTemplate, StaDataHeaderFields) = short;
+    /// ```
+    pub fn write_before<const N: usize>(
+        &self,
+        fields: StaDataHeaderFields,
+        headroom: &mut [u8; N],
+    ) -> MacHeader {
+        const {
+            if N < Self::MAX_PREFIX_LEN {
+                panic!("the headroom holds the longest prefix");
+            }
+        }
+        // The prefix is at most `MAX_PREFIX_LEN`, which `N` holds.
+        let at = N.saturating_sub(self.prefix_len());
+        let header = self.header(fields);
+        let octets = self.octets(&header, fields.ether_type);
+        for (place, octet) in headroom.iter_mut().skip(at).zip(octets) {
+            *place = octet;
+        }
+        header
     }
 }
 
@@ -288,6 +340,34 @@ mod tests {
             let mut expected = [0; 64];
             encoded(peer_qos, protection, second, &mut expected);
             assert_eq!(output, expected);
+        }
+    }
+
+    #[test]
+    fn a_write_before_puts_the_written_prefix_flush_against_the_body_in_every_mode() {
+        for (peer_qos, protection) in MODES {
+            let template =
+                StaDataHeaderTemplate::new(source(), bssid(), peer_qos, protection).unwrap();
+            let length = template.prefix_len();
+            assert!(length <= StaDataHeaderTemplate::MAX_PREFIX_LEN);
+            let fields = StaDataHeaderFields {
+                destination: [2, 0, 0, 0, 0, 3],
+                sequence_number: SequenceNumber::new(42).unwrap(),
+                priority: WmmUserPriority::UP5,
+                ether_type: 0x0800,
+            };
+            let mut expected = [0xee; 64];
+            let header = template.write(fields, &mut expected).unwrap();
+            let mut headroom = [0xdd; 64];
+            assert_eq!(template.write_before(fields, &mut headroom), header);
+            // The octets before the prefix keep what was there.
+            assert!(headroom[..64 - length].iter().all(|octet| *octet == 0xdd));
+            assert_eq!(headroom[64 - length..], expected[..length]);
+            // The shortest headroom the build admits holds every prefix.
+            let mut exact = [0xdd; StaDataHeaderTemplate::MAX_PREFIX_LEN];
+            template.write_before(fields, &mut exact);
+            let at = StaDataHeaderTemplate::MAX_PREFIX_LEN - length;
+            assert_eq!(exact[at..], expected[..length]);
         }
     }
 
