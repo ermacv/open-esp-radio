@@ -167,3 +167,6 @@ impl<K> core::fmt::Debug for AccessPointReceive<K> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

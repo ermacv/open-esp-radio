@@ -652,3 +652,6 @@ impl<R> RetryPlan<R> {
         Ok(RetryPlan { first, rest })
     }
 }
+
+#[cfg(test)]
+mod tests;

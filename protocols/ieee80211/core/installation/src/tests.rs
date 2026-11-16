@@ -1094,3 +1094,36 @@ fn a_started_radio_hands_the_data_its_rights_and_a_running_permit() {
         panic!("the start ends with a permit of a running radio");
     };
 }
+
+/// A retune's request keeps its deadline: a retune the port has not
+/// confirmed at once rests until that deadline, as a run's start would.
+#[test]
+fn a_retune_rests_until_its_deadline_while_the_port_retunes() {
+    let running = S {
+        pos: "running",
+        goal: None,
+        data: "flowing",
+        tokens: "held",
+        net: None,
+        wait: None,
+    };
+    with_gate(|gate| {
+        let mut machine = build(&running, None);
+        let request = Request::retune(
+            LiveRunning { brand: PhantomData },
+            CHANNEL,
+            gate.lent(),
+            Some(DEADLINE),
+        );
+        let Step::Retune(RetuneAsk::Begin(running, CHANNEL, _), resume) =
+            machine.step(Input::Request(request), NOW)
+        else {
+            panic!("a retune of the running radio is begun in its request's step");
+        };
+        let (key, _, _) = key();
+        assert!(matches!(
+            resume.answer(RetunePoll::Pending(key.retune(running))),
+            Step::Rest(Rest::Wake(Some(deadline))) if deadline == DEADLINE
+        ));
+    });
+}
