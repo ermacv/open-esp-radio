@@ -69,3 +69,6 @@ pub mod rx;
 pub mod startup;
 pub mod station_tsf;
 pub mod tx;
+
+#[cfg(test)]
+mod test_hardware;

@@ -326,3 +326,6 @@ pub const STATION_GROUP_SLOTS: usize = 1;
 pub const ACCESS_POINT_PAIRWISE_SLOTS: usize = 15;
 /// The access point's group key slots.
 pub const ACCESS_POINT_GROUP_SLOTS: usize = 3;
+
+#[cfg(test)]
+mod tests;

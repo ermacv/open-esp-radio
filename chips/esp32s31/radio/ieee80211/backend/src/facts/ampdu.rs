@@ -131,3 +131,6 @@ pub const fn esp32s31_ampdu_capabilities(slots: usize) -> AmpduCapabilities {
 pub const fn protection_spacing(min_mpdu_start_spacing: u8) -> HtProtectionSpacing {
     HtProtectionSpacing::from_density(HtAmpduDensity::from_spacing_code(min_mpdu_start_spacing))
 }
+
+#[cfg(test)]
+mod tests;

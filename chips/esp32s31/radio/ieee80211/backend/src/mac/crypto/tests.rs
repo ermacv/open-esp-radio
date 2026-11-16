@@ -256,3 +256,5 @@ fn ap_pairwise_and_group_slots_retain_clear_authority() {
     group.clear(&mut hardware);
     assert_eq!(hardware.clears, 2);
 }
+
+mod erasure;
