@@ -61,7 +61,8 @@ and the runtime's `drive` carries its steps out on the port.
 | `wire/src/extensions/wmm.rs` | WMM AC parameters and vendor IE parsing |
 | `wire/src/extensions/espressif/esp_now.rs` | ESP-NOW framing and protected-envelope validation |
 | `core/extensions/esp-now/src/extensions/espressif/esp_now/reassembly.rs` | Caller-owned ESP-NOW v2 datagram storage |
-| `core/roles/sta/src/events.rs` | The station core's events: lost tokens and data, dropped RSN input, scan table outcomes |
+| `core/roles/sta/src/events.rs` | The station core's events: lost tokens, dropped RSN input, scan table outcomes |
+| `core/datapath/src/events.rs` (`DataEvent`) | The data plane's events: lost data and how each aggregate settled |
 | `core/upper-mac/src/block_ack/banks.rs` (`RxBlockAckEvent`) | The receive agreements' events: containment, reorder decisions, agreement start and stop |
 | `core/extensions/esp-now/src/extensions/espressif/esp_now/security.rs` (`EspNowPeersCleared`) | The keys shutdown cleared, the one fact its result does not return |
 
@@ -104,7 +105,9 @@ MAC's `edca::contention`); an attempt carries no backoff. The port depends on
 no core. [`core/upper-mac`](core/upper-mac/README.md) owns retry ladders, Retry bits,
 aggregate retry selection, the reading of a BlockAck, protection and the BSS
 basic rates, management budgets, the association PHY mode and the attempt
-planner. Its
+planner. [`core/datapath`](core/datapath/README.md) holds the data plane over
+the port's two data arenas, the link's transmit numbers (`TxNumbers`) and the
+MAC's transmit queues. The upper MAC's
 `block_ack/banks.rs` owns an association's receive agreements and reordering.
 Its `ccmp.rs` is the one owner of CCMP numbering: the receive replay frontier
 (`CcmpReplayFrontier`; `ccmp/replay.rs` checks an association's keys) of the

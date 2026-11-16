@@ -48,10 +48,10 @@
 
 use super::{
     AggregateRetry, DataProtection, ETHERNET_HEADER_LEN, MSDU_ETHERNET_OFFSET, MSDU_PAYLOAD_OFFSET,
-    PpduLimit, WmmAccessCategory, WmmUserPriority, aggregate, move_down,
+    PpduLimit, aggregate, move_down,
 };
-use crate::events::{AggregateSettled, DataLoss, StaEvent};
-use crate::link::{TxKey, TxNumbers};
+use crate::events::{AggregateSettled, DataEvent, DataLoss};
+use crate::numbers::{TxKey, TxNumbers};
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::arena::{
@@ -70,6 +70,7 @@ use oer_protocols_ieee80211_core_upper_mac::{
     rate_selection::{FrameRates, RateSelection},
     sequence::{SequenceCounter, SequenceSpace},
 };
+use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use oer_protocols_ieee80211_wire::{
     ccmp::{CCMP_HEADER_LEN, CcmpHeader, CcmpKeyId},
     data::LLC_SNAP_HEADER_LEN,
@@ -566,7 +567,7 @@ impl DataPlane {
         &mut self,
         arena: &mut A,
         mut returned: impl FnMut(A::Memory),
-        events: &mut impl EventSink<StaEvent>,
+        events: &mut impl EventSink<DataEvent>,
     ) -> Result<Option<DataLink>, A::Fault> {
         for id in [ArenaId::First, ArenaId::Second] {
             self.withdraw(arena, id, &mut returned, events)?;
@@ -588,7 +589,7 @@ impl DataPlane {
         &mut self,
         arena: &mut A,
         mut returned: impl FnMut(A::Memory),
-        events: &mut impl EventSink<StaEvent>,
+        events: &mut impl EventSink<DataEvent>,
     ) -> Result<(), A::Fault> {
         for id in [ArenaId::First, ArenaId::Second] {
             self.withdraw(arena, id, &mut returned, events)?;
@@ -641,7 +642,7 @@ impl DataPlane {
         arena: &mut A,
         id: ArenaId,
         returned: &mut impl FnMut(A::Memory),
-        events: &mut impl EventSink<StaEvent>,
+        events: &mut impl EventSink<DataEvent>,
     ) -> Result<(), A::Fault> {
         let book = self.book_mut(id);
         let Some(right) = book.right.as_ref() else {
@@ -651,7 +652,7 @@ impl DataPlane {
             return Ok(());
         }
         let leave = |memory| {
-            report(events, || StaEvent::DataLost(DataLoss::LeftBehind));
+            report(events, || DataEvent::DataLost(DataLoss::LeftBehind));
             returned(memory);
         };
         arena.withdraw(right, leave)?;
@@ -982,7 +983,7 @@ impl DataPlane {
             access_category,
             protection,
             encryption,
-            power: crate::machine::calibrated_power::<K>(),
+            power: crate::calibrated_power::<K>(),
         })
     }
 
@@ -1014,7 +1015,7 @@ impl DataPlane {
         done: CompletedOf<'p, 'id, A>,
         now: Instant,
         mut returned: impl FnMut(A::Memory),
-        events: &mut impl EventSink<StaEvent>,
+        events: &mut impl EventSink<DataEvent>,
     ) -> Result<SettledOf<'p, 'id, A>, SettleErrorOf<'p, 'id, A>>
     where
         A: TxArena<'p, 'id, Response: Copy, Denial: Copy>,
@@ -1088,7 +1089,7 @@ impl DataPlane {
         }
         if matches!(kind, PpduKind::Aggregate { .. }) {
             report(events, || {
-                StaEvent::AggregateSettled(AggregateSettled {
+                DataEvent::AggregateSettled(AggregateSettled {
                     members: frames,
                     acknowledged: decision.delivered,
                     retried,
@@ -1119,7 +1120,7 @@ impl DataPlane {
     fn single_end<R, D>(
         book: &ArenaBook,
         end: &AttemptEnd<R, D>,
-        events: &mut impl EventSink<StaEvent>,
+        events: &mut impl EventSink<DataEvent>,
     ) -> Decision {
         let mut decision = Decision::default();
         let acknowledged = match end {
@@ -1141,7 +1142,7 @@ impl DataPlane {
                 AttemptEnd::Collision(_) => DataLoss::ContentionLimited,
                 _ => DataLoss::RetryLimit,
             };
-            report(events, || StaEvent::DataLost(loss));
+            report(events, || DataEvent::DataLost(loss));
             decision.dropped = 1;
         }
         // The positions after 0, compacted by the retention.
@@ -1163,7 +1164,7 @@ impl DataPlane {
         attempts: u8,
         end: &AttemptEnd<R, D>,
         now: Instant,
-        events: &mut impl EventSink<StaEvent>,
+        events: &mut impl EventSink<DataEvent>,
     ) -> Decision {
         let mut decision = Decision::default();
         let positions = FrameMask::first(book.count()).unwrap_or(FrameMask::EMPTY);
@@ -1205,7 +1206,7 @@ impl DataPlane {
             };
             match loss {
                 Some(loss) => {
-                    report(events, || StaEvent::DataLost(loss));
+                    report(events, || DataEvent::DataLost(loss));
                     decision.dropped = decision.dropped.saturating_add(1);
                 }
                 None => {

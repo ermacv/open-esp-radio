@@ -149,9 +149,8 @@ fn the_returned_link_numbers_the_stations_frames_on_and_its_key_comes_back() {
         assert!(!link.numbers().qos());
         for _ in 0..5 {
             link.numbers_mut()
-                .data_and_key(oer_protocols_ieee80211_wire::qos::WmmUserPriority::UP0)
-                .0
-                .take();
+                .take(oer_protocols_ieee80211_core_datapath::numbers::LinkSpace::Station)
+                .unwrap();
         }
         let next = link
             .numbers()

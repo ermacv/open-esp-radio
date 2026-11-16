@@ -145,9 +145,8 @@ use oer_protocols_ieee80211_contracts_port::RxEvidence;
 
 use crate::epoch::{LinkEpoch, LinkEpochSource};
 use crate::join::sae::{StaSaeAuthentication, StaSaeEvent, StaSaeFailure, StaSaeTransmission};
-use crate::link::{
-    FrameNumber, LinkAction, LinkHandover, LinkReturn, LinkSpace, RxLink, TxNumbers,
-};
+use crate::link::{FrameNumber, LinkAction, LinkHandover, LinkReturn, RxLink};
+use oer_protocols_ieee80211_core_datapath::numbers::{LinkSpace, TxNumbers};
 use oer_protocols_ieee80211_core_security_rsn::pmksa::{Pmksa, PmksaCache};
 
 /// The station's PMKSA cache: per access point and SSID.
@@ -892,22 +891,7 @@ impl<T: StaTokens, K: Ieee80211Capabilities> StaTransmit<'_, T, K> {
         oer_protocols_ieee80211_contracts_port::Protection::None;
     /// A station frame goes at the port's calibrated power.
     pub const POWER: oer_protocols_ieee80211_contracts_port::SupportedPower<K> =
-        calibrated_power::<K>();
-}
-
-/// The calibrated power every station attempt takes, which its port must
-/// offer: checked when the service's type is built, so a port without it
-/// builds no station.
-pub const fn calibrated_power<K: Ieee80211Capabilities>()
--> oer_protocols_ieee80211_contracts_port::SupportedPower<K> {
-    const {
-        match oer_protocols_ieee80211_contracts_port::SupportedPower::new(
-            oer_protocols_ieee80211_contracts_port::TxPower::Calibrated,
-        ) {
-            Some(power) => power,
-            None => panic!("a station's port sends at its calibrated power"),
-        }
-    }
+        oer_protocols_ieee80211_core_datapath::calibrated_power::<K>();
 }
 
 /// What a received frame was to the station.
@@ -1186,7 +1170,7 @@ enum LinkCustody {
     /// carries data, and each TID's transmit window it last told it.
     Lent {
         carries: bool,
-        windows: [Option<crate::data::plane::TxWindow>; 8],
+        windows: [Option<oer_protocols_ieee80211_core_datapath::plane::TxWindow>; 8],
     },
     /// The station asked for it back.
     Returning,
@@ -2465,7 +2449,7 @@ fn handover_data<T: StaTokens, K>(
     connected: &Connected<T, K>,
     keyed: bool,
     tx: Option<&StaTxBlockAck>,
-) -> Option<crate::data::plane::DataLink> {
+) -> Option<oer_protocols_ieee80211_core_datapath::plane::DataLink> {
     let header = oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate::new(
         address,
         bssid,
@@ -2486,11 +2470,13 @@ fn handover_data<T: StaTokens, K>(
         .ht_ampdu_parameters]);
     let ht =
         oer_protocols_ieee80211_contracts_port::MpduStartSpacing::new(parameters.spacing().get())
-            .map(|spacing| crate::data::plane::HtLimits {
-                spacing,
-                max_length: parameters.max_ampdu_length(),
-            });
-    Some(crate::data::plane::DataLink {
+            .map(
+                |spacing| oer_protocols_ieee80211_core_datapath::plane::HtLimits {
+                    spacing,
+                    max_length: parameters.max_ampdu_length(),
+                },
+            );
+    Some(oer_protocols_ieee80211_core_datapath::plane::DataLink {
         header,
         admission: AcAdmission::from_edca(connected.peer.associated.edca),
         retry: tx.map(StaTxBlockAck::retry_members),
@@ -2506,19 +2492,19 @@ fn handover_data<T: StaTokens, K>(
 fn agreement_change<'id, Path: oer_protocols_radio_port::PoolPath, P, T: StaTokens, K>(
     tx: &mut Option<StaTxBlockAck>,
     connected: &Connected<T, K>,
-    told: &mut [Option<crate::data::plane::TxWindow>; 8],
+    told: &mut [Option<oer_protocols_ieee80211_core_datapath::plane::TxWindow>; 8],
 ) -> Option<LinkAction<'id, Path, P>> {
     let tx = tx.as_mut().filter(|_| connected.tx_block_ack)?;
     if !tx.changed() {
         return None;
     }
     for tid in WmmUserPriority::ALL {
-        let window = tx
-            .operational(tid.value())
-            .map(|agreement| crate::data::plane::TxWindow {
+        let window = tx.operational(tid.value()).map(|agreement| {
+            oer_protocols_ieee80211_core_datapath::plane::TxWindow {
                 head: agreement.starting_sequence,
                 size: agreement.window,
-            });
+            }
+        });
         let heard = tid.select_mut(told);
         if *heard != window {
             *heard = window;

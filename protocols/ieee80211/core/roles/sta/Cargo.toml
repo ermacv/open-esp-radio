@@ -26,6 +26,7 @@ oer-protocols-ieee80211-wire = { path = "../../../wire" }
 oer-protocols-ieee80211-contracts-security = { path = "../../../contracts/security" }
 oer-protocols-ieee80211-core-security-rsn = { path = "../../security/rsn" }
 oer-protocols-ieee80211-core-upper-mac = { path = "../../upper-mac" }
+oer-protocols-ieee80211-core-datapath = { path = "../../datapath" }
 oer-portable-time = { path = "../../../../../portable/time" }
 oer-portable-events = { path = "../../../../../portable/events" }
 oer-protocols-radio-port = { path = "../../../../radio/port" }

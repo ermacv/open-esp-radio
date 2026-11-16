@@ -45,12 +45,10 @@ work still owned by the backend remains in that installation's retirement custod
 The `test-support` feature exposes the retired station's resource counts for
 composition tests; those diagnostic methods are absent from product builds.
 
-The station and its data plane keep no diagnostic counters and hold no
-sink. The calls that can lose or drop something (`Station::input`,
-`receive`, `poll_action`, `try_block_ack_reply` and the data plane's
-`completed`, `stop` and `withdraw_unpublished`) take the caller's
-`&mut impl EventSink<StaEvent>`. They report a token returned to a full pool
-(`TokenLost`), a lost data MSDU or MPDU with its reason (`DataLost`), an RSN
+The station keeps no diagnostic counters and holds no sink. The calls that
+can lose or drop something (`Station::input`, `receive`, `poll_action` and
+`try_block_ack_reply`) take the caller's `&mut impl EventSink<StaEvent>`.
+They report a token returned to a full pool (`TokenLost`), an RSN
 input dropped without a returned error (`RsnInputDropped`: key data that did
 not unwrap, fit or install, or a refused unwrap result) and each beacon or
 probe response the scan table took (`ScanBssObserved`), a connect's step
@@ -141,12 +139,7 @@ after the Association Response, its EDCA parameters and before the link
 starts (the 4-way handshake's frames included) an HE20 association sets
 `StationHe::He20`. The leave of an HE BSS sets `Off` before its receive-off
 configuration. A restart runs on the next installation, whose MAC starts
-without an HE association. The data plane's publications and their retry
-stages follow the BSS's HE TXOP Duration RTS Threshold: while the access
-point advertises one, every individually addressed HE PPDU, an A-MPDU
-included, goes behind RTS/CTS (`ProtectionPolicy::every_he_txop_protection`,
-no duration estimate); the ERP, HT and length rules are not applied to
-data.
+without an HE association.
 Authentication TX contexts also retain the attempt ordinal inside their link
 epoch. A late terminal or preparation refusal returns its credit and buffer
 but cannot end a later RX-driven retry or arm that retry's response timer.
@@ -201,15 +194,9 @@ Module map:
   the BlockAckReq the plane names
   after a drop, owed again at that head when it goes unanswered. Other
   Block Ack actions stay with the receive agreements;
-- `data`: the connected station's data: the network boundary's checked
-  `EthernetFrame` and where an MSDU sits in a frame region
-  (`MSDU_ETHERNET_OFFSET`), the BSS's data MPDUs into MSDUs, and the A-MPDU
-  limits (`PpduLimit`: the port's subframes, the lower of the access
-  point's Maximum A-MPDU Length and the port's length at the aggregate's
-  rate, and the rate's PPDU time limit, `PhyRate::max_txtime_micros`) and
-  the retry policy (`AggregateRetry`, `StaTxBlockAckPolicy::retry_members`)
-  under the station's transmit agreements. No reorder, replay check or
-  power save yet;
+- `data`: the connected station's received data: the network boundary's
+  checked `EthernetFrame` and the BSS's data MPDUs into MSDUs. No reorder,
+  replay check or power save yet;
 - `link`: the connected station's link as it hands it to the holder that
   carries its data (`LinkAction::HandOver` with a `LinkHandover`). The
   holder keeps the link's numbers (`TxNumbers`: each TID's QoS sequence
@@ -217,8 +204,8 @@ Module map:
   data share, and the pairwise key's transmit half, `StaTokens::LinkKey`,
   with its CCMP packet numbers) and its receive admission (`RxLink`: own
   address, BSSID, protection and the replay epoch). It numbers the data
-  and every station frame of the link (`StaTransmit::number`,
-  `FrameNumber::Link`: the station writes zero, `TxNumbers::number` writes
+  and every station frame of the link (`link::number`,
+  `FrameNumber::Link`: the station writes zero, `link::number` writes
   the Sequence Number into the frame's header as it is submitted; its
   packet number follows its rate), and admits received data without the
   station (`LinkHandover::receive`): data to the network, EAPOL to
@@ -236,36 +223,9 @@ Module map:
   (`LinkHandover::group_terminal`) before the station takes it; the
   station switches it itself only before its link exists. The service
   returns the link before the station finishes;
-- `data::plane`: the station's data transmission over the port's two DMA
-  arenas (`TxArena`). `DataPlane::handover` takes one link's `DataLink`
-  (from the `LinkHandover`: header template, `AcAdmission`, retry policy,
-  HT limits and each TID's `TxWindow`) and `DataPlane::stop` returns it,
-  after returning the frames of unpublished arenas;
-  `DataPlane::withdraw_unpublished` returns them alone, before a pairwise
-  key changes. `DataPlane::intake` writes an MSDU once, as the standby
-  arena takes it: the next sequence number of its TID and packet number of
-  the key, drawn from the link's `TxNumbers`, which the station's own EAPOL
-  and Block Ack negotiation share, the header from the template
-  and the CCMP header. The standby belongs to one TID, holds
-  consecutive sequence numbers inside its window, within the TID's
-  `PpduLimit` (computed when the aggregate rate or the agreement changes)
-  and the arena's slots; a TID without agreement takes one frame. An MSDU
-  the standby cannot take waits in the network's queue (`Intake::Wait`).
-  `DataPlane::publication` puts one arena on the air at a time, one rate
-  plan each: an arena holding frames from an earlier publication first,
-  then the standby; more frames than one as an A-MPDU under the TID's
-  agreement, else a single MPDU of the arena's position 0, so the frames
-  of a TID whose agreement ended drain one MPDU at a time.
-  `DataPlane::completed` decodes an A-MPDU's BlockAck in one pass over the
-  arena's frames: acknowledged frames are delivered, missing ones retried
-  in the same arena with the same numbers until their MSDU's lifetime or
-  the policy's attempts run out, then dropped. A single MPDU had the port's
-  retry plan and is never republished: it is delivered or dropped, and the
-  arena keeps the frames it did not send. A drop under an agreement moves
-  its window and owes a BlockAckReq (`Settled::bar`, which
-  `Station::tx_block_ack_request` takes), and the end's `RateLesson` teaches
-  the rate selection, a single MPDU's response through the caller's ACK
-  evidence;
+- the station's data transmission (the data plane over the port's two
+  arenas), the link's numbers (`TxNumbers`) and the MAC's transmit queues
+  are `oer-protocols-ieee80211-core-datapath`'s;
 - `port`: the station's tokens on a lower-MAC port (`PortStaTokens`) and
   the installed pairwise key
   (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
@@ -463,13 +423,6 @@ three states: Awake, Asleep or AwakeUnconfirmed. An unconfirmed PM=0 only
 needs reconciliation through TIM when an earlier PM=1 may have reached the
 access point. The Null retry budget is a `NonZeroU8` from its constant
 definition through the service's retry-plan limit.
-
-The data plane keeps each arena's frames in a book beside its arena right:
-their TID, first sequence number, admission instants and the attempts on
-the air; the arena holds their memory. An arena of an ended link settles
-by releasing every frame, without moving any window or teaching rate
-selection. Each intake draws from the link's `TxNumbers`, which the
-link's holder keeps.
 
 The link's holder admits a connected station's Data and EAPOL together
 (`LinkHandover::receive`) through MAC's checked `DecodedHeader` and

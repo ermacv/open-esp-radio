@@ -423,10 +423,7 @@ impl EventSink<StaEvent> for Losses {
             StaEvent::TokenLost => self.tokens += 1,
             StaEvent::RsnInputDropped(_) => self.rsn += 1,
             StaEvent::ScanBssObserved(outcome) => self.scan = Some(outcome),
-            StaEvent::DataLost(_)
-            | StaEvent::BufferMemoryUnavailable
-            | StaEvent::AggregateSettled(_)
-            | StaEvent::BlockAckRequestSent => {}
+            StaEvent::BufferMemoryUnavailable | StaEvent::BlockAckRequestSent => {}
             StaEvent::ConnectStep { step, channel, .. } => {
                 if self.steps.last() != Some(&(step, channel)) {
                     self.steps.push((step, channel));
@@ -508,7 +505,10 @@ enum LinkSeen {
     HandOver,
     Hold,
     Release,
-    Agreement(u8, Option<crate::data::plane::TxWindow>),
+    Agreement(
+        u8,
+        Option<oer_protocols_ieee80211_core_datapath::plane::TxWindow>,
+    ),
     Return,
     Sequence(u8),
     ReturnKey,
@@ -1219,8 +1219,7 @@ impl<'id, const G: usize> World<'id, G> {
                 .link
                 .as_mut()
                 .expect("a frame the link numbers goes while the world holds the link");
-            link.numbers_mut()
-                .number(&mut transmit)
+            crate::link::number(link.numbers_mut(), &mut transmit)
                 .expect("the link numbers the station's frame");
             if protected {
                 let numbered = link
@@ -3077,8 +3076,10 @@ fn tid_and_sequence(frame: &[u8]) -> (u8, u16) {
 #[test]
 fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() {
     installed(|mint| {
-        use crate::data::plane::{DataLink, DataPlane, Intake, OutboundMsdu};
         use oer_protocols_ieee80211_contracts_port::arena::TxArena;
+        use oer_protocols_ieee80211_core_datapath::plane::{
+            DataLink, DataPlane, Intake, OutboundMsdu,
+        };
         use oer_protocols_ieee80211_testing_model::{
             MODEL_MAX_MPDU, ModelArena, ModelNetworkMemory,
         };
@@ -3126,8 +3127,9 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
             // numbers the station's own frames.
             let link = world.link.as_mut().expect("the link is up");
             let mut memory: ModelNetworkMemory = std::boxed::Box::new([0xab; MODEL_MAX_MPDU]);
-            memory[crate::data::MSDU_ETHERNET_OFFSET..][..6].copy_from_slice(&BSSID);
-            memory[crate::data::MSDU_ETHERNET_OFFSET + 12..][..2]
+            memory[oer_protocols_ieee80211_core_datapath::MSDU_ETHERNET_OFFSET..][..6]
+                .copy_from_slice(&BSSID);
+            memory[oer_protocols_ieee80211_core_datapath::MSDU_ETHERNET_OFFSET + 12..][..2]
                 .copy_from_slice(&0x0800u16.to_be_bytes());
             let msdu = OutboundMsdu {
                 memory,

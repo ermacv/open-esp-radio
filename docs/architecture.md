@@ -131,7 +131,8 @@ by their lines ([HAL](../chips/esp32s31/hal/README.md)).
 
 Wi-Fi is split into `wire` (over-the-air formats), `contracts/` (the
 backend port and the installed-protection contract), the sans-IO cores under
-`core/` (`upper-mac` and `arbiter`, the security transforms and handshakes in
+`core/` (`upper-mac`, `datapath` (the data plane, the link's numbering and the
+transmit queues) and `arbiter`, the security transforms and handshakes in
 `security/`, the `roles/` station and access point, and `extensions/`), a
 `runtime`, and `testing/` (the backend conformance suite and the reference
 model), which no product package depends on. Bluetooth LE has wire formats, a

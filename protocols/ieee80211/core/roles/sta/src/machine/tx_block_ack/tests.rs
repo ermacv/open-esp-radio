@@ -9,7 +9,7 @@ const POLICY: StaTxBlockAckPolicy = StaTxBlockAckPolicy {
         interval: Duration::from_millis(10),
     },
     inactivity: Duration::from_secs(5),
-    retry_members: crate::data::AggregateRetry {
+    retry_members: oer_protocols_ieee80211_core_datapath::AggregateRetry {
         lifetime: Duration::from_millis(1_500),
         attempts: 4,
     },

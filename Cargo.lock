@@ -2635,6 +2635,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oer-protocols-ieee80211-core-datapath"
+version = "0.1.0"
+dependencies = [
+ "oer-portable-events",
+ "oer-portable-time",
+ "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-ieee80211-core-upper-mac",
+ "oer-protocols-ieee80211-testing-model",
+ "oer-protocols-ieee80211-wire",
+]
+
+[[package]]
 name = "oer-protocols-ieee80211-core-extensions-esp-now"
 version = "0.1.0"
 dependencies = [
@@ -2683,6 +2695,7 @@ dependencies = [
  "oer-protocols-ieee80211-contracts-port",
  "oer-protocols-ieee80211-contracts-security",
  "oer-protocols-ieee80211-core-arbiter",
+ "oer-protocols-ieee80211-core-datapath",
  "oer-protocols-ieee80211-core-security-cipher",
  "oer-protocols-ieee80211-core-security-rsn",
  "oer-protocols-ieee80211-core-upper-mac",
