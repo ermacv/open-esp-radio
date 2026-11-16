@@ -233,11 +233,13 @@ impl StaCallbacks for Callbacks {
 
 /// A legacy station: no HT, HE or WMM advertisement.
 static CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
-    ht20: [0; 28],
-    ht40: [0; 28],
-    he20_ht: [0; 28],
-    he20: [0; 24],
-    he20_extended: None,
+    ht: oer_protocols_ieee80211_wire::station::HtCapabilityElements {
+        mhz20: [0; 28],
+        mhz40: [0; 28],
+    },
+    ht_with_he: [0; 28],
+    he: [0; 24],
+    he_extended: None,
     wmm: [0; 9],
 };
 

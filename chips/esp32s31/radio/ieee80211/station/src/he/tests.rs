@@ -4,7 +4,7 @@
 use super::*;
 use oer_chips_esp32s31_radio_phy::PhyConfig;
 use oer_protocols_ieee80211_wire::he::{
-    HeDcmConstellation, parse_he20_capabilities, parse_he20_peer_state,
+    HeDcmConstellation, parse_he_capabilities, parse_he_peer_state,
 };
 
 #[test]
@@ -19,7 +19,7 @@ fn the_he20_element_is_one_stream_mcs9_both_ways_with_no_optional_capability() {
             0xfd, 0xff, 0xfd, 0xff, // HE-MCS 0..9, one stream, both ways
         ]
     );
-    let capability = parse_he20_capabilities(&HE20).unwrap();
+    let capability = parse_he_capabilities(&HE20).unwrap();
     assert!(capability.supports_bidirectional_mcs9());
     assert!(!capability.supports_ldpc_coding_in_payload());
     assert!(!capability.supports_one_ltf_800ns_gi());
@@ -42,7 +42,7 @@ fn the_he20_element_is_one_stream_mcs9_both_ways_with_no_optional_capability() {
     // An access point reading the element finds the 16 us padding.
     let operation = [255, 7, 36, 0x04, 0x00, 0x00, 0x01, 0xfc, 0xff];
     assert_eq!(
-        parse_he20_peer_state(&HE20, &operation)
+        parse_he_peer_state(&HE20, &operation)
             .unwrap()
             .packet_padding_eight_us,
         2

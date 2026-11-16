@@ -25,11 +25,13 @@ const HE_OPERATION: [u8; 9] = [255, 7, 36, 0x04, 0x00, 0x01, 0x1b, 0xfc, 0xff];
 /// The station's own elements, each distinct, so a request shows which
 /// one it carries.
 static ELEMENTS: AssociationCapabilities = AssociationCapabilities {
-    ht20: ht20_element(0x11),
-    ht40: ht20_element(0x22),
-    he20_ht: ht20_element(0x33),
-    he20: HE_CAPABILITY,
-    he20_extended: Some([127, 12, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    ht: oer_protocols_ieee80211_wire::station::HtCapabilityElements {
+        mhz20: ht20_element(0x11),
+        mhz40: ht20_element(0x22),
+    },
+    ht_with_he: ht20_element(0x33),
+    he: HE_CAPABILITY,
+    he_extended: Some([127, 12, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
 };
 
@@ -177,7 +179,7 @@ fn an_he_access_point_gets_the_he_request_and_an_he_link() {
         let find = |needle: &[u8]| body.windows(needle.len()).any(|window| window == needle);
         assert!(find(&[33, 2, 0xf5, 20]), "Power Capability -11 / 20 dBm");
         assert!(find(&[255, 12, 60, 0, 0, 0, 1, 1, 2, 2, 4, 5, 0, 0]));
-        assert!(find(&ELEMENTS.he20_ht), "the HE mode's HT Capabilities");
+        assert!(find(&ELEMENTS.ht_with_he), "the HE mode's HT Capabilities");
         assert!(find(&HE_CAPABILITY));
 
         world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
@@ -217,7 +219,7 @@ fn an_access_point_without_he_gets_the_ht_request() {
             request_elements(&request),
             [(0, None), (1, None), (45, None), (221, None)]
         );
-        assert!(request[28..].windows(28).any(|w| w == ELEMENTS.ht20));
+        assert!(request[28..].windows(28).any(|w| w == ELEMENTS.ht.mhz20));
 
         world.receive(at(31), &response(&[]));
         assert!(world.station.is_connected());
@@ -408,7 +410,7 @@ fn position(seen: &[Seen], pick: impl Fn(&Seen) -> bool) -> Option<usize> {
 fn scanned_bss() -> oer_protocols_ieee80211_contracts_port::StationHe {
     oer_protocols_ieee80211_contracts_port::StationHe::Bss(
         oer_protocols_ieee80211_contracts_port::HeBssColor::of(
-            &oer_protocols_ieee80211_wire::he::parse_he20_operation(&HE_OPERATION).unwrap(),
+            &oer_protocols_ieee80211_wire::he::parse_he_operation(&HE_OPERATION).unwrap(),
         )
         .unwrap(),
     )

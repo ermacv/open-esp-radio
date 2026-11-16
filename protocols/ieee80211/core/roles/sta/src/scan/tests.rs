@@ -441,22 +441,16 @@ fn ht40_geometry_requires_matching_capability_and_operation() {
     operation[0..4].copy_from_slice(&[61, 22, 6, 0x05]);
     record.set_ht_capability_ie(Some(capability));
     record.set_ht_operation_ie(Some(operation));
-    assert_eq!(
-        record.ht40_secondary_channel(6),
-        Some(HtSecondaryChannel::Above)
-    );
+    assert_eq!(record.secondary_channel(6), Some(HtSecondaryChannel::Above));
     // The operation must name the channel the station takes the BSS to be on.
-    assert_eq!(record.ht40_secondary_channel(7), None);
+    assert_eq!(record.secondary_channel(7), None);
 
     operation[3] = 0x07;
     record.set_ht_operation_ie(Some(operation));
-    assert_eq!(
-        record.ht40_secondary_channel(6),
-        Some(HtSecondaryChannel::Below)
-    );
+    assert_eq!(record.secondary_channel(6), Some(HtSecondaryChannel::Below));
     capability[2] = 0;
     record.set_ht_capability_ie(Some(capability));
-    assert_eq!(record.ht40_secondary_channel(6), None);
+    assert_eq!(record.secondary_channel(6), None);
 }
 
 #[test]
@@ -685,7 +679,7 @@ fn read_record(record: &ScanRecord) {
     let _ = record.ht_operation_ie_bytes();
     let _ = record.supports_ht_short_guard_interval_20mhz();
     let _ = record.supports_ht_short_guard_interval_40mhz();
-    let _ = record.ht40_secondary_channel(6);
+    let _ = record.secondary_channel(6);
     let _ = record.he_capability_ie_bytes();
     let _ = he_default_packet_extension_duration(record.he_operation_ie_bytes());
     let _ = he_extended_range_single_user_disabled(record.he_operation_ie_bytes());
@@ -803,10 +797,7 @@ fn a_rich_frame_keeps_every_retained_element() {
             .eq([0x02])
     );
     assert!(record.supports_ht_duplicate_mcs32());
-    assert_eq!(
-        record.ht40_secondary_channel(6),
-        Some(HtSecondaryChannel::Above)
-    );
+    assert_eq!(record.secondary_channel(6), Some(HtSecondaryChannel::Above));
     assert_eq!(record.rsn_ie_bytes().len(), 22);
     // Mixed WPA/WPA2 advertisements match no exact mode.
     assert!(!crate::security::matches_security(

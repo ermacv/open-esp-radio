@@ -12,11 +12,13 @@ const SELECTED_RSN_IE_LEN: usize = 22;
 // A synthetic profile keeps framing/admission tests independent of any chip.
 // Neither test below emits a local HT/HE element.
 const TEST_ASSOCIATION_CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
-    ht20: [0; 28],
-    ht40: [0; 28],
-    he20_ht: [0; 28],
-    he20: [0; 24],
-    he20_extended: None,
+    ht: oer_protocols_ieee80211_wire::station::HtCapabilityElements {
+        mhz20: [0; 28],
+        mhz40: [0; 28],
+    },
+    ht_with_he: [0; 28],
+    he: [0; 24],
+    he_extended: None,
     wmm: [0; 9],
 };
 
@@ -31,6 +33,35 @@ fn non_he_modes_refuse_he_power_elements() {
             Err(AssociationRequestError::UnexpectedPowerCapability)
         ));
     }
+}
+
+/// An HT request carries the HT Capabilities element of its width: a
+/// 20 MHz one the first, a 40 MHz one, to an access point whose HT
+/// Operation names a secondary channel, the second.
+#[test]
+fn an_ht_request_carries_the_element_of_its_width() {
+    let capabilities = AssociationCapabilities {
+        ht: oer_protocols_ieee80211_wire::station::HtCapabilityElements {
+            mhz20: [20; 28],
+            mhz40: [40; 28],
+        },
+        ..TEST_ASSOCIATION_CAPABILITIES
+    };
+    let mut peer = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
+    let mut capability = [0; oer_protocols_ieee80211_wire::ht::HT_CAPABILITY_IE_LEN];
+    capability[0..4].copy_from_slice(&[45, 26, 0x02, 0]);
+    let mut operation = [0; oer_protocols_ieee80211_wire::ht::HT_OPERATION_IE_LEN];
+    operation[0..4].copy_from_slice(&[61, 22, 6, 0x05]);
+    peer.set_ht_capability_ie(Some(capability));
+    peer.set_ht_operation_ie(Some(operation));
+    let narrow = PhyMode::Ht20
+        .elements(&peer, 6, &capabilities, None, None)
+        .unwrap();
+    assert_eq!(narrow.ht_capability, Some(&[20; 28]));
+    let wide = PhyMode::Ht40
+        .elements(&peer, 6, &capabilities, None, None)
+        .unwrap();
+    assert_eq!(wide.ht_capability, Some(&[40; 28]));
 }
 
 /// The selection a WPA2-Personal station makes for a PSK access point
@@ -155,7 +186,7 @@ fn association_encoder_uses_the_explicit_local_profile() {
         [0; oer_protocols_ieee80211_wire::ht::HT_CAPABILITY_IE_LEN],
     ));
     let mut capabilities = TEST_ASSOCIATION_CAPABILITIES;
-    capabilities.ht20[..6].copy_from_slice(&[45, 26, 0, 0, 0, 1]);
+    capabilities.ht.mhz20[..6].copy_from_slice(&[45, 26, 0, 0, 0, 1]);
     capabilities.wmm = [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0];
     let mut output = [0; 160];
     let length = AssociationRequest {

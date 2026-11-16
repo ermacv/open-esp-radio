@@ -25,7 +25,7 @@ use {
     oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode,
     oer_protocols_ieee80211_wire::{
         channel::ChannelWidth,
-        he::{He20Capabilities, He20PeerState, HeDcmConstellation, HeMcsNssSupport},
+        he::{HeCapabilities, HeDcmConstellation, HeMcsNssSupport, HePeerState},
         phy::{
             FecCoding, HeGiLtf, HeMcs, HeRate, HtMcs, HtRate, LegacyRate, PhyRate, PpduBandwidth,
         },
@@ -1328,7 +1328,7 @@ impl RateControl for EspressifRateControl {
                 }),
                 extended_range_single_user_permitted: peer
                     .he_peer_state
-                    .is_some_and(He20PeerState::extended_range_single_user_permitted),
+                    .is_some_and(HePeerState::extended_range_single_user_permitted),
             },
         });
         let (ht_bandwidth, width) = if peer.phy == PhyMode::Ht40 {
@@ -1345,12 +1345,12 @@ impl RateControl for EspressifRateControl {
                 ht_short_gi: peer
                     .ht_capabilities
                     .is_some_and(|capability| capability.supports_short_guard_interval(width)),
-                he_800ns_gi_ltf: if he.is_some_and(He20Capabilities::supports_one_ltf_800ns_gi) {
+                he_800ns_gi_ltf: if he.is_some_and(HeCapabilities::supports_one_ltf_800ns_gi) {
                     HeGiLtf::Ltf1xGi800Ns
                 } else {
                     HeGiLtf::Ltf2xGi800Ns
                 },
-                he_ldpc: he.is_some_and(He20Capabilities::supports_ldpc_coding_in_payload),
+                he_ldpc: he.is_some_and(HeCapabilities::supports_ldpc_coding_in_payload),
             },
         }
     }
