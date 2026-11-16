@@ -281,10 +281,6 @@ pub enum StaCommand {
 }
 
 /// One input of the station.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "the key-unwrap request owns its bounded buffer by value; the station has no allocator"
-)]
 pub enum StaInput<'id, T: StaTypes, K> {
     /// A deadline the station named passed.
     Tick,
@@ -2397,10 +2393,6 @@ enum Done<A, D> {
 type StaDone<T> = Done<<T as StaTypes>::AckEvidence, <T as StaTypes>::AirDenied>;
 
 /// An action a state owes.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "the key-unwrap request owns its bounded buffer by value; the station has no allocator"
-)]
 enum Owed<'id, T: StaTypes, K> {
     BlockAck(PendingRxBlockAck),
     InstallPairwise {
