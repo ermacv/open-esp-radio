@@ -1,8 +1,6 @@
-//! The HE20 advertisement claims nothing optional, and the power elements
-//! follow the PHY's target powers under the transmit ceiling.
+//! The HE20 advertisement claims nothing optional.
 
 use super::*;
-use oer_chips_esp32s31_radio_phy::PhyConfig;
 use oer_protocols_ieee80211_wire::he::{
     HeDcmConstellation, parse_he_capabilities, parse_he_peer_state,
 };
@@ -68,43 +66,4 @@ fn the_ht_capabilities_beside_he20_are_20_mhz_with_sm_power_save_disabled() {
     assert_eq!(u16::from_le_bytes([info0, info1]) & !0x000c, 0x0020);
     assert_eq!(ampdu, 0x17);
     assert_eq!(mcs0, 0xff);
-}
-
-/// The production PHY's power of each rate code under `ceiling` dBm.
-fn production(ceiling: i8) -> impl Fn(u8) -> i8 {
-    let targets = PhyConfig::production().tx_target_power_profile();
-    move |rate| targets.pair(rate).primary.min(ceiling)
-}
-
-#[test]
-fn the_power_elements_follow_the_production_targets() {
-    // HE-MCS 0..9 at 20, 20, 20, 20, 19, 19, 18, 18, 16, 15: the indices of
-    // the vendor run the archive recorded (open-esp-radio-rs `7abbf8eb6`).
-    let power = he_power(-11, production(20)).unwrap();
-    assert_eq!(power.power_capability.minimum_dbm(), -11);
-    assert_eq!(power.power_capability.maximum_dbm(), 20);
-    assert_eq!(
-        power.ul_mu_power.relative_to_rate_16(),
-        [0, 0, 0, 1, 1, 2, 2, 4, 5]
-    );
-}
-
-#[test]
-fn the_ceiling_bounds_every_rate() {
-    let power = he_power(-11, production(15)).unwrap();
-    assert_eq!(power.power_capability.maximum_dbm(), 15);
-    assert_eq!(power.ul_mu_power.relative_to_rate_16(), [0; 9]);
-}
-
-#[test]
-fn a_ceiling_below_the_minimum_gives_no_power_elements() {
-    assert!(matches!(
-        he_power(-11, production(-12)),
-        Err(HePowerError::Capability(_))
-    ));
-    // A higher rate above HE-MCS 0 has no UL-MU difference.
-    assert!(matches!(
-        he_power(-11, |rate| if rate == 25 { 21 } else { 20 }),
-        Err(HePowerError::UlMu(_))
-    ));
 }

@@ -832,3 +832,43 @@ fn an_he_only_request_refuses_an_access_point_without_he_before_any_frame() {
         );
     });
 }
+
+/// An HE request carries the power elements of the channel it was scanned
+/// on: two scanned channels with different powers, an HE access point on
+/// channel 6, and the request's Power Capability is channel 6's.
+#[test]
+fn an_he_request_carries_the_power_of_its_channel() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.station.config.association = &ELEMENTS;
+        let lower = StaHePower {
+            power_capability: StaPowerCapability::new(-11, 12).unwrap(),
+            ul_mu_power: HeUlMuPowerCapability::from_rate_power_indices([12; 10]).unwrap(),
+        };
+        world.station.config.channels = heapless::Vec::from_slice(&[
+            scan(1),
+            ScanChannel {
+                channel: channel(6),
+                he_power: lower,
+            },
+        ])
+        .unwrap();
+        world
+            .station
+            .profile
+            .as_mut()
+            .expect("the world's profile")
+            .phy = prefer();
+        let request = join(&mut world, 0, 1, &access_point_beacon(true));
+        let power_capability = [33, 2, (-11_i8) as u8, 12];
+        assert!(
+            request.windows(4).any(|window| window == power_capability),
+            "{request:02x?}"
+        );
+        assert!(
+            !request
+                .windows(4)
+                .any(|window| window == [33, 2, (-11_i8) as u8, 20])
+        );
+    });
+}

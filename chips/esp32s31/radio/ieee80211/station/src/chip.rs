@@ -10,7 +10,7 @@ use oer_chips_family_platform_interrupt_table::{
 use oer_portable_memory::HandlerCell;
 use oer_portable_time::Duration;
 use oer_portable_trace::Observer;
-use oer_protocols_ieee80211_core_roles_sta::machine::{StaCallbacks, StaConfig};
+use oer_protocols_ieee80211_core_roles_sta::machine::{ScanChannel, StaCallbacks, StaConfig};
 use oer_protocols_ieee80211_runtime::station as runtime;
 use oer_protocols_ieee80211_wire::{
     address::{IndividualAddress, OwnAddress},
@@ -199,6 +199,29 @@ pub struct Config {
     pub(crate) domain: RegulatoryDomain,
     pub(crate) supported: oer_protocols_ieee80211_contracts_port::SupportedChannel<Caps>,
 }
+/// The scanned channel `channel` with the power elements of an HE join on
+/// it, computed once, here, from that channel's ceiling under the
+/// configuration's domain and cap, which the station's life does not change.
+/// They are the scanned primary's because HE is offered at 20 MHz only.
+fn scan_channel(
+    config: &Config,
+    channel: oer_protocols_ieee80211_contracts_port::SupportedChannel<Caps>,
+) -> Result<ScanChannel<Caps>, InitializationError> {
+    let power = oer_chips_esp32s31_radio_ieee80211_backend::facts::he_power::he_power(
+        &config.domain,
+        channel.channel().number(),
+        radio::power_limits(config.cap_dbm),
+    )
+    .map_err(|_| InitializationError::HePower)?;
+    Ok(ScanChannel {
+        channel,
+        he_power: oer_protocols_ieee80211_core_roles_sta::association::StaHePower {
+            power_capability: power.power_capability,
+            ul_mu_power: power.ul_mu_power,
+        },
+    })
+}
+
 impl Config {
     pub fn with_reconnect(mut self, policy: crate::ReconnectPolicy) -> Self {
         self.reconnect = policy;
@@ -317,18 +340,20 @@ impl<W: Binding> Profile<W> {
                     && let Some(c) =
                         oer_protocols_ieee80211_contracts_port::SupportedChannel::<Caps>::new(p)
                 {
-                    channels.push(c).map_err(|_| InitializationError::Channel)?;
+                    channels
+                        .push(scan_channel(config, c)?)
+                        .map_err(|_| InitializationError::Channel)?;
                 }
             }
         } else {
             channels
-                .push(config.supported)
+                .push(scan_channel(config, config.supported)?)
                 .map_err(|_| InitializationError::Channel)?;
         }
         let mut wide_channels = heapless::Vec::new();
         if config.ht40 {
             for scanned in &channels {
-                let number = scanned.channel().number();
+                let number = scanned.channel.channel().number();
                 for width in [ChannelWidth::Mhz40Above, ChannelWidth::Mhz40Below] {
                     // A secondary outside the band or the domain is no
                     // 40 MHz channel of this primary.
@@ -366,9 +391,6 @@ impl<W: Binding> Profile<W> {
                 association: &service::ASSOCIATION,
                 listen_interval:
                     oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
-                // The HE request's power elements, once a run, from the PHY's
-                // production target powers under the initial channel's ceiling.
-                he_power: radio::he_power(&config.domain, config.channel, config.cap_dbm)?,
                 tx_block_ack: Some(
                     oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
                         TX_BLOCK_ACK,

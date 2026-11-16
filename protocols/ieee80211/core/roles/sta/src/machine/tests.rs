@@ -452,7 +452,7 @@ impl<'id> World<'id> {
             StaCommandCredits<'id, TestConfigurationPath<'id>>,
         ),
     ) -> World<'id, G> {
-        let channels = heapless::Vec::from_slice(&[channel(1), channel(6)]).unwrap();
+        let channels = heapless::Vec::from_slice(&[scan(1), scan(6)]).unwrap();
         let ((gate, gate_issuer, authority), ()) = mint.into_pools();
         // The pool gives the gate closed; the arbiter is built with it open.
         let gate = gate_issuer.open(gate);
@@ -473,7 +473,6 @@ impl<'id> World<'id> {
             access_point_margin_db: 6,
             supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
             association: &CAPABILITIES,
-            he_power: test_he_power(),
             listen_interval: StationListenInterval::new(10).unwrap(),
             tx_block_ack: None,
             callbacks: Callbacks {
@@ -3665,7 +3664,7 @@ fn association_waits_for_its_frame_without_consuming_a_request_and_still_expires
             rsn: select_association_rsn(&access_point, world.station.policy().unwrap()).unwrap(),
             access_point,
             erp: observation.erp,
-            channel: world.station.config.channels[0],
+            channel: world.station.config.channels[0].channel,
             phy: NegotiatedPhy::NonHt,
             he_set: true,
             step: JoinStep::Associate(
@@ -5692,6 +5691,14 @@ fn request<K: Ieee80211Capabilities>(
     widest: Width,
 ) -> StaPhyRequest<K> {
     StaPhyRequest::new(formats, widest).unwrap()
+}
+
+/// The scanned channel `number`, with the tests' power elements.
+fn scan(number: u8) -> ScanChannel<Caps> {
+    ScanChannel {
+        channel: channel(number),
+        he_power: test_he_power(),
+    }
 }
 
 /// The station's power elements in the tests.

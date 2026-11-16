@@ -956,17 +956,36 @@ pub trait StaCallbacks {
 /// A bounded, contiguous list uses the same checked channel values:
 ///
 /// ```
-/// use oer_protocols_ieee80211_core_roles_sta::machine::StaConfig;
-/// use oer_protocols_ieee80211_contracts_port::SupportedChannel;
-/// fn one<K, C: oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks>(config: &mut StaConfig<K, C>, channel: SupportedChannel<K>) {
+/// use oer_protocols_ieee80211_core_roles_sta::machine::{ScanChannel, StaConfig};
+/// fn one<K, C: oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks>(config: &mut StaConfig<K, C>, channel: ScanChannel<K>) {
 ///     config.channels = heapless::Vec::from_slice(&[channel]).unwrap();
 /// }
 /// ```
+/// A channel the scan visits, with the power elements an HE Association
+/// Request carries on it: the Power Capability states the powers of the
+/// current channel (IEEE Std 802.11-2020, 9.4.2.14), so each channel has its
+/// own, which the composition computes from that channel's ceiling when it
+/// builds the configuration. They are the scanned primary's because HE is
+/// offered at 20 MHz only: an HE join is on the channel it was scanned on.
+pub struct ScanChannel<K> {
+    pub channel: SupportedChannel<K>,
+    pub he_power: StaHePower,
+}
+
+impl<K> Clone for ScanChannel<K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for ScanChannel<K> {}
+
 pub struct StaConfig<K, C: StaCallbacks> {
     /// The interface's own address.
     pub address: OwnAddress,
-    /// The channels the scan visits, in order.
-    pub channels: heapless::Vec<SupportedChannel<K>, CHANNEL_CAPACITY>,
+    /// The channels the scan visits, in order, each with the power elements
+    /// of an HE join on it.
+    pub channels: heapless::Vec<ScanChannel<K>, CHANNEL_CAPACITY>,
     /// The 40 MHz channels an HT40 join may tune: the one whose primary is
     /// the access point's scanned channel and whose secondary its HT
     /// Operation names. Without one, the join stays on the scanned channel.
@@ -985,9 +1004,6 @@ pub struct StaConfig<K, C: StaCallbacks> {
     pub supported_rates: [u8; 8],
     /// The capabilities the Association Request offers.
     pub association: &'static AssociationCapabilities,
-    /// The power elements an HE Association Request carries, from the
-    /// transmit power the composition calibrated before the station starts.
-    pub he_power: StaHePower,
     /// The nonzero number of beacon intervals advertised in Association.
     /// The composition also uses this value for its power-save policy.
     pub listen_interval: StationListenInterval,
@@ -3449,7 +3465,10 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     }
 
     fn channel(&self, visit: usize) -> Option<SupportedChannel<K>> {
-        self.config.channels.get(visit).copied()
+        self.config
+            .channels
+            .get(visit)
+            .map(|scanned| scanned.channel)
     }
 
     /// Report `state`'s step of a connect at `now`.
@@ -4485,7 +4504,6 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         };
         let channels = &self.config.channels;
         let wide = &self.config.wide_channels;
-        let he_power = self.config.he_power;
         // A network's access points: its SSID and a security selection the
         // station's policy admits, on a channel the station scans.
         let network = || {
@@ -4497,7 +4515,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 let scanned = channels
                     .iter()
                     .copied()
-                    .find(|channel| channel.channel().number() == observation.channel)?;
+                    .find(|scanned| scanned.channel.channel().number() == observation.channel)?;
                 Some((observation, rsn, scanned))
             })
         };
@@ -4505,8 +4523,13 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         // the decision taken once from their scan records.
         let candidates = || {
             network().filter_map(move |(observation, rsn, scanned)| {
-                let (channel, phy) =
-                    negotiate(&request, he_power, &observation.record, wide, scanned)?;
+                let (channel, phy) = negotiate(
+                    &request,
+                    scanned.he_power,
+                    &observation.record,
+                    wide,
+                    scanned.channel,
+                )?;
                 Some(Candidate {
                     observation: *observation,
                     rsn,

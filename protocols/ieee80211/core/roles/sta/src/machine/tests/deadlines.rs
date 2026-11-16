@@ -46,7 +46,7 @@ fn background_overflow_before_configuration_has_no_effect_and_keeps_the_link() {
     for delayed_poll in [false, true] {
         installed(|mint| {
             let mut world = connected_world(mint);
-            world.station.config.channels = heapless::Vec::from_slice(&[channel(6)]).unwrap();
+            world.station.config.channels = heapless::Vec::from_slice(&[scan(6)]).unwrap();
             world.completed.clear();
             world.frames.clear();
             world.take();
@@ -72,7 +72,7 @@ fn background_overflow_before_configuration_has_no_effect_and_keeps_the_link() {
 fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
     installed(|mint| {
         let mut world = connected_world(mint);
-        world.station.config.channels = heapless::Vec::from_slice(&[channel(6)]).unwrap();
+        world.station.config.channels = heapless::Vec::from_slice(&[scan(6)]).unwrap();
         world.completed.clear();
         world.frames.clear();
         world.take();

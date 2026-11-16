@@ -1,18 +1,14 @@
-//! What an HE20 station advertises and the power elements of its HE20
-//! Association Request.
+//! What an HE20 station advertises. The power elements of its Association
+//! Request are each scanned channel's, computed by the backend
+//! (`facts::he_power`).
 
 use oer_protocols_ieee80211_contracts_port::Channel;
-use oer_protocols_ieee80211_core_roles_sta::association::StaHePower;
 use oer_protocols_ieee80211_wire::{
     he::{
         HeLocalCapabilities, HeMacCapabilities, HeMcsNssSupport, HePhyCapabilities,
         he_capability_ie,
     },
     ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
-    station::{
-        HeUlMuPowerCapability, HeUlMuPowerCapabilityError, StaPowerCapability,
-        StaPowerCapabilityError,
-    },
 };
 
 // HT Capabilities beside HE20: HT20, one spatial stream, MCS 0..7, SM power
@@ -85,38 +81,6 @@ pub(crate) const HE20: [u8; 24] = he_capability_ie(
 // skips an empty one (implementation precedent, not a requirement of the
 // standard).
 pub(crate) const HE20_EXTENDED: Option<[u8; 14]> = None;
-/// Why the PHY's powers give no HE power elements.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum HePowerError {
-    /// The MCS 0 power lies below the MAC's minimum.
-    Capability(StaPowerCapabilityError),
-    /// A rate of HE-MCS 1 to 9 has more power than HE-MCS 0.
-    UlMu(HeUlMuPowerCapabilityError),
-}
-
-/// The power elements of an HE20 Association Request: the Power Capability
-/// (`minimum_dbm` and the HE-MCS 0 power) and the HE UL-MU power capability
-/// (HE-MCS 1 to 9 against 0), from `rate_power`, the power code each MAC
-/// rate code of 16 to 25 (HE-MCS 0 to 9) transmits at.
-///
-/// SOURCE(esp32s31): complete pinned `libnet80211.a[ieee80211_he.o]::
-/// ieee80211_add_power_cap` (`hal_get_tx_min_pwr`, `hal_get_tx_pwr(16, 1)`)
-/// and `ieee80211_add_ulmu_pwrcap` (`phy_get_max_pwr` of rates 16..=25).
-pub(crate) fn he_power(
-    minimum_dbm: i8,
-    rate_power: impl Fn(u8) -> i8,
-) -> Result<StaHePower, HePowerError> {
-    let rates: [i8; 10] =
-        core::array::from_fn(|index| rate_power(16_u8.saturating_add(index as u8)));
-    let [mcs0, ..] = rates;
-    Ok(StaHePower {
-        power_capability: StaPowerCapability::new(minimum_dbm, mcs0)
-            .map_err(HePowerError::Capability)?,
-        ul_mu_power: HeUlMuPowerCapability::from_rate_power_indices(rates)
-            .map_err(HePowerError::UlMu)?,
-    })
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests;
