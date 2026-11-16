@@ -18,11 +18,20 @@ the end go deeper.
   Bluetooth.
 - **Configuration.** An image chooses at build time what it holds and where
   it runs: no Wi-Fi role, the station, the access point or both, and the
-  network on the radio's hart or on another. A part not chosen costs the
-  image nothing. Chips of the family with one core are consumers of the
-  one-hart placement. The network's interface contract is to carry several
-  interfaces (Wi-Fi station, Wi-Fi access point, both at once, Ethernet,
-  IEEE 802.15.4); today it carries one.
+  network on the radio's hart or on another. Chips of the family with one
+  core are consumers of the one-hart placement. The network's interface
+  contract is to carry several interfaces (Wi-Fi station, Wi-Fi access
+  point, both at once, Ethernet, IEEE 802.15.4); today it carries one.
+- **Not used, not paid.** An image pays in code and memory only for what it
+  uses: a role, a PPDU format's optional mechanisms and a security suite it
+  does not choose are not in it. An image with both roles is to hold their
+  common logic once (the engine, the installation machine, the arbiter, the
+  controller, the pump, the port), so that it is smaller than the two
+  single-role images together. A choice removes code by being a capability
+  of the application entry or a type parameter of a closed set; a constant
+  is not relied on to remove code. Today roles are capabilities of the
+  entry; the optional mechanisms of a format and the security suites are not
+  yet selectable, and every image holds them.
 - **Vendor parity is not a goal.** Clean architecture with hard boundaries,
   sans-IO protocols tested on the host and hardware offloads come first.
   Vendor code is evidence of hardware behaviour, not a design to copy; a
