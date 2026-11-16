@@ -135,6 +135,8 @@ fn policy_checks_the_actual_publication_budget_before_consuming_authority() {
     );
     installed(|mint| {
         let (gate, _issuer, authority) = mint.into_pools();
+        // The pool gives the gate closed; the arbiter is built with it open.
+        let gate = _issuer.open(gate);
         assert!(short.checked::<NoReservation>(budget).is_err());
         let (_arbiter, _primary, _absence) =
             Arbiter::<Caps>::new(exact.checked(budget).unwrap(), channel(1), authority, gate);
@@ -361,6 +363,8 @@ fn stopped_bank_reuses_places_and_gate_without_reusing_lease_identity() {
     for closed in [false, true] {
         installed(|mint| {
             let (gate, issuer, authority) = mint.into_pools();
+            // The pool gives the gate closed; the arbiter is built with it open.
+            let gate = issuer.open(gate);
             let (mut arbiter, place, absence) = Arbiter::<Caps>::new(
                 ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(),
                 channel(1),
@@ -413,13 +417,15 @@ fn stopped_bank_reuses_places_and_gate_without_reusing_lease_identity() {
 fn stop_retains_a_missing_gate_terminal_instead_of_minting_authority() {
     installed(|mint| {
         let (gate, issuer, authority) = mint.into_pools();
+        // The pool gives the gate closed; the arbiter is built with it open.
+        let gate = issuer.open(gate);
         let (mut arbiter, place, absence) = Arbiter::<Caps>::new(
             ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(),
             channel(1),
             authority,
             gate,
         );
-        let mut port = Port { issuer };
+        let port = Port { issuer };
         let first = lease(arbiter.request(at(0), scan(6, 10), place));
         arbiter.ready(first.id());
         let Some(ArbiterAction::CloseGate { gate, .. }) = arbiter.poll_action(at(0)) else {
