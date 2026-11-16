@@ -49,6 +49,16 @@ writes it:
 | track: MAC | `MacSources` (the four coexistence events, the power profile, the slow-clock calibration, the delay entropy), `cold_mac_hal`, `initialize_wifi_mac` | `Sources`, the same values (no slow-clock calibration, as the RX-chain probe answers), `cold_mac_hal`, `initialize_wifi_mac` |
 | running | `into_running` | the same; `from_running` and `reset_mac` around each pulse |
 
+Each receive start, the first, after an ordinary stop and after a pulse's
+cold preparation, follows the removed port's `port_start` (the knowledge
+table's section 2.3): the ring prepared with BASE on its reserved
+descriptor, the open promiscuous receive, the interrupt epoch (both banks
+masked and cleared, the station mask published, the station TBTT enabled;
+no line of this image takes a Wi-Fi source), the walker enabled, the MAC's
+runtime released. The station's receive policy of a virtual interface
+(`apply_vif`) is not programmed: the open receive is the probe's only
+filter.
+
 ## Records
 
 The console prints one line a record, `R <kind> <values…>`, then
@@ -57,10 +67,13 @@ The console prints one line a record, `R <kind> <values…>`, then
 | Kind | Values |
 |---|---|
 | 1 up | units received in the first 20 ms |
-| 2 stop | index, units before it, cycles to the stop request, cycles to the walker stopped, cycles to the activity field clear (or the 10 ms bound), the field then, the MAC's raw interrupts, the walker's flags and next descriptor |
-| 3 pulse | index, units before it, delay (µs), the pulse's cycle, its length in cycles, the walker's flags and next descriptor before, its flags, next and last descriptor after, the activity field after, the MAC's raw interrupts after, the power bank's causes after, the key entry valid after the pulse, the guard's changed words, units in the second run, the key entry valid after the second run's cold preparation |
+| 2 stop | index, units before it, cycles to the stop request, cycles to the walker stopped, cycles to the activity field clear (or the 10 ms bound), the field then, the MAC's raw interrupts, the walker's flags and next descriptor, the MAC's MPDU and data-success counts over the window (high and low half), its FCS-error and buffer-full counts over it |
+| 3 pulse | index, units before it, delay (µs), the pulse's cycle, its length in cycles, the walker's flags and next descriptor before, its flags, next, last descriptor and base after, the activity field after, the MAC's raw interrupts after, the power bank's causes after, the key entry valid after the pulse, the guard's changed words, units in the second run, the key entry valid after the second run's cold preparation, the MPDU and data-success counts over the window before the pulse and over the second run's |
+| 6 quiet | a pulse with the walker stopped first: index, the walker's flags and base before, its flags, next, last and base after, its flags and base after the cold preparation |
 | 4 end | cycles and microseconds over the series: the `mcycle` rate |
 | 5 failed | the phase and the index where the session stopped |
+
+The walker's flags are bit 0 `RX_CONTROL.WALKER_ENABLE`, bit 1 a reload pending, bit 2 the upper next-descriptor field nonzero.
 
 ## Running
 

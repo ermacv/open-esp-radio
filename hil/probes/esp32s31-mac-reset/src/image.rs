@@ -66,6 +66,8 @@ const CHANNEL: u8 = 13;
 const PULSES: usize = 100;
 /// The ordinary stops of one boot (question 4).
 const STOPS: usize = 1_000;
+/// The pulses with the walker stopped first (question 1's walker flag).
+const QUIET: usize = 10;
 /// How long a run receives before its pulse or its stop, and after a
 /// second run's start.
 const RECEIVE_MS: u32 = 20;
@@ -338,10 +340,12 @@ enum Kind {
     End = 4,
     /// A failure: its phase and its index.
     Failed = 5,
+    /// One pulse with the walker stopped before it.
+    Quiet = 6,
 }
 
-const WIDTH: usize = 20;
-const ROWS: usize = 4 + STOPS + PULSES;
+const WIDTH: usize = 22;
+const ROWS: usize = 4 + STOPS + PULSES + QUIET;
 
 /// The session's records, filled on hart 0's radio executor and printed by
 /// the console's task once the session has ended.
@@ -652,7 +656,7 @@ async fn session(
         mut pilot,
         identity,
         mut mac_irq,
-        power_irq,
+        mut power_irq,
         seed,
         station,
         ap,
@@ -739,7 +743,7 @@ async fn session(
             Owners {
                 radio,
                 mac_irq: &mut mac_irq,
-                power_irq: &power_irq,
+                power_irq: &mut power_irq,
                 sources: &mut sources,
                 timer: &timer,
             },
@@ -760,7 +764,7 @@ async fn session(
 struct Owners<'a> {
     radio: &'a mut Radio,
     mac_irq: &'a mut MacInterruptRegisters,
-    power_irq: &'a MacPowerInterruptRegisters,
+    power_irq: &'a mut MacPowerInterruptRegisters,
     sources: &'a mut Sources,
     timer: &'a CooperativeTimer,
 }
@@ -801,13 +805,14 @@ async fn series(
     let stopped = ready
         .publish(access.rx_dma())
         .map_err(|_| (phase::RING, 3))?;
+    // The port's start, in its order: the open receive, the interrupt
+    // epoch, the walker, the MAC's runtime.
+    access.wifi_mac_hal().configure_open_promiscuous_receive();
+    open_epoch(mac_irq, power_irq);
     let mut ring = stopped
         .try_start(access.rx_dma())
         .map_err(|_| (phase::RING, 4))?;
-    let stale = mac_irq.mac_interrupt_raw();
-    mac_irq.acknowledge_mac_interrupt_raw(stale);
     access.wifi_mac_hal().start_mac_runtime(&ring);
-    access.wifi_mac_hal().configure_open_promiscuous_receive();
     let units = receive(storage, &mut ring, &mut access, RECEIVE_MS)
         .await
         .map_err(|code| (phase::RECEIVE, code))?;
@@ -820,9 +825,11 @@ async fn series(
     // Question 4: ordinary stops under receive.
     for index in 0..STOPS {
         let index32 = u32::try_from(index).unwrap_or(u32::MAX);
+        let counted = statistics(&access);
         let units = receive(storage, &mut ring, &mut access, 1 + spread.next(5))
             .await
             .map_err(|code| (phase::RECEIVE, code))?;
+        let counted_after = statistics(&access);
         let begin = oer_portable_riscv::cycle32();
         access.wifi_mac_hal().request_channel_stop();
         let requested = oer_portable_riscv::cycle32();
@@ -853,13 +860,18 @@ async fn series(
                 mac_irq.mac_interrupt_raw().bits(),
                 walker(&snapshot)[0],
                 walker(&snapshot)[1],
+                advance(counted, counted_after, 0, 1),
+                advance(counted, counted_after, 2, 3),
             ],
         );
-        // An ordinary start again: the ring rebuilt, the MAC released.
+        // An ordinary start again, in the port's order: the ring rebuilt,
+        // the open receive, the epoch, the walker, the MAC released.
         let stopped = storage
             .prepare_halted(halted, access.rx_dma())
             .map_err(|_| (phase::RESTART, index32))?;
         access.wifi_mac_hal().reopen_mac_core(&stopped);
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        open_epoch(mac_irq, power_irq);
         ring = stopped
             .try_start(access.rx_dma())
             .map_err(|_| (phase::RESTART, index32 | 0x8000_0000))?;
@@ -870,9 +882,11 @@ async fn series(
     for index in 0..PULSES {
         let index32 = u32::try_from(index).unwrap_or(u32::MAX);
         let key = install_key(&mut access).map_err(|code| (phase::KEY, code))?;
+        let counted = statistics(&access);
         let units_before = receive(storage, &mut ring, &mut access, RECEIVE_MS)
             .await
             .map_err(|code| (phase::RECEIVE, code))?;
+        let counted_before = statistics(&access);
         let delay = spread.next(PULSE_SPREAD_US);
         wait_micros(u64::from(delay)).await;
         let before = access.receive_dma_snapshot();
@@ -920,16 +934,17 @@ async fn series(
             .prepare_halted(halted, access.rx_dma())
             .map_err(|_| (phase::SECOND_RING, index32))?;
         access.wifi_mac_hal().reopen_mac_core(&stopped);
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        open_epoch(mac_irq, power_irq);
         ring = stopped
             .try_start(access.rx_dma())
             .map_err(|_| (phase::SECOND_RING, index32 | 0x8000_0000))?;
-        let stale = mac_irq.mac_interrupt_raw();
-        mac_irq.acknowledge_mac_interrupt_raw(stale);
         access.wifi_mac_hal().start_mac_runtime(&ring);
-        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        let counted_second = statistics(&access);
         let units_after = receive(storage, &mut ring, &mut access, RECEIVE_MS)
             .await
             .map_err(|code| (phase::RECEIVE, code | 0x4000_0000))?;
+        let counted_second_after = statistics(&access);
         let key_second = access.wifi_mac_hal().ccmp_entry_is_valid(key);
         access.wifi_mac_hal().clear_ccmp_entry(KEY_ENTRY);
         journal.record(
@@ -945,6 +960,7 @@ async fn series(
                 walker(&after)[0],
                 walker(&after)[1],
                 walker(&after)[2],
+                walker(&after)[3],
                 u32::from(active),
                 raw,
                 power,
@@ -952,6 +968,68 @@ async fn series(
                 changed,
                 units_after,
                 u32::from(key_second),
+                advance(counted, counted_before, 0, 1),
+                advance(counted_second, counted_second_after, 0, 1),
+            ],
+        );
+    }
+
+    // Question 1's walker flag: a pulse with the walker stopped first, so
+    // that what the flag reads after it is the block's reset value.
+    for index in 0..QUIET {
+        let index32 = u32::try_from(index).unwrap_or(u32::MAX);
+        let _units = receive(storage, &mut ring, &mut access, RECEIVE_MS)
+            .await
+            .map_err(|code| (phase::RECEIVE, code | 0x2000_0000))?;
+        access.wifi_mac_hal().request_channel_stop();
+        let halted = match ring.try_stop(access.rx_dma()) {
+            Ok(halted) => halted,
+            Err((_live, _error)) => return Err((phase::WALKER_STOP, index32 | 0x2000_0000)),
+        };
+        let before = access.receive_dma_snapshot();
+        let (pulsed, pulsed_clocks) = {
+            let mut clocked = WifiClocked::from_running(access, clocks_on);
+            clocked.reset_mac(radio);
+            clocked.into_running()
+        };
+        access = pulsed;
+        clocks_on = pulsed_clocks;
+        let after = access.receive_dma_snapshot();
+        let second_cold = {
+            let mut clocked = WifiClocked::from_running(access, clocks_on);
+            let result = {
+                let mut hal = clocked.cold_mac_hal(radio);
+                initialize_wifi_mac(sources, &mut hal, timer, mac).await
+            };
+            let (running, on) = clocked.into_running();
+            access = running;
+            clocks_on = on;
+            result
+        };
+        second_cold.map_err(|_| (phase::SECOND_COLD, index32 | 0x2000_0000))?;
+        let cold_after = access.receive_dma_snapshot();
+        let stopped = storage
+            .prepare_halted(halted, access.rx_dma())
+            .map_err(|_| (phase::SECOND_RING, index32 | 0x2000_0000))?;
+        access.wifi_mac_hal().reopen_mac_core(&stopped);
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        open_epoch(mac_irq, power_irq);
+        ring = stopped
+            .try_start(access.rx_dma())
+            .map_err(|_| (phase::SECOND_RING, index32 | 0x6000_0000))?;
+        access.wifi_mac_hal().start_mac_runtime(&ring);
+        journal.record(
+            Kind::Quiet,
+            &[
+                index32,
+                walker(&before)[0],
+                walker(&before)[3],
+                walker(&after)[0],
+                walker(&after)[1],
+                walker(&after)[2],
+                walker(&after)[3],
+                walker(&cold_after)[0],
+                walker(&cold_after)[3],
             ],
         );
     }
@@ -964,6 +1042,43 @@ async fn series(
     // Every owner stays held until the leased host reset.
     let _held = (access, clocks_on, ring);
     Ok(())
+}
+
+/// The interrupt epoch as the port's start opened it (`MacIrqEpoch::activate`
+/// with `MAC_STATION_INTERRUPT_MASK`): both banks masked and cleared, the
+/// station's mask published, the station TBTT enabled. No line of this
+/// image routes the Wi-Fi sources: the banks latch and nothing is taken.
+fn open_epoch(mac_irq: &mut MacInterruptRegisters, power_irq: &mut MacPowerInterruptRegisters) {
+    mac_irq.mask_all_mac_interrupts();
+    power_irq.mask_all_power_interrupts();
+    let stale = mac_irq.mac_interrupt_raw();
+    mac_irq.acknowledge_mac_interrupt_raw(stale);
+    power_irq.clear_all_power_interrupts();
+    mac_irq.publish_mac_interrupt_mask(
+        oer_chips_esp32s31_hal::radio::ieee80211::init::MAC_STATION_INTERRUPT_MASK,
+    );
+    power_irq.enable_station_tbtt_interrupt();
+}
+
+/// The MAC's receive statistics this probe reads: MPDUs, data successes,
+/// FCS errors and buffer-full events (`dbg_read_rx_count`'s counters).
+fn statistics(access: &RadioAccess) -> [u16; 4] {
+    let primary = access.receive_statistics_snapshot().primary;
+    [
+        primary.mpdu_count,
+        primary.data_success,
+        primary.fcs_error,
+        primary.buffer_full,
+    ]
+}
+
+/// Two counters' advance over a window, packed high and low.
+fn advance(before: [u16; 4], after: [u16; 4], high: usize, low: usize) -> u32 {
+    let delta = |index: usize| match (before.get(index), after.get(index)) {
+        (Some(before), Some(after)) => u32::from(after.wrapping_sub(*before)),
+        _ => 0,
+    };
+    delta(high) << 16 | delta(low)
 }
 
 /// The power bank's latched causes, one bit each in their declared order:
@@ -990,16 +1105,17 @@ fn power_causes(
 
 /// The receive walker's state: its flags (bit 0 enabled, bit 1 a reload
 /// pending, bit 2 the upper next field nonzero), its next and its last
-/// descriptor.
+/// descriptor, and its base.
 fn walker(
     snapshot: &oer_chips_esp32s31_hal::radio::ieee80211::registers::MacRxDmaSnapshot,
-) -> [u32; 3] {
+) -> [u32; 4] {
     [
         u32::from(snapshot.walker_enabled)
             | u32::from(snapshot.reload_pending) << 1
             | u32::from(snapshot.next_descriptor_upper_unknown) << 2,
         snapshot.next_descriptor_low,
         snapshot.last_descriptor_low,
+        snapshot.descriptor_base,
     ]
 }
 
