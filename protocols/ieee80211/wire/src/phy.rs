@@ -334,6 +334,17 @@ pub struct HeRate {
 
 // Full-bandwidth N_SD and modulation/coding of IEEE Std 802.11ax-2021
 // 27.5.1. Each leaf is evaluated at compilation, not on received parameters.
+/// The largest HE nominal rate in kb/s fits a `u32`: the largest data
+/// subcarriers (1 960), bits per subcarrier (10), code-rate numerator (5)
+/// and streams (8), over the smallest divisor of [`HeRate::nominal_kbps`]'s
+/// arms (`2 · 13 600`), bound every arm.
+const HE_KBPS_FITS: () = {
+    let largest = 1_960_u64 * 10 * 5 * 8 * 1_000_000 / (2 * 13_600);
+    if largest > u32::MAX as u64 {
+        panic!("HE's nominal rate exceeds a u32");
+    }
+};
+
 /// The code rate of an HE-MCS.
 #[derive(Clone, Copy)]
 enum CodeRate {
@@ -466,12 +477,10 @@ impl HeRate {
             (CodeRate::FiveSixths, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (12 * 14_400),
             (CodeRate::FiveSixths, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (12 * 16_000),
         };
-        // At most 1 960 · 10 · 5 · 8 · 10⁶ / (2 · 13 600) b/s: far below u32's.
-        if kbps > u32::MAX as u64 {
-            u32::MAX
-        } else {
-            kbps as u32
-        }
+        // In u32 by `HE_KBPS_FITS`: no arm exceeds the largest numerator
+        // over the smallest divisor.
+        let () = HE_KBPS_FITS;
+        kbps as u32
     }
 
     /// The bits per subcarrier and the code rate of the HE-MCS (IEEE Std
