@@ -14,8 +14,8 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_testing_conformance as suite;
 use oer_protocols_ieee80211_testing_model::{
-    Air, Anomaly, HardwareState, MODEL_AGREEMENTS, MODEL_GROUPS, MODEL_PLACES, ModelCaps,
-    ModelLayout, ModelLink, ModelMemory, ModelPort, Programmed,
+    Air, Anomaly, HardwareState, MODEL_AGREEMENTS, MODEL_GROUPS, MODEL_PLACES,
+    MODEL_SHORT_AMPDU_MCS, ModelCaps, ModelLayout, ModelLink, ModelMemory, ModelPort, Programmed,
 };
 use oer_protocols_radio_port::{Mint, branded};
 
@@ -163,6 +163,41 @@ fn a_publication_sends_the_prefix_its_rate_admits() {
             1_500,
             6,
         );
+    });
+}
+
+#[test]
+fn a_single_publication_sends_the_first_frame() {
+    installed(|mut model, rights| {
+        suite::a_single_publication_sends_the_first_frame(
+            &mut model,
+            rights,
+            MpduLength::new(1_526).unwrap(),
+            1_500,
+        );
+    });
+}
+
+#[test]
+fn an_aggregate_of_one_frame_ends_single() {
+    // Two frames of 2 000 octets where the aggregate holds 3 000.
+    installed(|mut model, rights| {
+        suite::an_aggregate_of_one_frame_ends_single(
+            &mut model,
+            rights,
+            MpduLength::new(2_026).unwrap(),
+            2_000,
+            MODEL_SHORT_AMPDU_MCS,
+        );
+    });
+}
+
+#[test]
+fn an_unclassifiable_frame_goes_back_at_its_staging() {
+    installed(|mut model, rights| {
+        suite::an_unclassifiable_frame_goes_back_at_its_staging(&mut model, rights, |model| {
+            model.port.counts().dropped
+        });
     });
 }
 

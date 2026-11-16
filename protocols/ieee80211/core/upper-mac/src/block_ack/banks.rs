@@ -16,7 +16,8 @@ use super::{
 };
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    Ieee80211Capabilities, RxCryptoStatus, RxEvidence, RxHeader, RxMetadata, SupportedBlockAck, Tid,
+    Ieee80211Capabilities, RxCryptoStatus, RxEvidence, RxHead, RxHeader, RxMetadata,
+    SupportedBlockAck, Tid,
 };
 use oer_protocols_ieee80211_wire::{
     address::Bssid,
@@ -135,8 +136,8 @@ pub trait RxBlockAckTypes {
 /// once, and its bytes. Nothing of it is kept.
 #[derive(Clone, Copy, Debug)]
 pub struct RxView<'a> {
-    /// The header, when the frame has a data or a management frame's header.
-    pub header: Option<&'a RxHeader>,
+    /// What it is, classified once.
+    pub head: &'a RxHead,
     /// The MPDU, from its header to the end of its body.
     pub bytes: &'a [u8],
 }
@@ -371,7 +372,11 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     /// room: it waits behind the frames already in delivery order. A
     /// management or control frame is not held; the caller delivers it.
     pub fn park(&mut self, frame: T::Frame, view: RxView<'_>, meta: T::Meta) -> Parked<T> {
-        if !view.header.is_some_and(|header| header.control.is_data()) {
+        if !view
+            .head
+            .header()
+            .is_some_and(|header| header.control.is_data())
+        {
             return Parked::Deliver((frame, meta));
         }
         let next = usize::from(self.header.ready_len);
@@ -753,7 +758,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         meta: T::Meta,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
-        let action = view.header.is_some_and(|header| {
+        let action = view.head.header().is_some_and(|header| {
             !header.control.is_data() && header.control.subtype() == ACTION_SUBTYPE
         });
         if action && !self.can_receive_management() {
@@ -843,9 +848,10 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
             return RxDisposition::Recycle(frame);
         }
-        let key = view
-            .header
-            .and_then(|header| self.reorder_key(header, local, &meta));
+        let key = match view.head {
+            RxHead::Frame(header) => self.reorder_key(header, local, &meta),
+            RxHead::Control(_) => None,
+        };
         let Some((bank_index, sequence)) = key else {
             return RxDisposition::Deliver((frame, meta));
         };

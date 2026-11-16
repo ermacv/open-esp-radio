@@ -13,7 +13,9 @@
 use core::marker::PhantomData;
 
 use oer_portable_time::Instant;
-use oer_protocols_ieee80211_wire::frame::{DecodedHeader, FrameControl};
+use oer_protocols_ieee80211_wire::frame::{
+    DecodedHeader, FrameControl, FrameControlFields, FrameType,
+};
 
 use crate::data::{DataPort, Sealed};
 
@@ -59,6 +61,41 @@ impl RxHeader {
     }
 }
 
+/// What a staged unit is, classified once at its staging.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RxHead {
+    /// A data or a management frame, with its header decoded.
+    Frame(RxHeader),
+    /// A control frame, with its Frame Control field: its reader parses
+    /// its body (a BlockAckReq).
+    Control(FrameControlFields),
+}
+
+impl RxHead {
+    /// The class of `frame`: `None` for a frame that is neither, which the
+    /// port counts and gives back to the ring at its staging, as a frame
+    /// the air damaged.
+    pub fn of(frame: &[u8]) -> Option<Self> {
+        if let Some(header) =
+            DecodedHeader::decode(frame).and_then(|decoded| RxHeader::of(&decoded, frame))
+        {
+            return Some(Self::Frame(header));
+        }
+        let (&control, _) = frame.split_first_chunk::<2>()?;
+        let control = FrameControlFields::from_bytes(control);
+        (control.version() == 0 && control.kind() == FrameType::Control)
+            .then_some(Self::Control(control))
+    }
+
+    /// The decoded header of a data or a management frame.
+    pub const fn header(&self) -> Option<&RxHeader> {
+        match self {
+            Self::Frame(header) => Some(header),
+            Self::Control(_) => None,
+        }
+    }
+}
+
 /// A unit can be lent: a property of the unit, read before the decision.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Lendable(());
@@ -66,10 +103,8 @@ pub struct Lendable(());
 /// A staged unit, as the port holds it in its place.
 #[derive(Debug)]
 pub struct Staged<M> {
-    /// The header, decoded once: `None` for a frame whose header is not a
-    /// data or a management frame's (a control frame, a BlockAckReq), whose
-    /// reader parses its bytes.
-    pub header: Option<RxHeader>,
+    /// What it is, classified once.
+    pub head: RxHead,
     /// What the hardware observed of it.
     pub meta: M,
     /// Whether it can be lent.
@@ -79,9 +114,8 @@ pub struct Staged<M> {
 /// A unit read in place: its header, the hardware's evidence, the bytes.
 #[derive(Debug)]
 pub struct Received<'a, M> {
-    /// The header, decoded once, when the frame has a data or a management
-    /// frame's header.
-    pub header: Option<&'a RxHeader>,
+    /// What it is, classified once.
+    pub head: &'a RxHead,
     /// What the hardware observed.
     pub meta: &'a M,
     /// The MPDU, from its header to the end of its body.
@@ -236,7 +270,7 @@ impl<'p, 'id, P: ReceivePort<'id>> Round<'p, 'id, P> {
     pub fn unit(&self, handle: &UnitHandle<'id>) -> Option<Received<'_, P::Meta>> {
         let (staged, bytes) = self.port.round_unit(&self.seal, handle.place)?;
         Some(Received {
-            header: staged.header.as_ref(),
+            head: &staged.head,
             meta: &staged.meta,
             bytes,
             lendable: staged.lendable,
@@ -279,7 +313,7 @@ impl<'id, P: ReceivePort<'id>> Unit<'_, '_, 'id, P> {
     pub fn view(&self) -> Option<Received<'_, P::Meta>> {
         let (staged, bytes) = self.round.port.round_unit(&self.round.seal, self.place)?;
         Some(Received {
-            header: staged.header.as_ref(),
+            head: &staged.head,
             meta: &staged.meta,
             bytes,
             lendable: staged.lendable,

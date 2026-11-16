@@ -21,8 +21,8 @@ use oer_protocols_radio_port::{ClockError, PoolPath, Root};
 use crate::life::{MintData, PortKey, RadioPort};
 use crate::{
     AggregateOutcome, AmpduRate, BssColor, GateClosed, GateOpen, Ieee80211Instant, MpduLength,
-    PortRate, SingleOutcome, StationHe, StationReceive, SupportedBlockAck, SupportedEdca,
-    TbttEvent, Tid, TxFrame,
+    PortRate, RetryPlan, SingleOutcome, StationHe, StationReceive, SupportedBlockAck,
+    SupportedEdca, TbttEvent, Tid, TxFrame,
 };
 
 /// The brand of one installation, invariant in `'id`.
@@ -422,12 +422,42 @@ impl HeaderLen {
     }
 }
 
-/// An aggregate's end, read in place: what the prefix's frames did on the
-/// air.
+/// How an arena goes on the air.
+pub enum Ppdu<'id, K> {
+    /// The arena's first frame as one MPDU, acknowledged, by this plan.
+    Single(RetryPlan<PortRate<'id, K>>),
+    /// The longest prefix the rate admits as an A-MPDU; if that prefix is
+    /// one frame, that frame as one MPDU by `alone`.
+    Aggregate {
+        /// The aggregate's rate.
+        rate: AmpduRate<'id, K>,
+        /// The plan of a prefix of one frame.
+        alone: RetryPlan<PortRate<'id, K>>,
+    },
+}
+
+impl<K> Clone for Ppdu<'_, K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<K> Copy for Ppdu<'_, K> {}
+
+/// How an arena's publication ended: as what went, not as what was asked.
+/// An [`Ppdu::Aggregate`] whose prefix was one frame ends `Single`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArenaOutcome<A, B, D> {
+    /// One MPDU went.
+    Single(SingleOutcome<A, D>),
+    /// An A-MPDU went.
+    Aggregate(AggregateOutcome<B, D>),
+}
+
+/// An arena's end, read in place: what the prefix's frames did on the air.
 #[derive(Debug)]
-pub struct Ended<'a, B, D> {
-    /// The aggregate's outcome.
-    pub outcome: &'a AggregateOutcome<B, D>,
+pub struct Ended<'a, A, B, D> {
+    /// What went, and how it ended.
+    pub outcome: &'a ArenaOutcome<A, B, D>,
     /// The frames of the prefix that went.
     pub sent: FrameSet,
     /// The frames the response acknowledged.
@@ -616,13 +646,14 @@ pub trait DataPort<'id>: RadioPort<'id> {
         header: impl FnOnce(&mut [u8]) -> HeaderLen,
     );
 
-    /// Publish the arena at `rate`: the longest prefix of its frames the
-    /// rate admits, one frame at least, goes; the others stay in their
-    /// places with no attempt spent.
+    /// Publish the arena as `how` says: a single its first frame; an
+    /// aggregate the longest prefix of its frames the rate admits, one
+    /// frame at least, which goes alone by its plan. The others stay in
+    /// their places with no attempt spent.
     fn publish(
         &mut self,
         arena: Arena<'id>,
-        rate: AmpduRate<'id, Self::Caps>,
+        how: Ppdu<'id, Self::Caps>,
         gate: &GateOpen<'id>,
         now: Instant,
     ) -> OnAir<'id>;
@@ -640,7 +671,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         facts: TxFacts,
         on_air: &OnAir<'id>,
         now: Instant,
-    ) -> Option<Ended<'_, Self::BlockAck, Self::Denial>>;
+    ) -> Option<Ended<'_, Self::Ack, Self::BlockAck, Self::Denial>>;
 
     /// Settle an ended arena: the frames of `keep` stay in their places for
     /// a retry, every other body goes home.

@@ -8,7 +8,6 @@ use oer_protocols_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, LowerMacCapabilities, PhyFormatSet,
     RateSupport, ReceiveFilter, RxMeta, WidthSet,
 };
-use oer_protocols_ieee80211_wire::frame::DecodedHeader;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
@@ -73,8 +72,8 @@ trait Given<'v> {
     fn hold(&mut self, frame: Frame, meta: RxMeta) -> Parked<Types>;
 }
 
-fn header_of(bytes: &[u8]) -> Option<RxHeader> {
-    DecodedHeader::decode(bytes).and_then(|decoded| RxHeader::of(&decoded, bytes))
+fn header_of(bytes: &[u8]) -> RxHead {
+    RxHead::of(bytes).unwrap()
 }
 
 impl<'v, E: Copy + Eq> Given<'v> for RxBlockAckView<'v, Types, E> {
@@ -89,7 +88,7 @@ impl<'v, E: Copy + Eq> Given<'v> for RxBlockAckView<'v, Types, E> {
         let bytes = frame.0.clone();
         let header = header_of(&bytes);
         let view = RxView {
-            header: header.as_ref(),
+            head: &header,
             bytes: &bytes,
         };
         self.receive(now, local, frame, view, meta, events)
@@ -99,7 +98,7 @@ impl<'v, E: Copy + Eq> Given<'v> for RxBlockAckView<'v, Types, E> {
         let bytes = frame.0.clone();
         let header = header_of(&bytes);
         let view = RxView {
-            header: header.as_ref(),
+            head: &header,
             bytes: &bytes,
         };
         self.park(frame, view, meta)
@@ -556,7 +555,7 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
     let bytes = qos_data(0, 100).0;
     let header = header_of(&bytes);
     let seen = RxView {
-        header: header.as_ref(),
+        head: &header,
         bytes: &bytes,
     };
     let _received = view.receive(now(1), None, qos_data(0, 100), seen, counted, &mut ());

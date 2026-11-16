@@ -34,10 +34,10 @@ use oer_protocols_ieee80211_contracts_port::{
     AckHeader, HeaderSpec, Protection, RetryPlan, RetryStage, SizedFrame, TxFrame,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduRate, Command, CommandEnd, CommandPlace, CommandPoll, DataPort, DataRights, FrameSet,
-    GateClosed, GateOpen, HeaderLen, IdleArena, MpduLength, PhyRate, PortSink, QueueRight,
-    RadioPort, ReceivePort, Round, Settled, SingleOutcome, SinglePlace, StartPoll, StopPoll,
-    StopRight, Stopped, TbttEvent, TxFacts, TxOutcome,
+    AmpduRate, ArenaOutcome, Command, CommandEnd, CommandPlace, CommandPoll, DataPort, DataRights,
+    FrameSet, GateClosed, GateOpen, HeaderLen, IdleArena, MpduLength, PhyRate, PortRate, PortSink,
+    Ppdu, QueueRight, RadioPort, ReceivePort, Round, Settled, SingleOutcome, SinglePlace,
+    StartPoll, StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::frame::FrameControl;
@@ -528,20 +528,25 @@ pub fn a_unit_is_in_one_place<'id, H, const S: usize, const G: usize, const A: u
 
 /// **7. An aggregate's prefix**: a publication at a rate that admits less
 /// than the arena holds sends the longest prefix, one frame at least, and
-/// what did not go stays in place with no attempt spent.
-pub fn a_publication_sends_the_prefix_its_rate_admits<
-    'id,
-    H,
-    const S: usize,
-    const G: usize,
-    const A: usize,
->(
+/// What one publication of an arena of `frames` frames did: the frames
+/// that went and whether the outcome says one MPDU went.
+struct Publication {
+    sent: FrameSet,
+    single: bool,
+}
+
+/// Fill an arena with `frames` frames of `body` octets, publish it as
+/// `how` makes it, end it and settle it keeping nothing; the frames that
+/// did not go stay in place with no attempt spent.
+fn publication<'id, H, const S: usize, const G: usize, const A: usize>(
     harness: &mut H,
     mut rights: Rights<'id, S, G, A>,
     length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
     body: u16,
     frames: u8,
-) where
+    how: impl FnOnce(&H::Port) -> Ppdu<'id, <H::Port as RadioPort<'id>>::Caps>,
+) -> Publication
+where
     H: Harness<'id, S, G, A>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
@@ -561,14 +566,10 @@ pub fn a_publication_sends_the_prefix_its_rate_admits<
             .expect("the arena has slots");
         place.write(memory, header);
     }
-    let rate = ht_rate::<H::Port>(harness.port());
-    let on_air = harness.port().publish(arena, rate, &open, NOW);
+    let how = how(harness.port());
+    let on_air = harness.port().publish(arena, how, &open, NOW);
     let sent = on_air.sent();
     assert!(!sent.is_empty(), "one frame goes at least");
-    assert!(
-        u32::from(frames) > sent.len(),
-        "the rate admits less than the arena holds"
-    );
     assert_eq!(
         sent,
         FrameSet::prefix(sent.len() as u8),
@@ -577,22 +578,28 @@ pub fn a_publication_sends_the_prefix_its_rate_admits<
     let ended = harness
         .port()
         .aggregate_ended(TxFacts::DUE, &on_air, NOW)
-        .expect("the aggregate ended");
+        .expect("the arena ended");
     assert_eq!(ended.sent, sent);
+    let single = matches!(ended.outcome, ArenaOutcome::Single(_));
     let mut home = 0;
     let settled = harness
         .port()
         .settle(on_air, FrameSet::EMPTY, &mut |_memory| home += 1);
     assert_eq!(home, sent.len(), "the sent frames go home");
-    let Settled::Kept(arena) = settled else {
-        panic!("the frames that did not go stay in their places");
+    let idle = match settled {
+        Settled::Kept(arena) => {
+            assert_eq!(
+                u32::from(arena.frames()),
+                u32::from(frames) - sent.len(),
+                "no attempt of the rest was spent"
+            );
+            harness.port().withdraw(arena, &mut |_memory| {})
+        }
+        Settled::Idle(idle) => {
+            assert_eq!(sent.len(), u32::from(frames), "every frame went");
+            idle
+        }
     };
-    assert_eq!(
-        u32::from(arena.frames()),
-        u32::from(frames) - sent.len(),
-        "no attempt of the rest was spent"
-    );
-    let idle = harness.port().withdraw(arena, &mut |_memory| {});
     data.arenas = [idle, other];
     let (place, end) = command(harness, data.command, Command::CloseGate(open));
     let CommandEnd::GateClosed(closed) = end else {
@@ -602,21 +609,126 @@ pub fn a_publication_sends_the_prefix_its_rate_admits<
     rights.gate = Some(closed);
     rights.data = Some(data);
     stop(harness, &mut rights, running);
+    retire_whole(harness, rights);
+    Publication { sent, single }
 }
 
-/// HT MCS 0 at 20 MHz: the slowest aggregate rate.
-fn ht_rate<'id, P: DataPort<'id>>(port: &P) -> AmpduRate<'id, P::Caps> {
+/// The plan of one frame alone: one transmission at 6 Mb/s.
+fn alone<'id, P: DataPort<'id>>(port: &P) -> RetryPlan<PortRate<'id, P::Caps>> {
+    let rate = port
+        .rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
+        .expect("the port sends 6 Mb/s");
+    RetryPlan::new(RetryStage {
+        rate,
+        transmissions: NonZeroU8::MIN,
+        protection: Protection::None,
+    })
+}
+
+/// An aggregate at HT `mcs`, a frame alone at 6 Mb/s.
+fn aggregate<'id, P: DataPort<'id>>(port: &P, mcs: u8) -> Ppdu<'id, P::Caps> {
+    Ppdu::Aggregate {
+        rate: ht_rate(port, mcs),
+        alone: alone(port),
+    }
+}
+
+/// **7. A publication sends what its rate admits**: an aggregate at a
+/// rate that admits less than the arena holds sends the longest prefix, as
+/// an A-MPDU, and what did not go is in place with its attempts unchanged.
+/// `frames` frames of `body` octets must hold more than the rate admits
+/// and more than one frame of it.
+pub fn a_publication_sends_the_prefix_its_rate_admits<
+    'id,
+    H,
+    const S: usize,
+    const G: usize,
+    const A: usize,
+>(
+    harness: &mut H,
+    rights: Rights<'id, S, G, A>,
+    length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
+    body: u16,
+    frames: u8,
+) where
+    H: Harness<'id, S, G, A>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let went = publication(harness, rights, length, body, frames, |port| {
+        aggregate(port, 0)
+    });
+    assert!(
+        u32::from(frames) > went.sent.len(),
+        "the rate admits less than the arena holds"
+    );
+    assert!(went.sent.len() > 1, "the prefix is an aggregate");
+    assert!(!went.single, "an aggregate's outcome is an aggregate's");
+}
+
+/// **7. A single publication** sends the arena's first frame as one MPDU
+/// and leaves the rest in place with no attempt spent.
+pub fn a_single_publication_sends_the_first_frame<
+    'id,
+    H,
+    const S: usize,
+    const G: usize,
+    const A: usize,
+>(
+    harness: &mut H,
+    rights: Rights<'id, S, G, A>,
+    length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
+    body: u16,
+) where
+    H: Harness<'id, S, G, A>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let went = publication(harness, rights, length, body, 3, |port| {
+        Ppdu::Single(alone(port))
+    });
+    assert_eq!(went.sent, FrameSet::prefix(1), "the first frame goes");
+    assert!(went.single, "its outcome is a single's");
+}
+
+/// **7. An aggregate of one frame ends as a single**: at HT `mcs`, a rate
+/// that admits one frame of the arena's two, that frame goes alone by its
+/// plan and the outcome says one MPDU went. `body` octets must exceed half
+/// of what the rate admits.
+pub fn an_aggregate_of_one_frame_ends_single<
+    'id,
+    H,
+    const S: usize,
+    const G: usize,
+    const A: usize,
+>(
+    harness: &mut H,
+    rights: Rights<'id, S, G, A>,
+    length: MpduLength<<H::Port as RadioPort<'id>>::Caps>,
+    body: u16,
+    mcs: u8,
+) where
+    H: Harness<'id, S, G, A>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let went = publication(harness, rights, length, body, 2, |port| {
+        aggregate(port, mcs)
+    });
+    assert_eq!(went.sent, FrameSet::prefix(1), "one frame is admitted");
+    assert!(went.single, "what went is one MPDU");
+}
+
+/// HT `mcs` at 20 MHz with the long guard interval.
+fn ht_rate<'id, P: DataPort<'id>>(port: &P, mcs: u8) -> AmpduRate<'id, P::Caps> {
     let rate = PhyRate::Ht(
         HtRate::new(
-            HtMcs::new(0).unwrap(),
+            HtMcs::new(mcs).unwrap(),
             PpduBandwidth::Mhz20,
             HtGuardInterval::Normal,
         )
         .unwrap(),
     );
-    let rate = port.rate(rate).expect("the port sends HT MCS 0");
+    let rate = port.rate(rate).expect("the port sends the HT rate");
     port.ampdu_rate(rate)
-        .expect("the port aggregates at HT MCS 0")
+        .expect("the port aggregates at the HT rate")
 }
 
 /// **8. A round's port calls are bounded**: with a full ring, a round
@@ -647,6 +759,39 @@ pub fn a_round_services_the_ring_once<'id, H, const S: usize, const G: usize, co
         1,
         "a round services the ring once"
     );
+    stop(harness, &mut rights, running);
+}
+
+/// **6. A frame that is no frame goes back at its staging**: a unit that
+/// is neither a data, a management nor a control frame is counted and
+/// returned to the ring; the round hands the others.
+pub fn an_unclassifiable_frame_goes_back_at_its_staging<
+    'id,
+    H,
+    const S: usize,
+    const G: usize,
+    const A: usize,
+>(
+    harness: &mut H,
+    mut rights: Rights<'id, S, G, A>,
+    dropped: impl Fn(&H) -> u32,
+) where
+    H: Harness<'id, S, G, A>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    let running = run(harness, &mut rights);
+    // Protocol version 3: no frame of this standard.
+    harness.land(&[0xff; 24]);
+    harness.land(&data_mpdu(20));
+    let before = dropped(harness);
+    let mut round = Round::open(harness.port(), NOW);
+    let mut handed = 0;
+    while let Some(_unit) = round.staged() {
+        handed += 1;
+    }
+    let _ = round.close();
+    assert_eq!(handed, 1, "the data frame is handed");
+    assert_eq!(dropped(harness) - before, 1, "the other is counted");
     stop(harness, &mut rights, running);
 }
 

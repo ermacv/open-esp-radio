@@ -69,18 +69,17 @@ use std::vec::Vec;
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::data::Sealed;
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateEnd, AggregateOutcome, Air as OnAirAir, AmpduCapabilities, AmpduLengthTable,
-    AmpduRate, Arena, ArenaSide, BandSet, BlockAckReport, Channel, Command, CommandEnd,
-    CommandPlace, CommandPoll, Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet,
-    GateClosed, GateIssuer, GateLent, GateOpen, HEADROOM, HardwareServices, HeaderLen, IdleArena,
-    Ieee80211Capabilities, Ieee80211Instant, InCommand, IndeterminateCause, LowerMacCapabilities,
-    MpduLength, OnAir, PhyFormatSet, Place, PortKey, PortSink, QueueRight, RadioPort, RateSupport,
-    ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHeader, RxMeta,
+    AggregateEnd, Air as OnAirAir, AmpduCapabilities, AmpduLengthTable, Arena, ArenaOutcome,
+    ArenaSide, BandSet, BlockAckReport, Channel, Command, CommandEnd, CommandPlace, CommandPoll,
+    Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet, GateClosed, GateIssuer,
+    GateLent, GateOpen, HEADROOM, HardwareServices, HeaderLen, IdleArena, Ieee80211Capabilities,
+    Ieee80211Instant, InCommand, IndeterminateCause, LowerMacCapabilities, MpduLength, OnAir,
+    PhyFormatSet, Place, PortKey, PortSink, Ppdu, QueueRight, RadioPort, RateSupport,
+    ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead, RxMeta,
     Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces,
     StartFailure, StartPoll, Starting, StopPoll, StopRight, Stopped, Stopping, SupportedChannel,
     Tid, TxFacts, TxFrame, TxOutcome, UnitsHome, WidthSet, WithdrawCause,
 };
-use oer_protocols_ieee80211_wire::frame::DecodedHeader;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use oer_protocols_radio_port::ClockError;
@@ -88,13 +87,25 @@ use oer_protocols_radio_port::ClockError;
 /// The longest MPDU the model carries.
 pub const MODEL_MAX_MPDU: usize = 2304;
 
-/// The A-MPDU length the model sends at every HT and HE rate.
+/// The A-MPDU length the model sends at every HT and HE rate but one.
 pub const MODEL_AMPDU_LENGTH: u32 = 6_500;
 
+/// The one rate the model aggregates less at: HT MCS 7 at 20 MHz with the
+/// long guard interval, where one frame of the longest MPDU fits and two
+/// do not.
+pub const MODEL_SHORT_AMPDU_MCS: u8 = 7;
+
+/// The A-MPDU length at [`MODEL_SHORT_AMPDU_MCS`].
+pub const MODEL_SHORT_AMPDU_LENGTH: u32 = 3_000;
+
 /// The model's A-MPDU lengths.
-pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = AmpduLengthTable {
-    ht: [[[MODEL_AMPDU_LENGTH; 32]; 2]; 2],
-    he: [[[MODEL_AMPDU_LENGTH; 12]; 3]; 4],
+pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = {
+    let mut ht = [[[MODEL_AMPDU_LENGTH; 32]; 2]; 2];
+    ht[0][0][MODEL_SHORT_AMPDU_MCS as usize] = MODEL_SHORT_AMPDU_LENGTH;
+    AmpduLengthTable {
+        ht,
+        he: [[[MODEL_AMPDU_LENGTH; 12]; 3]; 4],
+    }
 };
 
 /// What the model serves.
@@ -251,6 +262,9 @@ pub struct Counts {
     pub closes: u32,
     /// The headers decoded.
     pub decodes: u32,
+    /// The units neither a data, a management nor a control frame: given
+    /// back to the ring at their staging.
+    pub dropped: u32,
 }
 
 /// A part of the modelled hardware that is on or off, or one of the
@@ -366,9 +380,20 @@ struct Frame {
 struct ArenaBuffer {
     frames: Vec<Frame>,
     sent: u8,
+    went: Went,
     air: Option<Air>,
-    ended: Option<AggregateOutcome<(), ()>>,
+    ended: Option<ArenaOutcome<(), (), ()>>,
     acknowledged: FrameSet,
+}
+
+/// What an arena's publication put on the air.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum Went {
+    /// One MPDU.
+    #[default]
+    Single,
+    /// An A-MPDU.
+    Aggregate,
 }
 
 /// A queue of the model: the single on its air.
@@ -601,7 +626,11 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
     fn withdraw_air(&mut self) {
         for arena in &mut self.arenas {
             if arena.air.take().is_some() && arena.ended.is_none() {
-                arena.ended = Some(TxOutcome::Withdrawn(WithdrawCause::Disabled));
+                let cause = WithdrawCause::Disabled;
+                arena.ended = Some(match arena.went {
+                    Went::Single => ArenaOutcome::Single(TxOutcome::Withdrawn(cause)),
+                    Went::Aggregate => ArenaOutcome::Aggregate(TxOutcome::Withdrawn(cause)),
+                });
             }
         }
         for queue in &mut self.queues {
@@ -864,14 +893,18 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
     fn publish(
         &mut self,
         arena: Arena<'id>,
-        rate: AmpduRate<'id, Self::Caps>,
+        how: Ppdu<'id, Self::Caps>,
         _gate: &GateOpen<'id>,
         _now: Instant,
     ) -> OnAir<'id> {
         self.call();
-        let limit = MODEL_AMPDU_LENGTHS
-            .at(rate.rate().get())
-            .map_or(0, core::num::NonZeroU32::get);
+        // A single goes alone: no second frame fits its limit.
+        let limit = match how {
+            Ppdu::Single(_) => 0,
+            Ppdu::Aggregate { rate, .. } => MODEL_AMPDU_LENGTHS
+                .at(rate.rate().get())
+                .map_or(0, core::num::NonZeroU32::get),
+        };
         let air = self.air_of(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort);
         let buffer = self.arenas.get_mut(side_index(arena.side()));
         let mut sent: u8 = 0;
@@ -892,6 +925,11 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                 .max(1)
                 .min(u8::try_from(buffer.frames.len()).unwrap_or(u8::MAX));
             buffer.sent = sent;
+            buffer.went = if sent > 1 {
+                Went::Aggregate
+            } else {
+                Went::Single
+            };
             buffer.air = Some(air);
             buffer.ended = None;
             buffer.acknowledged = FrameSet::EMPTY;
@@ -919,7 +957,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         _facts: TxFacts,
         on_air: &OnAir<'id>,
         _now: Instant,
-    ) -> Option<Ended<'_, Self::BlockAck, Self::Denial>> {
+    ) -> Option<Ended<'_, Self::Ack, Self::BlockAck, Self::Denial>> {
         self.call();
         let rate = PhyRate::Legacy(LegacyRate::Ofdm24M);
         let buffer = self.arenas.get_mut(side_index(on_air.side()))?;
@@ -929,28 +967,52 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                 Some(air) => air,
             };
             buffer.air = None;
-            let (outcome, acknowledged) = match air {
-                Air::Ack => (
-                    TxOutcome::Ended(AggregateEnd::Delivered {
+            let (outcome, acknowledged) = match (buffer.went, air) {
+                (_, Air::Timeout) => (
+                    ArenaOutcome::Single(TxOutcome::Indeterminate(
+                        IndeterminateCause::HardwareTimeout,
+                    )),
+                    FrameSet::EMPTY,
+                ),
+                (Went::Single, Air::Ack) => (
+                    ArenaOutcome::Single(TxOutcome::Ended(SingleEnd::Delivered {
+                        air: Self::rate_air(rate),
+                        response: SingleResponse::Ack(()),
+                    })),
+                    on_air.sent(),
+                ),
+                (Went::Single, Air::NoAck) => (
+                    ArenaOutcome::Single(TxOutcome::Ended(SingleEnd::AckTimeout(Self::rate_air(
+                        rate,
+                    )))),
+                    FrameSet::EMPTY,
+                ),
+                (Went::Single, Air::Deny | Air::Hold) => (
+                    ArenaOutcome::Single(TxOutcome::Ended(SingleEnd::AirDenied {
+                        denial: (),
+                        air: None,
+                    })),
+                    FrameSet::EMPTY,
+                ),
+                (Went::Aggregate, Air::Ack) => (
+                    ArenaOutcome::Aggregate(TxOutcome::Ended(AggregateEnd::Delivered {
                         air: Self::rate_air(rate),
                         report: BlockAckReport::new(SequenceNumber::ZERO, on_air.sent().bits()),
                         ack: (),
-                    }),
+                    })),
                     on_air.sent(),
                 ),
-                Air::NoAck => (
-                    TxOutcome::Ended(AggregateEnd::AckTimeout(Self::rate_air(rate))),
+                (Went::Aggregate, Air::NoAck) => (
+                    ArenaOutcome::Aggregate(TxOutcome::Ended(AggregateEnd::AckTimeout(
+                        Self::rate_air(rate),
+                    ))),
                     FrameSet::EMPTY,
                 ),
-                Air::Timeout => (
-                    TxOutcome::Indeterminate(IndeterminateCause::HardwareTimeout),
-                    FrameSet::EMPTY,
-                ),
-                Air::Deny | Air::Hold => (
-                    TxOutcome::Ended(AggregateEnd::AirDenied {
+                (Went::Aggregate, Air::Deny | Air::Hold) => (
+                    ArenaOutcome::Aggregate(TxOutcome::Ended(AggregateEnd::AirDenied {
                         denial: (),
                         air: None,
-                    }),
+                    })),
                     FrameSet::EMPTY,
                 ),
             };
@@ -1236,15 +1298,17 @@ impl<'id, const SINGLES: usize> ReceivePort<'id> for ModelPort<'id, SINGLES> {
                 break;
             };
             self.counts.decodes = self.counts.decodes.saturating_add(1);
-            let header =
-                DecodedHeader::decode(&bytes).and_then(|decoded| RxHeader::of(&decoded, &bytes));
+            let Some(head) = RxHead::of(&bytes) else {
+                self.counts.dropped = self.counts.dropped.saturating_add(1);
+                continue;
+            };
             let Ok(place) = u8::try_from(free) else {
                 break;
             };
             if let Some(slot) = self.places.get_mut(free) {
                 *slot = Some(Unit {
                     staged: Staged {
-                        header,
+                        head,
                         meta,
                         lendable: true,
                     },
