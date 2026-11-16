@@ -16,7 +16,7 @@ use std::vec::Vec;
 use std::{format, vec};
 
 use super::*;
-use oer_protocols_ieee80211_contracts_port::life::{PortKey, forge};
+use oer_protocols_ieee80211_contracts_port::life::{PortKey, StopFrom, forge};
 
 /// The channel a run asks.
 const CHANNEL: u8 = 6;
@@ -57,7 +57,9 @@ fn build<'id>(s: &S, deadline: Option<Instant>) -> M<'id> {
         "starting" => Some(At::Starting(key.start(stopped))),
         "running" => Some(At::Running(running())),
         "retuning" => Some(At::Retuning(key.retune(running()))),
-        "stopping" => Some(At::Stopping(Stopping::from(running()))),
+        "stopping" => Some(At::Stopping(
+            self::key().0.stop(StopFrom::Running(running())),
+        )),
         "retired" => Some(At::Retired(key.retire(stopped, key.units_home()))),
         "released" => None,
         other => panic!("no position {other}"),
@@ -390,7 +392,7 @@ fn run(
                 let _asked = ask;
                 resume.answer(match answer {
                     "ok" => StopPoll::Stopped(self::key().1),
-                    _ => StopPoll::Pending(Stopping::from(running())),
+                    _ => StopPoll::Pending(self::key().0.stop(StopFrom::Running(running()))),
                 })
             }
             Step::StopData(resume) => {

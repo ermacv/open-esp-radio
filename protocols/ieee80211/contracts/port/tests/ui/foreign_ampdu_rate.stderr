@@ -1,0 +1,33 @@
+error: lifetime may not live long enough
+  --> tests/ui/foreign_ampdu_rate.rs:21:16
+   |
+ 9 | pub fn publish<'a, 'b, P: DataPort<'a>>(
+   |                --  -- lifetime `'b` defined here
+   |                |
+   |                lifetime `'a` defined here
+...
+21 |     let rate = foreign; // ui-error: lifetime may not live long enough
+   |                ^^^^^^^ assignment requires that `'a` must outlive `'b`
+   |
+   = help: consider adding the following bound: `'a: 'b`
+   = note: requirement occurs because of the type `AmpduRate<'_, <P as RadioPort<'_>>::Caps>`, which makes the generic argument `'_` invariant
+   = note: the struct `AmpduRate<'p, K>` is invariant over the parameter `'p`
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
+
+error: lifetime may not live long enough
+  --> tests/ui/foreign_ampdu_rate.rs:24:78
+   |
+ 9 | pub fn publish<'a, 'b, P: DataPort<'a>>(
+   |                --  -- lifetime `'b` defined here
+   |                |
+   |                lifetime `'a` defined here
+...
+24 |     let how = Ppdu::Aggregate { rate, spacing, protection: Protection::None, alone }; // ui-error: lifetime may not live long enough
+   |                                                                              ^^^^^ this usage requires that `'b` must outlive `'a`
+   |
+   = help: consider adding the following bound: `'b: 'a`
+   = note: requirement occurs because of the type `PortRate<'_, <P as RadioPort<'_>>::Caps>`, which makes the generic argument `'_` invariant
+   = note: the struct `PortRate<'t, K>` is invariant over the parameter `'t`
+   = help: see <https://doc.rust-lang.org/nomicon/subtyping.html> for more information about variance
+
+help: `'a` and `'b` must be the same: replace one with the other

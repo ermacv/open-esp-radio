@@ -16,7 +16,7 @@
 use core::task::{Context, Poll};
 
 use oer_portable_time::Instant;
-use oer_protocols_ieee80211_contracts_port::RadioPort;
+use oer_protocols_ieee80211_contracts_port::{RadioPort, StopFrom};
 use oer_protocols_ieee80211_core_installation::{
     DataStop, Ended, Input, Machine, Rest, RetuneAsk, StartAsk, Step, StopAsk, Tell, Waited,
 };
@@ -71,9 +71,15 @@ pub fn drive<'id, P: RadioPort<'id>>(
             }
             Step::Stop(ask, mut resume) => {
                 let stopping = match ask {
-                    StopAsk::Running(running) => port.stop(resume.right(), running),
-                    StopAsk::Starting(starting) => port.stop(resume.right(), starting),
-                    StopAsk::Retuning(retuning) => port.stop(resume.right(), retuning),
+                    StopAsk::Running(running) => {
+                        port.stop(resume.right(), StopFrom::Running(running))
+                    }
+                    StopAsk::Starting(starting) => {
+                        port.stop(resume.right(), StopFrom::Starting(starting))
+                    }
+                    StopAsk::Retuning(retuning) => {
+                        port.stop(resume.right(), StopFrom::Retuning(retuning))
+                    }
                     StopAsk::Going(stopping) => stopping,
                 };
                 resume.answer(port.poll_stop(stopping, cx, now))

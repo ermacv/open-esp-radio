@@ -77,8 +77,8 @@ use oer_protocols_ieee80211_contracts_port::{
     PhyFormatSet, Place, PortKey, PortSink, Ppdu, Protection, QueueRight, RadioPort, RateSupport,
     ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead, RxMeta,
     Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces,
-    StartFailure, StartPoll, Starting, StopPoll, StopRight, Stopped, Stopping, SupportedChannel,
-    Tid, TxFacts, TxFrame, TxOutcome, UnitsHome, WidthSet, WithdrawCause,
+    StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped, Stopping,
+    SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome, UnitsHome, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -805,14 +805,10 @@ impl<'id, const SINGLES: usize> RadioPort<'id> for ModelPort<'id, SINGLES> {
         RetunePoll::Running(self.key.retuned(retuning))
     }
 
-    fn stop(
-        &mut self,
-        _right: &mut StopRight<'id>,
-        from: impl Into<Stopping<'id>>,
-    ) -> Stopping<'id> {
+    fn stop(&mut self, _right: &mut StopRight<'id>, from: StopFrom<'id>) -> Stopping<'id> {
         self.call();
         self.phase = Phase::Stopping;
-        from.into()
+        self.key.stop(from)
     }
 
     fn poll_stop(

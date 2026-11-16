@@ -7,13 +7,13 @@ error[E0382]: borrow of moved value: `right`
  9 |     drop(port.release(retired, right));
    |                                ----- value moved here
 10 |     #[cfg(all())]
-11 |     let _after = port.stop(&mut right, running); // ui-error: E0382
+11 |     let _after = port.stop(&mut right, StopFrom::Running(running)); // ui-error: E0382
    |                            ^^^^^^^^^^ value borrowed here after move
 
 error[E0596]: cannot borrow `right` as mutable, as it is not declared as mutable
   --> tests/ui/stop_after_release.rs:11:28
    |
-11 |     let _after = port.stop(&mut right, running); // ui-error: E0382
+11 |     let _after = port.stop(&mut right, StopFrom::Running(running)); // ui-error: E0382
    |                            ^^^^^^^^^^ cannot borrow as mutable
    |
 help: consider changing this to be mutable

@@ -76,22 +76,16 @@ right!(
     Retired
 );
 
-impl<'id> From<Running<'id>> for Stopping<'id> {
-    fn from(Running { brand }: Running<'id>) -> Self {
-        Self { brand }
-    }
-}
-
-impl<'id> From<Starting<'id>> for Stopping<'id> {
-    fn from(Starting { brand }: Starting<'id>) -> Self {
-        Self { brand }
-    }
-}
-
-impl<'id> From<Retuning<'id>> for Stopping<'id> {
-    fn from(Retuning { brand }: Retuning<'id>) -> Self {
-        Self { brand }
-    }
+/// Where a stop begins: a running radio, a start or a retune in progress.
+#[must_use = "a stop begins from it"]
+#[derive(Debug)]
+pub enum StopFrom<'id> {
+    /// The radio runs.
+    Running(Running<'id>),
+    /// A start is in progress.
+    Starting(Starting<'id>),
+    /// A retune is in progress.
+    Retuning(Retuning<'id>),
 }
 
 /// The port's authority to make the next right from the one it was given.
@@ -139,6 +133,14 @@ impl<'id> PortKey<'id> {
     pub const fn retune_failed(&self, retuning: Retuning<'id>) -> Stopped<'id> {
         let Retuning { brand } = retuning;
         Stopped { brand }
+    }
+
+    /// A stop began.
+    pub const fn stop(&self, from: StopFrom<'id>) -> Stopping<'id> {
+        let (StopFrom::Running(Running { brand })
+        | StopFrom::Starting(Starting { brand })
+        | StopFrom::Retuning(Retuning { brand })) = from;
+        Stopping { brand }
     }
 
     /// A stop is confirmed.
@@ -245,12 +247,24 @@ pub struct Install<'id, D, Path: PoolPath = Root<oer_protocols_radio_port::Local
 /// The pool set of an installation whose data's rights `D` builds.
 pub struct PortPools<D>(PhantomData<fn() -> D>);
 
-/// The data's rights an installation's mint builds.
-pub trait MintData {
+/// The data's rights an installation's mint builds. Only this crate
+/// implements it ([`DataLayout`](crate::DataLayout)) and only its
+/// installation's mint calls it: `mint` takes a seal no other crate can
+/// make.
+pub trait MintData: sealed::Layout {
     /// The rights, branded with the installation.
     type Rights<'id>;
-    /// Build them.
-    fn mint<'id>() -> Self::Rights<'id>;
+    /// Build them, for the installation's mint alone.
+    fn mint<'id>(seal: MintSeal) -> Self::Rights<'id>;
+}
+
+/// The seal of [`MintData::mint`]: only this crate makes one.
+#[derive(Debug)]
+pub struct MintSeal(pub(crate) ());
+
+pub(crate) mod sealed {
+    /// The data layouts of this crate.
+    pub trait Layout {}
 }
 
 impl<D: MintData> PoolSet for PortPools<D> {
@@ -262,7 +276,7 @@ impl<D: MintData> PoolSet for PortPools<D> {
             key: PortKey { brand: PhantomData },
             stopped: Stopped { brand: PhantomData },
             right: StopRight { brand: PhantomData },
-            data: D::mint(),
+            data: D::mint(MintSeal(())),
             gate,
             issuer,
         }
@@ -317,8 +331,7 @@ pub trait RadioPort<'id> {
     ) -> RetunePoll<'id>;
 
     /// Begin the radio's stop from a running radio, a start or a retune.
-    fn stop(&mut self, right: &mut StopRight<'id>, from: impl Into<Stopping<'id>>)
-    -> Stopping<'id>;
+    fn stop(&mut self, right: &mut StopRight<'id>, from: StopFrom<'id>) -> Stopping<'id>;
 
     /// Poll a stop. It always ends in [`Stopped`].
     fn poll_stop(

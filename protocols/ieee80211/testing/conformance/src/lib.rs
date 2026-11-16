@@ -37,8 +37,8 @@ use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, ArenaOutcome, Command, CommandEnd, CommandPlace, CommandPoll, DataPort, DataRights,
     FrameSet, GateClosed, GateOpen, HEADROOM, HeaderLen, IdleArena, MpduLength, MpduStartSpacing,
     PhyRate, PortRate, PortSink, Ppdu, QueueRight, RadioPort, ReceivePort, Round, Settled,
-    SingleOutcome, SinglePlace, StartPoll, StopPoll, StopRight, Stopped, TbttEvent, TxFacts,
-    TxOutcome,
+    SingleOutcome, SinglePlace, StartPoll, StopFrom, StopPoll, StopRight, Stopped, TbttEvent,
+    TxFacts, TxOutcome,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::frame::FrameControl;
@@ -162,7 +162,9 @@ fn stop<'id, H, const S: usize, const G: usize, const A: usize>(
 ) where
     H: Harness<'id, S, G, A>,
 {
-    let mut stopping = harness.port().stop(&mut rights.right, running);
+    let mut stopping = harness
+        .port()
+        .stop(&mut rights.right, StopFrom::Running(running));
     let stopped = loop {
         match harness.port().poll_stop(stopping, &mut cx(), NOW) {
             StopPoll::Stopped(stopped) => break stopped,

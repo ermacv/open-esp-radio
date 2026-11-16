@@ -188,8 +188,9 @@ pub use data::{
     TxFacts,
 };
 pub use life::{
-    Install, MintData, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning, Running,
-    StartFailure, StartPoll, Starting, StopPoll, StopRight, Stopped, Stopping, UnitsHome,
+    Install, MintData, MintSeal, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning,
+    Running, StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped, Stopping,
+    UnitsHome,
 };
 pub use receive::{
     Lendable, ReceivePort, Received, Rest, Round, RxHead, RxHeader, Staged, StagedPlaces, Unit,

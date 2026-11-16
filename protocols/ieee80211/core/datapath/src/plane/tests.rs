@@ -332,6 +332,7 @@ cases! {
     a_single_mpdu_s_attempt_is_charged_and_a_withdrawn_frame_charges_nothing => cost_single,
     an_attempt_whose_end_is_unknown_is_charged_unknown => cost_unknown,
     a_prefix_the_rate_admits_goes_and_the_rest_stays_with_no_attempt_spent => prefix,
+    an_aggregate_that_reached_no_receiver_spends_no_attempt_of_its_frames => unreached,
 }
 
 /// The PSDU of an open QoS data MPDU of [`PAYLOAD`] octets: its front, its
@@ -969,6 +970,44 @@ fn prefix(model: Installed<'_>) {
     // The frames that went once carry the Retry bit; the rest none.
     let retries = frames.iter().filter(|frame| retried(frame)).count();
     assert_eq!(retries, went.min(frames.len()));
+}
+
+/// An aggregate whose end says it reached no receiver (the air denied before
+/// any transmission) spends no attempt of its frames: they outlive as many
+/// such ends as the policy has attempts, then go on the air and are
+/// delivered.
+fn unreached(model: Installed<'_>) {
+    let mut link = link(LinkProtection::Open);
+    link.retry = link.retry.map(|retry| AggregateRetry {
+        attempts: 2,
+        ..retry
+    });
+    let mut world = World::new(model, link);
+    world.agree(BE, 64);
+    for tag in 0..3 {
+        world.taken(tag, BE);
+    }
+    for _ in 0..2 {
+        world.publish();
+        world.answer(Air::Deny);
+        let settled = world.settle();
+        assert_eq!(
+            (settled.delivered, settled.dropped, settled.retried),
+            (0, 0, 3),
+            "a denied air spends no attempt"
+        );
+        assert_eq!(settled.bar, None);
+    }
+    let (plan, frames) = world.publish();
+    assert_eq!(plan.frames, 3);
+    assert_eq!(frames.len(), 3);
+    world.block_ack(FrameSet::prefix(3));
+    let settled = world.settle();
+    assert_eq!(
+        (settled.delivered, settled.dropped, settled.retried),
+        (3, 0, 0)
+    );
+    assert_eq!(world.returned_sequences(), [0, 1, 2]);
 }
 
 /// The single MPDUs' outcomes a selection was taught, by their ACK SNR.

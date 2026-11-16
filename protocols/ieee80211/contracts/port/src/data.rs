@@ -324,12 +324,18 @@ pub struct DataRights<'id, const SINGLES: usize, const GROUPS: usize, const AGRE
 /// The layout of an installation's data's rights.
 pub struct DataLayout<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize>;
 
+impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> crate::life::sealed::Layout
+    for DataLayout<SINGLES, GROUPS, AGREEMENTS>
+{
+}
+
 impl<const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> MintData
     for DataLayout<SINGLES, GROUPS, AGREEMENTS>
 {
     type Rights<'id> = DataRights<'id, SINGLES, GROUPS, AGREEMENTS>;
 
-    fn mint<'id>() -> Self::Rights<'id> {
+    fn mint<'id>(seal: crate::life::MintSeal) -> Self::Rights<'id> {
+        let crate::life::MintSeal(()) = seal;
         const {
             if SINGLES > u8::MAX as usize
                 || GROUPS > u8::MAX as usize
