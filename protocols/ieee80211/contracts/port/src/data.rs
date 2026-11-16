@@ -713,10 +713,18 @@ pub struct Place<'a, 'id, P: DataPort<'id>> {
     arena: &'a mut Arena<'id>,
 }
 
+/// The port's word that it found a free place in an arena, made by its
+/// key: what a [`Place`] is made from.
+#[must_use = "a place is made from it"]
+#[derive(Debug)]
+pub struct Placing<'id> {
+    brand: Brand<'id>,
+}
+
 impl<'a, 'id, P: DataPort<'id>> Place<'a, 'id, P> {
     /// The port's place in `arena`, which it found free.
-    pub fn new(key: &PortKey<'id>, port: &'a mut P, arena: &'a mut Arena<'id>) -> Self {
-        let _ = key;
+    pub fn new(placing: Placing<'id>, port: &'a mut P, arena: &'a mut Arena<'id>) -> Self {
+        let Placing { brand: _ } = placing;
         Self { port, arena }
     }
 
@@ -781,15 +789,23 @@ impl<'id> PortKey<'id> {
         }
     }
 
-    /// A single ended: its place and its queue's right back.
-    pub const fn single_ended(&self, flight: InFlight<'id>) -> (SinglePlace<'id>, QueueRight<'id>) {
-        let InFlight {
-            index,
-            category,
-            brand,
-        } = flight;
+    /// The port found a free place in an arena.
+    pub const fn placing(&self) -> Placing<'id> {
+        Placing { brand: PhantomData }
+    }
+
+    /// A single ended: the place and the queue's right of the single the
+    /// port published at `index` on `category`, back from its record.
+    pub const fn single_end(
+        &self,
+        index: u8,
+        category: WmmAccessCategory,
+    ) -> (SinglePlace<'id>, QueueRight<'id>) {
         (
-            SinglePlace { index, brand },
+            SinglePlace {
+                index,
+                brand: PhantomData,
+            },
             QueueRight {
                 category,
                 brand: PhantomData,

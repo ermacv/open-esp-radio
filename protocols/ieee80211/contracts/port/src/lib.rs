@@ -185,7 +185,8 @@ pub use data::{
     Agreement, AgreementSlot, Arena, ArenaSide, Command, CommandEnd, CommandPlace, CommandPoll,
     Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet, GroupSlot, HEADROOM,
     HeaderLen, IdleArena, InCommand, InFlight, InstalledGroup, InstalledPairwise, OnAir,
-    PairwiseSlot, Place, PortSink, QUEUES, QueueRight, Settled, Signal, SinglePlace, TxFacts,
+    PairwiseSlot, Place, Placing, PortSink, QUEUES, QueueRight, Settled, Signal, SinglePlace,
+    TxFacts,
 };
 pub use life::{
     Install, MintData, PortKey, PortPools, RadioPort, Retired, RetunePoll, Retuning, Running,

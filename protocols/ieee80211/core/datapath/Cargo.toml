@@ -15,7 +15,7 @@ oer-protocols-ieee80211-core-upper-mac = { path = "../upper-mac" }
 oer-protocols-ieee80211-wire = { path = "../../wire" }
 
 [dev-dependencies]
-oer-protocols-ieee80211-testing-model = { path = "../../testing/model", features = ["test-support"] }
+oer-protocols-ieee80211-testing-model = { path = "../../testing/model" }
 oer-protocols-ieee80211-wire = { path = "../../wire", features = ["test-support"] }
 
 [lints]
