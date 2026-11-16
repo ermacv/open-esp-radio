@@ -10,15 +10,17 @@ acknowledged frame) follows in the same image.
    `RST_WIFIMAC` is asserted and released (`WifiClocked::reset_mac`). After
    it: the MAC's activity field (`channel_active_state`), the MAC's raw
    interrupt image and the power bank's latched causes, the walker's
-   registers (`receive_dma_snapshot`), and a guard: every buffer of the
-   ring is painted while its descriptors stay published to the walker, and
-   read back after 50 ms. A changed word is a write of a bus master that
+   registers (`receive_dma_snapshot`); then, in the vendor's order
+   (`wifi_reset_mac`), the walker stopped at once. Whether the reset state
+   writes is the hold case's question (kind 7): its guard paints every
+   buffer of the ring, and a changed word is a write of a bus master that
    went on.
 2. **A second run after it.** The walker's stop, the owner's cold
    preparation alone (`initialize_wifi_mac`, which begins with the pulse
-   and the cold handshake), the channel selected again (the pulse resets the MAC block's channel
-   and bandwidth words; no new calibration), the ring rebuilt
-   (`prepare_halted`, `reopen_mac_core`) and an ordinary start;
+   and the cold handshake), the channel selected again (no new calibration), the ring rebuilt and
+   published once more after the MAC's gates are open (`prepare_halted`,
+   `reopen_mac_core`, `into_halted`, `prepare_halted`: a BASE written into
+   the gates the cold preparation holds is not kept) and the port's start;
    the units received in the next 20 ms.
 3. **The key table.** A station key is installed before each pulse; its
    entry's validity after the pulse, and after the second run's cold
@@ -71,7 +73,7 @@ While the session runs the console prints `MARK <n>` at each phase (10 the basel
 |---|---|
 | 1 up | units received in the first 20 ms |
 | 2 stop | index, units before it, cycles to the stop request, cycles to the walker stopped, cycles to the activity field clear (or the 10 ms bound), the field then, the MAC's raw interrupts, the walker's flags and next descriptor, the MAC's MPDU and data-success counts over the window (high and low half), its FCS-error and buffer-full counts over it |
-| 3 pulse | index, units before it, delay (µs), the pulse's cycle, its length in cycles, the walker's flags and next descriptor before, its flags, next, last descriptor and base after, the activity field after, the MAC's raw interrupts after, the power bank's causes after, the key entry valid after the pulse, the guard's changed words, units in the second run, the key entry valid after the second run's cold preparation, the MPDU and data-success counts over the window before the pulse and over the second run's |
+| 3 pulse | index, units before it, delay (µs), the pulse's cycle, its length in cycles, the walker's flags and next descriptor before, its flags, next, last descriptor and base after, the activity field after, the MAC's raw interrupts after, the power bank's causes after, the key entry valid after the pulse, units in the second run, the key entry valid after the second run's cold preparation, the MPDU and data-success counts over the window before the pulse and over the second run's |
 | 6 quiet | a pulse with the walker stopped first: index, the walker's flags and base before, its flags, next, last and base after, its flags and base after the cold preparation |
 | 7 hold | a pulse under load left without the cold preparation for 20 ms: index, units before it, the walker's flags, next and base at the pulse, its flags, next, last and base after the 20 ms, the activity field then, the MPDU and data-success counts over the 20 ms, the FCS-error and buffer-full counts over them, the guard's changed words in the ring |
 | 8 case | a recovery case of `tasks/097` over a 1 s window: the case (`0xb` the baseline, 0 an ordinary stop and the cold preparation again, 1 the pulse mid-run then RX enable, channel, cold preparation and start, 3 the client's leave, join and track with the registration kept), units, the MPDU and data-success counts, the FCS-error and buffer-full counts, the walker's next descriptor |

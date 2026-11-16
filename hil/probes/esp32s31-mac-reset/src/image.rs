@@ -79,8 +79,6 @@ const RECEIVE_MS: u32 = 20;
 /// point spread over a received frame's time (a 1 500-octet frame at
 /// 1 Mb/s is 12 ms; at 54 Mb/s 0.25 ms).
 const PULSE_SPREAD_US: u32 = 2_000;
-/// How long the guard waits for the bus master after a pulse.
-const GUARD_MS: u32 = 50;
 /// A stop that has not ended in this time is recorded with its registers.
 const STOP_BOUND_MS: u32 = 10;
 /// The key entry the probe installs before its pulses.
@@ -984,21 +982,16 @@ async fn series(
         let raw = mac_irq.mac_interrupt_raw().bits();
         let power = power_causes(&power_irq.power_interrupt_status());
         let after = access.receive_dma_snapshot();
-        let key_after = access
-            .wifi_mac_hal()
-            .ccmp_entry_is_valid(key);
-        // The guard: every buffer of the ring painted while its descriptors
-        // stay published to the walker; a bus master still running writes
-        // over the paint.
-        paint(storage, index32).map_err(|code| (phase::RING, code))?;
-        wait_micros(u64::from(GUARD_MS) * 1_000).await;
-        let changed = changed_words(storage, index32).map_err(|code| (phase::RING, code))?;
-        // The second run: the walker's stop, the owner's cold preparation,
-        // the ring rebuilt and an ordinary start.
+        // The vendor's order (`wifi_reset_mac`): receive disabled at once
+        // after the pulse, then the cold preparation, the channel, the
+        // start. The reset state's quiet is the hold case's question.
         let halted = match ring.try_stop(access.rx_dma()) {
             Ok(halted) => halted,
             Err((_live, _error)) => return Err((phase::WALKER_STOP, index32 | 0x4000_0000)),
         };
+        let key_after = access
+            .wifi_mac_hal()
+            .ccmp_entry_is_valid(key);
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
@@ -1024,18 +1017,7 @@ async fn series(
             result
         };
         retuned.map_err(|(phase, code)| (phase, code | 0x0100_0000 | index32 << 8))?;
-        let stopped = storage
-            .prepare_halted(halted, access.rx_dma())
-            .map_err(|_| (phase::SECOND_RING, index32))?;
-        access.wifi_mac_hal().reopen_mac_core(&stopped);
-        access.wifi_mac_hal().configure_open_promiscuous_receive();
-        station_policy(&mut access);
-        open_epoch(mac_irq, power_irq);
-        ring = stopped
-            .try_start(access.rx_dma())
-            .map_err(|_| (phase::SECOND_RING, index32 | 0x8000_0000))?;
-        access.wifi_mac_hal().start_mac_runtime(&ring);
-        ring = settle_cycle(storage, ring, &mut access, mac_irq, power_irq)?;
+        ring = restart_after_cold(storage, halted, &mut access, mac_irq, power_irq)?;
         let counted_second = statistics(&access);
         let units_after = receive(storage, &mut ring, &mut access, RECEIVE_MS)
             .await
@@ -1061,7 +1043,6 @@ async fn series(
                 raw,
                 power,
                 u32::from(key_after),
-                changed,
                 units_after,
                 u32::from(key_second),
                 advance(counted, counted_before, 0, 1),
@@ -1262,22 +1243,28 @@ fn restart(
     Ok(ring)
 }
 
-/// One ordinary stop and start after a restart that followed the cold
-/// preparation: run 7 found the walker on no descriptor (next 0) and the
-/// MAC counting every MPDU as buffer-full after that first restart, and
-/// reception back after the next ordinary cycle.
-fn settle_cycle(
+/// The ring rebuilt and started after a cold preparation.
+///
+/// The cold preparation holds the MAC's common gates closed
+/// (`hold_mac_runtime`), and `prepare_halted` publishes the window and
+/// BASE before `reopen_mac_core` can be called (it needs the stopped ring
+/// that publication makes). A BASE written into the gated core is not
+/// kept: the walker starts on no descriptor (run 7). So the ring is
+/// published once more after the gates open, as the first start publishes
+/// it after `prepare_mac_runtime`: the stopped ring back to halted
+/// (`into_halted`), prepared again, then the port's start.
+fn restart_after_cold(
     storage: &'static Storage,
-    ring: Ring,
+    halted: oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingHalted<'static, COUNT>,
     access: &mut RadioAccess,
     mac_irq: &mut MacInterruptRegisters,
     power_irq: &mut MacPowerInterruptRegisters,
 ) -> Result<Ring, Failure> {
-    access.wifi_mac_hal().request_channel_stop();
-    let halted = ring
-        .try_stop(access.rx_dma())
-        .map_err(|_| (phase::RESTART, 0x0800_0002))?;
-    restart(storage, halted, access, mac_irq, power_irq)
+    let gated = storage
+        .prepare_halted(halted, access.rx_dma())
+        .map_err(|_| (phase::SECOND_RING, 0x0800_0003))?;
+    access.wifi_mac_hal().reopen_mac_core(&gated);
+    restart(storage, gated.into_halted(), access, mac_irq, power_irq)
 }
 
 /// The phases a recovery case's failure names.
@@ -1341,8 +1328,7 @@ async fn cases(
     };
     cold.map_err(|_| fail(0x02))?;
     (access, clocks_on) = clocked.into_running();
-    ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
-    ring = settle_cycle(storage, ring, &mut access, mac_irq, power_irq)?;
+    ring = restart_after_cold(storage, halted, &mut access, mac_irq, power_irq)?;
     mark(21);
     let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
     record(journal, 0, w, walker(&access.receive_dma_snapshot())[1]);
@@ -1365,8 +1351,7 @@ async fn cases(
     };
     cold.map_err(|_| fail(0x13))?;
     (access, clocks_on) = clocked.into_running();
-    ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
-    ring = settle_cycle(storage, ring, &mut access, mac_irq, power_irq)?;
+    ring = restart_after_cold(storage, halted, &mut access, mac_irq, power_irq)?;
     mark(31);
     let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
     record(journal, 1, w, walker(&access.receive_dma_snapshot())[1]);
@@ -1423,8 +1408,7 @@ async fn cases(
     };
     cold.map_err(|_| fail(0x40))?;
     (access, clocks_on) = clocked.into_running();
-    ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
-    ring = settle_cycle(storage, ring, &mut access, mac_irq, power_irq)?;
+    ring = restart_after_cold(storage, halted, &mut access, mac_irq, power_irq)?;
     mark(51);
     let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
     record(journal, 3, w, walker(&access.receive_dma_snapshot())[1]);
