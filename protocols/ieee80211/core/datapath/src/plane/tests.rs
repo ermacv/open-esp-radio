@@ -1,22 +1,27 @@
+//! The plane over the model port.
+
 use super::*;
-use core::marker::PhantomData;
+use crate::cost::{Response, transmission_micros};
+use crate::model::{Installed, SINGLES, installed};
+use core::num::{NonZeroU8, NonZeroU16};
 use oer_portable_time::Duration;
-use oer_protocols_ieee80211_contracts_port::{AmpduRate, PortArena, PortRate, Protection, RxMeta};
+use oer_protocols_ieee80211_contracts_port::{
+    AmpduRate, PortRate, Protection, RetryPlan, RetryStage, RxMeta,
+};
 use oer_protocols_ieee80211_core_upper_mac::ccmp::{
     CcmpPacketNumberStep, InstalledCcmpTxKey, SoftwareCcmpKey,
 };
+use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_testing_model::{
-    MODEL_MAX_MPDU, ModelAirDenied, ModelArena, ModelArenaAnswer, ModelBlockAckEvidence, ModelCaps,
-    ModelNetworkMemory,
+    Air, MODEL_MAX_MPDU, ModelCaps, ModelLink, ModelMemory, ModelPort, Went,
 };
 use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 use oer_protocols_ieee80211_wire::{
     address::{Bssid, IndividualAddress, OwnAddress},
-    data::IEEE80211_QOS_DATA_HEADER_LEN,
     frame::{FrameControlFields, sequence_control},
     phy::{HtMcs, HtRate, LegacyRate, PpduBandwidth},
 };
-use std::{boxed::Box, vec::Vec};
+use std::vec::Vec;
 
 const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
 const ACCESS_POINT: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -24,7 +29,13 @@ const DESTINATION: [u8; 6] = [2, 0, 0, 0, 0, 0x10];
 const PAYLOAD: usize = 100;
 const BE: WmmUserPriority = WmmUserPriority::UP0;
 const VIDEO: WmmUserPriority = WmmUserPriority::UP5;
+const BEST_EFFORT: oer_protocols_ieee80211_wire::qos::WmmAccessCategory =
+    oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort;
 
+/// A QoS data front without CCMP: the QoS header and LLC/SNAP.
+const OPEN_FRONT: usize = IEEE80211_QOS_DATA_HEADER_LEN + LLC_SNAP_HEADER_LEN;
+
+/// HT MCS 7 on 20 MHz.
 fn ht() -> PhyRate {
     PhyRate::Ht(
         HtRate::new(
@@ -36,53 +47,12 @@ fn ht() -> PhyRate {
     )
 }
 
-/// The port-checked rates a test publishes at.
-#[derive(Clone, Copy)]
-struct Rates<'p, 'id> {
-    single: PortRate<'p, ModelCaps>,
-    aggregate: AmpduRate<'p, ModelCaps>,
-    install: PhantomData<fn(&'id ()) -> &'id ()>,
-}
-
-/// A test body over an arena's checked rates.
-trait Case {
-    fn run<'p, 'id: 'p>(rates: Rates<'p, 'id>);
-}
-
-/// Run `C` with the rates a standalone model arena checks on its channel.
-fn with_rates<C: Case>() {
-    let arena = ModelArena::<ModelCaps>::new();
-    let single = PortArena::rate(&arena, PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
-    let ht = PortArena::rate(&arena, ht()).unwrap();
-    let aggregate = PortArena::ampdu_rate(&arena, ht).ok().unwrap();
-    C::run(Rates {
-        single,
-        aggregate,
-        install: PhantomData,
-    });
-}
-
-macro_rules! cases {
-    ($($name:ident => $body:ident),* $(,)?) => {$(
-        #[test]
-        fn $name() {
-            struct This;
-            impl Case for This {
-                fn run<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-                    $body(rates)
-                }
-            }
-            with_rates::<This>();
-        }
-    )*};
-}
-
 fn link(protection: LinkProtection) -> DataLink {
     DataLink {
         header: StaDataHeaderTemplate::new(
             OwnAddress::new(IndividualAddress::new(STATION).unwrap()),
             Bssid::new(IndividualAddress::new(ACCESS_POINT).unwrap()).unwrap(),
-            oer_protocols_ieee80211_wire::data::PeerQos::Qos,
+            PeerQos::Qos,
             protection,
         )
         .unwrap(),
@@ -105,16 +75,20 @@ struct TestKey;
 
 impl SoftwareCcmpKey for TestKey {}
 
-/// An MSDU whose payload octets are all `tag`.
-fn msdu(tag: u8, priority: WmmUserPriority) -> OutboundMsdu<ModelNetworkMemory> {
-    let mut memory: ModelNetworkMemory = Box::new([0; MODEL_MAX_MPDU]);
-    let frame = &mut memory[MSDU_ETHERNET_OFFSET..];
-    frame[..6].copy_from_slice(&DESTINATION);
-    frame[6..12].copy_from_slice(&STATION);
-    frame[12..14].copy_from_slice(&0x0800_u16.to_be_bytes());
-    frame[14..14 + PAYLOAD].fill(tag);
+/// An MSDU named `tag`: its Ethernet header at the end of its memory's
+/// headroom, its payload the body.
+fn msdu(tag: u8, priority: WmmUserPriority) -> OutboundMsdu<ModelMemory> {
+    let mut front = [0; HEADROOM];
+    let ethernet = &mut front[HEADROOM - ETHERNET_HEADER_LEN..];
+    ethernet[..6].copy_from_slice(&DESTINATION);
+    ethernet[6..12].copy_from_slice(&STATION);
+    ethernet[12..14].copy_from_slice(&0x0800_u16.to_be_bytes());
     OutboundMsdu {
-        memory,
+        memory: ModelMemory {
+            id: u32::from(tag),
+            len: PAYLOAD as u16,
+            front,
+        },
         length: ETHERNET_HEADER_LEN + PAYLOAD,
         priority,
     }
@@ -128,41 +102,63 @@ fn retried(frame: &[u8]) -> bool {
     FrameControlFields::from_bytes(*frame.first_chunk::<2>().unwrap()).retry()
 }
 
-/// An arena's end the plane has not settled.
-type Done<'p, 'id> = CompletedOf<'p, 'id, ModelArena<ModelCaps>>;
+fn positions(positions: &[u8]) -> FrameSet {
+    FrameSet::from_bits(positions.iter().fold(0, |bits, at| bits | 1 << at))
+}
 
-struct World<'p, 'id> {
-    rates: Rates<'p, 'id>,
+/// A single MPDU's plan of one transmission at `rate`.
+fn once<R>(rate: R) -> RetryPlan<R> {
+    RetryPlan::new(RetryStage {
+        rate,
+        transmissions: NonZeroU8::MIN,
+        protection: Protection::None,
+    })
+}
+
+/// The plane over a running model installation.
+struct World<'id> {
+    port: ModelPort<'id, SINGLES>,
+    gate: GateOpen<'id>,
+    plane: DataPlane<'id, ModelCaps>,
+    single: PortRate<'id, ModelCaps>,
+    aggregate: AmpduRate<'id, ModelCaps>,
     /// The link's QoS sequence spaces, which each intake draws from.
     sequences: [SequenceCounter; 8],
     /// The station's pairwise key and its packet numbers.
     key: Option<InstalledCcmpTxKey<TestKey>>,
-    arena: ModelArena<ModelCaps>,
-    plane: DataPlane,
-    returned: Vec<ModelNetworkMemory>,
+    returned: Vec<ModelMemory>,
     /// The cost of each attempt that settled, in order.
     costs: Vec<TxEstimate>,
     micros: u64,
 }
 
-impl<'p, 'id: 'p> World<'p, 'id> {
-    fn new(rates: Rates<'p, 'id>, link: DataLink) -> Self {
-        let mut arena = ModelArena::new();
-        let mut plane = DataPlane::new(TxArena::arenas(&mut arena).unwrap())
-            .ok()
-            .unwrap();
+impl<'id> World<'id> {
+    fn new(model: Installed<'id>, link: DataLink) -> Self {
+        Self::at(model, link, ht())
+    }
+
+    /// The plane whose aggregates go at `rate`, its singles at 24 Mb/s.
+    fn at(model: Installed<'id>, link: DataLink, rate: PhyRate) -> Self {
+        let Installed {
+            port, data, gate, ..
+        } = model;
+        let mut plane = DataPlane::new(data.arenas);
         plane.handover(link).ok().unwrap();
         plane.aggregate_rate(Some(AggregateRate {
-            rate: ht(),
+            rate,
             max_subframes: 8,
             max_length: 65_535,
         }));
+        let single = port.rate(PhyRate::Legacy(LegacyRate::Ofdm24M)).unwrap();
+        let aggregate = port.ampdu_rate(port.rate(rate).unwrap()).unwrap();
         Self {
-            rates,
+            port,
+            gate,
+            plane,
+            single,
+            aggregate,
             sequences: [SequenceCounter::new(SequenceNumber::from_low_bits(0)); 8],
             key: None,
-            arena,
-            plane,
             returned: Vec::new(),
             costs: Vec::new(),
             micros: 1,
@@ -178,19 +174,27 @@ impl<'p, 'id: 'p> World<'p, 'id> {
         self.plane.agreement(tid, Some(TxWindow { head, size }));
     }
 
-    fn take(&mut self, tag: u8, tid: WmmUserPriority) -> Intake<ModelNetworkMemory> {
+    fn take(&mut self, tag: u8, tid: WmmUserPriority) -> Intake<ModelMemory> {
         self.intake(msdu(tag, tid))
     }
 
     /// Offer `msdu` with the link's numbers.
-    fn intake(&mut self, msdu: OutboundMsdu<ModelNetworkMemory>) -> Intake<ModelNetworkMemory> {
+    fn intake(&mut self, msdu: OutboundMsdu<ModelMemory>) -> Intake<ModelMemory> {
         let now = self.now();
         let mut numbers = TxNumbers::new(
             SequenceCounter::new(SequenceNumber::ZERO),
             Some(self.sequences),
             self.key.take(),
         );
-        let intake = self.plane.intake(&mut self.arena, msdu, &mut numbers, now);
+        let link = ModelLink {
+            protected: self
+                .plane
+                .link
+                .is_some_and(|link| link.header.protection() == LinkProtection::Ccmp),
+        };
+        let intake = self
+            .plane
+            .intake(&mut self.port, &link, msdu, &mut numbers, now);
         let (_, sequences, key) = numbers.into_parts();
         self.sequences = sequences.unwrap();
         self.key = key;
@@ -201,121 +205,84 @@ impl<'p, 'id: 'p> World<'p, 'id> {
         assert_eq!(self.take(tag, tid), Intake::Taken(tid));
     }
 
-    /// Publish the next arena; its plan and the frames the model read.
-    fn publish(&mut self) -> (PpduPlan, Vec<Vec<u8>>) {
-        let rates = self.rates;
-        let mut planned = None;
-        let publication = self
-            .plane
-            .publication(|plan| {
-                planned = Some(plan);
-                Some(match plan.kind {
-                    PpduKind::Single => ArenaFormat::Single(once(rates.single)),
-                    PpduKind::Aggregate { spacing } => ArenaFormat::Aggregate {
-                        rate: rates.aggregate,
-                        spacing,
-                    },
-                })
-            })
-            .unwrap();
-        let now = self.now();
-        assert!(self.arena.publish(publication, now).is_ok());
-        let frames = self.arena.published().last().unwrap().frames.clone();
-        (planned.unwrap(), frames)
-    }
-
-    /// Publish the arena the plane puts ahead of settling `done`: its plan.
-    fn publish_ahead(&mut self, done: &Done<'p, 'id>) -> Option<PpduPlan> {
-        let rates = self.rates;
-        let mut planned = None;
-        let publication = self.plane.publication_ahead(done, |plan| {
-            planned = Some(plan);
+    /// The rates of a plan.
+    fn how(
+        single: PortRate<'id, ModelCaps>,
+        aggregate: AmpduRate<'id, ModelCaps>,
+    ) -> impl FnOnce(PpduPlan) -> Option<Ppdu<'id, ModelCaps>> {
+        move |plan| {
             Some(match plan.kind {
-                PpduKind::Single => ArenaFormat::Single(once(rates.single)),
-                PpduKind::Aggregate { spacing } => ArenaFormat::Aggregate {
-                    rate: rates.aggregate,
+                PpduKind::Single => Ppdu::Single(once(single)),
+                PpduKind::Aggregate { spacing } => Ppdu::Aggregate {
+                    rate: aggregate,
                     spacing,
+                    protection: Protection::None,
+                    alone: once(single),
                 },
             })
-        })?;
-        let now = self.now();
-        assert!(self.arena.publish(publication, now).is_ok());
-        planned
+        }
     }
 
-    /// The arena on the air's end, which the plane has not settled.
-    fn ended(&mut self) -> Done<'p, 'id> {
+    /// Publish the next arena; its plan and the fronts the model sent.
+    fn publish(&mut self) -> (PpduPlan, Vec<Vec<u8>>) {
         let now = self.now();
-        self.arena.service((), now).unwrap().unwrap()
+        let how = Self::how(self.single, self.aggregate);
+        let plan = self
+            .plane
+            .publication(&mut self.port, &self.gate, now, how)
+            .unwrap();
+        let frames = self.port.published().last().unwrap().frames.clone();
+        (plan, frames)
     }
 
-    fn settle_ended(&mut self, done: Done<'p, 'id>) {
+    /// The next aggregate's BlockAck acknowledges the frames of `acked`.
+    fn block_ack(&mut self, acked: FrameSet) {
+        self.port.set_air(BEST_EFFORT, Air::Ack);
+        self.port.acknowledge(acked);
+    }
+
+    fn answer(&mut self, air: Air) {
+        self.port.set_air(BEST_EFFORT, air);
+    }
+
+    fn settle_with(&mut self, events: &mut impl EventSink<DataEvent>) -> Settled<(), (), ()> {
         let now = self.now();
+        let how = Self::how(self.single, self.aggregate);
         let returned = &mut self.returned;
         let settled = self
             .plane
             .completed(
-                &mut self.arena,
-                done,
+                &mut self.port,
+                TxFacts::DUE,
+                &self.gate,
                 now,
+                how,
                 |memory| returned.push(memory),
-                &mut (),
+                events,
             )
-            .ok()
             .unwrap();
         self.costs.push(settled.cost);
-    }
-
-    fn block_ack(&mut self, acked: FrameMask) {
-        let on_air = self.arena.on_air().unwrap();
-        let report = self.arena.block_ack(on_air, acked).unwrap();
-        self.arena.answer(ModelArenaAnswer::BlockAck(report));
-    }
-
-    fn settle(&mut self) -> Settled<ModelBlockAckEvidence, ModelAirDenied> {
-        let now = self.now();
-        let done = self.arena.service((), now).unwrap().unwrap();
-        let returned = &mut self.returned;
-        let settled = self
-            .plane
-            .completed(
-                &mut self.arena,
-                done,
-                now,
-                |memory| returned.push(memory),
-                &mut (),
-            )
-            .ok()
-            .unwrap();
-        self.costs.push(settled.cost);
+        // Each test answers its next publication anew.
+        self.port.set_air(BEST_EFFORT, Air::Ack);
         settled
+    }
+
+    fn settle(&mut self) -> Settled<(), (), ()> {
+        self.settle_with(&mut ())
     }
 
     /// The holes of the aggregate that ended, as its settlement reports them.
     fn settled_holes(&mut self) -> Option<u32> {
-        let now = self.now();
-        let done = self.arena.service((), now).unwrap().unwrap();
-        let returned = &mut self.returned;
         let mut holes = Holes(Some(None));
-        let settled = self
-            .plane
-            .completed(
-                &mut self.arena,
-                done,
-                now,
-                |memory| returned.push(memory),
-                &mut holes,
-            )
-            .ok()
-            .unwrap();
-        self.costs.push(settled.cost);
+        self.settle_with(&mut holes);
         holes.0.flatten()
     }
 
     fn returned_sequences(&mut self) -> Vec<u16> {
+        let port = &self.port;
         self.returned
             .drain(..)
-            .map(|memory| sequence(memory.as_slice()))
+            .map(|memory| sequence(port.front(memory.id).unwrap()))
             .collect()
     }
 }
@@ -332,12 +299,13 @@ impl EventSink<DataEvent> for Holes {
     }
 }
 
-fn all(count: u8) -> FrameMask {
-    FrameMask::first(count).unwrap()
-}
-
-fn mask(positions: &[u8]) -> FrameMask {
-    FrameMask::from_bits(positions.iter().fold(0, |bits, at| bits | 1 << at)).unwrap()
+macro_rules! cases {
+    ($($name:ident => $body:ident),* $(,)?) => {$(
+        #[test]
+        fn $name() {
+            installed(|model| $body(model));
+        }
+    )*};
 }
 
 cases! {
@@ -362,83 +330,100 @@ cases! {
     nothing_goes_ahead_of_a_settlement_without_frames_in_the_other_arena => ahead_empty,
     each_attempt_is_charged_once_whole_for_its_tid => cost_split,
     a_single_mpdu_s_attempt_is_charged_and_a_withdrawn_frame_charges_nothing => cost_single,
-    an_attempt_outside_the_model_is_charged_unknown => cost_unknown,
+    an_attempt_whose_end_is_unknown_is_charged_unknown => cost_unknown,
+    a_prefix_the_rate_admits_goes_and_the_rest_stays_with_no_attempt_spent => prefix,
+    an_aggregate_that_reached_no_receiver_spends_no_attempt_of_its_frames => unreached,
 }
 
-const fn micros(micros: u32) -> TxEstimate {
-    TxEstimate::Estimated { micros }
+/// The PSDU of an open QoS data MPDU of [`PAYLOAD`] octets: its front, its
+/// payload and its FCS.
+const PSDU: u32 = (OPEN_FRONT + PAYLOAD + FCS_LEN) as u32;
+
+/// What `frames` such MPDUs take in an aggregate.
+const fn aggregate_octets(frames: u32) -> u32 {
+    frames * subframe(PSDU as u16)
 }
 
-fn cost_split<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn cost_split(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..3 {
         world.taken(tag, BE);
     }
-    world.arena.set_cost(micros(100));
     world.publish();
     // Frames 0 and 2 are acknowledged; 1 goes again alone in the arena.
-    world.block_ack(mask(&[0, 2]));
+    world.block_ack(positions(&[0, 2]));
     let settled = world.settle();
     assert_eq!(world.returned_sequences(), [0, 2]);
-    // The whole attempt, once, for its TID.
-    assert_eq!((settled.tid, settled.cost), (BE, micros(100)));
-    world.arena.set_cost(micros(70));
+    // The whole attempt, once, for its TID: its PPDU and BlockAck.
+    let whole = transmission_micros(ht(), aggregate_octets(3), Response::BlockAck).unwrap();
+    assert_eq!(
+        (settled.tid, settled.cost),
+        (BE, TxEstimate::Estimated { micros: whole })
+    );
     world.taken(3, BE);
     let (retry, _) = world.publish();
     assert_eq!(retry.frames, 1);
-    world.arena.answer(ModelArenaAnswer::Ack);
     let settled = world.settle();
     assert_eq!(world.returned_sequences(), [1]);
-    assert_eq!(settled.cost, micros(70), "the retry's own attempt");
-    assert_eq!(world.costs, [micros(100), micros(70)]);
+    let alone = transmission_micros(world.single.get(), PSDU, Response::Ack).unwrap();
+    assert_eq!(
+        settled.cost,
+        TxEstimate::Estimated { micros: alone },
+        "the retry's own attempt"
+    );
+    assert_eq!(world.costs.len(), 2);
 }
 
-fn cost_single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn cost_single(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.taken(0, BE);
-    world.arena.set_cost(micros(250));
     world.publish();
-    world.arena.answer(ModelArenaAnswer::Ack);
     world.settle();
     assert_eq!(world.returned_sequences(), [0]);
-    assert_eq!(world.costs, [micros(250)]);
+    let once = transmission_micros(world.single.get(), PSDU, Response::Ack).unwrap();
+    assert_eq!(world.costs, [TxEstimate::Estimated { micros: once }]);
     world.costs.clear();
     // Withdrawn frames that never went leave with no attempt to charge.
     world.taken(1, BE);
     let returned = &mut world.returned;
     world
         .plane
-        .withdraw_unpublished(&mut world.arena, |memory| returned.push(memory), &mut ())
-        .unwrap();
+        .withdraw_unpublished(&mut world.port, |memory| returned.push(memory), &mut ());
     assert_eq!(world.returned_sequences(), [1]);
     assert!(world.costs.is_empty());
 }
 
-fn cost_unknown<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn cost_unknown(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..2 {
         world.taken(tag, BE);
     }
-    world.arena.set_cost(TxEstimate::Unknown);
     world.publish();
-    world.block_ack(mask(&[0]));
+    world.answer(Air::Timeout);
     world.settle();
-    // An attempt outside the model is charged unknown, never nothing.
+    // An attempt whose end is not known is charged unknown, never nothing;
+    // its frames end with it.
     assert_eq!(world.costs, [TxEstimate::Unknown]);
-    world.arena.set_cost(micros(10));
-    world.publish();
-    world.arena.answer(ModelArenaAnswer::Ack);
-    world.settle();
     assert_eq!(world.returned_sequences(), [0, 1]);
-    assert_eq!(world.costs, [TxEstimate::Unknown, micros(10)]);
+    for tag in 2..4 {
+        world.taken(tag, BE);
+    }
+    world.publish();
+    world.settle();
+    assert_eq!(world.returned_sequences(), [2, 3]);
+    let whole = transmission_micros(ht(), aggregate_octets(2), Response::BlockAck).unwrap();
+    assert_eq!(
+        world.costs,
+        [TxEstimate::Unknown, TxEstimate::Estimated { micros: whole }]
+    );
 }
 
-fn standby_room<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn standby_room(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
-    let capacity = TxArena::capacity(&world.arena);
+    let capacity = 32;
     // Nothing on the air: the next frame goes out at once.
     assert_eq!(world.plane.standby_room(capacity), None);
     for tag in 0..2 {
@@ -460,13 +445,15 @@ fn standby_room<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert!(matches!(world.take(10, BE), Intake::Wait(_, _)));
     // The arena's own capacity bounds a wider TID bound.
     assert_eq!(world.plane.standby_room(4), Some(0));
-    world.block_ack(all(2));
-    world.settle();
-    assert_eq!(world.plane.standby_room(capacity), None);
+    // Their whole BlockAck puts the standby on the air ahead of the
+    // settlement: the emptied arena is the standby now, and empty.
+    world.block_ack(FrameSet::prefix(2));
+    assert!(world.settle().ahead.is_some());
+    assert_eq!(world.plane.standby_room(capacity), Some(capacity));
 }
 
-fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn full_block_ack(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..4 {
         world.taken(tag, BE);
@@ -478,11 +465,10 @@ fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         frames.iter().map(|f| sequence(f)).collect::<Vec<_>>(),
         [0, 1, 2, 3]
     );
-    // The payload follows the QoS header and LLC/SNAP, moved down to it.
-    let prefix = IEEE80211_QOS_DATA_HEADER_LEN + LLC_SNAP_HEADER_LEN;
-    assert_eq!(frames[2].len(), prefix + PAYLOAD);
-    assert!(frames[2][prefix..].iter().all(|octet| *octet == 2));
-    world.block_ack(all(4));
+    // The front is the QoS header and LLC/SNAP, flush against the body.
+    assert_eq!(frames[2].len(), OPEN_FRONT);
+    assert_eq!(frames[2][OPEN_FRONT - 2..], 0x0800_u16.to_be_bytes());
+    world.block_ack(FrameSet::prefix(4));
     let settled = world.settle();
     assert_eq!(
         (settled.delivered, settled.dropped, settled.retried),
@@ -494,7 +480,7 @@ fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     };
     assert_eq!(
         tally,
-        BlockAckTally::new(core::num::NonZeroU16::new(4).unwrap(), 4).unwrap()
+        BlockAckTally::new(NonZeroU16::new(4).unwrap(), 4).unwrap()
     );
     assert!(matches!(
         outcome,
@@ -505,8 +491,8 @@ fn full_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(world.plane.publishable(), None);
 }
 
-fn ahead_whole<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn ahead_whole(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..2 {
         world.taken(tag, BE);
@@ -515,27 +501,26 @@ fn ahead_whole<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     for tag in 2..4 {
         world.taken(tag, BE);
     }
-    world.block_ack(all(2));
-    let done = world.ended();
-    let ahead = world.publish_ahead(&done).expect("the standby goes first");
-    assert_eq!(ahead.arena, first.arena.other());
+    world.block_ack(FrameSet::prefix(2));
+    let settled = world.settle();
+    let ahead = settled.ahead.expect("the standby goes first");
+    assert_eq!(ahead.arena, other(first.arena));
     assert_eq!(ahead.frames, 2);
-    assert_eq!(world.arena.on_air(), Some(ahead.arena));
-    assert!(world.returned_sequences().is_empty());
-    world.settle_ended(done);
+    assert!(world.plane.on_air());
     assert_eq!(world.returned_sequences(), [0, 1]);
     assert_eq!(world.plane.window(BE).unwrap().head.get(), 2);
-    // The settled arena takes the next frame while the standby is on the air.
+    // The settled arena takes the next frame while the standby is on the air,
+    // and goes ahead of the standby's settlement in its turn.
     world.taken(4, BE);
-    world.block_ack(all(2));
+    world.block_ack(FrameSet::prefix(2));
     let settled = world.settle();
     assert_eq!(settled.delivered, 2);
     assert_eq!(world.returned_sequences(), [2, 3]);
-    assert_eq!(world.plane.publishable(), Some(first.arena));
+    assert_eq!(settled.ahead.map(|plan| plan.arena), Some(first.arena));
 }
 
-fn ahead_partial<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn ahead_partial(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..2 {
         world.taken(tag, BE);
@@ -543,36 +528,34 @@ fn ahead_partial<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let (first, _) = world.publish();
     world.taken(2, BE);
     world.taken(3, BE);
-    world.block_ack(mask(&[0]));
-    let done = world.ended();
-    assert!(world.publish_ahead(&done).is_none());
-    world.settle_ended(done);
+    world.block_ack(positions(&[0]));
+    let settled = world.settle();
+    assert!(settled.ahead.is_none());
     // The missing frame goes first, as the settlement decided.
     assert_eq!(world.plane.publishable(), Some(first.arena));
 }
 
-fn ahead_empty<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn ahead_empty(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..2 {
         world.taken(tag, BE);
     }
     world.publish();
-    world.block_ack(all(2));
-    let done = world.ended();
-    assert!(world.publish_ahead(&done).is_none());
-    world.settle_ended(done);
+    world.block_ack(FrameSet::prefix(2));
+    let settled = world.settle();
+    assert!(settled.ahead.is_none());
     assert_eq!(world.returned_sequences(), [0, 1]);
 }
 
-fn partial_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn partial_block_ack(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..4 {
         world.taken(tag, BE);
     }
     let (first, _) = world.publish();
-    world.block_ack(mask(&[0, 2]));
+    world.block_ack(positions(&[0, 2]));
     let settled = world.settle();
     assert_eq!(
         (settled.delivered, settled.dropped, settled.retried),
@@ -593,51 +576,53 @@ fn partial_block_ack<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         [1, 3]
     );
     assert!(frames.iter().all(|frame| retried(frame)));
-    world.block_ack(all(2));
+    world.block_ack(FrameSet::prefix(2));
     let settled = world.settle();
     assert_eq!(
         (settled.delivered, settled.dropped, settled.retried),
         (2, 0, 0)
     );
     assert_eq!(world.returned_sequences(), [1, 3]);
-    // The standby's frame is the oldest the window has not settled.
+    // The standby's frame is the oldest the window has not settled; the
+    // whole BlockAck put it on the air ahead of the settlement.
     assert_eq!(world.plane.window(BE).unwrap().head.get(), 4);
-    let (lone, frames) = world.publish();
+    let lone = settled.ahead.expect("the standby went ahead");
     assert_eq!(
         (lone.arena, lone.kind),
-        (first.arena.other(), PpduKind::Single)
+        (other(first.arena), PpduKind::Single)
     );
+    let frames = &world.port.published().last().unwrap().frames;
     assert_eq!(sequence(&frames[0]), 4);
 }
 
-fn holes_of_first_transmissions<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn holes_of_first_transmissions(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..4 {
         world.taken(tag, BE);
     }
     world.publish();
-    world.block_ack(mask(&[0, 2]));
+    world.block_ack(positions(&[0, 2]));
     assert_eq!(world.settled_holes(), Some(0b1010));
     // The retransmission's own hole is no position of the first aggregate.
     world.publish();
-    world.block_ack(mask(&[0]));
+    world.block_ack(positions(&[0]));
     assert_eq!(world.settled_holes(), None);
 }
 
-fn attempt_limit<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
+fn attempt_limit(model: Installed<'_>) {
     let mut link = link(LinkProtection::Open);
     link.retry = link.retry.map(|retry| AggregateRetry {
         attempts: 2,
         ..retry
     });
-    let mut world = World::new(rates, link);
+    let mut world = World::new(model, link);
     world.agree(BE, 64);
     for tag in 0..3 {
         world.taken(tag, BE);
     }
     world.publish();
-    world.arena.answer(ModelArenaAnswer::NoResponse);
+    world.answer(Air::NoAck);
     let settled = world.settle();
     assert_eq!((settled.dropped, settled.retried), (0, 3));
     let Some(RateLesson::Aggregate { outcome, .. }) = settled.lesson else {
@@ -648,7 +633,7 @@ fn attempt_limit<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         TxOutcome::Ended(AggregateEnd::AckTimeout(_))
     ));
     world.publish();
-    world.arena.answer(ModelArenaAnswer::NoResponse);
+    world.answer(Air::NoAck);
     let settled = world.settle();
     assert_eq!((settled.dropped, settled.retried), (3, 0));
     assert_eq!(
@@ -659,15 +644,15 @@ fn attempt_limit<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(world.plane.window(BE).unwrap().head.get(), 3);
 }
 
-fn lifetime<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn lifetime(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     world.taken(0, BE);
     world.micros += 50_000;
     world.taken(1, BE);
     world.taken(2, BE);
     world.publish();
-    world.block_ack(mask(&[1]));
+    world.block_ack(positions(&[1]));
     // The first MSDU is 100 ms old, the others 50 ms.
     world.micros += 50_000;
     let settled = world.settle();
@@ -683,8 +668,8 @@ fn lifetime<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(world.returned_sequences(), [0, 1]);
 }
 
-fn past_window<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn past_window(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 2);
     world.taken(0, BE);
     world.taken(1, BE);
@@ -693,7 +678,7 @@ fn past_window<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         panic!("sequence number 2 lies past the window [0, 2)");
     };
     assert_eq!(waiting, msdu(2, BE));
-    world.block_ack(all(2));
+    world.block_ack(FrameSet::prefix(2));
     world.settle();
     assert_eq!(world.plane.window(BE).unwrap().head.get(), 2);
     assert_eq!(world.intake(waiting), Intake::Taken(BE));
@@ -701,8 +686,8 @@ fn past_window<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(sequence(&frames[0]), 2);
 }
 
-fn other_tid<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn other_tid(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     world.agree(VIDEO, 64);
     world.taken(0, BE);
@@ -715,8 +700,8 @@ fn other_tid<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(world.intake(waiting), Intake::Taken(VIDEO));
 }
 
-fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Ccmp));
+fn key_and_link(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Ccmp));
     let Intake::Refused { reason, .. } = world.take(0, BE) else {
         panic!("a protected link without its key refuses data");
     };
@@ -725,22 +710,18 @@ fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         TestKey,
         CcmpPacketNumberStep::ONE,
     ));
-    world
-        .arena
-        .set_key(oer_protocols_ieee80211_testing_model::ModelArenaKey::Installed);
     world.taken(1, BE);
     let (plan, frames) = world.publish();
     assert_eq!(plan.kind, PpduKind::Single);
-    assert_eq!(world.arena.published()[0].encryption, MpduProtection::Ccmp);
     let pn = CcmpHeader::new(CcmpPacketNumber::new(1).unwrap(), CcmpKeyId::PAIRWISE).encode();
     let at = IEEE80211_QOS_DATA_HEADER_LEN;
     assert_eq!(frames[0][at..at + CCMP_HEADER_LEN], pn);
-    assert_eq!(frames[0].len(), MSDU_PAYLOAD_OFFSET + PAYLOAD);
-    // A frame too long for its memory takes neither number.
+    assert_eq!(frames[0].len(), StaDataHeaderTemplate::MAX_PREFIX_LEN);
+    // A frame longer than the port sends takes neither number.
     let mut long = msdu(2, BE);
     long.length = MODEL_MAX_MPDU;
     let Intake::Refused { reason, .. } = world.intake(long) else {
-        panic!("an MPDU longer than its memory is refused");
+        panic!("an MPDU longer than the port sends is refused");
     };
     assert_eq!(reason, IntakeRefusal::TooLong);
     world.taken(3, BE);
@@ -748,8 +729,7 @@ fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert!(
         world
             .plane
-            .stop(&mut world.arena, |memory| returned.push(memory), &mut ())
-            .unwrap()
+            .stop(&mut world.port, |memory| returned.push(memory), &mut ())
             .is_some()
     );
     // The numbers stay the station's, advanced past every frame taken.
@@ -765,8 +745,8 @@ fn key_and_link<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(reason, IntakeRefusal::NoLink);
 }
 
-fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn round_trip(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..3 {
         world.taken(tag, BE);
@@ -774,8 +754,7 @@ fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let returned = &mut world.returned;
     let link = world
         .plane
-        .stop(&mut world.arena, |memory| returned.push(memory), &mut ())
-        .unwrap()
+        .stop(&mut world.port, |memory| returned.push(memory), &mut ())
         .unwrap();
     assert_eq!(world.returned_sequences(), [0, 1, 2]);
     assert_eq!(world.sequences[0].peek().get(), 3);
@@ -791,13 +770,12 @@ fn round_trip<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(sequence(&frames[0]), 3);
 }
 
-fn single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn single(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.taken(0, BE);
     assert!(matches!(world.take(1, BE), Intake::Wait(_, _)));
     let (plan, _) = world.publish();
     assert_eq!((plan.kind, plan.frames), (PpduKind::Single, 1));
-    world.arena.answer(ModelArenaAnswer::Ack);
     let settled = world.settle();
     assert_eq!(
         (settled.delivered, settled.dropped, settled.bar),
@@ -816,7 +794,7 @@ fn single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     // not published again.
     world.taken(1, BE);
     world.publish();
-    world.arena.answer(ModelArenaAnswer::NoResponse);
+    world.answer(Air::NoAck);
     let settled = world.settle();
     assert_eq!(
         (settled.delivered, settled.dropped, settled.retried),
@@ -832,13 +810,13 @@ fn single<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(world.plane.publishable(), None);
 }
 
-fn lone_frame<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn lone_frame(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     world.taken(0, BE);
     let (plan, _) = world.publish();
     assert_eq!(plan.kind, PpduKind::Single);
-    world.arena.answer(ModelArenaAnswer::NoResponse);
+    world.answer(Air::NoAck);
     let settled = world.settle();
     assert_eq!((settled.dropped, settled.retried), (1, 0));
     assert_eq!(
@@ -847,8 +825,8 @@ fn lone_frame<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     );
 }
 
-fn agreement_end<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn agreement_end(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     for tag in 0..3 {
         world.taken(tag, BE);
@@ -857,7 +835,7 @@ fn agreement_end<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     world.taken(3, BE);
     world.taken(4, BE);
     world.plane.agreement(BE, None);
-    world.block_ack(mask(&[0]));
+    world.block_ack(positions(&[0]));
     let settled = world.settle();
     assert_eq!(
         (settled.delivered, settled.dropped, settled.retried),
@@ -875,13 +853,12 @@ fn agreement_end<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(frames.len(), 1);
     assert_eq!(sequence(&frames[0]), 1);
     assert!(retried(&frames[0]));
-    world.arena.answer(ModelArenaAnswer::Ack);
     let settled = world.settle();
     assert_eq!((settled.delivered, settled.retried), (1, 1));
     assert_eq!(world.returned_sequences(), [1]);
     let (_, frames) = world.publish();
     assert_eq!(sequence(&frames[0]), 2);
-    world.arena.answer(ModelArenaAnswer::NoResponse);
+    world.answer(Air::NoAck);
     let settled = world.settle();
     assert_eq!(
         (settled.dropped, settled.retried, settled.bar),
@@ -894,19 +871,18 @@ fn agreement_end<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
         let (plan, frames) = world.publish();
         assert_eq!(
             (plan.arena, plan.kind),
-            (aggregate.arena.other(), PpduKind::Single)
+            (other(aggregate.arena), PpduKind::Single)
         );
         assert_eq!(sequence(&frames[0]), expected);
         assert!(!retried(&frames[0]));
-        world.arena.answer(ModelArenaAnswer::Ack);
         assert_eq!(world.settle().delivered, 1);
         assert_eq!(world.returned_sequences(), [expected]);
     }
     assert_eq!(world.plane.publishable(), None);
 }
 
-fn shared_spaces<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn shared_spaces(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     world.taken(0, BE);
     // The station sends a frame of its own in TID 0's space between two
@@ -917,34 +893,35 @@ fn shared_spaces<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let (plan, frames) = world.publish();
     assert_eq!(plan.frames, 1);
     assert_eq!(sequence(&frames[0]), 0);
-    world.arena.answer(ModelArenaAnswer::Ack);
     world.settle();
     world.taken(2, BE);
     let (_, frames) = world.publish();
     assert_eq!(sequence(&frames[0]), 2);
 }
 
-fn numbering<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn numbering(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     let mut numbers = TxNumbers::<InstalledCcmpTxKey<TestKey>>::new(
         SequenceCounter::new(SequenceNumber::from_low_bits(0)),
         None,
         None,
     );
     let now = world.now();
-    let Intake::Refused { reason, .. } =
-        world
-            .plane
-            .intake(&mut world.arena, msdu(0, BE), &mut numbers, now)
-    else {
+    let Intake::Refused { reason, .. } = world.plane.intake(
+        &mut world.port,
+        &ModelLink { protected: false },
+        msdu(0, BE),
+        &mut numbers,
+        now,
+    ) else {
         panic!("a QoS template refuses the station's non-QoS space");
     };
     assert_eq!(reason, IntakeRefusal::Numbering);
     assert_eq!(numbers.next(BE).get(), 0);
 }
 
-fn withdraw_unpublished<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
-    let mut world = World::new(rates, link(LinkProtection::Open));
+fn withdraw_unpublished(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Open));
     world.agree(BE, 64);
     world.taken(0, BE);
     world.taken(1, BE);
@@ -954,12 +931,11 @@ fn withdraw_unpublished<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     let returned = &mut world.returned;
     world
         .plane
-        .withdraw_unpublished(&mut world.arena, |memory| returned.push(memory), &mut ())
-        .unwrap();
+        .withdraw_unpublished(&mut world.port, |memory| returned.push(memory), &mut ());
     // The standby's frame goes back; the A-MPDU on the air settles later.
     assert_eq!(world.returned_sequences(), [2]);
     assert!(world.plane.is_connected() && world.plane.on_air());
-    world.block_ack(all(2));
+    world.block_ack(FrameSet::prefix(2));
     assert_eq!(world.settle().delivered, 2);
     assert!(!world.plane.on_air() && !world.plane.holds_frames());
     world.taken(3, BE);
@@ -967,19 +943,89 @@ fn withdraw_unpublished<'p, 'id: 'p>(rates: Rates<'p, 'id>) {
     assert_eq!(sequence(&frames[0]), 3);
 }
 
+/// An aggregate of more frames than its rate admits sends its longest
+/// prefix; the rest stay in their places, spent no attempt, and go next.
+fn prefix(model: Installed<'_>) {
+    // HT MCS 7 at 20 MHz: the model admits 3 000 octets of an aggregate,
+    // two subframes of a 1 000-octet payload.
+    let mut world = World::new(model, link(LinkProtection::Open));
+    world.agree(BE, 64);
+    for tag in 0..8 {
+        let mut long = msdu(tag, BE);
+        long.length = ETHERNET_HEADER_LEN + 1_000;
+        long.memory.len = 1_000;
+        assert_eq!(world.intake(long), Intake::Taken(BE));
+    }
+    let (plan, frames) = world.publish();
+    assert_eq!(plan.frames, 8);
+    let went = frames.len();
+    assert!(went > 1 && went < 8, "a prefix of the eight: {went}");
+    world.answer(Air::NoAck);
+    let settled = world.settle();
+    // The ones that went are kept for a retry, the others stay unsent.
+    assert_eq!(settled.retried, 8);
+    assert_eq!(settled.dropped, 0);
+    let (retry, frames) = world.publish();
+    assert_eq!(retry.frames, 8);
+    // The frames that went once carry the Retry bit; the rest none.
+    let retries = frames.iter().filter(|frame| retried(frame)).count();
+    assert_eq!(retries, went.min(frames.len()));
+}
+
+/// An aggregate whose end says it reached no receiver (the air denied before
+/// any transmission) spends no attempt of its frames: they outlive as many
+/// such ends as the policy has attempts, then go on the air and are
+/// delivered.
+fn unreached(model: Installed<'_>) {
+    let mut link = link(LinkProtection::Open);
+    link.retry = link.retry.map(|retry| AggregateRetry {
+        attempts: 2,
+        ..retry
+    });
+    let mut world = World::new(model, link);
+    world.agree(BE, 64);
+    for tag in 0..3 {
+        world.taken(tag, BE);
+    }
+    for _ in 0..2 {
+        world.publish();
+        world.answer(Air::Deny);
+        let settled = world.settle();
+        assert_eq!(
+            (settled.delivered, settled.dropped, settled.retried),
+            (0, 0, 3),
+            "a denied air spends no attempt"
+        );
+        assert_eq!(settled.bar, None);
+    }
+    let (plan, frames) = world.publish();
+    assert_eq!(plan.frames, 3);
+    assert_eq!(frames.len(), 3);
+    world.block_ack(FrameSet::prefix(3));
+    let settled = world.settle();
+    assert_eq!(
+        (settled.delivered, settled.dropped, settled.retried),
+        (3, 0, 0)
+    );
+    assert_eq!(world.returned_sequences(), [0, 1, 2]);
+}
+
 /// The single MPDUs' outcomes a selection was taught, by their ACK SNR.
 #[derive(Default)]
 struct Taught(Vec<Option<i8>>);
 
-impl RateSelection<RxMeta, i8, ModelBlockAckEvidence> for Taught {
+/// A backend's ACK evidence in the test: measured or not.
+#[derive(Clone, Copy)]
+enum Evidence {
+    Measured(i8),
+    Unmeasured,
+}
+
+impl RateSelection<RxMeta, i8, ()> for Taught {
     fn packet_number_step(&self) -> CcmpPacketNumberStep {
         CcmpPacketNumberStep::ONE
     }
-    fn plan<R>(
-        &self,
-        _: FrameRates,
-        _: impl Fn(PhyRate) -> Option<R>,
-    ) -> Option<oer_protocols_ieee80211_contracts_port::RetryPlan<R>> {
+    fn plan<R>(&self, _: FrameRates, _: impl Fn(PhyRate) -> Option<R>) -> Option<RetryPlan<R>> {
         None
     }
     fn associated(
@@ -1003,7 +1049,7 @@ impl RateSelection<RxMeta, i8, ModelBlockAckEvidence> for Taught {
         &mut self,
         _: Instant,
         _: BlockAckTally,
-        _: &AggregateOutcome<ModelBlockAckEvidence, D>,
+        _: &AggregateOutcome<(), D>,
     ) {
     }
 }
@@ -1011,42 +1057,27 @@ impl RateSelection<RxMeta, i8, ModelBlockAckEvidence> for Taught {
 #[test]
 fn a_single_lesson_reaches_the_selection_through_its_ack_evidence() {
     let air = oer_protocols_ieee80211_contracts_port::Air {
-        transmissions: core::num::NonZeroU16::MIN,
+        transmissions: NonZeroU16::MIN,
         rate: ht(),
     };
     let acked = |response| {
-        RateLesson::<ModelBlockAckEvidence, ModelAirDenied>::Single(TxOutcome::Ended(
-            SingleEnd::Delivered {
-                air,
-                response: SingleResponse::Ack(response),
-            },
-        ))
+        RateLesson::<Evidence, (), ()>::Single(TxOutcome::Ended(SingleEnd::Delivered {
+            air,
+            response: SingleResponse::Ack(response),
+        }))
     };
     let ack = |response| match response {
-        ModelBlockAckEvidence::Measured(snr) => Some(snr),
-        ModelBlockAckEvidence::Unmeasured => None,
+        Evidence::Measured(snr) => Some(snr),
+        Evidence::Unmeasured => None,
     };
     let mut rates = Taught::default();
     let now = Instant::from_micros(1);
-    acked(ModelBlockAckEvidence::Measured(20)).teach(now, &mut rates, ack);
+    acked(Evidence::Measured(20)).teach(now, &mut rates, ack);
     // Evidence the selection cannot read teaches nothing.
-    acked(ModelBlockAckEvidence::Unmeasured).teach(now, &mut rates, ack);
-    RateLesson::<ModelBlockAckEvidence, ModelAirDenied>::Single(TxOutcome::Ended(
-        SingleEnd::AckTimeout(air),
-    ))
-    .teach(now, &mut rates, ack);
+    acked(Evidence::Unmeasured).teach(now, &mut rates, ack);
+    RateLesson::<Evidence, (), ()>::Single(TxOutcome::Ended(SingleEnd::AckTimeout(air)))
+        .teach(now, &mut rates, ack);
     assert_eq!(rates.0, [Some(20), None]);
-}
-
-/// A single MPDU's plan of one transmission at `rate`.
-fn once<R>(rate: R) -> oer_protocols_ieee80211_contracts_port::RetryPlan<R> {
-    oer_protocols_ieee80211_contracts_port::RetryPlan::new(
-        oer_protocols_ieee80211_contracts_port::RetryStage {
-            rate,
-            transmissions: core::num::NonZeroU8::MIN,
-            protection: oer_protocols_ieee80211_contracts_port::Protection::None,
-        },
-    )
 }
 
 /// HE-MCS 7 on 20 MHz, one stream.
@@ -1085,62 +1116,55 @@ fn he_link(threshold: bool) -> DataLink {
     }
 }
 
-/// The protection of the first publication of `frames` MSDUs of the
-/// link `link` at the HE rate `rate`, and each stage's of a single MPDU's
-/// plan of two stages.
-fn he_publication(
-    link: DataLink,
-    rate: PhyRate,
-    frames: u8,
-) -> (Protection, Option<Vec<Protection>>) {
-    let arena = ModelArena::<ModelCaps>::new();
-    let single = PortArena::rate(&arena, rate).unwrap();
-    let aggregate = PortArena::ampdu_rate(&arena, single).ok().unwrap();
-    let mut world = World::new(
-        Rates {
-            single,
-            aggregate,
-            install: PhantomData,
-        },
-        link,
-    );
-    world.plane.aggregate_rate(Some(AggregateRate {
-        rate,
-        max_subframes: 8,
-        max_length: 65_535,
-    }));
-    if frames > 1 {
-        world.agree(BE, 64);
-    }
-    for tag in 0..frames {
-        world.taken(tag, BE);
-    }
-    let publication = world
-        .plane
-        .publication(|plan| {
-            Some(match plan.kind {
-                PpduKind::Single => ArenaFormat::Single(
-                    once(single)
-                        .then(oer_protocols_ieee80211_contracts_port::RetryStage {
-                            rate: single,
-                            transmissions: core::num::NonZeroU8::MIN,
-                            protection: Protection::None,
-                        })
-                        .ok()
-                        .unwrap(),
-                ),
-                PpduKind::Aggregate { spacing } => ArenaFormat::Aggregate {
-                    rate: aggregate,
-                    spacing,
-                },
+/// The protection of the first publication of `frames` MSDUs of the link
+/// `link`, its singles and aggregates at `rate`: an aggregate's, or each
+/// stage's of a single's plan of two stages.
+fn he_publication(link: DataLink, rate: PhyRate, frames: u8) -> Vec<Protection> {
+    installed(|model| {
+        let mut world = World::at(model, link, rate);
+        if frames > 1 {
+            world.agree(BE, 64);
+        }
+        for tag in 0..frames {
+            world.taken(tag, BE);
+        }
+        let single = world.port.rate(rate).unwrap();
+        let aggregate = world.aggregate;
+        let now = world.now();
+        world
+            .plane
+            .publication(&mut world.port, &world.gate, now, |plan| {
+                Some(match plan.kind {
+                    PpduKind::Single => Ppdu::Single(
+                        once(single)
+                            .then(RetryStage {
+                                rate: single,
+                                transmissions: NonZeroU8::MIN,
+                                protection: Protection::None,
+                            })
+                            .ok()
+                            .unwrap(),
+                    ),
+                    PpduKind::Aggregate { spacing } => Ppdu::Aggregate {
+                        rate: aggregate,
+                        spacing,
+                        protection: Protection::None,
+                        alone: once(single),
+                    },
+                })
             })
-        })
-        .unwrap();
-    let stages = match &publication.format {
-        ArenaFormat::Single(plan) => Some(plan.stages().map(|stage| stage.protection).collect()),
-        ArenaFormat::Aggregate { .. } => None,
-    };
-    (publication.protection, stages)
+            .unwrap();
+        let publication = world.port.published().last().unwrap();
+        assert_eq!(
+            publication.single,
+            if frames > 1 {
+                Went::Aggregate
+            } else {
+                Went::Single
+            }
+        );
+        publication.protection.clone()
+    })
 }
 
 #[test]
@@ -1151,25 +1175,21 @@ fn a_finite_he_txop_threshold_protects_every_he_ppdu_and_its_retries() {
         policy.every_he_txop_protection(rate)
     };
     assert!(matches!(rts(he()), Protection::RtsCts { .. }));
-    // A single MPDU: the publication and each retry stage.
-    let (first, stages) = he_publication(he_link(true), he(), 1);
-    assert_eq!(first, rts(he()));
-    assert_eq!(stages, Some(std::vec![rts(he()), rts(he())]));
+    // A single MPDU: each stage of its plan.
+    assert_eq!(
+        he_publication(he_link(true), he(), 1),
+        [rts(he()), rts(he())]
+    );
     // An A-MPDU.
-    let (first, stages) = he_publication(he_link(true), he(), 3);
-    assert_eq!(first, rts(he()));
-    assert_eq!(stages, None);
+    assert_eq!(he_publication(he_link(true), he(), 3), [rts(he())]);
 }
 
 #[test]
 fn without_a_threshold_or_at_an_ht_rate_nothing_is_protected() {
     for (link, rate) in [(he_link(false), he()), (he_link(true), ht())] {
         for frames in [1, 3] {
-            let (first, stages) = he_publication(link, rate, frames);
-            assert_eq!(first, Protection::None);
-            if let Some(stages) = stages {
-                assert!(stages.iter().all(|stage| *stage == Protection::None));
-            }
+            let protection = he_publication(link, rate, frames);
+            assert!(protection.iter().all(|stage| *stage == Protection::None));
         }
     }
 }

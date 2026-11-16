@@ -17,5 +17,6 @@ oer-protocols-radio-port = { path = "../../../radio/port" }
 workspace = true
 
 [dev-dependencies]
+oer-protocols-ieee80211-contracts-port = { path = "../../contracts/port", features = ["test-support"] }
 oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }

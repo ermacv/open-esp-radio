@@ -1,0 +1,16 @@
+error[E0423]: cannot initialize a tuple struct which contains private fields
+ --> tests/ui/sealed_round.rs:6:39
+  |
+6 |     let _staged = port.round_service(&Sealed(())); // ui-error: E0423
+  |                                       ^^^^^^
+  |
+note: constructor is not visible here due to private fields
+ --> src/data.rs
+  |
+  | pub struct Sealed(());
+  |                   ^^ private field
+help: you might have meant to use the `new` associated function
+  |
+6 -     let _staged = port.round_service(&Sealed(())); // ui-error: E0423
+6 +     let _staged = port.round_service(&Sealed::new()); // ui-error: E0423
+  |

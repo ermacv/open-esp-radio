@@ -874,12 +874,13 @@ The terminal policy is:
 - Retained diagnostics use best-effort LP RAM alongside raw, per-hart reset
   causes. There is no guarantee after power loss. A valid old record need
   not explain the most recent brownout, watchdog or debugger reset.
-- A fault of the Wi-Fi port that leaves every owner in its place is no
-  terminal exit: the installation machine asks the port's recovery
-  (`DataPort::recover_for_stop`), which takes it back, and from then on the
-  port admits and publishes nothing new, however late the stop comes, while
-  what is out comes home. A fault that holds an owner no stop can return is
-  kept by the port (`FaultKept`); the machine says what it waits for.
+- An anomaly of the Wi-Fi hardware is no terminal exit and no return
+  value: the port raises one indication with no payload, "the port needs a
+  stop" (`Facts::needs_stop`), and the installation machine answers it with
+  the stop it has. A start or a retune in progress is given up and its
+  request ends; a running radio's run is interrupted, its data stops and
+  then the radio. A stop always ends in `Stopped`; the port keeps no
+  fault.
 - Repeated boot failure requires a record and explicit reset with the
   watchdog preserved. An implicit watchdog expiry, diagnostic idle mode or
   a retained "three failures" counter does not implement this policy.
@@ -1233,35 +1234,37 @@ its model and conformance case.
   `model` host crate. Frame protection
   lives in `cipher` where a software implementation exists; IEEE 802.15.4
   currently describes hardware offload through its port.
-- The Wi-Fi data port (`DataPort`) has one owner, the task that holds it.
-  Its transitions are called only by `drive`: six of the eight take a proof
-  and two the stop's right, which only the installation machine holds. A
-  refused submission returns its owners. Installations of one static identity
-  are minted by `radio_port::Installations`; a token of another installation
-  is refused at run time.
-- `DataPort` is the one physical owner of an installation (MAC, receive
-  ring, interrupt owner, DMA, transmit queues). The access point reaches it
-  through `AccessPointPort` beside the station's entry points: its own
-  admission, commands and issuer on its own permissions (configure, keys,
-  the one beacon permission), the same `submit`, queues and sink. Each role
-  stops with its own commands without touching the other's; `poll_stop`
-  stops the shared owner for both. A beacon contends as voice, one at a
-  time; who writes its Timestamp and the TSF control are backend
-  declarations, absent until sourced. The port's tokens name the
-  installation that issued them (`IssuedSlot`); both roles' operations
-  refuse an earlier installation's token at their acceptance point with
-  its owners. The gate, tickets, buffers and Block Ack slots carry no
-  generation.
+- The Wi-Fi port is two traits of one owner, the task that holds it: the
+  radio's life (`RadioPort`: start, retune, stop, retire, release) and the
+  data path (`DataPort`: arenas, singles, commands, the gate; `ReceivePort`:
+  receive as a round). It is the owner of its hardware in the sense of
+  RAII: what an operation sets up, its opposite takes down, and a stop
+  returns the port to its state before the start. No call returns an
+  error.
+- Every right of an installation (the radio's position, the stop's right,
+  an arena, a single's place, a queue, the command place, a key or
+  agreement slot, the gate) is a value branded by the installation and
+  made only by the contract from the port's `PortKey`, which only the
+  installation's mint hands out; a transition consumes the right it takes
+  and returns the next, so a call with a stale or a foreign right cannot be
+  written. The radio's life is called only by `drive`, from the steps of
+  the installation machine, which alone holds the radio's rights and the
+  stop's right; the gate is closed at each start and opened only on a
+  running radio.
+- An arena is a place filled and published once: its publication sends a
+  prefix, the longest its rate admits, one frame at least, and the frames
+  that did not go stay in their places with no attempt spent. A single's
+  place is its purpose's, so a role's frame always has one. Receive is a
+  round that services the ring once and returns, at its close, every unit
+  not taken.
 - A caller that drops an admitted request detaches only its waker; the port
   keeps the registration and buffer lease until the terminal event and
   reclaims exactly once. Event streams end with the uninstall.
 - A slot installation (Bluetooth LE) is abandoned through a static typed
   signal, executed only in the driver's context, which silences routes; a
   stop the driver does not confirm in its bound leaves the installation
-  quarantined. The Wi-Fi port answers `StopUnconfirmed` when its stop
-  cannot prove the MAC and its DMA quiet; the installation then stays
-  quarantined. A retired Wi-Fi installation masks the ring's interrupts and
-  erases the keys.
+  quarantined. The Wi-Fi port's stop always ends; the data's stop removes
+  its keys and agreements by their own commands before a retirement.
 - No radio-system token crosses a port; PHY membership stays inside the
   backend. The Bluetooth LE port takes the form of the Wi-Fi lower-MAC port.
 
@@ -1276,7 +1279,9 @@ its model and conformance case.
   software admission. Monitor is a tap in the shared lower-MAC loop, not a
   role; ESP-NOW and FTM are clients of the lower-MAC port. The installation
   machine decides every transition of a port's installation for every role,
-  and `drive` carries its steps out on the port.
+  and `drive` carries its steps out on the port. The engine
+  (`core/datapath`) fills and publishes the arenas, settles their ends and
+  charges what an attempt cost on the air.
 - **Bluetooth LE** (`protocols/bluetooth`, backend `chips/esp32s31/radio/bluetooth`).
   Wire formats carry no protocol state or clock domain. The port owns radio
   vocabulary and the shared DTM window calculation; backends autonomously

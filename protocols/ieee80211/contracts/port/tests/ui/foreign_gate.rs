@@ -2,11 +2,11 @@
 use oer_protocols_ieee80211_contracts_port::GatePool;
 use oer_protocols_radio_port::Mint;
 
-pub fn close<'id>(mint: Mint<'id, (GatePool, GatePool)>) {
-    let ((first, mut issuer), (second, _)) = mint.into_pools();
+pub fn open<'id>(mint: Mint<'id, (GatePool, GatePool)>) {
+    let ((first, issuer), (second, _)) = mint.into_pools();
     #[cfg(ui_reject)]
-    let closed = issuer.close(second); // ui-error: E0308
+    let open = issuer.open(second); // ui-error: E0308
     #[cfg(not(ui_reject))]
-    let closed = issuer.close(first);
-    let _open = issuer.open(closed);
+    let open = issuer.open(first);
+    let _closed = issuer.close(open);
 }

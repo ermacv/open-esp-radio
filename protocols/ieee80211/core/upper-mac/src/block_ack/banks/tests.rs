@@ -8,7 +8,6 @@ use oer_protocols_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, HardwareServices, LowerMacCapabilities, PhyFormatSet,
     RateSupport, ReceiveFilter, RxMeta, WidthSet,
 };
-use oer_protocols_ieee80211_wire::frame::DecodedHeader;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 use oer_protocols_ieee80211_wire::{
     address::IndividualAddress,
@@ -58,13 +57,51 @@ impl Ieee80211Capabilities for Caps {
 
 struct Frame(Vec<u8>);
 
-impl RxBuffer for Frame {
-    fn bytes(&self) -> &[u8] {
-        &self.0
+/// The agreements' calls with a frame's view beside its owner, as a round
+/// gives them: the harness reads the view from a copy of the owner's bytes,
+/// since its owner here is the bytes themselves.
+trait Given<'v> {
+    fn given(
+        &mut self,
+        now: Instant,
+        local: Option<[u8; 6]>,
+        frame: Frame,
+        meta: RxMeta,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) -> RxDisposition<Types>;
+    fn hold(&mut self, frame: Frame, meta: RxMeta) -> Parked<Types>;
+}
+
+fn header_of(bytes: &[u8]) -> RxHead {
+    RxHead::of(bytes).unwrap()
+}
+
+impl<'v, E: Copy + Eq> Given<'v> for RxBlockAckView<'v, Types, E> {
+    fn given(
+        &mut self,
+        now: Instant,
+        local: Option<[u8; 6]>,
+        frame: Frame,
+        meta: RxMeta,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) -> RxDisposition<Types> {
+        let bytes = frame.0.clone();
+        let header = header_of(&bytes);
+        let view = RxView {
+            head: &header,
+            bytes: &bytes,
+        };
+        self.receive(now, local, frame, view, meta, events)
     }
 
-    fn header(&self) -> Option<DecodedHeader<'_>> {
-        DecodedHeader::decode(&self.0)
+    fn hold(&mut self, frame: Frame, meta: RxMeta) -> Parked<Types> {
+        let bytes = frame.0.clone();
+        let header = header_of(&bytes);
+        let view = RxView {
+            head: &header,
+            bytes: &bytes,
+        };
+        self.park(frame, view, meta)
     }
 }
 
@@ -84,10 +121,9 @@ enum Call {
     Recycle(Vec<u8>),
 }
 
-/// The port's calls. `Some(n)` refuses the recycle after the next `n`
-/// with the count, the frame given back, once.
+/// The port's calls.
 #[derive(Default)]
-struct Recording(Vec<Call>, Option<usize>);
+struct Recording(Vec<Call>);
 
 impl RxBlockAckPort<Types> for Recording {
     type Caps = Caps;
@@ -105,25 +141,8 @@ impl RxBlockAckPort<Types> for Recording {
         running.0
     }
 
-    fn recycle(&mut self, frame: Frame) -> Result<(), RecycleRefused<Frame>> {
-        match self.1 {
-            Some(0) => {
-                self.1 = None;
-                return Err(RecycleRefused {
-                    unit: frame,
-                    fault: ReceiveAccounting {
-                        operation:
-                            oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
-                        held: 0,
-                        requested: 1,
-                    },
-                });
-            }
-            Some(after) => self.1 = Some(after - 1),
-            None => {}
-        }
+    fn recycle(&mut self, frame: Frame) {
         self.0.push(Call::Recycle(frame.0));
-        Ok(())
     }
 }
 
@@ -245,13 +264,13 @@ fn a_64_mpdu_request_gets_the_16_mpdu_window_its_frames_hold_and_reorders_across
     // then all 16 leave in sequence order when it arrives.
     for sequence in 101..116 {
         assert!(matches!(
-            view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
+            view.given(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
             RxDisposition::Retained
         ));
     }
     assert!(view.pop_ready().is_none());
     assert!(matches!(
-        view.receive(now(3), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
+        view.given(now(3), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
         RxDisposition::Retained
     ));
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
@@ -287,13 +306,13 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
     view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
         .unwrap();
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
     assert!(view.pop_ready().is_none());
     assert!(view.deadline().is_some());
     assert!(matches!(
-        view.receive(now(3), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
+        view.given(now(3), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
         RxDisposition::Retained
     ));
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
@@ -302,7 +321,7 @@ fn reordered_data_is_retained_then_released_in_sequence_order() {
     assert_eq!(order, [qos_data(0, 100).0, qos_data(0, 101).0]);
     // Before a link exists nothing is reordered.
     assert_eq!(
-        delivered(view.receive(now(4), None, qos_data(0, 103), meta(), &mut ())),
+        delivered(view.given(now(4), None, qos_data(0, 103), meta(), &mut ())),
         Some(qos_data(0, 103).0)
     );
 }
@@ -315,12 +334,12 @@ fn a_forward_block_ack_request_releases_the_hole_and_is_recycled() {
     view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
         .unwrap();
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
     let bar = encode_block_ack_request(LOCAL, AP, 0, SequenceNumber::new(102).unwrap());
     assert!(matches!(
-        view.receive(now(3), Some(LOCAL), Frame(bar.to_vec()), meta(), &mut ()),
+        view.given(now(3), Some(LOCAL), Frame(bar.to_vec()), meta(), &mut ()),
         RxDisposition::Recycle(_)
     ));
     assert_eq!(view.pop_ready().unwrap().0.0, qos_data(0, 101).0);
@@ -357,7 +376,7 @@ fn a_new_association_returns_every_bank_and_retained_frame_first() {
     view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
         .unwrap();
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
     view.offer(now(3), 8, bssid(), addba(0, 0), true, &mut port, &mut ())
@@ -398,7 +417,7 @@ fn an_action_waits_retained_while_no_reply_place_is_free() {
     action.extend_from_slice(&AP);
     action.extend_from_slice(&[0, 0, 3, 0]);
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), Frame(action.clone()), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), Frame(action.clone()), meta(), &mut ()),
         RxDisposition::Retained
     ));
     assert!(view.pop_deferred().is_none());
@@ -444,16 +463,16 @@ fn events_follow_real_ba_reorder_timeout_duplicate_and_clear_decisions() {
     )
     .unwrap();
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut events),
+        view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut events),
         RxDisposition::Retained
     ));
     assert!(matches!(
-        view.receive(now(3), Some(LOCAL), qos_data(0, 101), meta(), &mut events),
+        view.given(now(3), Some(LOCAL), qos_data(0, 101), meta(), &mut events),
         RxDisposition::Recycle(_)
     ));
     view.tick(now(20_000), &mut port, &mut events);
     assert!(view.pop_ready().is_some());
-    view.clear(&mut port, &mut events).unwrap();
+    view.clear(&mut port, &mut events);
     let events = events.0;
     assert_eq!(
         events
@@ -533,10 +552,16 @@ fn containment_is_built_only_for_an_enabled_sink_and_the_view_holds_no_sink() {
         meta: common,
         reads: &reads,
     };
-    let _received = view.receive(now(1), None, qos_data(0, 100), counted, &mut ());
+    let bytes = qos_data(0, 100).0;
+    let header = header_of(&bytes);
+    let seen = RxView {
+        head: &header,
+        bytes: &bytes,
+    };
+    let _received = view.receive(now(1), None, qos_data(0, 100), seen, counted, &mut ());
     assert_eq!(reads.get(), 0);
     let mut events = Kept::default();
-    let _received = view.receive(now(2), None, qos_data(0, 100), counted, &mut events);
+    let _received = view.receive(now(2), None, qos_data(0, 100), seen, counted, &mut events);
     assert_eq!(reads.get(), 1);
     assert!(matches!(
         events.0.as_slice(),
@@ -569,17 +594,17 @@ fn a_parked_data_frame_waits_behind_released_frames_and_management_passes() {
     // hole at 100, which releases both.
     for sequence in [101, 100] {
         assert!(matches!(
-            view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
+            view.given(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
             RxDisposition::Retained
         ));
     }
     assert!(view.has_ready());
     // A data frame outside the agreement waits behind them.
-    assert!(matches!(view.park(qos_data(5, 9), meta()), Parked::Waiting));
+    assert!(matches!(view.hold(qos_data(5, 9), meta()), Parked::Waiting));
     // A management frame is not held.
     let mut action = qos_data(5, 9);
     action.0[0] = 0xd0;
-    assert!(matches!(view.park(action, meta()), Parked::Deliver(_)));
+    assert!(matches!(view.hold(action, meta()), Parked::Deliver(_)));
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
         .map(|(frame, _)| frame.0)
         .collect();
@@ -602,13 +627,13 @@ fn the_agreements_hold_frames_from_a_retained_mpdu_until_its_release_is_taken() 
     view.sent(reply.place);
     // 101 waits in the window for the hole at 100.
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Retained
     ));
     assert!(view.holds_frames() && !view.has_ready());
     // 100 releases both; they are held until taken.
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 100), meta(), &mut ()),
         RxDisposition::Retained
     ));
     assert!(view.holds_frames());
@@ -629,23 +654,23 @@ fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
     // without taking a slot or a place in delivery order.
     for sequence in 100..103 {
         assert!(matches!(
-            view.receive(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
+            view.given(now(2), Some(LOCAL), qos_data(0, sequence), meta(), &mut ()),
             RxDisposition::Deliver((frame, _)) if frame.0 == qos_data(0, sequence).0
         ));
     }
     assert!(!view.has_ready());
     // 104 waits for 103; 103 then releases both in order.
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 104), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 104), meta(), &mut ()),
         RxDisposition::Retained
     ));
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 103), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 103), meta(), &mut ()),
         RxDisposition::Retained
     ));
     // The next in-order MPDU waits behind the released ones.
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 105), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 105), meta(), &mut ()),
         RxDisposition::Retained
     ));
     let order: Vec<_> = core::iter::from_fn(|| view.pop_ready())
@@ -657,7 +682,7 @@ fn an_in_order_mpdu_goes_out_at_once_unless_released_frames_wait() {
     );
     // A duplicate of a delivered MPDU is behind the window and recycled.
     assert!(matches!(
-        view.receive(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
+        view.given(now(2), Some(LOCAL), qos_data(0, 101), meta(), &mut ()),
         RxDisposition::Recycle(_)
     ));
 }
@@ -668,17 +693,17 @@ fn parking_beyond_the_retained_frames_is_a_capacity_fault() {
     let mut view = storage.view();
     for sequence in 0..2 {
         assert!(matches!(
-            view.park(qos_data(0, sequence), meta()),
+            view.hold(qos_data(0, sequence), meta()),
             Parked::Waiting
         ));
     }
     assert!(matches!(
-        view.park(qos_data(0, 2), meta()),
+        view.hold(qos_data(0, 2), meta()),
         Parked::Capacity(_)
     ));
     // Clearing returns every parked frame through the port.
     let mut port = Recording::default();
-    view.clear(&mut port, &mut ()).unwrap();
+    view.clear(&mut port, &mut ());
     assert_eq!(
         port.0
             .iter()
@@ -686,59 +711,6 @@ fn parking_beyond_the_retained_frames_is_a_capacity_fault() {
             .count(),
         2
     );
-}
-
-#[test]
-fn a_recycle_the_port_refuses_keeps_its_frame_and_the_rest_in_place_and_the_clear_incomplete() {
-    let mut storage = RxBlockAckStorage::<Types, u32, 1, 3>::new([10], GAP);
-    let mut view = storage.view();
-    let mut port = Recording::default();
-    view.offer(now(1), 7, bssid(), addba(0, 0), true, &mut port, &mut ())
-        .unwrap();
-    for sequence in 0..3 {
-        assert!(matches!(
-            view.park(qos_data(0, sequence), meta()),
-            Parked::Waiting
-        ));
-    }
-    let recycled = |port: &Recording| -> Vec<Vec<u8>> {
-        port.0
-            .iter()
-            .filter_map(|call| match call {
-                Call::Recycle(bytes) => Some(bytes.clone()),
-                _ => None,
-            })
-            .collect()
-    };
-    // The second frame's recycle is refused: the clear stops there.
-    port.1 = Some(1);
-    let refused = view.clear(&mut port, &mut ());
-    assert_eq!(
-        refused,
-        Err(ReceiveAccounting {
-            operation: oer_protocols_ieee80211_contracts_port::ReceiveOperation::Recycle,
-            held: 0,
-            requested: 1,
-        })
-    );
-    assert_eq!(recycled(&port), [qos_data(0, 0).0]);
-    // Not complete: the association stays, and a new one's Action is not
-    // taken while the port refuses.
-    assert_eq!(view.association(), Some(7));
-    port.1 = Some(0);
-    assert!(matches!(
-        view.offer(now(2), 8, bssid(), addba(0, 0), true, &mut port, &mut ()),
-        Err(RxBlockAckRefused::Clear(_))
-    ));
-    assert_eq!(view.association(), Some(7));
-    // Once the port takes them, each frame went back exactly once, in
-    // its order.
-    view.clear(&mut port, &mut ()).unwrap();
-    assert_eq!(
-        recycled(&port),
-        [qos_data(0, 0).0, qos_data(0, 1).0, qos_data(0, 2).0]
-    );
-    assert_eq!(view.association(), None);
 }
 
 /// An ADDBA Request for `tid` asking for `window`, zero included, which the

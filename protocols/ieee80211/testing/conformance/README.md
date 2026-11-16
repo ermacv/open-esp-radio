@@ -1,32 +1,33 @@
 # IEEE 802.11 backend conformance
 
-`oer-protocols-ieee80211-testing-conformance`: the shared conformance suite of the
-[IEEE 802.11 lower-MAC port](../../contracts/port/README.md). It is a testing
-package: a backend takes it as a test dependency, the reference model
-(`oer-protocols-ieee80211-testing-model`, itself a testing package) as a normal one, and
-no product package depends on it (`oer-tools-test-layers`). It takes the port, the
-wire formats and portable support alone.
+`oer-protocols-ieee80211-testing-conformance`: the shared conformance suite of
+the [IEEE 802.11 port contract](../../contracts/port/README.md). It is a
+testing package: a backend takes it as a test dependency, the reference
+model (`oer-protocols-ieee80211-testing-model`) as a dev-dependency, and no
+product package depends on it (`oer-tools-test-layers`). It takes the port,
+the wire formats, the security contract (the key a run installs) and
+portable support alone.
 
-Backend tests implement its harness traits; they need no dependency on
-`oer-protocols-ieee80211-runtime`. Traces contain observations from actual
-submitted and returned owners; expected identities cannot substitute for
-observations.
+A backend's test implements `Harness` (its port, a channel, network memory
+and a link, frames landed on the receive ring, the anomalies it can raise,
+a MAC held busy, the air held and released, what the hardware was asked to
+program and its state) and calls each property with an installation's
+rights (`Rights`). The suite keeps the rights in its own places and checks
+the port's answers against them; it reads no bookkeeping of the port's.
 
-| Suite | What it checks |
+| Property | What it checks |
 | --- | --- |
-| Data port (`data_port::check`) | No call wakes its caller, refusals return their owners, a receive pull stays within the caller's room, a configuration waits at the published arena as `Held`, the deadline follows admission and completion, the Retry bit of every retransmission history; the installation's proofs (`Proofs`: a copy of a proof refused once its state ended, a retired port's stop stopping it again, a start's proof ended by a stop, an earlier installation's proofs refused at every call, a release taking the stop's right); the epoch (`Epochs`: each reinstall at the port's next TSF epoch, a port at its last refusing with the proof back); conservation (`Conservation`, `FaultWhole`, `FaultHolding`): the suite's own ledger of what the port handed it and took back, compared with `outstanding()` class by class after every call, through a stop with an aggregate on the air and the queued work it withdraws, a unit lent across a reinstall, and a fault taken back or kept. No case reads `outstanding()` of a released port: it holds no installation, and the ports answer that reading differently |
-| TX arena (`arena::check`) | Intake until full, release order, withdrawal, publish refusals; partial BlockAck retention, protection-failure republication and a fault in the model only |
-| GTK receive cut (`group_keys::verify`) | The old key's delayed DMA, interrupt and software ingress before the mutation's terminal, the returned installation's identity, slot and counter, the command bound |
-| EDCA (`edca::parameters`) | Distinct complete tables a fixture installs per interface |
-| Access point (`access_point::check`) | One port for both roles; each role's configuration barrier holds only its own role; the beacon permission's one beacon, its expiry at its deadline, and no beacon on a stopped TSF; an earlier installation's configure permission, beacon permission, key slots, removals and frame keys refused with their owners; key installs and removals; the access point's stop alone, with held commands, and a shared stop; a key removal at the stop (`RemovalAtStop`), the frames in flight and the removals waiting compared with `outstanding()` after every call |
+| `every_right_is_in_exactly_one_place` | A run, its data path (the gate opened, a pairwise key installed and removed, the gate closed) and its stop hand every right back; a retirement takes them whole and the release ends the port |
+| `a_second_run_is_as_the_first` | What the hardware programs in a run after a stop equals the first run's, and its state after each stop equals its state before the first start; after each anomaly, and after a stop whose last resort ran; the gate is closed at each start and the data's rights are home after each stop |
+| `a_stop_ends_everything_on_the_air` | A single on the air when the stop comes ends withdrawn through the sink; its place and queue come back |
+| `the_indication_holds_until_the_stop` | An anomaly raises "the port needs a stop" in the facts, with no payload, until the stop |
+| `a_unit_is_in_one_place` | A unit taken in a round stays in its place, named by its handle; one not taken goes back at the close |
+| `a_publication_sends_the_prefix_its_rate_admits` | An aggregate at a rate that admits less than the arena holds sends the longest prefix as an A-MPDU; the rest stay with no attempt spent |
+| `a_single_publication_sends_the_first_frame` | A single publication sends the first frame as one MPDU; the rest stay |
+| `an_aggregate_of_one_frame_ends_single` | An aggregate whose rate admits one frame sends it alone by its plan, and its outcome says one MPDU went |
+| `an_unclassifiable_frame_goes_back_at_its_staging` | A unit that is no data, management or control frame is counted and returned to the ring; the round hands the others |
+| `a_round_services_the_ring_once` | A round services the ring once and hands what that service staged |
+| `no_call_returns_an_error` | The data path's calls, as the trait declares them, answer outcomes |
 
-Each arena and receive-cut case exposes `execution()`: `Hardware` or
-`ModelOnly(reason)`. Runners take `Environment::Model` to exercise everything,
-or `Environment::Hardware` to exclude injected conditions explicitly; their
-`Report` counts verified cases and model-only exclusions separately. The GTK
-receive cuts inject old-key facts at hardware, DMA, interrupt and software
-stages; ordinary RF traffic does not establish those exact cuts.
-
-The suite adds no allocator or executor dependency. Harness associated types
-select trace storage through `AsRef<[T]>`: host fixtures use `Vec`, and an image
-can use arrays or bounded collections.
+The suite adds no executor: its polls use a no-op waker, and a port whose
+answer is pending is a failure of the property that met it.

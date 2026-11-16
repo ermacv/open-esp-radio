@@ -330,14 +330,6 @@ pub struct BeaconTimingCapabilities {
     pub tbtt: VifRoleSet,
 }
 
-/// The limits of monitor reception.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct MonitorCapabilities {
-    /// Whether monitor reception runs while an interface has a receive
-    /// filter other than `ReceiveFilter::NONE`.
-    pub with_receiving_interfaces: bool,
-}
-
 #[cfg(test)]
 mod tests {
     use oer_protocols_ieee80211_wire::phy::{

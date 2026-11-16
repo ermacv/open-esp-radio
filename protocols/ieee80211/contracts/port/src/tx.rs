@@ -426,3 +426,232 @@ impl<A, D> SingleOutcome<A, D> {
         matches!(self, Self::Ended(SingleEnd::Delivered { .. }))
     }
 }
+
+/// The stages a retry plan holds at most.
+pub const RETRY_STAGES: usize = 4;
+
+/// One stage of a retry plan: a rate, the transmissions at it and their
+/// protection.
+#[derive(Debug)]
+pub struct RetryStage<R> {
+    /// The rate of the stage's transmissions.
+    pub rate: R,
+    /// The transmissions at the rate.
+    pub transmissions: core::num::NonZeroU8,
+    /// The control exchange that protects each of them.
+    pub protection: Protection,
+}
+
+/// The retry plan of an individual frame: its stages in order, as the
+/// rate table mac80211 hands its drivers.
+/// The backend transmits the head of its queue by the plan before the next
+/// attempt of that queue and keeps the frame's sequence number. A transmission
+/// without an ACK sets the Retry bit, which stays; a CTS timeout or a collision
+/// sets nothing. An exhausted plan ends the attempt unacknowledged. A backend
+/// whose hardware retries carries the plan out there.
+#[derive(Debug)]
+pub struct RetryPlan<R> {
+    /// The first stage: a plan always has one.
+    first: RetryStage<R>,
+    /// The stages after the first, in order. The occupied cells form a
+    /// prefix, which every operation keeps; the array's length is the bound.
+    rest: [Option<RetryStage<R>>; RETRY_STAGES - 1],
+}
+
+impl<R: Copy> Clone for RetryStage<R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<R: Copy> Copy for RetryStage<R> {}
+impl<R: Copy> Clone for RetryPlan<R> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<R: Copy> Copy for RetryPlan<R> {}
+
+impl<R> RetryPlan<R> {
+    /// The plan of `first` alone.
+    pub fn new(first: RetryStage<R>) -> Self {
+        Self {
+            first,
+            rest: core::array::from_fn(|_| None),
+        }
+    }
+
+    /// The plan with `stage` after its last.
+    ///
+    /// # Errors
+    ///
+    /// The plan and the stage, when the plan holds [`RETRY_STAGES`].
+    pub fn then(mut self, stage: RetryStage<R>) -> Result<Self, (Self, RetryStage<R>)> {
+        let unplaced = match self.rest.iter_mut().find(|cell| cell.is_none()) {
+            Some(cell) => {
+                *cell = Some(stage);
+                None
+            }
+            None => Some(stage),
+        };
+        match unplaced {
+            None => Ok(self),
+            Some(stage) => Err((self, stage)),
+        }
+    }
+
+    /// The first stage.
+    pub const fn first(&self) -> &RetryStage<R> {
+        &self.first
+    }
+
+    /// The plan past its first stage; `None` when that stage was its last.
+    pub fn after_first(self) -> Option<Self> {
+        let [second, third, fourth] = self.rest;
+        Some(Self {
+            first: second?,
+            rest: [third, fourth, None],
+        })
+    }
+
+    /// The first stage, by value: a frame of one rate takes it.
+    pub fn into_first(self) -> RetryStage<R> {
+        self.first
+    }
+
+    /// The stages in order.
+    pub fn stages(&self) -> impl Iterator<Item = &RetryStage<R>> {
+        core::iter::once(&self.first).chain(self.rest.iter().flatten())
+    }
+
+    /// The transmissions the plan makes at most.
+    pub fn transmissions(&self) -> u16 {
+        self.stages()
+            .map(|stage| u16::from(stage.transmissions.get()))
+            .sum()
+    }
+
+    /// The plan's first `transmissions` transmissions: its stages in order,
+    /// the last one cut and the ones after it dropped.
+    ///
+    /// ```
+    /// # use core::num::NonZeroU8;
+    /// # use oer_protocols_ieee80211_contracts_port::{Protection, RetryPlan, RetryStage};
+    /// let stage = |rate, transmissions| RetryStage {
+    ///     rate,
+    ///     transmissions: NonZeroU8::new(transmissions).unwrap(),
+    ///     protection: Protection::None,
+    /// };
+    /// let plan = RetryPlan::new(stage('a', 2)).then(stage('b', 3)).ok().unwrap();
+    /// let plan = plan.then(stage('c', 25)).ok().unwrap();
+    /// let cut = plan.limit(NonZeroU8::new(4).unwrap());
+    /// let left: Vec<_> = cut.stages().map(|s| (s.rate, s.transmissions.get())).collect();
+    /// assert_eq!(left, [('a', 2), ('b', 2)]);
+    /// assert_eq!(cut.transmissions(), 4);
+    /// // Each stage's rate turns; a refused one stops the plan.
+    /// let numbers = cut.try_map(|rate| Ok::<_, char>(rate as u8)).unwrap();
+    /// assert_eq!(numbers.stages().next().unwrap().rate, b'a');
+    /// let refused = numbers.try_map(|rate| if rate == b'b' { Err(rate) } else { Ok(rate) });
+    /// assert_eq!(refused.err(), Some(b'b'));
+    /// ```
+    pub fn limit(mut self, transmissions: core::num::NonZeroU8) -> Self {
+        let first = self.first.transmissions.min(transmissions);
+        // The budget left after the first stage; it only shrinks, so once a
+        // stage is dropped every later one is too: the occupied cells stay a
+        // prefix.
+        // `first` is at most `transmissions`, so this is their difference.
+        let mut left = transmissions.get().abs_diff(first.get());
+        self.first.transmissions = first;
+        for cell in &mut self.rest {
+            let taken = cell
+                .as_ref()
+                .map_or(0, |stage| stage.transmissions.get().min(left));
+            // `taken` is at most `left`.
+            left = left.abs_diff(taken);
+            match (cell.as_mut(), core::num::NonZeroU8::new(taken)) {
+                (Some(stage), Some(taken)) => stage.transmissions = taken,
+                (_, None) => *cell = None,
+                (None, Some(_)) => {}
+            }
+        }
+        self
+    }
+
+    /// Map each rate without changing the nonempty plan or its budget.
+    pub fn map<S>(&self, mut rate: impl FnMut(&R) -> S) -> RetryPlan<S> {
+        let mut stage = |stage: &RetryStage<R>| RetryStage {
+            rate: rate(&stage.rate),
+            transmissions: stage.transmissions,
+            protection: stage.protection,
+        };
+        RetryPlan {
+            first: stage(&self.first),
+            rest: self
+                .rest
+                .each_ref()
+                .map(|cell| cell.as_ref().map(&mut stage)),
+        }
+    }
+
+    /// The plan with each stage protected by the exchange `protection`
+    /// names for its rate; rates, counts and order unchanged.
+    pub fn with_protection(self, mut protection: impl FnMut(&R) -> Protection) -> Self {
+        let mut stage = |stage: RetryStage<R>| RetryStage {
+            protection: protection(&stage.rate),
+            ..stage
+        };
+        Self {
+            first: stage(self.first),
+            rest: self.rest.map(|cell| cell.map(&mut stage)),
+        }
+    }
+
+    /// Keep the stages whose rates `rate` accepts, in their original order.
+    /// Each retained stage keeps its exact transmission count and protection;
+    /// `None` means every stage was refused.
+    pub fn filter_map<S>(self, mut rate: impl FnMut(R) -> Option<S>) -> Option<RetryPlan<S>> {
+        let mut accepted = core::iter::once(self.first)
+            .chain(self.rest.into_iter().flatten())
+            .filter_map(|stage| {
+                Some(RetryStage {
+                    rate: rate(stage.rate)?,
+                    transmissions: stage.transmissions,
+                    protection: stage.protection,
+                })
+            });
+        let first = accepted.next()?;
+        // Taking the first accepted stage leaves at most RETRY_STAGES - 1 of
+        // the input's stages, one per cell: the zip places every one.
+        let mut rest: [Option<RetryStage<S>>; RETRY_STAGES - 1] = core::array::from_fn(|_| None);
+        for (cell, stage) in rest.iter_mut().zip(accepted) {
+            *cell = Some(stage);
+        }
+        Some(RetryPlan { first, rest })
+    }
+
+    /// The plan with each stage's rate turned by `rate`, the stages and
+    /// their transmissions kept.
+    ///
+    /// # Errors
+    ///
+    /// The first error `rate` returned.
+    pub fn try_map<S, E>(self, mut rate: impl FnMut(R) -> Result<S, E>) -> Result<RetryPlan<S>, E> {
+        let mut turn = |stage: RetryStage<R>| {
+            Ok(RetryStage {
+                rate: rate(stage.rate)?,
+                transmissions: stage.transmissions,
+                protection: stage.protection,
+            })
+        };
+        let first = turn(self.first)?;
+        let mut rest: [Option<RetryStage<S>>; RETRY_STAGES - 1] = core::array::from_fn(|_| None);
+        for (cell, stage) in rest.iter_mut().zip(self.rest) {
+            if let Some(stage) = stage {
+                *cell = Some(turn(stage)?);
+            }
+        }
+        Ok(RetryPlan { first, rest })
+    }
+}
+
+#[cfg(test)]
+mod tests;

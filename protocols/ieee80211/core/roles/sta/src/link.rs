@@ -39,7 +39,7 @@
 //! [`Station::link_returned`]: crate::machine::Station::link_returned
 //! [`Station::tx_sequence`]: crate::machine::Station::tx_sequence
 
-use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, LayoutError, RxMetadata};
+use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, RxMetadata, StorageTooShort};
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch;
 use oer_protocols_ieee80211_core_upper_mac::receive::{AdmittedData, Integrity, RxDropReason};
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
@@ -54,8 +54,8 @@ pub use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use crate::data::MsduDelivery;
 use crate::epoch::LinkEpoch;
 use crate::machine::{
-    EapolProtection, StaCallbacks, StaEapol, StaFrame, StaFrames, StaInput, StaKeyOutcome,
-    StaReceived, StaRxError, StaTransmit, StaTypes, Station, TxRefusal, sta_frame,
+    EapolProtection, StaCallbacks, StaEapol, StaFrame, StaInput, StaKeyOutcome, StaReceived,
+    StaRxError, StaTransmit, StaTypes, Station, TxRefusal, sta_frame,
 };
 use crate::receive::{Received, sort};
 use oer_protocols_ieee80211_core_datapath::numbers::{LinkSpace, TxNumbers};
@@ -114,7 +114,7 @@ pub fn number<P, K: Ieee80211Capabilities>(
 pub fn number_frame<P, K: Ieee80211Capabilities>(
     numbers: &mut TxNumbers<P>,
     number: FrameNumber,
-    frame: &mut StaFrame<K, StaFrames>,
+    frame: &mut StaFrame<K>,
     bytes: &mut [u8],
     plan: crate::machine::StaRatePlan,
 ) -> Result<(), TxRefusal> {
@@ -129,18 +129,18 @@ pub fn number_frame<P, K: Ieee80211Capabilities>(
 /// Write `sequence` into the Sequence Control of the frame `bytes` hold
 /// and describe the frame again from its bytes.
 fn renumber<K: Ieee80211Capabilities>(
-    frame: &mut StaFrame<K, StaFrames>,
+    frame: &mut StaFrame<K>,
     bytes: &mut [u8],
     plan: crate::machine::StaRatePlan,
     sequence: SequenceNumber,
 ) -> Result<(), TxRefusal> {
     let length = match frame {
-        StaFrame::Individual(frame) => frame.frame().len().get(),
-        StaFrame::Group(frame) => frame.frame().len().get(),
+        StaFrame::Individual(frame) => frame.len().get(),
+        StaFrame::Group(frame) => frame.len().get(),
         // A control frame has no Sequence Control.
         StaFrame::BlockAckRequest { .. } => return Ok(()),
     };
-    let short = TxRefusal::Layout(LayoutError::StorageTooShort);
+    let short = TxRefusal::Layout(StorageTooShort);
     let bytes = bytes.get_mut(..length).ok_or(short)?;
     let header = MacHeader::decode(bytes)
         .ok_or(short)?

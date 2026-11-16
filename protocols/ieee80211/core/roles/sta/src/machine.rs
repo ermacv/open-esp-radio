@@ -190,10 +190,8 @@ pub enum TxRefusal {
     LinkChanged,
     /// Service rate selection found no rate for the current phase.
     NoRate,
-    /// The pool refused preparation and returned the unchanged source.
-    Preparation(oer_protocols_ieee80211_contracts_port::PreparationError),
-    /// Portable placement failed before entering the backend.
-    Layout(oer_protocols_ieee80211_contracts_port::LayoutError),
+    /// A frame's bytes no longer held the frame its description named.
+    Layout(oer_protocols_ieee80211_contracts_port::StorageTooShort),
     /// The port refused the frame: its key was issued by an earlier
     /// installation of the port
     /// ([`WithdrawCause::StalePermission`](oer_protocols_ieee80211_contracts_port::WithdrawCause::StalePermission)).
@@ -283,10 +281,6 @@ pub enum StaCommand {
 }
 
 /// One input of the station.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "the key-unwrap request owns its bounded buffer by value; the station has no allocator"
-)]
 pub enum StaInput<'id, T: StaTypes, K> {
     /// A deadline the station named passed.
     Tick,
@@ -486,14 +480,6 @@ pub enum StaAction<'a, 'id, T: StaTypes, K> {
 /// encodes, without its FCS.
 pub const STA_FRAME_CAPACITY: usize = 512;
 
-/// The size class of the station's frames.
-#[derive(Debug)]
-pub struct StaFrames;
-
-impl oer_protocols_ieee80211_contracts_port::TxBufferClass for StaFrames {
-    const CAPACITY: usize = STA_FRAME_CAPACITY;
-}
-
 /// The station's own frame buffer: each frame is encoded here and lent to
 /// the action that carries it out in the same step.
 struct FrameBuffer {
@@ -533,7 +519,7 @@ pub struct StaTransmit<'a, K> {
     /// place ([`crate::link::number`]); a BlockAckReq has no bytes.
     pub bytes: &'a mut [u8],
     /// The frame's kind: its receiver, header and length.
-    pub frame: StaFrame<K, StaFrames>,
+    pub frame: StaFrame<K>,
     /// What the frame is for, which the service turns into the port's
     /// coexistence priority.
     pub class: StaFrameClass,
@@ -549,7 +535,7 @@ pub struct StaTransmit<'a, K> {
 /// A frame the station encoded into its buffer, owed until its action.
 struct Encoded<K> {
     tag: StaTxTag,
-    frame: StaFrame<K, StaFrames>,
+    frame: StaFrame<K>,
     class: StaFrameClass,
     plan: StaRatePlan,
     access_category: WmmAccessCategory,
@@ -662,11 +648,11 @@ pub enum StaFrameClass {
 }
 
 /// The kind of a station frame, as the port's frame kinds take it.
-pub enum StaFrame<K, C> {
+pub enum StaFrame<K> {
     /// An individual frame that solicits an ACK.
-    Individual(oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, AckHeader, K>),
+    Individual(SizedFrame<AckHeader, K>),
     /// A group frame.
-    Group(oer_protocols_ieee80211_contracts_port::ClassSizedFrame<C, HeaderSpec<GroupAddress>, K>),
+    Group(SizedFrame<HeaderSpec<GroupAddress>, K>),
     /// A BlockAckReq of a transmit agreement, which the port encodes and
     /// which solicits a BlockAck.
     BlockAckRequest {
@@ -739,9 +725,7 @@ impl StaRatePlan {
     }
 }
 
-impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBufferClass>
-    StaFrame<K, C>
-{
+impl<K: Ieee80211Capabilities> StaFrame<K> {
     /// The frame on the port's channel at the rates of `plan`, as `rates`
     /// select them; `carried` turns a rate into the port's. `None` when no
     /// stage of the selection is carried: the frame does not go. A
@@ -753,13 +737,13 @@ impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBuff
         carried: impl Fn(
             oer_protocols_ieee80211_contracts_port::PhyRate,
         ) -> Option<oer_protocols_ieee80211_contracts_port::PortRate<'p, K>>,
-    ) -> Option<oer_protocols_ieee80211_contracts_port::ClassFrame<'p, C, K>> {
+    ) -> Option<oer_protocols_ieee80211_contracts_port::TxFrame<'p, K>> {
         match self {
             Self::Individual(frame) => plan.individual(rates, carried).map(|plan| {
-                oer_protocols_ieee80211_contracts_port::ClassFrame::individual(frame, plan)
+                oer_protocols_ieee80211_contracts_port::TxFrame::Individual { frame, plan }
             }),
             Self::Group(frame) => StaRatePlan::group(rates, carried)
-                .map(|rate| oer_protocols_ieee80211_contracts_port::ClassFrame::group(frame, rate)),
+                .map(|rate| oer_protocols_ieee80211_contracts_port::TxFrame::Group { frame, rate }),
             Self::BlockAckRequest {
                 receiver,
                 transmitter,
@@ -769,7 +753,7 @@ impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBuff
                 let plan = plan
                     .individual(rates, carried)?
                     .filter_map(|rate| rate.legacy().ok())?;
-                oer_protocols_ieee80211_contracts_port::ClassFrame::new(
+                Some(
                     oer_protocols_ieee80211_contracts_port::TxFrame::BlockAckRequest {
                         receiver,
                         transmitter,
@@ -778,7 +762,6 @@ impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBuff
                         plan,
                     },
                 )
-                .ok()
             }
         }
     }
@@ -2410,10 +2393,6 @@ enum Done<A, D> {
 type StaDone<T> = Done<<T as StaTypes>::AckEvidence, <T as StaTypes>::AirDenied>;
 
 /// An action a state owes.
-#[expect(
-    clippy::large_enum_variant,
-    reason = "the key-unwrap request owns its bounded buffer by value; the station has no allocator"
-)]
 enum Owed<'id, T: StaTypes, K> {
     BlockAck(PendingRxBlockAck),
     InstallPairwise {
@@ -6893,35 +6872,20 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
 /// that goes by `plan`: a group frame for a group plan, an acknowledged
 /// individual frame otherwise. `None` for a frame whose header or length
 /// the port cannot take.
-pub fn sta_frame<
-    K: Ieee80211Capabilities,
-    C: oer_protocols_ieee80211_contracts_port::TxBufferClass,
->(
-    bytes: &[u8],
-    plan: StaRatePlan,
-) -> Option<StaFrame<K, C>> {
+pub fn sta_frame<K: Ieee80211Capabilities>(bytes: &[u8], plan: StaRatePlan) -> Option<StaFrame<K>> {
     let length = MpduLength::new(bytes.len())?;
     if matches!(plan, StaRatePlan::Group) {
         let header = HeaderSpec::from_mac_header(
             oer_protocols_ieee80211_wire::frame::MacHeader::decode(bytes)?,
             GroupAddress::new,
         )?;
-        oer_protocols_ieee80211_contracts_port::ClassSizedFrame::new(SizedFrame::new(
-            header, length,
-        )?)
-        .ok()
-        .map(StaFrame::Group)
+        SizedFrame::new(header, length).map(StaFrame::Group)
     } else {
         let header = HeaderSpec::from_mac_header(
             oer_protocols_ieee80211_wire::frame::MacHeader::decode(bytes)?,
             IndividualAddress::new,
         )?;
-        oer_protocols_ieee80211_contracts_port::ClassSizedFrame::new(SizedFrame::new(
-            AckHeader::new(header)?,
-            length,
-        )?)
-        .ok()
-        .map(StaFrame::Individual)
+        SizedFrame::new(AckHeader::new(header)?, length).map(StaFrame::Individual)
     }
 }
 

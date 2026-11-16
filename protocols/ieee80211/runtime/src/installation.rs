@@ -5,113 +5,102 @@
 //! ask on the port, or on the data plane, at once, passes each message and
 //! end on to its party, and returns the step's [`Rest`]. It holds nothing:
 //! a loop of one `match` with no field. It is the only caller of the
-//! port's transitions in the repository, by type: six of the eight take a
-//! proof and two the stop's right, which only the machine holds.
+//! port's life transitions in the repository, by type: each takes a right
+//! only the machine holds, and the stop takes the stop's right the step
+//! lends.
 //!
-//! Two answers of the port carry an owner that is not the machine's, and
-//! `drive` splits them: a reinstall's `Installed` goes to the controller in
-//! the one call that delivers the restart's end (`Parties::reinstalled`),
-//! and a release's device stays with the binding that holds the port. What
-//! a cleanup frees goes to the caller's sink. The machine gets what is left. A stop's answer is the
-//! port's `Poll`, and the wait is the pump's: `drive` answers `Ready` with
-//! the contract's `Result` and `Pending` with `pending`. That is the whole
-//! of the mapping.
+//! A begun start, retune or stop is polled in the same turn: the port's
+//! answer to the poll is the machine's. A release's hardware stays with the
+//! binding that holds the port.
 
 use core::task::{Context, Poll};
 
 use oer_portable_time::Instant;
-use oer_protocols_ieee80211_contracts_port::{DataPort, PortSink, SupportedChannel};
+use oer_protocols_ieee80211_contracts_port::{RadioPort, StopFrom};
 use oer_protocols_ieee80211_core_installation::{
-    DataStop, Ended, Input, Machine, Rest, Step, Tell, Waiting,
+    DataStop, Ended, Input, Machine, Rest, RetuneAsk, StartAsk, Step, StopAsk, Tell, Waited,
 };
 
-/// The channel the machine of port `P` starts on.
-pub type ChannelOf<'id, P> = SupportedChannel<<P as DataPort<'id>>::Caps>;
-
 /// The installation machine of port `P`.
-pub type MachineOf<'id, P> = Machine<'id, ChannelOf<'id, P>, <P as DataPort<'id>>::Fault>;
+pub type MachineOf<'id, P> =
+    Machine<'id, <P as RadioPort<'id>>::Channel, <P as RadioPort<'id>>::Data>;
 
 /// The parties a step speaks to beside the port: the data plane, the
 /// controller and the network, as the composition binds them.
-pub trait Parties<'id, P: DataPort<'id>> {
+pub trait Parties<'id, P: RadioPort<'id>> {
     /// The data plane: stop the data, answered at once.
-    fn stop_data(&mut self) -> DataStop;
+    fn stop_data(&mut self) -> DataStop<P::Data>;
     /// A message to its party: the controller's tokens' end, the network's
-    /// stop, or the data plane's flow.
-    fn tell(&mut self, tell: Tell<'id>);
-    /// The controller: the end of its restart, with the next installation's
-    /// permissions, in one call.
-    fn reinstalled(&mut self, ended: Ended<'id, P::Fault>, installed: P::Installed);
+    /// stop, or the data plane's flow with its rights.
+    fn tell(&mut self, tell: Tell<'id, P::Data>);
     /// The controller: the one end of its open request, or the release's.
-    fn ended(&mut self, ended: Ended<'id, P::Fault>);
-    /// The controller: the run was interrupted by a fault of the port.
+    fn ended(&mut self, ended: Ended<'id>);
+    /// The controller: the run was interrupted, since the port needs a stop.
     fn interrupted(&mut self);
     /// The controller: what the machine waits for changed.
-    fn held(&mut self, waiting: &Waiting<P::Fault>);
-}
-
-/// The port of one installation and what its calls take beside it.
-pub struct PortParts<'a, 'id, P: DataPort<'id>, S> {
-    /// The port.
-    pub port: &'a mut P,
-    /// The installations a reinstall takes the next one from.
-    pub installations: &'a mut P::Installations,
-    /// The sink of the port's terminals and units.
-    pub sink: &'a mut S,
+    fn held(&mut self, waiting: Waited);
 }
 
 /// Carry one step of `machine` out, from `input` at `now`, to its rest.
-pub fn drive<'id, P: DataPort<'id>, S: PortSink<'id, P::Types>>(
+pub fn drive<'id, P: RadioPort<'id>>(
     machine: &mut MachineOf<'id, P>,
-    input: Input<'id, ChannelOf<'id, P>>,
-    parts: &mut PortParts<'_, 'id, P, S>,
+    input: Input<'_, 'id, P::Channel>,
+    port: &mut P,
     parties: &mut impl Parties<'id, P>,
     cx: &mut Context<'_>,
     now: Instant,
 ) -> Rest {
-    let PortParts {
-        port,
-        installations,
-        sink,
-    } = parts;
     let mut step = machine.step(input, now);
     loop {
         step = match step {
-            Step::Start(proof, channel, resume) => {
-                resume.answer(port.poll_start(cx, proof, channel, now))
+            Step::Start(ask, resume) => {
+                let starting = match ask {
+                    StartAsk::Begin(stopped, channel) => port.start(stopped, channel, now),
+                    StartAsk::Going(starting) => starting,
+                };
+                resume.answer(port.poll_start(starting, cx, now))
             }
-            // The wait is the pump's: a stop not confirmed yet is `pending`.
-            Step::Stop(mut resume) => match port.poll_stop(resume.right(), cx, now) {
-                Poll::Ready(answer) => resume.answer(answer),
+            Step::Retune(ask, resume) => {
+                let retuning = match ask {
+                    RetuneAsk::Begin(running, channel, gate) => {
+                        port.retune(running, channel, gate, now)
+                    }
+                    RetuneAsk::Going(retuning) => retuning,
+                };
+                resume.answer(port.poll_retune(retuning, cx, now))
+            }
+            Step::Stop(ask, mut resume) => {
+                let stopping = match ask {
+                    StopAsk::Running(running) => {
+                        port.stop(resume.right(), StopFrom::Running(running))
+                    }
+                    StopAsk::Starting(starting) => {
+                        port.stop(resume.right(), StopFrom::Starting(starting))
+                    }
+                    StopAsk::Retuning(retuning) => {
+                        port.stop(resume.right(), StopFrom::Retuning(retuning))
+                    }
+                    StopAsk::Going(stopping) => stopping,
+                };
+                resume.answer(port.poll_stop(stopping, cx, now))
+            }
+            Step::StopData(resume) => resume.answer(parties.stop_data()),
+            Step::UnitsHome(resume) => match port.poll_units_home(cx) {
+                Poll::Ready(units) => resume.home(units),
                 Poll::Pending => resume.pending(),
             },
-            Step::StopData(resume) => resume.answer(parties.stop_data()),
-            Step::Clean(stopped, resume) => {
-                let answer = port.clean(&stopped, *sink);
-                resume.answer(stopped, answer)
+            Step::Retire(stopped, data, units, resume) => {
+                resume.answer(port.retire(stopped, data, units))
             }
-            Step::Retire(stopped, resume) => resume.answer(port.retire(stopped)),
-            Step::Reinstall(retired, resume) => match port.reinstall(retired, installations) {
-                Ok((stopped, installed)) => {
-                    let (ended, resume) = resume.installed(stopped);
-                    parties.reinstalled(ended, installed);
-                    resume.go()
-                }
-                Err(refused) => resume.refused(refused),
-            },
             Step::Release(retired, right, releasing) => {
                 // What the binding needs to give the radio up is the port's:
                 // the binding holds the port and reaches it there.
-                let answer = port.release(retired, right).map(|_released| ());
-                releasing.answer(answer)
+                let _released = port.release(retired, right);
+                releasing.answer()
             }
             Step::Released(ended, rest) => {
                 parties.ended(ended);
                 return rest;
-            }
-            Step::Recover(mut resume) => {
-                let answer = port.recover_for_stop(resume.right());
-                resume.answer(answer)
             }
             Step::Tell(tell, resume) => {
                 parties.tell(tell);

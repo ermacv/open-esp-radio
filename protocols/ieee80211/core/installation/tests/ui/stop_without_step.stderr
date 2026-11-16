@@ -1,5 +1,5 @@
-error[E0599]: no method named `right` found for mutable reference `&mut Machine<'id, C, <P as DataPort<'id>>::Fault>` in the current scope
-  --> tests/ui/stop_without_step.rs:15:43
+error[E0599]: no method named `right` found for mutable reference `&mut Machine<'id, <P as RadioPort<'id>>::Channel, D>` in the current scope
+  --> tests/ui/stop_without_step.rs:14:38
    |
-15 |     let _unasked = port.poll_stop(machine.right(), cx, now); // ui-error: E0599
-   |                                           ^^^^^ method not found in `&mut Machine<'id, C, <P as DataPort<'id>>::Fault>`
+14 |     let _unasked = port.stop(machine.right(), StopFrom::Running(running)); // ui-error: E0599
+   |                                      ^^^^^ method not found in `&mut Machine<'id, <P as RadioPort<'id>>::Channel, D>`

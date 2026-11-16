@@ -166,6 +166,8 @@ fn alone<'id, R: ReservationMode>(
     mint: Mint<'id, ArbiterPool>,
 ) -> (TestArbiter<'id, R>, LeasePlace<'id>, Port<'id>) {
     let (gate, issuer, authority) = mint.into_pools();
+    // The pool gives the gate closed; the arbiter is built with it open.
+    let gate = issuer.open(gate);
     let (arbiter, place, _) = Arbiter::new(
         ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(),
         channel(1),
@@ -290,6 +292,8 @@ fn beside_an_access_point_a_scan_goes_in_an_absence_with_the_air_reserved() {
 fn an_explicitly_nonreserving_arbiter_can_use_a_longer_absence() {
     installed(|mint| {
         let (gate, issuer, authority) = mint.into_pools();
+        // The pool gives the gate closed; the arbiter is built with it open.
+        let gate = issuer.open(gate);
         let policy = ArbiterPolicy {
             absence: Duration::from_millis(40),
             ..ArbiterPolicy::DEFAULT
@@ -454,7 +458,7 @@ fn a_refused_move_cancels_the_lease_and_the_port_returns() {
 #[test]
 fn refusal_returns_the_home_retune_without_taking_another_gate_action() {
     installed(|mint| {
-        let (mut arbiter, place, mut port) = beside_access_point::<NoReservation>(mint);
+        let (mut arbiter, place, port) = beside_access_point::<NoReservation>(mint);
         let _lease = lease(arbiter.request(at(0), scan(6, 10), place));
         let Some(ArbiterAction::CloseGate { gate, .. }) = arbiter.poll_action(at(52)) else {
             panic!("close the lease gate");
@@ -784,6 +788,8 @@ fn an_unrepresentable_follow_holdoff_refuses_without_a_move_or_lost_place() {
         policy.follow.min_follow_interval = Duration::from_micros(u64::MAX);
         policy.follow.max_follow_interval = Duration::from_micros(u64::MAX);
         let (gate, issuer, authority) = mint.into_pools();
+        // The pool gives the gate closed; the arbiter is built with it open.
+        let gate = issuer.open(gate);
         let (mut arbiter, place, _) = Arbiter::<Caps, NoReservation>::new(
             policy.checked(Duration::ZERO).unwrap(),
             channel(1),
@@ -987,6 +993,8 @@ fn connected_with_policy<'id>(
     Port<'id>,
 ) {
     let (gate, issuer, authority) = mint.into_pools();
+    // The pool gives the gate closed; the arbiter is built with it open.
+    let gate = issuer.open(gate);
     let mut port = Port { issuer };
     let (mut arbiter, place, absence) = Arbiter::new(
         policy.checked(Duration::ZERO).unwrap(),
@@ -1070,6 +1078,8 @@ fn a_connected_stations_absence_waits_for_its_readiness_and_returns_home() {
 fn an_absence_needs_the_running_primary_lease() {
     installed(|mint| {
         let (gate, _issuer, authority) = mint.into_pools();
+        // The pool gives the gate closed; the arbiter is built with it open.
+        let gate = _issuer.open(gate);
         let (mut arbiter, place, absence) = Arbiter::<Caps>::new(
             ArbiterPolicy::DEFAULT.checked(Duration::ZERO).unwrap(),
             channel(1),
@@ -1208,6 +1218,8 @@ fn returning_the_unique_place_proves_the_lease_ended_and_admits_the_next_lease()
 fn an_absence_reserves_one_publication_for_each_gate_and_the_return_starts_early() {
     installed(|mint| {
         let (gate, issuer, authority) = mint.into_pools();
+        // The pool gives the gate closed; the arbiter is built with it open.
+        let gate = issuer.open(gate);
         let mut port = Port { issuer };
         let publication = Duration::from_millis(3);
         let (mut arbiter, place, absence_place) = Arbiter::<Caps>::new(

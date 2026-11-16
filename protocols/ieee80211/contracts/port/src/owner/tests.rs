@@ -140,7 +140,7 @@ fn a_header_decodes_as_it_was_encoded() {
             let mut short = [0xa5; 36];
             assert_eq!(
                 AckHeader::new(spec).unwrap().encode(&mut short[..len]),
-                Err(crate::LayoutError::StorageTooShort)
+                Err(super::StorageTooShort)
             );
             assert_eq!(short, [0xa5; 36]);
         }

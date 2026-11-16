@@ -11,7 +11,7 @@ use crate::frame::MacHeader;
 /// association: the MAC header, the CCMP header's room on a protected link
 /// and the LLC/SNAP header. It is built once from what stays the same on the
 /// association (the station's address, the BSSID, QoS, protection);
-/// [`Self::write`] fills in what changes from one MPDU to the next
+/// [`Self::write_before`] fills in what changes from one MPDU to the next
 /// ([`StaDataHeaderFields`]). The written prefix is the one
 /// [`StaOpenDataFrame`] and [`StaProtectedDataFrame`] encode with a zero CCMP
 /// header, which the backend fills from its key.
@@ -106,8 +106,7 @@ impl StaDataHeaderTemplate {
     pub const MAX_PREFIX_LEN: usize =
         IEEE80211_QOS_DATA_HEADER_LEN + CCMP_HEADER_LEN + LLC_SNAP_HEADER_LEN;
 
-    /// The length of the prefix [`Self::write`] and [`Self::write_before`]
-    /// write.
+    /// The length of the prefix [`Self::write_before`] writes.
     pub const fn prefix_len(&self) -> usize {
         const LEGACY_OPEN: usize = IEEE80211_LEGACY_DATA_HEADER_LEN + LLC_SNAP_HEADER_LEN;
         const QOS_OPEN: usize = IEEE80211_QOS_DATA_HEADER_LEN + LLC_SNAP_HEADER_LEN;
@@ -152,28 +151,6 @@ impl StaDataHeaderTemplate {
             .chain(core::iter::repeat_n(0, ccmp))
             .chain(RFC1042_LLC_SNAP_PREFIX)
             .chain(ether_type.to_be_bytes())
-    }
-
-    /// Write the prefix of the MPDU of `fields` at the start of `output`
-    /// and return its MAC header. A shorter `output` is refused before any
-    /// octet is written.
-    pub fn write(
-        &self,
-        fields: StaDataHeaderFields,
-        output: &mut [u8],
-    ) -> Result<MacHeader, StationFrameError> {
-        let required = self.prefix_len();
-        let prefix = output
-            .get_mut(..required)
-            .ok_or(StationFrameError::OutputTooSmall { required })?;
-        let header = self.header(fields);
-        for (place, octet) in prefix
-            .iter_mut()
-            .zip(self.octets(&header, fields.ether_type))
-        {
-            *place = octet;
-        }
-        Ok(header)
     }
 
     /// Write the prefix of the MPDU of `fields` flush against the end of
@@ -292,9 +269,10 @@ mod tests {
                         let mut expected = [0xee; 64];
                         let length = encoded(peer_qos, protection, fields, &mut expected);
                         let mut written = [0xee; 64];
-                        let header = template.write(fields, &mut written).unwrap();
+                        let header = template.write_before(fields, &mut written);
                         assert_eq!(template.prefix_len(), length);
-                        assert_eq!(written, expected);
+                        assert_eq!(written[64 - length..], expected[..length]);
+                        assert!(written[..64 - length].iter().all(|octet| *octet == 0xee));
                         // The returned header is the one decoded from the
                         // full encode.
                         assert_eq!(Some(header), MacHeader::decode(&expected[..length]));
@@ -322,8 +300,8 @@ mod tests {
                 ether_type: 0x0800,
             };
             let mut output = [0; 64];
-            template.write(first, &mut output).unwrap();
-            let header = template.write(second, &mut output).unwrap();
+            template.write_before(first, &mut output);
+            let header = template.write_before(second, &mut output);
             assert_eq!(header.address3(), [2, 0, 0, 0, 0, 4]);
             assert_eq!(
                 SequenceNumber::from_sequence_control(header.sequence_control()),
@@ -338,8 +316,8 @@ mod tests {
                 protection == LinkProtection::Ccmp
             );
             let mut expected = [0; 64];
-            encoded(peer_qos, protection, second, &mut expected);
-            assert_eq!(output, expected);
+            let length = encoded(peer_qos, protection, second, &mut expected);
+            assert_eq!(output[64 - length..], expected[..length]);
         }
     }
 
@@ -357,9 +335,10 @@ mod tests {
                 ether_type: 0x0800,
             };
             let mut expected = [0xee; 64];
-            let header = template.write(fields, &mut expected).unwrap();
+            encoded(peer_qos, protection, fields, &mut expected);
             let mut headroom = [0xdd; 64];
-            assert_eq!(template.write_before(fields, &mut headroom), header);
+            let header = template.write_before(fields, &mut headroom);
+            assert_eq!(Some(header), MacHeader::decode(&expected[..length]));
             // The octets before the prefix keep what was there.
             assert!(headroom[..64 - length].iter().all(|octet| *octet == 0xdd));
             assert_eq!(headroom[64 - length..], expected[..length]);
@@ -368,27 +347,6 @@ mod tests {
             template.write_before(fields, &mut exact);
             let at = StaDataHeaderTemplate::MAX_PREFIX_LEN - length;
             assert_eq!(exact[at..], expected[..length]);
-        }
-    }
-
-    #[test]
-    fn a_short_output_is_refused_before_any_octet_is_written() {
-        for (peer_qos, protection) in MODES {
-            let template =
-                StaDataHeaderTemplate::new(source(), bssid(), peer_qos, protection).unwrap();
-            let required = template.prefix_len();
-            let mut output = [0xee; 64];
-            let fields = StaDataHeaderFields {
-                destination: [2, 0, 0, 0, 0, 3],
-                sequence_number: SequenceNumber::ZERO,
-                priority: WmmUserPriority::UP0,
-                ether_type: 0x0800,
-            };
-            assert_eq!(
-                template.write(fields, &mut output[..required - 1]),
-                Err(StationFrameError::OutputTooSmall { required })
-            );
-            assert_eq!(output, [0xee; 64]);
         }
     }
 

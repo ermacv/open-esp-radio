@@ -8,6 +8,10 @@ repository.workspace = true
 description = "Portable IEEE 802.11 lower-MAC radio port: one hardware transmission attempt, receive events and controls"
 readme = "README.md"
 
+[features]
+# Rights made without a mint, for the tests of the cores that hold them.
+test-support = []
+
 [dependencies]
 oer-portable-wire = { path = "../../../../portable/wire" }
 heapless = "0.9.3"

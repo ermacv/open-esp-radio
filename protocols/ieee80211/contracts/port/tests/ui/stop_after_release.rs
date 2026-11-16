@@ -1,22 +1,14 @@
 #![no_std]
-use core::task::Context;
-use oer_portable_time::Instant;
-use oer_protocols_ieee80211_contracts_port::{DataPort, Retired, StopRight};
-pub fn stop<'id, P: DataPort<'id>>(
+use oer_protocols_ieee80211_contracts_port::{RadioPort, Retired, Running, StopFrom, StopRight};
+pub fn stop<'id, P: RadioPort<'id>>(
     port: &mut P,
     retired: Retired<'id>,
-    mut right: StopRight<'id>,
-    cx: &mut Context<'_>,
-    now: Instant,
+    running: Running<'id>,
+    right: StopRight<'id>,
 ) {
-    let _stopped = port.poll_stop(&mut right, cx, now);
     drop(port.release(retired, right));
     #[cfg(ui_reject)]
-    let _after = port.poll_stop(&mut right, cx, now); // ui-error: E0382
-}
-pub fn recover<'id, P: DataPort<'id>>(port: &mut P, retired: Retired<'id>, mut right: StopRight<'id>) {
-    let _recovered = port.recover_for_stop(&mut right);
-    drop(port.release(retired, right));
-    #[cfg(ui_reject)]
-    let _after = port.recover_for_stop(&mut right); // ui-error: E0382
+    let _after = port.stop(&mut right, StopFrom::Running(running)); // ui-error: E0382
+    #[cfg(not(ui_reject))]
+    drop(running);
 }

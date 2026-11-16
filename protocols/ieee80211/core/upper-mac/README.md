@@ -115,9 +115,12 @@ agreements: `recipient` negotiates one agreement (ADDBA parameters, typed
 refusals, inactivity and the reorder gap) and `banks` owns an association's
 agreements, their retained frames and the replies they owe. `banks` parses
 ADDBA, DELBA and the Compressed BlockAckReq and selects the QoS Data it
-reorders with the wire codecs; it calls the port only through the caller's
-`RxBlockAckPort` (install an agreement, end one, return a frame), which the
-runtime implements over its data port. A credit stays free to close a reorder
+reorders with the wire codecs from a frame's view, given beside its owner
+(`RxView`: its `RxHead` and bytes, read in place; the owner is a type
+parameter the agreements know nothing of, and nothing of the view is kept);
+it calls the port only through the caller's `RxBlockAckPort` (install an
+agreement, end one, return a frame), which the runtime implements over its
+data port. A credit stays free to close a reorder
 gap, and a management Action whose reply would find no place waits retained. `ccmp` owns transmit PN allocation and receive replay frontiers for every
 CCMP user: one strictly increasing `CcmpReplayFrontier` per lane, key or
 peer, borrowed by an admission candidate until commit, for the station's
@@ -160,16 +163,10 @@ receive candidates commit only after authentication.
 
 The planner holds no frame bytes. The caller encodes each MPDU's sequence
 number and reserves its CCMP PN with the key's unique `ccmp::CcmpTxPacketNumber`.
-A pairwise installation command comes with a `PendingCcmpTxKey`
-(`PendingCcmpTxKey::issued`) holding the installation identity the port's
-command issuer minted; only that token, spent with the key the installation terminal
-returns, creates the allocator and retains it in `InstalledCcmpTxKey` with
-that backend key. A key whose `pairwise_identity` differs, another
-installation's, is refused as `ForeignCcmpTxKey` with the token and the key;
-`InstalledCcmpTxKey::install` does the same for a `SoftwareCcmpKey`, key
-material moved into its software owner (an ESP-NOW peer), and `replace_key`
-replaces that material without restarting its numbers. `number` hands out a
-fresh MPDU's port `NumberedKey`.
+`InstalledCcmpTxKey::install` pairs a `SoftwareCcmpKey`, key material
+moved into its software owner (an ESP-NOW peer), with a new allocator, and
+`replace_key` replaces that material without restarting its numbers; a
+key's `packet_numbers` hands out a fresh MPDU's number.
 The allocator has no public constructor or continuation/reset API.
 The backend formats that supplied PN at the first protected transmission;
 a retransmission sends the same MPDU and keeps both. `allocate_batch`

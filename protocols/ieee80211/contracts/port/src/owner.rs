@@ -147,7 +147,7 @@
 //! ```
 //! # use oer_protocols_ieee80211_contracts_port::{DataPort, PortRate, PhyRate};
 //! # use oer_protocols_ieee80211_wire::phy::LegacyRate;
-//! fn rate<'id, P: DataPort<'id>>(port: &P) -> Option<PortRate<'_, P::Caps>> {
+//! fn rate<'id, P: DataPort<'id>>(port: &P) -> Option<PortRate<'id, P::Caps>> {
 //!     port.rate(PhyRate::Legacy(LegacyRate::Ofdm6M))
 //! }
 //! ```
@@ -722,8 +722,8 @@ impl QosControl {
 /// supplies Protected from `TxProtection` when constructing a fresh MPDU.
 ///
 /// ```
-/// use oer_protocols_ieee80211_contracts_port::{AckHeader, LayoutError, ResponseHeader};
-/// fn encode(header: AckHeader, out: &mut [u8]) -> Result<usize, LayoutError> {
+/// use oer_protocols_ieee80211_contracts_port::{AckHeader, ResponseHeader, StorageTooShort};
+/// fn encode(header: AckHeader, out: &mut [u8]) -> Result<usize, StorageTooShort> {
 ///     header.encode(out)
 /// }
 /// ```
@@ -775,18 +775,6 @@ impl<A: ReceiverAddress> HeaderSpec<A> {
     /// Receiver of this checked header.
     pub const fn receiver(&self) -> A {
         self.receiver
-    }
-    /// Derive the Protected bit from the preparation's sole protection value.
-    pub(crate) fn with_protection(mut self, protection: crate::MpduProtection) -> Self {
-        self.header = self.header.with_protected(match protection {
-            crate::MpduProtection::Ccmp => {
-                oer_protocols_ieee80211_wire::frame::FrameProtection::Protected
-            }
-            crate::MpduProtection::Open => {
-                oer_protocols_ieee80211_wire::frame::FrameProtection::Unprotected
-            }
-        });
-        self
     }
     /// The header, when its fields agree with its Frame Control.
     #[allow(clippy::too_many_arguments, reason = "the fields of a MAC header")]
@@ -886,10 +874,6 @@ impl AckHeader {
     pub const fn header(&self) -> &HeaderSpec<IndividualAddress> {
         &self.0
     }
-
-    pub(crate) fn with_protection(self, protection: crate::MpduProtection) -> Self {
-        Self(self.0.with_protection(protection))
-    }
 }
 
 /// The header of an individual frame that solicits no ACK: one that says
@@ -910,11 +894,12 @@ impl NoAckHeader {
     pub const fn header(&self) -> &HeaderSpec<IndividualAddress> {
         &self.0
     }
-
-    pub(crate) fn with_protection(self, protection: crate::MpduProtection) -> Self {
-        Self(self.0.with_protection(protection))
-    }
 }
+
+/// The storage given to an encoding cannot hold the header; nothing was
+/// written.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StorageTooShort;
 
 mod response_header {
     pub trait Sealed {}
@@ -945,11 +930,11 @@ mod response_header {
 ///
 /// ```
 /// use oer_protocols_ieee80211_contracts_port::{
-///     AckHeader, GroupAddress, HeaderSpec, LayoutError, NoAckHeader, ResponseHeader,
+///     AckHeader, GroupAddress, HeaderSpec, NoAckHeader, ResponseHeader, StorageTooShort,
 /// };
 /// fn typed(
 ///     ack: AckHeader, no_ack: NoAckHeader, group: HeaderSpec<GroupAddress>, out: &mut [u8],
-/// ) -> Result<(), LayoutError> {
+/// ) -> Result<(), StorageTooShort> {
 ///     ack.encode(out)?;
 ///     no_ack.encode(out)?;
 ///     group.encode(out)?;
@@ -967,7 +952,7 @@ pub trait ResponseHeader: response_header::Sealed {
     /// Write the header, with the Ack Policy of its response, at the start
     /// of `out` and return its length. A shorter `out` is refused before
     /// any octet is written.
-    fn encode(self, out: &mut [u8]) -> Result<usize, crate::LayoutError>
+    fn encode(self, out: &mut [u8]) -> Result<usize, StorageTooShort>
     where
         Self: Sized,
     {
@@ -978,9 +963,7 @@ pub trait ResponseHeader: response_header::Sealed {
                 .unwrap_or(header),
             None => header,
         };
-        header
-            .encode(out)
-            .map_err(|_| crate::LayoutError::StorageTooShort)
+        header.encode(out).map_err(|_| StorageTooShort)
     }
 }
 
