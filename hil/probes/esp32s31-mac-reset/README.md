@@ -16,8 +16,9 @@ acknowledged frame) follows in the same image.
    went on.
 2. **A second run after it.** The walker's stop, the owner's cold
    preparation alone (`initialize_wifi_mac`, which begins with the pulse
-   and the cold handshake), the ring rebuilt (`prepare_halted`,
-   `reopen_mac_core`) and an ordinary start, with no new PHY calibration;
+   and the cold handshake), the channel selected again (the pulse resets the MAC block's channel
+   and bandwidth words; no new calibration), the ring rebuilt
+   (`prepare_halted`, `reopen_mac_core`) and an ordinary start;
    the units received in the next 20 ms.
 3. **The key table.** A station key is installed before each pulse; its
    entry's validity after the pulse, and after the second run's cold

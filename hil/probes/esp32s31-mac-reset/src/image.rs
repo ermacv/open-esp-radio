@@ -747,7 +747,7 @@ async fn session(
     let result = {
         let mut series = core::pin::pin!(series(
             Owners {
-                radio,
+                slot: &mut slot,
                 mac_irq: &mut mac_irq,
                 power_irq: &mut power_irq,
                 sources: &mut sources,
@@ -756,6 +756,7 @@ async fn session(
             access,
             clocks_on,
             mac,
+            channel,
             seed,
             journal,
         ));
@@ -768,7 +769,7 @@ async fn session(
 
 /// What the series borrows from the session.
 struct Owners<'a> {
-    radio: &'a mut Radio,
+    slot: &'a mut Option<Radio>,
     mac_irq: &'a mut MacInterruptRegisters,
     power_irq: &'a mut MacPowerInterruptRegisters,
     sources: &'a mut Sources,
@@ -790,11 +791,12 @@ async fn series(
     mut access: RadioAccess,
     mut clocks_on: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
     mac: MacColdStartConfig,
+    channel: Ghz2_4Channel,
     seed: u32,
     journal: &mut Journal,
 ) -> Result<(), Failure> {
     let Owners {
-        radio,
+        slot,
         mac_irq,
         power_irq,
         sources,
@@ -901,7 +903,7 @@ async fn series(
         let pulse_cycle = oer_portable_riscv::cycle32();
         let (pulsed, pulsed_clocks) = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
-            clocked.reset_mac(radio);
+            clocked.reset_mac(held(slot)?);
             clocked.into_running()
         };
         access = pulsed;
@@ -929,7 +931,7 @@ async fn series(
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
-                let mut hal = clocked.cold_mac_hal(radio);
+                let mut hal = clocked.cold_mac_hal(held(slot)?);
                 initialize_wifi_mac(sources, &mut hal, timer, mac).await
             };
             let (running, on) = clocked.into_running();
@@ -938,6 +940,19 @@ async fn series(
             result
         };
         second_cold.map_err(|_| (phase::SECOND_COLD, index32))?;
+        // The channel again, with no new calibration: the pulse resets the
+        // MAC block's channel and bandwidth words, which the cold
+        // preparation does not write.
+        let retuned = {
+            let mut clocked = WifiClocked::from_running(access, clocks_on);
+            let mut platform = ();
+            let result = apart!(tune(slot, &mut clocked, timer, &mut platform, channel));
+            let (running, on) = clocked.into_running();
+            access = running;
+            clocks_on = on;
+            result
+        };
+        retuned.map_err(|(phase, code)| (phase, code | 0x0100_0000 | index32 << 8))?;
         let stopped = storage
             .prepare_halted(halted, access.rx_dma())
             .map_err(|_| (phase::SECOND_RING, index32))?;
@@ -998,7 +1013,7 @@ async fn series(
         let before = access.receive_dma_snapshot();
         let (pulsed, pulsed_clocks) = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
-            clocked.reset_mac(radio);
+            clocked.reset_mac(held(slot)?);
             clocked.into_running()
         };
         access = pulsed;
@@ -1007,7 +1022,7 @@ async fn series(
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
-                let mut hal = clocked.cold_mac_hal(radio);
+                let mut hal = clocked.cold_mac_hal(held(slot)?);
                 initialize_wifi_mac(sources, &mut hal, timer, mac).await
             };
             let (running, on) = clocked.into_running();
@@ -1052,7 +1067,7 @@ async fn series(
             .map_err(|code| (phase::RECEIVE, code | 0x1000_0000))?;
         let (pulsed, pulsed_clocks) = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
-            clocked.reset_mac(radio);
+            clocked.reset_mac(held(slot)?);
             clocked.into_running()
         };
         access = pulsed;
@@ -1061,7 +1076,7 @@ async fn series(
         let counted = statistics(&access);
         paint(storage, index32 | 0x80).map_err(|code| (phase::RING, code))?;
         wait_micros(u64::from(HOLD_MS) * 1_000).await;
-        let held = access.receive_dma_snapshot();
+        let kept = access.receive_dma_snapshot();
         let active = access.wifi_mac_hal().channel_active_state();
         let counted_after = statistics(&access);
         let changed = changed_words(storage, index32 | 0x80).map_err(|code| (phase::RING, code))?;
@@ -1072,7 +1087,7 @@ async fn series(
         let second_cold = {
             let mut clocked = WifiClocked::from_running(access, clocks_on);
             let result = {
-                let mut hal = clocked.cold_mac_hal(radio);
+                let mut hal = clocked.cold_mac_hal(held(slot)?);
                 initialize_wifi_mac(sources, &mut hal, timer, mac).await
             };
             let (running, on) = clocked.into_running();
@@ -1100,10 +1115,10 @@ async fn series(
                 walker(&at_pulse)[0],
                 walker(&at_pulse)[1],
                 walker(&at_pulse)[3],
-                walker(&held)[0],
-                walker(&held)[1],
-                walker(&held)[2],
-                walker(&held)[3],
+                walker(&kept)[0],
+                walker(&kept)[1],
+                walker(&kept)[2],
+                walker(&kept)[3],
                 u32::from(active),
                 advance(counted, counted_after, 0, 1),
                 advance(counted, counted_after, 2, 3),
