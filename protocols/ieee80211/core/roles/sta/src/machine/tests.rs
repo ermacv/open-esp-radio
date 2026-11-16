@@ -3,9 +3,11 @@
 //! connected, disconnect; alone and beside an access point.
 
 use super::*;
+use crate::association::FormatsBelowHe;
 use crate::join::test_support::{BSSID, LOCAL, answer_authentication, association_response};
 use core::num::NonZeroU16;
 use oer_protocols_ieee80211_contracts_port::ArbiterPool;
+use oer_protocols_ieee80211_contracts_port::Width;
 use oer_protocols_ieee80211_contracts_port::{
     BandSet, Channel, ChannelWidth, GateIssuer, HardwareServices, LowerMacCapabilities,
     PhyFormatSet, RateSupport, RxMeta, WidthSet,
@@ -408,7 +410,7 @@ fn test_profile(security: StaSecurity) -> StaProfile {
     StaProfile {
         ssid: heapless::Vec::from_slice(SSID).unwrap(),
         security,
-        prefer_he20: false,
+        phy: request(FormatsBelowHe::NON_HT, Width::Mhz20),
     }
 }
 
@@ -473,7 +475,6 @@ impl<'id> World<'id> {
             supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
             association: &CAPABILITIES,
             listen_interval: StationListenInterval::new(10).unwrap(),
-            phy: StaPhyRequest::Legacy,
             tx_block_ack: None,
             callbacks: Callbacks {
                 nonce_calls: 0,
@@ -1308,7 +1309,10 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
                     )
                     .unwrap(),
                     channel: 6,
-                    phy: PhyMode::Legacy,
+                    phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                        format: oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
+                        width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+                    },
                 }),
                 Seen::Upstream(UpstreamFact::Connected(channel(6))),
             ]
@@ -1317,7 +1321,13 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
         // What a rate selection starts from: the PHY the association made and
         // the metadata its response arrived with.
         let peer = world.station.peer().unwrap();
-        assert_eq!(peer.associated.phy, PhyMode::Legacy);
+        assert_eq!(
+            peer.associated.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
         assert_eq!(peer.response, meta);
 
         // The application leaves: Deauthentication, receive off, the lease
@@ -2457,7 +2467,10 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
                         )
                         .unwrap(),
                         channel: 6,
-                        phy: PhyMode::Legacy,
+                        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                            format: oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
+                            width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+                        },
                     }),
                     Seen::Upstream(UpstreamFact::Connected(channel(6))),
                 ]
@@ -3660,8 +3673,7 @@ fn association_waits_for_its_frame_without_consuming_a_request_and_still_expires
             access_point,
             erp: observation.erp,
             channel: world.station.config.channels[0],
-            phy: PhyMode::Legacy,
-            he_power: None,
+            phy: NegotiatedPhy::NonHt,
             he_set: true,
             step: JoinStep::Associate(
                 StaAssociationRuntime::new(
@@ -5628,37 +5640,62 @@ fn an_ht40_join_tunes_the_secondary_the_access_point_names() {
     let scanned = wide(13, ChannelWidth::Mhz20);
     let below = wide(13, ChannelWidth::Mhz40Below);
     let offered = ht_access_point(Some(ChannelWidth::Mhz40Below));
+    let ht40 = request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz40);
+    let ht = |width| NegotiatedPhy::Ht { width };
     assert_eq!(
-        join_phy(StaPhyRequest::Ht40, &[below], &offered, scanned),
-        (below, PhyMode::Ht40, None)
+        negotiate(&ht40, &offered, &[below], scanned),
+        Some((below, ht(Width::Mhz40)))
     );
     // Without the permitted 40 MHz channel of that secondary, or with an
     // access point at 20 MHz, the join stays on the scanned channel at HT20.
     let above = wide(9, ChannelWidth::Mhz40Above);
     assert_eq!(
-        join_phy(StaPhyRequest::Ht40, &[above], &offered, scanned),
-        (scanned, PhyMode::Ht20, None)
+        negotiate(&ht40, &offered, &[above], scanned),
+        Some((scanned, ht(Width::Mhz20)))
     );
     let narrow = ht_access_point(Some(ChannelWidth::Mhz20));
     assert_eq!(
-        join_phy(StaPhyRequest::Ht40, &[below], &narrow, scanned),
-        (scanned, PhyMode::Ht20, None)
+        negotiate(&ht40, &narrow, &[below], scanned),
+        Some((scanned, ht(Width::Mhz20)))
     );
-    // An access point without HT is legacy.
+    // An access point without HT is non-HT.
     assert_eq!(
-        join_phy(
-            StaPhyRequest::Ht40,
+        negotiate(&ht40, &ht_access_point(None), &[below], scanned),
+        Some((scanned, NegotiatedPhy::NonHt))
+    );
+    // A request of 20 MHz keeps the scanned channel.
+    assert_eq!(
+        negotiate(
+            &request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20),
+            &offered,
             &[below],
-            &ht_access_point(None),
             scanned
         ),
-        (scanned, PhyMode::Legacy, None)
+        Some((scanned, ht(Width::Mhz20)))
     );
-    // A station configured for another mode keeps it and its channel.
-    assert_eq!(
-        join_phy(StaPhyRequest::Ht20, &[below], &offered, scanned),
-        (scanned, PhyMode::Ht20, None)
-    );
+}
+
+/// The widths the test requests are checked against: non-HT at 20 MHz, HT
+/// at 20 and 40 MHz, HE at 20 MHz.
+const OFFERED: oer_protocols_ieee80211_contracts_port::FormatWidths =
+    oer_protocols_ieee80211_contracts_port::FormatWidths {
+        non_ht: WidthSet::MHZ20,
+        ht: WidthSet::MHZ20.union(WidthSet::MHZ40),
+        he: WidthSet::MHZ20,
+    };
+
+/// A request of `formats` up to `widest`, without HE.
+fn request(formats: FormatsBelowHe, widest: Width) -> StaPhyRequest {
+    StaPhyRequest::new(OFFERED, formats, widest).unwrap()
+}
+
+/// A request of HE with `power` and `formats` below it, up to `widest`.
+fn he_request(
+    formats: FormatsBelowHe,
+    widest: Width,
+    power: crate::association::StaHePower,
+) -> StaPhyRequest {
+    StaPhyRequest::with_he(OFFERED, formats, widest, power).unwrap()
 }
 
 mod block_ack;

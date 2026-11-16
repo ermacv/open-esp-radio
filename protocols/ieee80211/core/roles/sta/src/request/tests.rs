@@ -47,7 +47,6 @@ fn discovery_keeps_protocol_policy_chip_independent() {
     let scan = StationScanPolicy::new(
         StationScanChannels::permitted(&germany(), &[1, 6, 11]).unwrap(),
         NonZeroU16::new(40).unwrap(),
-        Preference::Automatic,
     );
     let discovery = StationDiscovery::new(ssid, scan);
     assert_eq!(discovery.ssid(), ssid);

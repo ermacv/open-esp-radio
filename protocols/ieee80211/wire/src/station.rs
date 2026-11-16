@@ -62,9 +62,9 @@ mod management;
 mod security;
 
 pub use association::{
-    AssociationCapabilities, AssociationRequest, AssociationRequestError, AssociationResponse,
-    HeUlMuPowerCapability, HeUlMuPowerCapabilityError, HtCapabilityElements, ResponseHeElements,
-    StaPowerCapability, StaPowerCapabilityError, parse_association_response,
+    AssociationCapabilities, AssociationPhyElements, AssociationRequest, AssociationRequestError,
+    AssociationResponse, HeUlMuPowerCapability, HeUlMuPowerCapabilityError, HtCapabilityElements,
+    ResponseHeElements, StaPowerCapability, StaPowerCapabilityError, parse_association_response,
 };
 pub use data::{
     StaDataFrame, StaDataHeaderFields, StaDataHeaderTemplate, StaOpenDataFrame,

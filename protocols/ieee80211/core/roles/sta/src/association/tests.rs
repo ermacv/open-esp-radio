@@ -1,30 +1,4 @@
-use PhyMode::{He20, Ht20, Ht40, Legacy};
-
-use Preference::{Automatic, ForceHt20, PreferHe20};
-
 use super::*;
-
-#[test]
-fn preference_respects_admitted_modes() {
-    for (ht40, he20, automatic, prefer_he20) in [
-        (false, false, Ht20, Ht20),
-        (true, false, Ht40, Ht40),
-        (false, true, He20, He20),
-        (true, true, Ht40, He20),
-    ] {
-        assert_eq!(select_phy(Automatic, true, ht40, he20), automatic);
-        assert_eq!(select_phy(PreferHe20, true, ht40, he20), prefer_he20);
-        assert_eq!(select_phy(ForceHt20, true, ht40, he20), Ht20);
-    }
-}
-
-#[test]
-fn a_peer_without_ht_is_legacy_whatever_the_preference() {
-    for preference in [Automatic, PreferHe20, ForceHt20] {
-        assert_eq!(select_phy(preference, false, false, false), Legacy);
-        assert_eq!(select_phy(preference, false, true, true), Legacy);
-    }
-}
 
 mod associated_peer {
     use oer_protocols_ieee80211_core_upper_mac::protection::{BasicRates, HePacketPadding};
@@ -93,7 +67,10 @@ mod associated_peer {
             &he20_access_point(),
             oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
-            PhyMode::He20,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20,
+            },
             move |capability| {
                 assert_eq!(capability, HE20_MCS9_CAPABILITY);
                 let result = *padding;
@@ -102,7 +79,13 @@ mod associated_peer {
             },
         )
         .unwrap();
-        assert_eq!(peer.phy, PhyMode::He20);
+        assert_eq!(
+            peer.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
         assert_eq!(peer.ht_ampdu_parameters, 0x17);
         assert_eq!(peer.he_bss_color, 5);
         assert!(peer.he_capabilities.is_some());
@@ -113,7 +96,10 @@ mod associated_peer {
             &he20_access_point(),
             oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
-            PhyMode::Ht20,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20,
+            },
             eight_microseconds,
         )
         .unwrap();
@@ -127,7 +113,10 @@ mod associated_peer {
                 &he20_access_point(),
                 oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
                 &response(17),
-                PhyMode::He20,
+                oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                    format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+                    width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+                },
                 eight_microseconds,
             ),
             Err(StaAssociatedPeerError::Rejected(17))
@@ -158,7 +147,10 @@ mod associated_peer {
             &access_point,
             oer_protocols_ieee80211_wire::protection::ErpProtection::from_information(Some(0x07)),
             &response(0),
-            PhyMode::Ht20,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20,
+            },
             eight_microseconds,
         )
         .unwrap();

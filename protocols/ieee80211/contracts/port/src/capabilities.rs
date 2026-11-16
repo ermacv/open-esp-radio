@@ -36,6 +36,34 @@ impl BandSet {
     }
 }
 
+/// A channel width without its geometry: the side of a 40 MHz channel's
+/// secondary is the access point's.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum Width {
+    /// 20 MHz.
+    Mhz20,
+    /// 40 MHz.
+    Mhz40,
+}
+
+impl Width {
+    /// The width of `width`, its geometry left out.
+    pub const fn of(width: ChannelWidth) -> Self {
+        match width {
+            ChannelWidth::Mhz20 => Self::Mhz20,
+            ChannelWidth::Mhz40Above | ChannelWidth::Mhz40Below => Self::Mhz40,
+        }
+    }
+
+    /// The width in MHz.
+    pub const fn mhz(self) -> u16 {
+        match self {
+            Self::Mhz20 => 20,
+            Self::Mhz40 => 40,
+        }
+    }
+}
+
 /// A set of channel widths.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct WidthSet(u8);
@@ -51,6 +79,19 @@ impl WidthSet {
     /// All widths present in either set.
     pub const fn union(self, other: Self) -> Self {
         Self(self.0 | other.0)
+    }
+
+    /// The set of `width` alone.
+    pub const fn of(width: Width) -> Self {
+        match width {
+            Width::Mhz20 => Self::MHZ20,
+            Width::Mhz40 => Self::MHZ40,
+        }
+    }
+
+    /// Whether this set includes `width`.
+    pub const fn contains_width(self, width: Width) -> bool {
+        self.0 & Self::of(width).0 != 0
     }
 
     /// Whether this set includes a PPDU of `bandwidth`: 20 and 40 MHz are

@@ -114,7 +114,7 @@ pub type Ieee80211ClockSample = oer_protocols_radio_port::ClockSample<Ieee80211R
 
 pub use capabilities::{
     BandSet, FormatWidths, HardwareServices, LowerMacCapabilities, PhyFormat, PhyFormatSet,
-    RateSupport, Support, WidthSet,
+    RateSupport, Support, Width, WidthSet,
 };
 pub use control::{ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{

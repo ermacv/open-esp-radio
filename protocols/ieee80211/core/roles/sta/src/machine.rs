@@ -105,10 +105,10 @@ use oer_protocols_ieee80211_wire::address::{Bssid, IndividualAddress, OwnAddress
 use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
 use {
     crate::{
-        scan::ScanTable,
+        scan::{BssObservation, ScanTable},
         security::{StaSecurityPolicy, select_association_rsn},
     },
-    oer_protocols_ieee80211_core_upper_mac::{phy_mode::PhyMode, sequence::SequenceCounter},
+    oer_protocols_ieee80211_core_upper_mac::{phy_mode::NegotiatedPhy, sequence::SequenceCounter},
     oer_protocols_ieee80211_wire::{
         management::{BROADCAST_ADDRESS, MAX_SSID_LEN, ProbeRequest},
         scan::ScanRecord,
@@ -127,12 +127,8 @@ use {
     oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch,
 };
 
-use crate::association::{
-    Preference, StaAssociatedPeer, StaHePower, StaPhyRequest, he20_admitted, select_phy,
-};
+use crate::association::{StaAssociatedPeer, StaPhyRequest, negotiate};
 use crate::receive::{Management, Received, observe_scan};
-use oer_protocols_ieee80211_contracts_port::ChannelWidth;
-use oer_protocols_ieee80211_wire::scan::HtSecondaryChannel;
 // The machine's tests build receive metadata through `use super::*`.
 use oer_portable_time::{Duration, Instant};
 #[cfg(test)]
@@ -223,10 +219,10 @@ pub struct StaProfile {
     pub ssid: heapless::Vec<u8, MAX_SSID_LEN>,
     /// How the network protects its link.
     pub security: StaSecurity,
-    /// Whether the connection asks an access point that admits HE20 for it,
-    /// as the station's [`StaPhyRequest::PreferHe20`] names; without it the
-    /// join takes that request's HT fallback ([`StaPhyRequest::without_he20`]).
-    pub prefer_he20: bool,
+    /// What the station asks this network's access points for: the formats
+    /// it admits and its widest width; a 40 MHz join takes one of the
+    /// configuration's wide channels.
+    pub phy: StaPhyRequest,
 }
 
 impl core::fmt::Debug for StaProfile {
@@ -234,7 +230,7 @@ impl core::fmt::Debug for StaProfile {
         f.debug_struct("StaProfile")
             .field("ssid", &self.ssid)
             .field("policy", &self.security.policy())
-            .field("prefer_he20", &self.prefer_he20)
+            .field("phy", &self.phy)
             .finish_non_exhaustive()
     }
 }
@@ -841,8 +837,8 @@ pub enum StaNotice {
         bssid: Bssid,
         /// Its primary channel number.
         channel: u8,
-        /// The PHY mode the station associated in.
-        phy: PhyMode,
+        /// The PHY the station associated in.
+        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode,
     },
     /// The station left its network, or failed to join one.
     Disconnected(StaDisconnectReason),
@@ -860,6 +856,12 @@ pub enum StaDisconnectReason {
     /// No access point of the network answered the scan; `partial` when
     /// the scan ended early after cancelled absences.
     NotFound {
+        /// The scan ended early.
+        partial: bool,
+    },
+    /// Access points of the network answered, and none offers a format the
+    /// profile's request admits; `partial` as for [`Self::NotFound`].
+    NoAdmittedFormat {
         /// The scan ended early.
         partial: bool,
     },
@@ -978,9 +980,6 @@ pub struct StaConfig<K, C: StaCallbacks> {
     /// The nonzero number of beacon intervals advertised in Association.
     /// The composition also uses this value for its power-save policy.
     pub listen_interval: StationListenInterval,
-    /// The PHY the station asks for ([`StaPhyRequest`]); HT40 takes one of
-    /// [`Self::wide_channels`].
-    pub phy: StaPhyRequest,
     /// The station's transmit Block Ack originator, which the composition
     /// builds from its policy; `None` negotiates no transmit agreement.
     pub tx_block_ack: Option<StaTxBlockAck>,
@@ -1600,17 +1599,25 @@ enum ScanStep {
 }
 
 /// The join of one access point.
+/// A candidate of the network's access points: its observation and what the
+/// join decided of it before any frame.
+#[derive(Clone, Copy)]
+struct Candidate<K> {
+    observation: BssObservation,
+    rsn: SelectedRsn,
+    channel: SupportedChannel<K>,
+    phy: NegotiatedPhy,
+}
+
 struct Join<T: StaTypes, K> {
     access_point: ScanRecord,
     /// The ERP protection the access point's ERP elements ask for.
     erp: oer_protocols_ieee80211_wire::protection::ErpProtection,
     rsn: SelectedRsn,
     channel: SupportedChannel<K>,
-    /// The PHY the join associates with, on `channel`.
-    phy: PhyMode,
-    /// The power elements of the request: present exactly when `phy` is
-    /// HE20.
-    he_power: Option<StaHePower>,
+    /// The PHY the join associates with, on `channel`, decided once from the
+    /// access point's scan record with what its request carries.
+    phy: NegotiatedPhy,
     /// Whether the join set the port's HE state before authentication: the
     /// HE BSS of an HE20 join, `Off` for another.
     he_set: bool,
@@ -1860,7 +1867,11 @@ fn tx_agreements<'c, T: StaTypes, K>(
     let tx = tx.as_mut()?;
     if !connected.tx_block_ack {
         connected.tx_block_ack = true;
-        tx.associate(connected.qos && connected.peer.associated.phy != PhyMode::Legacy);
+        tx.associate(
+            connected.qos
+                && connected.peer.associated.phy.format
+                    != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
+        );
     }
     Some(tx)
 }
@@ -4458,24 +4469,52 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     ) -> Change<T, K> {
         let ssid = self.ssid();
         let policy = self.policy();
-        let candidates = || {
-            (*self.scan)
-                .observations()
-                .filter(move |observation| observation.record.ssid_bytes() == ssid)
-                .filter(move |observation| {
-                    select_association_rsn(&observation.record, policy).is_ok()
-                })
-        };
-        let Some(strongest) = candidates()
-            .max_by_key(|observation| observation.rssi)
-            .copied()
-        else {
+        let Some(request) = self.profile.as_ref().map(|profile| profile.phy) else {
             return leave_unkeyed(StaDisconnectReason::NotFound { partial });
+        };
+        let channels = &self.config.channels;
+        let wide = &self.config.wide_channels;
+        // A network's access points: its SSID and a security selection the
+        // station's policy admits, on a channel the station scans.
+        let network = || {
+            (*self.scan).observations().filter_map(move |observation| {
+                if observation.record.ssid_bytes() != ssid {
+                    return None;
+                }
+                let rsn = select_association_rsn(&observation.record, policy).ok()?;
+                let scanned = channels
+                    .iter()
+                    .copied()
+                    .find(|channel| channel.channel().number() == observation.channel)?;
+                Some((observation, rsn, scanned))
+            })
+        };
+        // Its candidates: those that offer a format the request admits, with
+        // the decision taken once from their scan records.
+        let candidates = || {
+            network().filter_map(move |(observation, rsn, scanned)| {
+                let (channel, phy) = negotiate(&request, &observation.record, wide, scanned)?;
+                Some(Candidate {
+                    observation: *observation,
+                    rsn,
+                    channel,
+                    phy,
+                })
+            })
+        };
+        let Some(strongest) = candidates().max_by_key(|candidate| candidate.observation.rssi)
+        else {
+            let reason = if network().next().is_some() {
+                StaDisconnectReason::NoAdmittedFormat { partial }
+            } else {
+                StaDisconnectReason::NotFound { partial }
+            };
+            return leave_unkeyed(reason);
         };
         let margin = i16::from(self.config.access_point_margin_db);
         // Within the margin of the strongest: a known level no more than the
         // margin below it; an unknown level only beside an unknown strongest.
-        let within_margin = |rssi: Option<i8>| match (rssi, strongest.rssi) {
+        let within_margin = |rssi: Option<i8>| match (rssi, strongest.observation.rssi) {
             (Some(rssi), Some(strongest)) => {
                 i16::from(rssi) >= i16::from(strongest).saturating_sub(margin)
             }
@@ -4484,38 +4523,23 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         };
         let beside = access_point_channel.and_then(|channel| {
             candidates()
-                .filter(|observation| observation.channel == channel.channel().number())
-                .filter(|observation| within_margin(observation.rssi))
-                .max_by_key(|observation| observation.rssi)
-                .copied()
+                .filter(|candidate| candidate.observation.channel == channel.channel().number())
+                .filter(|candidate| within_margin(candidate.observation.rssi))
+                .max_by_key(|candidate| candidate.observation.rssi)
         });
-        let selected = beside.unwrap_or(strongest);
+        let Candidate {
+            observation: selected,
+            rsn,
+            channel,
+            phy,
+        } = beside.unwrap_or(strongest);
         let access_point = selected.record;
-        let Ok(rsn) = select_association_rsn(&access_point, policy) else {
-            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
-        };
-        let Some(scanned) = self
-            .config
-            .channels
-            .iter()
-            .copied()
-            .find(|channel| channel.channel().number() == selected.channel)
-        else {
-            return leave_unkeyed(StaDisconnectReason::NotFound { partial });
-        };
-        let request = match self.profile.as_ref() {
-            Some(profile) if profile.prefer_he20 => self.config.phy,
-            _ => self.config.phy.without_he20(),
-        };
-        let (channel, phy, he_power) =
-            join_phy(request, &self.config.wide_channels, &access_point, scanned);
         Change::Join(Join {
             access_point,
             erp: selected.erp,
             rsn,
             channel,
             phy,
-            he_power,
             he_set: false,
             step: JoinStep::NeedLease,
         })
@@ -4877,7 +4901,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                                     &join.access_point,
                                     join.erp,
                                     &response,
-                                    join.phy,
+                                    join.phy.mode(),
                                     |capability| {
                                         self.config.callbacks.he_packet_padding(capability)
                                     },
@@ -5551,7 +5575,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 epoch,
                 connected.bssid,
                 action,
-                connected.qos && connected.peer.associated.phy != PhyMode::Legacy,
+                connected.qos
+                    && connected.peer.associated.phy.format
+                        != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
             );
             return (
                 Change::Keep,
@@ -6269,7 +6295,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             // HE BSS with the color the scan heard, `Off` for any other.
             JoinStep::NeedConfigure if !join.he_set => {
                 use oer_protocols_ieee80211_contracts_port::{HeBssColor, StationHe};
-                let he = if join.phy == PhyMode::He20 {
+                let he = if matches!(join.phy, NegotiatedPhy::He { .. }) {
                     match oer_protocols_ieee80211_wire::he::parse_he_operation(
                         join.access_point.he_operation_ie_bytes(),
                     )
@@ -6458,12 +6484,10 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 match runtime.poll(now, &mut (*self.sequence)) {
                     StaAssociationPoll::Transmit { runtime, attempt } => {
                         let capabilities = self.config.association;
-                        let phy = join.phy;
-                        let he_power = join.he_power;
+                        let phy = join.phy.elements(capabilities);
                         let address = self.config.address;
                         let listen_interval = self.config.listen_interval.get();
                         let access_point = &join.access_point;
-                        let channel = join.channel.channel().number();
                         let rsn = &join.rsn;
                         let encoded = self.encode_reserved(
                             epoch,
@@ -6471,13 +6495,10 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                                 AssociationRequest {
                                     source: address,
                                     access_point,
-                                    channel,
                                     sequence_number: attempt.sequence_number,
                                     listen_interval,
                                     phy,
                                     security: rsn,
-                                    power_capability: he_power.map(|power| power.power_capability),
-                                    he_ul_mu_power: he_power.map(|power| power.ul_mu_power),
                                 }
                                 .encode(frame, capabilities)
                                 .ok()
@@ -6904,53 +6925,6 @@ fn association_failure(failure: StaAssociationFailure) -> StaDisconnectReason {
         StaAssociationFailure::DeadlineOverflow => StaDisconnectReason::DeadlineOverflow,
         _ => StaDisconnectReason::AssociationFailed,
     }
-}
-
-/// The channel, PHY and HE power elements of a join of `access_point`,
-/// scanned on `scanned`, under `request`: HE20 on `scanned` with the
-/// request's power elements where the access point admits HE20
-/// ([`he20_admitted`]); with HT40, the one of `wide` whose primary is
-/// `scanned`'s and whose secondary the access point's HT Capabilities and
-/// HT Operation name, in the mode [`select_phy`] chooses between both
-/// stations' modes; HT20 and legacy stay on `scanned`.
-fn join_phy<K: Ieee80211Capabilities>(
-    request: StaPhyRequest,
-    wide: &[SupportedChannel<K>],
-    access_point: &ScanRecord,
-    scanned: SupportedChannel<K>,
-) -> (SupportedChannel<K>, PhyMode, Option<StaHePower>) {
-    match request {
-        StaPhyRequest::PreferHe20 { power, .. } if he20_admitted(access_point) => {
-            return (scanned, PhyMode::He20, Some(power));
-        }
-        StaPhyRequest::PreferHe20 { ht40: true, .. } | StaPhyRequest::Ht40 => {}
-        StaPhyRequest::PreferHe20 { ht40: false, .. } | StaPhyRequest::Ht20 => {
-            return (scanned, PhyMode::Ht20, None);
-        }
-        StaPhyRequest::Legacy => return (scanned, PhyMode::Legacy, None),
-    }
-    let primary = scanned.channel();
-    let wide = access_point
-        .secondary_channel(primary.number())
-        .and_then(|secondary| {
-            let width = match secondary {
-                HtSecondaryChannel::Above => ChannelWidth::Mhz40Above,
-                HtSecondaryChannel::Below => ChannelWidth::Mhz40Below,
-            };
-            wide.iter().copied().find(|channel| {
-                let channel = channel.channel();
-                channel.band() == primary.band()
-                    && channel.number() == primary.number()
-                    && channel.width() == width
-            })
-        });
-    let phy = select_phy(
-        Preference::Automatic,
-        access_point.ht_capability_ie_bytes().is_some(),
-        wide.is_some(),
-        false,
-    );
-    (wide.unwrap_or(scanned), phy, None)
 }
 
 fn leave_unkeyed<T: StaTypes, K>(reason: StaDisconnectReason) -> Change<T, K> {

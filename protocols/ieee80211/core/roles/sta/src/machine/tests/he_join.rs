@@ -2,7 +2,7 @@
 //! without HE, and what it makes of the Association Response.
 
 use super::*;
-use crate::association::{StaHePower, StaPhyRequest};
+use crate::association::{FormatsBelowHe, StaHePower, StaPhyRequest};
 use oer_protocols_ieee80211_wire::station::{HeUlMuPowerCapability, StaPowerCapability};
 
 /// An HT Capabilities element of an HT20 access point on channel 6.
@@ -104,20 +104,14 @@ fn associating<'id>(
 ) -> (World<'id>, Vec<u8>) {
     let mut world = World::new(mint, 3);
     world.station.config.association = &ELEMENTS;
-    world.station.config.phy = request;
-    prefer_he20(&mut world, true);
-    let request = join(&mut world, 0, 1, beacon);
-    (world, request)
-}
-
-/// Whether the world's profile asks for HE20.
-fn prefer_he20(world: &mut World<'_>, prefer: bool) {
     world
         .station
         .profile
         .as_mut()
         .expect("the world's profile")
-        .prefer_he20 = prefer;
+        .phy = request;
+    let request = join(&mut world, 0, 1, beacon);
+    (world, request)
 }
 
 /// Connect from idle at `start` ms with command tag `tag`, hear `beacon`
@@ -139,7 +133,9 @@ fn join(world: &mut World<'_>, start: u32, tag: u64, beacon: &[u8]) -> Vec<u8> {
     requests.into_iter().next().unwrap()
 }
 
-fn connected_phy(world: &World<'_>) -> Option<PhyMode> {
+fn connected_phy(
+    world: &World<'_>,
+) -> Option<oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode> {
     world
         .completed
         .iter()
@@ -154,10 +150,7 @@ fn an_he_access_point_gets_the_he_request_and_an_he_link() {
     installed(|mint| {
         let (mut world, request) = associating(
             mint,
-            StaPhyRequest::PreferHe20 {
-                ht40: true,
-                power: power(),
-            },
+            he_request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz40, power()),
             &access_point_beacon(true),
         );
         // The vendor's order: Power Capability after the rates, HT and HE
@@ -185,7 +178,13 @@ fn an_he_access_point_gets_the_he_request_and_an_he_link() {
         world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
         assert!(world.station.is_connected());
         let peer = world.station.peer().unwrap();
-        assert_eq!(peer.associated.phy, PhyMode::He20);
+        assert_eq!(
+            peer.associated.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
         assert_eq!(peer.associated.he_bss_color, 27);
         assert!(
             peer.associated
@@ -195,11 +194,20 @@ fn an_he_access_point_gets_the_he_request_and_an_he_link() {
         assert!(world.take().iter().any(|seen| matches!(
             seen,
             Seen::Notify(StaNotice::Connected {
-                phy: PhyMode::He20,
+                phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                    format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+                    width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+                },
                 ..
             })
         )));
-        assert_eq!(connected_phy(&world), Some(PhyMode::He20));
+        assert_eq!(
+            connected_phy(&world),
+            Some(oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            })
+        );
     });
 }
 
@@ -208,10 +216,7 @@ fn an_access_point_without_he_gets_the_ht_request() {
     installed(|mint| {
         let (mut world, request) = associating(
             mint,
-            StaPhyRequest::PreferHe20 {
-                ht40: false,
-                power: power(),
-            },
+            he_request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20, power()),
             &access_point_beacon(false),
         );
         // HT20 without the HE elements or the HE path's Power Capability.
@@ -223,8 +228,20 @@ fn an_access_point_without_he_gets_the_ht_request() {
 
         world.receive(at(31), &response(&[]));
         assert!(world.station.is_connected());
-        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::Ht20);
-        assert_eq!(connected_phy(&world), Some(PhyMode::Ht20));
+        assert_eq!(
+            world.station.peer().unwrap().associated.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
+        assert_eq!(
+            connected_phy(&world),
+            Some(oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            })
+        );
     });
 }
 
@@ -237,10 +254,7 @@ fn an_access_point_that_does_not_grant_he_is_no_link() {
         installed(|mint| {
             let (mut world, _) = associating(
                 mint,
-                StaPhyRequest::PreferHe20 {
-                    ht40: false,
-                    power: power(),
-                },
+                he_request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20, power()),
                 &access_point_beacon(true),
             );
             world.receive(at(31), &response(granted));
@@ -268,10 +282,7 @@ fn answered(elements: &[&[u8]]) -> (bool, Option<StaAssociatedPeer>, Option<StaC
     installed(|mint| {
         let (mut world, _) = associating(
             mint,
-            StaPhyRequest::PreferHe20 {
-                ht40: false,
-                power: power(),
-            },
+            he_request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20, power()),
             &access_point_beacon(true),
         );
         world.receive(at(31), &response(elements));
@@ -314,7 +325,13 @@ fn the_response_s_bss_color_is_the_link_s() {
     let (connected, peer, _) = answered(&[&HE_CAPABILITY, &operation]);
     assert!(connected);
     let peer = peer.unwrap();
-    assert_eq!(peer.phy, PhyMode::He20);
+    assert_eq!(
+        peer.phy,
+        oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+            format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+            width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+        }
+    );
     assert_eq!(peer.he_bss_color, 5);
     assert_eq!(peer.he_peer_state.unwrap().bss_color(), 5);
     // Its other HE Operation parameters are the response's too: default PE
@@ -353,8 +370,11 @@ fn malformed_or_repeated_he_elements_are_refused() {
 #[test]
 fn a_station_not_asking_for_he_never_requests_it() {
     installed(|mint| {
-        let (mut world, request) =
-            associating(mint, StaPhyRequest::Ht20, &access_point_beacon(true));
+        let (mut world, request) = associating(
+            mint,
+            request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20),
+            &access_point_beacon(true),
+        );
         assert_eq!(
             request_elements(&request),
             [(0, None), (1, None), (45, None), (221, None)]
@@ -362,8 +382,20 @@ fn a_station_not_asking_for_he_never_requests_it() {
         // The access point's HE elements in its response make no HE link.
         world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
         assert!(world.station.is_connected());
-        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::Ht20);
-        assert_eq!(connected_phy(&world), Some(PhyMode::Ht20));
+        assert_eq!(
+            world.station.peer().unwrap().associated.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
+        assert_eq!(
+            connected_phy(&world),
+            Some(oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            })
+        );
     });
 }
 
@@ -378,16 +410,19 @@ fn he_without_ht_is_not_admitted() {
         beacon = with_element(&beacon, &HE_OPERATION);
         let (mut world, request) = associating(
             mint,
-            StaPhyRequest::PreferHe20 {
-                ht40: true,
-                power: power(),
-            },
+            he_request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz40, power()),
             &beacon,
         );
         assert_eq!(request_elements(&request), [(0, None), (1, None)]);
         world.receive(at(31), &open_association_response());
         assert!(world.station.is_connected());
-        assert_eq!(connected_phy(&world), Some(PhyMode::Legacy));
+        assert_eq!(
+            connected_phy(&world),
+            Some(oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            })
+        );
     });
 }
 
@@ -416,26 +451,35 @@ fn scanned_bss() -> oer_protocols_ieee80211_contracts_port::StationHe {
     )
 }
 
+/// The HE request the joins below ask for.
 fn prefer() -> StaPhyRequest {
-    StaPhyRequest::PreferHe20 {
-        ht40: false,
-        power: power(),
-    }
+    he_request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20, power())
 }
 
 #[test]
-fn a_profile_without_the_he_preference_gets_the_ht_request() {
+fn a_profile_whose_request_admits_no_he_gets_the_ht_request() {
     installed(|mint| {
         let mut world = World::new(mint, 3);
         world.station.config.association = &ELEMENTS;
-        world.station.config.phy = prefer();
+        world
+            .station
+            .profile
+            .as_mut()
+            .expect("the world's profile")
+            .phy = request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20);
         let request = join(&mut world, 0, 1, &access_point_beacon(true));
         assert_eq!(
             request_elements(&request),
             [(0, None), (1, None), (45, None), (221, None)]
         );
         world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
-        assert_eq!(connected_phy(&world), Some(PhyMode::Ht20));
+        assert_eq!(
+            connected_phy(&world),
+            Some(oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            })
+        );
         // An HT join starts with the port's HE off, as the vendor's
         // non-HE connect does, and sets nothing more.
         assert_eq!(
@@ -538,7 +582,13 @@ fn he_then_ht_then_he_sets_each_bss_and_association_and_ends_each() {
         let request = join(&mut world, 100, 3, &access_point_beacon(false));
         assert!(!request_elements(&request).contains(&(255, Some(35))));
         world.receive(at(131), &response(&[]));
-        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::Ht20);
+        assert_eq!(
+            world.station.peer().unwrap().associated.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
         world.command(at(140), 4, StaCommand::Disconnect).unwrap();
         world.run(at(140));
         assert_eq!(he_settings(&world.take()), [StationHe::Off]);
@@ -547,7 +597,13 @@ fn he_then_ht_then_he_sets_each_bss_and_association_and_ends_each() {
         let request = join(&mut world, 200, 5, &access_point_beacon(true));
         assert!(request_elements(&request).contains(&(255, Some(35))));
         world.receive(at(231), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
-        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::He20);
+        assert_eq!(
+            world.station.peer().unwrap().associated.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
         let again = he_settings(&world.take());
         assert!(
             matches!(again[..], [StationHe::Bss(_), StationHe::He(_)]),
@@ -582,7 +638,13 @@ fn a_refused_association_between_the_stages_ends_the_bss_before_the_next_ht_join
         let request = join(&mut world, 100, 3, &access_point_beacon(false));
         assert!(!request_elements(&request).contains(&(255, Some(35))));
         world.receive(at(131), &response(&[]));
-        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::Ht20);
+        assert_eq!(
+            world.station.peer().unwrap().associated.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
         assert_eq!(he_settings(&world.take()), [StationHe::Off]);
     });
 }
@@ -640,12 +702,148 @@ fn a_restarted_station_sets_no_he_off_for_an_association_of_its_last_run() {
     installed(|mint| {
         let (mut world, _) = associating(mint, prefer(), &access_point_beacon(true));
         world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
-        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::He20);
+        assert_eq!(
+            world.station.peer().unwrap().associated.phy,
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
+                format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
+            }
+        );
         let mut world = restarted(world);
         world.take();
         world.run(at(50));
         let seen = world.take();
         assert!(he_settings(&seen).is_empty(), "{seen:?}");
         assert!(seen.contains(&Seen::Configure("off")));
+    });
+}
+
+/// The negotiation of 088's table, every cell: the request's formats as a
+/// set and its widest width against five access points (none with HT; HT
+/// without a usable secondary; HT with one; HE on each of those two),
+/// the format first and then the width.
+#[test]
+fn the_negotiation_takes_the_admitted_format_first_then_the_width() {
+    let scanned = wide(13, ChannelWidth::Mhz20);
+    let below = wide(13, ChannelWidth::Mhz40Below);
+    let he = |mut record: ScanRecord| {
+        record.set_he_capability_ie(&HE_CAPABILITY).unwrap();
+        record.set_he_operation_ie(&HE_OPERATION).unwrap();
+        record
+    };
+    let n = ht_access_point(None);
+    let h = ht_access_point(Some(ChannelWidth::Mhz20));
+    let w = ht_access_point(Some(ChannelWidth::Mhz40Below));
+    let eh = he(h.clone());
+    let ew = he(w.clone());
+    let non_ht = Some((scanned, NegotiatedPhy::NonHt));
+    let ht20 = Some((
+        scanned,
+        NegotiatedPhy::Ht {
+            width: Width::Mhz20,
+        },
+    ));
+    let ht40 = Some((
+        below,
+        NegotiatedPhy::Ht {
+            width: Width::Mhz40,
+        },
+    ));
+    let he20 = Some((
+        scanned,
+        NegotiatedPhy::He {
+            power_capability: power().power_capability,
+            he_ul_mu_power: power().ul_mu_power,
+        },
+    ));
+    let rows = [
+        (
+            request(FormatsBelowHe::NON_HT, Width::Mhz20),
+            [non_ht, non_ht, non_ht, non_ht, non_ht],
+        ),
+        (
+            request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20),
+            [non_ht, ht20, ht20, ht20, ht20],
+        ),
+        (
+            request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz40),
+            [non_ht, ht20, ht40, ht20, ht40],
+        ),
+        (
+            he_request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20, power()),
+            [non_ht, ht20, ht20, he20, he20],
+        ),
+        (
+            he_request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz40, power()),
+            [non_ht, ht20, ht40, he20, he20],
+        ),
+        (
+            he_request(FormatsBelowHe::NONE, Width::Mhz20, power()),
+            [None, None, None, he20, he20],
+        ),
+        (
+            he_request(FormatsBelowHe::HT, Width::Mhz40, power()),
+            [None, ht20, ht40, he20, he20],
+        ),
+        (
+            he_request(FormatsBelowHe::HT, Width::Mhz20, power()),
+            [None, ht20, ht20, he20, he20],
+        ),
+    ];
+    for (row, (asked, expected)) in rows.iter().enumerate() {
+        for (column, (access_point, expected)) in
+            [&n, &h, &w, &eh, &ew].into_iter().zip(expected).enumerate()
+        {
+            assert_eq!(
+                negotiate(asked, access_point, &[below], scanned),
+                *expected,
+                "row {row}, access point {column}"
+            );
+        }
+    }
+}
+
+/// A request of HE alone refuses an access point without HE when the
+/// candidate is chosen: no Authentication and no Association Request goes
+/// to it, and the join ends with its own reason.
+#[test]
+fn an_he_only_request_refuses_an_access_point_without_he_before_any_frame() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.station.config.association = &ELEMENTS;
+        world
+            .station
+            .profile
+            .as_mut()
+            .expect("the world's profile")
+            .phy = he_request(FormatsBelowHe::NONE, Width::Mhz20, power());
+        let sent = world.frames.len();
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        world.advance();
+        world.receive(at(13), &access_point_beacon(false));
+        let refused = |world: &World<'_>| {
+            world.seen.iter().any(|seen| {
+                matches!(
+                    seen,
+                    Seen::Notify(StaNotice::Disconnected(
+                        StaDisconnectReason::NoAdmittedFormat { .. }
+                    ))
+                )
+            })
+        };
+        for _ in 0..16 {
+            if refused(&world) {
+                break;
+            }
+            world.advance();
+        }
+        assert!(refused(&world), "{:?}", world.seen);
+        assert!(
+            world.frames[sent..]
+                .iter()
+                .all(|frame| frame[0] & 0xfc != 0xb0 && frame[0] & 0xfc != 0x00),
+            "no Authentication and no Association Request"
+        );
     });
 }

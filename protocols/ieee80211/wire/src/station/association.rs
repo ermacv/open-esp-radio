@@ -135,52 +135,38 @@ pub struct HtCapabilityElements {
     pub mhz40: [u8; 28],
 }
 
-/// The capability elements selected by the caller's association policy.
-pub struct AssociationElements<'a> {
-    /// The complete local HT Capability element when selected.
-    pub ht_capability: Option<&'a [u8; 28]>,
-    /// The complete local HE Capability element when selected.
-    pub he_capability: Option<&'a [u8; 24]>,
-    /// The local HE transmit-power capability when required.
-    pub power_capability: Option<StaPowerCapability>,
-    /// The local HE UL-MU capability when required.
-    pub he_ul_mu_power: Option<HeUlMuPowerCapability>,
-}
-
-/// Stateless selection of the capability elements a request serializes.
-/// The port supplies its negotiated mode without an upward wire dependency.
-pub trait AssociationPhy {
-    /// Select the admitted local elements after fixed request validation.
-    fn elements<'a>(
-        &self,
-        access_point: &ScanRecord,
-        channel: u8,
-        capabilities: &'a AssociationCapabilities,
-        power_capability: Option<StaPowerCapability>,
-        he_ul_mu_power: Option<HeUlMuPowerCapability>,
-    ) -> Result<AssociationElements<'a>, AssociationRequestError>;
+/// The PHY elements a request carries, chosen with its access point
+/// before the request is built: an HE request carries its power elements
+/// by type, and a request of another format carries none.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AssociationPhyElements<'a> {
+    /// Non-HT: no HT or HE element.
+    NonHt,
+    /// HT: its HT Capabilities.
+    Ht { ht_capability: &'a [u8; 28] },
+    /// HE: the HT Capabilities beside it, its HE Capabilities, the HE Power
+    /// Capability and the HE UL-MU power capability.
+    He {
+        ht_capability: &'a [u8; 28],
+        he_capability: &'a [u8; 24],
+        power_capability: StaPowerCapability,
+        he_ul_mu_power: HeUlMuPowerCapability,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct AssociationRequest<'a, P> {
+pub struct AssociationRequest<'a> {
     pub source: OwnAddress,
     pub access_point: &'a ScanRecord,
-    /// The primary channel the station joins the access point on.
-    pub channel: u8,
     pub sequence_number: SequenceNumber,
     pub listen_interval: u16,
-    pub phy: P,
+    /// The PHY elements chosen with the access point.
+    pub phy: AssociationPhyElements<'a>,
     /// The security elements this station selected for the access point.
     pub security: &'a SelectedRsn,
-    /// HE Power Capability derived from the same calibrated rate-16 power
-    /// source used by the MAC. Non-HE modes must leave it absent.
-    pub power_capability: Option<StaPowerCapability>,
-    /// Runtime-calibrated UL-MU power capability required by the complete HE
-    /// association contract. Non-HE modes must leave it absent.
-    pub he_ul_mu_power: Option<HeUlMuPowerCapability>,
 }
 
-impl<P: AssociationPhy> AssociationRequest<'_, P> {
+impl AssociationRequest<'_> {
     pub fn encode(
         self,
         output: &mut [u8],
@@ -224,18 +210,21 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
                     },
                 ))?;
         let selected_rsn = self.security;
-        let AssociationElements {
-            ht_capability,
-            he_capability,
-            power_capability,
-            he_ul_mu_power,
-        } = self.phy.elements(
-            self.access_point,
-            self.channel,
-            capabilities,
-            self.power_capability,
-            self.he_ul_mu_power,
-        )?;
+        let (ht_capability, he_capability, power_capability, he_ul_mu_power) = match self.phy {
+            AssociationPhyElements::NonHt => (None, None, None, None),
+            AssociationPhyElements::Ht { ht_capability } => (Some(ht_capability), None, None, None),
+            AssociationPhyElements::He {
+                ht_capability,
+                he_capability,
+                power_capability,
+                he_ul_mu_power,
+            } => (
+                Some(ht_capability),
+                Some(he_capability),
+                Some(power_capability),
+                Some(he_ul_mu_power),
+            ),
+        };
         let mut fixed = [0; MANAGEMENT_HEADER_LEN + ASSOCIATION_FIXED_BODY_LEN];
         crate::encoding::write_array::<0, _, _>(
             &mut fixed,
@@ -321,13 +310,6 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AssociationRequestError {
     Frame(StationFrameError),
-    HtUnsupportedByAccessPoint,
-    WidthUnsupportedByAccessPoint,
-    HeUnsupportedByAccessPoint,
-    MissingPowerCapability,
-    MissingHeUlMuPowerCapability,
-    UnexpectedPowerCapability,
-    UnexpectedHeUlMuPowerCapability,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
