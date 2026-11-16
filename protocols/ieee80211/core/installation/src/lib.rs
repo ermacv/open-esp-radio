@@ -70,7 +70,7 @@ use core::mem::{self, MaybeUninit};
 
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    CleanupRefused, FaultKept, Outstanding, ProofRefused, Recovered, ReinstallRefused,
+    CleanupRefused, FaultKept, GateClosed, Outstanding, ProofRefused, Recovered, ReinstallRefused,
     ReleaseRefused, Retired, StaleProof, StartFailure, StartPoll, StartProgress, StartProof,
     StartRefused, Starting, StopRight, StopUnconfirmed, Stopped,
 };
@@ -133,9 +133,26 @@ pub struct Request<'id, C> {
 }
 
 impl<'id, C> Request<'id, C> {
-    /// The radio running on `channel`: a start from a stopped radio, a
-    /// retune from a running one.
+    /// The radio running on `channel`: a start of a stopped radio.
     pub const fn run(permit: Live<'id>, channel: C, deadline: Option<Instant>) -> Self {
+        let Live { brand } = permit;
+        Self {
+            aim: Aim::Run(channel),
+            deadline,
+            brand,
+        }
+    }
+
+    /// A running radio moved to `channel`, asked under the transmit gate
+    /// the caller closed: the data stays as it is, and nothing is told to
+    /// the data plane, since a closed gate publishes nothing while the
+    /// radio stops and starts again.
+    pub const fn retune<P: oer_protocols_radio_port::PoolPath>(
+        permit: Live<'id>,
+        channel: C,
+        _closed: &GateClosed<'_, P>,
+        deadline: Option<Instant>,
+    ) -> Self {
         let Live { brand } = permit;
         Self {
             aim: Aim::Run(channel),
@@ -404,8 +421,18 @@ pub struct AskStop {
 
 /// The data's stop is asked.
 pub struct AskStopData<'id> {
-    stopped: Stopped<'id>,
+    before: DataBefore<'id>,
     run: Run,
+}
+
+/// What the data's stop is asked before.
+enum DataBefore<'id> {
+    /// The pass towards the goal of the stopped installation.
+    Goal(Stopped<'id>),
+    /// The radio's stop of an ending: its first poll follows.
+    Stop,
+    /// The recovery of a fault that ended a run.
+    Recovery,
 }
 
 /// The cleanup is asked.
@@ -600,6 +627,9 @@ enum Next<'id> {
     Rest(Again),
     /// The fault's step asks the recovery.
     RecoverForFault,
+    /// The fault's step of a running radio: the data stops first, then
+    /// the recovery.
+    StopDataForFault(Run),
     /// After a recovery, as its ask said, the fault kept or gone.
     AfterRecovery(AfterRecover, Kept),
     /// The drain of the stopped installation, after its tokens were asked.
@@ -624,6 +654,8 @@ enum Again {
 enum AfterStop {
     /// The pass towards the goal goes on.
     Pass,
+    /// The pass goes on, the data's stop asked in this step already.
+    PassDataAsked,
     /// The fault's step: it rests.
     Fault,
 }
@@ -821,6 +853,13 @@ impl<'m, 'id, C: Copy, F> Port<'m, 'id, C, F> {
             Next::Advance => self.advance(now),
             Next::Rest(again) => Step::Rest(self.rest(again, now)),
             Next::RecoverForFault => self.recover(AfterRecover::Fault, now),
+            Next::StopDataForFault(run) => Step::StopData(self.resume(
+                now,
+                AskStopData {
+                    before: DataBefore::Recovery,
+                    run,
+                },
+            )),
             Next::AfterRecovery(after, kept) => self.after_recovery(after, kept, now),
             Next::Drain(stopped, run) => self.drain(stopped, run, now),
             Next::EndStarted => self.end(Ok(End::Started), Next::Rest(Again::Wake), now),
@@ -921,15 +960,17 @@ impl<'m, 'id, C: Copy, F> Port<'m, 'id, C, F> {
                 self.end(Err(Unreached::StartInterrupted), Next::RecoverForFault, now)
             }
             At::Running(tokens) => {
-                *self.at = At::Stopping(Run {
+                // The radio leaves "running": the data stops first.
+                let run = Run {
                     data: Data::Flowing,
                     tokens,
                     drain: Drain::Owed,
-                });
+                };
+                *self.at = At::Stopping(run);
                 Step::Interrupted(self.resume(
                     now,
                     Told {
-                        next: Next::RecoverForFault,
+                        next: Next::StopDataForFault(run),
                     },
                 ))
             }
@@ -987,32 +1028,60 @@ impl<'m, 'id, C: Copy, F> Port<'m, 'id, C, F> {
                 channel,
                 self.resume(now, AskStart { channel, run }),
             ),
-            At::Stopping(run) => Step::Stop(self.resume(
-                now,
-                AskStop {
-                    after: AfterStop::Pass,
-                    run,
-                },
-            )),
+            At::Stopping(run) => {
+                // An ending stops the data before the radio: the data
+                // plane publishes nothing into a radio that stops. A
+                // retune is the one move with the data flowing, under the
+                // gate its caller closed.
+                if self.ending() && run.data == Data::Flowing {
+                    *self.at = At::Stopping(run);
+                    Step::StopData(self.resume(
+                        now,
+                        AskStopData {
+                            before: DataBefore::Stop,
+                            run,
+                        },
+                    ))
+                } else {
+                    Step::Stop(self.resume(
+                        now,
+                        AskStop {
+                            after: AfterStop::Pass,
+                            run,
+                        },
+                    ))
+                }
+            }
             At::Stopped(stopped, run) => self.stopped(stopped, run, now),
             At::Retired(retired) => self.retired(retired, now),
         }
     }
 
-    /// A stopped installation, its proof out of the machine: the data first.
-    fn stopped(self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'m, 'id, C, F> {
-        let ending = match *self.goal {
+    /// Whether the open request ends the run: a halt, a restart or a
+    /// release.
+    fn ending(&self) -> bool {
+        match *self.goal {
             Goal::Open {
                 want: Want::Halt | Want::Restart | Want::Release(_),
                 ..
-            } => run.data == Data::Flowing,
+            } => true,
             Goal::Open {
                 want: Want::Run(_), ..
             }
             | Goal::None => false,
-        };
-        if run.data == Data::Stopping || ending {
-            Step::StopData(self.resume(now, AskStopData { stopped, run }))
+        }
+    }
+
+    /// A stopped installation, its proof out of the machine: the data first.
+    fn stopped(self, stopped: Stopped<'id>, run: Run, now: Instant) -> Step<'m, 'id, C, F> {
+        if run.data == Data::Stopping || (self.ending() && run.data == Data::Flowing) {
+            Step::StopData(self.resume(
+                now,
+                AskStopData {
+                    before: DataBefore::Goal(stopped),
+                    run,
+                },
+            ))
         } else {
             self.toward(stopped, run, now)
         }
@@ -1206,6 +1275,7 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStop> {
                 port.clear(Waited::Radio);
                 match after {
                     AfterStop::Pass => port.stopped(stopped, run, now),
+                    AfterStop::PassDataAsked => port.toward(stopped, run, now),
                     AfterStop::Fault => {
                         *port.at = At::Stopped(stopped, run);
                         Step::Rest(port.rest(Again::Round, now))
@@ -1222,7 +1292,7 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStopData<'id>> {
         let Self {
             port,
             now,
-            kind: AskStopData { stopped, run },
+            kind: AskStopData { before, run },
         } = self;
         let run = Run {
             data: match answer {
@@ -1232,7 +1302,17 @@ impl<'m, 'id, C: Copy, F> Resume<'m, 'id, C, F, AskStopData<'id>> {
             ..run
         };
         *port.at = At::Stopping(run);
-        port.toward(stopped, run, now)
+        match before {
+            DataBefore::Goal(stopped) => port.toward(stopped, run, now),
+            DataBefore::Stop => Step::Stop(port.resume(
+                now,
+                AskStop {
+                    after: AfterStop::PassDataAsked,
+                    run,
+                },
+            )),
+            DataBefore::Recovery => port.recover(AfterRecover::Fault, now),
+        }
     }
 }
 

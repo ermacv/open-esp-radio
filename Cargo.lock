@@ -2664,6 +2664,7 @@ version = "0.1.0"
 dependencies = [
  "oer-portable-time",
  "oer-protocols-ieee80211-contracts-port",
+ "oer-protocols-radio-port",
  "oer-tools-test-ui-cases",
 ]
 

@@ -290,15 +290,37 @@ fn permit_for(request: &str, held: Option<&str>) -> Permit<'static> {
     }
 }
 
-/// The Rust input of the model's, and the instant of its step.
+/// A retune's request, asked under a gate the controller closed.
+fn retune(deadline: Option<Instant>) -> Request<'static, u8> {
+    let future = core::pin::pin!(oer_protocols_radio_port::branded(
+        async |mint: oer_protocols_radio_port::Mint<
+            '_,
+            oer_protocols_ieee80211_contracts_port::GatePool,
+        >| {
+            let (open, issuer) = mint.into_pools();
+            let closed = issuer.close(open);
+            Request::retune(live(), CHANNEL, &closed, deadline)
+        }
+    ));
+    let mut cx = core::task::Context::from_waker(core::task::Waker::noop());
+    match core::future::Future::poll(future, &mut cx) {
+        core::task::Poll::Ready(request) => request,
+        core::task::Poll::Pending => panic!("a gate's mint performs no async operation"),
+    }
+}
+
+/// The Rust input of the model's, and the instant of its step: a run of a
+/// running radio is a retune.
 fn input(
     inp: In,
+    pos: &str,
     permit: Option<&str>,
     deadline: Option<Instant>,
 ) -> (Input<'static, u8>, Instant) {
     match inp.kind {
         "request" => {
             let request = match inp.request {
+                "run" if pos == "running" => retune(deadline),
                 "run" => Request::run(live(), CHANNEL, deadline),
                 "halt" => Request::halt(live(), deadline),
                 "restart" => Request::restart(permit_for(inp.request, permit), deadline),
@@ -369,7 +391,7 @@ fn run(
     deadline: Option<Instant>,
 ) -> Ran {
     let mut machine = build(s, deadline);
-    let (rust, now) = input(inp, permit, deadline);
+    let (rust, now) = input(inp, s.pos, permit, deadline);
     let mut trace = Vec::new();
     if (inp.kind == "fault" || inp.kind == "deadline") && s.pos == "starting" {
         trace.push(Item::Drop("starting"));
@@ -645,6 +667,18 @@ struct Env {
     live: Held,
     /// A run left the drain unfinished.
     kept: Unfinished,
+    /// The transmit gate as the controller holds it: closed from a retune
+    /// it asks until that radio runs again. Under a closed gate the data
+    /// plane publishes nothing, which lets the radio stop with the data
+    /// flowing.
+    gate: Gate,
+}
+
+/// The transmit gate as the controller holds it.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum Gate {
+    Open,
+    Closed,
 }
 
 /// An order of the machine to a party, not yet carried out.
@@ -776,6 +810,7 @@ fn explore(budget: Budget) -> Search {
         permit: Some("live"),
         live: Held::Held,
         kept: Unfinished::Finished,
+        gate: Gate::Open,
     };
     let mut seen = HashSet::from([first]);
     let mut queue = VecDeque::from([first]);
@@ -796,6 +831,11 @@ fn explore(budget: Budget) -> Search {
                     env.live == Held::Held,
                 );
                 let mut kept = env.kept == Unfinished::Unfinished;
+                let mut gate = env.gate;
+                if inp.kind == "request" && inp.request == "run" && s.pos == "running" {
+                    // A retune is asked under a closed gate.
+                    gate = Gate::Closed;
+                }
                 if inp.kind == "request" {
                     if opened.is_some() {
                         problem("two requests open");
@@ -864,6 +904,11 @@ fn explore(budget: Budget) -> Search {
                             if *name == "start" && at.data == "stopping" {
                                 problem("start while the data is stopping");
                             }
+                            if *name == "stop" && at.data == "flowing" && gate != Gate::Closed {
+                                problem(
+                                    "the radio's stop asked with the data flowing and the gate open",
+                                );
+                            }
                         }
                         Item::Answer { name, answer } => {
                             if let Some(given) = gives(name, answer) {
@@ -875,6 +920,8 @@ fn explore(budget: Budget) -> Search {
                             }
                             if (*name, *answer) == ("start", "started") {
                                 kept = true;
+                                // The radio runs: the controller opens the gate.
+                                gate = Gate::Open;
                             }
                             if *answer == "stale" {
                                 held = None;
@@ -1006,6 +1053,7 @@ fn explore(budget: Budget) -> Search {
                     } else {
                         Unfinished::Finished
                     },
+                    gate,
                 };
                 outs.push(next);
                 if seen.insert(next) {
@@ -1109,7 +1157,13 @@ fn the_search_over_the_machine_finds_the_models_table() {
 
 #[test]
 fn the_search_holds_at_the_models_wider_bounds() {
-    for budget in [(3, 1, 1, 3), (4, 2, 2, 3), (3, 2, 3, 4)] {
+    // The ways of a step the model finds at each bound
+    // (`python3 -I design/installation-machine-model.py <bound>`).
+    for (budget, model_ways) in [
+        ((3, 1, 1, 3), 2_029),
+        ((4, 2, 2, 3), 2_111),
+        ((3, 2, 3, 4), 2_247),
+    ] {
         let search = explore(budget);
         assert!(
             search.problems.is_empty(),
@@ -1117,6 +1171,8 @@ fn the_search_holds_at_the_models_wider_bounds() {
             search.problems
         );
         assert_eq!(search.dead, 0, "{budget:?}: dead ends");
+        let ways: usize = search.table.values().map(BTreeSet::len).sum();
+        assert_eq!(ways, model_ways, "{budget:?}: the ways of a step");
     }
 }
 
@@ -1129,4 +1185,27 @@ fn a_placed_machine_halts_a_stopped_radio_at_once_and_returns_a_live_permit() {
         panic!("a stopped radio with its data home halts at once");
     };
     assert!(matches!(resume.go(), Step::Rest(Rest::Wake(None))));
+}
+
+/// A retune's request keeps its deadline: the radio's stop that does not
+/// confirm at once rests until that deadline, as a run's would.
+#[test]
+fn a_retune_rests_until_its_deadline_while_the_radio_stops() {
+    let running = S {
+        pos: "running",
+        goal: None,
+        data: "flowing",
+        tokens: "held",
+        drain: "owed",
+        net: None,
+        wait: None,
+    };
+    let mut machine = build(&running, None);
+    let Step::Stop(resume) = machine.step(Input::Request(retune(Some(DEADLINE))), NOW) else {
+        panic!("a retune stops the running radio, the data flowing under the closed gate");
+    };
+    assert!(matches!(
+        resume.pending(),
+        Step::Rest(Rest::Wake(Some(deadline))) if deadline == DEADLINE
+    ));
 }
