@@ -63,7 +63,7 @@ pub mod control;
 pub mod extensions;
 pub mod he;
 pub use he::{
-    BssColorScope, BssColorUse, He20Association, He20AssociationError, HeBssColor, StationHe,
+    BssColorScope, BssColorUse, HeAssociation, HeAssociationError, HeBssColor, StationHe,
 };
 pub mod operation;
 pub mod owner;
@@ -113,7 +113,8 @@ pub type Ieee80211ClockGeneration =
 pub type Ieee80211ClockSample = oer_protocols_radio_port::ClockSample<Ieee80211Radio>;
 
 pub use capabilities::{
-    BandSet, HardwareServices, LowerMacCapabilities, PhyFormatSet, RateSupport, Support, WidthSet,
+    BandSet, FormatWidths, HardwareServices, LowerMacCapabilities, PhyFormat, PhyFormatSet,
+    RateSupport, Support, WidthSet,
 };
 pub use control::{ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{
@@ -127,11 +128,11 @@ pub use oer_protocols_radio_port::{
 };
 pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
-    AccessPoint, AckHeader, AmpduRate, BssColor, FrameHeader, GroupAddress, HeaderSpec,
-    Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
-    NoAckHeader, PortRate, QosBody, QosControl, ReceiverAddress, ResponseHeader, ServicePeriod,
-    SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck, SupportedChannel,
-    SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
+    AccessPoint, AckHeader, AmpduRate, BssColor, FormatWidth, FrameHeader, GroupAddress,
+    HeaderSpec, Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
+    NoAckHeader, PhyChannel, PortRate, QosBody, QosControl, ReceiverAddress, ResponseHeader,
+    ServicePeriod, SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck,
+    SupportedChannel, SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub use rx::{LinkMetric, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata};
 pub use tx::{

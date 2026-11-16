@@ -116,13 +116,17 @@ pub static MODEL_AMPDU_LENGTHS: AmpduLengthTable = {
 /// What the model serves.
 pub const MODEL_CAPABILITIES: LowerMacCapabilities = LowerMacCapabilities {
     bands: BandSet::GHZ2_4.union(BandSet::GHZ5),
-    widths: WidthSet::MHZ20.union(WidthSet::MHZ40),
+    formats: oer_protocols_ieee80211_contracts_port::FormatWidths {
+        non_ht: WidthSet::MHZ20,
+        ht: WidthSet::MHZ20.union(WidthSet::MHZ40),
+        he: WidthSet::MHZ20,
+    },
     rates: RateSupport {
         dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported,
         ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
         ht_max_mcs: HtMcs::new(7),
         he_max_mcs: HeMcs::new(9),
-        he_max_bandwidth_mhz: 20,
+
         he_dcm: oer_protocols_ieee80211_contracts_port::Support::Supported,
         he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Supported,
         spatial_streams: 1,

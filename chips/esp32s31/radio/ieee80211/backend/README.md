@@ -10,7 +10,7 @@ offers the contract is in `facts`: the capabilities
 (`esp32s31_lower_mac_capabilities`, `ESP32S31_BEACON_TIMING_CAPABILITIES`),
 the queue, interface and key-slot counts, a received MPDU's metadata
 (`Esp32s31RxMeta`), the HE association's mapping onto the MAC's fields
-(`mac_he20_association`), the coexistence priorities a frame carries
+(`mac_he_association`), the coexistence priorities a frame carries
 (`RadioCoexPriorities`), and the register seams of the station TBTT, the
 transmit gate, the beacon receive priority and the HE association, which
 `cooperative_hardware` implements on the chip and `hardware_model` on the

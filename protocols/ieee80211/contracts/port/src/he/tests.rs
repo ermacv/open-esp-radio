@@ -1,6 +1,6 @@
 //! The HE settings' values stay within their fields.
 
-use super::{BssColorScope, BssColorUse, He20Association, He20AssociationError, HeBssColor};
+use super::{BssColorScope, BssColorUse, HeAssociation, HeAssociationError, HeBssColor};
 use crate::BssColor;
 use oer_protocols_ieee80211_wire::he::{HeOperation, HeOperationFields, HePeerState};
 
@@ -26,7 +26,7 @@ fn peer() -> HePeerState {
 
 #[test]
 fn an_association_keeps_the_peer_values_it_was_made_of() {
-    let association = He20Association::new(&peer(), 1, 7).expect("in range");
+    let association = HeAssociation::new(&peer(), 1, 7).expect("in range");
     assert_eq!(association.association_id(), 1);
     assert_eq!(association.minimum_mpdu_start_spacing(), 7);
     assert_eq!(association.packet_padding_eight_us(), 2);
@@ -68,27 +68,27 @@ fn a_bss_color_is_the_scan_s_and_a_disabled_one_is_transmitted_as_zero() {
 #[test]
 fn values_outside_their_fields_make_no_association() {
     assert_eq!(
-        He20Association::new(&peer(), 0, 0),
-        Err(He20AssociationError::AssociationId(0))
+        HeAssociation::new(&peer(), 0, 0),
+        Err(HeAssociationError::AssociationId(0))
     );
     assert_eq!(
-        He20Association::new(&peer(), 2008, 0),
-        Err(He20AssociationError::AssociationId(2008))
+        HeAssociation::new(&peer(), 2008, 0),
+        Err(HeAssociationError::AssociationId(2008))
     );
     assert_eq!(
-        He20Association::new(&peer(), 1, 8),
-        Err(He20AssociationError::MinimumMpduStartSpacing(8))
+        HeAssociation::new(&peer(), 1, 8),
+        Err(HeAssociationError::MinimumMpduStartSpacing(8))
     );
     let mut padded = peer();
     padded.packet_padding_eight_us = 3;
     assert_eq!(
-        He20Association::new(&padded, 1, 0),
-        Err(He20AssociationError::PacketPadding(3))
+        HeAssociation::new(&padded, 1, 0),
+        Err(HeAssociationError::PacketPadding(3))
     );
     let mut hosted = peer();
     hosted.max_co_hosted_bssid_indicator = Some(9);
     assert_eq!(
-        He20Association::new(&hosted, 1, 0),
-        Err(He20AssociationError::MaxCoHostedBssidIndicator(9))
+        HeAssociation::new(&hosted, 1, 0),
+        Err(HeAssociationError::MaxCoHostedBssidIndicator(9))
     );
 }

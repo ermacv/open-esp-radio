@@ -17,7 +17,7 @@ pub use crate::types::{
 };
 
 use crate::types::{
-    MacExtraSoftApRxBlockAckEntryIndex, MacHe20Association, MacHeBeamformingReportProfile,
+    MacExtraSoftApRxBlockAckEntryIndex, MacHeAssociation, MacHeBeamformingReportProfile,
     MacHeErSuAckRateProfile, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit,
     MacHeTid, MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxProgram,
     MacHtAmpduCompletionObservation, MacHtTxProgram, MacKeyEntryIndex, MacLegacyTxProgram,
@@ -519,23 +519,23 @@ impl<'registers> WifiMacHal<'registers> {
     }
 
     /// Begin an HE BSS's connection before authentication.
-    pub fn connect_he20_bss(
+    pub fn connect_he_bss(
         &mut self,
         color: crate::types::MacHeBssColor,
         enabled: bool,
         partial: bool,
     ) {
-        self.pac_mut().connect_he20_bss(color, enabled, partial)
+        self.pac_mut().connect_he_bss(color, enabled, partial)
     }
 
     /// Install the interface-zero HE20 association in the vendor's order.
-    pub fn install_he20_association(&mut self, association: MacHe20Association) {
-        self.pac_mut().install_he20_association(association)
+    pub fn install_he_association(&mut self, association: MacHeAssociation) {
+        self.pac_mut().install_he_association(association)
     }
 
     /// Remove the interface-zero HE association.
-    pub fn clear_he20_association(&mut self) {
-        self.pac_mut().clear_he20_association()
+    pub fn clear_he_association(&mut self) {
+        self.pac_mut().clear_he_association()
     }
 
     /// The MAC's received Trigger frames and its trigger-based

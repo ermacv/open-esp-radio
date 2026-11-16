@@ -4,7 +4,7 @@
 //! It is set in two stages, in the order the pinned vendor station sets it:
 //! the BSS before authentication ([`StationHe::Bss`],
 //! `libnet80211.a[wl_cnx.o]::cnx_connect_to_bss`), the association after
-//! the Association Response ([`StationHe::He20`],
+//! the Association Response ([`StationHe::He`],
 //! `ieee80211_parse_hecap`, `ieee80211_parse_heopr` and `ic_set_sta`).
 
 use oer_protocols_ieee80211_wire::he::{HeOperation, HePeerState};
@@ -27,7 +27,7 @@ pub enum StationHe {
     /// color included, which replaces the scan's for the MAC and the
     /// station's HE transmissions), the AID and the minimum MPDU start
     /// spacing.
-    He20(He20Association),
+    He(HeAssociation),
 }
 
 /// Whether an HE BSS's color is in use, as its HE Operation's BSS Color
@@ -100,7 +100,7 @@ impl HeBssColor {
 /// identifier and the access point's minimum MPDU start spacing. Each value
 /// lies within its field's range.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct He20Association {
+pub struct HeAssociation {
     color: HeBssColor,
     association_id: u16,
     minimum_mpdu_start_spacing: u8,
@@ -112,7 +112,7 @@ pub struct He20Association {
 
 /// Why an HE20 association's values are none.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum He20AssociationError {
+pub enum HeAssociationError {
     /// The AID is outside 1 to 2007 (IEEE Std 802.11-2020, 9.4.1.8).
     AssociationId(u16),
     /// The minimum MPDU start spacing code is above 7 (IEEE Std
@@ -132,7 +132,7 @@ pub enum He20AssociationError {
     MaxCoHostedBssidIndicator(u8),
 }
 
-impl He20Association {
+impl HeAssociation {
     /// The largest AID (IEEE Std 802.11-2020, 9.4.1.8).
     pub const MAX_ASSOCIATION_ID: u16 = 2007;
     /// The largest minimum MPDU start spacing code.
@@ -150,32 +150,32 @@ impl He20Association {
         peer: &HePeerState,
         association_id: u16,
         minimum_mpdu_start_spacing: u8,
-    ) -> Result<Self, He20AssociationError> {
+    ) -> Result<Self, HeAssociationError> {
         if association_id == 0 || association_id > Self::MAX_ASSOCIATION_ID {
-            return Err(He20AssociationError::AssociationId(association_id));
+            return Err(HeAssociationError::AssociationId(association_id));
         }
         if minimum_mpdu_start_spacing > Self::MAX_MINIMUM_MPDU_START_SPACING {
-            return Err(He20AssociationError::MinimumMpduStartSpacing(
+            return Err(HeAssociationError::MinimumMpduStartSpacing(
                 minimum_mpdu_start_spacing,
             ));
         }
         if peer.packet_padding_eight_us > Self::MAX_PACKET_PADDING_EIGHT_US {
-            return Err(He20AssociationError::PacketPadding(
+            return Err(HeAssociationError::PacketPadding(
                 peer.packet_padding_eight_us,
             ));
         }
         if peer.default_packet_extension_duration() > Self::MAX_DEFAULT_PACKET_EXTENSION {
-            return Err(He20AssociationError::DefaultPacketExtension(
+            return Err(HeAssociationError::DefaultPacketExtension(
                 peer.default_packet_extension_duration(),
             ));
         }
         if let Some(indicator) = peer.max_co_hosted_bssid_indicator
             && indicator > Self::MAX_CO_HOSTED_BSSID_INDICATOR
         {
-            return Err(He20AssociationError::MaxCoHostedBssidIndicator(indicator));
+            return Err(HeAssociationError::MaxCoHostedBssidIndicator(indicator));
         }
         let Some(color) = BssColor::new(peer.bss_color()) else {
-            return Err(He20AssociationError::BssColor(peer.bss_color()));
+            return Err(HeAssociationError::BssColor(peer.bss_color()));
         };
         Ok(Self {
             color: HeBssColor {

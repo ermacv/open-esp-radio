@@ -6560,7 +6560,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             } => {
                 let he = peer.associated.he_association.map_or(
                     oer_protocols_ieee80211_contracts_port::StationHe::Off,
-                    oer_protocols_ieee80211_contracts_port::StationHe::He20,
+                    oer_protocols_ieee80211_contracts_port::StationHe::He,
                 );
                 (
                     JoinStep::StartLink {

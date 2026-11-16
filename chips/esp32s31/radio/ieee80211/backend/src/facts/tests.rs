@@ -50,3 +50,43 @@ fn the_longest_mpdu_is_bounded_by_the_transmit_programs_too() {
     // The model's buffers stay the bound below it.
     assert!(esp32s31_lower_mac_capabilities(512).max_mpdu_length < capabilities.max_mpdu_length);
 }
+
+/// The HE element's Supported Channel Width Set comes from the capability's
+/// HE widths through the contract's conversion: the ESP32-S31's (HE at
+/// 20 MHz) gives none; a set with HE at 40 MHz in the 2.4 GHz band gives B0;
+/// 40 MHz alone in the 5 GHz band has no encoding and is refused.
+#[test]
+fn the_he_element_carries_the_widths_of_the_capability() {
+    use oer_protocols_ieee80211_contracts_port::{BandSet, FormatWidths, WidthSet};
+    use oer_protocols_ieee80211_wire::he::{
+        HeChannelWidthSet, HeLocalCapabilities, HeMacCapabilities, HeMcsNssSupport,
+        HePhyCapabilities, he_capability_ie,
+    };
+    let local = HeLocalCapabilities {
+        mac: HeMacCapabilities::from_bytes([0; 6]),
+        phy: HePhyCapabilities::from_bytes([0; 11]),
+        receive: HeMcsNssSupport::Mcs0To9,
+        transmit: HeMcsNssSupport::Mcs0To9,
+    };
+    let field = |widths: HeChannelWidthSet| {
+        let element = he_capability_ie(local, widths);
+        HePhyCapabilities::from_bytes(element[9..20].try_into().unwrap())
+            .channel_width_set()
+            .get()
+    };
+    assert_eq!(
+        crate::facts::ESP32S31_FORMAT_WIDTHS.he_channel_width_set(crate::facts::ESP32S31_BANDS),
+        Some(crate::facts::ESP32S31_HE_CHANNEL_WIDTH_SET)
+    );
+    assert_eq!(field(crate::facts::ESP32S31_HE_CHANNEL_WIDTH_SET), 0);
+    let wide = FormatWidths {
+        he: WidthSet::MHZ20.union(WidthSet::MHZ40),
+        ..crate::facts::ESP32S31_FORMAT_WIDTHS
+    };
+    assert_eq!(
+        wide.he_channel_width_set(BandSet::GHZ2_4).map(field),
+        Some(0b01)
+    );
+    assert_eq!(wide.he_channel_width_set(BandSet::GHZ5), None);
+    assert_eq!(wide.he_channel_width_set(BandSet::NONE), None);
+}

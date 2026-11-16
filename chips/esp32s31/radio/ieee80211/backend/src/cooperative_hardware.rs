@@ -113,25 +113,24 @@ impl crate::facts::RxBeaconPriorityHardware for RadioAccess {
 }
 
 impl crate::facts::StaHeHardware for RadioAccess {
-    fn connect_he20_bss(
+    fn connect_he_bss(
         &mut self,
         color: oer_chips_esp32s31_hal::types::MacHeBssColor,
         enabled: bool,
         partial: bool,
     ) {
-        self.wifi_mac_hal()
-            .connect_he20_bss(color, enabled, partial);
+        self.wifi_mac_hal().connect_he_bss(color, enabled, partial);
     }
 
-    fn install_he20_association(
+    fn install_he_association(
         &mut self,
-        association: oer_chips_esp32s31_hal::types::MacHe20Association,
+        association: oer_chips_esp32s31_hal::types::MacHeAssociation,
     ) {
-        self.wifi_mac_hal().install_he20_association(association);
+        self.wifi_mac_hal().install_he_association(association);
     }
 
-    fn clear_he20_association(&mut self) {
-        self.wifi_mac_hal().clear_he20_association();
+    fn clear_he_association(&mut self) {
+        self.wifi_mac_hal().clear_he_association();
     }
 }
 

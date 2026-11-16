@@ -413,12 +413,15 @@ fn an_advertised_capability_reads_back_through_the_parser() {
         .with_ldpc_coding_in_payload(true)
         .with_stbc_receive_under_80_mhz(true)
         .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US);
-    let element = he_capability_ie(HeLocalCapabilities {
-        mac: HeMacCapabilities::from_bytes([0; 6]),
-        phy,
-        receive: HeMcsNssSupport::Mcs0To9,
-        transmit: HeMcsNssSupport::Mcs0To7,
-    });
+    let element = he_capability_ie(
+        HeLocalCapabilities {
+            mac: HeMacCapabilities::from_bytes([0; 6]),
+            phy,
+            receive: HeMcsNssSupport::Mcs0To9,
+            transmit: HeMcsNssSupport::Mcs0To7,
+        },
+        HeChannelWidthSet::MHZ20,
+    );
 
     let capability = parse_he_capabilities(&element).unwrap();
     assert_eq!(capability.receive_nss1(), HeMcsNssSupport::Mcs0To9);
@@ -441,12 +444,15 @@ fn every_stream_after_the_first_is_not_supported() {
         (HeMcsNssSupport::Mcs0To11, 0xfffe),
         (HeMcsNssSupport::NotSupported, 0xffff),
     ] {
-        let element = he_capability_ie(HeLocalCapabilities {
-            mac: HeMacCapabilities::from_bytes([0; 6]),
-            phy: HePhyCapabilities::from_bytes([0; 11]),
-            receive: support,
-            transmit: support,
-        });
+        let element = he_capability_ie(
+            HeLocalCapabilities {
+                mac: HeMacCapabilities::from_bytes([0; 6]),
+                phy: HePhyCapabilities::from_bytes([0; 11]),
+                receive: support,
+                transmit: support,
+            },
+            HeChannelWidthSet::MHZ20,
+        );
         let capability = parse_he_capabilities(&element).unwrap();
         assert_eq!(capability.receive_mcs_map, map, "{support:?}");
         assert_eq!(capability.transmit_mcs_map, map, "{support:?}");
@@ -461,7 +467,10 @@ fn the_element_has_no_ppe_thresholds_and_a_20_mhz_only_width_set() {
     let phy = HePhyCapabilities::from_bytes([0xff; 11])
         .with_ppe_present(true)
         .with_channel_width_set(oer_portable_wire::U8::constant::<0x7f>());
-    let element = he_capability_ie(mcs9_local(HeMacCapabilities::from_bytes([0; 6]), phy));
+    let element = he_capability_ie(
+        mcs9_local(HeMacCapabilities::from_bytes([0; 6]), phy),
+        HeChannelWidthSet::MHZ20,
+    );
 
     assert_eq!(element.len(), HE_CAPABILITIES_IE_MIN_LEN);
     let advertised = HePhyCapabilities::from_bytes(element[9..20].try_into().unwrap());
@@ -482,7 +491,10 @@ fn the_mac_capabilities_land_in_their_octets() {
         .with_htc_he(true)
         .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US)
         .with_ht_and_vht_trigger_frame_rx(true);
-    let element = he_capability_ie(mcs9_local(mac, HePhyCapabilities::from_bytes([0; 11])));
+    let element = he_capability_ie(
+        mcs9_local(mac, HePhyCapabilities::from_bytes([0; 11])),
+        HeChannelWidthSet::MHZ20,
+    );
     let advertised = HeMacCapabilities::from_bytes(element[3..9].try_into().unwrap());
     assert_eq!(advertised, mac);
     assert!(advertised.htc_he());
@@ -536,7 +548,7 @@ fn the_named_fields_reproduce_the_vendor_s31_station_element() {
         .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US)
         .with_mu_ppdu_more_than_one_ru_maximum_ltf(true);
     assert_eq!(
-        he_capability_ie(mcs9_local(mac, phy)),
+        he_capability_ie(mcs9_local(mac, phy), HeChannelWidthSet::MHZ20),
         [
             0xff, 0x16, 0x23, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d,
             0xc0, 0x1f, 0x00, 0x02, 0x82, 0x01, 0xfd, 0xff, 0xfd, 0xff,
@@ -575,7 +587,7 @@ fn the_named_fields_reproduce_the_archive_station_element() {
         .with_he_ppdu_20_mhz_in_40_mhz_2g(true)
         .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US)
         .with_mu_ppdu_more_than_one_ru_maximum_ltf(true);
-    let element = he_capability_ie(mcs9_local(mac, phy));
+    let element = he_capability_ie(mcs9_local(mac, phy), HeChannelWidthSet::MHZ20);
     assert_eq!(
         element,
         [
@@ -642,4 +654,21 @@ fn an_operation_s_color_is_enabled_by_its_clear_disabled_bit_and_rts_disabled_at
         ..state(0)
     };
     assert!(disabled.extended_range_single_user_disabled());
+}
+
+#[test]
+fn the_element_carries_the_width_set_it_is_given() {
+    let local = mcs9_local(
+        HeMacCapabilities::from_bytes([0; 6]),
+        HePhyCapabilities::from_bytes([0; 11]),
+    );
+    for (widths, field) in [
+        (HeChannelWidthSet::MHZ20, 0),
+        (HeChannelWidthSet::GHZ2_4_MHZ40, 0b01),
+        (HeChannelWidthSet::GHZ5_MHZ40_80, 0b10),
+    ] {
+        let element = he_capability_ie(local, widths);
+        let advertised = HePhyCapabilities::from_bytes(element[9..20].try_into().unwrap());
+        assert_eq!(advertised.channel_width_set().get(), field);
+    }
 }

@@ -201,7 +201,7 @@ struct State {
     /// The HE BSS the MAC matches (its color, enabled, partial) and the
     /// HE20 association it holds; `None` after a removal or before any.
     he_bss: Option<(oer_chips_esp32s31_hal::types::MacHeBssColor, bool, bool)>,
-    he: Option<oer_chips_esp32s31_hal::types::MacHe20Association>,
+    he: Option<oer_chips_esp32s31_hal::types::MacHeAssociation>,
     cca_forced: bool,
     breaks: Vec<RuleBreak>,
     counts: AtomCounts,
@@ -243,7 +243,7 @@ impl Atoms {
     }
 
     /// The HE20 association the MAC holds now.
-    pub fn he(&self) -> Option<oer_chips_esp32s31_hal::types::MacHe20Association> {
+    pub fn he(&self) -> Option<oer_chips_esp32s31_hal::types::MacHeAssociation> {
         self.0.borrow().he
     }
 
@@ -848,7 +848,7 @@ impl TxGateHardware for ModelRegisters {
 }
 
 impl crate::facts::StaHeHardware for ModelRegisters {
-    fn connect_he20_bss(
+    fn connect_he_bss(
         &mut self,
         color: oer_chips_esp32s31_hal::types::MacHeBssColor,
         enabled: bool,
@@ -857,9 +857,9 @@ impl crate::facts::StaHeHardware for ModelRegisters {
         self.atoms
             .with(|state| state.he_bss = Some((color, enabled, partial)));
     }
-    fn install_he20_association(
+    fn install_he_association(
         &mut self,
-        association: oer_chips_esp32s31_hal::types::MacHe20Association,
+        association: oer_chips_esp32s31_hal::types::MacHeAssociation,
     ) {
         self.atoms.with(|state| {
             // The association writes the response's color.
@@ -872,7 +872,7 @@ impl crate::facts::StaHeHardware for ModelRegisters {
             state.he = Some(association);
         });
     }
-    fn clear_he20_association(&mut self) {
+    fn clear_he_association(&mut self) {
         self.atoms.with(|state| {
             state.he_bss = None;
             state.he = None;

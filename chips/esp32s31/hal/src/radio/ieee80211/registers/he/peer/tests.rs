@@ -1,13 +1,13 @@
 //! The HE20 association's installation and removal over host memory.
 
-use super::{MacHe20Association, MacHe20PeerConfig};
+use super::{MacHeAssociation, MacHePeerConfig};
 use crate::radio::ieee80211::registers::{
     HostWords, MacAssociationId, MacHeBssColor, MacHeDefaultPacketExtensionDuration,
     MacHePacketPaddingDuration, MacMinimumMpduStartSpacing, element,
 };
 
-fn peer(extended_range_single_user_disabled: bool) -> MacHe20PeerConfig {
-    MacHe20PeerConfig {
+fn peer(extended_range_single_user_disabled: bool) -> MacHePeerConfig {
+    MacHePeerConfig {
         packet_padding_duration: MacHePacketPaddingDuration::new(16).expect("in range"),
         default_packet_extension_duration: MacHeDefaultPacketExtensionDuration::new(4)
             .expect("in range"),
@@ -23,8 +23,8 @@ fn color() -> MacHeBssColor {
     MacHeBssColor::new(0x2a).expect("in range")
 }
 
-fn association(peer: MacHe20PeerConfig) -> MacHe20Association {
-    MacHe20Association {
+fn association(peer: MacHePeerConfig) -> MacHeAssociation {
+    MacHeAssociation {
         peer,
         association_id: MacAssociationId::new(0x123).expect("in range"),
         minimum_mpdu_start_spacing: MacMinimumMpduStartSpacing::new(5).expect("in range"),
@@ -35,10 +35,10 @@ fn association(peer: MacHe20PeerConfig) -> MacHe20Association {
 fn a_connection_and_its_association_publish_the_bssid_color_padding_and_rts_disable() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners.registers.connect_he20_bss(color(), true, false);
+    owners.registers.connect_he_bss(color(), true, false);
     owners
         .registers
-        .install_he20_association(association(peer(false)));
+        .install_he_association(association(peer(false)));
     let mac = &owners.registers.mac;
     let multi = mac.wifi_mac_he_init_suffix.read_multi_bssid_control();
     assert!(multi.he_bssid_enable() && multi.bss_color_enable());
@@ -104,7 +104,7 @@ fn a_disabled_extended_range_keeps_the_ack_rates() {
     let mut owners = words.owners();
     owners
         .registers
-        .install_he20_association(association(peer(true)));
+        .install_he_association(association(peer(true)));
     let suffix = &owners.registers.mac.wifi_mac_he_init_suffix;
     assert!(!suffix.read_ersu_and_vht_control().auto_ack_allow_ersu());
     assert_eq!(suffix.read_ersu_ack_rate().rate_0(), 0xff);
@@ -114,7 +114,7 @@ fn a_disabled_extended_range_keeps_the_ack_rates() {
 fn a_disabled_color_is_published_as_zero() {
     let mut words = HostWords::filled(u32::MAX);
     let mut owners = words.owners();
-    owners.registers.connect_he20_bss(color(), false, true);
+    owners.registers.connect_he_bss(color(), false, true);
     let multi = owners
         .registers
         .mac
@@ -135,13 +135,13 @@ fn the_association_writes_the_response_s_color_over_the_scan_s() {
     let mut owners = words.owners();
     owners
         .registers
-        .connect_he20_bss(MacHeBssColor::new(27).unwrap(), true, true);
+        .connect_he_bss(MacHeBssColor::new(27).unwrap(), true, true);
     let mut response = peer(false);
     response.bss_color = MacHeBssColor::new(5).unwrap();
     response.partial_bss_color = false;
     owners
         .registers
-        .install_he20_association(association(response));
+        .install_he_association(association(response));
     let multi = owners
         .registers
         .mac
@@ -159,9 +159,7 @@ fn a_co_hosted_bss_publishes_its_mask_and_none_restores_the_cold_init_s() {
         let mut owners = words.owners();
         let mut hosted = peer(false);
         hosted.max_co_hosted_bssid_indicator = Some(indicator);
-        owners
-            .registers
-            .install_he20_association(association(hosted));
+        owners.registers.install_he_association(association(hosted));
         let multi = owners
             .registers
             .mac
@@ -174,7 +172,7 @@ fn a_co_hosted_bss_publishes_its_mask_and_none_restores_the_cold_init_s() {
     let mut owners = words.owners();
     owners
         .registers
-        .install_he20_association(association(peer(false)));
+        .install_he_association(association(peer(false)));
     let multi = owners
         .registers
         .mac
@@ -197,9 +195,7 @@ fn an_enabled_multiple_bssid_keeps_the_co_hosted_fields() {
         });
     let mut hosted = peer(false);
     hosted.max_co_hosted_bssid_indicator = Some(3);
-    owners
-        .registers
-        .install_he20_association(association(hosted));
+    owners.registers.install_he_association(association(hosted));
     let multi = owners
         .registers
         .mac
@@ -213,11 +209,11 @@ fn an_enabled_multiple_bssid_keeps_the_co_hosted_fields() {
 fn a_removal_ends_bssid_matching_and_the_color() {
     let mut words = HostWords::filled(0);
     let mut owners = words.owners();
-    owners.registers.connect_he20_bss(color(), true, true);
+    owners.registers.connect_he_bss(color(), true, true);
     owners
         .registers
-        .install_he20_association(association(peer(false)));
-    owners.registers.clear_he20_association();
+        .install_he_association(association(peer(false)));
+    owners.registers.clear_he_association();
     let mac = &owners.registers.mac;
     let multi = mac.wifi_mac_he_init_suffix.read_multi_bssid_control();
     assert!(!multi.he_bssid_enable());
@@ -234,7 +230,7 @@ fn a_removal_ends_bssid_matching_and_the_color() {
 fn a_removal_touches_only_the_bssid_word_and_the_bitmap_clear() {
     let before = HostWords::filled(0);
     let mut after = before.clone();
-    after.owners().registers.clear_he20_association();
+    after.owners().registers.clear_he_association();
     // From zero, only the bitmap-clear request changes a word.
     assert_eq!(before.changes(&after).len(), 1);
 }
@@ -244,23 +240,23 @@ fn a_reinstallation_after_a_removal_is_the_first_installation() {
     let mut once = HostWords::filled(0);
     {
         let mut owners = once.owners();
-        owners.registers.connect_he20_bss(color(), true, false);
+        owners.registers.connect_he_bss(color(), true, false);
         owners
             .registers
-            .install_he20_association(association(peer(false)));
+            .install_he_association(association(peer(false)));
     }
     let mut again = HostWords::filled(0);
     {
         let mut owners = again.owners();
-        owners.registers.connect_he20_bss(color(), false, true);
+        owners.registers.connect_he_bss(color(), false, true);
         owners
             .registers
-            .install_he20_association(association(peer(true)));
-        owners.registers.clear_he20_association();
-        owners.registers.connect_he20_bss(color(), true, false);
+            .install_he_association(association(peer(true)));
+        owners.registers.clear_he_association();
+        owners.registers.connect_he_bss(color(), true, false);
         owners
             .registers
-            .install_he20_association(association(peer(false)));
+            .install_he_association(association(peer(false)));
     }
     // A connection, its association, the removal and another connection
     // and association end where one of each does: the removal leaves

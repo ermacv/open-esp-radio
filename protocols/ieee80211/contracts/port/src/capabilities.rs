@@ -2,7 +2,8 @@
 
 use oer_protocols_ieee80211_wire::{
     channel::{Band, Channel, ChannelWidth},
-    phy::{FecCoding, HeMcs, HtMcs, PhyRate},
+    he::HeChannelWidthSet,
+    phy::{FecCoding, HeMcs, HtMcs, PhyRate, PpduBandwidth},
     qos::WmmAccessCategory,
 };
 
@@ -52,6 +53,16 @@ impl WidthSet {
         Self(self.0 | other.0)
     }
 
+    /// Whether this set includes a PPDU of `bandwidth`: 20 and 40 MHz are
+    /// the widths a set names.
+    pub const fn contains_bandwidth(self, bandwidth: PpduBandwidth) -> bool {
+        match bandwidth {
+            PpduBandwidth::Mhz20 => self.0 & Self::MHZ20.0 != 0,
+            PpduBandwidth::Mhz40 => self.0 & Self::MHZ40.0 != 0,
+            PpduBandwidth::Mhz80 | PpduBandwidth::Mhz160 => false,
+        }
+    }
+
     /// Whether this set includes the channel geometry `width`.
     pub const fn contains(self, width: ChannelWidth) -> bool {
         let bit = match width {
@@ -59,6 +70,28 @@ impl WidthSet {
             ChannelWidth::Mhz40Above | ChannelWidth::Mhz40Below => Self::MHZ40.0,
         };
         self.0 & bit != 0
+    }
+}
+
+/// A PPDU format.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum PhyFormat {
+    /// Non-HT: DSSS, CCK and OFDM.
+    NonHt,
+    /// High throughput.
+    Ht,
+    /// High efficiency.
+    He,
+}
+
+impl PhyFormat {
+    /// The format of `rate`.
+    pub const fn of_rate(rate: PhyRate) -> Self {
+        match rate {
+            PhyRate::Legacy(_) => Self::NonHt,
+            PhyRate::Ht(_) => Self::Ht,
+            PhyRate::He(_) => Self::He,
+        }
     }
 }
 
@@ -81,14 +114,75 @@ impl PhyFormatSet {
         Self(self.0 | other.0)
     }
 
+    /// The set of `format` alone.
+    pub const fn of(format: PhyFormat) -> Self {
+        match format {
+            PhyFormat::NonHt => Self::NON_HT,
+            PhyFormat::Ht => Self::HT,
+            PhyFormat::He => Self::HE,
+        }
+    }
+
+    /// Whether `format` is in the set.
+    pub const fn contains(self, format: PhyFormat) -> bool {
+        self.0 & Self::of(format).0 != 0
+    }
+
     /// Whether the format of `rate` is in the set.
     pub const fn contains_rate(self, rate: PhyRate) -> bool {
-        let bit = match rate {
-            PhyRate::Legacy(_) => Self::NON_HT.0,
-            PhyRate::Ht(_) => Self::HT.0,
-            PhyRate::He(_) => Self::HE.0,
-        };
-        self.0 & bit != 0
+        self.contains(PhyFormat::of_rate(rate))
+    }
+}
+
+/// The channel widths a backend sends and receives each PPDU format at: the
+/// pairs of a format and a width it offers.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct FormatWidths {
+    /// Non-HT.
+    pub non_ht: WidthSet,
+    /// HT.
+    pub ht: WidthSet,
+    /// HE.
+    pub he: WidthSet,
+}
+
+impl FormatWidths {
+    /// The widths `format` is offered at.
+    pub const fn of(self, format: PhyFormat) -> WidthSet {
+        match format {
+            PhyFormat::NonHt => self.non_ht,
+            PhyFormat::Ht => self.ht,
+            PhyFormat::He => self.he,
+        }
+    }
+
+    /// Every width some format is offered at: the channels the backend
+    /// tunes to.
+    pub const fn channels(self) -> WidthSet {
+        self.non_ht.union(self.ht).union(self.he)
+    }
+
+    /// The Supported Channel Width Set an HE Capabilities element carries
+    /// for HE's widths in `bands`, or `None` where a band's rule cannot say
+    /// them: in the 2.4 GHz band, B0 is 40 MHz; in the 5 GHz band, B1 is 40
+    /// and 80 MHz together, so 40 MHz alone has no encoding, and a set
+    /// naming no band has no element.
+    ///
+    /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3; see
+    /// [`HeChannelWidthSet`].
+    pub const fn he_channel_width_set(self, bands: BandSet) -> Option<HeChannelWidthSet> {
+        let wide = self.he.contains(ChannelWidth::Mhz40Above);
+        if bands.0 == 0 {
+            return None;
+        }
+        let mut field = HeChannelWidthSet::MHZ20;
+        if bands.contains(Band::Ghz2_4) && wide {
+            field = field.union(HeChannelWidthSet::GHZ2_4_MHZ40);
+        }
+        if bands.contains(Band::Ghz5) && wide {
+            return None;
+        }
+        Some(field)
     }
 }
 
@@ -119,8 +213,6 @@ pub struct RateSupport {
     pub ht_max_mcs: Option<HtMcs>,
     /// The highest HE SU MCS; `None` without HE.
     pub he_max_mcs: Option<HeMcs>,
-    /// The widest HE PPDU in MHz.
-    pub he_max_bandwidth_mhz: u16,
     /// HE dual carrier modulation.
     pub he_dcm: Support,
     /// LDPC coding of HE PPDUs.
@@ -130,8 +222,9 @@ pub struct RateSupport {
 }
 
 impl RateSupport {
-    /// Whether the backend sends `rate`; bandwidth against the channel is
-    /// checked by [`LowerMacCapabilities::supports_rate`].
+    /// Whether the backend sends `rate`; its bandwidth against the format's
+    /// widths and the channel is checked by
+    /// [`LowerMacCapabilities::supports_rate`].
     pub const fn supports(self, rate: PhyRate) -> bool {
         match rate {
             PhyRate::Legacy(rate) => {
@@ -152,7 +245,6 @@ impl RateSupport {
                 Some(max) => {
                     rate.mcs().index() <= max.index()
                         && rate.spatial_streams().count() <= self.spatial_streams
-                        && rate.bandwidth().mhz() <= self.he_max_bandwidth_mhz
                         && (!rate.dcm() || self.he_dcm.is_supported())
                         && (matches!(rate.fec(), FecCoding::Bcc) || self.he_ldpc.is_supported())
                 }
@@ -217,8 +309,8 @@ impl HardwareServices {
 pub struct LowerMacCapabilities {
     /// Radio bands the backend can tune to.
     pub bands: BandSet,
-    /// Supported channel widths and forty-megahertz geometries.
-    pub widths: WidthSet,
+    /// The widths each PPDU format is offered at.
+    pub formats: FormatWidths,
     /// Transmit rates and their PHY constraints.
     pub rates: RateSupport,
     /// MAC work the backend performs autonomously.
@@ -265,7 +357,7 @@ pub struct LowerMacCapabilities {
 impl LowerMacCapabilities {
     /// Whether the backend tunes to `channel`.
     pub const fn supports_channel(self, channel: Channel) -> bool {
-        self.bands.contains(channel.band()) && self.widths.contains(channel.width())
+        self.bands.contains(channel.band()) && self.formats.channels().contains(channel.width())
     }
 
     /// Whether the backend sends `rate` on `channel`.
@@ -274,6 +366,10 @@ impl LowerMacCapabilities {
             && matches!(rate, PhyRate::Legacy(legacy) if !legacy.is_ofdm());
         self.rates.supports(rate)
             && !dsss_in_5ghz
+            && self
+                .formats
+                .of(PhyFormat::of_rate(rate))
+                .contains_bandwidth(rate.bandwidth())
             && rate.bandwidth().mhz() <= channel.bandwidth_mhz()
     }
 

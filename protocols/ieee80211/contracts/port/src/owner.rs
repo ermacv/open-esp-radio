@@ -60,13 +60,13 @@
 //! #     type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
 //! #     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
 //! #         bands: BandSet::GHZ2_4,
-//! #         widths: WidthSet::MHZ20,
+//! #         formats: oer_protocols_ieee80211_contracts_port::FormatWidths { non_ht: WidthSet::MHZ20, ht: WidthSet::MHZ20, he: WidthSet::MHZ20 },
 //! #         rates: RateSupport {
 //! #             dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported,
 //! #             ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
 //! #             ht_max_mcs: HtMcs::new(7),
 //! #             he_max_mcs: HeMcs::new(9),
-//! #             he_max_bandwidth_mhz: 20,
+//! #            
 //! #             he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 //! #             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 //! #             spatial_streams: 1,
@@ -103,13 +103,13 @@
 //! #     type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
 //! #     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
 //! #         bands: BandSet::GHZ2_4,
-//! #         widths: WidthSet::MHZ20,
+//! #         formats: oer_protocols_ieee80211_contracts_port::FormatWidths { non_ht: WidthSet::MHZ20, ht: WidthSet::MHZ20, he: WidthSet::MHZ20 },
 //! #         rates: RateSupport {
 //! #             dsss_cck: oer_protocols_ieee80211_contracts_port::Support::Supported,
 //! #             ofdm: oer_protocols_ieee80211_contracts_port::Support::Supported,
 //! #             ht_max_mcs: HtMcs::new(7),
 //! #             he_max_mcs: HeMcs::new(9),
-//! #             he_max_bandwidth_mhz: 20,
+//! #            
 //! #             he_dcm: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 //! #             he_ldpc: oer_protocols_ieee80211_contracts_port::Support::Unsupported,
 //! #             spatial_streams: 1,
@@ -214,6 +214,96 @@ impl<K: Ieee80211Capabilities> SupportedChannel<K> {
     pub const fn permitted(&self) -> Permitted<RegulatedChannel> {
         self.permitted
     }
+}
+
+/// A PPDU format at a channel width that the capabilities `K` offer it at
+/// ([`FormatWidths`](crate::FormatWidths)).
+///
+/// A pair known when the image builds is made in a const item, where a pair
+/// `K` does not offer fails to compile; a pair from the air (what an access
+/// point offers) is the same constructor's answer at run time.
+pub struct FormatWidth<K> {
+    format: crate::PhyFormat,
+    width: oer_protocols_ieee80211_wire::channel::ChannelWidth,
+    brand: PhantomData<fn() -> K>,
+}
+
+impl<K: Ieee80211Capabilities> FormatWidth<K> {
+    /// `format` at `width`, when `K` offers that pair.
+    pub const fn new(
+        format: crate::PhyFormat,
+        width: oer_protocols_ieee80211_wire::channel::ChannelWidth,
+    ) -> Option<Self> {
+        if K::CAPS.formats.of(format).contains(width) {
+            Some(Self {
+                format,
+                width,
+                brand: PhantomData,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// The format.
+    pub const fn format(&self) -> crate::PhyFormat {
+        self.format
+    }
+
+    /// The width.
+    pub const fn width(&self) -> oer_protocols_ieee80211_wire::channel::ChannelWidth {
+        self.width
+    }
+}
+
+impl<K> Clone for FormatWidth<K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for FormatWidth<K> {}
+
+/// A channel the capabilities `K` tune to, with the PPDU format a link
+/// uses on it, at the channel's width.
+pub struct PhyChannel<K> {
+    format: crate::PhyFormat,
+    channel: SupportedChannel<K>,
+}
+
+impl<K: Ieee80211Capabilities> PhyChannel<K> {
+    /// `pair` on `channel`, when the channel has the pair's width.
+    pub const fn new(pair: FormatWidth<K>, channel: SupportedChannel<K>) -> Option<Self> {
+        if channel_width_eq(pair.width, channel.channel().width()) {
+            Some(Self {
+                format: pair.format,
+                channel,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// The format.
+    pub const fn format(&self) -> crate::PhyFormat {
+        self.format
+    }
+
+    /// The channel.
+    pub const fn channel(&self) -> SupportedChannel<K> {
+        self.channel
+    }
+}
+
+const fn channel_width_eq(
+    left: oer_protocols_ieee80211_wire::channel::ChannelWidth,
+    right: oer_protocols_ieee80211_wire::channel::ChannelWidth,
+) -> bool {
+    use oer_protocols_ieee80211_wire::channel::ChannelWidth::{Mhz20, Mhz40Above, Mhz40Below};
+    matches!(
+        (left, right),
+        (Mhz20, Mhz20) | (Mhz40Above, Mhz40Above) | (Mhz40Below, Mhz40Below)
+    )
 }
 
 impl<K> Clone for SupportedChannel<K> {

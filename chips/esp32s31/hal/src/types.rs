@@ -9,10 +9,10 @@ pub use crate::radio::bluetooth::BluetoothMemoryListSelector;
 pub use crate::radio::ieee80211::registers::{
     ExtraSoftApRxBlockAckEntrySnapshot, MAC_MINIMUM_TX_POWER_DBM, MAC_TX_POWER_RATE_COUNT,
     MacApReceivePolicySnapshot, MacAssociationId, MacCcmpKeyIdentity, MacCoexPrioritySnapshot,
-    MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHe20Association, MacHe20PeerConfig,
+    MacDelaySlot, MacExtraSoftApRxBlockAckEntryIndex, MacHeAssociation,
     MacHeBeamformingReportProfile, MacHeBeamformingReportProfileError, MacHeBssColor,
     MacHeDefaultPacketExtensionDuration, MacHeErSuAckRateProfile, MacHeFecCoding,
-    MacHeGuardIntervalAndLtf, MacHeMcs, MacHePacketPaddingDuration, MacHeRate,
+    MacHeGuardIntervalAndLtf, MacHeMcs, MacHePacketPaddingDuration, MacHePeerConfig, MacHeRate,
     MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbStatistics, MacHeTbTidLimit, MacHeTid,
     MacHeTriggerRxDiagnostics, MacHeTriggerTxQueueSnapshot, MacHeTxFormat, MacHeTxParameters,
     MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtChannelWidth, MacHtGuardInterval,
