@@ -334,55 +334,44 @@ pub struct HeRate {
 
 // Full-bandwidth N_SD and modulation/coding of IEEE Std 802.11ax-2021
 // 27.5.1. Each leaf is evaluated at compilation, not on received parameters.
-macro_rules! he_rate_parameters {
-    ($rate:expr, $value:ident) => {{
-        macro_rules! streams {
-            ($numerator:expr, $denominator:literal) => {
-                match ($rate.spatial_streams.0, $rate.dcm) {
-                    (1, false) => $value!($numerator * 1_u64, $denominator * 1_u64),
-                    (1, true) => $value!($numerator * 1_u64, $denominator * 2_u64),
-                    (2, false) => $value!($numerator * 2_u64, $denominator * 1_u64),
-                    (2, true) => $value!($numerator * 2_u64, $denominator * 2_u64),
-                    (3, false) => $value!($numerator * 3_u64, $denominator * 1_u64),
-                    (3, true) => $value!($numerator * 3_u64, $denominator * 2_u64),
-                    (4, false) => $value!($numerator * 4_u64, $denominator * 1_u64),
-                    (4, true) => $value!($numerator * 4_u64, $denominator * 2_u64),
-                    (5, false) => $value!($numerator * 5_u64, $denominator * 1_u64),
-                    (5, true) => $value!($numerator * 5_u64, $denominator * 2_u64),
-                    (6, false) => $value!($numerator * 6_u64, $denominator * 1_u64),
-                    (6, true) => $value!($numerator * 6_u64, $denominator * 2_u64),
-                    (7, false) => $value!($numerator * 7_u64, $denominator * 1_u64),
-                    (7, true) => $value!($numerator * 7_u64, $denominator * 2_u64),
-                    (_, false) => $value!($numerator * 8_u64, $denominator * 1_u64),
-                    (_, true) => $value!($numerator * 8_u64, $denominator * 2_u64),
-                }
-            };
+/// The largest HE nominal rate in kb/s fits a `u32`: the largest data
+/// subcarriers (1 960), bits per subcarrier (10), code-rate numerator (5)
+/// and streams (8), over the smallest divisor of [`HeRate::nominal_kbps`]'s
+/// arms (`2 · 13 600`), bound every arm.
+const HE_KBPS_FITS: () = {
+    let largest = 1_960_u64 * 10 * 5 * 8 * 1_000_000 / (2 * 13_600);
+    if largest > u32::MAX as u64 {
+        panic!("HE's nominal rate exceeds a u32");
+    }
+};
+
+/// The code rate of an HE-MCS.
+#[derive(Clone, Copy)]
+enum CodeRate {
+    Half,
+    TwoThirds,
+    ThreeQuarters,
+    FiveSixths,
+}
+
+impl CodeRate {
+    const fn numerator(self) -> u64 {
+        match self {
+            Self::Half => 1,
+            Self::TwoThirds => 2,
+            Self::ThreeQuarters => 3,
+            Self::FiveSixths => 5,
         }
-        macro_rules! modulation {
-            ($subcarriers:literal) => {
-                match $rate.mcs.0 {
-                    0 => streams!($subcarriers * 1_u64 * 1_u64, 2),
-                    1 => streams!($subcarriers * 2_u64 * 1_u64, 2),
-                    2 => streams!($subcarriers * 2_u64 * 3_u64, 4),
-                    3 => streams!($subcarriers * 4_u64 * 1_u64, 2),
-                    4 => streams!($subcarriers * 4_u64 * 3_u64, 4),
-                    5 => streams!($subcarriers * 6_u64 * 2_u64, 3),
-                    6 => streams!($subcarriers * 6_u64 * 3_u64, 4),
-                    7 => streams!($subcarriers * 6_u64 * 5_u64, 6),
-                    8 => streams!($subcarriers * 8_u64 * 3_u64, 4),
-                    9 => streams!($subcarriers * 8_u64 * 5_u64, 6),
-                    10 => streams!($subcarriers * 10_u64 * 3_u64, 4),
-                    _ => streams!($subcarriers * 10_u64 * 5_u64, 6),
-                }
-            };
+    }
+
+    const fn denominator(self) -> u64 {
+        match self {
+            Self::Half => 2,
+            Self::TwoThirds => 3,
+            Self::ThreeQuarters => 4,
+            Self::FiveSixths => 6,
         }
-        match $rate.bandwidth {
-            PpduBandwidth::Mhz20 => modulation!(234_u64),
-            PpduBandwidth::Mhz40 => modulation!(468_u64),
-            PpduBandwidth::Mhz80 => modulation!(980_u64),
-            PpduBandwidth::Mhz160 => modulation!(1_960_u64),
-        }
-    }};
+    }
 }
 
 impl HeRate {
@@ -440,50 +429,103 @@ impl HeRate {
     /// 27.5.1), for the full-bandwidth resource unit; DCM halves the data
     /// subcarriers.
     pub const fn nominal_kbps(self) -> u32 {
-        macro_rules! kbps {
-            ($numerator:expr, $denominator:expr) => {
-                match self.gi_ltf {
-                    HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => {
-                        const {
-                            let kbps = $numerator * 1_000_000 / ($denominator * 13_600);
-                            if !(kbps <= u32::MAX as u64) {
-                                panic!("invalid fixed wire geometry");
-                            };
-                            kbps as u32
-                        }
-                    }
-                    HeGiLtf::Ltf2xGi1600Ns => {
-                        const {
-                            let kbps = $numerator * 1_000_000 / ($denominator * 14_400);
-                            if !(kbps <= u32::MAX as u64) {
-                                panic!("invalid fixed wire geometry");
-                            };
-                            kbps as u32
-                        }
-                    }
-                    HeGiLtf::Ltf4xGi3200Ns => {
-                        const {
-                            let kbps = $numerator * 1_000_000 / ($denominator * 16_000);
-                            if !(kbps <= u32::MAX as u64) {
-                                panic!("invalid fixed wire geometry");
-                            };
-                            kbps as u32
-                        }
-                    }
-                }
-            };
-        }
-        he_rate_parameters!(self, kbps)
+        let (numerator, _) = self.data_bits_per_symbol();
+        let (_, rate) = self.modulation();
+        // N_DBPS over the symbol's duration (12.8 us and the guard
+        // interval), in kb/s, rounded down once: every divisor is a constant
+        // of the standard's tables.
+        let bits = numerator.saturating_mul(1_000_000);
+        let kbps = match (rate, self.dcm, self.gi_ltf) {
+            (CodeRate::Half, false, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
+                bits / (2 * 13_600)
+            }
+            (CodeRate::Half, false, HeGiLtf::Ltf2xGi1600Ns) => bits / (2 * 14_400),
+            (CodeRate::Half, false, HeGiLtf::Ltf4xGi3200Ns) => bits / (2 * 16_000),
+            (CodeRate::Half, true, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
+                bits / (4 * 13_600)
+            }
+            (CodeRate::Half, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (4 * 14_400),
+            (CodeRate::Half, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (4 * 16_000),
+            (CodeRate::TwoThirds, false, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
+                bits / (3 * 13_600)
+            }
+            (CodeRate::TwoThirds, false, HeGiLtf::Ltf2xGi1600Ns) => bits / (3 * 14_400),
+            (CodeRate::TwoThirds, false, HeGiLtf::Ltf4xGi3200Ns) => bits / (3 * 16_000),
+            (CodeRate::TwoThirds, true, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
+                bits / (6 * 13_600)
+            }
+            (CodeRate::TwoThirds, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (6 * 14_400),
+            (CodeRate::TwoThirds, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (6 * 16_000),
+            (CodeRate::ThreeQuarters, false, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
+                bits / (4 * 13_600)
+            }
+            (CodeRate::ThreeQuarters, false, HeGiLtf::Ltf2xGi1600Ns) => bits / (4 * 14_400),
+            (CodeRate::ThreeQuarters, false, HeGiLtf::Ltf4xGi3200Ns) => bits / (4 * 16_000),
+            (CodeRate::ThreeQuarters, true, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
+                bits / (8 * 13_600)
+            }
+            (CodeRate::ThreeQuarters, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (8 * 14_400),
+            (CodeRate::ThreeQuarters, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (8 * 16_000),
+            (CodeRate::FiveSixths, false, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
+                bits / (6 * 13_600)
+            }
+            (CodeRate::FiveSixths, false, HeGiLtf::Ltf2xGi1600Ns) => bits / (6 * 14_400),
+            (CodeRate::FiveSixths, false, HeGiLtf::Ltf4xGi3200Ns) => bits / (6 * 16_000),
+            (CodeRate::FiveSixths, true, HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns) => {
+                bits / (12 * 13_600)
+            }
+            (CodeRate::FiveSixths, true, HeGiLtf::Ltf2xGi1600Ns) => bits / (12 * 14_400),
+            (CodeRate::FiveSixths, true, HeGiLtf::Ltf4xGi3200Ns) => bits / (12 * 16_000),
+        };
+        // In u32 by `HE_KBPS_FITS`: no arm exceeds the largest numerator
+        // over the smallest divisor.
+        let () = HE_KBPS_FITS;
+        kbps as u32
     }
 
-    /// Exact N_DBPS (IEEE Std 802.11ax-2021 27.5.1), including DCM.
-    const fn data_bits_per_symbol(self) -> (u64, u64) {
-        macro_rules! fraction {
-            ($numerator:expr, $denominator:expr) => {
-                const { ($numerator, $denominator) }
-            };
+    /// The bits per subcarrier and the code rate of the HE-MCS (IEEE Std
+    /// 802.11ax-2021, 27.5.1), and the data subcarriers of the bandwidth.
+    const fn modulation(self) -> (u64, CodeRate) {
+        match self.mcs.0 {
+            0 => (1, CodeRate::Half),
+            1 => (2, CodeRate::Half),
+            2 => (2, CodeRate::ThreeQuarters),
+            3 => (4, CodeRate::Half),
+            4 => (4, CodeRate::ThreeQuarters),
+            5 => (6, CodeRate::TwoThirds),
+            6 => (6, CodeRate::ThreeQuarters),
+            7 => (6, CodeRate::FiveSixths),
+            8 => (8, CodeRate::ThreeQuarters),
+            9 => (8, CodeRate::FiveSixths),
+            10 => (10, CodeRate::ThreeQuarters),
+            _ => (10, CodeRate::FiveSixths),
         }
-        he_rate_parameters!(self, fraction)
+    }
+
+    /// Exact N_DBPS (IEEE Std 802.11ax-2021 27.5.1), including DCM, as a
+    /// fraction: the data subcarriers of the bandwidth, the bits per
+    /// subcarrier, the code rate's numerator and the streams, over the code
+    /// rate's denominator and DCM's two.
+    const fn data_bits_per_symbol(self) -> (u64, u64) {
+        let subcarriers: u64 = match self.bandwidth {
+            PpduBandwidth::Mhz20 => 234,
+            PpduBandwidth::Mhz40 => 468,
+            PpduBandwidth::Mhz80 => 980,
+            PpduBandwidth::Mhz160 => 1_960,
+        };
+        let (bits, rate) = self.modulation();
+        let streams: u64 = match self.spatial_streams.0 {
+            count @ 1..=7 => count as u64,
+            _ => 8,
+        };
+        let dcm: u64 = if self.dcm { 2 } else { 1 };
+        (
+            subcarriers
+                .saturating_mul(bits)
+                .saturating_mul(rate.numerator())
+                .saturating_mul(streams),
+            rate.denominator().saturating_mul(dcm),
+        )
     }
 }
 
