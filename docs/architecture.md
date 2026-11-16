@@ -720,7 +720,7 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
 
 ## Operation results
 
-Five kinds of thing come out of an operation. They are categories of meaning,
+Six kinds of thing come out of an operation. They are categories of meaning,
 not a mapping onto `Ok` and `Err`:
 
 | Kind | Answers | With correct code and hardware | Form |
@@ -730,6 +730,7 @@ not a mapping onto `Ok` and `Err`:
 | Outcome | how an accepted operation ended | yes | a typed end stating only what is known |
 | Refusal | why an operation was not accepted | yes | `Err` with its owners back and what comes next |
 | Fault | a contract or the hardware model broke | no | a named fault with its observations, for its owner |
+| Indication | that a peripheral needs its owner's stop | no | one latched fact with no payload, for the core that owns the peripheral's life; never a return value |
 
 An `Err` may carry a failed outcome or a fault on its way to its owner, and an
 operation may return the state it reached beside its result. A status may keep
@@ -756,7 +757,9 @@ For each case, take the first of these that fits:
 5. It is the world's and final for this input: refuse, owners back.
 6. An accepted operation ended: an outcome. An unknown end says unknown, with
    its named cause and known observations.
-7. Anything else: a fault, at the level that holds the owners.
+7. The hardware did what its model excludes, and the owner of the
+   peripheral can take it down: an indication, answered by the stop.
+8. Anything else: a fault, at the level that holds the owners.
 
 **Temporary unavailability** has three shapes, in order of preference:
 
