@@ -1,9 +1,7 @@
-use oer_protocols_ieee80211_contracts_port::association::KEY_BANK_CAPACITY;
 use oer_protocols_ieee80211_contracts_port::*;
 use oer_protocols_ieee80211_core_arbiter::{AbsencePlace, LeasePlace};
-use oer_protocols_ieee80211_core_roles_sta::epoch::LinkEpochSource;
 use oer_protocols_ieee80211_core_roles_sta::machine::{
-    StaConfig, StaTokens, Station, StationResources,
+    StaConfig, StaTypes, Station, StationResources,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 struct Caps;
@@ -39,106 +37,27 @@ impl Ieee80211Capabilities for Caps {
         edca_max_txop_limit_units_32_us: u16::MAX,
     };
 }
-struct Buffer;
-impl TxBufferMemory for Buffer {
-    fn renew_msdu(
-        &mut self,
-    ) -> Result<(), oer_protocols_ieee80211_contracts_port::BufferMemoryUnavailable> {
-        Ok(())
-    }
-    fn bytes_mut(
-        &mut self,
-    ) -> Result<&mut [u8], oer_protocols_ieee80211_contracts_port::BufferMemoryUnavailable> {
-        Ok(&mut [])
-    }
-}
-struct Tokens<'id, const GROUPS: usize>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
-impl oer_protocols_ieee80211_contracts_port::TxBufferClass for Buffer {
-    const CAPACITY: usize = 256;
-}
-impl<'id, const GROUPS: usize> StaTokens for Tokens<'id, GROUPS> {
-    type AssociationStart = ();
-    type Association = ();
-    type VacantKeyBank = oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
-        (),
-        (),
-        KEY_BANK_CAPACITY,
-    >;
-    type VacantAssociation = [(); GROUPS];
-    fn begin_association(_: (), _: oer_protocols_ieee80211_wire::security::Spp) {}
-    fn association(key: &()) -> &() {
-        key
-    }
-    type LinkKey = ();
-    fn lend((): ()) -> ((), ()) {
-        ((), ())
-    }
-    fn reunite((): (), (): ()) {}
-    fn split_vacant(group: Self::VacantAssociation) -> ((), (), Self::VacantKeyBank) {
-        (
-            (),
-            (),
-            oer_protocols_ieee80211_contracts_port::association::KeyBankParts {
-                pairwise: core::iter::empty().collect(),
-                group: group.into_iter().collect(),
-            },
-        )
-    }
-    fn collect_key_bank(
-        parts: Self::VacantKeyBank,
-    ) -> Result<Self::VacantKeyBank, Self::VacantKeyBank> {
-        Ok(parts)
-    }
-    fn end_association(_: (), mut bank: Self::VacantKeyBank) -> ((), (), Self::VacantKeyBank) {
-        bank.pairwise.pop();
-        ((), (), bank)
-    }
-    const PAIRWISE_SLOTS: usize = 1;
-    const TOTAL_GROUP_SLOTS: usize = GROUPS;
-    const GROUP_SLOTS: usize = GROUPS;
+struct Types<'id>(core::marker::PhantomData<fn(&'id ()) -> &'id ()>);
+impl<'id> StaTypes for Types<'id> {
     type GatePath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
-    type EpochPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
     type ConfigurationPath = oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'id>>;
-    type Small = Buffer;
-    type Ticket = u8;
-    type SmallBuffer = Buffer;
-    type PairwiseSlot = ();
-    type Sent = core::convert::Infallible;
     type AckEvidence = ();
     type AirDenied = ();
-    fn renew(mpdu: Self::Sent) -> Buffer {
-        match mpdu {}
-    }
-    type GroupSlot = ();
-    type PairwiseKey = ();
-    type GroupKey = ();
-    type GroupPermission = ();
     type RxMeta = RxMeta;
 }
-fn construct<'id, const T: usize, const B: usize, const G: usize>(
-    epochs: LinkEpochSource<'id>,
+fn construct<'id, const G: usize>(
     config: StaConfig<Caps, Callbacks>,
     place: LeasePlace<'id>,
     absence: AbsencePlace<'id>,
-    configure: oer_protocols_ieee80211_contracts_port::ConfigurePermission<
-        'id,
-        oer_protocols_ieee80211_contracts_port::Station,
-    >,
 ) -> (
-    Station<'id, Tokens<'id, G>, Caps, Callbacks>,
+    Station<'id, Types<'id>, Caps, Callbacks>,
     oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<'id>,
 ) {
-    Station::new::<T, B, G>(
+    Station::new::<G>(
         config,
         StationResources {
-            configure,
-            epochs,
-            tickets: [0; T],
-            buffers: [const { Buffer }; B],
             place,
             absence_place: absence,
-            keys: [(); G],
-            group_permission: (),
         },
         oer_protocols_ieee80211_core_roles_sta::machine::GroupCapacity::new(),
     )
@@ -162,7 +81,7 @@ impl oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks for Callbacks
 }
 
 #[test]
-fn minimum_pools_are_well_formed() {
-    let constructor: fn(_, _, _, _, _) -> _ = construct::<1, 1, 1>;
+fn a_station_builds_from_its_places_and_one_group_key() {
+    let constructor: fn(_, _, _) -> _ = construct::<1>;
     core::hint::black_box(constructor);
 }

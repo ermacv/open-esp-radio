@@ -7,10 +7,11 @@ rekey, leave) that takes the port's events, the channel arbiter's answers and
 notices, commands and time as values and leaves the port's and the arbiter's
 actions as values. A thin service loop over the lower-MAC port feeds it.
 
-Produced actions, transmissions and pending response tokens are `must_use`:
-the consumer performs or forwards them before waiting again. Rust can still
-explicitly drop an affine value; the annotation diagnoses accidentally
-discarded results and does not replace terminal resource handling.
+Produced actions and transmissions are `must_use`: the consumer performs or
+forwards them before waiting again. The station holds nothing the port has a
+limited number of. Its inputs carry outcomes and its actions carry values; it
+is generic over the types of those values (`StaTypes`: the arbiter's path,
+the brand of its command credits and the port's evidence of a frame).
 
 `Station::command` consumes a `StaRequest` together with its unique command
 credit. Construction returns separate Connect, background-scan and Disconnect
@@ -25,30 +26,22 @@ remain distinct from request completion. A scan result retains partial
 observations and names the exact absence refusal, cancelled-absence limit or
 link-ending reason. Correlation is caller data and confers no authority.
 
-After the port's terminal failure, `Station::finish` consumes the protocol
-machine into `RetiredStation`, with separate epoch, key, frame and
-command resource fields instead of a runnable station. This path retains its
-owners and emits only the
-original request terminals and one lifecycle notice; it cannot issue Configure,
-key removal or TX effects to the failed port. Idle channel places return
-separately in `StationPlaceReturns`, without advancing scan/join transitions. The stopped arbiter consumes this collection
-and the cancelled lease returns, then hands out the complete `StationPlaces`
-by value. The infallible station restart requires that complete owner.
-A complete station bank can
-consume itself through `restart(self, StationPlaces)`, preserving its epoch
-source and all minted resources. The resulting station reclaims old keys and receive configuration
-before accepting commands. Deferred EAPOL owners return separately for the old association.
-Only the service's ordinary Stop continuation supplies the reusable disabled
-port owner needed to run these banks again. Healthy disable returns every frame
-and key owner before these banks or the installation are destroyed; poisoned
-work still owned by the backend remains in that installation's retirement custody.
-The `test-support` feature exposes the retired station's resource counts for
-composition tests; those diagnostic methods are absent from product builds.
+After the port's stop, `Station::finish` ends the run in place: every
+accepted request ends, the station's channel places go back to the arbiter
+(`StationPlaceReturns`) and the station owes no configuration, key removal or
+frame to the stopped port. `Station::poll_output` then gives the requests'
+ends and the one lifecycle notice, and `Station::take_deferred` the frames
+its RSN deferred. The stopped arbiter consumes the places and the cancelled
+lease returns, then hands out the complete `StationPlaces`;
+`Station::restart` takes them, keeps the profile, the configuration and the
+keys' progress, and resets the rest in place. The restarted station removes
+the keys and the receive configuration its last run left before it takes a
+Connect.
 
 The station keeps no diagnostic counters and holds no sink. The calls that
 can lose or drop something (`Station::input`, `receive`, `poll_action` and
 `try_block_ack_reply`) take the caller's `&mut impl EventSink<StaEvent>`.
-They report a token returned to a full pool (`TokenLost`), an RSN
+They report a group table place returned to its full pool (`PlaceLost`), an RSN
 input dropped without a returned error (`RsnInputDropped`: key data that did
 not unwrap, fit or install, or a refused unwrap result) and each beacon or
 probe response the scan table took (`ScanBssObserved`), a connect's step
@@ -95,11 +88,10 @@ records every BSS.
 
 SAE observations consume the exchange and return it only while it continues.
 Commit and confirm have checked absolute deadlines, including time waiting
-for a TX credit. An anti-clogging token repeats the same commit without
-extending its deadline. RX may advance before the outgoing frame's TX
-terminal; that terminal returns resources and cannot restart an earlier
-exchange. Timeout, peer refusal and invalid confirmation retain their concrete
-failure causes. Pending transmissions retain their bytes until credit returns.
+for the SAE frame out to end. An anti-clogging token repeats the same commit
+without extending its deadline. RX may advance before the outgoing frame's
+end; that end cannot restart an earlier exchange. Timeout, peer refusal and
+invalid confirmation retain their concrete failure causes.
 
 The station retains up to ten SAE PMKSAs by BSSID and SSID. A repeat connection
 uses Open System authentication, names the cached PMKID in its association
@@ -140,10 +132,10 @@ starts (the 4-way handshake's frames included) an HE20 association sets
 `StationHe::He20`. The leave of an HE BSS sets `Off` before its receive-off
 configuration. A restart runs on the next installation, whose MAC starts
 without an HE association.
-Authentication TX contexts also retain the attempt ordinal inside their link
-epoch. A late terminal or preparation refusal returns its credit and buffer
-but cannot end a later RX-driven retry or arm that retry's response timer.
-RX may still complete the current exchange before its TX terminal arrives.
+Authentication frame tags also retain the attempt ordinal beside their link
+epoch. A retry waits for the earlier attempt's frame to end; that end, or its
+refusal, cannot end the retry or arm the retry's response timer. RX may still
+complete the current exchange before its frame's end arrives.
 
 Open links and pre-key authentication use MAC's disconnect parser. A PMF
 handshake retains a software management CCMP receiver when it installs its
@@ -168,11 +160,11 @@ evidence.
 
 Module map:
 
-- `machine`: the station, its tokens (`StaTokens`) and its host slice tests
+- `machine`: the station, the types of its values (`StaTypes`) and its host slice tests
   beside the real arbiter;
 - `machine::block_ack`: the machine validates association addresses and PMF
-  before handing over Block Ack management (`PendingRxBlockAck`), and uses
-  its control TX credits for replies (`RxBlockAckReply`); the recipient
+  before handing over Block Ack management (`PendingRxBlockAck`), and sends
+  replies as its connected station's frames (`RxBlockAckReply`); the recipient
   agreements themselves are `oer-protocols-ieee80211-core-upper-mac`'s `block_ack::banks`;
 - `machine::tx_block_ack`: the station's transmit agreements
   (`StaTxBlockAck`), one `TxBlockAckOriginator` of the eight TIDs that the
@@ -181,8 +173,8 @@ Module map:
   starts it afresh and admits agreements only with an HT access point of a
   QoS BSS. Data of a TID (`Station::tx_traffic`, with the TID's next
   sequence number as the link's holder numbers it) queues that TID's
-  negotiation; the station sends the ADDBA Request with its control TX
-  credit, from that next sequence number, and retries an unanswered or
+  negotiation; the station sends the ADDBA Request as a connected station's
+  frame, from that next sequence number, and retries an unanswered or
   unsent request after the policy's interval while attempts remain. A
   refusal, spent attempts or a response outside the request (which owes a
   DELBA) close the TID for the association. The access point's DELBA as the
@@ -201,8 +193,8 @@ Module map:
   carries its data (`LinkAction::HandOver` with a `LinkHandover`). The
   holder keeps the link's numbers (`TxNumbers`: each TID's QoS sequence
   space, the station's own space, which management frames and non-QoS
-  data share, and the pairwise key's transmit half, `StaTokens::LinkKey`,
-  with its CCMP packet numbers) and its receive admission (`RxLink`: own
+  data share; the holder adds its own pairwise key with its CCMP packet
+  numbers, `LinkHandover::with_key`) and its receive admission (`RxLink`: own
   address, BSSID, protection and the replay epoch). It numbers the data
   and every station frame of the link (`link::number`,
   `FrameNumber::Link`: the station writes zero, `link::number` writes
@@ -216,24 +208,16 @@ Module map:
   holder returns it (`LinkReturn`, `Station::link_returned`), which the
   station numbers on from. `Station::poll_link` gives the hand-over, hold,
   release and return the holder applies right after an input; every
-  change also comes first from `Station::poll_action`. The station keeps
-  the PTK's association owner while the link holds its transmit half
-  (`KeyCell::Lent`). A group key's installation, replacement, selection
-  or removal terminal switches the replay lane in the link
-  (`LinkHandover::group_terminal`) before the station takes it; the
+  change also comes first from `Station::poll_action`. The pairwise key is
+  the engine's: the station removes it only after the link came back. A
+  group key's installation, replacement, selection or removal end switches
+  the replay lane in the link (`LinkHandover::group_terminal`, from the
+  station's own record of the operation) before the station takes it; the
   station switches it itself only before its link exists. The service
   returns the link before the station finishes;
 - the station's data transmission (the data plane over the port's two
   arenas), the link's numbers (`TxNumbers`) and the MAC's transmit queues
   are `oer-protocols-ieee80211-core-datapath`'s;
-- `port`: the station's tokens on a lower-MAC port (`PortStaTokens`) and
-  the installed pairwise key
-  (`StationPairwiseKey`), which numbers each fresh protected MPDU from its
-  CCMP packet-number allocator; a retransmission keeps its number. The
-  identity the port's command issuer mints with the installation command
-  makes a `PendingStationPairwiseKey` holding the association
-  (`StationPairwiseKey::issued`); only the key its installation terminal
-  returns makes it installed;
 - the transmit decisions of a station frame travel with its action:
   `StaRatePlan` selects its rate record and transmissions, `StaFrameClass`
   its coexistence class, and `StaTransmit` its access category (Voice), its
@@ -355,12 +339,11 @@ after checking its subtype and all three header addresses.
 `StaSecurity::Personal` carries both the SAE password and PSK PMK; AKM
 selection follows the BSS qualification.
 
-`Station::new` (and `init` in place) returns the machine and its three
-command credits. It requires one to eight tickets and small buffers at
-compile time. Resources must match the backend token type's
-`StaTokens::GROUP_SLOTS`, and the constructor takes a `GroupCapacity` proof,
-which a `const` item evaluates: a zero capacity fails the build, since any
-later profile may protect its link.
+`Station::new` (and `init` in place) takes the station's two places with the
+channel arbiter (`StationResources`) and returns the machine and its three
+command credits. Its `GroupCapacity<GROUPS>` proof names how many group keys
+the port holds at once; a `const` item evaluates it, and a zero capacity
+fails the build, since any later profile may protect its link.
 
 The station has no network until `Station::set_profile` gives it a
 `StaProfile`: the SSID and `StaSecurity`. Connect without one returns
@@ -370,52 +353,53 @@ get (`AlreadyConnected` or `Transitioning`). The profile stays for every later
 Connect until the next replaces it; the previous profile's PMK and SAE
 password erase on drop, and the PMKSA cache forgets that SSID's
 associations. Every connection phase reads the profile its Connect was
-admitted with. Authentication and Association reserve an owned
-ticket/buffer credit before beginning a request or consuming its sequence
-number. Authentication's retry owner becomes an active exchange only after
-that reservation. A beacon, Probe Response or Authentication Response while
-waiting for credit cannot finish an exchange that has not begun. The active
-owner moves through TX and response waits; only its retry outcome permits
-another attempt, with no separate active/terminal flags.
-EAPOL (including the QoS rekey response), Null, deauthentication
-and Probe reserve credit before consuming a sequence. A missing credit
-waits for a terminal that returns the required ticket or buffer from the
-station pool; it is not tied to one named operation. Association starts its
-deadline when entered, before any credit or first transmission; its overdue
-retry time
-does not cause repeated polling. Every four-way handshake step retains the
-same response deadline while waiting for TX, a key slot or installation.
-Expiry leaves once and reclaims late returns through the normal teardown.
-After reserving credit, encoding can fail only with `EncodeError`. Null
-transmission waits only when credit is occupied; an encoding failure leaves
-once and returns its ticket and buffer, and a missing connection is reported
-as a changed link.
+admitted with.
+
+The station encodes every frame into one buffer of its own
+(`STA_FRAME_CAPACITY` bytes) and lends it to the action that carries the
+frame out in the same step (`StaTransmit`). It has one place for each purpose
+of its frames: probe, authentication, SAE authentication, association,
+handshake response, handshake last, deauthentication, and the connected
+station's frames, which go one at a time. A frame waits while the frame of
+its own purpose is out, from its action to its end (`StaInput::FrameEnded`),
+never for another purpose's. Authentication and Association take their
+place before beginning a request or consuming its sequence number;
+Authentication's retry becomes an active exchange only then, and a beacon,
+Probe Response or Authentication Response while it waits cannot finish an
+exchange that has not begun. EAPOL (including the QoS rekey response), Null,
+deauthentication and Probe take their place before consuming a sequence.
+Association starts its deadline when entered, before its first
+transmission; its overdue retry time does not cause repeated polling. Every
+four-way handshake step retains the same response deadline while waiting for
+its frame, a key or its installation. Expiry leaves once. After taking its
+place, encoding can fail only with `EncodeError`; an encoding failure leaves
+once, and a missing connection is reported as a changed link.
 
 GTK wire IDs include zero. IEEE 802.11-2020, 12.7.2 (EAPOL-Key frames),
 defines the GTK KDE's two-bit KeyID. Frame addressing distinguishes PTK
 and GTK. The pinned
 [ESP-IDF parser](https://github.com/espressif/esp-idf/blob/4d80c1b29aeabc8e735ffc6e1be9bb23e95d1d5d/components/wpa_supplicant/src/rsn_supp/wpa.c#L1064)
 also accepts all four IDs. `GroupKeyId::select` addresses four protocol
-records; physical slots come from the backend's pool. The wire ID does not
+records; the station's group table names a key by its place
+(`StaGroupPlace`), which the engine maps onto its hardware. The wire ID does not
 prescribe a hardware slot layout or narrow the portable WPA2 receive contract. Legacy WPA/TKIP and mesh
 key-selection policies are outside this station's supported WPA2-CCMP mode.
 
 `poll_action` drains internal transitions until it produces an action or
 reaches an external wait. The Associated action is a join step, delivered
 before Connected or handshake work. Disconnect waits for an absence to end
-before deauthentication, and waits for TX credit instead of discarding that
-frame. The bounded transition graph is documented beside `poll_action`.
+before deauthentication, and waits for a Deauthentication still out instead
+of discarding the frame. The bounded transition graph is documented beside `poll_action`.
 An unsuccessful or refused scan follows the same Leave path and disables
 reception before its terminal notice. A lease terminal received during Leave
 preserves pending key removals, deauthentication and configuration; it ends
 Leave only when the machine already waits for that lease terminal.
 
-Every `StaTransmit` or `DataTransmit` carries an owned context alongside its
-buffer and ticket. The service puts that context in the port attempt and
-returns it through `TxDone` or the local unsent path. A station context
-names the connection epoch and purpose (authentication, handshake message,
-PM transition, probe or rekey); the current state never guesses which
-operation a terminal ended. Connected control admission remains one at a
+Every `StaTransmit` carries a tag (`StaTxTag`): the connection epoch and the
+frame's purpose (authentication, handshake message, PM transition, probe or
+rekey). Its end comes back with that tag, sent or refused
+(`StaInput::FrameEnded`); the current state never guesses which operation an
+end ended. Connected control admission remains one at a
 time; its flags describe pending policy transitions, not completion identity.
 The complete `SingleOutcome` reaches the station's state transition. Power save
 then interprets a Null's outcome as Delivered or Unconfirmed, keeping one of
@@ -464,62 +448,42 @@ under the original D4 M1/M3 deadline. Only a delivered M4 opens application
 data. Replacing a deferred frame never extends that deadline. Connected has
 no rekey or repeated-M3 timeout: the port guarantees a finite TX terminal,
 including watchdog Indeterminate. The AP ends an unsuccessful exchange by
-deauthentication. Disabled enters Leave and returns both deferred owners in
-`RetiredStation::into_outputs`, together with the key and frame resources;
-no cleanup operations are sent to a disabled port. The rustdoc of
+deauthentication. Disabled enters Leave; once the station finishes, it gives
+both deferred owners back (`Station::take_deferred`), and no cleanup
+operation is sent to a disabled port. The rustdoc of
 [`deferred_eapol`](src/machine/deferred_eapol.rs) links the pinned vendor replay,
 group-exchange and TX-callback paths and its empty auth-timeout cancellation.
 
-Station alone issues `LinkEpoch`, before starting Connect. Its non-cloneable
-`LinkEpochSource` consumes the install's unique `Slot<ConnectionEpochKind>`
-from `oer-protocols-ieee80211-contracts-port`; there is no reset or slot extraction. The
-backend supplies that slot, while Station constructs and owns its source. The epoch and contexts carry the invariant
-install brand. Recreating Station therefore cannot restart its counter
-while earlier operations can return. Issuance is total with a wrapping `u64`.
-An outstanding operation must not survive an entire cycle of 2^64 connections;
-this lifecycle condition is documented on `LinkEpochSource::begin`. The
-ticket bound limits concurrent operations, not their age. Ending a link
-closes its epoch without allocating another. The link's holder takes this
+Station alone issues `LinkEpoch`, before starting Connect: a value its own
+counter makes, wrapping at `u64::MAX`. An old epoch equals a new one only
+after 2^64 attempts while one of its frames or commands is still out. Ending
+a link closes its epoch without issuing another. The link's holder takes this
 same epoch with the link (`LinkHandover::epoch`); temporary sleep or a
 channel absence does not close it.
 
-Station and Data construct `ClassSizedFrame` while encoding into their class's
-buffer, then retain that proof through the operation. The service only adds
+Station constructs `ClassSizedFrame` while encoding into its own buffer
+(`StaFrames`), then retains that proof through the operation. The service only adds
 the port's checked rates; it cannot replace the checked header or length.
 `TxRefusal::NoRate` belongs to service selection, while
 `TxRefusal::Preparation` carries a pool refusal. Neither is a radio terminal.
 
-Preparation refusal is `StaInput::Unsent { reason, .. }`, distinct from
-`TxDone`. Refusing M2/M4 ends the handshake through key removal and the
+Preparation refusal is a frame's end `StaFrameEnd::Refused`, distinct from
+`StaFrameEnd::Sent`. Refusing M2/M4 ends the handshake through key removal and the
 normal leave path; an unsubmitted M4 cannot establish a connection. A
 required join frame refused at preparation ends that join. Connected PM
 frames retain the existing unsuccessful-send policy. An unsubmitted connected
 group response releases its stage and permits the deferred successor without
 a local disconnect.
 An admitted M4 establishes Connected only on `Ended(Delivered)`. Other
-radio outcomes return their ticket and buffer and wait for another M3 under
+radio outcomes wait for another M3 under
 the original handshake deadline; Disabled starts Leave. There is no automatic
 M4 retry after an indeterminate result. A repeated authenticated M3 may advance
 its replay counter and group material, while the installed PTK and its replay
 frontier remain intact. Unchanged GTK material is acknowledged without another
 installation; changed GTK material follows the same install/replace terminal
 rules as connected rekeying.
-Data's `DataReturn::Refused` ends that MSDU and releases its permission and
-tokens once, without retrying unchanged invalid input. The service reports
-the typed reason to its application and continues; preparation refusals
-never enter radio/rate statistics.
-
-`StationResources` groups the epoch source, ticket and small-buffer pools,
-channel places and key slots transferred into Station. Completion inputs
-carry `ReturnedMpdu::Fresh` or `Sent`; service preserves that state. Only
-the machine renews a published MPDU when retiring it, releasing its body
-and returning fresh memory to its pool.
-
-A station frame whose terminal returns a buffer of another class than the
-station's is a backend contract violation: it takes the Poisoned fail-stop
-path without a stray-terminal counter or resource reuse. `Indeterminate`
-retires the frame; Station treats it as unconfirmed. Neither it nor
-`ContentionLimit` trains rate selection.
+`Indeterminate` ends the frame; Station treats it as unconfirmed. Neither it
+nor `ContentionLimit` trains rate selection.
 
 A barrier waits only the current publication; rate selection ignores every
 withdrawal.
@@ -546,24 +510,18 @@ withdrawal.
 
 ## Responses to lifecycle actions
 
-`Station` owns keys and free slots across scan/join/handshake/leave
-transitions. The pairwise cell is Free, Installing, Installed or Removing.
-Group slots are fungible credits from the composition's declared pool;
-installed owners occupy private reserved records in installation order. A
-pending install owns a vacant record; returning it cannot overflow a pool
-of retiring keys. With a free physical slot the new GTK installs there;
-previous installations and their replay frontiers remain until eviction or
-Leave. A full pool uses `replace_group_key`, evicting the oldest non-current
-installation. The same algorithm applies to every capacity: if the only
-installed key is current, replacement consumes it atomically. Selecting
-retained material preserves its installation age and replay frontier.
-Leave removes all installed owners, with each terminal returning the
-permission for the next removal.
-
-A refused key-bank reunion retains the partial collection and every remaining
-slot in quarantine. `Station::poll_action` returns the existing
-`ContractViolation(IncompleteBank)` action, so the service follows its normal
-contract-fault path without discarding or reusing any slot.
+`Station` keeps each key's progress across scan/join/handshake/leave
+transitions: the pairwise key is none, installing, installed or removing.
+The group table holds as many keys as `GROUPS` names, in installation order;
+one group operation runs at a time (install, replace, select, remove), and
+the station owes the next only after its end. A pending install reserves a
+place. With a free place the new GTK installs there; previous installations
+and their replay frontiers remain until eviction or Leave. A full table
+replaces the oldest non-current installation. The same algorithm applies to
+every capacity: if the only installed key is current, replacement consumes it
+atomically. Selecting retained material preserves its installation age and
+replay frontier. Leave removes every group key, one at a time, then the
+pairwise key once the group table is empty and the link came back.
 
 A correctly authenticated repeated M3, including a larger replay counter,
 retains PTK. Its GTK follows that same material/slot policy. `RsnStaRetryInstall`
@@ -587,17 +545,10 @@ owned bytes when a record retires or an unfinished action is dropped.
 Material comparison borrows those bytes; this makes no claim about
 arbitrary compiler temporaries or copies made inside hardware adapters.
 
-Each station receives one non-cloneable GTK mutation permission. Install,
-replace, select and remove all consume it, so a pending operation excludes
-another mutation without blocking RX. Each call reserves its FIFO terminal
-and wakes the backend. The backend's `GROUP_COMMAND_BOUND` covers admission
-through success or Poisoned, including the finite DMA/ISR/software RX cut.
-Normal disable completes accepted commands within that bound. The interface
-exposes no cancellation command; uncertain work remains owned for teardown.
-
-The service retains the private pending action and matches its terminal by
-physical slot. It never fabricates `GroupKeyInstalled` at command submission.
-Until the terminal RX updates the old epoch. New material starts at KeyRSC
+One group operation in progress excludes another mutation without blocking
+RX. Its end comes back with its place (`StaInput::GroupKeyEnded`); the
+station keeps the operation's record (key ID, material, replay lane) and
+matches the end against it. Until that end RX updates the old epoch. New material starts at KeyRSC
 there, even below the old frontier. Selecting retained identical material
 consumes its concrete installed owner and restores that record's live replay
 frontiers; it performs no material write or counter initialization. Repeating
@@ -607,29 +558,19 @@ Exactly one installation of each association/wire KeyID can decrypt; other
 IDs can remain active. Retained records of the same ID keep their own replay
 state outside the active RX epoch. M4, group response and retirement resume
 only after the matching terminal. Selection does not change physical
-installation age. Every removal keeps its record place and material until
-the terminal returns the slot and permission. Pairwise removal can overlap
-a group mutation; two group mutations cannot overlap.
+installation age. Every removal keeps its place and material until its end.
+Two group operations cannot overlap. An evicted installation cannot be
+selected from a RAM material copy.
 
-Hardware rejection poisons the port; internal rollback is not a success
-terminal. The model and shared conformance exercise delayed ingress and
-fault/disable custody. Each hardware backend must independently prove its
-RX boundary. An evicted installation cannot be selected from a RAM material
-copy.
+An installation's record names its key ID and link epoch. An old epoch's end
+leaves its key installed for the normal removal; it does not require a
+current link epoch. Leaving waits for every key before reporting.
 
-Installation actions carry private pending tokens naming their cell, key ID
-and link epoch. An old epoch's terminal returns its resources for normal
-removal. Its private pending token is invariant in the port installation and
-the station's epoch pool path, so another station's token cannot free a local
-record or erase its replay frontier. It remains valid after the connection
-leaves; completion does not require a current link epoch. Leaving waits for
-all slots and the GTK permission before reporting.
-
-`Configure` carries `PendingConfiguration`. Station grants only one such
-token until it returns in `Configured`; an old epoch's reply releases that
-permission without completing the new transition. The service keeps only
-this outstanding action token. `StaTokens::GatePath` carries the channel
-arbiter's component independently of `EpochPath`. Lease places, leases and
+One receive configuration is set at a time (`StaAction::Configure`, then
+`StaInput::Configured`); the station records the connection attempt it
+belongs to, and an old attempt's end frees the configuration without
+completing the new transition. `StaTypes::GatePath` carries the channel
+arbiter's component. Lease places, leases and
 arbiter responses keep that path and the invariant installation lifetime;
 neither another installation nor another gate in this one may answer them.
 Arbiter responses are proved by
@@ -638,10 +579,8 @@ AbsencePlace or Lease, and Exchanged consumes the old Lease and returns its
 replacement. The service returns these synchronous answers in the same step.
 None of these normal lifecycle paths adds fail-stop behavior.
 
-A missing pending token is also a compile-time error. Owning rustdoc
-supplies that compile-fail test and its valid counterpart; module
-tests exercise stale handshake/rekey replies, slot return order and stale
-configuration replies.
+Module tests exercise stale handshake/rekey ends, the group table's places
+and stale configuration ends.
 
 ## Known defects
 
@@ -677,20 +616,19 @@ configuration replies.
 **Types and ownership**
 
 - **Actions borrow `self`:** `machine.rs::StaAction` `RequestAbsence { home: &Lease }`,
-  `InstallGroupKey { association: & }`, `TransmitProtected { key: & }`.
+  and every `StaTransmit` lends the station's frame buffer.
 - **Arbiter answers are not correlated:** `machine.rs::answered`,
   `absence_answered` and `StaInput::Exchanged(Ok)` overwrite or drop a
   `Lease`/`AbsencePlace`; an owner can be lost silently.
-- **Placeholder and flag state:** `State::Taken`, `KeyCell::Installing/Removing`
-  (via `mem::replace`), `Option` fields `configuration`, `place`,
+- **Placeholder and flag state:** `State::Taken`, `Option` fields `place`,
   `absence_place`, `absence`, `epoch` on `Station`, `Held::Released`, bools
   and `Option`s in `Connected`.
 - **`Commands::complete`** does nothing unless the cell is `Pending`; command
   credits prevent a second request from overwriting that cell or its terminal.
 - **`machine.rs::Owed` variants carry no proof**; they re-read `self.lease`
-  and `self.keys.pairwise` behind `_ =>` arms.
-- **Silent losses:** `pool.rs::Pool::put` drops a token beyond a full pool
-  and reports only a `TokenLost` event; unreachable `data.rs`
+  and `self.keys` behind `_ =>` arms.
+- **Silent losses:** `pool.rs::Pool::put` drops a place beyond a full pool
+  and reports only a `PlaceLost` event; unreachable `data.rs`
   `overflowed` sites.
 - **Authentication attempts matched by number:**
   `machine.rs::TxPurpose::Authentication { attempt: u16 }`, with

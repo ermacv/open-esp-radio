@@ -19,11 +19,9 @@
 //! [`Station::link_returned`]) with everything the station needs to number
 //! its frames again.
 //!
-//! The pairwise key's transmit half has one owner of its packet numbers:
-//! the holder keeps it after the link came back, and numbers the station's
-//! protected frames under it ([`FrameNumber::Keyed`]) until the station asks
-//! for it back before its removal ([`LinkAction::ReturnKey`],
-//! [`Station::key_returned`]).
+//! The pairwise key is the engine's: the station hands over whether the
+//! link is protected, never the key, and the engine draws the packet number
+//! of every protected frame.
 //!
 //! Before its ADDBA Request names a TID's starting Sequence Number, the
 //! station asks the holder for the TID's next number
@@ -32,19 +30,16 @@
 //! again, so the number the request names is the next data MPDU's.
 //!
 //! A group key's replay lane is switched only by that key's installation
-//! terminal: the holder applies the terminal to its replay epoch
-//! ([`LinkHandover::group_terminal`]) before it hands the terminal to the
+//! end: the holder applies the end to its replay epoch
+//! ([`LinkHandover::group_terminal`]) before it hands the end to the
 //! station.
 //!
 //! [`Station::eapol`]: crate::machine::Station::eapol
 //! [`Station::receive`]: crate::machine::Station::receive
 //! [`Station::link_returned`]: crate::machine::Station::link_returned
-//! [`Station::key_returned`]: crate::machine::Station::key_returned
 //! [`Station::tx_sequence`]: crate::machine::Station::tx_sequence
 
-use oer_protocols_ieee80211_contracts_port::{
-    Ieee80211Capabilities, LayoutError, RxMetadata, TxBufferClass, TxBufferMemory,
-};
+use oer_protocols_ieee80211_contracts_port::{Ieee80211Capabilities, LayoutError, RxMetadata};
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch;
 use oer_protocols_ieee80211_core_upper_mac::receive::{AdmittedData, Integrity, RxDropReason};
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
@@ -55,13 +50,12 @@ use oer_protocols_ieee80211_wire::ethertype::ETHER_TYPE_EAPOL;
 use oer_protocols_ieee80211_wire::frame::{DecodedHeader, MacHeader};
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 pub use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
-use oer_protocols_radio_port::PoolPath;
 
 use crate::data::MsduDelivery;
 use crate::epoch::LinkEpoch;
 use crate::machine::{
-    EapolProtection, StaEapol, StaFrame, StaInput, StaReceived, StaRxError, StaTokens, StaTransmit,
-    TxRefusal, sta_frame,
+    EapolProtection, StaCallbacks, StaEapol, StaFrame, StaFrames, StaInput, StaReceived,
+    StaRxError, StaTransmit, StaTypes, Station, TxRefusal, sta_frame,
 };
 use crate::receive::{Received, sort};
 use oer_protocols_ieee80211_core_datapath::numbers::{LinkSpace, TxNumbers};
@@ -82,10 +76,6 @@ pub enum FrameNumber {
         /// It goes under the link's pairwise key.
         protected: bool,
     },
-    /// The station numbered it after the link came back, and it goes under
-    /// the link's pairwise key, which the holder still keeps: the holder
-    /// draws its CCMP packet number as it submits it.
-    Keyed,
 }
 
 /// Number one station frame of the link from `numbers`: a frame the
@@ -101,31 +91,31 @@ pub enum FrameNumber {
 /// A TID's space on a non-QoS BSS ([`TxRefusal::LinkChanged`]), or a
 /// buffer whose memory or header no longer holds the frame
 /// ([`TxRefusal::Layout`]).
-pub fn number<P, T: StaTokens, K: Ieee80211Capabilities>(
+pub fn number<P, K: Ieee80211Capabilities>(
     numbers: &mut TxNumbers<P>,
-    transmit: &mut StaTransmit<'_, T, K>,
+    transmit: &mut StaTransmit<'_, K>,
 ) -> Result<(), TxRefusal> {
     number_frame(
         numbers,
         transmit.number,
         &mut transmit.frame,
-        &mut transmit.buffer,
+        transmit.bytes,
         transmit.plan,
     )
 }
 
 /// Number one station frame of the link from its parts, as [`number`]
 /// does for a whole transmission: the frame's description `frame`, the
-/// `buffer` holding it, its rate `plan` and who numbers it (`number`).
+/// `bytes` holding it, its rate `plan` and who numbers it (`number`).
 ///
 /// # Errors
 ///
 /// As [`number`].
-pub fn number_frame<P, K: Ieee80211Capabilities, C: TxBufferClass>(
+pub fn number_frame<P, K: Ieee80211Capabilities>(
     numbers: &mut TxNumbers<P>,
     number: FrameNumber,
-    frame: &mut StaFrame<K, C>,
-    buffer: &mut impl TxBufferMemory,
+    frame: &mut StaFrame<K, StaFrames>,
+    bytes: &mut [u8],
     plan: crate::machine::StaRatePlan,
 ) -> Result<(), TxRefusal> {
     let FrameNumber::Link { space, .. } = number else {
@@ -133,14 +123,14 @@ pub fn number_frame<P, K: Ieee80211Capabilities, C: TxBufferClass>(
         return Ok(());
     };
     let sequence = numbers.take(space).ok_or(TxRefusal::LinkChanged)?;
-    renumber(frame, buffer, plan, sequence)
+    renumber(frame, bytes, plan, sequence)
 }
 
-/// Write `sequence` into the Sequence Control of the frame `buffer` holds
+/// Write `sequence` into the Sequence Control of the frame `bytes` hold
 /// and describe the frame again from its bytes.
-fn renumber<K: Ieee80211Capabilities, C: TxBufferClass>(
-    frame: &mut StaFrame<K, C>,
-    buffer: &mut impl TxBufferMemory,
+fn renumber<K: Ieee80211Capabilities>(
+    frame: &mut StaFrame<K, StaFrames>,
+    bytes: &mut [u8],
     plan: crate::machine::StaRatePlan,
     sequence: SequenceNumber,
 ) -> Result<(), TxRefusal> {
@@ -151,9 +141,6 @@ fn renumber<K: Ieee80211Capabilities, C: TxBufferClass>(
         StaFrame::BlockAckRequest { .. } => return Ok(()),
     };
     let short = TxRefusal::Layout(LayoutError::StorageTooShort);
-    let bytes = buffer
-        .bytes_mut()
-        .map_err(|_| TxRefusal::Layout(LayoutError::BufferUnavailable))?;
     let bytes = bytes.get_mut(..length).ok_or(short)?;
     let header = MacHeader::decode(bytes)
         .ok_or(short)?
@@ -315,8 +302,8 @@ pub enum LinkRx {
 /// plane's state of it (`None` for a BSSID the station sends no data to),
 /// its transmit numbers and its receive admission. The holder keeps it
 /// until the station asks for it back ([`Self::into_return`]).
-pub struct LinkHandover<'id, Path: PoolPath, P> {
-    epoch: LinkEpoch<'id, Path>,
+pub struct LinkHandover<P> {
+    epoch: LinkEpoch,
     data: Option<DataLink>,
     numbers: TxNumbers<P>,
     rx: RxLink,
@@ -324,11 +311,11 @@ pub struct LinkHandover<'id, Path: PoolPath, P> {
     carries: bool,
 }
 
-impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
+impl LinkHandover<()> {
     pub(crate) const fn new(
-        epoch: LinkEpoch<'id, Path>,
+        epoch: LinkEpoch,
         data: Option<DataLink>,
-        numbers: TxNumbers<P>,
+        numbers: TxNumbers<()>,
         rx: RxLink,
     ) -> Self {
         Self {
@@ -340,8 +327,38 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
         }
     }
 
+    /// The link with the holder's pairwise `key`, which numbers its
+    /// protected frames: the station hands over none, the key is the
+    /// engine's. A link of an open connection takes `None`.
+    pub fn with_key<P>(self, key: Option<P>) -> LinkHandover<P> {
+        let Self {
+            epoch,
+            data,
+            numbers,
+            rx,
+            carries,
+        } = self;
+        // The station's numbers carry no key.
+        let (station, tids, _none) = numbers.into_parts();
+        LinkHandover {
+            epoch,
+            data,
+            numbers: TxNumbers::new(station, tids, key),
+            rx,
+            carries,
+        }
+    }
+
+    /// Whether the link is protected: its holder adds its pairwise key
+    /// ([`Self::with_key`]).
+    pub const fn protected(&self) -> bool {
+        self.rx.protected
+    }
+}
+
+impl<P> LinkHandover<P> {
     /// The connection the link belongs to.
-    pub const fn epoch(&self) -> LinkEpoch<'id, Path> {
+    pub const fn epoch(&self) -> LinkEpoch {
         self.epoch
     }
 
@@ -433,31 +450,29 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
         ))
     }
 
-    /// Apply a group key's terminal to the link's replay epoch before the
-    /// station takes it: an installation, replacement or selection of the
-    /// link's connection switches its key ID's replay lane to the new key
-    /// (the old installation keeps its lane for the station), a replacement
-    /// of another key ID ends that ID's lane, and the removal of an active
-    /// key ends its lane. Any other input is left as it is.
-    pub fn group_terminal<T: StaTokens<EpochPath = Path>, K>(
+    /// Apply a group key operation's end to the link's replay epoch before
+    /// the station takes it: an installation, replacement or selection of
+    /// the link's connection switches its key ID's replay lane to the new
+    /// key (the old installation keeps its lane for the station), a
+    /// replacement of another key ID ends that ID's lane, and the removal of
+    /// an active key ends its lane. Any other input is left as it is.
+    pub fn group_terminal<T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>(
         &mut self,
-        input: &mut StaInput<'id, T, K>,
+        station: &mut Station<'_, T, K, C>,
+        input: &StaInput<'_, T, K>,
     ) {
-        let lane = match input {
-            StaInput::GroupKeyInstalled { pending, .. } => GroupLane::Installed(pending),
-            StaInput::GroupKeySelected { pending, .. } => GroupLane::Selected(pending),
-            StaInput::GroupKeyReplaced { pending, .. } => GroupLane::Replaced(pending),
-            StaInput::GroupKeyRemoved { pending, .. } => GroupLane::Removed(pending),
-            _ => return,
+        let StaInput::GroupKeyEnded { place } = input else {
+            return;
         };
-        self.group_lane(lane);
+        if let Some(lane) = station.group_lane(*place) {
+            self.group_lane(lane);
+        }
     }
 
-    /// Apply the terminal of the group change `lane` names to the link's
-    /// replay epoch, as [`Self::group_terminal`] does for the station's
-    /// input: the pending token of the change, before it goes back to the
-    /// station with its terminal.
-    pub fn group_lane(&mut self, lane: GroupLane<'_, 'id, Path>) {
+    /// Apply the end of the group change `lane` names to the link's replay
+    /// epoch, as [`Self::group_terminal`] does for the station's input: the
+    /// station's record of the change, before the station takes its end.
+    pub(crate) fn group_lane(&mut self, lane: GroupLane<'_>) {
         let Some(replay) = self.rx.replay.as_mut() else {
             return;
         };
@@ -496,9 +511,8 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
 
     /// An open link of the connection `sequence` for a host test of its
     /// holder: own `address`, `bssid`, the profile's protection
-    /// (`protected`), QoS sequence spaces when `qos`, the pairwise `key`
-    /// its protected frames draw packet numbers from, and the data plane's
-    /// state of it.
+    /// (`protected`), QoS sequence spaces when `qos`, the holder's pairwise
+    /// `key`, and the data plane's state of it.
     #[cfg(any(test, feature = "test-support"))]
     pub fn for_test(
         sequence: u64,
@@ -509,22 +523,21 @@ impl<'id, Path: PoolPath, P> LinkHandover<'id, Path, P> {
         key: Option<P>,
         data: Option<DataLink>,
     ) -> Self {
-        Self::new(
-            LinkEpoch::for_test(sequence),
+        Self {
+            epoch: LinkEpoch::for_test(sequence),
             data,
-            TxNumbers::new(
+            numbers: TxNumbers::new(
                 SequenceCounter::new(SequenceNumber::ZERO),
                 qos.then_some([SequenceCounter::new(SequenceNumber::ZERO); 8]),
                 key,
             ),
-            RxLink::new(address, bssid, protected, None),
-        )
+            rx: RxLink::new(address, bssid, protected, None),
+            carries: false,
+        }
     }
 
     /// Give the link back to the station: what it needs to number its
-    /// frames again. The holder keeps the pairwise key, the one owner of its
-    /// packet numbers, until the station asks for it
-    /// ([`LinkAction::ReturnKey`]).
+    /// frames again. The holder keeps its key.
     pub fn into_return(self) -> (LinkReturn, Option<P>) {
         let (station, tids, key) = self.numbers.into_parts();
         (
@@ -547,17 +560,17 @@ pub struct LinkReturn {
     pub(crate) rx: RxLink,
 }
 
-/// The pending token of one group key change whose terminal the link's
+/// The station's record of one group key change whose end the link's
 /// holder applies to the link's replay epoch ([`LinkHandover::group_lane`]).
-pub enum GroupLane<'a, 'id, Path: PoolPath> {
+pub(crate) enum GroupLane<'a> {
     /// An installation.
-    Installed(&'a mut crate::machine::PendingGroupKey<'id, Path>),
+    Installed(&'a mut crate::machine::PendingGroupKey),
     /// A selection of a retained installation.
-    Selected(&'a mut crate::machine::PendingGroupSelection<'id, Path>),
+    Selected(&'a mut crate::machine::PendingGroupSelection),
     /// A replacement.
-    Replaced(&'a mut crate::machine::PendingGroupReplacement<'id, Path>),
+    Replaced(&'a mut crate::machine::PendingGroupReplacement),
     /// A removal.
-    Removed(&'a crate::machine::PendingGroupRemoval<'id, Path>),
+    Removed(&'a crate::machine::PendingGroupRemoval),
 }
 
 /// What the station tells its link's holder.
@@ -565,10 +578,10 @@ pub enum GroupLane<'a, 'id, Path: PoolPath> {
     clippy::large_enum_variant,
     reason = "the link moves by value from the station to its holder once per connection; the station has no allocator"
 )]
-pub enum LinkAction<'id, Path: PoolPath, P> {
+pub enum LinkAction {
     /// Take the link: from now on the holder numbers the link's frames and
     /// admits its data. It carries no data before a [`Self::Release`].
-    HandOver(LinkHandover<'id, Path, P>),
+    HandOver(LinkHandover<()>),
     /// The link carries no data for now: the station sleeps, is away on
     /// another channel or its keys are not confirmed yet.
     Hold,
@@ -588,10 +601,6 @@ pub enum LinkAction<'id, Path: PoolPath, P> {
     /// take no more data of `tid` until the station's ADDBA Request of it
     /// comes or the next [`Self::Release`].
     Sequence(WmmUserPriority),
-    /// Give the pairwise key kept after the link came back
-    /// ([`Station::key_returned`](crate::machine::Station::key_returned)):
-    /// the station removes it next.
-    ReturnKey,
 }
 
 #[cfg(test)]

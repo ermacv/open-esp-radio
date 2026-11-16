@@ -70,7 +70,7 @@ fn a_protected_link_is_held_until_its_keys_are_confirmed() {
         let link = world.link.as_ref().unwrap();
         assert!(!link.carries());
         assert!(link.numbers().key().is_some(), "the link took the PTK");
-        assert!(matches!(world.station.keys.pairwise, KeyCell::Lent(_)));
+        assert!(world.station.keys.keyed());
         world.hold_transmissions = false;
         world.end_transmissions(at(34));
         world.run(at(34));
@@ -123,7 +123,7 @@ fn eapol_of_the_link_reaches_the_station_only_through_the_link() {
                 .receive(at(50), &frame, verified_meta(), &mut world.losses),
             Err(oer_protocols_ieee80211_core_upper_mac::receive::RxDropReason::NotConnected.into())
         );
-        assert!(world.poll(at(50)).is_none());
+        assert!(poll!(world, at(50)).is_none());
         // The link admits it and hands its EAPOL to the station, which owes
         // Group Message 2 under the link's key.
         assert_eq!(
@@ -140,7 +140,7 @@ fn eapol_of_the_link_reaches_the_station_only_through_the_link() {
 }
 
 #[test]
-fn the_returned_link_numbers_the_stations_frames_on_and_its_key_comes_back() {
+fn the_returned_link_numbers_the_stations_frames_on() {
     installed(|mint| {
         let (mut world, _) = wpa2_connected::<2>(mint);
         // Data took five numbers of the station's own space: the test BSS
@@ -159,21 +159,16 @@ fn the_returned_link_numbers_the_stations_frames_on_and_its_key_comes_back() {
         let sent = world.frames.len();
         world.command(at(50), 2, StaCommand::Disconnect).unwrap();
         world.run(at(50));
-        // The station asked for its link back before its Deauthentication,
-        // and for the key the holder kept only after it.
-        assert_eq!(
-            world.link_actions[world.link_actions.len() - 2..],
-            [LinkSeen::Return, LinkSeen::ReturnKey]
-        );
+        // The station asked for its link back before its Deauthentication.
+        assert_eq!(world.link_actions.last(), Some(&LinkSeen::Return));
         assert!(world.link.is_none());
-        assert!(world.kept_key.is_none());
         assert!(!world.station.link.lent());
         let deauthentication = world.frames[sent..]
             .iter()
             .find(|frame| frame[0] == 0xc0)
             .expect("the station deauthenticated");
         assert_eq!(sequence_of(deauthentication), next);
-        // The pairwise key came back whole and left with the association.
+        // The pairwise key left with the association.
         assert!(world.station.keys.clear());
         assert!(world.seen.contains(&Seen::RemoveKey));
         // A new connection numbers on from there.

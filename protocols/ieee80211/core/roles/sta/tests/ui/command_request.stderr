@@ -2,7 +2,7 @@ error[E0382]: borrow of moved value: `request`
   --> tests/ui/command_request.rs:12:24
    |
  8 |     request: StaRequest<'id, T::ConfigurationPath>,
-   |     ------- move occurs because `request` has type `StaRequest<'_, <T as StaTokens>::ConfigurationPath>`, which does not implement the `Copy` trait
+   |     ------- move occurs because `request` has type `StaRequest<'_, <T as StaTypes>::ConfigurationPath>`, which does not implement the `Copy` trait
  9 | ) {
 10 |     let result = station.command(now, request);
    |                                       ------- value moved here

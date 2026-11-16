@@ -52,15 +52,11 @@ fn unsupported_addba_receives_an_explicit_decline() {
 }
 
 #[test]
-fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy() {
+fn an_encoder_refusal_returns_the_reply_without_marking_tx_busy() {
     installed(|mint| {
         let mut world = connected_world(mint);
-        let mut buffers = world.station.buffers.take_all();
-        for buffer in buffers.iter_mut().flatten() {
-            buffer.1 = 24;
-        }
-        world.station.buffers =
-            crate::pool::Pool::from_collection(buffers.into_iter().flatten().collect());
+        // The reply does not fit the station's buffer now.
+        world.station.frame.limit = 24;
         let reply = RxBlockAckReply::for_association(
             world.station.epoch.unwrap(),
             Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap(),
@@ -75,32 +71,17 @@ fn an_encoder_refusal_returns_the_reply_and_every_credit_without_marking_tx_busy
             },
         )
         .unwrap();
-        let (reply, reason) = world
-            .station
-            .try_block_ack_reply(reply, &mut world.losses)
-            .err()
-            .unwrap();
+        let (reply, reason) = world.station.try_block_ack_reply(reply).err().unwrap();
         assert_eq!(reason, BlockAckReplyRefusal::Encode);
         assert!(world.station.is_connected());
         assert!(matches!(&world.station.state, State::Connected(connected) if !connected.sending));
-        assert_eq!(world.station.tickets.len(), 2);
-        assert_eq!(world.station.buffers.len(), 2);
-        let mut buffers = world.station.buffers.take_all();
-        for buffer in buffers.iter_mut().flatten() {
-            buffer.1 = 512;
-        }
-        world.station.buffers =
-            crate::pool::Pool::from_collection(buffers.into_iter().flatten().collect());
-        let Ok(StaAction::Transmit(transmit)) =
-            world.station.try_block_ack_reply(reply, &mut world.losses)
-        else {
-            panic!("the same reply fits the restored control buffer");
+        world.station.frame.limit = STA_FRAME_CAPACITY;
+        let Ok(StaAction::Transmit(transmit)) = world.station.try_block_ack_reply(reply) else {
+            panic!("the same reply fits the restored buffer");
         };
-        world.transmitted(transmit, false);
+        transmitted(record!(world), transmit, false);
         let clock = VirtualClock::<8>::starting_at(at(40));
         world.run(clock.now());
-        assert_eq!(world.station.tickets.len(), 2);
-        assert_eq!(world.station.buffers.len(), 2);
     });
 }
 

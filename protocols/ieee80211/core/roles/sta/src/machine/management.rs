@@ -166,7 +166,7 @@ impl ManagementProtection {
     }
 
     pub(super) fn deadline(&self, blocked: bool) -> Option<Instant> {
-        // A pending request waits for credit/TX return. Its absolute timeout
+        // A pending request waits for its frame's end. Its absolute timeout
         // still runs; an elapsed retry must not keep the service ready-spinning.
         if self.request.is_some() || blocked {
             self.query.timeout()

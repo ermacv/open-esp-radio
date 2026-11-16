@@ -70,8 +70,6 @@ fn deferred_m3_responds_only_to_the_latest_counter_after_the_current_m4_terminal
                     world.hold_transmissions = false;
                     world.run(at(53));
                     assert!(world.station.is_connected());
-                    assert_eq!(world.station.tickets.len(), 2);
-                    assert_eq!(world.station.buffers.len(), 2);
                 });
             }
         }
@@ -101,8 +99,6 @@ fn deferred_gm1_responds_only_to_the_latest_counter_after_the_current_gm2_termin
                 world.hold_transmissions = false;
                 world.run(at(53));
                 assert!(world.station.is_connected());
-                assert_eq!(world.station.tickets.len(), 2);
-                assert_eq!(world.station.buffers.len(), 2);
             });
         }
     }
@@ -139,8 +135,6 @@ fn deferred_kinds_follow_the_shared_replay_order_without_dropping_either_frame()
                 world.run(at(54));
                 assert!(world.station.is_connected());
                 assert!(world.station.poll_deadline().is_none());
-                assert_eq!(world.station.tickets.len(), 2);
-                assert_eq!(world.station.buffers.len(), 2);
             });
         }
     }
@@ -300,13 +294,11 @@ fn original_d4_deadline_with_a_deferred_m3_fails_once_even_if_the_old_m4_later_d
                 .all(|frame| frame[0] & 0xfc == 0xc0)
         );
         assert!(world.station.keys.clear());
-        assert_eq!(world.station.tickets.len(), 2);
-        assert_eq!(world.station.buffers.len(), 2);
     });
 }
 
 #[test]
-fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
+fn disabled_returns_both_deferred_frame_owners_at_finish() {
     for initial in [false, true] {
         installed(|mint| {
             let (mut world, ptk) = if initial {
@@ -334,11 +326,8 @@ fn disabled_returns_both_deferred_frame_owners_with_the_station_resources() {
             assert_eq!(world.frames.len(), before);
             // The service takes the link back before the station finishes.
             world.return_link();
-            let (bank, _places) = world.station.finish(StaDisconnectReason::Requested);
-            assert_eq!(bank.frame_credits(), (2, 2));
-            assert_eq!(bank.key_owners(), (1, 2, true));
-            let (_bank, deferred, _notice) = bank.into_outputs();
-            let DeferredEapol::Both { message3, group } = deferred else {
+            let _places = world.station.finish(StaDisconnectReason::Requested);
+            let DeferredEapol::Both { message3, group } = world.station.take_deferred() else {
                 panic!("disable must return both affine owners")
             };
             for (frame, counter) in [(message3.into_frame(), 4), (group.into_frame(), 5)] {
@@ -430,8 +419,6 @@ fn authenticated_higher_m3_keeps_ptk_and_answers_with_matching_mac_protection() 
                             .is_ok()
                     );
                 }
-                assert_eq!(world.station.tickets.len(), 2);
-                assert_eq!(world.station.buffers.len(), 2);
             });
         }
     }
@@ -488,36 +475,6 @@ fn failed_initial_m4_answers_a_protected_repeat_with_a_protected_m4() {
 }
 
 #[test]
-fn a_removal_terminal_preserves_an_encoded_group_response_waiting_for_credit() {
-    installed(|mint| {
-        let (mut world, ptk) = wpa2_connected::<2>(mint);
-        let (pending, slot, permission) = take_group_removal(&mut world, &ptk, 3, 2, at(50));
-        let buffers = [
-            world.station.buffers.take().unwrap(),
-            world.station.buffers.take().unwrap(),
-        ];
-        world.receive_verified(at(51), &group_message1(&ptk, 4, 2));
-        let before = world.frames.len();
-        world.input(
-            at(52),
-            StaInput::GroupKeyRemoved {
-                pending,
-                slot,
-                permission,
-            },
-        );
-        for buffer in buffers {
-            world.station.buffers.put(buffer, &mut ());
-        }
-        world.run(at(52));
-        assert_eq!(world.frames.len(), before + 1);
-        assert_eq!(world.eapol.last(), Some(&(true, true)));
-        assert_eq!(world.station.tickets.len(), 2);
-        assert_eq!(world.station.buffers.len(), 2);
-    });
-}
-
-#[test]
 fn every_capacity_retains_keys_then_evicts_the_oldest_non_current_installation() {
     fn exercise<const GROUPS: usize>() {
         installed(|mint| {
@@ -531,7 +488,7 @@ fn every_capacity_retains_keys_then_evicts_the_oldest_non_current_installation()
                 assert_eq!(world.station.keys.groups.len(), index + 1);
                 assert!(world.station.keys.groups.same_material(id, &[0x99; 16]));
             }
-            assert_eq!(world.station.keys.group_slots.free.len(), 0);
+            assert_eq!(world.station.keys.free_group_places(), 0);
             assert!(
                 world
                     .seen

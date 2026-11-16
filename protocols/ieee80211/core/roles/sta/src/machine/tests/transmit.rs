@@ -86,7 +86,7 @@ fn each_plan_selects_its_record_and_a_null_keeps_its_own_transmissions() {
 
 #[test]
 fn station_frames_go_in_voice_unprotected_and_connection_frames_first() {
-    type Transmit<'id> = StaTransmit<'id, Tokens<'id, 2>, Caps>;
+    type Transmit<'a> = StaTransmit<'a, Caps>;
     assert_eq!(Transmit::ACCESS_CATEGORY, WmmAccessCategory::Voice);
     assert_eq!(Transmit::PROTECTION, Protection::None);
     assert_eq!(

@@ -2,7 +2,7 @@ use super::*;
 use oer_protocols_ieee80211_core_arbiter::{ArbiterEnd, ArbiterNotice, RetiredArbiter};
 
 #[test]
-fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
+fn a_finished_station_restarts_in_place_reclaims_old_keys_then_connects() {
     installed(|mint| {
         let (mut world, _) = wpa2_connected::<2>(mint);
         let nonce_calls = world.station.config.callbacks.nonce_calls;
@@ -12,14 +12,13 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
         // The service takes the link back before the station finishes.
         world.return_link();
         let mut arbiter = world.arbiter.finish(ArbiterEnd::Stopped);
-        let (mut bank, mut places) = world.station.finish(StaDisconnectReason::Requested);
-        assert_eq!(bank.config.callbacks.nonce_calls, nonce_calls);
+        let mut places = world.station.finish(StaDisconnectReason::Requested);
         while let Some(notice) = arbiter.poll_notice() {
             if let ArbiterNotice::Station(notice) = notice {
                 places.returned(notice);
             }
         }
-        while bank.poll_output().is_some() {}
+        while world.station.poll_output().is_some() {}
         let RetiredArbiter::Stopped(stopped) = arbiter else {
             panic!()
         };
@@ -28,11 +27,10 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
             .ok()
             .unwrap()
             .into_parts();
-        let (station, deferred, notice) = bank.restart(places).into_parts();
-        assert_eq!(station.config.callbacks.nonce_calls, nonce_calls);
+        let (deferred, notice) = world.station.restart(places);
+        assert_eq!(world.station.config.callbacks.nonce_calls, nonce_calls);
         assert!(matches!(deferred, DeferredEapol::Empty));
         assert!(notice.is_none());
-        world.station = station;
         world.arbiter = arbiter;
         world.take();
         world.hold_group_removals = true;
@@ -53,8 +51,6 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
         world.run(at(52));
         assert!(!world.station.is_reclaiming());
         assert!(world.station.keys.clear());
-        assert_eq!(world.station.tickets.len(), 2);
-        assert_eq!(world.station.buffers.len(), 2);
         assert_eq!(
             world.take(),
             [Seen::RemoveKey, Seen::RemoveKey, Seen::Configure("off")]
@@ -95,55 +91,5 @@ fn stopped_bank_reclaims_old_keys_then_connects_using_the_same_installation() {
                 .any(|terminal| terminal.request.correlation() == 1000
                     && matches!(terminal.outcome, StaCommandOutcome::Connected { .. }))
         );
-        assert_eq!(world.losses.tokens, 0);
-    });
-}
-
-#[test]
-fn a_missing_place_is_retained_by_the_arbiter_and_cannot_form_a_restart_bank() {
-    installed(|mint| {
-        let (mut world, _) = wpa2_connected::<2>(mint);
-        // The service takes the link back before the station finishes.
-        world.return_link();
-        let (bank, places) = world.station.finish(StaDisconnectReason::Requested);
-        let RetiredArbiter::Stopped(stopped) = world.arbiter.finish(ArbiterEnd::Stopped) else {
-            panic!()
-        };
-        let incomplete = stopped.restart(channel(6), places).err().unwrap();
-        assert_eq!(
-            incomplete.missing,
-            oer_protocols_ieee80211_core_arbiter::MissingArbiterReturn::StationPlaces
-        );
-        assert_eq!(bank.frame_credits(), (2, 2));
-        assert_eq!(bank.key_owners(), (1, 2, true));
-        let mut arbiter = RetiredArbiter::Stopped(incomplete.bank);
-        let mut places = incomplete.places;
-        while let Some(notice) = arbiter.poll_notice() {
-            if let ArbiterNotice::Station(notice) = notice {
-                places.returned(notice);
-            }
-        }
-        let RetiredArbiter::Stopped(stopped) = arbiter else {
-            panic!()
-        };
-        let (_arbiter, places) = stopped
-            .restart(channel(6), places)
-            .ok()
-            .unwrap()
-            .into_parts();
-        let (_station, deferred, _notice) = bank.restart(places).into_parts();
-        assert!(matches!(deferred, DeferredEapol::Empty));
-    });
-}
-
-#[test]
-fn a_retired_bank_gives_back_its_configuration_and_callbacks_for_the_next_installation() {
-    installed(|mint| {
-        let (mut world, _) = wpa2_connected::<2>(mint);
-        let nonce_calls = world.station.config.callbacks.nonce_calls;
-        world.return_link();
-        let (bank, _places) = world.station.finish(StaDisconnectReason::Requested);
-        let config = bank.into_config();
-        assert_eq!(config.callbacks.nonce_calls, nonce_calls);
     });
 }
