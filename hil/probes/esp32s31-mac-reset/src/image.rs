@@ -37,7 +37,7 @@ use oer_chips_esp32s31_radio_phy::{
     concurrent::{ConcurrentAcquire, ConcurrentPhy, PhyClientAccess, phy_ready},
     maintain_concurrent_phy, phy_get_rf_cal_version, register_concurrent_phy,
     select_concurrent_wifi_channel,
-    wifi_client::{WifiPhyMembership, join_wifi, set_wifi_rx},
+    wifi_client::{WifiPhyMembership, join_wifi, leave_wifi, set_wifi_rx},
 };
 use oer_chips_family_platform_executor::{Executor, InterruptExecutor};
 use oer_portable_diagnostics::{Name, name};
@@ -348,10 +348,16 @@ enum Kind {
     Quiet = 6,
     /// One pulse under load left in the block's reset state.
     Hold = 7,
+    /// One recovery case of `tasks/097` and its window.
+    Case = 8,
 }
 
 const WIDTH: usize = 22;
-const ROWS: usize = 4 + STOPS + PULSES + QUIET + HOLDS;
+const ROWS: usize = 4 + STOPS + PULSES + QUIET + HOLDS + CASES;
+/// The recovery cases' records: a baseline and cases 0, 1 and 3.
+const CASES: usize = 4;
+/// The window each recovery case is measured over.
+const CASE_WINDOW_MS: u32 = 1_000;
 
 /// The session's records, filled on hart 0's radio executor and printed by
 /// the console's task once the session has ended.
@@ -380,6 +386,13 @@ static JOURNAL: oer_portable_memory::zeroed::ZeroedStatic<Journal> =
     oer_portable_memory::zeroed::ZeroedStatic::new();
 static DONE: oer_portable_memory::ClaimCell<&'static mut Journal> =
     oer_portable_memory::ClaimCell::new();
+/// The phase the session is in, printed as it changes so that the host
+/// can place the peer's lines beside the cases (`MARK <n>`).
+static MARK: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+fn mark(phase: u32) {
+    MARK.store(phase, core::sync::atomic::Ordering::Relaxed);
+}
 
 async fn report(
     mut console: usb::Console,
@@ -387,7 +400,15 @@ async fn report(
 ) {
     use core::fmt::Write as _;
     usb::text(&mut console, b"MACRESET boot v=1\n").await;
+    let mut shown = 0_u32;
     let journal = loop {
+        let now = MARK.load(core::sync::atomic::Ordering::Relaxed);
+        if now != shown {
+            shown = now;
+            let mut line = heapless::String::<32>::new();
+            let _ = writeln!(line, "MARK {now}");
+            usb::text(&mut console, line.as_bytes()).await;
+        }
         if let Ok(journal) = DONE.take() {
             break journal;
         }
@@ -674,8 +695,9 @@ async fn session(
     apart!(register(&mut slot, &timer, &mut platform, &clocks, identity))?;
     // enter: coexistence, common power, the modem clocks, the PHY's client.
     let radio = held(&mut slot)?;
-    let (_coexisting, _participants) = radio.enter_coex(coex);
-    let (powered, _power) = WifiCold::from_partition(wifi)
+    let (coexisting, _participants) = radio.enter_coex(coex);
+    let mut coexisting = Some(coexisting);
+    let (powered, power) = WifiCold::from_partition(wifi)
         .power_up(radio, &clocks)
         .map_err(|_| (phase::POWER, 0))?;
     let mut clocked = powered
@@ -692,11 +714,14 @@ async fn session(
         let joined = join_wifi(available, &clocked, &timer).map_err(|_| (phase::JOIN, 2))?;
         (joined.membership, joined.acquired)
     };
+    let mut power = Some(power);
+    let mut membership = Some(membership);
     // track: the initial tracking, RX enable, the channel, the MAC.
     if acquired == ConcurrentAcquire::TrackingDue {
         apart!(maintain(&mut slot, &timer, &mut platform, &mut pilot))?;
     }
-    set_wifi_rx(held(&mut slot)?, &membership, true).map_err(|_| (phase::RX_ENABLE, 0))?;
+    set_wifi_rx(held(&mut slot)?, membership.as_ref().ok_or((phase::RX_ENABLE, 1))?, true)
+        .map_err(|_| (phase::RX_ENABLE, 0))?;
     let channel = Ghz2_4Channel::new(CHANNEL, ChannelWidth::Mhz20)
         .map_err(|_| (phase::CHANNEL, 0))?;
     apart!(tune(&mut slot, &mut clocked, &timer, &mut platform, channel))?;
@@ -752,6 +777,13 @@ async fn session(
                 power_irq: &mut power_irq,
                 sources: &mut sources,
                 timer: &timer,
+                client: Client {
+                    coex: &mut coexisting,
+                    power: &mut power,
+                    membership: &mut membership,
+                    pilot: &mut pilot,
+                    clocks: &clocks,
+                },
             },
             access,
             clocks_on,
@@ -763,7 +795,7 @@ async fn session(
         core::future::poll_fn(|context| poll_apart(series.as_mut(), context)).await
     };
     // Every owner stays held until the leased host reset.
-    let _held = (slot, membership);
+    let _held = (slot, membership, coexisting, power);
     result
 }
 
@@ -774,6 +806,22 @@ struct Owners<'a> {
     power_irq: &'a mut MacPowerInterruptRegisters,
     sources: &'a mut Sources,
     timer: &'a CooperativeTimer,
+    client: Client<'a>,
+}
+
+/// The Wi-Fi client's owners a leave and a join take and give back.
+struct Client<'a> {
+    coex: &'a mut Option<oer_chips_esp32s31_hal::radio::domain::Coexisting<
+        oer_chips_esp32s31_hal::radio::domain::WifiClient,
+    >>,
+    power: &'a mut Option<
+        oer_chips_esp32s31_hal::radio::domain::CommonPower<
+            oer_chips_esp32s31_hal::radio::domain::WifiClient,
+        >,
+    >,
+    membership: &'a mut Option<WifiPhyMembership>,
+    pilot: &'a mut phy_pilot::Client,
+    clocks: &'a ChipClocks,
 }
 
 /// Poll `future` in this function's frame, never inlined into its caller's.
@@ -801,6 +849,7 @@ async fn series(
         power_irq,
         sources,
         timer,
+        client,
     } = owners;
     // The receive ring, live, with the open promiscuous receive.
     let placed = RxDmaStorage::place(RX.take().ok_or((phase::RING, 0))?)
@@ -826,6 +875,28 @@ async fn series(
         .await
         .map_err(|code| (phase::RECEIVE, code))?;
     journal.record(Kind::Up, &[units]);
+
+    // `tasks/097`: the recovery cases, from the healthy start on.
+    let (cased_access, cased_clocks, cased_ring) = apart!(cases(
+        CaseParts {
+            storage,
+            slot: &mut *slot,
+            mac_irq: &mut *mac_irq,
+            power_irq: &mut *power_irq,
+            sources: &mut *sources,
+            timer,
+            client,
+            mac,
+            channel,
+        },
+        access,
+        clocks_on,
+        ring,
+        journal,
+    ))?;
+    access = cased_access;
+    clocks_on = cased_clocks;
+    ring = cased_ring;
 
     let mut spread = Spread(seed);
     let series_start_cycle = oer_portable_riscv::cycle32();
@@ -1135,6 +1206,208 @@ async fn series(
     // Every owner stays held until the leased host reset.
     let _held = (access, clocks_on, ring);
     Ok(())
+}
+
+/// What the recovery cases borrow.
+struct CaseParts<'a, 'b> {
+    storage: &'static Storage,
+    slot: &'a mut Option<Radio>,
+    mac_irq: &'a mut MacInterruptRegisters,
+    power_irq: &'a mut MacPowerInterruptRegisters,
+    sources: &'a mut Sources,
+    timer: &'a CooperativeTimer,
+    client: Client<'b>,
+    mac: MacColdStartConfig,
+    channel: Ghz2_4Channel,
+}
+
+type Ring = RxRingLive<'static, COUNT>;
+
+/// Receive for `millis`: the units and the MAC's counts over it (MPDUs and
+/// data successes, FCS errors and buffer-full events, each pair packed).
+async fn window(
+    storage: &'static Storage,
+    ring: &mut Ring,
+    access: &mut RadioAccess,
+    millis: u32,
+) -> Result<[u32; 3], Failure> {
+    let counted = statistics(access);
+    let units = receive(storage, ring, access, millis)
+        .await
+        .map_err(|code| (phase::RECEIVE, code | 0x0800_0000))?;
+    let after = statistics(access);
+    Ok([units, advance(counted, after, 0, 1), advance(counted, after, 2, 3)])
+}
+
+/// The ring rebuilt and started in the port's order.
+fn restart(
+    storage: &'static Storage,
+    halted: oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::RxRingHalted<'static, COUNT>,
+    access: &mut RadioAccess,
+    mac_irq: &mut MacInterruptRegisters,
+    power_irq: &mut MacPowerInterruptRegisters,
+) -> Result<Ring, Failure> {
+    let stopped = storage
+        .prepare_halted(halted, access.rx_dma())
+        .map_err(|_| (phase::SECOND_RING, 0x0800_0000))?;
+    access.wifi_mac_hal().reopen_mac_core(&stopped);
+    access.wifi_mac_hal().configure_open_promiscuous_receive();
+    station_policy(access);
+    open_epoch(mac_irq, power_irq);
+    let ring = stopped
+        .try_start(access.rx_dma())
+        .map_err(|_| (phase::SECOND_RING, 0x0800_0001))?;
+    access.wifi_mac_hal().start_mac_runtime(&ring);
+    Ok(ring)
+}
+
+/// The phases a recovery case's failure names.
+const CASE_FAILED: u32 = 20;
+
+/// `tasks/097`'s cases in order, each measured by a window of its own: the
+/// baseline, case 0 (an ordinary stop and the cold preparation again, no
+/// pulse mid-run), case 1 (the pulse mid-run, then what `track` does
+/// after the entry: RX enable, channel, cold preparation, start) and case
+/// 3 (the client's leave, join and track, the registration kept). Case 2
+/// is not callable on its own: the baseband and MAC pulse is the HAL's
+/// `pub(crate)` step of a first `power_up`, which case 3 walks.
+async fn cases(
+    parts: CaseParts<'_, '_>,
+    mut access: RadioAccess,
+    mut clocks_on: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
+    mut ring: Ring,
+    journal: &mut Journal,
+) -> Result<(RadioAccess, oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn, Ring), Failure>
+{
+    let CaseParts {
+        storage,
+        slot,
+        mac_irq,
+        power_irq,
+        sources,
+        timer,
+        client,
+        mac,
+        channel,
+    } = parts;
+    let Client {
+        coex,
+        power,
+        membership,
+        pilot,
+        clocks,
+    } = client;
+    let mut platform = ();
+    let fail = |step: u32| (CASE_FAILED, step);
+    let record = |journal: &mut Journal, case: u32, w: [u32; 3], next: u32| {
+        let [units, seen, errors] = w;
+        journal.record(Kind::Case, &[case, units, seen, errors, next]);
+    };
+
+    // The baseline.
+    mark(10);
+    let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
+    record(journal, 0xb, w, walker(&access.receive_dma_snapshot())[1]);
+
+    // Case 0: an ordinary stop, the cold preparation again, the start.
+    mark(20);
+    access.wifi_mac_hal().request_channel_stop();
+    let halted = ring
+        .try_stop(access.rx_dma())
+        .map_err(|_| fail(0x01))?;
+    let mut clocked = WifiClocked::from_running(access, clocks_on);
+    let cold = {
+        let mut hal = clocked.cold_mac_hal(held(slot)?);
+        initialize_wifi_mac(&mut *sources, &mut hal, timer, mac).await
+    };
+    cold.map_err(|_| fail(0x02))?;
+    (access, clocks_on) = clocked.into_running();
+    ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
+    mark(21);
+    let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
+    record(journal, 0, w, walker(&access.receive_dma_snapshot())[1]);
+
+    // Case 1: the pulse mid-run, then `track` after the entry.
+    mark(30);
+    let mut clocked = WifiClocked::from_running(access, clocks_on);
+    clocked.reset_mac(held(slot)?);
+    set_wifi_rx(held(slot)?, membership.as_ref().ok_or(fail(0x10))?, true)
+        .map_err(|_| fail(0x11))?;
+    apart!(tune(slot, &mut clocked, timer, &mut platform, channel))?;
+    (access, clocks_on) = clocked.into_running();
+    let halted = ring
+        .try_stop(access.rx_dma())
+        .map_err(|_| fail(0x12))?;
+    let mut clocked = WifiClocked::from_running(access, clocks_on);
+    let cold = {
+        let mut hal = clocked.cold_mac_hal(held(slot)?);
+        initialize_wifi_mac(&mut *sources, &mut hal, timer, mac).await
+    };
+    cold.map_err(|_| fail(0x13))?;
+    (access, clocks_on) = clocked.into_running();
+    ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
+    mark(31);
+    let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
+    record(journal, 1, w, walker(&access.receive_dma_snapshot())[1]);
+
+    // Case 3: leave, join and track by the client's public operations,
+    // the PHY's registration kept.
+    mark(50);
+    access.wifi_mac_hal().request_channel_stop();
+    let halted = ring
+        .try_stop(access.rx_dma())
+        .map_err(|_| fail(0x30))?;
+    let clocked = WifiClocked::from_running(access, clocks_on);
+    let left = membership.take().ok_or(fail(0x31))?;
+    set_wifi_rx(held(slot)?, &left, false).map_err(|_| fail(0x32))?;
+    let _last = leave_wifi(held(slot)?, &clocked, left).map_err(|_| fail(0x33))?;
+    let powered = match clocked.release_clocks(held(slot)?) {
+        Ok(released) => released.into_powered(),
+        Err(_stopped) => return Err(fail(0x34)),
+    };
+    let (absent, _participants) = held(slot)?.leave_coex(coex.take().ok_or(fail(0x35))?);
+    let cold_client = powered
+        .power_down(held(slot)?, power.take().ok_or(fail(0x36))?, &absent)
+        .map_err(|_| fail(0x37))?;
+    let (entered, _participants) = held(slot)?.enter_coex(absent);
+    *coex = Some(entered);
+    let (powered, entered_power) = cold_client
+        .power_up(held(slot)?, clocks)
+        .map_err(|_| fail(0x38))?;
+    *power = Some(entered_power);
+    let mut clocked = powered
+        .enable_clocks(held(slot)?, clocks)
+        .map_err(|_| fail(0x39))?;
+    clocked
+        .set_initialized(held(slot)?, true)
+        .map_err(|_| fail(0x3a))?;
+    let acquired = {
+        let ready = phy_ready(held(slot)?).map_err(|_| fail(0x3b))?;
+        let PhyClientAccess::Available(available) = ready.client::<WifiPhyMembership>() else {
+            return Err(fail(0x3c));
+        };
+        let joined = join_wifi(available, &clocked, timer).map_err(|_| fail(0x3d))?;
+        *membership = Some(joined.membership);
+        joined.acquired
+    };
+    if acquired == ConcurrentAcquire::TrackingDue {
+        apart!(maintain(slot, timer, &mut platform, pilot))?;
+    }
+    set_wifi_rx(held(slot)?, membership.as_ref().ok_or(fail(0x3e))?, true)
+        .map_err(|_| fail(0x3f))?;
+    apart!(tune(slot, &mut clocked, timer, &mut platform, channel))?;
+    let cold = {
+        let mut hal = clocked.cold_mac_hal(held(slot)?);
+        initialize_wifi_mac(&mut *sources, &mut hal, timer, mac).await
+    };
+    cold.map_err(|_| fail(0x40))?;
+    (access, clocks_on) = clocked.into_running();
+    ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
+    mark(51);
+    let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
+    record(journal, 3, w, walker(&access.receive_dma_snapshot())[1]);
+    mark(60);
+    Ok((access, clocks_on, ring))
 }
 
 /// The interrupt epoch as the port's start opened it (`MacIrqEpoch::activate`

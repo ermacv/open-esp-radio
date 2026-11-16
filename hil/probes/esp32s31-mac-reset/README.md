@@ -64,7 +64,7 @@ taken and acknowledged whatever its BSSID, with no key.
 
 ## Records
 
-The console prints one line a record, `R <kind> <values…>`, then
+While the session runs the console prints `MARK <n>` at each phase (10 the baseline, 20/21 case 0, 30/31 case 1, 50/51 case 3, 60 the cases' end; the second of each pair opens its window), so that the host can place a peer's lines beside them. Then it prints one line a record, `R <kind> <values…>`, then
 `OER-RESULT: pass mac-reset` or `fail mac-reset`.
 
 | Kind | Values |
@@ -74,6 +74,7 @@ The console prints one line a record, `R <kind> <values…>`, then
 | 3 pulse | index, units before it, delay (µs), the pulse's cycle, its length in cycles, the walker's flags and next descriptor before, its flags, next, last descriptor and base after, the activity field after, the MAC's raw interrupts after, the power bank's causes after, the key entry valid after the pulse, the guard's changed words, units in the second run, the key entry valid after the second run's cold preparation, the MPDU and data-success counts over the window before the pulse and over the second run's |
 | 6 quiet | a pulse with the walker stopped first: index, the walker's flags and base before, its flags, next, last and base after, its flags and base after the cold preparation |
 | 7 hold | a pulse under load left without the cold preparation for 20 ms: index, units before it, the walker's flags, next and base at the pulse, its flags, next, last and base after the 20 ms, the activity field then, the MPDU and data-success counts over the 20 ms, the FCS-error and buffer-full counts over them, the guard's changed words in the ring |
+| 8 case | a recovery case of `tasks/097` over a 1 s window: the case (`0xb` the baseline, 0 an ordinary stop and the cold preparation again, 1 the pulse mid-run then RX enable, channel, cold preparation and start, 3 the client's leave, join and track with the registration kept), units, the MPDU and data-success counts, the FCS-error and buffer-full counts, the walker's next descriptor |
 | 4 end | cycles and microseconds over the series: the `mcycle` rate |
 | 5 failed | the phase and the index where the session stopped |
 
