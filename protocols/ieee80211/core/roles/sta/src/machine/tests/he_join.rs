@@ -632,3 +632,18 @@ fn the_association_carries_the_response_s_color_over_the_scan_s() {
         assert_eq!(world.station.peer().unwrap().associated.he_bss_color, 5);
     });
 }
+
+#[test]
+fn a_restarted_station_sets_no_he_off_for_an_association_of_its_last_run() {
+    installed(|mint| {
+        let (mut world, _) = associating(mint, prefer(), &access_point_beacon(true));
+        world.receive(at(31), &response(&[&HE_CAPABILITY, &HE_OPERATION]));
+        assert_eq!(world.station.peer().unwrap().associated.phy, PhyMode::He20);
+        let mut world = restarted(world);
+        world.take();
+        world.run(at(50));
+        let seen = world.take();
+        assert!(he_settings(&seen).is_empty(), "{seen:?}");
+        assert!(seen.contains(&Seen::Configure("off")));
+    });
+}

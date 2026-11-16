@@ -22,7 +22,7 @@ fn wpa2_profile(ssid: &[u8], pmk: [u8; 32]) -> StaProfile {
 
 /// A station built without a profile.
 fn unprofiled(mint: Mint<'_, TestPools>) -> World<'_, 2> {
-    World::with_builder::<2, 2>(mint, 3, [Slot(1), Slot(2)], build_station)
+    World::with_builder::<2>(mint, 3, build_station::<2>)
 }
 
 /// A scan of the open network's beacon and its outcome: the notice.
@@ -42,7 +42,7 @@ fn a_station_without_a_profile_refuses_connect_and_keeps_its_credit() {
         let refused = world.command(at(0), 1, StaCommand::Connect).unwrap_err();
         assert_eq!(refused.reason, CommandRefusal::NoProfile);
         assert!(world.command_credits.connect.is_some());
-        assert!(world.poll(at(0)).is_none());
+        assert!(poll!(world, at(0)).is_none());
         assert_eq!(world.station.policy(), None);
     });
 }

@@ -1,10 +1,11 @@
-//! Installed group owners and reserved record places. A pending installation
-//! owns its vacant place, so its return cannot overflow a retirement pool.
+//! The station's group table: its installed group keys, by place, and the
+//! places a pending operation reserved.
 
 use super::{Ccmp128Key, GroupKeyId, Pool};
 use oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayState;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 enum Index {
     A,
     B,
@@ -31,7 +32,6 @@ mod tests {
                     place,
                     key_id: id,
                     material: Ccmp128Key::new(&[value; 16]),
-                    key: value,
                     replay: Replay::Retained(
                         CcmpRxReplayState::from_receive_sequence([0; 8]).unwrap(),
                     ),
@@ -45,14 +45,14 @@ mod tests {
         let selected = keys.take_matching(id, &[2; 16]).unwrap();
         keys.restore(selected, true);
         let old = keys.replace().unwrap();
-        assert_eq!(old.key, 0);
+        assert_eq!(old.material.as_bytes(), &[0; 16]);
         assert_eq!(keys.current_id(), Some(id));
         keys.release(old.place, &mut ());
         let next = keys.take_retiring().unwrap();
-        assert_eq!(next.key, 1);
+        assert_eq!(next.material.as_bytes(), &[1; 16]);
         keys.release(next.place, &mut ());
         let single = keys.replace().unwrap();
-        assert_eq!(single.key, 2);
+        assert_eq!(single.material.as_bytes(), &[2; 16]);
         keys.install(single, true);
         let last = keys.take_any().unwrap();
         keys.release(last.place, &mut ());
@@ -101,15 +101,22 @@ impl Index {
     }
 }
 
-/// One vacant record; minted privately once and moved through each install.
-#[derive(Debug)]
-pub(super) struct GroupPlace(Index);
+/// A place of the station's group table: which of its records a group key
+/// operation names.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StaGroupPlace(Index);
 
-pub(super) struct Installed<Key> {
-    pub(super) place: GroupPlace,
+impl StaGroupPlace {
+    /// The place's index in the table, from zero.
+    pub const fn index(self) -> u8 {
+        self.0 as u8
+    }
+}
+
+pub(super) struct Installed {
+    pub(super) place: StaGroupPlace,
     pub(super) key_id: GroupKeyId,
     pub(super) material: Ccmp128Key,
-    pub(super) key: Key,
     pub(super) replay: Replay,
 }
 
@@ -121,39 +128,44 @@ pub(super) enum Replay {
     Retained(CcmpRxReplayState),
 }
 
-pub(super) struct GroupKeys<Key> {
-    entries: [Option<Installed<Key>>; 8],
-    vacant: Pool<GroupPlace>,
+pub(super) struct GroupKeys {
+    entries: [Option<Installed>; 8],
+    vacant: Pool<StaGroupPlace>,
     /// Oldest first, without a wrapping or saturating installation counter.
     order: [Index; 8],
     current: Option<Index>,
 }
 
-impl<Key> GroupKeys<Key> {
+impl GroupKeys {
     #[cfg(test)]
     pub(super) fn len(&self) -> usize {
         self.entries.iter().flatten().count()
     }
 
-    #[cfg(any(test, feature = "test-support"))]
-    pub(super) fn owners(&self) -> impl Iterator<Item = &Key> {
-        self.entries.iter().flatten().map(|entry| &entry.key)
-    }
-
     pub(super) fn new() -> Self {
         Self {
             entries: [const { None }; 8],
-            vacant: Pool::new(Index::ALL.map(GroupPlace)),
+            vacant: Pool::new(Index::ALL.map(StaGroupPlace)),
             order: Index::ALL,
             current: None,
         }
     }
 
-    pub(super) fn reserve(&mut self) -> Option<GroupPlace> {
+    /// Whether no place is installed or reserved.
+    pub(super) fn is_empty(&self) -> bool {
+        self.vacant.len() == Index::ALL.len()
+    }
+
+    /// The places installed or reserved.
+    pub(super) fn occupied(&self) -> usize {
+        Index::ALL.len().saturating_sub(self.vacant.len())
+    }
+
+    pub(super) fn reserve(&mut self) -> Option<StaGroupPlace> {
         self.vacant.take()
     }
 
-    pub(super) fn install(&mut self, entry: Installed<Key>, current: bool) {
+    pub(super) fn install(&mut self, entry: Installed, current: bool) {
         let index = entry.place.0;
         self.restore(entry, current);
         let mut carry = index;
@@ -168,7 +180,7 @@ impl<Key> GroupKeys<Key> {
 
     /// Selection restores an existing record without changing its physical
     /// installation age, used to choose the oldest non-current eviction.
-    pub(super) fn restore(&mut self, entry: Installed<Key>, current: bool) {
+    pub(super) fn restore(&mut self, entry: Installed, current: bool) {
         let index = entry.place.0;
         *index.select_mut(&mut self.entries) = Some(entry);
         if current {
@@ -193,7 +205,7 @@ impl<Key> GroupKeys<Key> {
 
     pub(super) fn release(
         &mut self,
-        place: GroupPlace,
+        place: StaGroupPlace,
         events: &mut impl oer_portable_events::EventSink<crate::events::StaEvent>,
     ) {
         self.vacant.put(place, events);
@@ -216,7 +228,7 @@ impl<Key> GroupKeys<Key> {
         &mut self,
         id: GroupKeyId,
         material: &[u8; 16],
-    ) -> Option<Installed<Key>> {
+    ) -> Option<Installed> {
         self.entries
             .iter_mut()
             .find(|entry| {
@@ -248,28 +260,28 @@ impl<Key> GroupKeys<Key> {
             .find(|index| Some(*index) != self.current && index.select(&self.entries).is_some())
     }
 
-    pub(super) fn take_retiring(&mut self) -> Option<Installed<Key>> {
+    pub(super) fn take_retiring(&mut self) -> Option<Installed> {
         self.take(self.oldest_retiring()?)
     }
 
-    pub(super) fn take_any(&mut self) -> Option<Installed<Key>> {
+    pub(super) fn take_any(&mut self) -> Option<Installed> {
         let index = self.oldest_retiring().or(self.current)?;
         self.take(index)
     }
 
-    fn take(&mut self, index: Index) -> Option<Installed<Key>> {
+    fn take(&mut self, index: Index) -> Option<Installed> {
         let entry = index.select_mut(&mut self.entries).take()?;
         if self.current == Some(index) {
             self.current = None;
         }
-        // The removal token keeps this record place until its terminal.
+        // The removal keeps this record's place until its end.
         Some(entry)
     }
 
     /// When no vacant slot remains, replace the oldest non-current record,
     /// or the current one when it is the only installed owner. Selection
     /// leaves the installation's age unchanged.
-    pub(super) fn replace(&mut self) -> Option<Installed<Key>> {
+    pub(super) fn replace(&mut self) -> Option<Installed> {
         let index = self.oldest_retiring().or(self.current)?;
         index.select_mut(&mut self.entries).take()
     }

@@ -232,14 +232,10 @@ fn unprotected_data_of_a_protected_link_is_refused_and_foreign_open_eapol_goes_n
 fn a_fault_the_station_reports_later_ends_the_links_data() {
     let address = OwnAddress::new(IndividualAddress::new(LOCAL).unwrap());
     let bssid = Bssid::new(IndividualAddress::new(BSSID).unwrap()).unwrap();
-    let mut link = LinkHandover::<
-        '_,
-        oer_protocols_radio_port::Root<oer_protocols_radio_port::LocalId<'_>>,
-        (),
-    >::for_test(1, address, bssid, false, false, None, None);
+    let mut link = LinkHandover::<()>::for_test(1, address, bssid, false, false, None, None);
     link.hold(false);
     let frame = received_frame(0x0288, 0x0800, 0, 0);
-    let deliveries = |link: &mut LinkHandover<'_, _, ()>| {
+    let deliveries = |link: &mut LinkHandover<()>| {
         let mut count = 0;
         let routed = link.receive(
             DecodedHeader::decode(&frame),

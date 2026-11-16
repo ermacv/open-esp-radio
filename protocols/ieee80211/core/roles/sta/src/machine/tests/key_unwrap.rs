@@ -83,8 +83,6 @@ fn a_group_rekey_unwraps_each_frame_in_its_step_and_answers_each() {
         assert_eq!(world.unwraps(), before + 2);
         assert_eq!(world.frames.len(), frames + 2, "GM2 for each counter");
         assert!(world.station.is_connected());
-        assert_eq!(world.station.tickets.len(), 2);
-        assert_eq!(world.station.buffers.len(), 2);
     });
 }
 

@@ -67,7 +67,6 @@ pub mod association;
 pub mod data;
 pub mod epoch;
 pub mod events;
-pub mod port;
 
 pub mod scan;
 pub mod security;

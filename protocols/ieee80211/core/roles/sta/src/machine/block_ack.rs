@@ -4,16 +4,16 @@ use oer_protocols_ieee80211_core_upper_mac::block_ack::{AddbaResponse, AddbaStat
 use oer_protocols_ieee80211_wire::block_ack::frame::{BlockAckAction, parse_block_ack_action};
 
 #[must_use = "a parsed ADDBA request needs a response from the receive bank owner"]
-pub struct PendingRxBlockAck<'id, Path: PoolPath> {
-    epoch: LinkEpoch<'id, Path>,
+pub struct PendingRxBlockAck {
+    epoch: LinkEpoch,
     bssid: Bssid,
     action: BlockAckAction,
     supported: bool,
 }
 
-impl<'id, Path: PoolPath> PendingRxBlockAck<'id, Path> {
+impl PendingRxBlockAck {
     pub(super) fn new(
-        epoch: LinkEpoch<'id, Path>,
+        epoch: LinkEpoch,
         bssid: Bssid,
         action: BlockAckAction,
         supported: bool,
@@ -29,7 +29,7 @@ impl<'id, Path: PoolPath> PendingRxBlockAck<'id, Path> {
     /// station ahead of the receive agreements.
     #[cfg(any(test, feature = "test-support"))]
     pub const fn for_test(
-        epoch: LinkEpoch<'id, Path>,
+        epoch: LinkEpoch,
         bssid: Bssid,
         action: BlockAckAction,
         supported: bool,
@@ -50,13 +50,13 @@ impl<'id, Path: PoolPath> PendingRxBlockAck<'id, Path> {
     pub const fn bssid(&self) -> Bssid {
         self.bssid
     }
-    pub const fn epoch(&self) -> LinkEpoch<'id, Path> {
+    pub const fn epoch(&self) -> LinkEpoch {
         self.epoch
     }
 
     /// Consume the received request into a response of that association.
     /// A response with another dialog or TID returns the unchanged request.
-    pub fn reply(self, response: AddbaResponse) -> Result<RxBlockAckReply<'id, Path>, Self> {
+    pub fn reply(self, response: AddbaResponse) -> Result<RxBlockAckReply, Self> {
         let BlockAckAction::AddbaRequest {
             dialog_token, tid, ..
         } = self.action
@@ -76,7 +76,7 @@ impl<'id, Path: PoolPath> PendingRxBlockAck<'id, Path> {
         })
     }
 
-    pub fn decline(self) -> Result<RxBlockAckReply<'id, Path>, Self> {
+    pub fn decline(self) -> Result<RxBlockAckReply, Self> {
         let BlockAckAction::AddbaRequest {
             dialog_token,
             tid,
@@ -98,22 +98,22 @@ impl<'id, Path: PoolPath> PendingRxBlockAck<'id, Path> {
     }
 }
 
-#[must_use = "retain a busy response until a transmit credit returns"]
-pub struct RxBlockAckReply<'id, Path: PoolPath> {
-    epoch: LinkEpoch<'id, Path>,
+#[must_use = "retain a busy response until the station's frame of its purpose ended"]
+pub struct RxBlockAckReply {
+    epoch: LinkEpoch,
     bssid: Bssid,
     body: [u8; 9],
 }
 
-impl<'id, Path: PoolPath> RxBlockAckReply<'id, Path> {
-    pub const fn epoch(&self) -> LinkEpoch<'id, Path> {
+impl RxBlockAckReply {
+    pub const fn epoch(&self) -> LinkEpoch {
         self.epoch
     }
 
     /// Encode a response retained by this association's receive bank owner.
-    /// The station rechecks the supplied epoch before reserving TX credits.
+    /// The station rechecks the supplied epoch before taking its frame's place.
     pub fn for_association(
-        epoch: LinkEpoch<'id, Path>,
+        epoch: LinkEpoch,
         bssid: Bssid,
         response: AddbaResponse,
     ) -> Option<Self> {
@@ -125,7 +125,7 @@ impl<'id, Path: PoolPath> RxBlockAckReply<'id, Path> {
     }
 
     /// Restore a queued encoded ADDBA response after checking its frame kind.
-    pub fn from_body(epoch: LinkEpoch<'id, Path>, bssid: Bssid, body: [u8; 9]) -> Option<Self> {
+    pub fn from_body(epoch: LinkEpoch, bssid: Bssid, body: [u8; 9]) -> Option<Self> {
         if !matches!(
             parse_block_ack_action(&body),
             Some(BlockAckAction::AddbaResponse { .. } | BlockAckAction::Delba { .. })
@@ -143,13 +143,8 @@ pub enum BlockAckReplyRefusal {
     Encode,
 }
 
-pub type BlockAckReplyResult<'a, 'id, T, K> = Result<
-    StaAction<'a, 'id, T, K>,
-    (
-        RxBlockAckReply<'id, <T as StaTokens>::EpochPath>,
-        BlockAckReplyRefusal,
-    ),
->;
+pub type BlockAckReplyResult<'a, 'id, T, K> =
+    Result<StaAction<'a, 'id, T, K>, (RxBlockAckReply, BlockAckReplyRefusal)>;
 
 pub(super) fn unprotected_action(
     management: Management<'_>,
@@ -173,14 +168,13 @@ pub(super) fn unprotected_action(
     parse_block_ack_action(header.body())
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T, K, C> {
-    /// Attempt a response using the station's existing control credits and,
+impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T, K, C> {
+    /// Attempt a response as a connected station's frame and,
     /// when negotiated, its management protection. Busy returns the owner.
     #[inline(never)]
     pub fn try_block_ack_reply(
         &mut self,
-        reply: RxBlockAckReply<'id, T::EpochPath>,
-        events: &mut impl EventSink<StaEvent>,
+        reply: RxBlockAckReply,
     ) -> BlockAckReplyResult<'_, 'id, T, K> {
         if self.epoch != Some(reply.epoch) || !self.is_connected() {
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
@@ -208,46 +202,36 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
             return Err((reply, BlockAckReplyRefusal::Encode));
         };
         let (mut transition, _) = self.transition();
-        let transmit = match transition.encode_management(
+        let encoded = match transition.encode_management(
             StaManagementSubtype::Action,
             bssid,
             body,
             TxPurpose::Connected(Sending::BlockAck),
             protected,
-            events,
         ) {
-            Ok(transmit) => transmit,
-            Err(Unsent::NoTokens) => return Err((reply, BlockAckReplyRefusal::Busy)),
+            Ok(encoded) => encoded,
+            Err(Unsent::Out) => return Err((reply, BlockAckReplyRefusal::Busy)),
             Err(Unsent::Encode) => return Err((reply, BlockAckReplyRefusal::Encode)),
             Err(Unsent::NoConnection) => return Err((reply, BlockAckReplyRefusal::LinkChanged)),
         };
-        if protected && !self.keys.keyed() {
-            self.tickets.put(transmit.ticket, events);
-            self.buffers.put(transmit.buffer, events);
+        // A protected frame the station numbered itself goes under its
+        // installed key; the handed-over link keys its own frames.
+        if protected
+            && !self.keys.keyed()
+            && !matches!(encoded.number, crate::link::FrameNumber::Link { .. })
+        {
+            self.out.release(encoded.tag.purpose);
             return Err((reply, BlockAckReplyRefusal::LinkChanged));
         }
         if let State::Connected(connected) = &mut self.state {
             connected.sending = true;
         }
-        if protected {
-            match (transmit.number, &self.keys.pairwise) {
-                // The handed-over link numbers and keys its own frames; the
-                // key its holder kept after the link came back keys them.
-                (crate::link::FrameNumber::Link { .. }, _)
-                | (crate::link::FrameNumber::Keyed, KeyCell::Lent(_)) => {
-                    Ok(StaAction::Transmit(transmit))
-                }
-                (crate::link::FrameNumber::Open, KeyCell::Installed(key)) => {
-                    Ok(StaAction::TransmitProtected { transmit, key })
-                }
-                (crate::link::FrameNumber::Open | crate::link::FrameNumber::Keyed, _) => {
-                    self.tickets.put(transmit.ticket, events);
-                    self.buffers.put(transmit.buffer, events);
-                    Err((reply, BlockAckReplyRefusal::LinkChanged))
-                }
-            }
+        let under_key = protected && matches!(encoded.number, crate::link::FrameNumber::Open);
+        let transmit = self.hand_out(encoded);
+        Ok(if under_key {
+            StaAction::TransmitProtected(transmit)
         } else {
-            Ok(StaAction::Transmit(transmit))
-        }
+            StaAction::Transmit(transmit)
+        })
     }
 }

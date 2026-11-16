@@ -9459,14 +9459,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::Keys.group_permission",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::Keys.stray",
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::NewConnection.confirmation",
         BY_P3,
     ),
@@ -9479,18 +9471,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.configuration",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.notice",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::RetiredStation.profile",
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Scan.access_point",
         BY_P3,
     ),
@@ -9499,19 +9479,11 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::StaConfigurationContext.epoch",
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.absence",
         BY_P3,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.absence_place",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::Station.configuration",
         BY_P3,
     ),
     (
@@ -9527,19 +9499,11 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::StationRestart.notice",
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.absence",
         BY_P3,
     ),
     (
         "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.absence_place",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/roles/sta/src/machine.rs::TransitionContext.configuration",
         BY_P3,
     ),
     (

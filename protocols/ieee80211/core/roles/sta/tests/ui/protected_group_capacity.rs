@@ -11,7 +11,7 @@ pub const CAPACITY: GroupCapacity<GROUPS> = GroupCapacity::new(); // ui-error@ou
 
 pub fn build<'id>(
     config: StaConfig<Caps, Callbacks>,
-    resources: StationResources<'id, Tokens<'id, GROUPS>, 1, 1, GROUPS>,
-) -> (Station<'id, Tokens<'id, GROUPS>, Caps, Callbacks>, oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<'id>) {
+    resources: StationResources<'id, Types<'id>>,
+) -> (Station<'id, Types<'id>, Caps, Callbacks>, oer_protocols_ieee80211_core_roles_sta::machine::StaCommandCredits<'id>) {
     Station::new(config, resources, CAPACITY)
 }

@@ -10,17 +10,14 @@ use oer_protocols_ieee80211_contracts_port::{SingleEnd, SingleOutcome, TxOutcome
 /// One decision of the station core.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StaEvent {
-    /// A token came back to a full pool and was dropped: it was not one of
-    /// the owner's, whose number the pool's creation checks.
-    TokenLost,
+    /// A place of the group table came back to its full pool and was
+    /// dropped: it was not out, whose number the pool's creation checks.
+    PlaceLost,
     /// The connected station dropped one RSN input and kept its link.
     RsnInputDropped(RsnDrop),
     /// The station heard one well-formed beacon or probe response while
     /// scanning.
     ScanBssObserved(ScanOutcome),
-    /// A returned buffer's memory was not the station's: its renewal or
-    /// encoding was refused, and the token stays in its pool.
-    BufferMemoryUnavailable,
     /// The station sent a BlockAckReq to move a recipient's window past a
     /// dropped MPDU.
     BlockAckRequestSent,
@@ -147,20 +144,6 @@ pub struct ScanHeard {
     pub to_us: bool,
     /// Its received level in dBm, when the receiver reported one.
     pub rssi: Option<i8>,
-}
-
-/// The returned buffer, renewed for a new MSDU. A buffer whose memory is
-/// not the station's still returns to its pool, reported.
-pub(crate) fn fresh<B: oer_protocols_ieee80211_contracts_port::TxBufferMemory, S>(
-    returned: oer_protocols_ieee80211_contracts_port::ReturnedMpdu<B, S>,
-    renew: impl FnOnce(S) -> B,
-    events: &mut impl oer_portable_events::EventSink<StaEvent>,
-) -> B {
-    let (buffer, renewed) = returned.into_fresh(renew);
-    if renewed.is_err() {
-        oer_portable_events::report(events, || StaEvent::BufferMemoryUnavailable);
-    }
-    buffer
 }
 
 /// Which ordinary RSN input of the connected link the station dropped.

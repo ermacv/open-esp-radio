@@ -15,13 +15,10 @@ fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
     assert_eq!(world.arbiter.channel(), Some(channel(6)));
     assert!(world.station.absence.is_none());
     assert!(world.station.absence_place.is_some());
-    assert!(world.station.configuration.is_some());
+    assert_eq!(world.station.configuration, Configuration::Idle);
     assert!(matches!(world.station.lease, Held::Lease(_)));
-    assert_eq!(world.station.tickets.len(), 2);
-    assert_eq!(world.station.buffers.len(), 2);
-    assert_eq!(world.losses.tokens, 0);
     assert!(world.station.poll_deadline().is_none());
-    assert!(world.poll(now).is_none());
+    assert!(poll!(world, now).is_none());
     assert!(world.arbiter.poll_action(now).is_none());
     assert!(
         world.frames.is_empty(),
@@ -42,8 +39,6 @@ fn assert_scan_overflow(world: &mut World<'_>, now: Instant) {
         }]
     );
     assert!(world.link.as_ref().is_some_and(|link| link.carries()));
-    assert_eq!(world.station.tickets.len(), 2);
-    assert_eq!(world.station.buffers.len(), 2);
 }
 
 #[test]
@@ -88,8 +83,8 @@ fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
         world.run(at(50));
         assert_eq!(world.take(), [Seen::Configure("bss+scan")]);
         let late = Instant::from_micros(u64::MAX - 1);
-        let widened = world.configuring.take().unwrap();
-        world.input(late, StaInput::Configured(widened));
+        assert!(core::mem::take(&mut world.configuring));
+        world.input(late, StaInput::Configured);
         world.run(late);
         assert_eq!(world.take(), [Seen::Configure("bss")]);
         assert!(
@@ -97,8 +92,8 @@ fn delayed_widen_terminal_overflow_restores_receive_before_scan_terminal() {
             "cleanup still owns the accepted request"
         );
         assert!(world.station.poll_deadline().is_none());
-        let narrowed = world.configuring.take().unwrap();
-        world.input(late, StaInput::Configured(narrowed));
+        assert!(core::mem::take(&mut world.configuring));
+        world.input(late, StaInput::Configured);
         world.hold_configured = false;
         world.run(late);
         assert_scan_overflow(&mut world, late);
@@ -121,10 +116,10 @@ fn late_authentication_terminal_overflow_finishes_connect_once_with_all_credits(
         // Expire attempt 1, allowing attempt 2 to publish at this finite time.
         let deadline = world.station.poll_deadline().unwrap();
         world.input(deadline, StaInput::Tick);
-        let Some(StaAction::Transmit(transmit)) = world.poll(deadline) else {
+        let Some(StaAction::Transmit(transmit)) = poll!(world, deadline) else {
             panic!()
         };
-        world.transmitted(transmit, false);
+        transmitted(record!(world), transmit, false);
         world.frames.clear();
         world.take();
         world.end_transmissions(late);
@@ -147,9 +142,7 @@ fn late_authentication_terminal_overflow_finishes_connect_once_with_all_credits(
         );
         assert!(world.frames.is_empty());
         assert!(world.station.place.is_some());
-        assert_eq!(world.station.tickets.len(), 2);
-        assert_eq!(world.station.buffers.len(), 2);
-        assert!(world.poll(late).is_none());
+        assert!(poll!(world, late).is_none());
         assert!(world.station.poll_deadline().is_none());
     });
 }
@@ -158,7 +151,7 @@ fn late_authentication_terminal_overflow_finishes_connect_once_with_all_credits(
 fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
     for message1 in [false, true] {
         installed(|mint| {
-            let mut world = World::with_groups(
+            let mut world = World::with_groups::<2>(
                 mint,
                 3,
                 StaSecurity::Personal {
@@ -168,7 +161,6 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
                     .unwrap(),
                     pmk: Pmk::from_bytes(PMK),
                 },
-                [Slot(1), Slot(2)],
             );
             world.command(at(0), 404, StaCommand::Connect).unwrap();
             world.run(at(0));
@@ -203,10 +195,8 @@ fn handshake_deadline_overflow_finishes_connect_without_sending_eapol() {
             assert!(matches!(world.station.state, State::Idle));
             assert!(world.station.place.is_some());
             assert!(world.station.keys.clear());
-            assert_eq!(world.station.tickets.len(), 2);
-            assert_eq!(world.station.buffers.len(), 2);
             assert!(world.station.poll_deadline().is_none());
-            assert!(world.poll(late).is_none());
+            assert!(poll!(world, late).is_none());
         });
     }
 }

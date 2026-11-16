@@ -16,30 +16,27 @@
 //! }
 //! ```
 //!
-//! # Tokens
+//! # Types
 //!
-//! The machine is generic over its tokens ([`StaTokens`]): the transmit
-//! tickets and buffers the composition hands it at its start, minted by
-//! the port, its key slots, and the arbiter's [`LeasePlace`]. A token
-//! leaves in an action by value and comes back in an input, so what the
-//! machine holds is what it may do, and a host test plays the port and the
-//! arbiter with tokens of its own. The station encodes each frame straight
-//! into the memory of its buffer token ([`TxBufferMemory`]).
+//! The machine is generic over the types of its values ([`StaTypes`]): the
+//! arbiter's path, the brand of the station's own command credits and the
+//! port's evidence of a received frame and of a transmission's end. It holds
+//! nothing the port has a limited number of. It encodes each frame into a
+//! buffer of its own and lends it to the action that carries it out at once
+//! ([`StaTransmit`]); the frame's end comes back with its tag
+//! ([`StaInput::FrameEnded`]). It keeps each key's progress (none,
+//! installing, installed, removing), and its actions name the key by its
+//! place and material, not by an owner.
 //! Management requests use the configured station address as transmitter;
 //! the selected BSSID identifies the receiver and the BSS.
 //!
-//! Station owns keys and their free slots across protocol transitions. Install
-//! actions carry private affine pending tokens (key ID and link epoch for a
-//! group key); responses return those tokens with the keys. A stale install
-//! is removed normally. Group slots are fungible: removal returns a raw slot
-//! to the free pool, whose fullness proves that every group key came back.
-//! Construction receives the complete vacant association bank, retaining even
-//! spare PTK and GTK slots outside the station's selected active capacity.
-//! The negotiated SPP decision moves into the PTK installation and its returned
-//! owner. GTK installation waits for that owner and borrows the same decision.
-//! Leave removes every GTK before the PTK, then synchronously ends the
-//! association with the complete returned bank. No extra timer or terminal
-//! is introduced; pending key installation stays under the original D4 deadline.
+//! The station has one place for each purpose of its frames: a frame waits
+//! while the frame of its own purpose is out, never for another purpose's.
+//! The four orders of its keys and its configuration are states: one group
+//! key operation at a time; the pairwise key removed only once the group
+//! table is empty and the link came back; one receive configuration at a
+//! time. Leave removes every GTK before the PTK, under the original D4
+//! deadline for any pending installation.
 //!
 //! # Channels
 //!
@@ -70,7 +67,6 @@
 //! awaits its end: there is no queue of actions to overflow.
 
 use core::marker::PhantomData;
-use oer_protocols_ieee80211_contracts_port::association::KEY_BANK_CAPACITY;
 use oer_protocols_ieee80211_wire::ccmp::GroupKeyId;
 /// Why an EAPOL-Key packet is not one, as [`StaDisconnectReason::InvalidEapol`]
 /// carries it.
@@ -82,9 +78,8 @@ use crate::events::{ConnectStep, RsnDrop, ScanOutcome, StaEvent};
 use oer_portable_events::{EventSink, report};
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, ConnectionFrame, GroupAddress, HeaderSpec, Ieee80211Capabilities, MpduLength,
-    ReceiveFilter, ReturnedMpdu, RxMetadata, SingleEnd, SingleOutcome, SizedFrame,
-    Station as StationRole, StationReceive, SupportedChannel, SupportedEdca, SupportedFilter,
-    TxBufferMemory, TxOutcome,
+    ReceiveFilter, RxMetadata, SingleEnd, SingleOutcome, SizedFrame, Station as StationRole,
+    StationReceive, SupportedChannel, SupportedEdca, SupportedFilter, TxOutcome,
 };
 use oer_protocols_ieee80211_core_arbiter::{
     AbsenceAnswer, AbsencePlace, Answer, ChannelRequest, Lease, LeaseId, LeasePlace, LeaveReason,
@@ -143,7 +138,7 @@ use oer_portable_time::{Duration, Instant};
 #[cfg(test)]
 use oer_protocols_ieee80211_contracts_port::RxEvidence;
 
-use crate::epoch::{LinkEpoch, LinkEpochSource};
+use crate::epoch::{LinkEpoch, LinkEpochs};
 use crate::join::sae::{StaSaeAuthentication, StaSaeEvent, StaSaeFailure, StaSaeTransmission};
 use crate::link::{FrameNumber, LinkAction, LinkHandover, LinkReturn, RxLink};
 use oer_protocols_ieee80211_core_datapath::numbers::{LinkSpace, TxNumbers};
@@ -153,7 +148,6 @@ use oer_protocols_ieee80211_core_security_rsn::pmksa::{Pmksa, PmksaCache};
 type StaPmksaCache = PmksaCache<Bssid, heapless::Vec<u8, MAX_SSID_LEN>>;
 use crate::pool::Pool;
 use crate::request::StationListenInterval;
-use oer_protocols_ieee80211_contracts_port::ConfigurePermission;
 use oer_protocols_radio_port::{PoolPath, Root};
 mod block_ack;
 mod commands;
@@ -172,7 +166,8 @@ pub use commands::{
     StaCommandRefused, StaCommandTerminal, StaRequest,
 };
 pub use deferred_eapol::{DeferredEapol, PendingGroupM1, PendingM3};
-use group_keys::{GroupKeys, GroupPlace, Installed as InstalledGroup, Replay as GroupReplay};
+pub use group_keys::StaGroupPlace;
+use group_keys::{GroupKeys, Installed as InstalledGroup, Replay as GroupReplay};
 use management::{ManagementEvent, ManagementProtection};
 use tx_block_ack::TxBlockAckOwed;
 pub use tx_block_ack::{StaTxBlockAck, StaTxBlockAckPolicy, StaTxBlockAckPolicyError};
@@ -206,118 +201,20 @@ pub enum TxRefusal {
     StaleKey,
 }
 
-/// The tokens a station holds: the port's, or a host test's.
-pub trait StaTokens {
-    /// Total slots in the complete bank; unused PTKs remain with the station.
-    const PAIRWISE_SLOTS: usize;
-    /// Physical GTK slots, including those outside the selected active bank.
-    const TOTAL_GROUP_SLOTS: usize;
-    /// Group slots granted by this backend resource type.
-    const GROUP_SLOTS: usize;
+/// The types of a station's values: what it shares with its arbiter and
+/// its application, and what the port tells of a frame. None of them is an
+/// owner the port has a limited number of.
+pub trait StaTypes {
     /// Component owning the station's channel arbiter and lease admission.
     type GatePath: PoolPath;
-    /// Component owning this station's connection epoch source.
-    type EpochPath: PoolPath;
-    /// Installation component owning this interface's command permissions.
+    /// Installation component owning this interface's command credits.
     type ConfigurationPath: PoolPath;
-    /// The checked size class of management frames.
-    type Small: oer_protocols_ieee80211_contracts_port::TxBufferClass;
-    /// A transmit ticket: a place in flight and a place for its terminal.
-    type Ticket;
-    /// A transmit buffer of the small class, for management frames: its
-    /// memory, which the station encodes into.
-    type SmallBuffer: TxBufferMemory;
-    /// An immutable published MPDU, including its body and original description.
-    type Sent;
     /// What the port observed of a solicited response.
     type AckEvidence: Copy;
     /// The port's evidence that coexistence denied an attempt the air.
     type AirDenied: Copy;
-    /// Release a completed MPDU for a new frame, ending its retained body owner.
-    fn renew(mpdu: Self::Sent) -> Self::SmallBuffer;
-    /// The affine start permission, reclaimed only through the complete key bank.
-    type AssociationStart;
-    /// Immutable association policy shared by every installed key.
-    type Association;
-    /// Every vacant PTK and GTK slot of this interface.
-    type VacantKeyBank;
-    /// A start permission together with every vacant slot.
-    type VacantAssociation;
-    /// Split the complete initial bank; one PTK is active, the rest are retained.
-    fn split_vacant(
-        vacant: Self::VacantAssociation,
-    ) -> oer_protocols_ieee80211_contracts_port::association::DistributedKeyBank<
-        Self::AssociationStart,
-        Self::PairwiseSlot,
-        Self::GroupSlot,
-        KEY_BANK_CAPACITY,
-    >;
-    /// Select SPP once before installing PTK.
-    fn begin_association(
-        start: Self::AssociationStart,
-        spp: oer_protocols_ieee80211_wire::security::Spp,
-    ) -> Self::Association;
-    /// Collect returns; a partial bank remains owned on failure.
-    fn collect_key_bank(
-        parts: oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
-            Self::PairwiseSlot,
-            Self::GroupSlot,
-            KEY_BANK_CAPACITY,
-        >,
-    ) -> Result<
-        Self::VacantKeyBank,
-        oer_protocols_ieee80211_contracts_port::association::KeyBankParts<
-            Self::PairwiseSlot,
-            Self::GroupSlot,
-            KEY_BANK_CAPACITY,
-        >,
-    >;
-    /// End synchronously, then distribute the complete bank for another association.
-    fn end_association(
-        association: Self::Association,
-        bank: Self::VacantKeyBank,
-    ) -> oer_protocols_ieee80211_contracts_port::association::DistributedKeyBank<
-        Self::AssociationStart,
-        Self::PairwiseSlot,
-        Self::GroupSlot,
-        KEY_BANK_CAPACITY,
-    >;
-    /// The installed PTK retains the association owner until its removal terminal.
-    fn association(key: &Self::PairwiseKey) -> &Self::Association;
-    /// The transmit half of an installed pairwise key: what the link's
-    /// holder numbers the link's protected MPDUs with
-    /// ([`LinkHandover`](crate::link::LinkHandover)).
-    type LinkKey;
-    /// Lend an installed pairwise key to the link: the station keeps its
-    /// association owner, the link takes its transmit half.
-    fn lend(key: Self::PairwiseKey) -> (Self::Association, Self::LinkKey);
-    /// The pairwise key whose transmit half the link returned, with its
-    /// association owner again.
-    fn reunite(association: Self::Association, key: Self::LinkKey) -> Self::PairwiseKey;
-    /// A pairwise key slot.
-    type PairwiseSlot;
-    /// A unique, fungible group slot retained by the backend until removal.
-    type GroupSlot;
-    /// An installed pairwise key, which holds its slot.
-    type PairwiseKey;
-    /// An installed group key, which holds its slot.
-    type GroupKey;
-    /// Unique admission to this station interface's GTK mutations.
-    type GroupPermission;
     /// The metadata the port gives a received frame.
     type RxMeta: RxMetadata;
-}
-
-/// A resource-return violation prevents any further key or association mutation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StaKeyContractViolation {
-    /// Removal returned the association before all of its slots were recovered.
-    IncompleteBank,
-    /// The link returned a pairwise key the station did not lend it, or none
-    /// for the one it lent.
-    LinkKeyMismatch,
-    /// A group installation has no installed PTK association owner.
-    MissingAssociation,
 }
 
 /// The network one connection joins: its SSID and how it protects its link.
@@ -390,33 +287,16 @@ pub enum StaCommand {
     clippy::large_enum_variant,
     reason = "the key-unwrap request owns its bounded buffer by value; the station has no allocator"
 )]
-pub enum StaInput<'id, T: StaTokens, K> {
+pub enum StaInput<'id, T: StaTypes, K> {
     /// A deadline the station named passed.
     Tick,
-    /// The terminal of a transmission: its ticket and buffer come back.
-    TxDone {
-        /// The original operation, returned by the port.
-        context: StaTxContext<'id, T::EpochPath>,
-        /// The transmission's ticket.
-        ticket: T::Ticket,
-        /// The transmission's buffer.
-        buffer: ReturnedMpdu<T::SmallBuffer, T::Sent>,
+    /// A frame the station handed out ended: the frame of its tag's purpose
+    /// is no longer out.
+    FrameEnded {
+        /// The frame's tag, as its action named it.
+        tag: StaTxTag,
         /// How it ended.
-        completion: SingleOutcome<T::AckEvidence, T::AirDenied>,
-    },
-    /// A frame the service did not send (no rate of its plan is on the
-    /// port's channel, or it does not fit its buffer class): its ticket and
-    /// buffer come back with a typed refusal. This is not an accepted TX
-    /// completion and cannot complete the handshake.
-    Unsent {
-        /// Refused before admission; no transmission terminal exists.
-        reason: TxRefusal,
-        /// The operation that was not submitted.
-        context: StaTxContext<'id, T::EpochPath>,
-        /// The frame's ticket.
-        ticket: T::Ticket,
-        /// The frame's buffer.
-        buffer: ReturnedMpdu<T::SmallBuffer, T::Sent>,
+        end: StaFrameEnd<T::AckEvidence, T::AirDenied>,
     },
     /// The same-step answer consumes the request's unique LeasePlace<'id, T::GatePath>, either
     /// returning it on refusal or transferring its ownership into a Lease.
@@ -431,96 +311,77 @@ pub enum StaInput<'id, T: StaTokens, K> {
     Exchanged(Result<Lease<'id, K, T::GatePath>, Lease<'id, K, T::GatePath>>),
     /// A notice of the arbiter.
     Arbiter(StationNotice<'id, K, T::GatePath>),
-    /// The receive configuration the station set took effect.
-    Configured(
-        ConfigurePermission<
-            'id,
-            StationRole,
-            T::ConfigurationPath,
-            StaConfigurationContext<'id, T::EpochPath>,
-        >,
-    ),
-    /// The pairwise key the station asked to install, installed.
-    PairwiseKeyInstalled {
-        /// The original installation action.
-        pending: PendingPairwiseKey<'id, T::EpochPath>,
-        /// The installed key.
-        key: T::PairwiseKey,
+    /// The receive configuration the station set ([`StaAction::Configure`])
+    /// took effect.
+    Configured,
+    /// The pairwise key operation the station asked for
+    /// ([`StaAction::InstallPairwiseKey`], [`StaAction::RemovePairwiseKey`])
+    /// ended with its outcome.
+    PairwiseKeyEnded(StaKeyOutcome),
+    /// The group key operation the station asked for at `place` ended:
+    /// an installation, a replacement, a selection or a removal.
+    GroupKeyEnded {
+        /// The group table's place the operation named.
+        place: StaGroupPlace,
+        /// How it ended.
+        outcome: StaKeyOutcome,
     },
-    /// The group key the station asked to install, installed under the
-    /// index its action named.
-    GroupKeyInstalled {
-        /// Permission returned by the successful FIFO terminal.
-        permission: T::GroupPermission,
-        /// The installed key.
-        key: T::GroupKey,
-        /// The original installation action, including epoch and key index.
-        pending: PendingGroupKey<'id, T::EpochPath>,
-    },
-    /// The FIFO replacement terminal for the pending operation's slot.
-    GroupKeyReplaced {
-        /// Permission returned by the successful FIFO terminal.
-        permission: T::GroupPermission,
-        /// The private successor epoch and installation record.
-        pending: PendingGroupReplacement<'id, T::EpochPath>,
-        /// The successor key, retaining the same physical slot.
-        key: T::GroupKey,
-    },
-    /// Selection of an existing installation reached its RX boundary.
-    GroupKeySelected {
-        pending: PendingGroupSelection<'id, T::EpochPath>,
-        key: T::GroupKey,
-        permission: T::GroupPermission,
-    },
-    /// A removed pairwise key's slot.
-    PairwiseKeyRemoved {
-        /// Returned key slot.
-        slot: T::PairwiseSlot,
-        /// The same association retained through removal.
-        association: T::Association,
-    },
-    /// A removed group key's slot and its unique mutation permission.
-    GroupKeyRemoved {
-        pending: PendingGroupRemoval<'id, T::EpochPath>,
-        slot: T::GroupSlot,
-        permission: T::GroupPermission,
-    },
+}
+
+/// How a key operation the station asked for ended.
+///
+/// An installation, replacement or selection that expired ends the
+/// connection attempt it belongs to as a failed handshake
+/// ([`StaDisconnectReason::HandshakeFailed`]); the station then holds no key
+/// it asked for there. A removal that expired ends the same way as one done:
+/// the station holds that key no longer and does not wait for it again.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaKeyOutcome {
+    /// The operation took effect.
+    Done,
+    /// The operation did not take effect within its bound.
+    Expired,
+}
+
+/// How a frame the station handed out ended.
+#[derive(Clone, Copy, Debug)]
+pub enum StaFrameEnd<A, D> {
+    /// It went: its outcome on the air.
+    Sent(SingleOutcome<A, D>),
+    /// It was refused before admission: no transmission terminal exists.
+    Refused(TxRefusal),
 }
 
 /// One action of the station, which the service carries out at once.
 /// Discarding a produced action is diagnosed by `unused_must_use`:
 /// ```compile_fail
 /// #![deny(unused_must_use)]
-/// use oer_protocols_ieee80211_core_roles_sta::machine::{StaAction, StaTokens};
-/// fn ignore<'a, 'id, T: StaTokens, K: 'a>(next: impl FnOnce() -> StaAction<'a, 'id, T, K>)
-/// where T::PairwiseKey: 'a {
+/// use oer_protocols_ieee80211_core_roles_sta::machine::{StaAction, StaTypes};
+/// fn ignore<'a, 'id, T: StaTypes, K: 'a>(next: impl FnOnce() -> StaAction<'a, 'id, T, K>) {
 ///     next();
 /// }
 /// ```
 /// The consumer may transfer it to the component that performs it:
 /// ```
 /// #![deny(unused_must_use)]
-/// use oer_protocols_ieee80211_core_roles_sta::machine::{StaAction, StaTokens};
-/// fn forward<'a, 'id, T: StaTokens, K: 'a>(next: impl FnOnce() -> StaAction<'a, 'id, T, K>)
-///     -> StaAction<'a, 'id, T, K>
-/// where T::PairwiseKey: 'a {
+/// use oer_protocols_ieee80211_core_roles_sta::machine::{StaAction, StaTypes};
+/// fn forward<'a, 'id, T: StaTypes, K: 'a>(next: impl FnOnce() -> StaAction<'a, 'id, T, K>)
+///     -> StaAction<'a, 'id, T, K> {
 ///     next()
 /// }
 /// ```
-#[must_use = "carry out the action or return its owners through a terminal path"]
+#[must_use = "carry out the action"]
 #[expect(
     clippy::large_enum_variant,
     reason = "the key-unwrap request owns its bounded buffer by value; the station has no allocator"
 )]
-pub enum StaAction<'a, 'id, T: StaTokens, K> {
+pub enum StaAction<'a, 'id, T: StaTypes, K> {
     /// Tell the link's holder what the link does now
     /// ([`crate::link`]): take it, hold or release its data, a transmit
     /// agreement's change, or give it back ([`Station::link_returned`]).
-    Link(LinkAction<'id, T::EpochPath, T::LinkKey>),
+    Link(LinkAction),
     /// A validated Block Ack action of the current BSS, for its RX bank owner.
-    BlockAck(PendingRxBlockAck<'id, T::EpochPath>),
-    /// Stop the port; the machine retains the incomplete resource bank.
-    ContractViolation(StaKeyContractViolation),
+    BlockAck(PendingRxBlockAck),
     /// Ask the arbiter for a channel, with the station's place; the service
     /// hands the answer back ([`StaInput::Answer`]) in the same step.
     RequestChannel(ChannelRequest<K>, LeasePlace<'id, T::GatePath>),
@@ -547,15 +408,7 @@ pub enum StaAction<'a, 'id, T: StaTokens, K> {
     Upstream(UpstreamFact<K>),
     /// Set what the station's interface receives ([`StaInput::Configured`]
     /// follows).
-    Configure(
-        StationReceive<K>,
-        ConfigurePermission<
-            'id,
-            StationRole,
-            T::ConfigurationPath,
-            StaConfigurationContext<'id, T::EpochPath>,
-        >,
-    ),
+    Configure(StationReceive<K>),
     /// Set the EDCA parameters the station's interface contends with: the
     /// access point's, from its association on and whenever its beacons
     /// announce another set. No input follows.
@@ -567,75 +420,58 @@ pub enum StaAction<'a, 'id, T: StaTokens, K> {
     /// again at the leave of an HE BSS and before a restart's reclaim
     /// finds one left. No input follows.
     SetHe(oer_protocols_ieee80211_contracts_port::StationHe),
-    /// Install a pairwise key ([`StaInput::PairwiseKeyInstalled`]).
+    /// Install the pairwise key ([`StaInput::PairwiseKeyEnded`]).
     InstallPairwiseKey {
-        /// Unique policy owner, returned inside the installed pairwise owner.
-        association: T::Association,
-        /// The response must return this token.
-        pending: PendingPairwiseKey<'id, T::EpochPath>,
-        /// The slot it takes.
-        slot: T::PairwiseSlot,
         /// The access point.
         peer: IndividualAddress,
         /// The temporal key.
         key: Ccmp128Key,
+        /// The association's SPP A-MSDU decision.
+        spp: oer_protocols_ieee80211_wire::security::Spp,
     },
-    /// Install a group key ([`StaInput::GroupKeyInstalled`]).
+    /// Install a group key at `place` ([`StaInput::GroupKeyEnded`]).
     InstallGroupKey {
-        /// The decision retained by the PTK of this association.
-        association: &'a T::Association,
-        /// Exclusive GTK mutation permission, held through the terminal.
-        permission: T::GroupPermission,
-        /// The response must return this token.
-        pending: PendingGroupKey<'id, T::EpochPath>,
-        /// The slot it takes.
-        slot: T::GroupSlot,
+        /// The group table's place.
+        place: StaGroupPlace,
         /// Its key index.
         key_id: GroupKeyId,
         /// The temporal key.
         key: Ccmp128Key,
     },
-    /// Replace the consumed key in one FIFO operation. Its slot reserves the
-    /// terminal; only that terminal switches the station's replay epoch.
+    /// Replace the key at `place` in one operation; only its end switches
+    /// the station's replay lane ([`StaInput::GroupKeyEnded`]).
     ReplaceGroupKey {
-        /// Exclusive GTK mutation permission, held through the terminal.
-        permission: T::GroupPermission,
-        /// Return with the replacement terminal of this installed key's slot.
-        pending: PendingGroupReplacement<'id, T::EpochPath>,
-        /// The previous installation and its slot.
-        installed: T::GroupKey,
-        /// The successor's wire ID.
+        /// The group table's place of the key it replaces.
+        place: StaGroupPlace,
+        /// The successor's key index.
         key_id: GroupKeyId,
         /// The successor's material.
         key: Ccmp128Key,
     },
-    /// Choose a retained installation without writing material or resetting replay.
+    /// Choose the retained installation at `place` without writing material
+    /// or resetting replay ([`StaInput::GroupKeyEnded`]).
     SelectGroupKey {
-        pending: PendingGroupSelection<'id, T::EpochPath>,
-        installed: T::GroupKey,
-        permission: T::GroupPermission,
+        /// The group table's place.
+        place: StaGroupPlace,
+        /// Its key index.
+        key_id: GroupKeyId,
     },
-    /// Remove the pairwise key ([`StaInput::PairwiseKeyRemoved`]).
-    RemovePairwiseKey(T::PairwiseKey),
-    /// Remove a group key ([`StaInput::GroupKeyRemoved`]).
+    /// Remove the pairwise key ([`StaInput::PairwiseKeyEnded`]).
+    RemovePairwiseKey,
+    /// Remove the group key at `place` ([`StaInput::GroupKeyEnded`]).
     RemoveGroupKey {
-        pending: PendingGroupRemoval<'id, T::EpochPath>,
-        key: T::GroupKey,
-        permission: T::GroupPermission,
+        /// The group table's place.
+        place: StaGroupPlace,
     },
-    /// Transmit one MPDU ([`StaInput::TxDone`] follows).
-    Transmit(StaTransmit<'id, T, K>),
+    /// Transmit one MPDU ([`StaInput::FrameEnded`] follows).
+    Transmit(StaTransmit<'a, K>),
     /// Transmit one MPDU the station numbered itself under its pairwise
-    /// key: a protected Deauthentication after the link came back
-    /// ([`StaInput::TxDone`] follows). It carries the Protected bit and the
-    /// CCMP header's room. A protected frame of a handed-over link goes as
-    /// [`Self::Transmit`] with its [`FrameNumber::Link`].
-    TransmitProtected {
-        /// The MPDU.
-        transmit: StaTransmit<'id, T, K>,
-        /// The station's installed pairwise key.
-        key: &'a T::PairwiseKey,
-    },
+    /// key, which is the engine's: a protected Deauthentication after the
+    /// link came back ([`StaInput::FrameEnded`] follows). It carries the
+    /// Protected bit and the CCMP header's room. A protected frame of a
+    /// handed-over link goes as [`Self::Transmit`] with its
+    /// [`FrameNumber::Link`].
+    TransmitProtected(StaTransmit<'a, K>),
     /// The station associated with `Peer`: the rates of its frames start
     /// from what the association made known, the handshake's EAPOL
     /// included. A [`StaNotice::Disconnected`] ends it.
@@ -646,18 +482,58 @@ pub enum StaAction<'a, 'id, T: StaTokens, K> {
     CommandCompleted(StaCommandTerminal<'id, T::ConfigurationPath>),
 }
 
-/// One MPDU to transmit: its ticket, the buffer the station encoded it in,
-/// its kind, its class and its rates.
-#[must_use = "submit the operation or return its ticket and buffer"]
-pub struct StaTransmit<'id, T: StaTokens, K> {
-    /// Its epoch and purpose, moved with the operation through its terminal.
-    pub context: StaTxContext<'id, T::EpochPath>,
-    /// Its ticket.
-    pub ticket: T::Ticket,
-    /// The buffer holding the frame, from its header on.
-    pub buffer: T::SmallBuffer,
+/// The capacity of the station's own frame buffer: the longest frame it
+/// encodes, without its FCS.
+pub const STA_FRAME_CAPACITY: usize = 512;
+
+/// The size class of the station's frames.
+#[derive(Debug)]
+pub struct StaFrames;
+
+impl oer_protocols_ieee80211_contracts_port::TxBufferClass for StaFrames {
+    const CAPACITY: usize = STA_FRAME_CAPACITY;
+}
+
+/// The station's own frame buffer: each frame is encoded here and lent to
+/// the action that carries it out in the same step.
+struct FrameBuffer {
+    bytes: [u8; STA_FRAME_CAPACITY],
+    /// The bytes an encoding may use: a test narrows it to make one fail.
+    #[cfg(test)]
+    limit: usize,
+}
+
+impl FrameBuffer {
+    const fn new() -> Self {
+        Self {
+            bytes: [0; STA_FRAME_CAPACITY],
+            #[cfg(test)]
+            limit: STA_FRAME_CAPACITY,
+        }
+    }
+
+    /// Whether a frame of `length` bytes fits the buffer as the test set it.
+    const fn fits(&self, length: usize) -> bool {
+        #[cfg(test)]
+        let fits = length <= self.limit;
+        #[cfg(not(test))]
+        let fits = length <= STA_FRAME_CAPACITY;
+        fits
+    }
+}
+
+/// One MPDU to transmit: the station's buffer holding it, its kind, its
+/// class and its rates.
+#[must_use = "submit the frame; its end comes back with its tag"]
+pub struct StaTransmit<'a, K> {
+    /// Its epoch and purpose, which its end names.
+    pub tag: StaTxTag,
+    /// The station's buffer holding the frame from its header on; `frame`
+    /// names its length. The link's holder writes its Sequence Number in
+    /// place ([`crate::link::number`]); a BlockAckReq has no bytes.
+    pub bytes: &'a mut [u8],
     /// The frame's kind: its receiver, header and length.
-    pub frame: StaFrame<K, T::Small>,
+    pub frame: StaFrame<K, StaFrames>,
     /// What the frame is for, which the service turns into the port's
     /// coexistence priority.
     pub class: StaFrameClass,
@@ -670,45 +546,27 @@ pub struct StaTransmit<'id, T: StaTokens, K> {
     pub number: FrameNumber,
 }
 
-/// Reserve both owners before consuming a sequence or starting an attempt.
-struct TxCredit<'id, T: StaTokens> {
-    epoch: LinkEpoch<'id, T::EpochPath>,
-    ticket: T::Ticket,
-    buffer: T::SmallBuffer,
+/// A frame the station encoded into its buffer, owed until its action.
+struct Encoded<K> {
+    tag: StaTxTag,
+    frame: StaFrame<K, StaFrames>,
+    class: StaFrameClass,
+    plan: StaRatePlan,
+    access_category: WmmAccessCategory,
+    number: FrameNumber,
 }
 
-/// The identity of one station operation. No frame parsing or current-state
-/// guess assigns a completion to a handshake, power transition or link.
-#[derive(Debug)]
-pub struct StaTxContext<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
-    epoch: LinkEpoch<'id, Path>,
+/// The identity of one station frame: the connection it was made in and
+/// what it is for. No frame parsing or current-state guess assigns an end
+/// to a handshake, power transition or link.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StaTxTag {
+    epoch: LinkEpoch,
     purpose: TxPurpose,
 }
 
-/// Opaque purpose retained with a station operation's owned epoch context.
-pub struct StaTxPurpose(TxPurpose);
-
-impl<'p, Path: PoolPath + 'p> oer_protocols_radio_port::LoanedContext<'p, Path::Identity>
-    for StaTxContext<'p, Path>
-where
-    Path::Identity: 'p,
-{
-    type Owned = crate::epoch::EpochContext<Path, StaTxPurpose>;
-
-    fn enclose(self) -> oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
-        self.epoch.context(StaTxPurpose(self.purpose))
-    }
-
-    fn restore(
-        context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>,
-    ) -> Self {
-        let (epoch, StaTxPurpose(purpose)) = context.into_parts();
-        Self { epoch, purpose }
-    }
-}
-
-impl<Path: PoolPath> StaTxContext<'_, Path> {
-    /// Whether this operation used the probe rate record.
+impl StaTxTag {
+    /// Whether this frame used the probe rate record.
     pub const fn is_probe(&self) -> bool {
         matches!(
             self.purpose,
@@ -716,8 +574,8 @@ impl<Path: PoolPath> StaTxContext<'_, Path> {
         )
     }
 
-    /// The rate record whose selection this operation's completion teaches:
-    /// a probe's, or the control frames'.
+    /// The rate record whose selection this frame's end teaches: a probe's,
+    /// or the control frames'.
     pub const fn frame_rates(&self) -> FrameRates {
         if self.is_probe() {
             FrameRates::Probe
@@ -725,6 +583,7 @@ impl<Path: PoolPath> StaTxContext<'_, Path> {
             FrameRates::Control
         }
     }
+
     /// The TID whose next Sequence Number this frame names: an ADDBA
     /// Request, for which the link's holder held the TID's data
     /// ([`LinkAction::Sequence`]).
@@ -733,6 +592,11 @@ impl<Path: PoolPath> StaTxContext<'_, Path> {
             TxPurpose::Connected(Sending::AddbaRequest { tid }) => WmmUserPriority::new(tid),
             _ => None,
         }
+    }
+
+    /// The connection the frame was made in.
+    pub const fn epoch(&self) -> LinkEpoch {
+        self.epoch
     }
 }
 
@@ -746,6 +610,44 @@ enum TxPurpose {
     HandshakeLast,
     Deauthentication,
     Connected(Sending),
+}
+
+impl TxPurpose {
+    /// The purpose's place among the station's frames out.
+    const fn place(self) -> u8 {
+        match self {
+            Self::Probe => 1 << 0,
+            Self::Authentication { .. } => 1 << 1,
+            Self::SaeAuthentication => 1 << 2,
+            Self::Association => 1 << 3,
+            Self::HandshakeResponse => 1 << 4,
+            Self::HandshakeLast => 1 << 5,
+            Self::Deauthentication => 1 << 6,
+            Self::Connected(_) => 1 << 7,
+        }
+    }
+}
+
+/// The one place of every frame of the connected station.
+const CONNECTED_PLACE: TxPurpose = TxPurpose::Connected(Sending::Probe);
+
+/// The station's frames out: one place a purpose, taken from the frame's
+/// action to its end.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct FramesOut(u8);
+
+impl FramesOut {
+    const fn holds(self, purpose: TxPurpose) -> bool {
+        self.0 & purpose.place() != 0
+    }
+
+    fn take(&mut self, purpose: TxPurpose) {
+        self.0 |= purpose.place();
+    }
+
+    fn release(&mut self, purpose: TxPurpose) {
+        self.0 &= !purpose.place();
+    }
 }
 
 /// What a station frame is for.
@@ -882,7 +784,7 @@ impl<K: Ieee80211Capabilities, C: oer_protocols_ieee80211_contracts_port::TxBuff
     }
 }
 
-impl<T: StaTokens, K: Ieee80211Capabilities> StaTransmit<'_, T, K> {
+impl<K: Ieee80211Capabilities> StaTransmit<'_, K> {
     /// Station management frames contend in the Voice queue; admission
     /// control governs QoS data only.
     pub const ACCESS_CATEGORY: WmmAccessCategory = WmmAccessCategory::Voice;
@@ -1128,15 +1030,17 @@ impl<K: Ieee80211Capabilities> Rules<K> {
     };
 }
 
-/// The station: its state and its tokens.
-pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
+/// The station: its state and the progress of what it asked of the port.
+pub struct Station<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> {
     config: StaConfig<K, C>,
     profile: Option<StaProfile>,
     state: State<T, K>,
-    keys: Keys<T>,
-    configuration: Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
-    tickets: Pool<T::Ticket>,
-    buffers: Pool<T::SmallBuffer>,
+    keys: Keys,
+    configuration: Configuration,
+    /// The buffer each frame is encoded into.
+    frame: FrameBuffer,
+    /// The station's frames out, one place a purpose.
+    out: FramesOut,
     /// The station's place for a lease, while it holds none.
     place: Option<LeasePlace<'id, T::GatePath>>,
     /// The lease the station holds, or gave back and awaits the end of.
@@ -1150,9 +1054,9 @@ pub struct Station<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     sequence: SequenceCounter,
     scan: ScanTable<SCAN_CAPACITY>,
     pmksa: StaPmksaCache,
-    /// The connection attempt that owns new TX operations.
-    epoch: Option<LinkEpoch<'id, T::EpochPath>>,
-    epochs: LinkEpochSource<'id, T::EpochPath>,
+    /// The connection attempt that owns new frames.
+    epoch: Option<LinkEpoch>,
+    epochs: LinkEpochs,
     /// Who holds the connected link.
     link: LinkCustody,
     /// Whether the port holds an HE BSS or association the station set
@@ -1183,31 +1087,15 @@ impl LinkCustody {
     }
 }
 
-/// Resource bank of a terminal station. It cannot accept commands, receive
-/// frames or issue protocol effects. Every remaining owner stays in this bank
-/// until its caller retires it with the installation.
-pub struct RetiredStation<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
-    /// Authenticated successors returned by disable without protocol effects.
-    deferred_eapol: DeferredEapol,
-    config: StaConfig<K, C>,
-    profile: Option<StaProfile>,
-    epochs: LinkEpochSource<'id, T::EpochPath>,
-    keys: Keys<T>,
-    configuration: Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
-    tickets: Pool<T::Ticket>,
-    buffers: Pool<T::SmallBuffer>,
-    commands: Commands<'id, T::ConfigurationPath>,
-    sequence: SequenceCounter,
-    pmksa: StaPmksaCache,
-    notice: Option<StaNotice>,
+/// The station's receive configuration as it asked for it: one at a time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Configuration {
+    /// None is being set.
+    Idle,
+    /// One is being set, for the connection attempt it names: an end of an
+    /// earlier attempt's completes no transition of the current one.
+    Setting(Option<LinkEpoch>),
 }
-
-/// A placed station's terminal bank and the places it returns to the arbiter.
-#[cfg(feature = "placement")]
-type PlacedFinish<'b, 'id, T, K, C> = (
-    oer_portable_memory::Placed<'b, RetiredStation<'id, T, K, C>>,
-    StationPlaceReturns<'id, <T as StaTokens>::GatePath>,
-);
 
 /// Terminal-only output; finalization never requests a port operation.
 pub enum StaFinalOutput<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
@@ -1215,150 +1103,34 @@ pub enum StaFinalOutput<'id, Path: PoolPath = Root<oer_protocols_radio_port::Loc
     Notify(StaNotice),
 }
 
-/// A resumed machine and the terminal output which belonged to its prior run.
-/// Its first actions reclaim retained keys and receive configuration; it cannot
-/// admit a new Connect before those real port terminals return.
-pub struct StationRestart<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
-    station: Station<'id, T, K, C>,
-    deferred_eapol: DeferredEapol,
-    notice: Option<StaNotice>,
+/// What a finished station keeps for its restart: the frames its RSN
+/// deferred and the notice of its run.
+struct Finished {
+    deferred: DeferredEapol,
+    notice: FinalNotice,
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> StationRestart<'id, T, K, C> {
-    /// Consume the restart into its machine and the previous run's outputs.
-    pub fn into_parts(self) -> (Station<'id, T, K, C>, DeferredEapol, Option<StaNotice>) {
-        (self.station, self.deferred_eapol, self.notice)
-    }
+/// The notice a finished run owes its application.
+#[derive(Clone, Copy, Debug)]
+enum FinalNotice {
+    /// None: the station was idle.
+    None,
+    /// Owed.
+    Owed(StaNotice),
+    /// Handed out ([`Station::poll_output`]).
+    Given,
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> RetiredStation<'id, T, K, C> {
-    /// Reuse this installation's owners, sequence and connection-epoch source.
-    /// The stopped arbiter supplies both admission places by value. A partial
-    /// return collection cannot enter this infallible transition.
-    pub fn restart(self, places: StationPlaces<'id, T::GatePath>) -> StationRestart<'id, T, K, C> {
-        let (place, absence_place) = places.into_parts();
-        let Self {
-            config,
-            profile,
-            epochs,
-            keys,
-            configuration,
-            tickets,
-            buffers,
-            commands,
-            sequence,
-            pmksa,
-            notice,
-            deferred_eapol,
-        } = self;
-        StationRestart {
-            station: Station {
-                config,
-                profile,
-                epochs,
-                keys,
-                configuration,
-                tickets,
-                buffers,
-                place: Some(place),
-                lease: Held::None,
-                absence_place: Some(absence_place),
-                absence: None,
-                commands,
-                sequence,
-                pmksa,
-                scan: ScanTable::new(),
-                epoch: None,
-                state: State::Reclaiming(Reclaim::Keys),
-                link: LinkCustody::Station,
-                // A restart runs on the next installation, whose MAC starts
-                // without an HE association.
-                he: false,
-            },
-            notice,
-            deferred_eapol,
+impl FinalNotice {
+    /// The notice still owed, which is then given.
+    fn give(&mut self) -> Option<StaNotice> {
+        match core::mem::replace(self, Self::Given) {
+            Self::Owed(notice) => Some(notice),
+            other => {
+                *self = other;
+                None
+            }
         }
-    }
-
-    /// Return deferred frames and the remaining notice together with the
-    /// resource bank. Consuming the bank prevents a second extraction of the
-    /// same authenticated frame owner.
-    pub fn into_outputs(self) -> (Self, DeferredEapol, Option<StaNotice>) {
-        let Self {
-            deferred_eapol,
-            notice,
-            ..
-        } = self;
-        (
-            Self {
-                deferred_eapol: DeferredEapol::Empty,
-                notice: None,
-                ..self
-            },
-            deferred_eapol,
-            notice,
-        )
-    }
-
-    /// The station's network, for its next installation to reconnect to.
-    pub fn take_profile(&mut self) -> Option<StaProfile> {
-        self.profile.take()
-    }
-
-    /// End this installation's transmit tokens: its tickets and its
-    /// buffers drop here, each going home to the port that minted it. The
-    /// bank keeps no transmit token after this; a restart ends them before
-    /// it asks for the next installation.
-    pub fn end_transmit_tokens(&mut self) {
-        drop(self.tickets.take_all());
-        drop(self.buffers.take_all());
-    }
-
-    /// The transmit tokens the bank still holds: its tickets and buffers.
-    pub fn transmit_tokens(&self) -> usize {
-        self.tickets.len().saturating_add(self.buffers.len())
-    }
-
-    /// End this installation's bank and keep only the station's
-    /// configuration and callbacks, for a station on another installation's
-    /// owners; every owner of this installation drops with the bank.
-    pub fn into_config(self) -> StaConfig<K, C> {
-        self.config
-    }
-
-    /// Drain original accepted requests before the one lifecycle notice.
-    pub fn poll_output(&mut self) -> Option<StaFinalOutput<'id, T::ConfigurationPath>> {
-        self.commands
-            .poll()
-            .map(StaFinalOutput::CommandCompleted)
-            .or_else(|| self.notice.take().map(StaFinalOutput::Notify))
-    }
-
-    /// Free frame credits retained before the installation is torn down.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn frame_credits(&self) -> (usize, usize) {
-        (self.tickets.len(), self.buffers.len())
-    }
-
-    /// Pairwise owners, group owners (vacant or installed), and the group's
-    /// mutation permission retained before installation teardown. Poisoned
-    /// work may still own missing resources in the backend's retirement bank.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn key_owners(&self) -> (usize, usize, bool) {
-        let keys = &self.keys;
-        (
-            usize::from(matches!(
-                keys.pairwise,
-                KeyCell::Free(_) | KeyCell::Installed(_)
-            )),
-            keys.group_slots
-                .free
-                .iter()
-                .map(|_| ())
-                .chain(keys.groups.owners().map(|_| ()))
-                .count(),
-            keys.group_permission.is_some(),
-        )
     }
 }
 
@@ -1382,52 +1154,16 @@ impl<'id, K, Path: PoolPath> Held<'id, K, Path> {
     }
 }
 
-/// A pairwise cell awaiting the response to its one installation.
+/// A group key installation the station asked for, kept by the station
+/// until its end: the key's index, material and place, and its replay lane.
 #[derive(Debug)]
-#[must_use = "return this token with the pairwise installation result"]
-pub struct PendingPairwiseKey<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
-    cell: PairwiseCell,
-    epoch: LinkEpoch<'id, Path>,
-}
-
-#[derive(Debug)]
-struct PairwiseCell;
-
-/// A group-key installation awaiting its response. Only Station creates this value;
-/// moving it into the response proves which transition owns the installed key.
-///
-/// ```compile_fail,E0063
-/// use oer_protocols_ieee80211_core_roles_sta::machine::{StaInput, StaTokens};
-/// fn forged<'id, T: StaTokens, K>(key: T::GroupKey) -> StaInput<'id, T, K> {
-///     StaInput::GroupKeyInstalled { key }
-/// }
-/// ```
-///
-/// It cannot be copied to manufacture a second response:
-/// ```compile_fail,E0599
-/// use oer_protocols_ieee80211_core_roles_sta::machine::PendingGroupKey;
-/// fn duplicate<'id>(pending: PendingGroupKey<'id>) -> (PendingGroupKey<'id>, PendingGroupKey<'id>) {
-///     (pending.clone(), pending)
-/// }
-/// ```
-///
-/// With the original action's token, returning the key is well-typed:
-/// ```
-/// use oer_protocols_ieee80211_core_roles_sta::machine::{PendingGroupKey, StaInput, StaTokens};
-/// fn installed<'id, T: StaTokens, K>(pending: PendingGroupKey<'id, T::EpochPath>, key: T::GroupKey, permission: T::GroupPermission)
-///     -> StaInput<'id, T, K> {
-///     StaInput::GroupKeyInstalled { pending, key, permission }
-/// }
-/// ```
-#[derive(Debug)]
-#[must_use = "return this token with the group installation result"]
-pub struct PendingGroupKey<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
-    pub(crate) epoch: LinkEpoch<'id, Path>,
+pub(crate) struct PendingGroupKey {
+    pub(crate) epoch: LinkEpoch,
     key_id: GroupKeyId,
     material: Ccmp128Key,
-    place: GroupPlace,
-    /// The key's replay lane: its initial frontier until its terminal
-    /// switches the lane to it.
+    place: StaGroupPlace,
+    /// The key's replay lane: its initial frontier until its end switches
+    /// the lane to it.
     replay: PendingLane,
 }
 
@@ -1437,15 +1173,15 @@ enum PendingLane {
     /// As the station keeps it: already active, or the frontier the key
     /// starts from.
     Station(GroupReplay),
-    /// The link's holder switched the key ID's lane to the key at its
-    /// terminal and took this frontier from it, for the installation of
-    /// that ID which stays.
+    /// The link's holder switched the key ID's lane to the key at its end
+    /// and took this frontier from it, for the installation of that ID
+    /// which stays.
     Switched(Option<oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayState>),
 }
 
-impl<Path: PoolPath> PendingGroupKey<'_, Path> {
-    /// The key's installation terminal switches its key ID's lane of
-    /// `replay` to the key, once.
+impl PendingGroupKey {
+    /// The key's end switches its key ID's lane of `replay` to the key,
+    /// once.
     pub(crate) fn activate(&mut self, replay: &mut CcmpRxReplayEpoch) {
         let PendingLane::Station(GroupReplay::Retained(next)) =
             core::mem::replace(&mut self.replay, PendingLane::Station(GroupReplay::Active))
@@ -1458,306 +1194,104 @@ impl<Path: PoolPath> PendingGroupKey<'_, Path> {
     }
 }
 
-/// The reserved successor of a GTK. It stays private until the port's
-/// replacement terminal; the active replay epoch remains usable meanwhile.
-///
-/// The pending owner cannot complete two replacements:
-/// ```compile_fail,E0382
-/// use oer_protocols_ieee80211_core_roles_sta::machine::PendingGroupReplacement;
-/// fn duplicate<'id>(pending: PendingGroupReplacement<'id>) {
-///     let first = pending;
-///     let second = pending;
-/// }
-/// ```
-/// The replacement input must return that owner:
-/// ```compile_fail,E0063
-/// use oer_protocols_ieee80211_core_roles_sta::machine::{StaInput, StaTokens};
-/// fn forged<'id, T: StaTokens, K>(key: T::GroupKey) -> StaInput<'id, T, K> {
-///     StaInput::GroupKeyReplaced { key }
-/// }
-/// ```
-/// Its valid terminal moves both values once:
-/// ```
-/// use oer_protocols_ieee80211_core_roles_sta::machine::{PendingGroupReplacement, StaInput, StaTokens};
-/// fn returned<'id, T: StaTokens, K>(pending: PendingGroupReplacement<'id, T::EpochPath>, key: T::GroupKey, permission: T::GroupPermission)
-///     -> StaInput<'id, T, K> {
-///     StaInput::GroupKeyReplaced { pending, key, permission }
-/// }
-/// ```
-#[must_use = "return this token with the matching group replacement terminal"]
-pub struct PendingGroupReplacement<
-    'id,
-    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
-> {
-    pub(crate) install: PendingGroupKey<'id, Path>,
-    /// The replaced installation's key ID, whose replay lane the terminal
-    /// ends when it is another ID and no installation of it stays active.
+/// The successor of a GTK. Only the replacement's end switches the active
+/// replay lane; the old one stays usable meanwhile.
+#[derive(Debug)]
+pub(crate) struct PendingGroupReplacement {
+    pub(crate) install: PendingGroupKey,
+    /// The replaced installation's key ID, whose replay lane the end ends
+    /// when it is another ID and no installation of it stays active.
     retired: Option<GroupKeyId>,
 }
 
-impl<Path: PoolPath> PendingGroupReplacement<'_, Path> {
-    /// The key ID whose replay lane the replacement's terminal ends.
+impl PendingGroupReplacement {
+    /// The key ID whose replay lane the replacement's end ends.
     pub(crate) const fn retired_lane(&self) -> Option<GroupKeyId> {
         self.retired
     }
 }
 
-/// Replay and material custody of the existing installation being selected.
-#[must_use = "return with the matching selection terminal"]
-pub struct PendingGroupSelection<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>>
-{
-    pub(crate) install: PendingGroupKey<'id, Path>,
+/// The existing installation being selected.
+#[derive(Debug)]
+pub(crate) struct PendingGroupSelection {
+    pub(crate) install: PendingGroupKey,
 }
 
-/// A record cannot be reused until the physical removal terminal returns.
-/// Its invariant installation and pool path belong to the station that issued
-/// the action, independently of whether that connection has since left.
-#[must_use = "return with the matching removal terminal"]
-pub struct PendingGroupRemoval<'id, Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>> {
+/// A group key being removed: its place is not reused before the removal's
+/// end.
+#[derive(Debug)]
+pub(crate) struct PendingGroupRemoval {
     pub(crate) key_id: GroupKeyId,
-    place: GroupPlace,
+    place: StaGroupPlace,
     _material: Ccmp128Key,
     replay: GroupReplay,
-    installation: core::marker::PhantomData<fn(&'id Path) -> &'id Path>,
 }
 
-impl<Path: PoolPath> PendingGroupRemoval<'_, Path> {
-    /// Whether the removed key's replay lane is active: its terminal ends
-    /// the lane.
+impl PendingGroupRemoval {
+    /// Whether the removed key's replay lane is active: its end ends the
+    /// lane.
     pub(crate) const fn active(&self) -> bool {
         matches!(self.replay, GroupReplay::Active)
     }
 }
 
-/// Opaque connection context carried inside the installation's sole configure
-/// permission. Its terminal returns the context with that same permission;
-/// an old epoch releases admission without completing a transition of the
-/// current connection. No service-side request table correlates this response.
-///
-/// ```compile_fail,E0308
-/// use oer_protocols_ieee80211_core_roles_sta::machine::{StaInput, StaTokens};
-/// fn forged<'id, T: StaTokens, K>() -> StaInput<'id, T, K> {
-///     StaInput::Configured
-/// }
-/// ```
-#[derive(Debug)]
-pub struct StaConfigurationContext<
-    'id,
-    Path: PoolPath = Root<oer_protocols_radio_port::LocalId<'id>>,
-> {
-    epoch: Option<LinkEpoch<'id, Path>>,
-}
-
-impl<'id, Path: PoolPath> StaConfigurationContext<'id, Path> {
-    /// The context of a configuration no link epoch follows: another
-    /// interface's, which shares the port's configure context type.
-    pub const fn detached() -> Self {
-        Self { epoch: None }
-    }
-}
-
-impl<'p, Path: PoolPath + 'p> oer_protocols_radio_port::LoanedContext<'p, Path::Identity>
-    for StaConfigurationContext<'p, Path>
-where
-    Path::Identity: 'p,
-{
-    type Owned = oer_protocols_radio_port::ContextChoice<(), crate::epoch::EpochContext<Path, ()>>;
-
-    fn enclose(self) -> oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned> {
-        match self.epoch {
-            Some(epoch) => epoch.context(()).second(),
-            None => oer_protocols_radio_port::PortContext::new(()).first(),
-        }
-    }
-
-    fn restore(
-        context: oer_protocols_radio_port::PortContext<'p, Path::Identity, Self::Owned>,
-    ) -> Self {
-        let epoch = match context.into_choice() {
-            oer_protocols_radio_port::ContextChoice::First(_) => None,
-            oer_protocols_radio_port::ContextChoice::Second(context) => {
-                Some(context.into_parts().0)
-            }
-        };
-        Self { epoch }
-    }
-}
-
-type BankParts<P, G> =
-    oer_protocols_ieee80211_contracts_port::association::KeyBankParts<P, G, KEY_BANK_CAPACITY>;
-
-/// A refused bank retains all owners, including the element which did not fit.
-enum KeyBankReunionError<P, G> {
-    Incomplete {
-        _parts: BankParts<P, G>,
-    },
-    Capacity {
-        _parts: BankParts<P, G>,
-        _pairwise: [Option<P>; KEY_BANK_CAPACITY],
-        _group: [[Option<G>; KEY_BANK_CAPACITY]; 2],
-    },
-}
-
-fn assemble_key_bank<P, G>(
-    slot: P,
-    mut pairwise: [Option<P>; KEY_BANK_CAPACITY],
-    mut group: [[Option<G>; KEY_BANK_CAPACITY]; 2],
-) -> Result<BankParts<P, G>, KeyBankReunionError<P, G>> {
-    let mut parts = BankParts {
-        pairwise: heapless::Vec::from_array([slot]),
-        group: heapless::Vec::new(),
-    };
-    for source in &mut pairwise {
-        if let Some(item) = source.take()
-            && let Err(item) = parts.pairwise.push(item)
-        {
-            *source = Some(item);
-            return Err(KeyBankReunionError::Capacity {
-                _parts: parts,
-                _pairwise: pairwise,
-                _group: group,
-            });
-        }
-    }
-    for source in group.iter_mut().flatten() {
-        if let Some(item) = source.take()
-            && let Err(item) = parts.group.push(item)
-        {
-            *source = Some(item);
-            return Err(KeyBankReunionError::Capacity {
-                _parts: parts,
-                _pairwise: pairwise,
-                _group: group,
-            });
-        }
-    }
-    Ok(parts)
-}
-
-/// The state of a key cell, independent of the protocol's current state.
-enum KeyCell<T: StaTokens> {
-    Free(VacantPairwise<T>),
-    Installing,
-    Installed(T::PairwiseKey),
-    /// The installed key's transmit half is with the link's holder; the
-    /// station keeps its association owner.
-    Lent(T::Association),
-    /// The station asked the link's holder for the lent transmit half
-    /// ([`LinkAction::ReturnKey`]) to remove the key.
-    Recalled(T::Association),
+/// The pairwise key's progress, as the station asked for it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PairwiseKey {
+    /// None is installed.
+    None,
+    /// Its installation for the connection attempt it names is out.
+    Installing(LinkEpoch),
+    /// It is installed.
+    Installed,
+    /// Its removal is out.
     Removing,
-    /// Backend contract violation: every returned owner remains in custody.
-    UnreturnedBank {
-        _association: T::Association,
-        _error: KeyBankReunionError<T::PairwiseSlot, T::GroupSlot>,
-    },
 }
 
-/// Free slots are fungible credits from the installation's declared pool.
-/// An install takes one; only its eventual removal returns one. Thus a full
-/// pool proves that no group installation or removal remains outstanding.
-struct GroupSlots<T: StaTokens> {
-    free: Pool<T::GroupSlot>,
+/// The group table's operation: one at a time.
+#[derive(Debug)]
+enum GroupOperation {
+    Idle,
+    Install(PendingGroupKey),
+    Replace(PendingGroupReplacement),
+    Select(PendingGroupSelection),
+    Remove(PendingGroupRemoval),
 }
 
-impl<T: StaTokens> GroupSlots<T> {
-    fn is_full(&self) -> bool {
-        self.free.len() == T::GROUP_SLOTS
+impl GroupOperation {
+    /// The place the operation in progress names.
+    const fn place(&self) -> Option<StaGroupPlace> {
+        match self {
+            Self::Idle => None,
+            Self::Install(pending) => Some(pending.place),
+            Self::Replace(pending) => Some(pending.install.place),
+            Self::Select(pending) => Some(pending.install.place),
+            Self::Remove(pending) => Some(pending.place),
+        }
     }
 }
 
-struct VacantPairwise<T: StaTokens> {
-    slot: T::PairwiseSlot,
-    association: T::AssociationStart,
+struct Keys {
+    pairwise: PairwiseKey,
+    group: GroupOperation,
+    groups: GroupKeys,
+    /// The group keys the station's port holds at once.
+    capacity: usize,
 }
 
-struct Keys<T: StaTokens> {
-    pairwise: KeyCell<T>,
-    /// A transmit half the link's holder returned for no lent key.
-    stray: Option<T::LinkKey>,
-    spare_pairwise: heapless::Vec<T::PairwiseSlot, KEY_BANK_CAPACITY>,
-    spare_group: Pool<T::GroupSlot>,
-    group_slots: GroupSlots<T>,
-    group_permission: Option<T::GroupPermission>,
-    groups: GroupKeys<T::GroupKey>,
-}
-
-type PairwiseAdmission<'id, T> = (
-    <T as StaTokens>::Association,
-    <T as StaTokens>::PairwiseSlot,
-    PendingPairwiseKey<'id, <T as StaTokens>::EpochPath>,
-);
-
-impl<T: StaTokens> Keys<T> {
-    fn new<const N: usize>(vacant: T::VacantAssociation, permission: T::GroupPermission) -> Self {
-        const {
-            if N != T::GROUP_SLOTS
-                || N > T::TOTAL_GROUP_SLOTS
-                || T::TOTAL_GROUP_SLOTS > KEY_BANK_CAPACITY
-                || T::PAIRWISE_SLOTS == 0
-                || T::PAIRWISE_SLOTS > KEY_BANK_CAPACITY
-            {
-                panic!("station collections must retain the complete key bank");
-            }
-        }
-        let (association, slot, parts) = T::split_vacant(vacant);
-        let (free, spare_group) = Pool::partition(parts.group, N);
+impl Keys {
+    fn new(capacity: usize) -> Self {
         Self {
-            pairwise: KeyCell::Free(VacantPairwise { slot, association }),
-            stray: None,
-            spare_pairwise: parts.pairwise,
-            spare_group,
-            group_slots: GroupSlots { free },
-            group_permission: Some(permission),
+            pairwise: PairwiseKey::None,
+            group: GroupOperation::Idle,
             groups: GroupKeys::new(),
-        }
-    }
-
-    fn take_pairwise_slot<'id>(
-        &mut self,
-        epoch: LinkEpoch<'id, T::EpochPath>,
-        spp: oer_protocols_ieee80211_wire::security::Spp,
-    ) -> Option<PairwiseAdmission<'id, T>> {
-        match core::mem::replace(&mut self.pairwise, KeyCell::Installing) {
-            KeyCell::Free(VacantPairwise { slot, association }) => Some((
-                T::begin_association(association, spp),
-                slot,
-                PendingPairwiseKey {
-                    cell: PairwiseCell,
-                    epoch,
-                },
-            )),
-            cell => {
-                self.pairwise = cell;
-                None
-            }
-        }
-    }
-
-    fn pairwise_installed(
-        &mut self,
-        pending: PendingPairwiseKey<'_, T::EpochPath>,
-        key: T::PairwiseKey,
-    ) {
-        let PairwiseCell = pending.cell;
-        self.pairwise = KeyCell::Installed(key);
-    }
-
-    fn take_pairwise_key(&mut self) -> Option<T::PairwiseKey> {
-        match core::mem::replace(&mut self.pairwise, KeyCell::Removing) {
-            KeyCell::Installed(key) => Some(key),
-            cell => {
-                self.pairwise = cell;
-                None
-            }
+            capacity,
         }
     }
 
     fn group_installed(
         &mut self,
-        pending: PendingGroupKey<'_, T::EpochPath>,
-        key: T::GroupKey,
-        permission: T::GroupPermission,
+        pending: PendingGroupKey,
         current: bool,
         replay: Option<&mut CcmpRxReplayEpoch>,
         selected: bool,
@@ -1787,7 +1321,6 @@ impl<T: StaTokens> Keys<T> {
             place,
             key_id,
             material,
-            key,
             replay,
         };
         if selected {
@@ -1795,112 +1328,46 @@ impl<T: StaTokens> Keys<T> {
         } else {
             self.groups.install(entry, current);
         }
-        self.group_permission = Some(permission);
     }
 
-    fn take_group_key(
-        &mut self,
-        retiring: bool,
-    ) -> Option<(T::GroupPermission, InstalledGroup<T::GroupKey>)> {
-        let permission = self.group_permission.take()?;
-        let entry = if retiring {
+    /// An installed group key to remove, while no group operation is out.
+    fn take_group_key(&mut self, retiring: bool) -> Option<InstalledGroup> {
+        if !matches!(self.group, GroupOperation::Idle) {
+            return None;
+        }
+        if retiring {
             self.groups.take_retiring()
         } else {
             self.groups.take_any()
-        };
-        match entry {
-            Some(entry) => Some((permission, entry)),
-            None => {
-                self.group_permission = Some(permission);
-                None
-            }
         }
-    }
-
-    fn group_removed(
-        &mut self,
-        slot: T::GroupSlot,
-        permission: T::GroupPermission,
-        place: GroupPlace,
-        events: &mut impl EventSink<StaEvent>,
-    ) {
-        self.groups.release(place, events);
-        self.group_slots.free.put(slot, events);
-        self.group_permission = Some(permission);
     }
 
     fn current_group(&self) -> Option<GroupKeyId> {
         self.groups.current_id()
     }
 
-    /// Whether the station's pairwise key is installed, with the station or
-    /// lent to its link.
+    /// Whether the station's pairwise key is installed.
     const fn keyed(&self) -> bool {
-        matches!(
-            self.pairwise,
-            KeyCell::Installed(_) | KeyCell::Lent(_) | KeyCell::Recalled(_)
-        )
-    }
-
-    /// Whether the installed key's transmit half is with the link's holder,
-    /// which numbers the station's protected frames under it.
-    const fn lent(&self) -> bool {
-        matches!(self.pairwise, KeyCell::Lent(_))
-    }
-
-    /// Lend the installed pairwise key's transmit half to the link.
-    fn lend(&mut self) -> Option<T::LinkKey> {
-        match core::mem::replace(&mut self.pairwise, KeyCell::Removing) {
-            KeyCell::Installed(key) => {
-                let (association, key) = T::lend(key);
-                self.pairwise = KeyCell::Lent(association);
-                Some(key)
-            }
-            cell => {
-                self.pairwise = cell;
-                None
-            }
-        }
-    }
-
-    /// Ask the link's holder for the lent transmit half: whether the key
-    /// was lent and is now recalled.
-    fn recall(&mut self) -> bool {
-        match core::mem::replace(&mut self.pairwise, KeyCell::Removing) {
-            KeyCell::Lent(association) => {
-                self.pairwise = KeyCell::Recalled(association);
-                true
-            }
-            cell => {
-                self.pairwise = cell;
-                false
-            }
-        }
-    }
-
-    /// The link's holder returned `key`, the transmit half it was lent,
-    /// asked for or not.
-    fn returned(&mut self, key: T::LinkKey) {
-        self.pairwise = match core::mem::replace(&mut self.pairwise, KeyCell::Removing) {
-            KeyCell::Lent(association) | KeyCell::Recalled(association) => {
-                KeyCell::Installed(T::reunite(association, key))
-            }
-            cell => {
-                // The cell's owners stay with it; the stray key is kept.
-                self.stray = Some(key);
-                cell
-            }
-        };
+        matches!(self.pairwise, PairwiseKey::Installed)
     }
 
     fn installed(&self) -> bool {
-        matches!(self.pairwise, KeyCell::Installed(_)) && self.current_group().is_some()
+        self.keyed() && self.current_group().is_some()
+    }
+
+    /// Whether the group table holds no key and no group operation is out.
+    fn groups_empty(&self) -> bool {
+        matches!(self.group, GroupOperation::Idle) && self.groups.is_empty()
     }
 
     fn clear(&self) -> bool {
-        matches!(self.pairwise, KeyCell::Free(_))
-            && self.group_slots.is_full()
-            && self.group_permission.is_some()
+        matches!(self.pairwise, PairwiseKey::None) && self.groups_empty()
+    }
+
+    /// The group table's places the station may still fill.
+    #[cfg(test)]
+    fn free_group_places(&self) -> usize {
+        self.capacity.saturating_sub(self.groups.occupied())
     }
 }
 
@@ -1909,7 +1376,7 @@ impl<T: StaTokens> Keys<T> {
     clippy::large_enum_variant,
     reason = "sub-limit variant initializers stay affine without an allocator"
 )]
-enum Change<T: StaTokens, K> {
+enum Change<T: StaTypes, K> {
     Keep,
     Idle,
     Reclaiming(Reclaim),
@@ -1928,7 +1395,7 @@ enum Change<T: StaTokens, K> {
     },
 }
 
-struct NewConnection<T: StaTokens, K> {
+struct NewConnection<T: StaTypes, K> {
     bssid: Bssid,
     channel: SupportedChannel<K>,
     association_id: u16,
@@ -1937,7 +1404,7 @@ struct NewConnection<T: StaTokens, K> {
     qos_sequences: [SequenceCounter; 8],
     confirmation: Option<RsnStaResponseDeadline>,
 }
-impl<T: StaTokens, K> State<T, K> {
+impl<T: StaTypes, K> State<T, K> {
     fn take_deferred(&mut self) -> DeferredEapol {
         let deferred = match self {
             Self::Leave(leave) => &mut leave.deferred,
@@ -2069,10 +1536,10 @@ impl<T: StaTokens, K> State<T, K> {
     }
 }
 
-fn current_epoch<'id, T: StaTokens, K>(
+fn current_epoch<T: StaTypes, K>(
     state: &State<T, K>,
-    epoch: Option<LinkEpoch<'id, T::EpochPath>>,
-) -> Option<LinkEpoch<'id, T::EpochPath>> {
+    epoch: Option<LinkEpoch>,
+) -> Option<LinkEpoch> {
     match state {
         State::Idle | State::Reclaiming(_) | State::Leave(_) | State::Report(_) => None,
         _ => epoch,
@@ -2085,7 +1552,7 @@ fn current_epoch<'id, T: StaTokens, K>(
     clippy::large_enum_variant,
     reason = "phase payloads stay resident and are never passed through transitions by value"
 )]
-enum State<T: StaTokens, K> {
+enum State<T: StaTypes, K> {
     /// Not connected and not trying.
     Idle,
     /// A restarted service returns old key/configuration owners before Connect.
@@ -2102,6 +1569,9 @@ enum State<T: StaTokens, K> {
     Leave(Leave),
     /// Telling the application why it is not connected, then idle.
     Report(StaDisconnectReason),
+    /// The port stopped: the run ended ([`Station::finish`]) and the
+    /// station waits for its restart.
+    Finished(Finished),
 }
 
 #[derive(Clone, Copy)]
@@ -2147,7 +1617,7 @@ enum ScanStep {
 }
 
 /// The join of one access point.
-struct Join<T: StaTokens, K> {
+struct Join<T: StaTypes, K> {
     access_point: ScanRecord,
     /// The ERP protection the access point's ERP elements ask for.
     erp: oer_protocols_ieee80211_wire::protection::ErpProtection,
@@ -2223,7 +1693,7 @@ enum AssociationKey {
 }
 
 enum Authenticate {
-    NeedCredit(StaAuthenticationRuntime, AssociationKey),
+    NeedSend(StaAuthenticationRuntime, AssociationKey),
     Exchange {
         runtime: StaAuthenticationExchange,
         stage: AuthStage,
@@ -2243,7 +1713,7 @@ enum AuthStage {
 }
 
 /// The WPA2 four-way handshake with the joined access point.
-struct NewHandshake<T: StaTokens, K> {
+struct NewHandshake<T: StaTypes, K> {
     bssid: Bssid,
     channel: SupportedChannel<K>,
     association_id: u16,
@@ -2258,7 +1728,7 @@ struct NewHandshake<T: StaTokens, K> {
     management: Option<ManagementProtection>,
 }
 
-struct Handshake<T: StaTokens, K> {
+struct Handshake<T: StaTypes, K> {
     bssid: Bssid,
     channel: SupportedChannel<K>,
     association_id: u16,
@@ -2274,7 +1744,7 @@ struct Handshake<T: StaTokens, K> {
     management: Option<ManagementProtection>,
 }
 
-impl<T: StaTokens, K> Handshake<T, K> {
+impl<T: StaTypes, K> Handshake<T, K> {
     fn supplicant(&mut self) -> Result<&mut RsnStaSupplicant, RsnStaSupplicantError> {
         self.supplicant
             .as_mut()
@@ -2312,7 +1782,7 @@ enum TidSequence {
 }
 
 /// The connected station.
-struct Connected<T: StaTokens, K> {
+struct Connected<T: StaTypes, K> {
     confirmation: Option<RsnStaResponseDeadline>,
     bssid: Bssid,
     channel: SupportedChannel<K>,
@@ -2400,7 +1870,7 @@ fn own_delba(
 
 /// The station's transmit agreements in `connected`'s association, started
 /// afresh at their first use in it.
-fn tx_agreements<'c, T: StaTokens, K>(
+fn tx_agreements<'c, T: StaTypes, K>(
     tx: &'c mut Option<StaTxBlockAck>,
     connected: &mut Connected<T, K>,
 ) -> Option<&'c mut StaTxBlockAck> {
@@ -2414,7 +1884,7 @@ fn tx_agreements<'c, T: StaTokens, K>(
 
 /// Hand a received Block Ack action to the transmit agreements, or keep it
 /// for the receive agreements.
-fn route_block_ack<T: StaTokens, K>(
+fn route_block_ack<T: StaTypes, K>(
     tx: &mut Option<StaTxBlockAck>,
     connected: &mut Connected<T, K>,
     action: oer_protocols_ieee80211_wire::block_ack::frame::BlockAckAction,
@@ -2427,11 +1897,7 @@ fn route_block_ack<T: StaTokens, K>(
 
 /// Whether the connected link carries data now: confirmed, home, awake and,
 /// on a protected link, keyed.
-fn data_link_up<T: StaTokens, K>(
-    connected: &Connected<T, K>,
-    absent: bool,
-    keys: &Keys<T>,
-) -> bool {
+fn data_link_up<T: StaTypes, K>(connected: &Connected<T, K>, absent: bool, keys: &Keys) -> bool {
     connected.confirmation.is_none()
         && !absent
         && !connected.power.asleep()
@@ -2443,7 +1909,7 @@ fn data_link_up<T: StaTokens, K>(
 /// its access point's EDCA set names, the retry of the transmit agreements
 /// `tx` and the access point's A-MPDU limits; no agreement is operational
 /// yet. `None` for a BSSID the station sends no data to.
-fn handover_data<T: StaTokens, K>(
+fn handover_data<T: StaTypes, K>(
     address: OwnAddress,
     bssid: Bssid,
     connected: &Connected<T, K>,
@@ -2489,11 +1955,11 @@ fn handover_data<T: StaTokens, K>(
 /// The next TID whose operational transmit agreement in `connected`'s
 /// association is not the window in `told`, once the agreements changed;
 /// `told` takes it.
-fn agreement_change<'id, Path: oer_protocols_radio_port::PoolPath, P, T: StaTokens, K>(
+fn agreement_change<T: StaTypes, K>(
     tx: &mut Option<StaTxBlockAck>,
     connected: &Connected<T, K>,
     told: &mut [Option<oer_protocols_ieee80211_core_datapath::plane::TxWindow>; 8],
-) -> Option<LinkAction<'id, Path, P>> {
+) -> Option<LinkAction> {
     let tx = tx.as_mut().filter(|_| connected.tx_block_ack)?;
     if !tx.changed() {
         return None;
@@ -2911,7 +2377,7 @@ fn group_key(install: &RsnKeyInstall) -> Option<(GroupKeyId, Ccmp128Key)> {
 
 /// The active replay frontiers stay available while a GTK command holds its
 /// permission. Only its terminal exchanges the selected per-ID frontier.
-fn active_replay<T: StaTokens, K>(state: &mut State<T, K>) -> Option<&mut CcmpRxReplayEpoch> {
+fn active_replay<T: StaTypes, K>(state: &mut State<T, K>) -> Option<&mut CcmpRxReplayEpoch> {
     match state {
         State::Connected(connected) => connected.rsn.as_mut().and_then(|rsn| rsn.replay.as_mut()),
         State::Handshake(handshake) => match &mut handshake.step {
@@ -2941,47 +2407,36 @@ enum Done<A, D> {
 }
 
 /// The station's [`Done`] in the port types of `T`.
-type StaDone<T> = Done<<T as StaTokens>::AckEvidence, <T as StaTokens>::AirDenied>;
+type StaDone<T> = Done<<T as StaTypes>::AckEvidence, <T as StaTypes>::AirDenied>;
 
 /// An action a state owes.
 #[expect(
     clippy::large_enum_variant,
     reason = "the key-unwrap request owns its bounded buffer by value; the station has no allocator"
 )]
-enum Owed<'id, T: StaTokens, K> {
-    BlockAck(PendingRxBlockAck<'id, T::EpochPath>),
+enum Owed<'id, T: StaTypes, K> {
+    BlockAck(PendingRxBlockAck),
     InstallPairwise {
-        association: T::Association,
-        pending: PendingPairwiseKey<'id, T::EpochPath>,
-        slot: T::PairwiseSlot,
         peer: IndividualAddress,
         key: Ccmp128Key,
+        spp: oer_protocols_ieee80211_wire::security::Spp,
     },
     InstallGroup {
-        permission: T::GroupPermission,
-        pending: PendingGroupKey<'id, T::EpochPath>,
-        slot: T::GroupSlot,
+        place: StaGroupPlace,
         key_id: GroupKeyId,
         key: Ccmp128Key,
     },
     ReplaceGroup {
-        permission: T::GroupPermission,
-        pending: PendingGroupReplacement<'id, T::EpochPath>,
-        installed: T::GroupKey,
+        place: StaGroupPlace,
         key_id: GroupKeyId,
         key: Ccmp128Key,
     },
-    RemovePairwise(T::PairwiseKey),
+    RemovePairwise,
     SelectGroup {
-        pending: PendingGroupSelection<'id, T::EpochPath>,
-        installed: T::GroupKey,
-        permission: T::GroupPermission,
+        place: StaGroupPlace,
+        key_id: GroupKeyId,
     },
-    RemoveGroup {
-        pending: PendingGroupRemoval<'id, T::EpochPath>,
-        key: T::GroupKey,
-        permission: T::GroupPermission,
-    },
+    RemoveGroup(StaGroupPlace),
     /// A request, with the place it takes.
     Request(ChannelRequest<K>, LeasePlace<'id, T::GatePath>),
     /// An absence, with the place it takes.
@@ -2992,27 +2447,18 @@ enum Owed<'id, T: StaTokens, K> {
     /// The primary lease to give back.
     Release(Lease<'id, K, T::GatePath>),
     Upstream(UpstreamFact<K>),
-    Configure(
-        StationReceive<K>,
-        ConfigurePermission<
-            'id,
-            StationRole,
-            T::ConfigurationPath,
-            StaConfigurationContext<'id, T::EpochPath>,
-        >,
-    ),
+    Configure(StationReceive<K>),
     SetEdca(SupportedEdca<K>),
     SetHe(oer_protocols_ieee80211_contracts_port::StationHe),
-    Transmit(StaTransmit<'id, T, K>),
-    /// Under the pairwise key of the connected link.
-    TransmitProtected(StaTransmit<'id, T, K>),
+    /// A frame in the station's buffer.
+    Transmit(Encoded<K>),
+    /// A frame in the station's buffer, under the pairwise key.
+    TransmitProtected(Encoded<K>),
     /// Ask the link's holder for the TID's next Sequence Number.
     LinkSequence(WmmUserPriority),
     /// Tell the link's holder the link carries data again: an ADDBA Request
     /// whose number the holder told does not go.
     LinkRelease,
-    /// Ask the link's holder for the pairwise key it kept.
-    ReturnKey,
     Associated(Peer<T::RxMeta>),
     Notify(StaNotice),
 }
@@ -3035,31 +2481,13 @@ impl<A> From<Option<A>> for ActionProgress<A> {
 
 type ActionStep<'id, T, K> = (Change<T, K>, ActionProgress<Owed<'id, T, K>>);
 
-/// The affine resources composition grants to one station. Epoch issuance,
-/// frame pools, channel admission and key slots move into it together.
-pub struct StationResources<
-    'id,
-    T: StaTokens,
-    const TICKETS: usize,
-    const BUFFERS: usize,
-    const GROUPS: usize,
-> {
-    /// The installation's only station epoch source.
-    pub epochs: LinkEpochSource<'id, T::EpochPath>,
-    /// The interface's only receive-configuration permission, minted by the port.
-    pub configure: ConfigurePermission<'id, StationRole, T::ConfigurationPath>,
-    /// Ticket credits, each reserving a terminal.
-    pub tickets: [T::Ticket; TICKETS],
-    /// Fresh small allocations for protocol frames.
-    pub buffers: [T::SmallBuffer; BUFFERS],
+/// What composition grants one station: its places with the channel
+/// arbiter.
+pub struct StationResources<'id, T: StaTypes> {
     /// Primary-channel lease admission.
     pub place: LeasePlace<'id, T::GatePath>,
     /// Temporary channel-absence admission.
     pub absence_place: AbsencePlace<'id, T::GatePath>,
-    /// The interface association permission and its complete vacant key bank.
-    pub keys: T::VacantAssociation,
-    /// This station interface's unique GTK mutation permission.
-    pub group_permission: T::GroupPermission,
 }
 
 /// The proof that a personal station's group-key capacity `GROUPS` is
@@ -3102,58 +2530,25 @@ impl<const GROUPS: usize> GroupCapacity<GROUPS> {
     }
 }
 
-impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T, K, C> {
-    /// End this machine after the backend's disable/poison terminal. The caller
-    /// first returns every backend terminal it received. Unlike ordinary Leave,
-    /// this path owes no configuration, key removal or transmission to a port
-    /// which can no longer execute it. Pending owners remain with the bank or
-    /// the installation that must now be retired.
-    pub fn finish(
-        mut self,
-        reason: StaDisconnectReason,
-    ) -> (
-        RetiredStation<'id, T, K, C>,
-        StationPlaceReturns<'id, T::GatePath>,
-    ) {
-        let notice = self.finish_commands(reason);
-        let Self {
-            config,
-            profile,
-            epochs,
-            keys,
-            configuration,
-            tickets,
-            buffers,
-            place,
-            lease: _,
-            absence_place,
-            absence: _,
-            commands,
-            sequence,
-            pmksa,
-            mut state,
-            scan: _,
-            epoch: _,
-            link: _,
-            he: _,
-        } = self;
-        (
-            RetiredStation {
-                deferred_eapol: state.take_deferred(),
-                config,
-                profile,
-                epochs,
-                keys,
-                configuration,
-                tickets,
-                buffers,
-                commands,
-                sequence,
-                pmksa,
-                notice,
-            },
-            StationPlaceReturns::new(place, absence_place),
-        )
+impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T, K, C> {
+    /// End this run after the port's stop: every accepted command ends and
+    /// the station's places go back to the arbiter. The station owes no
+    /// configuration, key removal or frame to a port which stopped; it keeps
+    /// its profile, its configuration and its keys' progress for
+    /// [`Self::restart`], and its terminal outputs for [`Self::poll_output`].
+    pub fn finish(&mut self, reason: StaDisconnectReason) -> StationPlaceReturns<'id, T::GatePath> {
+        let notice = match self.finish_commands(reason) {
+            Some(notice) => FinalNotice::Owed(notice),
+            None => FinalNotice::None,
+        };
+        let deferred = self.state.take_deferred();
+        self.state = State::Finished(Finished { deferred, notice });
+        self.lease = Held::None;
+        self.absence = None;
+        self.epoch = None;
+        // A frame out is still the port's: only its end frees its place.
+        self.link = LinkCustody::Station;
+        StationPlaceReturns::new(self.place.take(), self.absence_place.take())
     }
 
     fn finish_commands(&mut self, reason: StaDisconnectReason) -> Option<StaNotice> {
@@ -3180,137 +2575,89 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         notice
     }
 
-    /// Finalize a placed station without moving the complete machine or its
-    /// scan table through a temporary. The returned owner has only terminal APIs.
-    #[cfg(feature = "placement")]
-    #[inline(never)]
-    pub fn finish_placed<'a, 'b>(
-        mut machine: oer_portable_memory::Placed<'a, Self>,
-        destination: &'b mut core::mem::MaybeUninit<RetiredStation<'id, T, K, C>>,
-        reason: StaDisconnectReason,
-    ) -> PlacedFinish<'b, 'id, T, K, C> {
-        let notice = machine.finish_commands(reason);
-        let (
-            config,
-            profile,
-            mut state,
-            keys,
-            configuration,
-            tickets,
-            buffers,
-            place,
-            lease,
-            absence_place,
-            absence,
-            commands,
-            sequence,
-            scan,
-            pmksa,
-            epoch,
-            epochs,
-            link,
-            he,
-        ) = oer_portable_memory::unpack_placed!(
-            machine,
-            Self {
-                config,
-                profile,
-                state,
-                keys,
-                configuration,
-                tickets,
-                buffers,
-                place,
-                lease,
-                absence_place,
-                absence,
-                commands,
-                sequence,
-                scan,
-                pmksa,
-                epoch,
-                epochs,
-                link,
-                he
+    /// A finished station's terminal outputs: its accepted requests' ends,
+    /// then the one lifecycle notice.
+    pub fn poll_output(&mut self) -> Option<StaFinalOutput<'id, T::ConfigurationPath>> {
+        if let Some(terminal) = self.commands.poll() {
+            return Some(StaFinalOutput::CommandCompleted(terminal));
+        }
+        match &mut self.state {
+            State::Finished(finished) => finished.notice.give().map(StaFinalOutput::Notify),
+            _ => None,
+        }
+    }
+
+    /// The frames the RSN of a finished station deferred, once.
+    pub fn take_deferred(&mut self) -> DeferredEapol {
+        match &mut self.state {
+            State::Finished(finished) => {
+                core::mem::replace(&mut finished.deferred, DeferredEapol::Empty)
             }
-        );
-        drop((lease, absence, scan, epoch, link, he));
-        let deferred = state.take_deferred();
-        drop(state);
-        let retired = oer_portable_memory::Placed::init(destination, |place| {
-            oer_portable_memory::init_in_place!(
-                place,
-                RetiredStation {
-                    deferred_eapol: deferred,
-                    config: config.read(),
-                    profile: profile.read(),
-                    epochs: epochs.read(),
-                    keys: keys.read(),
-                    configuration: configuration.read(),
-                    tickets: tickets.read(),
-                    buffers: buffers.read(),
-                    commands: commands.read(),
-                    sequence: sequence.read(),
-                    pmksa: pmksa.read(),
-                    notice: notice,
-                }
-            )
-        });
-        (
-            retired,
-            StationPlaceReturns::new(place.read(), absence_place.read()),
-        )
+            _ => DeferredEapol::Empty,
+        }
+    }
+
+    /// Start the next run of a finished station in place, with the places
+    /// the arbiter gave back. It first removes the keys and the receive
+    /// configuration the last run left, then takes a Connect; it gives back
+    /// the frames its RSN deferred and a notice its last run did not hand
+    /// out. A station that is not finished stays as it is.
+    pub fn restart(
+        &mut self,
+        places: StationPlaces<'id, T::GatePath>,
+    ) -> (DeferredEapol, Option<StaNotice>) {
+        let (place, absence_place) = places.into_parts();
+        self.place = Some(place);
+        self.absence_place = Some(absence_place);
+        let State::Finished(finished) =
+            core::mem::replace(&mut self.state, State::Reclaiming(Reclaim::Keys))
+        else {
+            return (DeferredEapol::Empty, None);
+        };
+        self.scan.clear();
+        // The next run's MAC starts without an HE association.
+        self.he = false;
+        let mut notice = finished.notice;
+        (finished.deferred, notice.give())
     }
 
     /// Construct the station directly in caller-provided storage. It has no
     /// profile until [`Self::set_profile`]; `capacity` proves the group-key
     /// slots every protected profile needs.
     #[cfg(feature = "placement")]
-    pub fn init<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+    pub fn init<'a, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
         config: StaConfig<K, C>,
-        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        resources: StationResources<'id, T>,
         _capacity: GroupCapacity<GROUPS>,
     ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        Self::from_config_in_place(storage, config, resources)
+        Self::from_config_in_place::<GROUPS>(storage, config, resources)
     }
 
     /// Build the station. It has no profile until [`Self::set_profile`];
     /// `capacity` proves the group-key slots every protected profile needs.
     #[doc = include_str!("machine/resources_contracts.md")]
-    pub fn new<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+    pub fn new<const GROUPS: usize>(
         config: StaConfig<K, C>,
-        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        resources: StationResources<'id, T>,
         _capacity: GroupCapacity<GROUPS>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
-        Self::from_config(config, resources)
+        Self::from_config::<GROUPS>(config, resources)
     }
 
-    fn from_config<const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+    fn from_config<const GROUPS: usize>(
         config: StaConfig<K, C>,
-        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        resources: StationResources<'id, T>,
     ) -> (Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         const {
-            if TICKETS < 1 {
-                panic!("a station needs at least one TX ticket");
-            }
-            if BUFFERS < 1 {
-                panic!("a station needs at least one small buffer");
-            }
             let _: (
                 SupportedFilter<K, StationRole>,
                 SupportedFilter<K, StationRole>,
             ) = (Rules::<K>::MEMBER, Rules::<K>::WIDENED);
         }
         let StationResources {
-            epochs,
-            configure,
-            tickets,
-            buffers,
             place,
             absence_place,
-            keys,
-            group_permission,
         } = resources;
         let (commands, credits) = Commands::new();
         (
@@ -3318,10 +2665,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 config,
                 profile: None,
                 state: State::Idle,
-                keys: Keys::new::<GROUPS>(keys, group_permission),
-                configuration: Some(configure),
-                tickets: Pool::new(tickets),
-                buffers: Pool::new(buffers),
+                keys: Keys::new(GROUPS),
+                configuration: Configuration::Idle,
+                frame: FrameBuffer::new(),
+                out: FramesOut::default(),
                 place: Some(place),
                 lease: Held::None,
                 absence_place: Some(absence_place),
@@ -3331,7 +2678,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 scan: ScanTable::new(),
                 pmksa: StaPmksaCache::new(),
                 epoch: None,
-                epochs,
+                epochs: LinkEpochs::new(),
                 link: LinkCustody::Station,
                 he: false,
             },
@@ -3341,32 +2688,20 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
 
     #[cfg(feature = "placement")]
     #[inline(never)]
-    fn from_config_in_place<'a, const TICKETS: usize, const BUFFERS: usize, const GROUPS: usize>(
+    fn from_config_in_place<'a, const GROUPS: usize>(
         storage: &'a mut core::mem::MaybeUninit<Self>,
         config: StaConfig<K, C>,
-        resources: StationResources<'id, T, TICKETS, BUFFERS, GROUPS>,
+        resources: StationResources<'id, T>,
     ) -> (&'a mut Self, StaCommandCredits<'id, T::ConfigurationPath>) {
         const {
-            if TICKETS < 1 {
-                panic!("a station needs at least one TX ticket");
-            }
-            if BUFFERS < 1 {
-                panic!("a station needs at least one small buffer");
-            }
             let _: (
                 SupportedFilter<K, StationRole>,
                 SupportedFilter<K, StationRole>,
             ) = (Rules::<K>::MEMBER, Rules::<K>::WIDENED);
         }
         let StationResources {
-            epochs,
-            configure,
-            tickets,
-            buffers,
             place,
             absence_place,
-            keys,
-            group_permission,
         } = resources;
         let (commands, credits) = Commands::new();
         (
@@ -3374,10 +2709,10 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 config: config,
                 profile: None,
                 state: State::Idle,
-                keys: Keys::new::<GROUPS>(keys, group_permission),
-                configuration: Some(configure),
-                tickets: Pool::new(tickets),
-                buffers: Pool::new(buffers),
+                keys: Keys::new(GROUPS),
+                configuration: Configuration::Idle,
+                frame: FrameBuffer::new(),
+                out: FramesOut::default(),
                 place: Some(place),
                 lease: Held::None,
                 absence_place: Some(absence_place),
@@ -3387,7 +2722,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 scan => ScanTable::init_in_place,
                 pmksa: StaPmksaCache::new(),
                 epoch: None,
-                epochs: epochs,
+                epochs: LinkEpochs::new(),
                 link: LinkCustody::Station,
                 he: false,
             }),
@@ -3397,7 +2732,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
 
     /// Whether an operation still belongs to this connection attempt.
     /// Resource return is unconditional; protocol and rate updates use this guard.
-    pub fn is_current(&self, context: &StaTxContext<'id, T::EpochPath>) -> bool {
+    pub fn is_current(&self, context: &StaTxTag) -> bool {
         Some(context.epoch) == self.epoch
     }
 
@@ -3429,7 +2764,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     /// again ([`crate::link`]): its handover, a hold or release of its data,
     /// or its return. A change of a transmit agreement waits for
     /// [`Self::poll_action`], as each of these does too.
-    pub fn poll_link(&mut self) -> Option<LinkAction<'id, T::EpochPath, T::LinkKey>> {
+    pub fn poll_link(&mut self) -> Option<LinkAction> {
         self.owe_link(false)
     }
 
@@ -3438,7 +2773,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     /// are not confirmed and releases it again; `agreements` adds each
     /// change of a TID's transmit agreement; once it left, it asks for the
     /// link back.
-    fn owe_link(&mut self, agreements: bool) -> Option<LinkAction<'id, T::EpochPath, T::LinkKey>> {
+    fn owe_link(&mut self, agreements: bool) -> Option<LinkAction> {
         let protected = self
             .profile
             .as_ref()
@@ -3450,17 +2785,16 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         match (self.link, connected) {
             (LinkCustody::Station, Some(connected)) => {
                 let epoch = self.epoch?;
-                // A protected link goes with its key and its replay check.
-                let (key, replay) = match connected.rsn.as_mut() {
+                // A protected link goes once its key is installed, with its
+                // replay check; the key itself is the engine's.
+                let (keyed, replay) = match connected.rsn.as_mut() {
                     Some(rsn) => {
-                        if !matches!(self.keys.pairwise, KeyCell::Installed(_))
-                            || rsn.replay.is_none()
-                        {
+                        if !self.keys.keyed() || rsn.replay.is_none() {
                             return None;
                         }
-                        (self.keys.lend(), rsn.replay.take())
+                        (true, rsn.replay.take())
                     }
-                    None => (None, None),
+                    None => (false, None),
                 };
                 let address = self.config.address;
                 let bssid = connected.bssid;
@@ -3468,7 +2802,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                     address,
                     bssid,
                     connected,
-                    key.is_some(),
+                    keyed,
                     self.config.tx_block_ack.as_ref(),
                 );
                 if let Some(tx) = self.config.tx_block_ack.as_mut() {
@@ -3477,7 +2811,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 let numbers = TxNumbers::new(
                     self.sequence,
                     connected.qos.then_some(connected.qos_sequences),
-                    key,
+                    None,
                 );
                 self.link = LinkCustody::Lent {
                     carries: false,
@@ -3523,9 +2857,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
 
     /// Take the link its holder gave back: the station numbers its own
     /// frames again from where the link left them and, still connected,
-    /// holds its replay check again. The holder keeps the pairwise key's
-    /// transmit half until the station asks for it
-    /// ([`LinkAction::ReturnKey`], [`Self::key_returned`]).
+    /// holds its replay check again.
     pub fn link_returned(&mut self, link: LinkReturn) {
         let LinkReturn { station, tids, rx } = link;
         self.sequence = station;
@@ -3542,22 +2874,44 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         self.link = LinkCustody::Station;
     }
 
-    /// Take the pairwise key's transmit half its link's holder kept: the
-    /// station holds its key whole again and may remove it. A holder that
-    /// returns a key the station did not lend breaks its contract: the
-    /// station keeps it and owes [`StaKeyContractViolation::LinkKeyMismatch`].
-    pub fn key_returned(&mut self, key: T::LinkKey) {
-        self.keys.returned(key);
+    /// The frame `encoded` in the station's buffer, lent to its action.
+    fn hand_out(&mut self, encoded: Encoded<K>) -> StaTransmit<'_, K> {
+        let Encoded {
+            tag,
+            frame,
+            class,
+            plan,
+            access_category,
+            number,
+        } = encoded;
+        StaTransmit {
+            tag,
+            bytes: self.frame.bytes.as_mut_slice(),
+            frame,
+            class,
+            plan,
+            access_category,
+            number,
+        }
     }
 
-    /// Lend the installed pairwise key's transmit half to the link's holder
-    /// before the station hands its link over: the holder draws the packet
-    /// number of a protected frame the station numbered itself
-    /// ([`FrameNumber::Keyed`]) and gives the key back
-    /// ([`Self::key_returned`]). `None` unless the key is installed with the
-    /// station.
-    pub fn lend_key(&mut self) -> Option<T::LinkKey> {
-        self.keys.lend()
+    /// The record of the group key operation at `place`, whose end the
+    /// link's holder applies to its replay epoch first
+    /// ([`LinkHandover::group_terminal`]).
+    pub(crate) fn group_lane(
+        &mut self,
+        place: StaGroupPlace,
+    ) -> Option<crate::link::GroupLane<'_>> {
+        if self.keys.group.place() != Some(place) {
+            return None;
+        }
+        Some(match &mut self.keys.group {
+            GroupOperation::Idle => return None,
+            GroupOperation::Install(pending) => crate::link::GroupLane::Installed(pending),
+            GroupOperation::Replace(pending) => crate::link::GroupLane::Replaced(pending),
+            GroupOperation::Select(pending) => crate::link::GroupLane::Selected(pending),
+            GroupOperation::Remove(pending) => crate::link::GroupLane::Removed(pending),
+        })
     }
 
     /// The link's holder tells the next Sequence Number of `tid` the
@@ -3761,9 +3115,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
     /// ```
     ///
     /// ```
-    /// use oer_protocols_ieee80211_core_roles_sta::machine::{Station, StaTokens};
+    /// use oer_protocols_ieee80211_core_roles_sta::machine::{Station, StaTypes};
     /// use oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities;
-    /// fn receive<T: StaTokens, K: Ieee80211Capabilities, C: oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks>(
+    /// fn receive<T: StaTypes, K: Ieee80211Capabilities, C: oer_protocols_ieee80211_core_roles_sta::machine::StaCallbacks>(
     ///     station: &mut Station<'_, T, K, C>, now: oer_portable_time::Instant,
     ///     frame: &[u8], meta: T::RxMeta,
     /// ) {
@@ -3803,16 +3157,6 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
         now: Instant,
         events: &mut impl EventSink<StaEvent>,
     ) -> Option<StaAction<'_, 'id, T, K>> {
-        if matches!(self.keys.pairwise, KeyCell::UnreturnedBank { .. }) {
-            return Some(StaAction::ContractViolation(
-                StaKeyContractViolation::IncompleteBank,
-            ));
-        }
-        if self.keys.stray.is_some() {
-            return Some(StaAction::ContractViolation(
-                StaKeyContractViolation::LinkKeyMismatch,
-            ));
-        }
         let owed = loop {
             self.complete_commands();
             if let Some(terminal) = self.commands.poll() {
@@ -3859,113 +3203,42 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 }
             },
             Owed::Ready(id) => StaAction::Ready(id),
-            Owed::InstallPairwise {
-                association,
-                pending,
-                slot,
-                peer,
-                key,
-            } => StaAction::InstallPairwiseKey {
-                association,
-                pending,
-                slot,
-                peer,
-                key,
-            },
-            Owed::InstallGroup {
-                permission,
-                pending,
-                slot,
-                key_id,
-                key,
-            } => match &self.keys.pairwise {
-                KeyCell::Installed(pairwise) => StaAction::InstallGroupKey {
-                    association: T::association(pairwise),
-                    permission,
-                    pending,
-                    slot,
-                    key_id,
-                    key,
-                },
-                KeyCell::Lent(association) => StaAction::InstallGroupKey {
-                    association,
-                    permission,
-                    pending,
-                    slot,
-                    key_id,
-                    key,
-                },
-                _ => {
-                    self.keys.group_slots.free.put(slot, events);
-                    self.keys.groups.release(pending.place, events);
-                    self.keys.group_permission = Some(permission);
-                    return Some(StaAction::ContractViolation(
-                        StaKeyContractViolation::MissingAssociation,
-                    ));
-                }
-            },
-            Owed::RemovePairwise(key) => StaAction::RemovePairwiseKey(key),
-            Owed::ReplaceGroup {
-                permission,
-                pending,
-                installed,
-                key_id,
-                key,
-            } => StaAction::ReplaceGroupKey {
-                permission,
-                pending,
-                installed,
-                key_id,
-                key,
-            },
-            Owed::SelectGroup {
-                pending,
-                installed,
-                permission,
-            } => StaAction::SelectGroupKey {
-                pending,
-                installed,
-                permission,
-            },
-            Owed::RemoveGroup {
-                pending,
-                key,
-                permission,
-            } => StaAction::RemoveGroupKey {
-                pending,
-                key,
-                permission,
-            },
+            Owed::InstallPairwise { peer, key, spp } => {
+                StaAction::InstallPairwiseKey { peer, key, spp }
+            }
+            Owed::InstallGroup { place, key_id, key } => {
+                StaAction::InstallGroupKey { place, key_id, key }
+            }
+            Owed::RemovePairwise => StaAction::RemovePairwiseKey,
+            Owed::ReplaceGroup { place, key_id, key } => {
+                StaAction::ReplaceGroupKey { place, key_id, key }
+            }
+            Owed::SelectGroup { place, key_id } => StaAction::SelectGroupKey { place, key_id },
+            Owed::RemoveGroup(place) => StaAction::RemoveGroupKey { place },
             Owed::Exchange(lease) => StaAction::ExchangeLease(lease),
             Owed::Request(request, place) => StaAction::RequestChannel(request, place),
             Owed::Release(lease) => StaAction::ReleaseChannel(lease),
             Owed::Upstream(fact) => StaAction::Upstream(fact),
-            Owed::Configure(receive, pending) => StaAction::Configure(receive, pending),
+            Owed::Configure(receive) => StaAction::Configure(receive),
             Owed::SetEdca(edca) => StaAction::SetEdca(edca),
             Owed::SetHe(he) => StaAction::SetHe(he),
-            Owed::Transmit(transmit) => StaAction::Transmit(transmit),
+            Owed::Transmit(encoded) => StaAction::Transmit(self.hand_out(encoded)),
             // A frame of the handed-over link goes under the link's key; one
-            // the station numbered goes under its own installed key. Owed
-            // only while that key is there; without it the frame does not
-            // go and its tokens come back.
-            // A frame the station numbered after its link came back goes
-            // under the key the link's holder kept.
-            Owed::TransmitProtected(transmit) => match (transmit.number, &self.keys.pairwise) {
-                (FrameNumber::Link { .. }, _) | (FrameNumber::Keyed, KeyCell::Lent(_)) => {
-                    StaAction::Transmit(transmit)
+            // the station numbered goes under its installed key. Owed only
+            // while that key is there; without it the frame does not go and
+            // its purpose's place is free again.
+            Owed::TransmitProtected(encoded) => match encoded.number {
+                FrameNumber::Link { .. } => StaAction::Transmit(self.hand_out(encoded)),
+                FrameNumber::Open if self.keys.keyed() => {
+                    StaAction::TransmitProtected(self.hand_out(encoded))
                 }
-                (FrameNumber::Open, KeyCell::Installed(key)) => {
-                    StaAction::TransmitProtected { transmit, key }
-                }
-                (FrameNumber::Open | FrameNumber::Keyed, _) => {
-                    self.tickets.put(transmit.ticket, events);
-                    self.buffers.put(transmit.buffer, events);
+                FrameNumber::Open => {
+                    self.out.release(encoded.tag.purpose);
                     return None;
                 }
             },
             Owed::LinkSequence(tid) => StaAction::Link(LinkAction::Sequence(tid)),
             Owed::LinkRelease => StaAction::Link(LinkAction::Release),
-            Owed::ReturnKey => StaAction::Link(LinkAction::ReturnKey),
             Owed::Notify(notice) => StaAction::Notify(notice),
             Owed::Associated(peer) => StaAction::Associated(peer),
         })
@@ -3987,7 +3260,9 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 step: JoinStep::Associate(runtime, _),
                 ..
             }) => {
-                if self.tickets.is_empty() || self.buffers.is_empty() {
+                // While its last request is out, only the response bound
+                // runs.
+                if self.out.holds(TxPurpose::Association) {
                     Some(runtime.response_deadline())
                 } else {
                     Some(runtime.next_deadline())
@@ -4026,8 +3301,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                     .and_then(|management| {
                         management.deadline(
                             connected.sending
-                                || self.tickets.is_empty()
-                                || self.buffers.is_empty()
+                                || self.out.holds(CONNECTED_PLACE)
                                 || !(self.absence.is_none()
                                     && !connected.power.asleep()
                                     && self.keys.keyed()),
@@ -4035,8 +3309,7 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                     });
                 let can_send = !connected.sending
                     && data_link_up(connected, self.absence.is_some(), &self.keys)
-                    && !self.tickets.is_empty()
-                    && !self.buffers.is_empty();
+                    && !self.out.holds(CONNECTED_PLACE);
                 let tx_block_ack = self
                     .config
                     .tx_block_ack
@@ -4097,8 +3370,8 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
                 profile: &mut self.profile,
                 keys: &mut self.keys,
                 configuration: &mut self.configuration,
-                tickets: &mut self.tickets,
-                buffers: &mut self.buffers,
+                frame: &mut self.frame,
+                out: &mut self.out,
                 place: &mut self.place,
                 lease: &mut self.lease,
                 absence_place: &mut self.absence_place,
@@ -4118,13 +3391,15 @@ impl<'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, 
 }
 
 /// Disjoint resource loans used while the resident phase is mutably borrowed.
-struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks> {
+struct TransitionContext<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> {
     config: &'s mut StaConfig<K, C>,
     profile: &'s mut Option<StaProfile>,
-    keys: &'s mut Keys<T>,
-    configuration: &'s mut Option<ConfigurePermission<'id, StationRole, T::ConfigurationPath>>,
-    tickets: &'s mut Pool<T::Ticket>,
-    buffers: &'s mut Pool<T::SmallBuffer>,
+    keys: &'s mut Keys,
+    configuration: &'s mut Configuration,
+    /// The buffer each frame is encoded into.
+    frame: &'s mut FrameBuffer,
+    /// The station's frames out, one place a purpose.
+    out: &'s mut FramesOut,
     /// The station's place for a lease, while it holds none.
     place: &'s mut Option<LeasePlace<'id, T::GatePath>>,
     /// The lease the station holds, or gave back and awaits the end of.
@@ -4139,15 +3414,15 @@ struct TransitionContext<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: Sta
     scan: &'s mut ScanTable<SCAN_CAPACITY>,
     pmksa: &'s mut StaPmksaCache,
     /// The connection attempt that owns new TX operations.
-    epoch: &'s mut Option<LinkEpoch<'id, T::EpochPath>>,
-    epochs: &'s mut LinkEpochSource<'id, T::EpochPath>,
+    epoch: &'s mut Option<LinkEpoch>,
+    epochs: &'s mut LinkEpochs,
     /// Who holds the connected link.
     link: &'s mut LinkCustody,
     /// Whether the port holds an HE association the station set.
     he: &'s mut bool,
 }
 
-impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
+impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
     TransitionContext<'s, 'id, T, K, C>
 {
     // Connect is admitted only with a profile (`CommandRefusal::NoProfile`),
@@ -4234,9 +3509,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             ),
             State::Handshake(_) => (ConnectStep::Handshake, None),
             State::Connected(_) => (ConnectStep::Connected, None),
-            State::Idle | State::Reclaiming(_) | State::Leave(_) | State::Report(_) => {
-                (ConnectStep::Rest, None)
-            }
+            State::Idle
+            | State::Reclaiming(_)
+            | State::Leave(_)
+            | State::Report(_)
+            | State::Finished(_) => (ConnectStep::Rest, None),
         }
     }
 
@@ -4249,58 +3526,42 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         events: &mut impl EventSink<StaEvent>,
     ) {
         let done = match input {
-            StaInput::TxDone {
-                context,
-                ticket,
-                buffer,
-                completion,
-            } => {
-                // A transmission's tokens come back whatever the state.
-                self.tickets.put(ticket, events);
-                self.buffers
-                    .put(crate::events::fresh(buffer, T::renew, events), events);
-                if Some(context.epoch) != *self.epoch {
+            StaInput::FrameEnded { tag, end } => {
+                // The purpose's place is free again whatever the state.
+                self.out.release(tag.purpose);
+                if Some(tag.epoch) != *self.epoch {
                     return;
                 }
-                if context.purpose == TxPurpose::Probe {
+                if tag.purpose == TxPurpose::Probe {
                     report(events, || StaEvent::ScanProbeEnded {
                         at: now,
-                        end: crate::events::ScanProbeEnd::of(&completion),
+                        end: match &end {
+                            StaFrameEnd::Sent(completion) => {
+                                crate::events::ScanProbeEnd::of(completion)
+                            }
+                            StaFrameEnd::Refused(_) => crate::events::ScanProbeEnd::NotTransmitted,
+                        },
                     });
                 }
-                Done::Tx {
-                    purpose: context.purpose,
-                    completion,
-                }
-            }
-            StaInput::Unsent {
-                reason,
-                context,
-                ticket,
-                buffer,
-            } => {
-                self.tickets.put(ticket, events);
-                self.buffers
-                    .put(crate::events::fresh(buffer, T::renew, events), events);
-                if Some(context.epoch) != *self.epoch {
-                    return;
-                }
-                if context.purpose == TxPurpose::Probe {
-                    report(events, || StaEvent::ScanProbeEnded {
-                        at: now,
-                        end: crate::events::ScanProbeEnd::NotTransmitted,
-                    });
-                }
-                Done::Unsent {
-                    purpose: context.purpose,
-                    reason,
+                match end {
+                    StaFrameEnd::Sent(completion) => Done::Tx {
+                        purpose: tag.purpose,
+                        completion,
+                    },
+                    StaFrameEnd::Refused(reason) => Done::Unsent {
+                        purpose: tag.purpose,
+                        reason,
+                    },
                 }
             }
             StaInput::Tick => Done::Tick,
-            StaInput::Configured(permission) => {
-                let (permission, pending) = permission.into_parts();
-                (*self.configuration) = Some(permission);
-                if pending.epoch != current_epoch(state, *self.epoch) {
+            StaInput::Configured => {
+                let Configuration::Setting(epoch) =
+                    core::mem::replace(self.configuration, Configuration::Idle)
+                else {
+                    return;
+                };
+                if epoch != current_epoch(state, *self.epoch) {
                     return;
                 }
                 Done::Configured
@@ -4332,94 +3593,82 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 }
                 return;
             }
-            StaInput::PairwiseKeyInstalled { pending, key } => {
-                let current = current_epoch(state, *self.epoch) == Some(pending.epoch);
-                self.keys.pairwise_installed(pending, key);
-                // Leave waits for every outstanding key installation to return.
-                // An old response becomes a removal action there.
-                if current {
-                    self.keys_changed(state);
-                }
-                return;
-            }
-            StaInput::GroupKeyInstalled {
-                pending,
-                key,
-                permission,
-            } => {
-                self.group_transition(state, pending, key, permission, None, false, events);
-                return;
-            }
-            StaInput::GroupKeyReplaced {
-                pending,
-                key,
-                permission,
-            } => {
-                let retired = pending.retired_lane();
-                self.group_transition(
-                    state,
-                    pending.install,
-                    key,
-                    permission,
-                    retired,
-                    false,
-                    events,
-                );
-                return;
-            }
-            StaInput::GroupKeySelected {
-                pending,
-                key,
-                permission,
-            } => {
-                self.group_transition(state, pending.install, key, permission, None, true, events);
-                return;
-            }
-            StaInput::PairwiseKeyRemoved { slot, association } => {
-                let mut spare =
-                    Pool::from_collection(core::mem::take(&mut self.keys.spare_pairwise));
-                let parts = assemble_key_bank(
-                    slot,
-                    spare.take_all(),
-                    [
-                        self.keys.group_slots.free.take_all(),
-                        self.keys.spare_group.take_all(),
-                    ],
-                )
-                .and_then(|parts| {
-                    T::collect_key_bank(parts)
-                        .map_err(|parts| KeyBankReunionError::Incomplete { _parts: parts })
-                });
-                match parts {
-                    Ok(bank) => {
-                        let (association, slot, parts) = T::end_association(association, bank);
-                        self.keys.pairwise = KeyCell::Free(VacantPairwise { association, slot });
-                        self.keys.spare_pairwise = parts.pairwise;
-                        let (free, spare) = Pool::partition(parts.group, T::GROUP_SLOTS);
-                        self.keys.group_slots.free = free;
-                        self.keys.spare_group = spare;
+            StaInput::PairwiseKeyEnded(outcome) => {
+                match (self.keys.pairwise, outcome) {
+                    (PairwiseKey::Installing(epoch), StaKeyOutcome::Done) => {
+                        self.keys.pairwise = PairwiseKey::Installed;
+                        // Leave waits for every outstanding key installation
+                        // to end; an old one's key is removed there.
+                        if current_epoch(state, *self.epoch) == Some(epoch) {
+                            self.keys_changed(state);
+                        }
                     }
-                    Err(error) => {
-                        self.keys.pairwise = KeyCell::UnreturnedBank {
-                            _association: association,
-                            _error: error,
-                        };
+                    (PairwiseKey::Installing(epoch), StaKeyOutcome::Expired) => {
+                        self.keys.pairwise = PairwiseKey::None;
+                        if current_epoch(state, *self.epoch) == Some(epoch) {
+                            self.key_expired(state);
+                        }
                     }
+                    (PairwiseKey::Removing, _) => self.keys.pairwise = PairwiseKey::None,
+                    (PairwiseKey::None | PairwiseKey::Installed, _) => {}
                 }
                 return;
             }
-            StaInput::GroupKeyRemoved {
-                pending,
-                slot,
-                permission,
+            StaInput::GroupKeyEnded {
+                place,
+                outcome: StaKeyOutcome::Expired,
             } => {
-                if matches!(pending.replay, GroupReplay::Active)
-                    && let Some(replay) = active_replay(state)
-                {
-                    replay.remove_group(pending.key_id);
+                if self.keys.group.place() != Some(place) {
+                    return;
                 }
-                self.keys
-                    .group_removed(slot, permission, pending.place, events);
+                let epoch = match core::mem::replace(&mut self.keys.group, GroupOperation::Idle) {
+                    GroupOperation::Idle => return,
+                    GroupOperation::Install(pending) => {
+                        self.keys.groups.release(pending.place, events);
+                        pending.epoch
+                    }
+                    GroupOperation::Replace(pending) => {
+                        // The replaced key went with the place.
+                        self.keys.groups.release(pending.install.place, events);
+                        pending.install.epoch
+                    }
+                    GroupOperation::Select(pending) => {
+                        // The selected installation stays, not current.
+                        let epoch = pending.install.epoch;
+                        (*self.keys).group_installed(pending.install, false, None, true);
+                        epoch
+                    }
+                    GroupOperation::Remove(pending) => {
+                        self.group_removed(state, pending, events);
+                        return;
+                    }
+                };
+                if current_epoch(state, *self.epoch) == Some(epoch) {
+                    self.key_expired(state);
+                }
+                return;
+            }
+            StaInput::GroupKeyEnded {
+                place,
+                outcome: StaKeyOutcome::Done,
+            } => {
+                if self.keys.group.place() != Some(place) {
+                    return;
+                }
+                match core::mem::replace(&mut self.keys.group, GroupOperation::Idle) {
+                    GroupOperation::Idle => {}
+                    GroupOperation::Install(pending) => {
+                        self.group_transition(state, pending, None, false, events);
+                    }
+                    GroupOperation::Replace(pending) => {
+                        let retired = pending.retired_lane();
+                        self.group_transition(state, pending.install, retired, false, events);
+                    }
+                    GroupOperation::Select(pending) => {
+                        self.group_transition(state, pending.install, None, true, events);
+                    }
+                    GroupOperation::Remove(pending) => self.group_removed(state, pending, events),
+                }
                 return;
             }
             StaInput::Arbiter(notice) => {
@@ -4465,24 +3714,59 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         state.apply(change);
     }
 
+    /// A group key's removal ended, done or expired: the station holds the
+    /// key no longer.
+    fn group_removed(
+        &mut self,
+        state: &mut State<T, K>,
+        pending: PendingGroupRemoval,
+        events: &mut impl EventSink<StaEvent>,
+    ) {
+        if pending.active()
+            && let Some(replay) = active_replay(state)
+        {
+            replay.remove_group(pending.key_id);
+        }
+        self.keys.groups.release(pending.place, events);
+    }
+
+    /// A key installation of the current connection attempt did not take:
+    /// the attempt ends as a failed handshake.
     #[inline(never)]
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the group key terminal's owners and the caller's event sink"
-    )]
+    fn key_expired(&mut self, state: &mut State<T, K>) {
+        let change = match state {
+            State::Handshake(handshake) => leave_keyed(
+                StaDisconnectReason::HandshakeFailed,
+                Some(Deauthentication {
+                    bssid: handshake.bssid,
+                    reason_code: reason_code::UNSPECIFIED,
+                    // A protected frame needs the pairwise key the station
+                    // still holds.
+                    protected: handshake.management.is_some() && self.keys.keyed(),
+                }),
+            ),
+            State::Connected(connected) => leave_connected(
+                connected,
+                StaDisconnectReason::HandshakeFailed,
+                Some(reason_code::UNSPECIFIED),
+            ),
+            _ => Change::Keep,
+        };
+        state.apply(change);
+    }
+
+    #[inline(never)]
     fn group_transition(
         &mut self,
         state: &mut State<T, K>,
-        pending: PendingGroupKey<'id, T::EpochPath>,
-        key: T::GroupKey,
-        permission: T::GroupPermission,
+        pending: PendingGroupKey,
         retired: Option<GroupKeyId>,
         selected: bool,
         events: &mut impl EventSink<StaEvent>,
     ) {
         let current = current_epoch(state, *self.epoch) == Some(pending.epoch);
         // While the link's holder keeps the replay check, it applied the
-        // terminal to it already.
+        // end to it already.
         let replay = if current { active_replay(state) } else { None };
         let mut replay = replay;
         if let Some(old) = retired
@@ -4490,7 +3774,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         {
             replay.remove_group(old);
         }
-        (*self.keys).group_installed(pending, key, permission, current, replay, selected);
+        (*self.keys).group_installed(pending, current, replay, selected);
         if current {
             self.group_installed(state, events);
         }
@@ -4524,7 +3808,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     }
 
     /// A group key terminal completes only its own exchange stage. Other
-    /// stages (including an encoded response waiting for credit) stay owned.
+    /// stages (including a response waiting for its frame's place) stay as they are.
     fn group_installed(&mut self, state: &mut State<T, K>, events: &mut impl EventSink<StaEvent>) {
         match state {
             State::Connected(connected) => finish_connected_install(connected, events),
@@ -5321,7 +4605,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 }
             }
         };
-        Ok(JoinStep::Authenticate(Authenticate::NeedCredit(
+        Ok(JoinStep::Authenticate(Authenticate::NeedSend(
             StaAuthenticationRuntime::new(self.config.address, bssid),
             key,
         )))
@@ -5442,7 +4726,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 let auth = if timed_out {
                     match runtime.response_timed_out() {
                         StaAuthenticationEvent::Retry { runtime, .. } => {
-                            Authenticate::NeedCredit(runtime, key)
+                            Authenticate::NeedSend(runtime, key)
                         }
                         _ => return leave_unkeyed(StaDisconnectReason::AuthenticationFailed),
                     }
@@ -5563,8 +4847,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         self.sae_event(join, event, now)
                     }
 
-                    JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key)) => {
-                        join.step = JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key));
+                    JoinStep::Authenticate(Authenticate::NeedSend(runtime, key)) => {
+                        join.step = JoinStep::Authenticate(Authenticate::NeedSend(runtime, key));
                         Change::Keep
                     }
                     JoinStep::Authenticate(Authenticate::Exchange {
@@ -5592,7 +4876,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         }
                         StaAuthenticationEvent::Retry { runtime, .. } => {
                             join.step =
-                                JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key));
+                                JoinStep::Authenticate(Authenticate::NeedSend(runtime, key));
                             Change::Keep
                         }
                         StaAuthenticationEvent::Failed { .. } => {
@@ -5792,17 +5076,18 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         Change::Keep
     }
 
+    /// Set `receive`, while no other configuration is being set.
     fn configure(&mut self, receive: StationReceive<K>) -> Option<Owed<'id, T, K>> {
-        let place = self.configuration.take()?;
+        if !matches!(*self.configuration, Configuration::Idle) {
+            return None;
+        }
         let epoch = if matches!(receive, StationReceive::Off) {
             None
         } else {
             *self.epoch
         };
-        Some(Owed::Configure(
-            receive,
-            place.with_context(StaConfigurationContext { epoch }),
-        ))
+        *self.configuration = Configuration::Setting(epoch);
+        Some(Owed::Configure(receive))
     }
 
     /// The action `state` owes, and the state that awaits its end.
@@ -5869,40 +5154,40 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             }
                         }
                     }
-                    ScanStep::NeedConfigure if self.configuration.is_some() => {
+                    ScanStep::NeedConfigure
+                        if matches!(*self.configuration, Configuration::Idle) =>
+                    {
                         scan.step = ScanStep::AwaitConfigured;
                         self.configure(StationReceive::OtherBssManagement)
                     }
-                    ScanStep::NeedProbe { until } => {
-                        match self.encode_probe(TxPurpose::Probe, events) {
-                            Ok(transmit) => {
-                                scan.step = ScanStep::Listen { until };
-                                report(events, || StaEvent::ScanProbeBuilt { at: now });
-                                Some(Owed::Transmit(transmit))
-                            }
-                            Err(Unsent::NoTokens) => None,
-                            Err(Unsent::Encode) => {
-                                return (
-                                    leave_unkeyed(StaDisconnectReason::Encode),
-                                    ActionProgress::Transition,
-                                );
-                            }
-                            Err(Unsent::NoConnection) => {
-                                return (
-                                    leave_unkeyed(StaDisconnectReason::TransmitRefused(
-                                        TxRefusal::LinkChanged,
-                                    )),
-                                    ActionProgress::Transition,
-                                );
-                            }
+                    ScanStep::NeedProbe { until } => match self.encode_probe(TxPurpose::Probe) {
+                        Ok(transmit) => {
+                            scan.step = ScanStep::Listen { until };
+                            report(events, || StaEvent::ScanProbeBuilt { at: now });
+                            Some(Owed::Transmit(transmit))
                         }
-                    }
+                        Err(Unsent::Out) => None,
+                        Err(Unsent::Encode) => {
+                            return (
+                                leave_unkeyed(StaDisconnectReason::Encode),
+                                ActionProgress::Transition,
+                            );
+                        }
+                        Err(Unsent::NoConnection) => {
+                            return (
+                                leave_unkeyed(StaDisconnectReason::TransmitRefused(
+                                    TxRefusal::LinkChanged,
+                                )),
+                                ActionProgress::Transition,
+                            );
+                        }
+                    },
                     _ => None,
                 };
                 (Change::Keep, owed.into())
             }
-            State::Join(join) => self.owe_join(join, now, events),
-            State::Handshake(handshake) => self.owe_handshake(handshake, events),
+            State::Join(join) => self.owe_join(join, now),
+            State::Handshake(handshake) => self.owe_handshake(handshake),
             State::Connected(connected) => {
                 let purpose = if connected.confirmation.is_some() {
                     TxPurpose::HandshakeLast
@@ -5911,7 +5196,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 };
                 self.owe_connected(connected, now, purpose, events)
             }
-            State::Leave(leave) => self.owe_leave(leave, events),
+            State::Leave(leave) => self.owe_leave(leave),
             _ => (Change::Keep, ActionProgress::Wait),
         }
     }
@@ -5960,25 +5245,18 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         }
     }
 
-    /// The pairwise key's removal once every group key is gone: the
-    /// installed key goes, and a key the link's holder kept is asked back
-    /// first, once the link came back.
+    /// The pairwise key's removal once every group key is gone and the link
+    /// came back.
     fn pairwise_removal(&mut self) -> Option<Owed<'id, T, K>> {
-        if !self.keys.group_slots.is_full() {
+        if !self.keys.groups_empty() || self.link.lent() || !self.keys.keyed() {
             return None;
         }
-        if let Some(key) = self.keys.take_pairwise_key() {
-            return Some(Owed::RemovePairwise(key));
-        }
-        (!self.link.lent() && self.keys.recall()).then_some(Owed::ReturnKey)
+        self.keys.pairwise = PairwiseKey::Removing;
+        Some(Owed::RemovePairwise)
     }
 
     /// The action the leave owes.
-    fn owe_leave(
-        &mut self,
-        leave: &mut Leave,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> ActionStep<'id, T, K> {
+    fn owe_leave(&mut self, leave: &mut Leave) -> ActionStep<'id, T, K> {
         let owed = match leave.step {
             LeaveStep::AwaitAbsenceEnd(deauthentication) if self.absence.is_none() => {
                 leave.step = leave_key_step(deauthentication);
@@ -6006,12 +5284,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 protected,
             }) => {
                 // A protected Deauthentication goes under the station's
-                // key, installed or kept by the link's holder, once the link
-                // came back.
-                if protected
-                    && (self.link.lent()
-                        || !matches!(self.keys.pairwise, KeyCell::Installed(_) | KeyCell::Lent(_)))
-                {
+                // installed key, once the link came back.
+                if protected && (self.link.lent() || !self.keys.keyed()) {
                     return (Change::Keep, ActionProgress::Wait);
                 }
                 match self.encode_management(
@@ -6020,7 +5294,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     &reason_code.to_le_bytes(),
                     TxPurpose::Deauthentication,
                     protected,
-                    events,
                 ) {
                     Ok(transmit) => {
                         if protected {
@@ -6031,7 +5304,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             Some(Owed::Transmit(transmit))
                         }
                     }
-                    Err(Unsent::NoTokens) => None,
+                    Err(Unsent::Out) => None,
                     Err(Unsent::Encode | Unsent::NoConnection) => {
                         leave.step = if protected {
                             LeaveStep::RemoveKeys(None)
@@ -6048,7 +5321,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     oer_protocols_ieee80211_contracts_port::StationHe::Off,
                 ))
             }
-            LeaveStep::NeedConfigure if self.configuration.is_some() => {
+            LeaveStep::NeedConfigure if matches!(*self.configuration, Configuration::Idle) => {
                 leave.step = LeaveStep::AwaitConfigured;
                 self.configure(StationReceive::Off)
             }
@@ -6110,11 +5383,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
 
     /// The action the handshake owes.
     #[inline(never)]
-    fn owe_handshake(
-        &mut self,
-        handshake: &mut Handshake<T, K>,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> ActionStep<'id, T, K> {
+    fn owe_handshake(&mut self, handshake: &mut Handshake<T, K>) -> ActionStep<'id, T, K> {
         let (step, owed) = match core::mem::replace(&mut handshake.step, HandshakeStep::Await) {
             HandshakeStep::Send(message) => {
                 match self.encode_eapol(
@@ -6122,12 +5391,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     AcAdmission::from_edca(handshake.peer.associated.edca),
                     message.as_bytes(),
                     TxPurpose::HandshakeResponse,
-                    events,
                 ) {
                     Ok(transmit) => (HandshakeStep::AwaitSent, Some(Owed::Transmit(transmit))),
-                    Err(EapolUnsent::Unsent(Unsent::NoTokens)) => {
-                        (HandshakeStep::Send(message), None)
-                    }
+                    Err(EapolUnsent::Unsent(Unsent::Out)) => (HandshakeStep::Send(message), None),
                     Err(EapolUnsent::NoAdmittedAccessCategory) => {
                         return (
                             leave_handshake_because(
@@ -6165,10 +5431,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     );
                 };
                 let peer = handshake.bssid.individual();
-                match (*self.epoch)
-                    .and_then(|epoch| self.keys.take_pairwise_slot(epoch, handshake.spp))
-                {
-                    Some((association, slot, pending)) => {
+                match (*self.epoch).filter(|_| self.keys.pairwise == PairwiseKey::None) {
+                    Some(epoch) => {
+                        self.keys.pairwise = PairwiseKey::Installing(epoch);
                         let (pairwise, group) = request.into_parts();
                         let key = pairwise.into_key();
                         if protected && handshake.management.is_none() {
@@ -6178,29 +5443,25 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         (
                             HandshakeStep::InstallGroup(group, replay, protection),
                             Some(Owed::InstallPairwise {
-                                association,
-                                pending,
-                                slot,
                                 peer,
                                 key,
+                                spp: handshake.spp,
                             }),
                         )
                     }
                     None => (HandshakeStep::Install(request, protection), None),
                 }
             }
-            HandshakeStep::InstallGroup(request, replay, protection)
-                if !matches!(self.keys.pairwise, KeyCell::Installed(_)) =>
-            {
-                // PairwiseKeyInstalled returns the sole association owner.
-                // Its typed response unlocks GTK installation; D4 is unchanged.
+            HandshakeStep::InstallGroup(request, replay, protection) if !self.keys.keyed() => {
+                // The pairwise key's end unlocks GTK installation; D4 is
+                // unchanged.
                 (
                     HandshakeStep::InstallGroup(request, replay, protection),
                     None,
                 )
             }
             HandshakeStep::InstallGroup(request, replay, protection) => {
-                match self.begin_group_change(request.group(), events) {
+                match self.begin_group_change(request.group()) {
                     Ok(ActionProgress::Transition) => {
                         return (
                             finish_handshake_install(
@@ -6243,15 +5504,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         admission: AcAdmission,
         eapol: &[u8],
         purpose: TxPurpose,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaTransmit<'id, T, K>, EapolUnsent> {
+    ) -> Result<Encoded<K>, EapolUnsent> {
         let priority = eapol_priority(admission)?;
-        let credit = self.reserve_transmit(events)?;
+        let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
         let (sequence_number, number) = self.station_number(false);
         Ok(self
             .encode_reserved(
-                credit,
+                epoch,
                 |frame| {
                     oer_protocols_ieee80211_wire::station::StaDataFrame {
                         source: address,
@@ -6267,12 +5527,11 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 StaFrameClass::Connection(ConnectionFrame::Eapol),
                 purpose,
                 StaRatePlan::Management,
-                events,
             )
-            .map(|transmit| StaTransmit {
+            .map(|encoded| Encoded {
                 access_category: priority.access_category(),
                 number,
-                ..transmit
+                ..encoded
             })?)
     }
 
@@ -6359,13 +5618,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 ActionProgress::Transition,
             ),
         };
-        if let Some(action) = self.owe_sa_query(connected, now, events) {
+        if let Some(action) = self.owe_sa_query(connected, now) {
             return owed(connected, action);
         }
         if let Some(action) = self.owe_tx_block_ack(connected, now, events) {
             return owed(connected, action);
         }
-        if let Some(action) = self.owe_duplicate_message4(connected, pairwise_purpose, events) {
+        if let Some(action) = self.owe_duplicate_message4(connected, pairwise_purpose) {
             return owed(connected, action);
         }
         if let Some(action) = self.owe_rekey(connected, pairwise_purpose, events) {
@@ -6379,7 +5638,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         {
             return (Change::Keep, ActionProgress::Wait);
         }
-        match self.owe_background(connected, now, events) {
+        match self.owe_background(connected, now) {
             Ok(progress) => (Change::Keep, progress),
             Err(reason) => (
                 leave_connected(connected, reason, Some(reason_code::UNSPECIFIED)),
@@ -6392,7 +5651,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         &mut self,
         connected: &mut Connected<T, K>,
         now: Instant,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
         if connected.sending || !self.link_up(&connected.power, &(*self.keys)) {
             return None;
@@ -6405,14 +5663,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             &query.encode(),
             TxPurpose::Connected(Sending::SaQuery),
             true,
-            events,
         ) {
             Ok(transmit) => {
                 management.submitted(query);
                 connected.sending = true;
                 Some(Ok(Owed::TransmitProtected(transmit)))
             }
-            Err(Unsent::NoTokens) => None,
+            Err(Unsent::Out) => None,
             Err(Unsent::Encode) => Some(Err(StaDisconnectReason::Encode)),
             Err(Unsent::NoConnection) => Some(Err(StaDisconnectReason::TransmitRefused(
                 TxRefusal::LinkChanged,
@@ -6429,8 +5686,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
         let can_send = !connected.sending
             && data_link_up(connected, self.absence.is_some(), &(*self.keys))
-            && !self.tickets.is_empty()
-            && !self.buffers.is_empty();
+            && !self.out.holds(CONNECTED_PLACE);
         // An ADDBA Request whose number the link's holder told goes first;
         // one that waits for it owes nothing else of the agreements.
         let fresh = match connected.sequence {
@@ -6506,7 +5762,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             frame,
             TxPurpose::Connected(sending),
             protected,
-            events,
         ) {
             Ok(transmit) => {
                 connected.sending = true;
@@ -6520,7 +5775,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     Owed::Transmit(transmit)
                 }))
             }
-            Err(Unsent::NoTokens) => {
+            Err(Unsent::Out) => {
                 if let (Sending::AddbaRequest { tid }, Some(tx)) =
                     (sending, self.config.tx_block_ack.as_mut())
                 {
@@ -6537,7 +5792,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     }
 
     /// A BlockAckReq of the agreement of `tid`, moving the recipient's
-    /// window to `start`, with the station's control credit.
+    /// window to `start`, as a connected station's frame.
     fn owe_block_ack_request(
         &mut self,
         connected: &mut Connected<T, K>,
@@ -6552,32 +5807,25 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         ) else {
             return Some(Err(StaDisconnectReason::Encode));
         };
-        let credit = match self.reserve_transmit(events) {
-            Ok(credit) => credit,
+        let purpose = TxPurpose::Connected(Sending::BlockAckRequest { tid });
+        let epoch = match self.reserve_transmit(purpose) {
+            Ok(epoch) => epoch,
             Err(Unsent::NoConnection) => {
                 return Some(Err(StaDisconnectReason::TransmitRefused(
                     TxRefusal::LinkChanged,
                 )));
             }
-            Err(Unsent::NoTokens | Unsent::Encode) => return None,
+            Err(Unsent::Out | Unsent::Encode) => return None,
         };
         if let Some(tx) = self.config.tx_block_ack.as_mut() {
             tx.request_sent(tid);
         }
         report(events, || StaEvent::BlockAckRequestSent);
         connected.sending = true;
-        let TxCredit {
-            epoch,
-            ticket,
-            buffer,
-        } = credit;
-        Some(Ok(Owed::Transmit(StaTransmit {
-            context: StaTxContext {
-                epoch,
-                purpose: TxPurpose::Connected(Sending::BlockAckRequest { tid }),
-            },
-            ticket,
-            buffer,
+        // The port encodes a BlockAckReq: nothing of it is in the buffer.
+        self.out.take(purpose);
+        Some(Ok(Owed::Transmit(Encoded {
+            tag: StaTxTag { epoch, purpose },
             frame: StaFrame::BlockAckRequest {
                 receiver,
                 transmitter: self.config.address.get(),
@@ -6597,7 +5845,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         &mut self,
         connected: &mut Connected<T, K>,
         purpose: TxPurpose,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Option<Result<Owed<'id, T, K>, StaDisconnectReason>> {
         if connected.sending || !self.link_up(&connected.power, &(*self.keys)) {
             return None;
@@ -6608,8 +5855,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         };
         let admission = AcAdmission::from_edca(connected.peer.associated.edca);
         let qos = connected.qos.then_some(&mut connected.qos_sequences);
-        match self.encode_eapol_response(connected.bssid, qos, admission, message, purpose, events)
-        {
+        match self.encode_eapol_response(connected.bssid, qos, admission, message, purpose) {
             Ok(owed) => {
                 rsn.message4 = DuplicateMessage4::AwaitSent;
                 connected.sending = true;
@@ -6626,21 +5872,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         admission: AcAdmission,
         response: &EapolResponse,
         purpose: TxPurpose,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Result<Owed<'id, T, K>, EapolUnsent> {
         match response.protection {
             EapolProtection::Open => self
-                .encode_eapol(bssid, admission, response.frame.as_bytes(), purpose, events)
+                .encode_eapol(bssid, admission, response.frame.as_bytes(), purpose)
                 .map(Owed::Transmit),
             EapolProtection::Pairwise => self
-                .encode_protected_eapol(
-                    bssid,
-                    qos,
-                    admission,
-                    response.frame.as_bytes(),
-                    purpose,
-                    events,
-                )
+                .encode_protected_eapol(bssid, qos, admission, response.frame.as_bytes(), purpose)
                 .map(Owed::TransmitProtected),
         }
     }
@@ -6650,7 +5888,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     fn begin_group_change(
         &mut self,
         request: &RsnKeyInstall,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Result<ActionProgress<Owed<'id, T, K>>, ()> {
         let (key_id, material) = group_key(request).ok_or(())?;
         if self
@@ -6663,114 +5900,98 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         let Some(epoch) = *self.epoch else {
             return Ok(ActionProgress::Wait);
         };
-        let Some(permission) = self.keys.group_permission.take() else {
+        // One group operation at a time.
+        if !matches!(self.keys.group, GroupOperation::Idle) {
             return Ok(ActionProgress::Wait);
-        };
+        }
         if let Some(InstalledGroup {
             place,
             key_id,
             material,
-            key,
             replay,
+            ..
         }) = self.keys.groups.take_matching(key_id, material.as_bytes())
         {
-            let install = PendingGroupKey {
-                epoch,
-                key_id,
-                material,
-                place,
-                replay: PendingLane::Station(replay),
-            };
-            return Ok(ActionProgress::Action(Owed::SelectGroup {
-                pending: PendingGroupSelection { install },
-                installed: key,
-                permission,
-            }));
+            self.keys.group = GroupOperation::Select(PendingGroupSelection {
+                install: PendingGroupKey {
+                    epoch,
+                    key_id,
+                    material,
+                    place,
+                    replay: PendingLane::Station(replay),
+                },
+            });
+            return Ok(ActionProgress::Action(Owed::SelectGroup { place, key_id }));
         }
         let replay =
             match oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayState::from_receive_sequence(
                 *request.receive_sequence(),
             ) {
                 Ok(replay) => GroupReplay::Retained(replay),
-                Err(_) => {
-                    self.keys.group_permission = Some(permission);
-                    return Err(());
-                }
+                Err(_) => return Err(()),
             };
-        if let Some(slot) = self.keys.group_slots.free.take() {
-            if let Some(place) = self.keys.groups.reserve() {
-                return Ok(ActionProgress::Action(Owed::InstallGroup {
-                    pending: PendingGroupKey {
-                        epoch,
-                        key_id,
-                        material: Ccmp128Key::new(material.as_bytes()),
-                        place,
-                        replay: PendingLane::Station(replay),
-                    },
-                    slot,
-                    key_id,
-                    key: material,
-                    permission,
-                }));
-            }
-            self.keys.group_slots.free.put(slot, events);
+        if self.keys.groups.occupied() < self.keys.capacity
+            && let Some(place) = self.keys.groups.reserve()
+        {
+            self.keys.group = GroupOperation::Install(PendingGroupKey {
+                epoch,
+                key_id,
+                material: Ccmp128Key::new(material.as_bytes()),
+                place,
+                replay: PendingLane::Station(replay),
+            });
+            return Ok(ActionProgress::Action(Owed::InstallGroup {
+                place,
+                key_id,
+                key: material,
+            }));
         }
         let Some(InstalledGroup {
             place,
             key_id: previous_id,
-            key: installed,
             ..
         }) = self.keys.groups.replace()
         else {
-            self.keys.group_permission = Some(permission);
             return Ok(ActionProgress::Wait);
         };
         // An evicted installation of another ID ends its lane with the
-        // terminal; retained entries of that ID still own their active state
-        // independently. The permission keeps the entries as they are now
-        // until the terminal.
+        // end; retained entries of that ID still own their active state
+        // independently. The operation keeps the entries as they are now
+        // until its end.
         let retired = (previous_id != key_id && !self.keys.groups.has_active(previous_id))
             .then_some(previous_id);
-        Ok(ActionProgress::Action(Owed::ReplaceGroup {
-            pending: PendingGroupReplacement {
-                install: PendingGroupKey {
-                    epoch,
-                    key_id,
-                    material: Ccmp128Key::new(material.as_bytes()),
-                    place,
-                    replay: PendingLane::Station(replay),
-                },
-                retired,
+        self.keys.group = GroupOperation::Replace(PendingGroupReplacement {
+            install: PendingGroupKey {
+                epoch,
+                key_id,
+                material: Ccmp128Key::new(material.as_bytes()),
+                place,
+                replay: PendingLane::Station(replay),
             },
-            installed,
+            retired,
+        });
+        Ok(ActionProgress::Action(Owed::ReplaceGroup {
+            place,
             key_id,
             key: material,
-            permission,
         }))
     }
 
     fn group_removal(&mut self, retiring: bool) -> Option<Owed<'id, T, K>> {
-        let (
-            permission,
-            InstalledGroup {
-                place,
-                key_id,
-                material,
-                key,
-                replay,
-            },
-        ) = self.keys.take_group_key(retiring)?;
-        Some(Owed::RemoveGroup {
-            pending: PendingGroupRemoval {
-                place,
-                key_id,
-                _material: material,
-                replay,
-                installation: core::marker::PhantomData,
-            },
-            key,
-            permission,
-        })
+        let InstalledGroup {
+            place,
+            key_id,
+            material,
+            replay,
+            ..
+        } = self.keys.take_group_key(retiring)?;
+        self.keys.group = GroupOperation::Remove(PendingGroupRemoval {
+            place,
+            key_id,
+            _material: material,
+            replay,
+        });
+        Some(Owed::RemoveGroup(place))
     }
 
     #[inline(never)]
@@ -6807,7 +6028,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     continue;
                 }
                 Rekey::Install(request, protection) => {
-                    match self.begin_group_change(request.group(), events) {
+                    match self.begin_group_change(request.group()) {
                         Ok(ActionProgress::Transition) => {
                             if let Err(reason) = rsn.complete_install(request, protection) {
                                 return Some(Err(reason));
@@ -6841,8 +6062,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             pairwise_purpose
                         } else {
                             TxPurpose::Connected(Sending::GroupResponse)
-                        },
-                        events,
+                        }
                     ) {
                         Ok(owed) => {
                             connected.sending = true;
@@ -6866,7 +6086,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         &mut self,
         connected: &mut Connected<T, K>,
         now: Instant,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Result<ActionProgress<Owed<'id, T, K>>, StaDisconnectReason> {
         // Admission and action polling can occur at different instants. Validate
         // again before changing receive rules or handing an absence to the arbiter.
@@ -6930,19 +6149,21 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     owed = absence_id.map(Owed::Ready);
                     BackgroundStep::AwaitStart
                 }
-                BackgroundStep::NeedConfigure if self.configuration.is_some() => {
+                BackgroundStep::NeedConfigure
+                    if matches!(*self.configuration, Configuration::Idle) =>
+                {
                     owed = self.configure(StationReceive::OtherBssManagement);
                     BackgroundStep::AwaitConfigured
                 }
                 BackgroundStep::NeedProbe if !connected.sending => {
-                    owed = self.probe(&mut connected.sending, events)?;
+                    owed = self.probe(&mut connected.sending)?;
                     if owed.is_some() {
                         BackgroundStep::Listen
                     } else {
                         BackgroundStep::NeedProbe
                     }
                 }
-                BackgroundStep::NeedHome if self.configuration.is_some() => {
+                BackgroundStep::NeedHome if matches!(*self.configuration, Configuration::Idle) => {
                     owed = self.configure(bss_rules(bssid, Rules::<K>::MEMBER));
                     BackgroundStep::AwaitHome
                 }
@@ -6951,14 +6172,16 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     BackgroundStep::AwaitWake
                 }
                 BackgroundStep::HomeProbe { until } if !connected.sending => {
-                    owed = self.probe(&mut connected.sending, events)?;
+                    owed = self.probe(&mut connected.sending)?;
                     if owed.is_some() {
                         BackgroundStep::HomeListen { until }
                     } else {
                         BackgroundStep::HomeProbe { until }
                     }
                 }
-                BackgroundStep::Narrow(reason) if self.configuration.is_some() => {
+                BackgroundStep::Narrow(reason)
+                    if matches!(*self.configuration, Configuration::Idle) =>
+                {
                     owed = self.configure(bss_rules(bssid, Rules::<K>::MEMBER));
                     BackgroundStep::AwaitNarrowed(reason)
                 }
@@ -6970,14 +6193,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             power = Some((StaPowerManagement::Active, Sending::Wake));
         }
         if let Some((power_management, sending)) = power {
-            match self.encode_null(bssid, power_management, events) {
+            match self.encode_null(bssid, power_management) {
                 Ok(transmit) => {
                     connected.sending = true;
                     connected.waking = sending == Sending::Wake;
                     owed = Some(Owed::Transmit(transmit));
                 }
-                // No token now: the step waits for the next poll.
-                Err(Unsent::NoTokens) => {
+                // Its purpose's frame is still out: the step waits for its end.
+                Err(Unsent::Out) => {
                     if let Some(background) = &mut connected.background {
                         background.step = match background.step {
                             BackgroundStep::AwaitSleep => BackgroundStep::NeedSleep,
@@ -7001,14 +6224,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
     fn probe(
         &mut self,
         sending: &mut bool,
-        events: &mut impl EventSink<StaEvent>,
     ) -> Result<Option<Owed<'id, T, K>>, StaDisconnectReason> {
-        match self.encode_probe(TxPurpose::Connected(Sending::Probe), events) {
+        match self.encode_probe(TxPurpose::Connected(Sending::Probe)) {
             Ok(transmit) => {
                 *sending = true;
                 Ok(Some(Owed::Transmit(transmit)))
             }
-            Err(Unsent::NoTokens) => Ok(None),
+            Err(Unsent::Out) => Ok(None),
             Err(Unsent::Encode) => Err(StaDisconnectReason::Encode),
             Err(Unsent::NoConnection) => {
                 Err(StaDisconnectReason::TransmitRefused(TxRefusal::LinkChanged))
@@ -7021,13 +6243,16 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         &mut self,
         bssid: Bssid,
         power_management: StaPowerManagement,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaTransmit<'id, T, K>, Unsent> {
-        let credit = self.reserve_transmit(events)?;
+    ) -> Result<Encoded<K>, Unsent> {
+        let purpose = TxPurpose::Connected(match power_management {
+            StaPowerManagement::Active => Sending::Wake,
+            StaPowerManagement::PowerSave => Sending::Sleep,
+        });
+        let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
         let (sequence_number, number) = self.station_number(false);
         let transmit = self.encode_reserved(
-            credit,
+            epoch,
             |frame| {
                 StaNullDataFrame {
                     station_address: address,
@@ -7039,23 +6264,14 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 .ok()
             },
             StaFrameClass::Normal,
-            TxPurpose::Connected(match power_management {
-                StaPowerManagement::Active => Sending::Wake,
-                StaPowerManagement::PowerSave => Sending::Sleep,
-            }),
+            purpose,
             StaRatePlan::Null,
-            events,
         )?;
-        Ok(StaTransmit { number, ..transmit })
+        Ok(Encoded { number, ..transmit })
     }
 
     #[inline(never)]
-    fn owe_join(
-        &mut self,
-        join: &mut Join<T, K>,
-        now: Instant,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> ActionStep<'id, T, K> {
+    fn owe_join(&mut self, join: &mut Join<T, K>, now: Instant) -> ActionStep<'id, T, K> {
         let connect = ChannelRequest {
             channel: join.channel,
             purpose: Purpose::Connect,
@@ -7097,7 +6313,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 *self.he = matches!(he, StationHe::Bss(_));
                 (JoinStep::NeedConfigure, Some(Owed::SetHe(he)))
             }
-            JoinStep::NeedConfigure if self.configuration.is_some() => {
+            JoinStep::NeedConfigure if matches!(*self.configuration, Configuration::Idle) => {
                 let receive = bss_rules(join.access_point.bssid, Rules::<K>::MEMBER);
                 (JoinStep::AwaitConfigured, self.configure(receive))
             }
@@ -7111,9 +6327,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         ActionProgress::Transition,
                     );
                 }
-                let credit = match self.reserve_transmit(events) {
-                    Ok(credit) => credit,
-                    Err(Unsent::NoTokens) => {
+                let epoch = match self.reserve_transmit(TxPurpose::SaeAuthentication) {
+                    Ok(epoch) => epoch,
+                    Err(Unsent::Out) => {
                         join.step = JoinStep::SaeSend {
                             authentication,
                             transmission,
@@ -7139,7 +6355,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 let bssid = join.access_point.bssid;
                 let sequence_number = self.sequence.take();
                 let transmit = self.encode_reserved(
-                    credit,
+                    epoch,
                     |frame| {
                         oer_protocols_ieee80211_wire::station::SaeAuthenticationFrame {
                             source,
@@ -7155,7 +6371,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     StaFrameClass::Connection(ConnectionFrame::Authentication),
                     TxPurpose::SaeAuthentication,
                     StaRatePlan::Management,
-                    events,
                 );
                 match transmit {
                     Ok(transmit) => (
@@ -7170,11 +6385,12 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                     }
                 }
             }
-            JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key)) => {
-                let credit = match self.reserve_transmit(events) {
-                    Ok(credit) => credit,
-                    Err(Unsent::NoTokens) => {
-                        join.step = JoinStep::Authenticate(Authenticate::NeedCredit(runtime, key));
+            JoinStep::Authenticate(Authenticate::NeedSend(runtime, key)) => {
+                // Every authentication attempt shares one place.
+                let epoch = match self.reserve_transmit(TxPurpose::Authentication { attempt: 0 }) {
+                    Ok(epoch) => epoch,
+                    Err(Unsent::Out) => {
+                        join.step = JoinStep::Authenticate(Authenticate::NeedSend(runtime, key));
                         return (Change::Keep, ActionProgress::Wait);
                     }
                     Err(Unsent::Encode) => {
@@ -7196,7 +6412,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 let bssid = join.access_point.bssid;
                 let address = self.config.address;
                 let encoded = self.encode_reserved(
-                    credit,
+                    epoch,
                     |frame| {
                         OpenAuthenticationRequest {
                             source: address,
@@ -7211,7 +6427,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         attempt: attempt.ordinal,
                     },
                     StaRatePlan::Management,
-                    events,
                 );
                 match encoded {
                     Ok(transmit) => {
@@ -7240,9 +6455,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         ActionProgress::Transition,
                     );
                 }
-                let credit = match self.reserve_transmit(events) {
-                    Ok(credit) => credit,
-                    Err(Unsent::NoTokens) => {
+                let epoch = match self.reserve_transmit(TxPurpose::Association) {
+                    Ok(epoch) => epoch,
+                    Err(Unsent::Out) => {
                         join.step = JoinStep::Associate(runtime, key);
                         return (Change::Keep, ActionProgress::Wait);
                     }
@@ -7272,7 +6487,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         let channel = join.channel.channel().number();
                         let rsn = &join.rsn;
                         let encoded = self.encode_reserved(
-                            credit,
+                            epoch,
                             |frame| {
                                 AssociationRequest {
                                     source: address,
@@ -7291,7 +6506,6 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             StaFrameClass::Connection(ConnectionFrame::Association),
                             TxPurpose::Association,
                             StaRatePlan::Management,
-                            events,
                         );
                         match encoded {
                             Ok(transmit) => (
@@ -7306,12 +6520,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                             }
                         }
                     }
-                    StaAssociationPoll::Idle(runtime) => {
-                        self.return_credit(credit, events);
-                        (JoinStep::Associate(runtime, key), None)
-                    }
+                    StaAssociationPoll::Idle(runtime) => (JoinStep::Associate(runtime, key), None),
                     StaAssociationPoll::Failed { failure, .. } => {
-                        self.return_credit(credit, events);
                         return (
                             leave_unkeyed(association_failure(failure)),
                             ActionProgress::Transition,
@@ -7473,85 +6683,47 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         }
     }
 
-    /// A ticket and a small buffer, if the station holds both.
-    fn tokens(
-        &mut self,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Option<(T::Ticket, T::SmallBuffer)> {
-        let ticket = self.tickets.take()?;
-        match self.buffers.take() {
-            Some(buffer) => Some((ticket, buffer)),
-            None => {
-                self.tickets.put(ticket, events);
-                None
-            }
-        }
-    }
-
-    fn reserve_transmit(
-        &mut self,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Result<TxCredit<'id, T>, Unsent> {
+    /// The epoch of a frame of `purpose`, when the station is in a
+    /// connection attempt and its purpose's place is free.
+    fn reserve_transmit(&mut self, purpose: TxPurpose) -> Result<LinkEpoch, Unsent> {
         let epoch = self.epoch.ok_or(Unsent::NoConnection)?;
-        let (ticket, buffer) = self.tokens(events).ok_or(Unsent::NoTokens)?;
-        Ok(TxCredit {
-            epoch,
-            ticket,
-            buffer,
-        })
+        if self.out.holds(purpose) {
+            return Err(Unsent::Out);
+        }
+        Ok(epoch)
     }
 
-    fn return_credit(&mut self, credit: TxCredit<'id, T>, events: &mut impl EventSink<StaEvent>) {
-        self.tickets.put(credit.ticket, events);
-        self.buffers.put(credit.buffer, events);
-    }
-
-    /// Encode with both owners already reserved, after the caller may have
-    /// consumed a sequence or started an attempt.
+    /// Encode a frame of `purpose` into the station's buffer, after the
+    /// caller may have consumed a sequence or started an attempt; its
+    /// purpose's place is taken until its end.
     fn encode_reserved(
         &mut self,
-        credit: TxCredit<'id, T>,
+        epoch: LinkEpoch,
         encode: impl FnOnce(&mut [u8]) -> Option<usize>,
         class: StaFrameClass,
         purpose: TxPurpose,
         plan: StaRatePlan,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaTransmit<'id, T, K>, EncodeError> {
-        let TxCredit {
-            epoch,
-            ticket,
-            mut buffer,
-        } = credit;
-        let Ok(bytes) = buffer.bytes_mut() else {
-            report(events, || StaEvent::BufferMemoryUnavailable);
-            self.tickets.put(ticket, events);
-            self.buffers.put(buffer, events);
-            return Err(EncodeError);
-        };
-        let frame =
-            encode(&mut *bytes).and_then(|len| sta_frame(bytes.split_at_checked(len)?.0, plan));
-        match frame {
-            Some(frame) => Ok(StaTransmit {
-                context: StaTxContext { epoch, purpose },
-                ticket,
-                buffer,
-                frame,
-                class,
-                plan,
-                access_category: StaTransmit::<'id, T, K>::ACCESS_CATEGORY,
-                number: FrameNumber::Open,
-            }),
-            None => {
-                self.tickets.put(ticket, events);
-                self.buffers.put(buffer, events);
-                Err(EncodeError)
-            }
-        }
+    ) -> Result<Encoded<K>, EncodeError> {
+        let length =
+            encode(self.frame.bytes.as_mut_slice()).filter(|length| self.frame.fits(*length));
+        let bytes = self.frame.bytes.as_slice();
+        let frame = length
+            .and_then(|length| sta_frame(bytes.split_at_checked(length)?.0, plan))
+            .ok_or(EncodeError)?;
+        self.out.take(purpose);
+        Ok(Encoded {
+            tag: StaTxTag { epoch, purpose },
+            frame,
+            class,
+            plan,
+            access_category: StaTransmit::<'_, K>::ACCESS_CATEGORY,
+            number: FrameNumber::Open,
+        })
     }
 
     /// Whether the connected link is up: the station is home and awake,
     /// and holds its pairwise key, itself or lent to its link.
-    fn link_up(&self, power: &PowerSaveView, keys: &Keys<T>) -> bool {
+    fn link_up(&self, power: &PowerSaveView, keys: &Keys) -> bool {
         self.absence.is_none() && !power.asleep() && keys.keyed()
     }
 
@@ -7569,18 +6741,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 },
             )
         } else {
-            (self.sequence.take(), self.own_number(protected))
-        }
-    }
-
-    /// Who numbers a frame the station numbered itself: a protected one
-    /// takes its packet number from the link's holder while the holder
-    /// keeps the pairwise key after the link came back.
-    const fn own_number(&self, protected: bool) -> FrameNumber {
-        if protected && self.keys.lent() {
-            FrameNumber::Keyed
-        } else {
-            FrameNumber::Open
+            (self.sequence.take(), FrameNumber::Open)
         }
     }
 
@@ -7599,10 +6760,9 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         admission: AcAdmission,
         eapol: &[u8],
         purpose: TxPurpose,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaTransmit<'id, T, K>, EapolUnsent> {
+    ) -> Result<Encoded<K>, EapolUnsent> {
         let priority = eapol_priority(admission)?;
-        let credit = self.reserve_transmit(events)?;
+        let epoch = self.reserve_transmit(purpose)?;
         let peer_qos = if qos.is_some() {
             oer_protocols_ieee80211_wire::data::PeerQos::Qos
         } else {
@@ -7619,7 +6779,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                         protected: true,
                     }
                 } else {
-                    self.own_number(true)
+                    FrameNumber::Open
                 },
             ),
             None => self.station_number(true),
@@ -7637,27 +6797,22 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         };
         Ok(self
             .encode_reserved(
-                credit,
+                epoch,
                 |buffer| frame.encode(buffer).ok(),
                 StaFrameClass::Connection(ConnectionFrame::Eapol),
                 purpose,
                 StaRatePlan::Management,
-                events,
             )
-            .map(|transmit| StaTransmit {
+            .map(|encoded| Encoded {
                 access_category: priority.access_category(),
                 number,
-                ..transmit
+                ..encoded
             })?)
     }
 
-    /// A Probe Request reserves credit before consuming its sequence.
-    fn encode_probe(
-        &mut self,
-        purpose: TxPurpose,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaTransmit<'id, T, K>, Unsent> {
-        let credit = self.reserve_transmit(events)?;
+    /// A Probe Request takes its place before consuming its sequence.
+    fn encode_probe(&mut self, purpose: TxPurpose) -> Result<Encoded<K>, Unsent> {
+        let epoch = self.reserve_transmit(purpose)?;
         let (sequence_number, number) = self.station_number(false);
         let rates = self.config.supported_rates;
         let address = self.config.address.get();
@@ -7668,7 +6823,7 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
             .unwrap_or_default();
         Ok(self
             .encode_reserved(
-                credit,
+                epoch,
                 |output| {
                     ProbeRequest {
                         destination: BROADCAST_ADDRESS,
@@ -7684,9 +6839,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 StaFrameClass::Normal,
                 purpose,
                 StaRatePlan::Group,
-                events,
             )
-            .map(|transmit| StaTransmit { number, ..transmit })?)
+            .map(|encoded| Encoded { number, ..encoded })?)
     }
 
     /// A management frame of `subtype` to `bssid` in a buffer.
@@ -7697,14 +6851,13 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
         body: &[u8],
         purpose: TxPurpose,
         protected: bool,
-        events: &mut impl EventSink<StaEvent>,
-    ) -> Result<StaTransmit<'id, T, K>, Unsent> {
-        let credit = self.reserve_transmit(events)?;
+    ) -> Result<Encoded<K>, Unsent> {
+        let epoch = self.reserve_transmit(purpose)?;
         let address = self.config.address;
         let (sequence_number, number) = self.station_number(protected);
         Ok(self
             .encode_reserved(
-                credit,
+                epoch,
                 |frame| {
                     if protected {
                         return oer_protocols_ieee80211_wire::station::StaProtectedManagementFrame {
@@ -7731,9 +6884,8 @@ impl<'s, 'id, T: StaTokens, K: Ieee80211Capabilities, C: StaCallbacks>
                 StaFrameClass::Normal,
                 purpose,
                 StaRatePlan::Management,
-                events,
             )
-            .map(|transmit| StaTransmit { number, ..transmit })?)
+            .map(|encoded| Encoded { number, ..encoded })?)
     }
 }
 
@@ -7837,7 +6989,7 @@ fn join_phy<K: Ieee80211Capabilities>(
     (wide.unwrap_or(scanned), phy, None)
 }
 
-fn leave_unkeyed<T: StaTokens, K>(reason: StaDisconnectReason) -> Change<T, K> {
+fn leave_unkeyed<T: StaTypes, K>(reason: StaDisconnectReason) -> Change<T, K> {
     Change::Leave {
         reason,
         step: LeaveStep::NeedConfigure,
@@ -7851,7 +7003,7 @@ fn leave_key_step(deauthentication: Option<Deauthentication>) -> LeaveStep {
         other => LeaveStep::RemoveKeys(other),
     }
 }
-fn leave_keyed<T: StaTokens, K>(
+fn leave_keyed<T: StaTypes, K>(
     reason: StaDisconnectReason,
     deauthentication: Option<Deauthentication>,
 ) -> Change<T, K> {
@@ -7861,7 +7013,7 @@ fn leave_keyed<T: StaTokens, K>(
     }
 }
 /// The handshake's state after the supplicant's resolved effect.
-fn handshake_ready<T: StaTokens, K>(
+fn handshake_ready<T: StaTypes, K>(
     handshake: &mut Handshake<T, K>,
     now: Instant,
     action: RsnStaReady<DEFAULT_EAPOL_FRAME_CAPACITY>,
@@ -7894,7 +7046,7 @@ fn handshake_ready<T: StaTokens, K>(
     Change::Keep
 }
 
-fn leave_handshake<T: StaTokens, K>(handshake: &Handshake<T, K>, reason_code: u16) -> Change<T, K> {
+fn leave_handshake<T: StaTypes, K>(handshake: &Handshake<T, K>, reason_code: u16) -> Change<T, K> {
     let reason = if reason_code == reason_code::DEAUTH_LEAVING {
         StaDisconnectReason::Requested
     } else {
@@ -7903,7 +7055,7 @@ fn leave_handshake<T: StaTokens, K>(handshake: &Handshake<T, K>, reason_code: u1
     leave_handshake_because(handshake, reason, reason_code)
 }
 /// Leave a handshake for `reason`, deauthenticating with `reason_code`.
-fn leave_handshake_because<T: StaTokens, K>(
+fn leave_handshake_because<T: StaTypes, K>(
     handshake: &Handshake<T, K>,
     reason: StaDisconnectReason,
     reason_code: u16,
@@ -7917,7 +7069,7 @@ fn leave_handshake_because<T: StaTokens, K>(
         }),
     )
 }
-fn leave_connected<T: StaTokens, K>(
+fn leave_connected<T: StaTypes, K>(
     connected: &Connected<T, K>,
     reason: StaDisconnectReason,
     reason_code: Option<u16>,
@@ -7936,14 +7088,14 @@ fn leave_connected<T: StaTokens, K>(
         })),
     }
 }
-fn leave_disabled<T: StaTokens, K>(_connected: &Connected<T, K>) -> Change<T, K> {
+fn leave_disabled<T: StaTypes, K>(_connected: &Connected<T, K>) -> Change<T, K> {
     Change::Leave {
         reason: StaDisconnectReason::TransmitRefused(TxRefusal::LinkChanged),
         step: LeaveStep::Disabled,
     }
 }
 #[inline(never)]
-fn finish_connected_install<T: StaTokens, K>(
+fn finish_connected_install<T: StaTypes, K>(
     connected: &mut Connected<T, K>,
     events: &mut impl EventSink<StaEvent>,
 ) {
@@ -7962,7 +7114,7 @@ fn finish_connected_install<T: StaTokens, K>(
     }
 }
 
-fn finish_handshake_install<T: StaTokens, K, E: oer_portable_crypto::block::Aes128Engine>(
+fn finish_handshake_install<T: StaTypes, K, E: oer_portable_crypto::block::Aes128Engine>(
     handshake: &mut Handshake<T, K>,
     request: RsnStaRetryInstall,
     replay: CcmpRxReplayEpoch,
@@ -7989,8 +7141,9 @@ fn finish_handshake_install<T: StaTokens, K, E: oer_portable_crypto::block::Aes1
 #[derive(Debug)]
 enum Unsent {
     NoConnection,
-    /// The station holds no ticket or buffer now.
-    NoTokens,
+    /// The frame of its purpose is still out: the station's one place for
+    /// it is taken until that frame's end.
+    Out,
     /// The frame did not encode.
     Encode,
 }
@@ -8017,12 +7170,12 @@ impl From<EncodeError> for EapolUnsent {
 }
 
 impl EapolUnsent {
-    /// The reason a connected station leaves for a refusal other than a
-    /// lack of tokens, which only defers the frame.
+    /// The reason a connected station leaves for a refusal other than its
+    /// purpose's frame still out, which only defers the frame.
     fn disconnect_reason(self) -> Option<StaDisconnectReason> {
         match self {
             Self::NoAdmittedAccessCategory => Some(StaDisconnectReason::NoAdmittedAccessCategory),
-            Self::Unsent(Unsent::NoTokens) => None,
+            Self::Unsent(Unsent::Out) => None,
             Self::Unsent(Unsent::Encode) => Some(StaDisconnectReason::Encode),
             Self::Unsent(Unsent::NoConnection) => {
                 Some(StaDisconnectReason::TransmitRefused(TxRefusal::LinkChanged))
@@ -8040,7 +7193,7 @@ fn eapol_priority(admission: AcAdmission) -> Result<WmmUserPriority, EapolUnsent
         .ok_or(EapolUnsent::NoAdmittedAccessCategory)
 }
 
-/// Encoding can fail after credit is reserved; acquiring credit cannot.
+/// Encoding can fail after the frame's place is taken; taking it cannot.
 #[derive(Debug)]
 struct EncodeError;
 
