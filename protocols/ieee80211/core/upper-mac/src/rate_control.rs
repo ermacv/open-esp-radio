@@ -15,7 +15,7 @@ use oer_protocols_ieee80211_contracts_port::{BlockAckSnr, LinkMetric};
 use {
     crate::phy_mode::PhyMode,
     oer_protocols_ieee80211_wire::{
-        he::{He20Capabilities, He20PeerState},
+        he::{HeCapabilities, HePeerState},
         ht::HtPeerCapabilities,
         phy::PhyRate,
     },
@@ -35,9 +35,9 @@ pub struct RatePeer {
     /// fallback must remain within this nonempty set even on an HT/HE link.
     pub legacy_rates: NegotiatedLegacyRates,
     pub ht_capabilities: Option<HtPeerCapabilities>,
-    pub he_capabilities: Option<He20Capabilities>,
+    pub he_capabilities: Option<HeCapabilities>,
     /// The HE state of an HE link.
-    pub he_peer_state: Option<He20PeerState>,
+    pub he_peer_state: Option<HePeerState>,
 }
 
 /// Whether the peer acknowledged an MPDU whose transmission count is known.

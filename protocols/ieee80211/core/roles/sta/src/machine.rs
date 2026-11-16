@@ -6270,7 +6270,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
             JoinStep::NeedConfigure if !join.he_set => {
                 use oer_protocols_ieee80211_contracts_port::{HeBssColor, StationHe};
                 let he = if join.phy == PhyMode::He20 {
-                    match oer_protocols_ieee80211_wire::he::parse_he20_operation(
+                    match oer_protocols_ieee80211_wire::he::parse_he_operation(
                         join.access_point.he_operation_ie_bytes(),
                     )
                     .ok()
@@ -6931,7 +6931,7 @@ fn join_phy<K: Ieee80211Capabilities>(
     }
     let primary = scanned.channel();
     let wide = access_point
-        .ht40_secondary_channel(primary.number())
+        .secondary_channel(primary.number())
         .and_then(|secondary| {
             let width = match secondary {
                 HtSecondaryChannel::Above => ChannelWidth::Mhz40Above,

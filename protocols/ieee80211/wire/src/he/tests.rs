@@ -6,7 +6,7 @@ fn parses_single_stream_mcs9_capability_without_optional_tails() {
     element[..3].copy_from_slice(&[255, 22, 35]);
     element[20..22].copy_from_slice(&0xfffd_u16.to_le_bytes());
     element[22..24].copy_from_slice(&0xfffd_u16.to_le_bytes());
-    let capability = parse_he20_capabilities(&element).unwrap();
+    let capability = parse_he_capabilities(&element).unwrap();
     assert_eq!(capability.receive_nss1(), HeMcsNssSupport::Mcs0To9);
     assert_eq!(capability.transmit_nss1(), HeMcsNssSupport::Mcs0To9);
     assert!(capability.supports_bidirectional_mcs9());
@@ -154,7 +154,7 @@ fn parses_optional_one_ltf_800ns_gi_capability() {
     let mut element = [0_u8; 24];
     element[..3].copy_from_slice(&[255, 22, 35]);
     element[10] = 0x40;
-    let capability = parse_he20_capabilities(&element).unwrap();
+    let capability = parse_he_capabilities(&element).unwrap();
     assert!(capability.supports_one_ltf_800ns_gi());
     assert!(!capability.supports_ldpc_coding_in_payload());
 }
@@ -164,7 +164,7 @@ fn parses_payload_ldpc_independently_from_gi_and_dcm() {
     let mut element = [0_u8; 24];
     element[..3].copy_from_slice(&[255, 22, 35]);
     element[10] = 0x20;
-    let capability = parse_he20_capabilities(&element).unwrap();
+    let capability = parse_he_capabilities(&element).unwrap();
     assert!(!capability.supports_one_ltf_800ns_gi());
     assert!(capability.supports_ldpc_coding_in_payload());
     assert_eq!(capability.dcm_receive(), HeDcmConstellation::NotSupported);
@@ -177,7 +177,7 @@ fn parses_independent_dcm_transmit_and_receive_constellations() {
     // Peer TX: QPSK (bits 1:0 = 2); peer RX: 16-QAM
     // (bits 4:3 = 3). NSS stays one when bits 2 and 5 are clear.
     element[12] = 0x1a;
-    let capability = parse_he20_capabilities(&element).unwrap();
+    let capability = parse_he_capabilities(&element).unwrap();
     assert_eq!(capability.dcm_transmit(), HeDcmConstellation::Qpsk);
     assert_eq!(capability.dcm_receive(), HeDcmConstellation::Qam16);
     assert!(capability.dcm_receive().supports_bpsk());
@@ -192,7 +192,7 @@ fn parses_stbc_and_independent_cqi_feedback_capabilities() {
     element[11] = 0x0c;
     element[15] = 0x1c;
     element[18] = 0x02;
-    let capability = parse_he20_capabilities(&element).unwrap();
+    let capability = parse_he_capabilities(&element).unwrap();
     assert!(capability.phy.stbc_transmit_under_80_mhz());
     assert!(capability.phy.stbc_receive_under_80_mhz());
     assert!(capability.phy.triggered_su_beamforming_feedback());
@@ -211,7 +211,7 @@ fn decodes_the_vendor_s31_sta_stbc_and_cqi_advertisement() {
         0xff, 0x16, 0x23, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d, 0xc0,
         0x1f, 0x00, 0x02, 0x82, 0x01, 0xfd, 0xff, 0xfd, 0xff,
     ];
-    let capability = parse_he20_capabilities(&capability).unwrap();
+    let capability = parse_he_capabilities(&capability).unwrap();
     assert!(!capability.phy.stbc_transmit_under_80_mhz());
     assert!(capability.phy.stbc_receive_under_80_mhz());
     assert_eq!(capability.dcm_transmit(), HeDcmConstellation::Qam16);
@@ -229,7 +229,7 @@ fn decodes_the_vendor_s31_sta_stbc_and_cqi_advertisement() {
 #[test]
 fn parses_disabled_partial_bss_color() {
     let element = [255, 7, 36, 0, 0, 0, 0xc5, 0xfd, 0xff];
-    let operation = parse_he20_operation(&element).unwrap();
+    let operation = parse_he_operation(&element).unwrap();
     assert_eq!(operation.bss_color(), 5);
     assert!(!operation.bss_color_enabled());
     assert!(operation.partial_bss_color());
@@ -240,7 +240,7 @@ fn parses_disabled_partial_bss_color() {
 #[test]
 fn disabled_color_matches_vendor_effective_tx_color() {
     let element = [255, 7, 36, 0, 0, 0, 0xae, 0xfd, 0xff];
-    let operation = parse_he20_operation(&element).unwrap();
+    let operation = parse_he_operation(&element).unwrap();
     assert_eq!(operation.bss_color(), 46);
     assert!(!operation.bss_color_enabled());
     assert!(!operation.partial_bss_color());
@@ -254,7 +254,7 @@ fn recovers_vendor_ap_he20_peer_state() {
         0x95, 0x08, 0x00, 0xcc, 0x00, 0xfa, 0xff, 0xfa, 0xff, 0x19, 0x1c, 0xc7, 0x71,
     ];
     let operation = [0xff, 0x07, 0x24, 0x04, 0x00, 0x01, 0x1b, 0xfc, 0xff];
-    let state = parse_he20_peer_state(&capability, &operation).unwrap();
+    let state = parse_he_peer_state(&capability, &operation).unwrap();
     assert_eq!(state.packet_padding_eight_us, 2);
     assert_eq!(state.default_packet_extension_duration(), 4);
     assert_eq!(state.bss_color(), 27);
@@ -265,12 +265,12 @@ fn recovers_vendor_ap_he20_peer_state() {
     assert!(state.extended_range_single_user_disabled());
     assert!(!state.extended_range_single_user_permitted());
     assert!(
-        !parse_he20_capabilities(&capability)
+        !parse_he_capabilities(&capability)
             .unwrap()
             .supports_one_ltf_800ns_gi()
     );
     assert_eq!(
-        parse_he20_capabilities(&capability).unwrap().dcm_receive(),
+        parse_he_capabilities(&capability).unwrap().dcm_receive(),
         HeDcmConstellation::NotSupported
     );
 }
@@ -295,65 +295,65 @@ fn a_capability_announcing_ppe_thresholds_without_them_is_too_short() {
     let mut capability = minimal_capability();
     capability[15] |= 0x80;
     assert_eq!(
-        parse_he20_peer_state(&capability, &SEED_OPERATION),
+        parse_he_peer_state(&capability, &SEED_OPERATION),
         Err(HeElementError::TooShort)
     );
     let mut one_byte = [0_u8; 25];
     one_byte[..24].copy_from_slice(&capability);
     one_byte[1] = 23;
     assert_eq!(
-        parse_he20_peer_state(&one_byte, &SEED_OPERATION),
+        parse_he_peer_state(&one_byte, &SEED_OPERATION),
         Err(HeElementError::TooShort)
     );
-    assert!(parse_he20_peer_state(&SEED_CAPABILITY, &SEED_OPERATION).is_ok());
+    assert!(parse_he_peer_state(&SEED_CAPABILITY, &SEED_OPERATION).is_ok());
 }
 
 #[test]
 fn element_checks_keep_their_order() {
-    assert_eq!(parse_he20_operation(&[]), Err(HeElementError::WrongElement));
-    assert_eq!(parse_he20_operation(&[255]), Err(HeElementError::TooShort));
+    assert_eq!(parse_he_operation(&[]), Err(HeElementError::WrongElement));
+    assert_eq!(parse_he_operation(&[255]), Err(HeElementError::TooShort));
     assert_eq!(
-        parse_he20_operation(&[255, 7, 36]),
+        parse_he_operation(&[255, 7, 36]),
         Err(HeElementError::LengthMismatch)
     );
     assert_eq!(
-        parse_he20_operation(&[255, 1, 36]),
+        parse_he_operation(&[255, 1, 36]),
         Err(HeElementError::TooShort)
     );
     let mut wrong = SEED_OPERATION;
     wrong[2] = 35;
     assert_eq!(
-        parse_he20_operation(&wrong),
+        parse_he_operation(&wrong),
         Err(HeElementError::WrongExtension)
     );
 }
 
 fn parse_every_element(bytes: &[u8]) {
-    if let Ok(capability) = parse_he20_capabilities(bytes) {
+    if let Ok(capability) = parse_he_capabilities(bytes) {
         let _ = (
             capability.supports_bidirectional_mcs9(),
             capability.supports_one_ltf_800ns_gi(),
             capability.dcm_receive(),
         );
     }
-    if let Ok(operation) = parse_he20_operation(bytes) {
+    if let Ok(operation) = parse_he_operation(bytes) {
         let _ = operation.effective_bss_color();
     }
     // The input as either element of the pair, with the other one valid,
     // and split at its middle into a capability and an operation.
-    let _ = parse_he20_peer_state(bytes, &SEED_OPERATION);
-    let _ = parse_he20_peer_state(&SEED_CAPABILITY, bytes);
+    let _ = parse_he_peer_state(bytes, &SEED_OPERATION);
+    let _ = parse_he_peer_state(&SEED_CAPABILITY, bytes);
     let (capability, operation) = bytes.split_at(bytes.len() / 2);
-    if let Ok(state) = parse_he20_peer_state(capability, operation) {
+    if let Ok(state) = parse_he_peer_state(capability, operation) {
         let _ = state.extended_range_single_user_permitted();
     }
 }
 
 fn run_element_parsers(count: usize) {
-    assert!(parse_he20_capabilities(&SEED_CAPABILITY).is_ok());
+    assert!(parse_he_capabilities(&SEED_CAPABILITY).is_ok());
     let minimal = minimal_capability();
-    assert!(parse_he20_capabilities(&minimal).is_ok());
-    assert!(parse_he20_operation(&SEED_OPERATION).is_ok());
+    assert!(parse_he_capabilities(&minimal).is_ok());
+    assert!(parse_he_operation(&SEED_OPERATION).is_ok());
     // The pair back to back, which the middle split of a mutated input meets.
     let pair = [SEED_CAPABILITY.as_slice(), SEED_OPERATION.as_slice()].concat();
     let seeds = [
@@ -398,8 +398,8 @@ fn a_sig_b_user_field_is_read_lsb_first_and_refused_past_the_stream() {
 }
 
 /// One-stream MCS 0..9 both ways with the given MAC and PHY fields.
-fn mcs9_local(mac: HeMacCapabilities, phy: HePhyCapabilities) -> He20LocalCapabilities {
-    He20LocalCapabilities {
+fn mcs9_local(mac: HeMacCapabilities, phy: HePhyCapabilities) -> HeLocalCapabilities {
+    HeLocalCapabilities {
         mac,
         phy,
         receive: HeMcsNssSupport::Mcs0To9,
@@ -413,14 +413,14 @@ fn an_advertised_capability_reads_back_through_the_parser() {
         .with_ldpc_coding_in_payload(true)
         .with_stbc_receive_under_80_mhz(true)
         .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US);
-    let element = he20_capability_ie(He20LocalCapabilities {
+    let element = he_capability_ie(HeLocalCapabilities {
         mac: HeMacCapabilities::from_bytes([0; 6]),
         phy,
         receive: HeMcsNssSupport::Mcs0To9,
         transmit: HeMcsNssSupport::Mcs0To7,
     });
 
-    let capability = parse_he20_capabilities(&element).unwrap();
+    let capability = parse_he_capabilities(&element).unwrap();
     assert_eq!(capability.receive_nss1(), HeMcsNssSupport::Mcs0To9);
     assert_eq!(capability.transmit_nss1(), HeMcsNssSupport::Mcs0To7);
     assert!(!capability.supports_bidirectional_mcs9());
@@ -441,13 +441,13 @@ fn every_stream_after_the_first_is_not_supported() {
         (HeMcsNssSupport::Mcs0To11, 0xfffe),
         (HeMcsNssSupport::NotSupported, 0xffff),
     ] {
-        let element = he20_capability_ie(He20LocalCapabilities {
+        let element = he_capability_ie(HeLocalCapabilities {
             mac: HeMacCapabilities::from_bytes([0; 6]),
             phy: HePhyCapabilities::from_bytes([0; 11]),
             receive: support,
             transmit: support,
         });
-        let capability = parse_he20_capabilities(&element).unwrap();
+        let capability = parse_he_capabilities(&element).unwrap();
         assert_eq!(capability.receive_mcs_map, map, "{support:?}");
         assert_eq!(capability.transmit_mcs_map, map, "{support:?}");
         assert_eq!(capability.receive_nss1(), support);
@@ -461,7 +461,7 @@ fn the_element_has_no_ppe_thresholds_and_a_20_mhz_only_width_set() {
     let phy = HePhyCapabilities::from_bytes([0xff; 11])
         .with_ppe_present(true)
         .with_channel_width_set(oer_portable_wire::U8::constant::<0x7f>());
-    let element = he20_capability_ie(mcs9_local(HeMacCapabilities::from_bytes([0; 6]), phy));
+    let element = he_capability_ie(mcs9_local(HeMacCapabilities::from_bytes([0; 6]), phy));
 
     assert_eq!(element.len(), HE_CAPABILITIES_IE_MIN_LEN);
     let advertised = HePhyCapabilities::from_bytes(element[9..20].try_into().unwrap());
@@ -472,7 +472,7 @@ fn the_element_has_no_ppe_thresholds_and_a_20_mhz_only_width_set() {
     assert_eq!(advertised.nominal_padding().get(), 3);
     // Without PPE Thresholds the peer state needs no bytes after the prefix
     // and takes the nominal padding.
-    let state = parse_he20_peer_state(&element, &SEED_OPERATION).unwrap();
+    let state = parse_he_peer_state(&element, &SEED_OPERATION).unwrap();
     assert_eq!(state.packet_padding_eight_us, 3);
 }
 
@@ -482,7 +482,7 @@ fn the_mac_capabilities_land_in_their_octets() {
         .with_htc_he(true)
         .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US)
         .with_ht_and_vht_trigger_frame_rx(true);
-    let element = he20_capability_ie(mcs9_local(mac, HePhyCapabilities::from_bytes([0; 11])));
+    let element = he_capability_ie(mcs9_local(mac, HePhyCapabilities::from_bytes([0; 11])));
     let advertised = HeMacCapabilities::from_bytes(element[3..9].try_into().unwrap());
     assert_eq!(advertised, mac);
     assert!(advertised.htc_he());
@@ -536,7 +536,7 @@ fn the_named_fields_reproduce_the_vendor_s31_station_element() {
         .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US)
         .with_mu_ppdu_more_than_one_ru_maximum_ltf(true);
     assert_eq!(
-        he20_capability_ie(mcs9_local(mac, phy)),
+        he_capability_ie(mcs9_local(mac, phy)),
         [
             0xff, 0x16, 0x23, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d,
             0xc0, 0x1f, 0x00, 0x02, 0x82, 0x01, 0xfd, 0xff, 0xfd, 0xff,
@@ -575,7 +575,7 @@ fn the_named_fields_reproduce_the_archive_station_element() {
         .with_he_ppdu_20_mhz_in_40_mhz_2g(true)
         .with_nominal_padding(HePhyCapabilities::NOMINAL_PADDING_16_US)
         .with_mu_ppdu_more_than_one_ru_maximum_ltf(true);
-    let element = he20_capability_ie(mcs9_local(mac, phy));
+    let element = he_capability_ie(mcs9_local(mac, phy));
     assert_eq!(
         element,
         [
@@ -583,7 +583,7 @@ fn the_named_fields_reproduce_the_archive_station_element() {
             0x00, 0x00, 0x00, 0x02, 0x80, 0x01, 0xfd, 0xff, 0xfd, 0xff,
         ]
     );
-    let capability = parse_he20_capabilities(&element).unwrap();
+    let capability = parse_he_capabilities(&element).unwrap();
     assert!(!capability.phy.triggered_su_beamforming_feedback());
     assert!(!capability.phy.triggered_cqi_feedback());
     assert!(!capability.phy.non_triggered_cqi_feedback());
@@ -598,20 +598,20 @@ fn a_co_hosted_bss_names_its_max_co_hosted_bssid_indicator() {
     ];
     // Not co-hosted: no indicator.
     let plain = [255, 7, 36, 0x04, 0x00, 0x00, 0x1b, 0xfc, 0xff];
-    let state = parse_he20_peer_state(&capability, &plain).unwrap();
+    let state = parse_he_peer_state(&capability, &plain).unwrap();
     assert_eq!(state.max_co_hosted_bssid_indicator, None);
     // Co-Hosted BSS (parameters bit 15): the octet after the fixed fields.
     let co_hosted = [255, 8, 36, 0x04, 0x80, 0x00, 0x1b, 0xfc, 0xff, 3];
-    let state = parse_he20_peer_state(&capability, &co_hosted).unwrap();
+    let state = parse_he_peer_state(&capability, &co_hosted).unwrap();
     assert_eq!(state.max_co_hosted_bssid_indicator, Some(3));
     // With VHT Operation Information (bit 14): after its three octets.
     let with_vht = [255, 11, 36, 0x04, 0xc0, 0x00, 0x1b, 0xfc, 0xff, 0, 42, 0, 5];
-    let state = parse_he20_peer_state(&capability, &with_vht).unwrap();
+    let state = parse_he_peer_state(&capability, &with_vht).unwrap();
     assert_eq!(state.max_co_hosted_bssid_indicator, Some(5));
     // Announced but absent: the element is too short.
     let missing = [255, 7, 36, 0x04, 0x80, 0x00, 0x1b, 0xfc, 0xff];
     assert_eq!(
-        parse_he20_peer_state(&capability, &missing),
+        parse_he_peer_state(&capability, &missing),
         Err(HeElementError::TooShort)
     );
 }
@@ -621,13 +621,13 @@ fn an_operation_s_color_is_enabled_by_its_clear_disabled_bit_and_rts_disabled_at
     let fields = HeOperationFields::from_bytes([0; 6])
         .with_bss_color(5)
         .unwrap();
-    let operation = He20Operation { fields };
+    let operation = HeOperation { fields };
     assert!(operation.bss_color_enabled() && operation.effective_bss_color() == 5);
-    let operation = He20Operation {
+    let operation = HeOperation {
         fields: fields.with_bss_color_disabled(true),
     };
     assert!(!operation.bss_color_enabled() && operation.effective_bss_color() == 0);
-    let state = |threshold| He20PeerState {
+    let state = |threshold| HePeerState {
         capability_prefix: [0; HE_CAPABILITIES_IE_MIN_LEN],
         packet_padding_eight_us: 0,
         operation: fields.with_rts_threshold(threshold).unwrap(),
@@ -637,7 +637,7 @@ fn an_operation_s_color_is_enabled_by_its_clear_disabled_bit_and_rts_disabled_at
     assert_eq!(state(0x03ff).rts_threshold(), None);
     assert_eq!(state(100).rts_threshold(), Some(100));
     assert!(state(0).extended_range_single_user_permitted());
-    let disabled = He20PeerState {
+    let disabled = HePeerState {
         operation: fields.with_er_su_disabled(true),
         ..state(0)
     };

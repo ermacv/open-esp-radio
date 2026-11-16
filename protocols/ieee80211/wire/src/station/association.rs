@@ -111,14 +111,40 @@ impl StaPowerCapability {
 /// no default chip profile and does not derive capabilities from peer claims.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AssociationCapabilities {
-    pub ht20: [u8; 28],
-    pub ht40: [u8; 28],
-    pub he20_ht: [u8; 28],
-    pub he20: [u8; 24],
-    /// The Extended Capabilities element an HE20 request carries after its
+    /// The HT Capabilities element of an HT request, for each channel width.
+    pub ht: HtCapabilityElements,
+    /// The HT Capabilities element an HE request carries beside its HE
+    /// Capabilities.
+    pub ht_with_he: [u8; 28],
+    /// The HE Capabilities element of an HE request.
+    pub he: [u8; 24],
+    /// The Extended Capabilities element an HE request carries after its
     /// WMM element; `None` sends none.
-    pub he20_extended: Option<[u8; 14]>,
+    pub he_extended: Option<[u8; 14]>,
     pub wmm: [u8; 9],
+}
+
+/// A station's HT Capabilities element for each channel width it requests
+/// HT at: the element's Supported Channel Width Set and short guard
+/// intervals follow the width (IEEE Std 802.11-2020, 9.4.2.55.2).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HtCapabilityElements {
+    /// At 20 MHz.
+    pub mhz20: [u8; 28],
+    /// At 40 MHz.
+    pub mhz40: [u8; 28],
+}
+
+impl HtCapabilityElements {
+    /// The element for `width`: a 40 MHz geometry takes the 40 MHz one.
+    pub const fn at(&self, width: crate::channel::ChannelWidth) -> &[u8; 28] {
+        match width {
+            crate::channel::ChannelWidth::Mhz20 => &self.mhz20,
+            crate::channel::ChannelWidth::Mhz40Above | crate::channel::ChannelWidth::Mhz40Below => {
+                &self.mhz40
+            }
+        }
+    }
 }
 
 /// The capability elements selected by the caller's association policy.
@@ -292,7 +318,7 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
             } else {
                 &[]
             },
-            match (he_capability, &capabilities.he20_extended) {
+            match (he_capability, &capabilities.he_extended) {
                 (Some(_), Some(extended)) => extended.as_slice(),
                 _ => &[],
             },
@@ -308,8 +334,8 @@ impl<P: AssociationPhy> AssociationRequest<'_, P> {
 pub enum AssociationRequestError {
     Frame(StationFrameError),
     HtUnsupportedByAccessPoint,
-    Ht40UnsupportedByAccessPoint,
-    He20UnsupportedByAccessPoint,
+    WidthUnsupportedByAccessPoint,
+    HeUnsupportedByAccessPoint,
     MissingPowerCapability,
     MissingHeUlMuPowerCapability,
     UnexpectedPowerCapability,

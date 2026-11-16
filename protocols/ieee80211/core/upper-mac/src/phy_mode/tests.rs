@@ -12,11 +12,13 @@ const SELECTED_RSN_IE_LEN: usize = 22;
 // A synthetic profile keeps framing/admission tests independent of any chip.
 // Neither test below emits a local HT/HE element.
 const TEST_ASSOCIATION_CAPABILITIES: AssociationCapabilities = AssociationCapabilities {
-    ht20: [0; 28],
-    ht40: [0; 28],
-    he20_ht: [0; 28],
-    he20: [0; 24],
-    he20_extended: None,
+    ht: oer_protocols_ieee80211_wire::station::HtCapabilityElements {
+        mhz20: [0; 28],
+        mhz40: [0; 28],
+    },
+    ht_with_he: [0; 28],
+    he: [0; 24],
+    he_extended: None,
     wmm: [0; 9],
 };
 
@@ -155,7 +157,7 @@ fn association_encoder_uses_the_explicit_local_profile() {
         [0; oer_protocols_ieee80211_wire::ht::HT_CAPABILITY_IE_LEN],
     ));
     let mut capabilities = TEST_ASSOCIATION_CAPABILITIES;
-    capabilities.ht20[..6].copy_from_slice(&[45, 26, 0, 0, 0, 1]);
+    capabilities.ht.mhz20[..6].copy_from_slice(&[45, 26, 0, 0, 0, 1]);
     capabilities.wmm = [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0];
     let mut output = [0; 160];
     let length = AssociationRequest {

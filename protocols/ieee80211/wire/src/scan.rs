@@ -248,7 +248,7 @@ impl ScanRecord {
     /// independently recovered in
     /// `oer-chips-esp32s31-pac/src/phy/frequency.rs::bss_tx_offset` from the
     /// complete rev0 ROM `phy_bb_bss_cbw40`.
-    pub fn ht40_secondary_channel(&self, primary_channel: u8) -> Option<HtSecondaryChannel> {
+    pub fn secondary_channel(&self, primary_channel: u8) -> Option<HtSecondaryChannel> {
         let capability = self.ht_capability_ie_bytes()?;
         let operation = self.ht_operation_ie_bytes()?;
         let capability_info = u16::from_le_bytes([capability[2], capability[3]]);

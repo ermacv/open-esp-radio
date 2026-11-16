@@ -2,7 +2,7 @@
 
 use super::{BssColorScope, BssColorUse, He20Association, He20AssociationError, HeBssColor};
 use crate::BssColor;
-use oer_protocols_ieee80211_wire::he::{He20Operation, He20PeerState, HeOperationFields};
+use oer_protocols_ieee80211_wire::he::{HeOperation, HeOperationFields, HePeerState};
 
 /// An HE Operation of default PE 4, BSS color 42 (partial) and the basic
 /// set `0xfffc`.
@@ -15,8 +15,8 @@ fn operation_fields() -> HeOperationFields {
         .with_partial_bss_color(true)
 }
 
-fn peer() -> He20PeerState {
-    He20PeerState {
+fn peer() -> HePeerState {
+    HePeerState {
         capability_prefix: [0; 24],
         packet_padding_eight_us: 2,
         operation: operation_fields().with_er_su_disabled(true),
@@ -45,7 +45,7 @@ fn an_association_keeps_the_peer_values_it_was_made_of() {
 
 #[test]
 fn a_bss_color_is_the_scan_s_and_a_disabled_one_is_transmitted_as_zero() {
-    let mut operation = He20Operation {
+    let mut operation = HeOperation {
         fields: operation_fields().with_partial_bss_color(false),
     };
     let color = HeBssColor::of(&operation).expect("a color");

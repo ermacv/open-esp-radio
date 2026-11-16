@@ -91,7 +91,7 @@ pub fn select_association_phy(
     select_phy(
         preference,
         access_point.ht_capability_ie_bytes().is_some(),
-        ht40_capable && access_point.ht40_secondary_channel(channel).is_some(),
+        ht40_capable && access_point.secondary_channel(channel).is_some(),
         he20_admitted(access_point),
     )
 }
@@ -102,11 +102,11 @@ pub fn select_association_phy(
 /// request's elements ([`PhyMode`]'s `AssociationPhy`).
 pub fn he20_admitted(access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord) -> bool {
     access_point.ht_capability_ie_bytes().is_some()
-        && oer_protocols_ieee80211_wire::he::parse_he20_capabilities(
+        && oer_protocols_ieee80211_wire::he::parse_he_capabilities(
             access_point.he_capability_ie_bytes(),
         )
         .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
-        && oer_protocols_ieee80211_wire::he::parse_he20_operation(
+        && oer_protocols_ieee80211_wire::he::parse_he_operation(
             access_point.he_operation_ie_bytes(),
         )
         .is_ok()
@@ -163,9 +163,9 @@ pub struct StaAssociatedPeer {
     /// its maximum A-MPDU length exponent and minimum MPDU start spacing;
     /// zero without HT Capabilities.
     pub ht_ampdu_parameters: u8,
-    pub he_capabilities: Option<oer_protocols_ieee80211_wire::he::He20Capabilities>,
+    pub he_capabilities: Option<oer_protocols_ieee80211_wire::he::HeCapabilities>,
     /// The HE state of an HE association.
-    pub he_peer_state: Option<oer_protocols_ieee80211_wire::he::He20PeerState>,
+    pub he_peer_state: Option<oer_protocols_ieee80211_wire::he::HePeerState>,
     /// The BSS color of the access point's HE Operation, zero without one.
     pub he_bss_color: u8,
     /// What the station's MAC follows of an HE association: its peer
@@ -261,7 +261,7 @@ impl StaAssociatedPeer {
     ) -> Result<Self, StaAssociatedPeerError> {
         use oer_protocols_ieee80211_wire::{
             extensions::wmm::WmmParameterSet,
-            he::{parse_he20_capabilities, parse_he20_operation, parse_he20_peer_state},
+            he::{parse_he_capabilities, parse_he_operation, parse_he_peer_state},
             protection::HtProtectionMode,
         };
         if response.status_code != 0 {
@@ -282,24 +282,24 @@ impl StaAssociatedPeer {
             if capability.is_empty() || operation.is_empty() {
                 return Err(StaAssociatedPeerError::HeNotGranted);
             }
-            let capabilities = parse_he20_capabilities(capability)
+            let capabilities = parse_he_capabilities(capability)
                 .map_err(StaAssociatedPeerError::HeCapabilities)?;
             if !capabilities.supports_bidirectional_mcs9() {
                 return Err(StaAssociatedPeerError::HeUnsupported);
             }
-            let bss_color = parse_he20_operation(operation)
+            let bss_color = parse_he_operation(operation)
                 .map_err(StaAssociatedPeerError::HeOperation)?
                 .effective_bss_color();
-            let state = parse_he20_peer_state(capability, operation)
+            let state = parse_he_peer_state(capability, operation)
                 .map_err(StaAssociatedPeerError::HePeer)?;
             (capability, Some(capabilities), Some(state), bss_color)
         } else {
             let capability = access_point.he_capability_ie_bytes();
             (
                 capability,
-                parse_he20_capabilities(capability).ok(),
+                parse_he_capabilities(capability).ok(),
                 None,
-                parse_he20_operation(access_point.he_operation_ie_bytes())
+                parse_he_operation(access_point.he_operation_ie_bytes())
                     .map_or(0, |operation| operation.effective_bss_color()),
             )
         };

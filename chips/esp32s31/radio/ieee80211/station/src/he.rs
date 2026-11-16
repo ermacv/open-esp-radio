@@ -5,8 +5,8 @@ use oer_protocols_ieee80211_contracts_port::Channel;
 use oer_protocols_ieee80211_core_roles_sta::association::StaHePower;
 use oer_protocols_ieee80211_wire::{
     he::{
-        He20LocalCapabilities, HeMacCapabilities, HeMcsNssSupport, HePhyCapabilities,
-        he20_capability_ie,
+        HeLocalCapabilities, HeMacCapabilities, HeMcsNssSupport, HePhyCapabilities,
+        he_capability_ie,
     },
     ht::{HtAmpduParameters, HtCapabilityInfo, HtLocalCapabilities, ht_capability_ie},
     station::{
@@ -65,7 +65,7 @@ pub(crate) const HE20_HT: [u8; 28] = ht_capability_ie(
 // `esp_wifi_set_tf_padding_duration` admits 0..2) and Nominal Packet Padding
 // 16 us (the vendor default element, PHY byte 9 bits 7:6 = 2). Field
 // positions: IEEE Std 802.11ax-2021, 9.4.2.248.2 and .3, as Linux cites them.
-pub(crate) const HE20: [u8; 24] = he20_capability_ie(He20LocalCapabilities {
+pub(crate) const HE20: [u8; 24] = he_capability_ie(HeLocalCapabilities {
     mac: HeMacCapabilities::from_bytes([0; 6])
         .with_trigger_frame_mac_padding(HeMacCapabilities::TRIGGER_FRAME_MAC_PADDING_16_US),
     phy: HePhyCapabilities::from_bytes([0; 11])

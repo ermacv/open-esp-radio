@@ -1,6 +1,6 @@
 //! The PHY mode of one association and the elements it requests.
 use oer_protocols_ieee80211_wire::{
-    he::{parse_he20_capabilities, parse_he20_operation},
+    he::{parse_he_capabilities, parse_he_operation},
     scan::ScanRecord,
     station::association::{
         AssociationCapabilities, AssociationElements, AssociationPhy, AssociationRequestError,
@@ -53,26 +53,26 @@ impl AssociationPhy for PhyMode {
         let (ht_capability, he_capability, selected_power, selected_ul_mu) = match *self {
             PhyMode::Legacy => (None, None, None, None),
             PhyMode::Ht20 if access_point.ht_capability_ie_bytes().is_some() => {
-                (Some(&capabilities.ht20), None, None, None)
+                (Some(&capabilities.ht.mhz20), None, None, None)
             }
             PhyMode::Ht20 => {
                 return Err(AssociationRequestError::HtUnsupportedByAccessPoint);
             }
-            PhyMode::Ht40 if access_point.ht40_secondary_channel(channel).is_some() => {
-                (Some(&capabilities.ht40), None, None, None)
+            PhyMode::Ht40 if access_point.secondary_channel(channel).is_some() => {
+                (Some(&capabilities.ht.mhz40), None, None, None)
             }
             PhyMode::Ht40 => {
-                return Err(AssociationRequestError::Ht40UnsupportedByAccessPoint);
+                return Err(AssociationRequestError::WidthUnsupportedByAccessPoint);
             }
             PhyMode::He20
                 if access_point.ht_capability_ie_bytes().is_some()
-                    && parse_he20_capabilities(access_point.he_capability_ie_bytes())
+                    && parse_he_capabilities(access_point.he_capability_ie_bytes())
                         .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
-                    && parse_he20_operation(access_point.he_operation_ie_bytes()).is_ok() =>
+                    && parse_he_operation(access_point.he_operation_ie_bytes()).is_ok() =>
             {
                 (
-                    Some(&capabilities.he20_ht),
-                    Some(&capabilities.he20),
+                    Some(&capabilities.ht_with_he),
+                    Some(&capabilities.he),
                     Some(power_capability.ok_or(AssociationRequestError::MissingPowerCapability)?),
                     Some(
                         he_ul_mu_power
@@ -81,7 +81,7 @@ impl AssociationPhy for PhyMode {
                 )
             }
             PhyMode::He20 => {
-                return Err(AssociationRequestError::He20UnsupportedByAccessPoint);
+                return Err(AssociationRequestError::HeUnsupportedByAccessPoint);
             }
         };
         if *self != PhyMode::He20 {

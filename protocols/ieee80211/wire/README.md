@@ -23,7 +23,7 @@ values for `oer-protocols-ieee80211-core-security-rsn` to interpret, and extensi
 the BIP Management MIC element (`bip`), single information elements
 (`element`), RSN element and RSNXE encoders, beacon template element edits, the HE-SIG-B user field codecs
 and the HE Capabilities element of a 20 MHz-only, one-stream 2.4 GHz station
-from its named HE MAC and PHY capability fields (`he::he20_capability_ie`).
+from its named HE MAC and PHY capability fields (`he::he_capability_ie`).
 The chip's RX-report SIG-B streams live in the S31 MAC.
 
 Production code forbids unsafe and denies every sans-IO panic lint, including

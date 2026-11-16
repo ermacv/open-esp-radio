@@ -1,4 +1,12 @@
-//! Allocation-free parsing for the bounded 2.4-GHz HE20 capability prefix.
+//! Allocation-free parsing of the HE Capabilities and HE Operation
+//! elements' fixed prefixes, and the HE-SIG-B of a 20 MHz HE MU PPDU.
+//!
+//! The elements' parsers read what serves every channel width up to 80 MHz:
+//! the HE MAC and PHY Capabilities Information, the ≤ 80 MHz HE-MCS maps
+//! and the Operation's fixed fields. The 160 MHz and 80+80 MHz maps are not
+//! read. The one width-dependent value is the packet padding
+//! ([`HePeerState::packet_padding_eight_us`]), taken for the RU of a 20 MHz
+//! PPDU, the width HE is offered at today.
 //!
 //! This module does not enable HE transmission. It owns the stateless peer
 //! representation recovered from reviewed vendor behavior. Register
@@ -634,17 +642,17 @@ impl HeDcmConstellation {
     }
 }
 
-/// A parsed HE Capabilities element of a 2.4 GHz, 20 MHz peer: its HE PHY
+/// A parsed HE Capabilities element's fixed prefix: its HE PHY
 /// Capabilities Information field and its two one-stream HE-MCS maps, and
 /// what is derived from them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct He20Capabilities {
+pub struct HeCapabilities {
     pub phy: HePhyCapabilities,
     pub receive_mcs_map: u16,
     pub transmit_mcs_map: u16,
 }
 
-impl He20Capabilities {
+impl HeCapabilities {
     /// The HE-MCS the peer receives on one stream.
     pub const fn receive_nss1(self) -> HeMcsNssSupport {
         HeMcsNssSupport::one_stream_from_map(self.receive_mcs_map)
@@ -690,11 +698,11 @@ impl He20Capabilities {
 /// A parsed HE Operation element: its HE Operation Parameters and BSS
 /// Color Information and its Basic HE-MCS And NSS Set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct He20Operation {
+pub struct HeOperation {
     pub fields: HeOperationFields,
 }
 
-impl He20Operation {
+impl HeOperation {
     pub const fn bss_color(self) -> u8 {
         self.fields.bss_color()
     }
@@ -729,12 +737,15 @@ impl He20Operation {
     }
 }
 
-/// Bounded HE20 peer state consumed by a chip-specific register backend:
+/// Bounded HE peer state consumed by a chip-specific register backend:
 /// the HE Capabilities element's fixed prefix, the padding it implies, the
 /// HE Operation element's fixed fields and its optional indicator.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct He20PeerState {
+pub struct HePeerState {
     pub capability_prefix: [u8; HE_CAPABILITIES_IE_MIN_LEN],
+    /// The packet padding the peer asks for, in units of 8 µs: its Nominal
+    /// Packet Padding, or with PPE Thresholds present those of the 242-tone
+    /// RU, the RU of a 20 MHz PPDU (IEEE Std 802.11ax-2021, 9.4.2.248.5).
     pub packet_padding_eight_us: u8,
     pub operation: HeOperationFields,
     /// The HE Operation's Max Co-Hosted BSSID Indicator, present exactly
@@ -748,7 +759,7 @@ pub struct He20PeerState {
     pub max_co_hosted_bssid_indicator: Option<u8>,
 }
 
-impl He20PeerState {
+impl HePeerState {
     pub const fn default_packet_extension_duration(self) -> u8 {
         self.operation.default_pe()
     }
@@ -793,14 +804,14 @@ impl He20PeerState {
     }
 }
 
-/// What a 2.4 GHz, 20 MHz-only, one-stream HE station advertises in its HE
+/// What a 2.4 GHz, 20 MHz, one-stream HE station advertises in its HE
 /// Capabilities element: its HE MAC and HE PHY Capabilities Information and
 /// the highest HE-MCS it receives and transmits on one spatial stream.
 ///
 /// The caller owns which capabilities it can honour; this type has no
 /// default profile and takes nothing from a peer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct He20LocalCapabilities {
+pub struct HeLocalCapabilities {
     pub mac: HeMacCapabilities,
     pub phy: HePhyCapabilities,
     /// Rx HE-MCS Map ≤ 80 MHz, one spatial stream.
@@ -822,7 +833,7 @@ pub struct He20LocalCapabilities {
 /// format) and 9.4.2.248.4 (Supported HE-MCS And NSS Set field); clause
 /// numbers as Linux `include/linux/ieee80211-he.h` cites them, the standard's
 /// text not consulted.
-pub const fn he20_capability_ie(local: He20LocalCapabilities) -> [u8; HE_CAPABILITIES_IE_MIN_LEN] {
+pub const fn he_capability_ie(local: HeLocalCapabilities) -> [u8; HE_CAPABILITIES_IE_MIN_LEN] {
     let [m0, m1, m2, m3, m4, m5] = local.mac.to_bytes();
     let [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10] = local
         .phy
@@ -909,7 +920,7 @@ fn validate_extension<const MINIMUM_LEN: usize>(
     clippy::unreachable,
     clippy::arithmetic_side_effects
 )]
-pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeElementError> {
+pub fn parse_he_capabilities(element: &[u8]) -> Result<HeCapabilities, HeElementError> {
     let (element, _) =
         validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(element, HE_CAPABILITIES_EXTENSION_ID)?;
     let mut reader = oer_portable_wire::Reader::new(element);
@@ -917,7 +928,7 @@ pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeEle
     let phy = HePhyCapabilities::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
     let receive_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
     let transmit_mcs_map = reader.u16_le().map_err(|_| HeElementError::TooShort)?;
-    Ok(He20Capabilities {
+    Ok(HeCapabilities {
         phy,
         receive_mcs_map,
         transmit_mcs_map,
@@ -932,14 +943,14 @@ pub fn parse_he20_capabilities(element: &[u8]) -> Result<He20Capabilities, HeEle
     clippy::unreachable,
     clippy::arithmetic_side_effects
 )]
-pub fn parse_he20_operation(element: &[u8]) -> Result<He20Operation, HeElementError> {
+pub fn parse_he_operation(element: &[u8]) -> Result<HeOperation, HeElementError> {
     let (element, _) =
         validate_extension::<HE_OPERATION_IE_MIN_LEN>(element, HE_OPERATION_EXTENSION_ID)?;
     let mut reader = oer_portable_wire::Reader::new(element);
     reader.take(3).map_err(|_| HeElementError::TooShort)?;
     let fields =
         HeOperationFields::from_bytes(reader.read().map_err(|_| HeElementError::TooShort)?);
-    Ok(He20Operation { fields })
+    Ok(HeOperation { fields })
 }
 
 /// Recover the peer fields installed by the pinned HE capability and
@@ -958,10 +969,10 @@ pub fn parse_he20_operation(element: &[u8]) -> Result<He20Operation, HeElementEr
     clippy::unreachable,
     clippy::arithmetic_side_effects
 )]
-pub fn parse_he20_peer_state(
+pub fn parse_he_peer_state(
     capability: &[u8],
     operation: &[u8],
-) -> Result<He20PeerState, HeElementError> {
+) -> Result<HePeerState, HeElementError> {
     let (capability, thresholds) =
         validate_extension::<HE_CAPABILITIES_IE_MIN_LEN>(capability, HE_CAPABILITIES_EXTENSION_ID)?;
     let (operation, optional) =
@@ -1005,7 +1016,7 @@ pub fn parse_he20_peer_state(
         None
     };
 
-    Ok(He20PeerState {
+    Ok(HePeerState {
         capability_prefix,
         packet_padding_eight_us,
         operation: fields,

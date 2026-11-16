@@ -506,7 +506,7 @@ fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
     let he = RatePeer {
         phy: PhyMode::He20,
         he_capabilities: Some(
-            oer_protocols_ieee80211_wire::he::parse_he20_capabilities(&[
+            oer_protocols_ieee80211_wire::he::parse_he_capabilities(&[
                 255, 22, 35, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d,
                 0xc0, 0x1f, 0x00, 0x02, 0x82, 0x01, 0xfd, 0xff, 0xfd, 0xff,
             ])

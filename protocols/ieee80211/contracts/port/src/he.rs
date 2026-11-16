@@ -7,7 +7,7 @@
 //! the Association Response ([`StationHe::He20`],
 //! `ieee80211_parse_hecap`, `ieee80211_parse_heopr` and `ic_set_sta`).
 
-use oer_protocols_ieee80211_wire::he::{He20Operation, He20PeerState};
+use oer_protocols_ieee80211_wire::he::{HeOperation, HePeerState};
 
 use crate::BssColor;
 
@@ -60,7 +60,7 @@ pub struct HeBssColor {
 
 impl HeBssColor {
     /// The color `operation` names.
-    pub const fn of(operation: &He20Operation) -> Option<Self> {
+    pub const fn of(operation: &HeOperation) -> Option<Self> {
         match BssColor::new(operation.bss_color()) {
             Some(color) => Some(Self {
                 color,
@@ -147,7 +147,7 @@ impl He20Association {
     /// The association of `peer` with AID `association_id` and the access
     /// point's minimum MPDU start spacing code.
     pub const fn new(
-        peer: &He20PeerState,
+        peer: &HePeerState,
         association_id: u16,
         minimum_mpdu_start_spacing: u8,
     ) -> Result<Self, He20AssociationError> {

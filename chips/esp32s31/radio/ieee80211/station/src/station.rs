@@ -270,11 +270,13 @@ const HT40: [u8; 28] = ht_capability_ie(
     },
 );
 pub(crate) static ASSOCIATION: AssociationCapabilities = AssociationCapabilities {
-    ht20: HT20,
-    ht40: HT40,
-    he20_ht: crate::he::HE20_HT,
-    he20: crate::he::HE20,
-    he20_extended: crate::he::HE20_EXTENDED,
+    ht: oer_protocols_ieee80211_wire::station::HtCapabilityElements {
+        mhz20: HT20,
+        mhz40: HT40,
+    },
+    ht_with_he: crate::he::HE20_HT,
+    he: crate::he::HE20,
+    he_extended: crate::he::HE20_EXTENDED,
     wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
 };
 /// The station's contexts at their tickets' places.
