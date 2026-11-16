@@ -1238,44 +1238,6 @@ const fn legacy_rate(rate_500kbps: u8) -> oer_protocols_ieee80211_wire::phy::Leg
     }
 }
 
-/// The port's description of a frame the engine wrote in `bytes`: an
-/// acknowledged individual frame by `plan`, or a group frame at the plan's
-/// first rate. `None` for a header or length the port cannot take.
-pub fn port_frame<
-    'p,
-    K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities,
-    C: oer_protocols_ieee80211_contracts_port::TxBufferClass,
->(
-    bytes: &[u8],
-    frame: ApFrame,
-    plan: oer_protocols_ieee80211_contracts_port::RetryPlan<
-        oer_protocols_ieee80211_contracts_port::PortRate<'p, K>,
-    >,
-) -> Option<oer_protocols_ieee80211_contracts_port::ClassFrame<'p, C, K>> {
-    use oer_protocols_ieee80211_contracts_port::{
-        AckHeader, ClassFrame, GroupAddress, HeaderSpec, MpduLength, SizedFrame, TxFrame,
-    };
-    let header = oer_protocols_ieee80211_wire::frame::MacHeader::decode(bytes.get(..frame.len)?)?;
-    let length = MpduLength::new(frame.len)?;
-    let tx = match frame.kind {
-        ApFrameKind::Management { .. } | ApFrameKind::Pairwise { .. } => TxFrame::Individual {
-            frame: SizedFrame::new(
-                AckHeader::new(HeaderSpec::from_mac_header(header, IndividualAddress::new)?)?,
-                length,
-            )?,
-            plan,
-        },
-        ApFrameKind::Group | ApFrameKind::Beacon => TxFrame::Group {
-            frame: SizedFrame::new(
-                HeaderSpec::from_mac_header(header, GroupAddress::new)?,
-                length,
-            )?,
-            rate: plan.first().rate,
-        },
-    };
-    ClassFrame::new(tx).ok()
-}
-
 /// A due handshake edge.
 #[derive(Debug)]
 #[allow(
