@@ -127,7 +127,7 @@ use {
     oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxReplayEpoch,
 };
 
-use crate::association::{StaAssociatedPeer, StaPhyRequest, negotiate};
+use crate::association::{StaAssociatedPeer, StaHePower, StaPhyRequest, negotiate};
 use crate::receive::{Management, Received, observe_scan};
 // The machine's tests build receive metadata through `use super::*`.
 use oer_portable_time::{Duration, Instant};
@@ -214,7 +214,7 @@ pub trait StaTypes {
 /// The network one connection joins: its SSID and how it protects its link.
 /// The station keeps the profile across reconnections until the next one
 /// replaces it ([`Station::set_profile`]); secrets erase themselves on drop.
-pub struct StaProfile {
+pub struct StaProfile<K> {
     /// The network's SSID.
     pub ssid: heapless::Vec<u8, MAX_SSID_LEN>,
     /// How the network protects its link.
@@ -222,10 +222,10 @@ pub struct StaProfile {
     /// What the station asks this network's access points for: the formats
     /// it admits and its widest width; a 40 MHz join takes one of the
     /// configuration's wide channels.
-    pub phy: StaPhyRequest,
+    pub phy: StaPhyRequest<K>,
 }
 
-impl core::fmt::Debug for StaProfile {
+impl<K> core::fmt::Debug for StaProfile<K> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("StaProfile")
             .field("ssid", &self.ssid)
@@ -237,10 +237,18 @@ impl core::fmt::Debug for StaProfile {
 
 /// A profile the station did not take: the same profile, which erases its
 /// secrets when dropped, and why.
-#[derive(Debug)]
-pub struct StaProfileRefused {
-    pub profile: StaProfile,
+pub struct StaProfileRefused<K> {
+    pub profile: StaProfile<K>,
     pub reason: CommandRefusal,
+}
+
+impl<K> core::fmt::Debug for StaProfileRefused<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("StaProfileRefused")
+            .field("profile", &self.profile)
+            .field("reason", &self.reason)
+            .finish()
+    }
 }
 
 /// How the station protects its link.
@@ -977,6 +985,9 @@ pub struct StaConfig<K, C: StaCallbacks> {
     pub supported_rates: [u8; 8],
     /// The capabilities the Association Request offers.
     pub association: &'static AssociationCapabilities,
+    /// The power elements an HE Association Request carries, from the
+    /// transmit power the composition calibrated before the station starts.
+    pub he_power: StaHePower,
     /// The nonzero number of beacon intervals advertised in Association.
     /// The composition also uses this value for its power-save policy.
     pub listen_interval: StationListenInterval,
@@ -1015,7 +1026,7 @@ impl<K: Ieee80211Capabilities> Rules<K> {
 /// The station: its state and the progress of what it asked of the port.
 pub struct Station<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> {
     config: StaConfig<K, C>,
-    profile: Option<StaProfile>,
+    profile: Option<StaProfile<K>>,
     state: State<T, K>,
     keys: Keys,
     configuration: Configuration,
@@ -3022,7 +3033,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         clippy::result_large_err,
         reason = "a refused profile returns by value so its secrets stay with their owner"
     )]
-    pub fn set_profile(&mut self, profile: StaProfile) -> Result<(), StaProfileRefused> {
+    pub fn set_profile(&mut self, profile: StaProfile<K>) -> Result<(), StaProfileRefused<K>> {
         self.complete_commands();
         let reason = match &self.state {
             State::Idle => None,
@@ -3383,7 +3394,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
 /// Disjoint resource loans used while the resident phase is mutably borrowed.
 struct TransitionContext<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> {
     config: &'s mut StaConfig<K, C>,
-    profile: &'s mut Option<StaProfile>,
+    profile: &'s mut Option<StaProfile<K>>,
     keys: &'s mut Keys,
     configuration: &'s mut Configuration,
     /// The buffer each frame is encoded into.
@@ -4474,6 +4485,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         };
         let channels = &self.config.channels;
         let wide = &self.config.wide_channels;
+        let he_power = self.config.he_power;
         // A network's access points: its SSID and a security selection the
         // station's policy admits, on a channel the station scans.
         let network = || {
@@ -4493,7 +4505,8 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
         // the decision taken once from their scan records.
         let candidates = || {
             network().filter_map(move |(observation, rsn, scanned)| {
-                let (channel, phy) = negotiate(&request, &observation.record, wide, scanned)?;
+                let (channel, phy) =
+                    negotiate(&request, he_power, &observation.record, wide, scanned)?;
                 Some(Candidate {
                     observation: *observation,
                     rsn,

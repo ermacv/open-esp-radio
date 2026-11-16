@@ -2,7 +2,7 @@
 //! from its scan record before any frame: the format once, then the width.
 
 use oer_protocols_ieee80211_contracts_port::{
-    FormatWidths, Ieee80211Capabilities, PhyFormat, PhyFormatSet, SupportedChannel, Width,
+    Ieee80211Capabilities, PhyFormat, PhyFormatSet, SupportedChannel, Width,
 };
 use oer_protocols_ieee80211_core_upper_mac::phy_mode::{NegotiatedPhy, PhyMode};
 use oer_protocols_ieee80211_core_upper_mac::protection::{
@@ -34,32 +34,41 @@ pub struct StaHePower {
     pub ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability,
 }
 
-/// The formats below HE a request admits: of non-HT and HT. HE enters a
-/// request only with its power elements ([`StaPhyRequest::with_he`]).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FormatsBelowHe(PhyFormatSet);
-
-impl FormatsBelowHe {
-    /// None: an HE request admits HE alone.
-    pub const NONE: Self = Self(PhyFormatSet::NONE);
-    /// Non-HT.
-    pub const NON_HT: Self = Self(PhyFormatSet::NON_HT);
-    /// HT.
-    pub const HT: Self = Self(PhyFormatSet::HT);
-    /// Non-HT and HT.
-    pub const NON_HT_AND_HT: Self = Self(PhyFormatSet::NON_HT.union(PhyFormatSet::HT));
+/// What a station asks an access point for: the formats it admits and the
+/// widest width it may use, checked against what the chip `K` offers. A
+/// request of constants is built in a const item, where one outside the
+/// chip does not compile; one that arrives at run time gets the same answer
+/// as a handled error. The power elements an HE request carries are the
+/// station's fact ([`StaConfig::he_power`](crate::machine::StaConfig::he_power)).
+pub struct StaPhyRequest<K> {
+    formats: PhyFormatSet,
+    widest: Width,
+    brand: core::marker::PhantomData<fn() -> K>,
 }
 
-/// What a station asks an access point for: the formats it admits and the
-/// widest width it may use, checked against the widths the formats are
-/// offered at. A request of constants is built in a const item; one that
-/// arrives at run time gets the same answer as a handled error.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StaPhyRequest {
-    below_he: FormatsBelowHe,
-    he: Option<StaHePower>,
-    widest: Width,
-    offered: FormatWidths,
+impl<K> Clone for StaPhyRequest<K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for StaPhyRequest<K> {}
+
+impl<K> PartialEq for StaPhyRequest<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.formats == other.formats && self.widest == other.widest
+    }
+}
+
+impl<K> Eq for StaPhyRequest<K> {}
+
+impl<K> core::fmt::Debug for StaPhyRequest<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("StaPhyRequest")
+            .field("formats", &self.formats)
+            .field("widest", &self.widest)
+            .finish()
+    }
 }
 
 /// Why a request is none.
@@ -67,46 +76,17 @@ pub struct StaPhyRequest {
 pub enum StaPhyRequestError {
     /// It admits no format.
     NoFormat,
-    /// It admits a format offered at no width.
+    /// It admits a format the chip offers at no width.
     FormatNotOffered(PhyFormat),
     /// No format it admits is offered at its widest width.
     WidthNotOffered(Width),
 }
 
-impl StaPhyRequest {
-    /// A request of `formats` up to `widest`, with no HE, against `offered`.
-    pub const fn new(
-        offered: FormatWidths,
-        formats: FormatsBelowHe,
-        widest: Width,
-    ) -> Result<Self, StaPhyRequestError> {
-        Self::checked(offered, formats, None, widest)
-    }
-
-    /// A request of HE with `power`'s elements and `formats` below it, up to
-    /// `widest`, against `offered`.
-    pub const fn with_he(
-        offered: FormatWidths,
-        formats: FormatsBelowHe,
-        widest: Width,
-        power: StaHePower,
-    ) -> Result<Self, StaPhyRequestError> {
-        Self::checked(offered, formats, Some(power), widest)
-    }
-
-    const fn checked(
-        offered: FormatWidths,
-        below_he: FormatsBelowHe,
-        he: Option<StaHePower>,
-        widest: Width,
-    ) -> Result<Self, StaPhyRequestError> {
-        let request = Self {
-            below_he,
-            he,
-            widest,
-            offered,
-        };
-        let formats = request.formats();
+impl<K: Ieee80211Capabilities> StaPhyRequest<K> {
+    /// A request of `formats` up to `widest`: each format offered by the
+    /// chip at some width, and the widest width offered for one of them.
+    pub const fn new(formats: PhyFormatSet, widest: Width) -> Result<Self, StaPhyRequestError> {
+        let offered = K::CAPS.formats;
         let mut admitted_widest = false;
         let mut any = false;
         let all = [PhyFormat::NonHt, PhyFormat::Ht, PhyFormat::He];
@@ -130,25 +110,23 @@ impl StaPhyRequest {
         if !admitted_widest {
             return Err(StaPhyRequestError::WidthNotOffered(widest));
         }
-        Ok(request)
+        Ok(Self {
+            formats,
+            widest,
+            brand: core::marker::PhantomData,
+        })
     }
+}
 
+impl<K> StaPhyRequest<K> {
     /// The formats it admits.
     pub const fn formats(&self) -> PhyFormatSet {
-        match self.he {
-            Some(_) => self.below_he.0.union(PhyFormatSet::HE),
-            None => self.below_he.0,
-        }
+        self.formats
     }
 
     /// The widest width it may use.
     pub const fn widest(&self) -> Width {
         self.widest
-    }
-
-    /// HE's power elements, when it admits HE.
-    pub const fn he_power(&self) -> Option<StaHePower> {
-        self.he
     }
 }
 
@@ -157,34 +135,34 @@ impl StaPhyRequest {
 /// `None` when it offers no format the request admits.
 ///
 /// The format first: HE where the request admits it and the access point
-/// admits HE ([`he_admitted`]), at 20 MHz on `scanned`; else HT where both
+/// admits HE ([`he_admitted`]), at 20 MHz on `scanned`, with the station's
+/// `he_power`; else HT where both
 /// admit it, at 40 MHz on the one of `wide` whose primary is `scanned`'s
 /// and whose secondary the access point's HT elements name, when the
 /// request's widest width and the widths HT is offered at allow it, else
 /// at 20 MHz; else non-HT where the request admits it.
 pub fn negotiate<K: Ieee80211Capabilities>(
-    request: &StaPhyRequest,
+    request: &StaPhyRequest<K>,
+    he_power: StaHePower,
     access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord,
     wide: &[SupportedChannel<K>],
     scanned: SupportedChannel<K>,
 ) -> Option<(SupportedChannel<K>, NegotiatedPhy)> {
     use oer_protocols_ieee80211_wire::{channel::ChannelWidth, scan::HtSecondaryChannel};
     let formats = request.formats();
-    if let Some(power) = request.he {
-        if he_admitted(access_point) {
-            return Some((
-                scanned,
-                NegotiatedPhy::He {
-                    power_capability: power.power_capability,
-                    he_ul_mu_power: power.ul_mu_power,
-                },
-            ));
-        }
+    if formats.contains(PhyFormat::He) && he_admitted(access_point) {
+        return Some((
+            scanned,
+            NegotiatedPhy::He {
+                power_capability: he_power.power_capability,
+                he_ul_mu_power: he_power.ul_mu_power,
+            },
+        ));
     }
     if formats.contains(PhyFormat::Ht) && access_point.ht_capability_ie_bytes().is_some() {
         let primary = scanned.channel();
         let wide = (request.widest == Width::Mhz40
-            && request.offered.ht.contains_width(Width::Mhz40))
+            && K::CAPS.formats.ht.contains_width(Width::Mhz40))
         .then(|| access_point.secondary_channel(primary.number()))
         .flatten()
         .and_then(|secondary| {

@@ -366,13 +366,9 @@ impl<W: Binding> Profile<W> {
                 association: &service::ASSOCIATION,
                 listen_interval:
                     oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
-                // HE20 only for a connection whose settings ask for it
-                // (`StationSettings::with_he20`).
-                phy:
-                    oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::PreferHe20 {
-                        ht40: config.ht40,
-                        power: radio::he_power(&config.domain, config.channel, config.cap_dbm)?,
-                    },
+                // The HE request's power elements, once a run, from the PHY's
+                // production target powers under the initial channel's ceiling.
+                he_power: radio::he_power(&config.domain, config.channel, config.cap_dbm)?,
                 tx_block_ack: Some(
                     oer_protocols_ieee80211_core_roles_sta::machine::StaTxBlockAck::new(
                         TX_BLOCK_ACK,

@@ -18,7 +18,7 @@ plans and reports leave as values, and nothing waits.
 | `protection` | RTS/CTS or CTS-to-self and the control-frame rate for each PPDU, as the port's `Protection`, with the BSS facts it reads (`BssProtection`, `BasicRates`) | `BssProtection`, dot11RTSThreshold, an `HeTxopRtsBudget` |
 | `block_ack` | What a `BlockAckReport` acknowledges, under both starting-sequence conventions; agreement negotiation, an association's receive agreements and their reordering | `BlockAckReport`, received ADDBA, DELBA and BlockAckReq frames |
 | `management` | The attempt budget of a management frame: seven for unicast (dot11ShortRetryLimit), one for broadcast | a legacy rate |
-| `phy_mode` | The PHY mode of one association and the capability elements its request carries (`AssociationPhy`) | a `ScanRecord`, `AssociationCapabilities` |
+| `phy_mode` | The PHY of one association, its format and width (`PhyMode`), and the decision a join takes before its request (`NegotiatedPhy`), whose elements it carries | `AssociationCapabilities` |
 | `tx` | `TxPlanner`: the next `TxAttemptPlan` (rate, protection, power, coexistence, content and Retry bits) of an MPDU or A-MPDU exchange, and its `TxReport` | `TxRequest`, `PublicationReport`, `RadioInstant` |
 
 The planner draws no backoff: the lower-MAC port carries none, and a backend
@@ -42,7 +42,7 @@ state, before changing its rate or ACK-SNR filter.
 `RatePeer` retains the nonempty `NegotiatedLegacyRates` from both rate elements,
 including non-basic rates. This set bounds legacy data, control and retry
 fallback on every PHY. An association with no recognized legacy rate is
-refused; `PhyMode::Legacy` alone does not imply OFDM support.
+refused; a non-HT `PhyMode` alone does not imply OFDM support.
 
 `rate_selection::management_rate(band, Option<&BasicRates>)` derives the
 management/group rate above the driver: the lowest advertised basic rate

@@ -110,13 +110,23 @@ Association also retains every advertised legacy rate from Supported and
 Extended Supported Rates in `StaAssociatedPeer::rate_peer`, alongside the
 separate basic-rate set for protection. A response cannot create a peer from
 an advertisement containing no usable legacy rate.
-The station asks for the PHY of `StaConfig::phy` (`association::StaPhyRequest`)
-for a connection whose profile sets `StaProfile::prefer_he20`; another
-connection takes the request without HE20 (`StaPhyRequest::without_he20`).
-`PreferHe20` asks an access point that admits HE20 (`association::he20_admitted`:
-HT Capabilities, HE-MCS 0..9 both ways on one stream and an HE Operation that
-parses) for HE20, with its Power Capability and HE UL-MU power elements; any
-other access point gets the HT40 or HT20 request. An HE20 association takes
+A network's profile holds what the station asks its access points for
+(`StaProfile::phy`, an `association::StaPhyRequest<K>`): the set of formats
+it admits and its widest width, checked against the chip's `K::CAPS` when it
+is made, in a const item where it is a constant. An empty set, or HE at a
+width the chip does not offer, does not build (`tests/ui/phy_request.rs`).
+The format is decided once, when the candidate is chosen from the scan
+(`association::negotiate`): the highest format the request admits and the
+access point offers, HE first (`association::he_admitted`: HT Capabilities,
+HE-MCS 0..9 both ways on one stream and an HE Operation that parses), then
+HT, then non-HT; and only then the width, 40 MHz where the request's
+ceiling, HT's widths and the access point's secondary channel allow it. An
+access point offering no admitted format is no candidate: if no access
+point of the network offers one, the join ends with `NoAdmittedFormat`
+before any frame. The decision (`NegotiatedPhy`) goes with the join to the
+request's encoder, which cannot refuse it. The HE Power Capability and HE
+UL-MU power elements are the station's fact (`StaConfig::he_power`), given
+by its composition. An HE association takes
 its HE facts (capabilities, peer state, BSS color) from the Association
 Response's HE Capabilities and HE Operation, which must parse and still admit
 HE20; the scan's elements chose the request only. A response that lacks,

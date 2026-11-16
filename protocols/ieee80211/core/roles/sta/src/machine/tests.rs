@@ -3,7 +3,6 @@
 //! connected, disconnect; alone and beside an access point.
 
 use super::*;
-use crate::association::FormatsBelowHe;
 use crate::join::test_support::{BSSID, LOCAL, answer_authentication, association_response};
 use core::num::NonZeroU16;
 use oer_protocols_ieee80211_contracts_port::ArbiterPool;
@@ -47,7 +46,7 @@ impl Ieee80211Capabilities for Caps {
         bands: BandSet::GHZ2_4,
         formats: oer_protocols_ieee80211_contracts_port::FormatWidths {
             non_ht: WidthSet::MHZ20,
-            ht: WidthSet::MHZ20,
+            ht: WidthSet::MHZ20.union(WidthSet::MHZ40),
             he: WidthSet::MHZ20,
         },
         rates: RateSupport {
@@ -406,11 +405,11 @@ fn build_station<'id, const G: usize>(
 }
 
 /// The test network, protected by `security`.
-fn test_profile(security: StaSecurity) -> StaProfile {
+fn test_profile(security: StaSecurity) -> StaProfile<Caps> {
     StaProfile {
         ssid: heapless::Vec::from_slice(SSID).unwrap(),
         security,
-        phy: request(FormatsBelowHe::NON_HT, Width::Mhz20),
+        phy: request(PHY_NON_HT, Width::Mhz20),
     }
 }
 
@@ -474,6 +473,7 @@ impl<'id> World<'id> {
             access_point_margin_db: 6,
             supported_rates: [0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24],
             association: &CAPABILITIES,
+            he_power: test_he_power(),
             listen_interval: StationListenInterval::new(10).unwrap(),
             tx_block_ack: None,
             callbacks: Callbacks {
@@ -5640,33 +5640,40 @@ fn an_ht40_join_tunes_the_secondary_the_access_point_names() {
     let scanned = wide(13, ChannelWidth::Mhz20);
     let below = wide(13, ChannelWidth::Mhz40Below);
     let offered = ht_access_point(Some(ChannelWidth::Mhz40Below));
-    let ht40 = request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz40);
+    let ht40 = request::<WideCaps>(PHY_NON_HT_AND_HT, Width::Mhz40);
     let ht = |width| NegotiatedPhy::Ht { width };
     assert_eq!(
-        negotiate(&ht40, &offered, &[below], scanned),
+        negotiate(&ht40, test_he_power(), &offered, &[below], scanned),
         Some((below, ht(Width::Mhz40)))
     );
     // Without the permitted 40 MHz channel of that secondary, or with an
     // access point at 20 MHz, the join stays on the scanned channel at HT20.
     let above = wide(9, ChannelWidth::Mhz40Above);
     assert_eq!(
-        negotiate(&ht40, &offered, &[above], scanned),
+        negotiate(&ht40, test_he_power(), &offered, &[above], scanned),
         Some((scanned, ht(Width::Mhz20)))
     );
     let narrow = ht_access_point(Some(ChannelWidth::Mhz20));
     assert_eq!(
-        negotiate(&ht40, &narrow, &[below], scanned),
+        negotiate(&ht40, test_he_power(), &narrow, &[below], scanned),
         Some((scanned, ht(Width::Mhz20)))
     );
     // An access point without HT is non-HT.
     assert_eq!(
-        negotiate(&ht40, &ht_access_point(None), &[below], scanned),
+        negotiate(
+            &ht40,
+            test_he_power(),
+            &ht_access_point(None),
+            &[below],
+            scanned
+        ),
         Some((scanned, NegotiatedPhy::NonHt))
     );
     // A request of 20 MHz keeps the scanned channel.
     assert_eq!(
         negotiate(
-            &request(FormatsBelowHe::NON_HT_AND_HT, Width::Mhz20),
+            &request(PHY_NON_HT_AND_HT, Width::Mhz20),
+            test_he_power(),
             &offered,
             &[below],
             scanned
@@ -5675,27 +5682,35 @@ fn an_ht40_join_tunes_the_secondary_the_access_point_names() {
     );
 }
 
-/// The widths the test requests are checked against: non-HT at 20 MHz, HT
-/// at 20 and 40 MHz, HE at 20 MHz.
-const OFFERED: oer_protocols_ieee80211_contracts_port::FormatWidths =
-    oer_protocols_ieee80211_contracts_port::FormatWidths {
-        non_ht: WidthSet::MHZ20,
-        ht: WidthSet::MHZ20.union(WidthSet::MHZ40),
-        he: WidthSet::MHZ20,
-    };
+const PHY_NONE: oer_protocols_ieee80211_contracts_port::PhyFormatSet =
+    oer_protocols_ieee80211_contracts_port::PhyFormatSet::NONE;
+const PHY_NON_HT: oer_protocols_ieee80211_contracts_port::PhyFormatSet =
+    oer_protocols_ieee80211_contracts_port::PhyFormatSet::NON_HT;
+const PHY_HT: oer_protocols_ieee80211_contracts_port::PhyFormatSet =
+    oer_protocols_ieee80211_contracts_port::PhyFormatSet::HT;
+const PHY_HE: oer_protocols_ieee80211_contracts_port::PhyFormatSet =
+    oer_protocols_ieee80211_contracts_port::PhyFormatSet::HE;
+const PHY_NON_HT_AND_HT: oer_protocols_ieee80211_contracts_port::PhyFormatSet =
+    PHY_NON_HT.union(PHY_HT);
 
-/// A request of `formats` up to `widest`, without HE.
-fn request(formats: FormatsBelowHe, widest: Width) -> StaPhyRequest {
-    StaPhyRequest::new(OFFERED, formats, widest).unwrap()
+/// A request of `formats` up to `widest`, checked against `K`.
+fn request<K: Ieee80211Capabilities>(
+    formats: oer_protocols_ieee80211_contracts_port::PhyFormatSet,
+    widest: Width,
+) -> StaPhyRequest<K> {
+    StaPhyRequest::new(formats, widest).unwrap()
 }
 
-/// A request of HE with `power` and `formats` below it, up to `widest`.
-fn he_request(
-    formats: FormatsBelowHe,
-    widest: Width,
-    power: crate::association::StaHePower,
-) -> StaPhyRequest {
-    StaPhyRequest::with_he(OFFERED, formats, widest, power).unwrap()
+/// The station's power elements in the tests.
+fn test_he_power() -> crate::association::StaHePower {
+    use oer_protocols_ieee80211_wire::station::{HeUlMuPowerCapability, StaPowerCapability};
+    crate::association::StaHePower {
+        power_capability: StaPowerCapability::new(-11, 20).unwrap(),
+        ul_mu_power: HeUlMuPowerCapability::from_rate_power_indices([
+            20, 20, 20, 20, 19, 19, 18, 18, 16, 15,
+        ])
+        .unwrap(),
+    }
 }
 
 mod block_ack;
