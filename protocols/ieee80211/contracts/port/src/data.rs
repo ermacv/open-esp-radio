@@ -21,8 +21,8 @@ use oer_protocols_radio_port::{ClockError, PoolPath, Root};
 use crate::life::{MintData, PortKey, RadioPort};
 use crate::{
     AggregateOutcome, AmpduRate, BssColor, GateClosed, GateOpen, Ieee80211Instant, MpduLength,
-    PortRate, RetryPlan, SingleOutcome, StationHe, StationReceive, SupportedBlockAck,
-    SupportedEdca, TbttEvent, Tid, TxFrame,
+    MpduStartSpacing, PortRate, Protection, RetryPlan, SingleOutcome, StationHe, StationReceive,
+    SupportedBlockAck, SupportedEdca, TbttEvent, Tid, TxFrame,
 };
 
 /// The brand of one installation, invariant in `'id`.
@@ -383,28 +383,31 @@ pub struct Complete;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeaderLen(u8);
 
-/// The Frame Control and Duration/ID fields (IEEE Std 802.11-2020,
-/// 9.2.4.1, 9.2.4.2).
-const FRAME_CONTROL_AND_DURATION: usize = 2 + 2;
-/// Address 1 to Address 4 (9.2.4.3).
-const ADDRESSES: usize = 4 * 6;
-/// The Sequence Control field (9.2.4.4).
-const SEQUENCE_CONTROL: usize = 2;
-/// The QoS Control field (9.2.4.5).
-const QOS_CONTROL: usize = 2;
-/// The HT Control field (9.2.4.6).
-const HT_CONTROL: usize = 4;
+/// A QoS data header of three addresses (IEEE Std 802.11-2020, 9.3.2.1:
+/// Frame Control, Duration/ID, Address 1 to 3, Sequence Control, QoS
+/// Control).
+const QOS_DATA_HEADER: usize = 26;
 /// The CCMP header (12.5.3.2).
 const CCMP_HEADER: usize = 8;
+/// The LLC/SNAP header of an RFC 1042 encapsulated MSDU (5.1.4).
+const LLC_SNAP: usize = 8;
+/// What is written in front of a body: the longest front the engine
+/// writes.
+const WRITTEN: usize = QOS_DATA_HEADER + CCMP_HEADER + LLC_SNAP;
+/// The body's alignment in the network's memory: a word.
+const BODY_ALIGNMENT: usize = 4;
 
-/// The longest header the engine writes in front of a body: a QoS Data
-/// header with four addresses and HT Control (9.3.2.1), and a CCMP header.
-pub const HEADROOM: usize = FRAME_CONTROL_AND_DURATION
-    + ADDRESSES
-    + SEQUENCE_CONTROL
-    + QOS_CONTROL
-    + HT_CONTROL
-    + CCMP_HEADER;
+/// The octets in front of a body, in the same memory: the MPDU's front
+/// ([`WRITTEN`], 42) rounded up to the body's alignment (44). They hold
+/// what the network wrote there (a data MSDU's Ethernet header is their
+/// last 14 octets); the engine reads what it needs of that and writes the
+/// MPDU's front flush against the body, and its [`HeaderLen`] says where
+/// the MPDU begins. A role that writes more (an HT Control) changes it,
+/// and each role's const check of its longest front says so.
+pub const HEADROOM: usize = match WRITTEN % BODY_ALIGNMENT {
+    0 => WRITTEN,
+    rest => WRITTEN + (BODY_ALIGNMENT - rest),
+};
 
 impl HeaderLen {
     /// `len`, when it fits the headroom.
@@ -431,6 +434,12 @@ pub enum Ppdu<'id, K> {
     Aggregate {
         /// The aggregate's rate.
         rate: AmpduRate<'id, K>,
+        /// The recipient's Minimum MPDU Start Spacing, the peer's for the
+        /// link's life.
+        spacing: MpduStartSpacing,
+        /// The control exchange that protects the aggregate, as the upper
+        /// MAC's policy decided it this publication.
+        protection: Protection,
         /// The plan of a prefix of one frame.
         alone: RetryPlan<PortRate<'id, K>>,
     },
@@ -643,7 +652,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         token: Sealed,
         arena: &mut Arena<'id>,
         body: Self::Memory,
-        header: impl FnOnce(&mut [u8]) -> HeaderLen,
+        header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen,
     );
 
     /// Publish the arena as `how` says: a single its first frame; an
@@ -766,7 +775,7 @@ impl<'a, 'id, P: DataPort<'id>> Place<'a, 'id, P> {
 
     /// Write the frame: the body by its handle, in place, the header once
     /// into the headroom the port lends.
-    pub fn write(self, body: P::Memory, header: impl FnOnce(&mut [u8]) -> HeaderLen) {
+    pub fn write(self, body: P::Memory, header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen) {
         let Self { port, arena } = self;
         port.write_frame(Sealed::new(), arena, body, header);
         arena.frames = arena.frames.saturating_add(1);

@@ -35,9 +35,10 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, ArenaOutcome, Command, CommandEnd, CommandPlace, CommandPoll, DataPort, DataRights,
-    FrameSet, GateClosed, GateOpen, HeaderLen, IdleArena, MpduLength, PhyRate, PortRate, PortSink,
-    Ppdu, QueueRight, RadioPort, ReceivePort, Round, Settled, SingleOutcome, SinglePlace,
-    StartPoll, StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome,
+    FrameSet, GateClosed, GateOpen, HEADROOM, HeaderLen, IdleArena, MpduLength, MpduStartSpacing,
+    PhyRate, PortRate, PortSink, Ppdu, QueueRight, RadioPort, ReceivePort, Round, Settled,
+    SingleOutcome, SinglePlace, StartPoll, StopPoll, StopRight, Stopped, TbttEvent, TxFacts,
+    TxOutcome,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::frame::FrameControl;
@@ -118,18 +119,21 @@ fn cx() -> Context<'static> {
 }
 
 /// A QoS Data MPDU header of 26 octets.
-fn header(out: &mut [u8]) -> HeaderLen {
-    let header = [
-        0x88, 0x01, 0, 0, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0,
-    ];
-    out[..header.len()].copy_from_slice(&header);
-    HeaderLen::new(header.len()).unwrap()
+/// A QoS Data header from the access point to the station.
+const QOS_DATA: [u8; 26] = [
+    0x88, 0x01, 0, 0, 2, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0,
+];
+
+fn header(headroom: &mut [u8; HEADROOM]) -> HeaderLen {
+    // Flush against the body.
+    headroom[HEADROOM - QOS_DATA.len()..].copy_from_slice(&QOS_DATA);
+    HeaderLen::new(QOS_DATA.len()).unwrap()
 }
 
 /// A received QoS Data MPDU with a body of `len` octets.
 pub fn data_mpdu(len: usize) -> Vec<u8> {
-    let mut bytes = std::vec![0_u8; 26 + len];
-    header(&mut bytes);
+    let mut bytes = std::vec![0_u8; QOS_DATA.len() + len];
+    bytes[..QOS_DATA.len()].copy_from_slice(&QOS_DATA);
     bytes
 }
 
@@ -629,6 +633,8 @@ fn alone<'id, P: DataPort<'id>>(port: &P) -> RetryPlan<PortRate<'id, P::Caps>> {
 fn aggregate<'id, P: DataPort<'id>>(port: &P, mcs: u8) -> Ppdu<'id, P::Caps> {
     Ppdu::Aggregate {
         rate: ht_rate(port, mcs),
+        spacing: MpduStartSpacing::new(0).unwrap(),
+        protection: Protection::None,
         alone: alone(port),
     }
 }

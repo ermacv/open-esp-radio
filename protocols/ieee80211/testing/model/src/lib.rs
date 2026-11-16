@@ -179,6 +179,21 @@ pub struct ModelMemory {
     pub id: u32,
     /// The body's length.
     pub len: u16,
+    /// The octets the network wrote in front of the body: a data MSDU's
+    /// Ethernet header at their end.
+    pub front: [u8; HEADROOM],
+}
+
+/// One publication of an arena, as the model put it on the air.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Publication {
+    /// One MPDU went, not an A-MPDU.
+    pub single: Went,
+    /// The rate it went at.
+    pub rate: PhyRate,
+    /// The MPDUs' fronts as they went, the Retry bit set on a frame that
+    /// went before.
+    pub frames: Vec<Vec<u8>>,
 }
 
 /// The link an arena is opened for.
@@ -378,6 +393,30 @@ enum Phase {
 struct Frame {
     memory: ModelMemory,
     header: u8,
+    /// The headroom after the engine wrote the front.
+    front: [u8; HEADROOM],
+    /// The publications it went in.
+    attempts: u8,
+}
+
+impl Frame {
+    /// The MPDU's front as it goes on the air: the Retry bit set when the
+    /// frame went before (IEEE Std 802.11-2020, 9.2.4.1.7).
+    fn on_air(&self) -> Vec<u8> {
+        let mut front: Vec<u8> = self
+            .front
+            .iter()
+            .skip(HEADROOM.saturating_sub(usize::from(self.header)))
+            .copied()
+            .collect();
+        if self.attempts > 0
+            && let Some(control) = front.get_mut(1)
+        {
+            // Retry is bit 11 of Frame Control: bit 3 of its second octet.
+            *control |= 0x08;
+        }
+        front
+    }
 }
 
 /// One arena of the model.
@@ -386,6 +425,8 @@ struct ArenaBuffer {
     frames: Vec<Frame>,
     sent: u8,
     went: Went,
+    /// The rate the publication went at.
+    rate: Option<PhyRate>,
     air: Option<Air>,
     ended: Option<ArenaOutcome<(), (), ()>>,
     acknowledged: FrameSet,
@@ -393,7 +434,7 @@ struct ArenaBuffer {
 
 /// What an arena's publication put on the air.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-enum Went {
+pub enum Went {
     /// One MPDU.
     #[default]
     Single,
@@ -462,6 +503,12 @@ pub struct ModelPort<'id, const SINGLES: usize> {
     ring: VecDeque<(Vec<u8>, RxMeta)>,
     places: Vec<Option<Unit>>,
     returns: Rc<Cell<u64>>,
+    /// The frames the next aggregate's BlockAck acknowledges.
+    acknowledge: Option<FrameSet>,
+    /// Every arena's publication, in order.
+    published: Vec<Publication>,
+    /// Each memory's last written front, by its id.
+    fronts: Vec<(u32, Vec<u8>)>,
     command: Option<Running_<'id>>,
     record: Vec<Programmed>,
     counts: Counts,
@@ -508,6 +555,9 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
             ring: VecDeque::new(),
             places: (0..MODEL_PLACES).map(|_| None).collect(),
             returns: Rc::new(Cell::new(0)),
+            acknowledge: None,
+            published: Vec::new(),
+            fronts: Vec::new(),
             command: None,
             record: Vec::new(),
             counts: Counts::default(),
@@ -562,6 +612,25 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
             self.parts.on(Part::NeedsStop);
             self.anomaly = Some(anomaly);
         }
+    }
+
+    /// Let the next aggregate's BlockAck acknowledge only the frames of
+    /// `frames`, by their positions.
+    pub const fn acknowledge(&mut self, frames: FrameSet) {
+        self.acknowledge = Some(frames);
+    }
+
+    /// Every arena's publication, in order.
+    pub fn published(&self) -> &[Publication] {
+        &self.published
+    }
+
+    /// The front the engine last wrote in front of the memory `id`.
+    pub fn front(&self, id: u32) -> Option<&[u8]> {
+        self.fronts
+            .iter()
+            .find(|(written, _)| *written == id)
+            .map(|(_, front)| front.as_slice())
     }
 
     /// What the model was asked to program since the last start.
@@ -883,14 +952,26 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         _token: Sealed,
         arena: &mut Arena<'id>,
         body: Self::Memory,
-        header: impl FnOnce(&mut [u8]) -> HeaderLen,
+        header: impl FnOnce(&mut [u8; HEADROOM]) -> HeaderLen,
     ) {
-        let mut headroom = [0; HEADROOM];
-        let written = header(&mut headroom);
+        let mut front = body.front;
+        let written = header(&mut front);
+        let header = u8::try_from(written.get()).unwrap_or(u8::MAX);
+        self.fronts.retain(|(id, _)| *id != body.id);
+        self.fronts.push((
+            body.id,
+            front
+                .iter()
+                .skip(HEADROOM.saturating_sub(written.get()))
+                .copied()
+                .collect(),
+        ));
         if let Some(buffer) = self.arenas.get_mut(side_index(arena.side())) {
             buffer.frames.push(Frame {
                 memory: body,
-                header: written.get() as u8,
+                header,
+                front,
+                attempts: 0,
             });
         }
     }
@@ -910,6 +991,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                 .at(rate.rate().get())
                 .map_or(0, core::num::NonZeroU32::get),
         };
+        let mut record = None;
         let air = self.air_of(oer_protocols_ieee80211_wire::qos::WmmAccessCategory::BestEffort);
         let buffer = self.arenas.get_mut(side_index(arena.side()));
         let mut sent: u8 = 0;
@@ -938,7 +1020,31 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             buffer.air = Some(air);
             buffer.ended = None;
             buffer.acknowledged = FrameSet::EMPTY;
+            let went_at = match (how, buffer.went) {
+                (Ppdu::Single(plan) | Ppdu::Aggregate { alone: plan, .. }, Went::Single) => {
+                    plan.first().rate.get()
+                }
+                (Ppdu::Aggregate { rate, .. }, Went::Aggregate) => rate.rate().get(),
+                (Ppdu::Single(plan), Went::Aggregate) => plan.first().rate.get(),
+            };
+            buffer.rate = Some(went_at);
+            let frames = buffer
+                .frames
+                .iter_mut()
+                .take(usize::from(sent))
+                .map(|frame| {
+                    let front = frame.on_air();
+                    frame.attempts = frame.attempts.saturating_add(1);
+                    front
+                })
+                .collect();
+            record = Some(Publication {
+                single: buffer.went,
+                rate: went_at,
+                frames,
+            });
         }
+        self.published.extend(record);
         self.key.publish(arena, FrameSet::prefix(sent))
     }
 
@@ -964,8 +1070,9 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         _now: Instant,
     ) -> Option<Ended<'_, Self::Ack, Self::BlockAck, Self::Denial>> {
         self.call();
-        let rate = PhyRate::Legacy(LegacyRate::Ofdm24M);
+        let acknowledge = self.acknowledge;
         let buffer = self.arenas.get_mut(side_index(on_air.side()))?;
+        let rate = buffer.rate?;
         if buffer.ended.is_none() {
             let air = match buffer.air {
                 None | Some(Air::Hold) => return None,
@@ -999,14 +1106,22 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                     })),
                     FrameSet::EMPTY,
                 ),
-                (Went::Aggregate, Air::Ack) => (
-                    ArenaOutcome::Aggregate(TxOutcome::Ended(AggregateEnd::Delivered {
-                        air: Self::rate_air(rate),
-                        report: BlockAckReport::new(SequenceNumber::ZERO, on_air.sent().bits()),
-                        ack: (),
-                    })),
-                    on_air.sent(),
-                ),
+                (Went::Aggregate, Air::Ack) => {
+                    // The BlockAck acknowledges the frames the lever names,
+                    // every frame that went without it.
+                    let acknowledged = FrameSet::from_bits(
+                        acknowledge.map_or(on_air.sent().bits(), FrameSet::bits)
+                            & on_air.sent().bits(),
+                    );
+                    (
+                        ArenaOutcome::Aggregate(TxOutcome::Ended(AggregateEnd::Delivered {
+                            air: Self::rate_air(rate),
+                            report: BlockAckReport::new(SequenceNumber::ZERO, acknowledged.bits()),
+                            ack: (),
+                        })),
+                        acknowledged,
+                    )
+                }
                 (Went::Aggregate, Air::NoAck) => (
                     ArenaOutcome::Aggregate(TxOutcome::Ended(AggregateEnd::AckTimeout(
                         Self::rate_air(rate),
@@ -1023,6 +1138,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             };
             buffer.ended = Some(outcome);
             buffer.acknowledged = acknowledged;
+            self.acknowledge = None;
         }
         let outcome = buffer.ended.as_ref()?;
         Some(Ended {

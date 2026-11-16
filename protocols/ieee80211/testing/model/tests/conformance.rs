@@ -61,6 +61,7 @@ impl<'id> suite::Harness<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS> for Model
         ModelMemory {
             id: self.memory,
             len,
+            front: [0; oer_protocols_ieee80211_contracts_port::HEADROOM],
         }
     }
     fn link(&self) -> ModelLink {
