@@ -899,3 +899,27 @@ impl<'id> PortKey<'id> {
         AgreementSlot { index, brand }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FrameSet;
+
+    #[test]
+    fn a_frame_set_keeps_its_positions_through_its_operations() {
+        // A prefix of every count, the whole set at the width and past it.
+        assert_eq!(FrameSet::prefix(0), FrameSet::EMPTY);
+        assert_eq!(FrameSet::prefix(3).bits(), 0b111);
+        assert_eq!(FrameSet::prefix(64).bits(), u64::MAX);
+        assert_eq!(FrameSet::prefix(200).bits(), u64::MAX);
+        let set = FrameSet::from_bits(0b1010);
+        assert!(set.contains(1) && set.contains(3));
+        assert!(!set.contains(0) && !set.contains(2));
+        // A position past the width is in no set.
+        assert!(!FrameSet::prefix(64).contains(64));
+        assert_eq!(set.len(), 2);
+        assert!(!set.is_empty() && FrameSet::EMPTY.is_empty());
+        let other = FrameSet::from_bits(0b0110);
+        assert_eq!(set.union(other).bits(), 0b1110);
+        assert_eq!(set.without(other).bits(), 0b1000);
+    }
+}
