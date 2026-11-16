@@ -92,7 +92,7 @@ impl StationTsfHardware for RadioAccess {
     }
 }
 
-impl crate::lower_mac::StationTbttHardware for RadioAccess {
+impl crate::seam::StationTbttHardware for RadioAccess {
     fn start_station_tbtt(&mut self, schedule: oer_chips_esp32s31_hal::types::StaTbttSchedule) {
         self.station_wake_hal().start_station_tbtt(schedule);
     }
@@ -102,7 +102,7 @@ impl crate::lower_mac::StationTbttHardware for RadioAccess {
     }
 }
 
-impl crate::lower_mac::RxBeaconPriorityHardware for RadioAccess {
+impl crate::seam::RxBeaconPriorityHardware for RadioAccess {
     fn set_rx_beacon_pti(&mut self, pti: oer_chips_esp32s31_hal::types::MacPti) {
         self.wifi_mac_hal().set_rx_beacon_pti(pti, pti);
     }
@@ -112,7 +112,7 @@ impl crate::lower_mac::RxBeaconPriorityHardware for RadioAccess {
     }
 }
 
-impl crate::lower_mac::StaHeHardware for RadioAccess {
+impl crate::seam::StaHeHardware for RadioAccess {
     fn connect_he20_bss(
         &mut self,
         color: oer_chips_esp32s31_hal::types::MacHeBssColor,
@@ -135,7 +135,7 @@ impl crate::lower_mac::StaHeHardware for RadioAccess {
     }
 }
 
-impl crate::lower_mac::TxGateHardware for RadioAccess {
+impl crate::seam::TxGateHardware for RadioAccess {
     fn set_power_save_tx_block(&mut self, blocked: bool) {
         self.wifi_mac_hal().set_power_save_tx_block(blocked);
     }

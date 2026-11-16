@@ -28,7 +28,6 @@ oer-protocols-ieee80211-core-arbiter = { path = "../../../ieee80211/core/arbiter
 oer-protocols-ieee80211-core-roles-sta = { path = "../../../ieee80211/core/roles/sta" }
 oer-protocols-ieee80211-core-security-cipher = { path = "../../../ieee80211/core/security/cipher" }
 oer-protocols-ieee80211-core-security-rsn = { path = "../../../ieee80211/core/security/rsn" }
-oer-protocols-ieee80211-testing-model = { path = "../../../ieee80211/testing/model", features = ["test-support"] }
 oer-protocols-ieee80211-wire = { path = "../../../ieee80211/wire" }
 oer-protocols-network-core = { path = "../../core", features = ["test-support"] }
 oer-protocols-network-runtime = { path = "../../runtime" }

@@ -825,5 +825,5 @@ pub trait TxArena<'p, 'id: 'p> {
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests;

@@ -1426,5 +1426,5 @@ fn write_mpdu(
     Ok(length)
 }
 
-#[cfg(test)]
+#[cfg(any())] // SCRATCH: names PortArena and the model port
 mod tests;

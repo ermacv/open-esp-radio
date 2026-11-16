@@ -58,44 +58,13 @@
 //! are the portable ones of `oer-protocols-ieee80211-wire`. This package only declares
 //! the port and its values; it never waits on it.
 
-mod in_flight;
-pub use in_flight::{
-    Admission, AdmissionOwners, BodyPayload, Completed, ExecutionPayload, InFlight, OwnedPayload,
-    TerminalAccess, TerminalParts, TransmitPool, TxMpdu,
-};
 
-mod issued;
-pub use issued::{IssuedSlot, IssuedSlots, SlotGrant, first_stale};
 pub mod access_point;
 pub use access_point::{
-    AccessPointCapabilities, AccessPointCommand, AccessPointCommandFailed, AccessPointCommandKind,
-    AccessPointCommands, AccessPointPairwiseIssue, AccessPointPort, AccessPointProgress,
-    AccessPointReceive, AccessPointRefusal, AccessPointServices, AccessPointSubmission,
-    AccessPointTypes, AdmittedBeacon, BEACON_ACCESS_CATEGORY, BeaconAttempt, BeaconGrant,
-    BeaconParts, BeaconPermission, BeaconPool, BeaconStamp, BeaconSubmission, BeaconTimestamp,
-    SealedBeaconParts, SupportedTsfControl, TsfControl,
+    AccessPointCapabilities, AccessPointReceive, AccessPointServices, BEACON_ACCESS_CATEGORY,
+    BeaconStamp, BeaconTimestamp, SupportedTsfControl, TsfControl,
 };
-pub mod arena;
-pub use arena::{
-    ARENA_FRAMES, Arena, ArenaCompleted, ArenaFormat, ArenaId, ArenaPublication, AttemptEnd,
-    CompletedOf, Completion, CompletionOf, FrameIndex, FrameIter, FrameMask, IntakeRefused,
-    PublishError, PublishRefused, RetainError, RetainErrorOf, Settlement, TxArena,
-};
-pub mod association;
 pub mod capabilities;
-mod command;
-pub use command::{CommandKind, CommandTypes, PairwiseIssue, PortCommand, PortCommands};
-mod data_port;
-pub use data_port::{
-    CleanupRefused, CommandFailed, CommandProgress, CommandRefusal, DataPort, Facts, PortArena,
-    PortCommandFailed, PortCompleted, PortRxBuffer, PortRxPull, PortSink, RxPull, Signal,
-    StartFailure, StationSubmission, StopCause, SubmitRefusal, TxFacts,
-};
-mod layout;
-pub use layout::{
-    CheckedTxSource, FreshSource, LaidOut, LayoutError, LayoutRefused, MpduKind, MpduLayout,
-    MpduProtection,
-};
 pub mod control;
 pub mod extensions;
 pub mod he;
@@ -170,39 +139,15 @@ pub use owner::{
     SizedFrame, Station, StationReceive, SupportedBlockAck, SupportedChannel, SupportedEdca,
     SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
-pub mod installation;
-pub mod outstanding;
-pub use installation::{
-    FaultKept, ProofRefused, Recovered, ReinstallRefused, ReleaseRefused, Retired, StaleProof,
-    StartPoll, StartProgress, StartProof, StartRefused, Starting, StateSerial, StopRight,
-    StopUnconfirmed, Stopped,
-};
-pub use outstanding::{ACCESS_CATEGORIES, ArenaState, Outstanding, RunPhase};
-mod interface_commands;
-pub use interface_commands::{
-    ConfigurePermission, Configured, InterfaceCommandPool, InterfaceGrant, InterfacePermissions,
-};
 pub use rx::{
-    AdvanceRefused, LendRefusal, LendRefused, LentRxBuffer, LinkMetric, ReceiveAccounting,
-    ReceiveOperation, RecycleRefused, RxBuffer, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata,
-    SignalMetadata,
+    LinkMetric, ReceiveOperation, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata,
 };
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
     Protection, RateSample, SingleEnd, SingleOutcome, SingleResponse, SnrSample, TxBody,
     TxEstimate, TxOutcome, TxPower, TxResponse, TxStatus, WithdrawCause,
 };
-pub use types::{
-    AdmittedAttempt, AdmittedTxParts, ArbiterAuthority, ArbiterPool, Attempt, AttemptKey,
-    BufferMemoryUnavailable, CheckedPoolSource, ClassFrame, ClassSizedFrame, GateClosed,
-    GateIssuer, GateOpen, GatePool, InstalledGroup, InstalledPairwise, KeyTypes, LowerMacTerminal,
-    NETWORK_MPDU_LEN, NETWORK_MSDU_PAYLOAD, NetworkCapacity, NetworkFrames, NetworkTxBuffer,
-    PoolMpdu, PoolPreparation, PoolSource, PortBlockAckSlot, PortSingleOutcome, PortTypes,
-    PreparationError, PreparationRefused, PreparedTx, RETRY_STAGES, Removed, RemovedKey,
-    RetransmissionPlan, RetryPlan, RetryStage, ReturnedMpdu, RoleKeys, SingleCompleted,
-    TxBufferClass, TxBufferForm, TxBufferMemory, TxBufferPool, TxCompleted, TxNetworkPool,
-    TxProtection, TxSource,
-};
+pub use types::{ArbiterAuthority, ArbiterPool, GateClosed, GateIssuer, GateOpen, GatePool};
 
 #[cfg(test)]
 extern crate alloc;
@@ -238,4 +183,10 @@ pub use monitor::{
 
 pub mod backend;
 
-pub use types::NumberedKey;
+mod kept;
+pub mod arena; // SCRATCH: named by core/datapath
+pub use kept::{
+    AdvanceRefused, ClassFrame, ClassSizedFrame, LayoutError, PreparationError, TxBufferClass, LendRefusal, LendRefused, LentRxBuffer, MpduProtection, NumberedKey,
+    RETRY_STAGES, ReceiveAccounting, RecycleRefused, RetryPlan, RetryStage, RxBuffer,
+};
+

@@ -144,6 +144,7 @@ impl<I> PendingCcmpTxKey<I> {
 impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// Whether `key` is this installation's pairwise key, as
     /// [`Self::installed`] checks it, read by borrow: nothing is spent.
+    #[cfg(any())] // SCRATCH: names KeyTypes
     pub fn names_pairwise<
         'id,
         Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>,
@@ -157,6 +158,7 @@ impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// Whether `key` is the group key of this installation's slot, as
     /// [`Self::installed_group`] checks it, read by borrow: nothing is
     /// spent.
+    #[cfg(any())] // SCRATCH: names KeyTypes
     pub fn names_group<
         'id,
         Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, GroupSlotIdentity = I>,
@@ -170,6 +172,7 @@ impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// Pair the key the installation terminal returned with its new PN
     /// allocator; the token is spent. A key of another installation, which
     /// may already own a numbering, is refused with both owners.
+    #[cfg(any())] // SCRATCH: names KeyTypes
     pub fn installed<
         'id,
         Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>,
@@ -193,6 +196,7 @@ impl<I: PartialEq> PendingCcmpTxKey<I> {
     /// The token names the vacant group slot the installation took
     /// ([`KeyTypes::vacant_group_slot_identity`](oer_protocols_ieee80211_contracts_port::KeyTypes::vacant_group_slot_identity)):
     /// a key of another slot is refused with both owners.
+    #[cfg(any())] // SCRATCH: names KeyTypes
     pub fn installed_group<
         'id,
         Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, GroupSlotIdentity = I>,

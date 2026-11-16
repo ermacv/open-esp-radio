@@ -74,7 +74,7 @@ use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
 use crate::{
     cooperative_hardware::ReceiveRegisters,
     irq::{DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, WifiIrqRequests},
-    lower_mac::{RxBeaconPriorityHardware, StationTbttHardware, TxGateHardware},
+    seam::{RxBeaconPriorityHardware, StationTbttHardware, TxGateHardware},
     mac::{
         ap_policy::ApRxPolicyHardware,
         ap_tsf::{AccessPointTsfWrite, ApTsfHardware},
@@ -93,7 +93,6 @@ use crate::{
         tx::{TxHardware, ampdu::HtAmpduHardware},
     },
     ordinary_tx::{WifiTxPowerPair, WifiTxPowerProfile},
-    port::{WifiRetuneError, device::Frontier, device::RetuneEnd},
     station_tsf::{StationTsfHardware, StationTsfWrite},
 };
 
@@ -852,7 +851,7 @@ impl TxGateHardware for ModelRegisters {
     }
 }
 
-impl crate::lower_mac::StaHeHardware for ModelRegisters {
+impl crate::seam::StaHeHardware for ModelRegisters {
     fn connect_he20_bss(
         &mut self,
         color: oer_chips_esp32s31_hal::types::MacHeBssColor,
@@ -922,47 +921,6 @@ impl ModelFrontier {
 
     pub const fn channel(&self) -> Ghz2_4Channel {
         self.channel
-    }
-}
-
-impl Frontier for ModelFrontier {
-    type Registers = ModelRegisters;
-    type Space = HostDma;
-    type Calibrated = ModelPower;
-    type Context = Ghz2_4Channel;
-    type Cell = ();
-    type Retune = Option<Self>;
-    type Failed = Infallible;
-    fn into_running(self) -> (ModelRegisters, Ghz2_4Channel) {
-        (self.registers, self.channel)
-    }
-    fn into_stopped(registers: ModelRegisters, channel: Ghz2_4Channel) -> Self {
-        Self { registers, channel }
-    }
-    fn current_channel(context: &Ghz2_4Channel) -> Ghz2_4Channel {
-        *context
-    }
-    fn start_retune(
-        self,
-        (): (),
-        _channel: Permitted<RegulatedChannel<Ghz2_4Channel>>,
-        _ceiling: TxCeiling,
-    ) -> Option<Self> {
-        self.registers.atoms.unmodelled("start_retune");
-        Some(self)
-    }
-    fn poll_retune(
-        retune: &mut Option<Self>,
-        _cx: &mut core::task::Context<'_>,
-    ) -> Poll<RetuneEnd<Self>> {
-        Poll::Ready(match retune.take() {
-            Some(stopped) => RetuneEnd::Unchanged {
-                stopped,
-                cell: (),
-                cause: WifiRetuneError::NotStopped(maintenance::Error::RxWalkerEnabled),
-            },
-            None => RetuneEnd::Abandoned,
-        })
     }
 }
 

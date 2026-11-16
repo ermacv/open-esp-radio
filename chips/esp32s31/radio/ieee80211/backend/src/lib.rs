@@ -59,13 +59,12 @@ pub mod datapath;
 #[cfg(any(test, all(feature = "test-support", not(target_arch = "riscv32"))))]
 pub mod hardware_model;
 pub mod irq;
-pub mod lower_mac;
 pub mod mac;
 pub mod ordinary_tx;
-pub mod port;
 #[cfg(target_arch = "riscv32")]
 pub mod runtime;
 pub mod rx;
+pub mod seam;
 #[cfg(target_arch = "riscv32")]
 pub mod startup;
 pub mod station_tsf;
