@@ -73,13 +73,12 @@ use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, Arena, ArenaSide, BandSet, BlockAckReport, Channel, Command, CommandEnd,
     CommandPlace, CommandPoll, Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet,
     GateClosed, GateIssuer, GateOpen, HEADROOM, HardwareServices, HeaderLen, IdleArena,
-    Ieee80211Capabilities, Ieee80211Instant, InCommand, InFlight, IndeterminateCause,
-    LowerMacCapabilities, MpduLength, OnAir, PhyFormatSet, Place, PortKey, PortSink, QueueRight,
-    RadioPort, RateSupport, ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning,
-    Running, RxHeader, RxMeta, Settled, Signal, SingleEnd, SingleOutcome, SinglePlace,
-    SingleResponse, Staged, StagedPlaces, StartFailure, StartPoll, Starting, StopPoll, StopRight,
-    Stopped, Stopping, SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome, UnitsHome, WidthSet,
-    WithdrawCause,
+    Ieee80211Capabilities, Ieee80211Instant, InCommand, IndeterminateCause, LowerMacCapabilities,
+    MpduLength, OnAir, PhyFormatSet, Place, PortKey, PortSink, QueueRight, RadioPort, RateSupport,
+    ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHeader, RxMeta,
+    Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces,
+    StartFailure, StartPoll, Starting, StopPoll, StopRight, Stopped, Stopping, SupportedChannel,
+    Tid, TxFacts, TxFrame, TxOutcome, UnitsHome, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::frame::DecodedHeader;
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
@@ -252,9 +251,6 @@ pub struct Counts {
     pub closes: u32,
     /// The headers decoded.
     pub decodes: u32,
-    /// The units the model dropped: a length outside the buffer or a
-    /// header that does not decode.
-    pub dropped: u32,
 }
 
 /// What the modelled hardware holds that a stop must take down: compared
@@ -1019,7 +1015,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         _gate: &GateOpen<'id>,
         frame: &TxFrame<'id, Self::Caps>,
         _now: Instant,
-    ) -> InFlight<'id> {
+    ) {
         self.call();
         let rate = match frame {
             TxFrame::Individual { plan, .. } => Some(plan.first().rate.get()),
@@ -1031,7 +1027,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             slot.single = Some(place.index());
             slot.rate = rate;
         }
-        self.key.publish_single(place, queue)
+        self.key.single_published(place, queue);
     }
 
     fn begin(
@@ -1195,10 +1191,6 @@ impl<'id, const SINGLES: usize> ReceivePort<'id> for ModelPort<'id, SINGLES> {
             self.counts.decodes = self.counts.decodes.saturating_add(1);
             let header =
                 DecodedHeader::decode(&bytes).and_then(|decoded| RxHeader::of(&decoded, &bytes));
-            let Some(header) = header else {
-                self.counts.dropped = self.counts.dropped.saturating_add(1);
-                continue;
-            };
             let Ok(place) = u8::try_from(free) else {
                 break;
             };

@@ -198,10 +198,6 @@ right!(
     QueueRight { category: WmmAccessCategory }
 );
 right!(
-    /// A single on the air.
-    InFlight { index: u8, category: WmmAccessCategory }
-);
-right!(
     /// The one place of a command.
     CommandPlace {}
 );
@@ -275,18 +271,6 @@ impl SinglePlace<'_> {
 
 impl QueueRight<'_> {
     /// The queue.
-    pub const fn category(&self) -> WmmAccessCategory {
-        self.category
-    }
-}
-
-impl InFlight<'_> {
-    /// The place of the single on the air.
-    pub const fn place(&self) -> u8 {
-        self.index
-    }
-
-    /// Its queue.
     pub const fn category(&self) -> WmmAccessCategory {
         self.category
     }
@@ -399,10 +383,28 @@ pub struct Complete;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct HeaderLen(u8);
 
+/// The Frame Control and Duration/ID fields (IEEE Std 802.11-2020,
+/// 9.2.4.1, 9.2.4.2).
+const FRAME_CONTROL_AND_DURATION: usize = 2 + 2;
+/// Address 1 to Address 4 (9.2.4.3).
+const ADDRESSES: usize = 4 * 6;
+/// The Sequence Control field (9.2.4.4).
+const SEQUENCE_CONTROL: usize = 2;
+/// The QoS Control field (9.2.4.5).
+const QOS_CONTROL: usize = 2;
+/// The HT Control field (9.2.4.6).
+const HT_CONTROL: usize = 4;
+/// The CCMP header (12.5.3.2).
+const CCMP_HEADER: usize = 8;
+
 /// The longest header the engine writes in front of a body: a QoS Data
-/// header with HT Control and four addresses (36 octets) and a CCMP
-/// header (8).
-pub const HEADROOM: usize = 44;
+/// header with four addresses and HT Control (9.3.2.1), and a CCMP header.
+pub const HEADROOM: usize = FRAME_CONTROL_AND_DURATION
+    + ADDRESSES
+    + SEQUENCE_CONTROL
+    + QOS_CONTROL
+    + HT_CONTROL
+    + CCMP_HEADER;
 
 impl HeaderLen {
     /// `len`, when it fits the headroom.
@@ -665,7 +667,10 @@ pub trait DataPort<'id>: RadioPort<'id> {
         fill: impl FnOnce(&mut [u8]) -> MpduLength<Self::Caps>,
     );
 
-    /// Publish a single written in its place on its free queue.
+    /// Publish a single written in its place on its free queue. From its
+    /// publication to its end the place and the queue's right are the
+    /// port's; its end gives them back through the sink
+    /// ([`PortSink::single_ended`]).
     fn publish_single(
         &mut self,
         place: SinglePlace<'id>,
@@ -673,7 +678,7 @@ pub trait DataPort<'id>: RadioPort<'id> {
         gate: &GateOpen<'id>,
         frame: &TxFrame<'id, Self::Caps>,
         now: Instant,
-    ) -> InFlight<'id>;
+    );
 
     /// Begin a command.
     fn begin(
@@ -774,28 +779,21 @@ impl<'id> PortKey<'id> {
         }
     }
 
-    /// A single published.
-    pub const fn publish_single(
-        &self,
-        place: SinglePlace<'id>,
-        queue: QueueRight<'id>,
-    ) -> InFlight<'id> {
-        let SinglePlace { index, brand } = place;
-        let QueueRight { category, .. } = queue;
-        InFlight {
-            index,
-            category,
-            brand,
-        }
-    }
-
     /// The port found a free place in an arena.
     pub const fn placing(&self) -> Placing<'id> {
         Placing { brand: PhantomData }
     }
 
+    /// A single published: its place and its queue's right are the
+    /// port's until its end, which [`Self::single_end`] gives back.
+    pub const fn single_published(&self, place: SinglePlace<'id>, queue: QueueRight<'id>) {
+        let SinglePlace { .. } = place;
+        let QueueRight { .. } = queue;
+    }
+
     /// A single ended: the place and the queue's right of the single the
-    /// port published at `index` on `category`, back from its record.
+    /// port published at `index` on `category`, which it held since its
+    /// publication.
     pub const fn single_end(
         &self,
         index: u8,

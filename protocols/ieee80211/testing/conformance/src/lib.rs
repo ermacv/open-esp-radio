@@ -266,6 +266,17 @@ pub fn every_right_is_in_exactly_one_place<'id, H, const S: usize, const G: usiz
     let running = run(harness, &mut rights);
     data_run(harness, &mut rights);
     stop(harness, &mut rights, running);
+    retire_whole(harness, rights);
+}
+
+/// Retire and release a stopped installation: every right is home, the gate
+/// closed.
+fn retire_whole<'id, H, const S: usize, const G: usize, const A: usize>(
+    harness: &mut H,
+    rights: Rights<'id, S, G, A>,
+) where
+    H: Harness<'id, S, G, A>,
+{
     let units = match harness.port().poll_units_home(&mut cx()) {
         Poll::Ready(units) => units,
         Poll::Pending => panic!("no unit is out"),
@@ -402,7 +413,7 @@ pub fn a_stop_ends_everything_on_the_air<'id, H, const S: usize, const G: usize,
         length
     });
     harness.hold_air();
-    let _flight = harness
+    harness
         .port()
         .publish_single(place, queue, &open, &frame, NOW);
     stop(harness, &mut rights, running);
@@ -442,6 +453,7 @@ pub fn a_stop_ends_everything_on_the_air<'id, H, const S: usize, const G: usize,
         groups: data.groups,
         agreements: data.agreements,
     });
+    retire_whole(harness, rights);
 }
 
 /// **5. The indication**: an anomaly raises "the port needs a stop" in the

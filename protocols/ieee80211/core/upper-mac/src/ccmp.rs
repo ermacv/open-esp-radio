@@ -72,28 +72,15 @@ impl<K> InstalledCcmpTxKey<K> {
         self.key
     }
 
-    /// Whether [`Self::number`] numbers one more MPDU: nothing is drawn.
+    /// Whether one more MPDU can be numbered: nothing is drawn.
     pub fn can_number(&self) -> bool {
         self.packet_numbers.available()
-    }
-
-    /// Number one protected MPDU: the key and its next CCMP packet number,
-    /// or `None` once its packet numbers are exhausted. A retransmission
-    /// keeps the number of its first transmission and does not call this.
-    pub fn number(&self) -> Option<oer_protocols_ieee80211_contracts_port::NumberedKey<&K>> {
-        let packet_number = self.packet_numbers.allocate().ok()?;
-        Some(oer_protocols_ieee80211_contracts_port::NumberedKey {
-            key: &self.key,
-            packet_number,
-        })
     }
 }
 
 /// Key material whose only owner is software: installing it means moving it
 /// into that owner, as the ESP-NOW peer table owns its peers' local master
-/// keys. A lower-MAC port key is not one; it pairs with its packet numbers
-/// only through the [`PendingCcmpTxKey`] its installation command was
-/// issued with ([`PendingCcmpTxKey::issued`]).
+/// keys.
 pub trait SoftwareCcmpKey {}
 
 impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
@@ -110,105 +97,6 @@ impl<K: SoftwareCcmpKey> InstalledCcmpTxKey<K> {
     /// out, so the same key bytes supplied again never repeat a nonce.
     pub fn replace_key(&mut self, key: K) -> K {
         core::mem::replace(&mut self.key, key)
-    }
-}
-
-/// A pairwise installation the port accepted, until its terminal returns
-/// the installed key: the step of its numbering and the identity `I` of
-/// the installation, which only that installation's key carries.
-#[derive(Debug, Eq, PartialEq)]
-#[must_use = "only the accepted installation's token numbers its key"]
-pub struct PendingCcmpTxKey<I> {
-    step: CcmpPacketNumberStep,
-    installation: I,
-}
-
-/// A key that is not the installation's: the token and the key, both
-/// returned unchanged.
-#[derive(Debug, Eq, PartialEq)]
-pub struct ForeignCcmpTxKey<I, K> {
-    pub pending: PendingCcmpTxKey<I>,
-    pub key: K,
-}
-
-impl<I> PendingCcmpTxKey<I> {
-    /// The pending key of the installation `installation` that the port's
-    /// command issuer
-    /// ([`PortCommands::install_pairwise`](oer_protocols_ieee80211_contracts_port::PortCommands::install_pairwise))
-    /// minted with its command, numbering its MPDUs by `step`.
-    pub const fn issued(installation: I, step: CcmpPacketNumberStep) -> Self {
-        Self { step, installation }
-    }
-}
-
-impl<I: PartialEq> PendingCcmpTxKey<I> {
-    /// Whether `key` is this installation's pairwise key, as
-    /// [`Self::installed`] checks it, read by borrow: nothing is spent.
-    pub fn names_pairwise<
-        'id,
-        Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>,
-    >(
-        &self,
-        key: &Keys::PairwiseKey,
-    ) -> bool {
-        Keys::pairwise_identity(key) == self.installation
-    }
-
-    /// Whether `key` is the group key of this installation's slot, as
-    /// [`Self::installed_group`] checks it, read by borrow: nothing is
-    /// spent.
-    pub fn names_group<
-        'id,
-        Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, GroupSlotIdentity = I>,
-    >(
-        &self,
-        key: &Keys::GroupKey,
-    ) -> bool {
-        Keys::group_slot_identity(key) == self.installation
-    }
-
-    /// Pair the key the installation terminal returned with its new PN
-    /// allocator; the token is spent. A key of another installation, which
-    /// may already own a numbering, is refused with both owners.
-    pub fn installed<
-        'id,
-        Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, Identity = I>,
-    >(
-        self,
-        key: Keys::PairwiseKey,
-    ) -> Result<InstalledCcmpTxKey<Keys::PairwiseKey>, ForeignCcmpTxKey<I, Keys::PairwiseKey>> {
-        if Keys::pairwise_identity(&key) != self.installation {
-            return Err(ForeignCcmpTxKey { pending: self, key });
-        }
-        Ok(InstalledCcmpTxKey {
-            key,
-            packet_numbers: CcmpTxPacketNumber::new(self.step),
-        })
-    }
-}
-
-impl<I: PartialEq> PendingCcmpTxKey<I> {
-    /// Pair the group key an installation terminal returned with its new PN
-    /// allocator, under the owner `wrap` makes of it; the token is spent.
-    /// The token names the vacant group slot the installation took
-    /// ([`KeyTypes::vacant_group_slot_identity`](oer_protocols_ieee80211_contracts_port::KeyTypes::vacant_group_slot_identity)):
-    /// a key of another slot is refused with both owners.
-    pub fn installed_group<
-        'id,
-        Keys: oer_protocols_ieee80211_contracts_port::KeyTypes<'id, GroupSlotIdentity = I>,
-        K,
-    >(
-        self,
-        key: Keys::GroupKey,
-        wrap: impl FnOnce(Keys::GroupKey) -> K,
-    ) -> Result<InstalledCcmpTxKey<K>, ForeignCcmpTxKey<I, Keys::GroupKey>> {
-        if Keys::group_slot_identity(&key) != self.installation {
-            return Err(ForeignCcmpTxKey { pending: self, key });
-        }
-        Ok(InstalledCcmpTxKey {
-            key: wrap(key),
-            packet_numbers: CcmpTxPacketNumber::new(self.step),
-        })
     }
 }
 

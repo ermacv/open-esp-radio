@@ -66,8 +66,10 @@ pub struct Lendable(());
 /// A staged unit, as the port holds it in its place.
 #[derive(Debug)]
 pub struct Staged<M> {
-    /// The header, decoded once.
-    pub header: RxHeader,
+    /// The header, decoded once: `None` for a frame whose header is not a
+    /// data or a management frame's (a control frame, a BlockAckReq), whose
+    /// reader parses its bytes.
+    pub header: Option<RxHeader>,
     /// What the hardware observed of it.
     pub meta: M,
     /// Whether it can be lent.
@@ -77,8 +79,9 @@ pub struct Staged<M> {
 /// A unit read in place: its header, the hardware's evidence, the bytes.
 #[derive(Debug)]
 pub struct Received<'a, M> {
-    /// The header, decoded once.
-    pub header: &'a RxHeader,
+    /// The header, decoded once, when the frame has a data or a management
+    /// frame's header.
+    pub header: Option<&'a RxHeader>,
     /// What the hardware observed.
     pub meta: &'a M,
     /// The MPDU, from its header to the end of its body.
@@ -233,7 +236,7 @@ impl<'p, 'id, P: ReceivePort<'id>> Round<'p, 'id, P> {
     pub fn unit(&self, handle: &UnitHandle<'id>) -> Option<Received<'_, P::Meta>> {
         let (staged, bytes) = self.port.round_unit(&self.seal, handle.place)?;
         Some(Received {
-            header: &staged.header,
+            header: staged.header.as_ref(),
             meta: &staged.meta,
             bytes,
             lendable: staged.lendable,
@@ -276,7 +279,7 @@ impl<'id, P: ReceivePort<'id>> Unit<'_, '_, 'id, P> {
     pub fn view(&self) -> Option<Received<'_, P::Meta>> {
         let (staged, bytes) = self.round.port.round_unit(&self.round.seal, self.place)?;
         Some(Received {
-            header: &staged.header,
+            header: staged.header.as_ref(),
             meta: &staged.meta,
             bytes,
             lendable: staged.lendable,

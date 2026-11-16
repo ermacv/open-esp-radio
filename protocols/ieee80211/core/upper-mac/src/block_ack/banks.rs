@@ -16,8 +16,7 @@ use super::{
 };
 use oer_portable_time::{Duration, Instant};
 use oer_protocols_ieee80211_contracts_port::{
-    Ieee80211Capabilities, ReceiveAccounting, RecycleRefused, RxBuffer, RxCryptoStatus, RxEvidence,
-    RxMetadata, SupportedBlockAck, Tid,
+    Ieee80211Capabilities, RxCryptoStatus, RxEvidence, RxHeader, RxMetadata, SupportedBlockAck, Tid,
 };
 use oer_protocols_ieee80211_wire::{
     address::Bssid,
@@ -125,10 +124,21 @@ pub trait RxBlockAckTypes {
     type Slot;
     /// An agreement installed in a slot.
     type Running;
-    /// A received MPDU's owner.
-    type Frame: RxBuffer;
+    /// A received MPDU's owner. The agreements know nothing of it: what
+    /// they decide from is its view ([`RxView`]), given beside it.
+    type Frame;
     /// Its receive metadata.
     type Meta: RxMetadata;
+}
+
+/// A received MPDU read in place, beside its owner: its header, decoded
+/// once, and its bytes. Nothing of it is kept.
+#[derive(Clone, Copy, Debug)]
+pub struct RxView<'a> {
+    /// The header, when the frame has a data or a management frame's header.
+    pub header: Option<&'a RxHeader>,
+    /// The MPDU, from its header to the end of its body.
+    pub bytes: &'a [u8],
 }
 
 /// The port calls that carry out the owner's decisions, in the order made.
@@ -140,11 +150,7 @@ pub trait RxBlockAckPort<T: RxBlockAckTypes> {
     /// End `running`, returning its slot.
     fn remove(&mut self, running: T::Running) -> T::Slot;
     /// Return a retained frame's receive owner.
-    ///
-    /// # Errors
-    ///
-    /// The port's count refused it: the frame, unchanged, with the count.
-    fn recycle(&mut self, frame: T::Frame) -> Result<(), RecycleRefused<T::Frame>>;
+    fn recycle(&mut self, frame: T::Frame);
 }
 
 type Session<T> = RxBlockAckSession<<T as RxBlockAckTypes>::Running, WINDOW, WINDOW>;
@@ -281,9 +287,6 @@ pub struct RxBlockAckCapacity;
 pub enum RxBlockAckRefused {
     /// No reply place or bank remains for an admitted request.
     Capacity(RxBlockAckCapacity),
-    /// The previous association's clear did not complete
-    /// ([`RxBlockAckView::clear`]): the Action was not taken.
-    Clear(ReceiveAccounting),
 }
 
 impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
@@ -367,11 +370,8 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     /// Hold one data MPDU released for delivery while its consumer has no
     /// room: it waits behind the frames already in delivery order. A
     /// management or control frame is not held; the caller delivers it.
-    pub fn park(&mut self, frame: T::Frame, meta: T::Meta) -> Parked<T> {
-        let data = frame
-            .header()
-            .is_some_and(|header| header.control().is_data());
-        if !data {
+    pub fn park(&mut self, frame: T::Frame, view: RxView<'_>, meta: T::Meta) -> Parked<T> {
+        if !view.header.is_some_and(|header| header.control.is_data()) {
             return Parked::Deliver((frame, meta));
         }
         let next = usize::from(self.header.ready_len);
@@ -430,18 +430,11 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
 
     /// End only this role's agreements; every bank and retained frame returns
     /// through the same port before a healthy Stop; temporary absences keep them.
-    ///
-    /// # Errors
-    ///
-    /// The port refused a retained frame's recycle: that frame stays in its
-    /// own place, the frames after it in theirs, and the association and
-    /// its replies stay. The clear did not complete; the agreements it
-    /// ended stay ended.
     pub fn clear(
         &mut self,
         port: &mut impl RxBlockAckPort<T>,
         events: &mut impl EventSink<RxBlockAckEvent>,
-    ) -> Result<(), ReceiveAccounting> {
+    ) {
         for bank in self.banks.iter_mut() {
             if let Some(active) = bank.active.take() {
                 let tid = active.tid();
@@ -462,13 +455,8 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             bank.response = false;
         }
         for place in self.frames.iter_mut() {
-            let Some((frame, meta)) = place.take() else {
-                continue;
-            };
-            if let Err(RecycleRefused { unit, fault }) = port.recycle(frame) {
-                // Its own place, which the take emptied.
-                *place = Some((unit, meta));
-                return Err(fault);
+            if let Some((frame, _meta)) = place.take() {
+                port.recycle(frame);
             }
         }
         self.header.association = None;
@@ -476,7 +464,6 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         self.header.ready_len = 0;
         self.header.deferred.clear();
         self.header.failed = false;
-        Ok(())
     }
 
     /// The association the agreements belong to.
@@ -503,7 +490,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> Result<(), RxBlockAckRefused> {
         if self.association() != Some(association) {
-            self.clear(port, events).map_err(RxBlockAckRefused::Clear)?;
+            self.clear(port, events);
             self.header.association = Some((association, bssid));
         }
         match action {
@@ -762,11 +749,12 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         now: Instant,
         local: Option<[u8; 6]>,
         frame: T::Frame,
+        view: RxView<'_>,
         meta: T::Meta,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
-        let action = frame.header().is_some_and(|header| {
-            !header.control().is_data() && header.control().subtype() == ACTION_SUBTYPE
+        let action = view.header.is_some_and(|header| {
+            !header.control.is_data() && header.control.subtype() == ACTION_SUBTYPE
         });
         if action && !self.can_receive_management() {
             return match self.defer(frame, meta) {
@@ -779,13 +767,59 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             RxBlockAckEvent::Contained {
                 ampdu: common.ampdu,
                 s_mpdu: common.s_mpdu,
-                bytes: u32::try_from(frame.bytes().len()).ok(),
+                bytes: u32::try_from(view.bytes.len()).ok(),
             }
         });
         match local {
-            Some(local) => self.ingest(now, local, frame, meta, events),
+            Some(local) => self.ingest(now, local, frame, view, meta, events),
             None => RxDisposition::Deliver((frame, meta)),
         }
+    }
+
+    /// The bank and the sequence a QoS Data MPDU of the association is
+    /// reordered at, from its header: `None` for any other frame.
+    fn reorder_key(
+        &self,
+        header: &RxHeader,
+        local: [u8; 6],
+        meta: &T::Meta,
+    ) -> Option<(usize, SequenceNumber)> {
+        let (_, bssid) = self.header.association?;
+        let control = header.control;
+        let fragment =
+            SequenceControl::from_bytes(header.sequence_control.to_le_bytes()).fragment();
+        // QoS Data subtypes 8 to 11 from the DS (IEEE Std 802.11-2020,
+        // 9.2.4.1.3, Table 9-1).
+        if !control.is_data()
+            || control.ds() != 2
+            || control.more_fragments()
+            || fragment != 0
+            || header.transmitter != bssid.get()
+            || header.receiver != local
+            || !matches!(control.subtype(), 8..=11)
+            || (control.protected()
+                && !matches!(
+                    meta.common().crypto,
+                    RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)
+                        | RxEvidence::ProtocolValidated(
+                            RxCryptoStatus::DecryptedAndIntegrityVerified
+                        )
+                ))
+        {
+            return None;
+        }
+        let tid = QosControl::from_bytes(header.qos?.to_le_bytes())
+            .tid()
+            .get();
+        let index = self.banks.iter().position(|bank| {
+            bank.active
+                .as_ref()
+                .is_some_and(|active| active.tid() == tid)
+        })?;
+        Some((
+            index,
+            SequenceNumber::from_sequence_control(header.sequence_control),
+        ))
     }
 
     fn ingest(
@@ -793,10 +827,11 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         now: Instant,
         local: [u8; 6],
         frame: T::Frame,
+        view: RxView<'_>,
         meta: T::Meta,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
-        if let Some((tid, sequence)) = self.bar(frame.bytes(), local) {
+        if let Some((tid, sequence)) = self.bar(view.bytes, local) {
             if let Some(active) = self
                 .banks
                 .iter_mut()
@@ -808,44 +843,9 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
             return RxDisposition::Recycle(frame);
         }
-        let key = frame.header().and_then(|header| {
-            let (_, bssid) = self.header.association?;
-            let control = header.control();
-            let fragment =
-                SequenceControl::from_bytes(header.sequence_control().to_le_bytes()).fragment();
-            // QoS Data subtypes 8 to 11 from the DS (IEEE Std 802.11-2020,
-            // 9.2.4.1.3, Table 9-1).
-            if !control.is_data()
-                || control.ds() != 2
-                || control.more_fragments()
-                || fragment != 0
-                || header.transmitter() != bssid.get()
-                || header.receiver() != local
-                || !matches!(control.subtype(), 8..=11)
-                || (control.protected()
-                    && !matches!(
-                        meta.common().crypto,
-                        RxEvidence::HardwareObserved(RxCryptoStatus::DecryptedAndIntegrityVerified)
-                            | RxEvidence::ProtocolValidated(
-                                RxCryptoStatus::DecryptedAndIntegrityVerified
-                            )
-                    ))
-            {
-                return None;
-            }
-            let tid = QosControl::from_bytes(header.qos()?.to_le_bytes())
-                .tid()
-                .get();
-            let index = self.banks.iter().position(|bank| {
-                bank.active
-                    .as_ref()
-                    .is_some_and(|active| active.tid() == tid)
-            })?;
-            Some((
-                index,
-                SequenceNumber::from_sequence_control(header.sequence_control()),
-            ))
-        });
+        let key = view
+            .header
+            .and_then(|header| self.reorder_key(header, local, &meta));
         let Some((bank_index, sequence)) = key else {
             return RxDisposition::Deliver((frame, meta));
         };
