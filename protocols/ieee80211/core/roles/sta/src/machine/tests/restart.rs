@@ -93,3 +93,76 @@ fn a_finished_station_restarts_in_place_reclaims_old_keys_then_connects() {
         );
     });
 }
+
+#[test]
+fn a_frame_out_at_a_finish_holds_its_place_across_the_restart_until_its_end() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.hold_transmissions = true;
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        assert_eq!(world.losses.built, 1);
+        assert_eq!(world.submitted.len(), 1);
+        let old = world.submitted[0];
+        assert!(old.is_probe());
+        let mut world = restarted(world);
+        // The old probe is still the port's: its place stays taken.
+        assert!(world.station.out.holds(TxPurpose::Probe));
+        world.run(at(50));
+        assert!(!world.station.is_reclaiming());
+        assert!(world.station.out.holds(TxPurpose::Probe));
+        assert_eq!(world.losses.built, 1, "no probe over the one out");
+        // The new run's scan closes the gate, which ends the old probe; only
+        // then does the new run's probe go, under the new connection.
+        world.command(at(51), 2, StaCommand::Connect).unwrap();
+        world.run(at(51));
+        assert_eq!(world.losses.built, 2);
+        assert_eq!(world.submitted.len(), 1);
+        assert_ne!(world.submitted[0].epoch(), old.epoch());
+        assert!(world.station.out.holds(TxPurpose::Probe));
+        world.hold_transmissions = false;
+        world.run(at(52));
+        assert!(world.submitted.is_empty());
+        assert!(!world.station.out.holds(TxPurpose::Probe));
+        assert!(matches!(world.station.state, State::Scan(_)));
+    });
+}
+
+#[test]
+fn a_restart_reclaims_through_removals_that_expired() {
+    installed(|mint| {
+        let (world, _) = wpa2_connected::<2>(mint);
+        let mut world = restarted(world);
+        world.take();
+        world.removal_outcome = StaKeyOutcome::Expired;
+        world.run(at(50));
+        assert!(!world.station.is_reclaiming());
+        assert!(world.station.keys.clear());
+        assert_eq!(
+            world.take(),
+            [Seen::RemoveKey, Seen::RemoveKey, Seen::Configure("off")]
+        );
+        world.command(at(51), 1000, StaCommand::Connect).unwrap();
+    });
+}
+
+#[test]
+fn a_restart_sets_receive_off_only_after_the_last_runs_configuration_ended() {
+    installed(|mint| {
+        let mut world = World::new(mint, 3);
+        world.hold_configured = true;
+        world.command(at(0), 1, StaCommand::Connect).unwrap();
+        world.run(at(0));
+        assert!(world.configuring, "the scan's configuration is out");
+        let mut world = restarted(world);
+        world.take();
+        // The world refuses a second configuration while one is out.
+        world.run(at(50));
+        assert!(world.station.is_reclaiming());
+        assert_eq!(world.take(), []);
+        world.hold_configured = false;
+        world.run(at(51));
+        assert_eq!(world.take(), [Seen::Configure("off")]);
+        assert!(!world.station.is_reclaiming());
+    });
+}

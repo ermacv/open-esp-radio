@@ -316,14 +316,31 @@ pub enum StaInput<'id, T: StaTypes, K> {
     Configured,
     /// The pairwise key operation the station asked for
     /// ([`StaAction::InstallPairwiseKey`], [`StaAction::RemovePairwiseKey`])
-    /// ended.
-    PairwiseKeyEnded,
+    /// ended with its outcome.
+    PairwiseKeyEnded(StaKeyOutcome),
     /// The group key operation the station asked for at `place` ended:
     /// an installation, a replacement, a selection or a removal.
     GroupKeyEnded {
         /// The group table's place the operation named.
         place: StaGroupPlace,
+        /// How it ended.
+        outcome: StaKeyOutcome,
     },
+}
+
+/// How a key operation the station asked for ended.
+///
+/// An installation, replacement or selection that expired ends the
+/// connection attempt it belongs to as a failed handshake
+/// ([`StaDisconnectReason::HandshakeFailed`]); the station then holds no key
+/// it asked for there. A removal that expired ends the same way as one done:
+/// the station holds that key no longer and does not wait for it again.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaKeyOutcome {
+    /// The operation took effect.
+    Done,
+    /// The operation did not take effect within its bound.
+    Expired,
 }
 
 /// How a frame the station handed out ended.
@@ -2529,7 +2546,7 @@ impl<'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks> Station<'id, T
         self.lease = Held::None;
         self.absence = None;
         self.epoch = None;
-        self.out = FramesOut::default();
+        // A frame out is still the port's: only its end frees its place.
         self.link = LinkCustody::Station;
         StationPlaceReturns::new(self.place.take(), self.absence_place.take())
     }
@@ -3576,9 +3593,9 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 }
                 return;
             }
-            StaInput::PairwiseKeyEnded => {
-                match self.keys.pairwise {
-                    PairwiseKey::Installing(epoch) => {
+            StaInput::PairwiseKeyEnded(outcome) => {
+                match (self.keys.pairwise, outcome) {
+                    (PairwiseKey::Installing(epoch), StaKeyOutcome::Done) => {
                         self.keys.pairwise = PairwiseKey::Installed;
                         // Leave waits for every outstanding key installation
                         // to end; an old one's key is removed there.
@@ -3586,12 +3603,55 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                             self.keys_changed(state);
                         }
                     }
-                    PairwiseKey::Removing => self.keys.pairwise = PairwiseKey::None,
-                    PairwiseKey::None | PairwiseKey::Installed => {}
+                    (PairwiseKey::Installing(epoch), StaKeyOutcome::Expired) => {
+                        self.keys.pairwise = PairwiseKey::None;
+                        if current_epoch(state, *self.epoch) == Some(epoch) {
+                            self.key_expired(state);
+                        }
+                    }
+                    (PairwiseKey::Removing, _) => self.keys.pairwise = PairwiseKey::None,
+                    (PairwiseKey::None | PairwiseKey::Installed, _) => {}
                 }
                 return;
             }
-            StaInput::GroupKeyEnded { place } => {
+            StaInput::GroupKeyEnded {
+                place,
+                outcome: StaKeyOutcome::Expired,
+            } => {
+                if self.keys.group.place() != Some(place) {
+                    return;
+                }
+                let epoch = match core::mem::replace(&mut self.keys.group, GroupOperation::Idle) {
+                    GroupOperation::Idle => return,
+                    GroupOperation::Install(pending) => {
+                        self.keys.groups.release(pending.place, events);
+                        pending.epoch
+                    }
+                    GroupOperation::Replace(pending) => {
+                        // The replaced key went with the place.
+                        self.keys.groups.release(pending.install.place, events);
+                        pending.install.epoch
+                    }
+                    GroupOperation::Select(pending) => {
+                        // The selected installation stays, not current.
+                        let epoch = pending.install.epoch;
+                        (*self.keys).group_installed(pending.install, false, None, true);
+                        epoch
+                    }
+                    GroupOperation::Remove(pending) => {
+                        self.group_removed(state, pending, events);
+                        return;
+                    }
+                };
+                if current_epoch(state, *self.epoch) == Some(epoch) {
+                    self.key_expired(state);
+                }
+                return;
+            }
+            StaInput::GroupKeyEnded {
+                place,
+                outcome: StaKeyOutcome::Done,
+            } => {
                 if self.keys.group.place() != Some(place) {
                     return;
                 }
@@ -3607,14 +3667,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     GroupOperation::Select(pending) => {
                         self.group_transition(state, pending.install, None, true, events);
                     }
-                    GroupOperation::Remove(pending) => {
-                        if pending.active()
-                            && let Some(replay) = active_replay(state)
-                        {
-                            replay.remove_group(pending.key_id);
-                        }
-                        self.keys.groups.release(pending.place, events);
-                    }
+                    GroupOperation::Remove(pending) => self.group_removed(state, pending, events),
                 }
                 return;
             }
@@ -3657,6 +3710,47 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                     _ => Change::Keep,
                 }
             }
+        };
+        state.apply(change);
+    }
+
+    /// A group key's removal ended, done or expired: the station holds the
+    /// key no longer.
+    fn group_removed(
+        &mut self,
+        state: &mut State<T, K>,
+        pending: PendingGroupRemoval,
+        events: &mut impl EventSink<StaEvent>,
+    ) {
+        if pending.active()
+            && let Some(replay) = active_replay(state)
+        {
+            replay.remove_group(pending.key_id);
+        }
+        self.keys.groups.release(pending.place, events);
+    }
+
+    /// A key installation of the current connection attempt did not take:
+    /// the attempt ends as a failed handshake.
+    #[inline(never)]
+    fn key_expired(&mut self, state: &mut State<T, K>) {
+        let change = match state {
+            State::Handshake(handshake) => leave_keyed(
+                StaDisconnectReason::HandshakeFailed,
+                Some(Deauthentication {
+                    bssid: handshake.bssid,
+                    reason_code: reason_code::UNSPECIFIED,
+                    // A protected frame needs the pairwise key the station
+                    // still holds.
+                    protected: handshake.management.is_some() && self.keys.keyed(),
+                }),
+            ),
+            State::Connected(connected) => leave_connected(
+                connected,
+                StaDisconnectReason::HandshakeFailed,
+                Some(reason_code::UNSPECIFIED),
+            ),
+            _ => Change::Keep,
         };
         state.apply(change);
     }

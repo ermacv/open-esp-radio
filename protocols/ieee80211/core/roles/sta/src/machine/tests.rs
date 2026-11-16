@@ -317,6 +317,14 @@ struct World<'id, const G: usize = 2> {
     hold_key_installs: bool,
     pending_installs: Vec<StaInput<'id, Types<'id>, Caps>>,
     hold_group_removals: bool,
+    /// The port's ends of key installations, replacements and selections.
+    install_outcome: StaKeyOutcome,
+    /// The port's ends of key removals.
+    removal_outcome: StaKeyOutcome,
+    /// The link's return waits for the test.
+    hold_link_return: bool,
+    /// The station asked for its link back while the return is held.
+    return_owed: bool,
     pending_removals: Vec<StaInput<'id, Types<'id>, Caps>>,
     /// The outcomes of the next transmissions; delivered once none is
     /// queued.
@@ -491,6 +499,10 @@ impl<'id> World<'id> {
             hold_key_installs: false,
             pending_installs: Vec::new(),
             hold_group_removals: false,
+            install_outcome: StaKeyOutcome::Done,
+            removal_outcome: StaKeyOutcome::Done,
+            hold_link_return: false,
+            return_owed: false,
             pending_removals: Vec::new(),
             outcomes: std::collections::VecDeque::new(),
             hold_transmissions: false,
@@ -805,21 +817,21 @@ impl<'id, const G: usize> World<'id, G> {
                         self.seen.push(Seen::InstallPairwise(*key.as_bytes()));
                         self.pairwise_spp = Some(spp);
                         self.pairwise = Some(engine_key());
-                        self.installed(now, StaInput::PairwiseKeyEnded);
+                        self.installed(now, StaInput::PairwiseKeyEnded(self.install_outcome));
                     }
                     StaAction::InstallGroupKey { place, key_id, .. } => {
                         self.seen.push(Seen::InstallGroup(key_id.get()));
-                        self.installed(now, StaInput::GroupKeyEnded { place });
+                        self.installed(now, StaInput::GroupKeyEnded { place, outcome: self.install_outcome });
                     }
                     StaAction::RemovePairwiseKey => {
                         self.seen.push(Seen::RemoveKey);
                         self.pairwise = None;
                         self.station
-                            .input(now, StaInput::PairwiseKeyEnded, &mut self.losses);
+                            .input(now, StaInput::PairwiseKeyEnded(self.removal_outcome), &mut self.losses);
                     }
                     StaAction::RemoveGroupKey { place } => {
                         self.seen.push(Seen::RemoveKey);
-                        let removed = StaInput::GroupKeyEnded { place };
+                        let removed = StaInput::GroupKeyEnded { place, outcome: self.removal_outcome };
                         if self.hold_group_removals {
                             self.pending_removals.push(removed);
                         } else {
@@ -828,11 +840,11 @@ impl<'id, const G: usize> World<'id, G> {
                     }
                     StaAction::SelectGroupKey { place, .. } => {
                         self.seen.push(Seen::SelectGroup);
-                        self.installed(now, StaInput::GroupKeyEnded { place });
+                        self.installed(now, StaInput::GroupKeyEnded { place, outcome: self.install_outcome });
                     }
                     StaAction::ReplaceGroupKey { place, key_id, .. } => {
                         self.seen.push(Seen::ReplaceGroup(key_id.get()));
-                        self.installed(now, StaInput::GroupKeyEnded { place });
+                        self.installed(now, StaInput::GroupKeyEnded { place, outcome: self.install_outcome });
                     }
                     StaAction::ExchangeLease(old) => {
                         let new = self.arbiter.exchange(old);
@@ -954,6 +966,7 @@ impl<'id, const G: usize> World<'id, G> {
             crate::link::LinkAction::Agreement { tid, window } => {
                 let _ = self.link.as_mut().unwrap().agreement(tid, window);
             }
+            crate::link::LinkAction::Return if self.hold_link_return => self.return_owed = true,
             crate::link::LinkAction::Return => {
                 let link = self.link.take().expect("the station lent its link");
                 let (link, key) = link.into_return();
@@ -3779,7 +3792,9 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                     panic!("PTK")
                 };
                 world.pairwise = Some(engine_key());
-                world.pending_installs.push(StaInput::PairwiseKeyEnded);
+                world
+                    .pending_installs
+                    .push(StaInput::PairwiseKeyEnded(StaKeyOutcome::Done));
             }
             if point >= 6 {
                 let pairwise = world.pending_installs.pop().unwrap();
@@ -3787,9 +3802,10 @@ fn handshake_deadline_covers_every_message_key_and_tx_wait() {
                 let Some(StaAction::InstallGroupKey { place, .. }) = poll!(world, at(33)) else {
                     panic!("GTK")
                 };
-                world
-                    .pending_installs
-                    .push(StaInput::GroupKeyEnded { place });
+                world.pending_installs.push(StaInput::GroupKeyEnded {
+                    place,
+                    outcome: StaKeyOutcome::Done,
+                });
             }
             if point >= 7 {
                 for installed in core::mem::take(&mut world.pending_installs) {
@@ -4670,6 +4686,160 @@ fn take_group_removal<'id>(
     place
 }
 
+/// The service's stop and the next run: the link back, the arbiter and the
+/// station finished, the places through the stopped arbiter, and the
+/// station restarted in place with its outputs taken.
+fn restarted<'id, const G: usize>(mut world: World<'id, G>) -> World<'id, G> {
+    use oer_protocols_ieee80211_core_arbiter::{ArbiterEnd, ArbiterNotice, RetiredArbiter};
+    world.return_link();
+    let mut arbiter = world.arbiter.finish(ArbiterEnd::Stopped);
+    let mut places = world.station.finish(StaDisconnectReason::Requested);
+    while let Some(notice) = arbiter.poll_notice() {
+        if let ArbiterNotice::Station(notice) = notice {
+            places.returned(notice);
+        }
+    }
+    while let Some(output) = world.station.poll_output() {
+        if let StaFinalOutput::CommandCompleted(terminal) = output {
+            world
+                .command_credits
+                .restore(terminal.request.into_parts().1);
+        }
+    }
+    let RetiredArbiter::Stopped(stopped) = arbiter else {
+        panic!("the arbiter stopped")
+    };
+    let (arbiter, places) = stopped
+        .restart(channel(6), places)
+        .ok()
+        .expect("the station's places came back")
+        .into_parts();
+    let _ = world.station.restart(places);
+    world.arbiter = arbiter;
+    world
+}
+
+#[test]
+fn the_pairwise_key_is_removed_only_after_the_link_came_back() {
+    installed(|mint| {
+        let (mut world, _) = wpa2_connected::<2>(mint);
+        world.hold_link_return = true;
+        world.command(at(50), 2, StaCommand::Disconnect).unwrap();
+        world.run(at(50));
+        assert!(world.return_owed, "the station asks for its link back");
+        assert!(
+            world.station.keys.keyed(),
+            "the pairwise key stays while the link is out"
+        );
+        world.hold_link_return = false;
+        world.return_link();
+        world.run(at(51));
+        assert!(!world.station.keys.keyed());
+        assert!(world.station.keys.clear());
+        assert!(matches!(world.station.state, State::Idle));
+    });
+}
+
+#[test]
+fn a_group_installation_that_expired_switches_no_lane_in_the_link() {
+    installed(|mint| {
+        let (mut world, ptk) = wpa2_connected::<2>(mint);
+        world.hold_link_return = true;
+        world.install_outcome = StaKeyOutcome::Expired;
+        world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
+        world.run(at(50));
+        assert!(!world.station.is_connected());
+        let replay = world.link.as_mut().unwrap().replay_mut().unwrap();
+        let header = |id, pn| {
+            oer_protocols_ieee80211_wire::ccmp::CcmpHeader::new(
+                oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber::new(pn).unwrap(),
+                GroupKeyId::new(id).unwrap().key_id(),
+            )
+        };
+        // Key 2 never took: the link has no lane for it.
+        assert!(
+            replay
+                .check(
+                    oer_protocols_ieee80211_core_upper_mac::ccmp::CcmpRxProtection::Group,
+                    None,
+                    header(2, 1),
+                )
+                .is_err()
+        );
+    });
+}
+
+#[test]
+fn a_pairwise_installation_that_expired_ends_the_attempt_as_a_failed_handshake() {
+    installed(|mint| {
+        let (mut world, ptk) = wpa2_associated::<2>(mint);
+        world.install_outcome = StaKeyOutcome::Expired;
+        world.receive(at(33), &retry_message3(&ptk, 2, 0x99));
+        world.run(at(33));
+        assert!(!world.station.is_connected());
+        assert!(world.seen.contains(&Seen::Notify(StaNotice::Disconnected(
+            StaDisconnectReason::HandshakeFailed
+        ))));
+        assert!(world.completed.iter().any(|terminal| matches!(
+            terminal.outcome,
+            StaCommandOutcome::ConnectFailed(StaDisconnectReason::HandshakeFailed)
+        )));
+        // Message 2 was the only EAPOL: no Message 4.
+        assert_eq!(world.eapol.len(), 1);
+        // The station holds no key to remove.
+        assert!(!world.seen.contains(&Seen::RemoveKey));
+        assert!(world.station.keys.clear());
+        assert!(matches!(world.station.state, State::Idle));
+    });
+}
+
+#[test]
+fn a_group_installation_that_expired_ends_the_connection_as_a_failed_handshake() {
+    installed(|mint| {
+        let (mut world, ptk) = wpa2_connected::<2>(mint);
+        let eapol = world.eapol.len();
+        world.take();
+        world.install_outcome = StaKeyOutcome::Expired;
+        world.receive_verified(at(50), &group_message1(&ptk, 3, 2));
+        world.run(at(50));
+        assert!(!world.station.is_connected());
+        let seen = world.take();
+        assert!(seen.contains(&Seen::Notify(StaNotice::Disconnected(
+            StaDisconnectReason::HandshakeFailed
+        ))));
+        assert_eq!(world.eapol.len(), eapol, "no group Message 2");
+        // The old group key and the pairwise key go; the new one never was.
+        assert_eq!(
+            seen.iter().filter(|seen| **seen == Seen::RemoveKey).count(),
+            2
+        );
+        assert!(world.station.keys.clear());
+        assert!(matches!(world.station.state, State::Idle));
+    });
+}
+
+#[test]
+fn removals_that_expired_end_the_leave_as_done_ones_do() {
+    installed(|mint| {
+        let (mut world, _) = wpa2_connected::<2>(mint);
+        world.take();
+        world.removal_outcome = StaKeyOutcome::Expired;
+        world.command(at(50), 2, StaCommand::Disconnect).unwrap();
+        world.run(at(50));
+        let seen = world.take();
+        assert_eq!(
+            seen.iter().filter(|seen| **seen == Seen::RemoveKey).count(),
+            2
+        );
+        assert!(world.station.keys.clear());
+        assert!(matches!(world.station.state, State::Idle));
+        assert!(world.completed.iter().any(|terminal| matches!(
+            terminal.outcome,
+            StaCommandOutcome::Disconnected(StaDisconnectReason::Requested)
+        )));
+    });
+}
+
 #[test]
 fn a_group_operation_waits_for_the_one_out_to_end() {
     installed(|mint| {
@@ -4686,7 +4856,13 @@ fn a_group_operation_waits_for_the_one_out_to_end() {
                 .any(|seen| matches!(seen, Seen::InstallGroup(_) | Seen::ReplaceGroup(_))),
             "no second group operation while the removal is out"
         );
-        world.input(at(52), StaInput::GroupKeyEnded { place });
+        world.input(
+            at(52),
+            StaInput::GroupKeyEnded {
+                place,
+                outcome: StaKeyOutcome::Done,
+            },
+        );
         world.run(at(52));
         assert!(
             world
@@ -4732,10 +4908,22 @@ fn each_removal_preserves_its_stations_current_replay() {
             let current_b = GroupKeyId::new(2).unwrap();
             assert!(b.replay().has_group(current_b));
             // Each removal's end reaches its own station, by its place.
-            a.station
-                .input(at(52), StaInput::GroupKeyEnded { place: place_a }, &mut ());
-            b.station
-                .input(at(52), StaInput::GroupKeyEnded { place: place_b }, &mut ());
+            a.station.input(
+                at(52),
+                StaInput::GroupKeyEnded {
+                    place: place_a,
+                    outcome: StaKeyOutcome::Done,
+                },
+                &mut (),
+            );
+            b.station.input(
+                at(52),
+                StaInput::GroupKeyEnded {
+                    place: place_b,
+                    outcome: StaKeyOutcome::Done,
+                },
+                &mut (),
+            );
             assert!(
                 b.station
                     .keys
@@ -4759,10 +4947,22 @@ fn freed_removal_places_are_reused_without_losing_installed_keys() {
             let (mut b, ptk_b) = wpa2_connected::<2>(mint_b);
             let place_a = take_group_removal(&mut a, &ptk_a, 4, 3, at(51));
             let place_b = take_group_removal(&mut b, &ptk_b, 3, 2, at(51));
-            a.station
-                .input(at(52), StaInput::GroupKeyEnded { place: place_a }, &mut ());
-            b.station
-                .input(at(52), StaInput::GroupKeyEnded { place: place_b }, &mut ());
+            a.station.input(
+                at(52),
+                StaInput::GroupKeyEnded {
+                    place: place_a,
+                    outcome: StaKeyOutcome::Done,
+                },
+                &mut (),
+            );
+            b.station.input(
+                at(52),
+                StaInput::GroupKeyEnded {
+                    place: place_b,
+                    outcome: StaKeyOutcome::Done,
+                },
+                &mut (),
+            );
             // A subsequent installation reuses the freed place without
             // overwriting the still-current record.
             a.hold_key_installs = false;
@@ -4786,7 +4986,13 @@ fn a_removal_issued_before_leave_frees_its_place_after_leave() {
         world.command(at(52), 2, StaCommand::Disconnect).unwrap();
         world.run(at(52));
         assert!(matches!(world.station.state, State::Leave(_)));
-        world.input(at(53), StaInput::GroupKeyEnded { place });
+        world.input(
+            at(53),
+            StaInput::GroupKeyEnded {
+                place,
+                outcome: StaKeyOutcome::Done,
+            },
+        );
         world.run(at(53));
         assert!(world.station.keys.clear());
         assert!(matches!(world.station.state, State::Idle));
@@ -5052,7 +5258,10 @@ fn the_pairwise_installation_names_the_associations_spp() {
             world.receive(at(33), &eapol_frame(message3.as_bytes()));
             assert_eq!(world.pending_installs.len(), 1, "GTK waits for the PTK");
             let installed = world.pending_installs.pop().unwrap();
-            assert!(matches!(installed, StaInput::PairwiseKeyEnded));
+            assert!(matches!(
+                installed,
+                StaInput::PairwiseKeyEnded(StaKeyOutcome::Done)
+            ));
             assert_eq!(world.pairwise_spp, Some(expected));
             world.hold_key_installs = false;
             world.input(at(33), installed);

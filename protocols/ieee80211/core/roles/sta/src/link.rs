@@ -54,8 +54,8 @@ pub use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 use crate::data::MsduDelivery;
 use crate::epoch::LinkEpoch;
 use crate::machine::{
-    EapolProtection, StaCallbacks, StaEapol, StaFrame, StaFrames, StaInput, StaReceived,
-    StaRxError, StaTransmit, StaTypes, Station, TxRefusal, sta_frame,
+    EapolProtection, StaCallbacks, StaEapol, StaFrame, StaFrames, StaInput, StaKeyOutcome,
+    StaReceived, StaRxError, StaTransmit, StaTypes, Station, TxRefusal, sta_frame,
 };
 use crate::receive::{Received, sort};
 use oer_protocols_ieee80211_core_datapath::numbers::{LinkSpace, TxNumbers};
@@ -455,17 +455,22 @@ impl<P> LinkHandover<P> {
     /// the link's connection switches its key ID's replay lane to the new
     /// key (the old installation keeps its lane for the station), a
     /// replacement of another key ID ends that ID's lane, and the removal of
-    /// an active key ends its lane. Any other input is left as it is.
+    /// an active key ends its lane. An installation, replacement or selection
+    /// that expired switches nothing. Any other input is left as it is.
     pub fn group_terminal<T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>(
         &mut self,
         station: &mut Station<'_, T, K, C>,
         input: &StaInput<'_, T, K>,
     ) {
-        let StaInput::GroupKeyEnded { place } = input else {
+        let StaInput::GroupKeyEnded { place, outcome } = input else {
             return;
         };
-        if let Some(lane) = station.group_lane(*place) {
-            self.group_lane(lane);
+        match station.group_lane(*place) {
+            // A removal ends its lane however it ended.
+            Some(lane @ GroupLane::Removed(_)) => self.group_lane(lane),
+            // An installation that expired took no lane.
+            Some(lane) if *outcome == StaKeyOutcome::Done => self.group_lane(lane),
+            _ => {}
         }
     }
 

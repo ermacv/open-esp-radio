@@ -29,7 +29,8 @@ link-ending reason. Correlation is caller data and confers no authority.
 After the port's stop, `Station::finish` ends the run in place: every
 accepted request ends, the station's channel places go back to the arbiter
 (`StationPlaceReturns`) and the station owes no configuration, key removal or
-frame to the stopped port. `Station::poll_output` then gives the requests'
+frame to the stopped port. A frame out at the finish keeps its place until
+its end arrives, across a restart. `Station::poll_output` then gives the requests'
 ends and the one lifecycle notice, and `Station::take_deferred` the frames
 its RSN deferred. The stopped arbiter consumes the places and the cancelled
 lease returns, then hands out the complete `StationPlaces`;
@@ -546,9 +547,19 @@ Material comparison borrows those bytes; this makes no claim about
 arbitrary compiler temporaries or copies made inside hardware adapters.
 
 One group operation in progress excludes another mutation without blocking
-RX. Its end comes back with its place (`StaInput::GroupKeyEnded`); the
-station keeps the operation's record (key ID, material, replay lane) and
-matches the end against it. Until that end RX updates the old epoch. New material starts at KeyRSC
+RX. Its end comes back with its place and its outcome
+(`StaInput::GroupKeyEnded`); the station keeps the operation's record (key
+ID, material, replay lane) and matches the end against it. Until that end RX
+updates the old epoch.
+
+A key operation's end carries `StaKeyOutcome`: done, or expired at its
+bound. An installation, replacement or selection that expired ends its
+connection attempt as a failed handshake (`HandshakeFailed`): the station
+holds no key it asked for there (a selected installation stays, not
+current), the link's replay lanes stay as they were, and the leave removes
+what remains. A removal that expired ends as a done one: the station holds
+the key no longer, so a leave or a restart's reclaim never waits for it
+again. New material starts at KeyRSC
 there, even below the old frontier. Selecting retained identical material
 consumes its concrete installed owner and restores that record's live replay
 frontiers; it performs no material write or counter initialization. Repeating
