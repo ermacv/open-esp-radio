@@ -264,52 +264,74 @@ impl Fatal<'_> {
 /// a correctness requirement; the proof grants no peripheral takeover.
 pub fn fatal(fatal_path: impl for<'a> FnOnce(Fatal<'a>)) -> ! {
     fatal_with(
-        || {
-            #[cfg(target_arch = "riscv32")]
-            let _ = oer_portable_riscv::swap_interrupt_threshold(u8::MAX);
-        },
-        || {
-            #[cfg(target_arch = "riscv32")]
-            oer_portable_riscv::disable_interrupts();
-        },
+        mask_threshold,
+        disable_interrupts,
         current_hart,
         fatal_path,
-        || {
-            #[cfg(target_arch = "riscv32")]
-            oer_portable_riscv::disable_interrupts();
-            loop {
-                #[cfg(target_arch = "riscv32")]
-                oer_portable_riscv::wait_for_interrupt();
-                #[cfg(not(target_arch = "riscv32"))]
-                #[allow(
-                    clippy::disallowed_methods,
-                    reason = "the host has no WFI; this fatal path is terminal"
-                )]
-                core::hint::spin_loop();
-            }
-        },
+        halt,
     )
+}
+
+/// The CLIC threshold at its maximum. Functions of this module rather than
+/// closures of [`fatal`]: a closure of a generic function is a type of each
+/// instance, and these keep one body for every fatal path.
+fn mask_threshold() {
+    #[cfg(target_arch = "riscv32")]
+    let _ = oer_portable_riscv::swap_interrupt_threshold(u8::MAX);
+}
+
+/// `mstatus.MIE` clear.
+fn disable_interrupts() {
+    #[cfg(target_arch = "riscv32")]
+    oer_portable_riscv::disable_interrupts();
+}
+
+/// The terminal wait.
+fn halt() -> core::convert::Infallible {
+    #[cfg(target_arch = "riscv32")]
+    oer_portable_riscv::disable_interrupts();
+    loop {
+        #[cfg(target_arch = "riscv32")]
+        oer_portable_riscv::wait_for_interrupt();
+        #[cfg(not(target_arch = "riscv32"))]
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "the host has no WFI; this fatal path is terminal"
+        )]
+        core::hint::spin_loop();
+    }
 }
 
 /// Keep the mask, record/reset and terminal wait in order; host tests supply
 /// a local hart model and a terminal observer.
-fn fatal_with(
-    mask_threshold: impl FnOnce(),
-    disable_interrupts: impl FnOnce(),
-    identify: impl FnOnce() -> Result<Hart, Fault>,
+fn fatal_with<M: FnOnce(), D: FnOnce(), I: FnOnce() -> Result<Hart, Fault>>(
+    mask_threshold: M,
+    disable_interrupts: D,
+    identify: I,
     fatal_path: impl for<'a> FnOnce(Fatal<'a>),
     halt: impl FnOnce() -> core::convert::Infallible,
 ) -> ! {
-    mask_threshold();
-    disable_interrupts();
-    // No access of the fatal path moves before the mask.
-    core::sync::atomic::compiler_fence(Ordering::SeqCst);
+    let hart = masked(mask_threshold, disable_interrupts, identify);
     fatal_path(Fatal {
-        hart: identify(),
+        hart,
         _path: PhantomData,
         _hart: PhantomData,
     });
     match halt() {}
+}
+
+/// Mask, then identify the hart: one body for every fatal path of the image.
+#[inline(never)]
+fn masked<M: FnOnce(), D: FnOnce(), I: FnOnce() -> Result<Hart, Fault>>(
+    mask_threshold: M,
+    disable_interrupts: D,
+    identify: I,
+) -> Result<Hart, Fault> {
+    mask_threshold();
+    disable_interrupts();
+    // No access of the fatal path moves before the mask.
+    core::sync::atomic::compiler_fence(Ordering::SeqCst);
+    identify()
 }
 
 /// Why a fatal path did not stop the world.

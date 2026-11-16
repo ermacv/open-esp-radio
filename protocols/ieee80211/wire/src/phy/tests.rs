@@ -499,3 +499,126 @@ fn an_offset_past_the_counting_range_is_refused() {
     let dsss = PhyRate::Legacy(LegacyRate::Dsss1M);
     assert!(dsss.psdu_octet_sent_nanos(u32::MAX).is_some());
 }
+
+/// The rate's values as the table of every case gave them before they were
+/// arithmetic over small tables: the reference, kept only here.
+macro_rules! reference_he_rate_parameters {
+    ($rate:expr, $value:ident) => {{
+        macro_rules! streams {
+            ($numerator:expr, $denominator:literal) => {
+                match ($rate.spatial_streams.0, $rate.dcm) {
+                    (1, false) => $value!($numerator * 1_u64, $denominator * 1_u64),
+                    (1, true) => $value!($numerator * 1_u64, $denominator * 2_u64),
+                    (2, false) => $value!($numerator * 2_u64, $denominator * 1_u64),
+                    (2, true) => $value!($numerator * 2_u64, $denominator * 2_u64),
+                    (3, false) => $value!($numerator * 3_u64, $denominator * 1_u64),
+                    (3, true) => $value!($numerator * 3_u64, $denominator * 2_u64),
+                    (4, false) => $value!($numerator * 4_u64, $denominator * 1_u64),
+                    (4, true) => $value!($numerator * 4_u64, $denominator * 2_u64),
+                    (5, false) => $value!($numerator * 5_u64, $denominator * 1_u64),
+                    (5, true) => $value!($numerator * 5_u64, $denominator * 2_u64),
+                    (6, false) => $value!($numerator * 6_u64, $denominator * 1_u64),
+                    (6, true) => $value!($numerator * 6_u64, $denominator * 2_u64),
+                    (7, false) => $value!($numerator * 7_u64, $denominator * 1_u64),
+                    (7, true) => $value!($numerator * 7_u64, $denominator * 2_u64),
+                    (_, false) => $value!($numerator * 8_u64, $denominator * 1_u64),
+                    (_, true) => $value!($numerator * 8_u64, $denominator * 2_u64),
+                }
+            };
+        }
+        macro_rules! modulation {
+            ($subcarriers:literal) => {
+                match $rate.mcs.0 {
+                    0 => streams!($subcarriers * 1_u64 * 1_u64, 2),
+                    1 => streams!($subcarriers * 2_u64 * 1_u64, 2),
+                    2 => streams!($subcarriers * 2_u64 * 3_u64, 4),
+                    3 => streams!($subcarriers * 4_u64 * 1_u64, 2),
+                    4 => streams!($subcarriers * 4_u64 * 3_u64, 4),
+                    5 => streams!($subcarriers * 6_u64 * 2_u64, 3),
+                    6 => streams!($subcarriers * 6_u64 * 3_u64, 4),
+                    7 => streams!($subcarriers * 6_u64 * 5_u64, 6),
+                    8 => streams!($subcarriers * 8_u64 * 3_u64, 4),
+                    9 => streams!($subcarriers * 8_u64 * 5_u64, 6),
+                    10 => streams!($subcarriers * 10_u64 * 3_u64, 4),
+                    _ => streams!($subcarriers * 10_u64 * 5_u64, 6),
+                }
+            };
+        }
+        match $rate.bandwidth {
+            PpduBandwidth::Mhz20 => modulation!(234_u64),
+            PpduBandwidth::Mhz40 => modulation!(468_u64),
+            PpduBandwidth::Mhz80 => modulation!(980_u64),
+            PpduBandwidth::Mhz160 => modulation!(1_960_u64),
+        }
+    }};
+}
+
+fn reference_kbps(rate: HeRate) -> u32 {
+    macro_rules! kbps {
+        ($numerator:expr, $denominator:expr) => {{
+            let symbol = match rate.gi_ltf {
+                HeGiLtf::Ltf1xGi800Ns | HeGiLtf::Ltf2xGi800Ns => 13_600,
+                HeGiLtf::Ltf2xGi1600Ns => 14_400,
+                HeGiLtf::Ltf4xGi3200Ns => 16_000,
+            };
+            ($numerator * 1_000_000 / ($denominator * symbol)) as u32
+        }};
+    }
+    reference_he_rate_parameters!(rate, kbps)
+}
+
+fn reference_fraction(rate: HeRate) -> (u64, u64) {
+    macro_rules! fraction {
+        ($numerator:expr, $denominator:expr) => {
+            ($numerator, $denominator)
+        };
+    }
+    reference_he_rate_parameters!(rate, fraction)
+}
+
+/// Every HE rate `HeRate::new` admits keeps its nominal rate and its exact
+/// N_DBPS fraction.
+#[test]
+fn every_he_rate_keeps_its_nominal_rate_and_its_data_bits_per_symbol() {
+    let mut rates = 0;
+    for mcs in 0..=11 {
+        for streams in 1..=8 {
+            for bandwidth in [
+                PpduBandwidth::Mhz20,
+                PpduBandwidth::Mhz40,
+                PpduBandwidth::Mhz80,
+                PpduBandwidth::Mhz160,
+            ] {
+                for gi_ltf in [
+                    HeGiLtf::Ltf1xGi800Ns,
+                    HeGiLtf::Ltf2xGi800Ns,
+                    HeGiLtf::Ltf2xGi1600Ns,
+                    HeGiLtf::Ltf4xGi3200Ns,
+                ] {
+                    for fec in [FecCoding::Bcc, FecCoding::Ldpc] {
+                        for dcm in [Dcm::NotUsed, Dcm::Used] {
+                            let Some(rate) = HeRate::new(
+                                HeMcs::new(mcs).unwrap(),
+                                SpatialStreams::new(streams).unwrap(),
+                                bandwidth,
+                                gi_ltf,
+                                fec,
+                                dcm,
+                            ) else {
+                                continue;
+                            };
+                            rates += 1;
+                            assert_eq!(rate.nominal_kbps(), reference_kbps(rate), "{rate:?}");
+                            assert_eq!(
+                                rate.data_bits_per_symbol(),
+                                reference_fraction(rate),
+                                "{rate:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(rates, 12 * 8 * 4 * 4 * 2 + 4 * 2 * 4 * 4 * 2);
+}
