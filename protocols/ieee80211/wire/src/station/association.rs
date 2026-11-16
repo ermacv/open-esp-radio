@@ -135,18 +135,6 @@ pub struct HtCapabilityElements {
     pub mhz40: [u8; 28],
 }
 
-impl HtCapabilityElements {
-    /// The element for `width`: a 40 MHz geometry takes the 40 MHz one.
-    pub const fn at(&self, width: crate::channel::ChannelWidth) -> &[u8; 28] {
-        match width {
-            crate::channel::ChannelWidth::Mhz20 => &self.mhz20,
-            crate::channel::ChannelWidth::Mhz40Above | crate::channel::ChannelWidth::Mhz40Below => {
-                &self.mhz40
-            }
-        }
-    }
-}
-
 /// The capability elements selected by the caller's association policy.
 pub struct AssociationElements<'a> {
     /// The complete local HT Capability element when selected.
