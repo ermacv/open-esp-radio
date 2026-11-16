@@ -4197,11 +4197,10 @@ fn issues_a_proof(word: &str) -> bool {
 }
 
 /// Whether production code of the package at `path`, in `file`, may make a
-/// proof: a port's implementation (the S31 backend's port) and the testing
-/// packages (the reference model, the conformance suite's forged proof).
+/// proof: the testing packages (the reference model, the conformance
+/// suite's forged proof).
 fn may_issue_proofs(file: &str) -> bool {
-    file.starts_with("chips/esp32s31/radio/ieee80211/backend/src/port")
-        || file.starts_with("protocols/ieee80211/testing/")
+    file.starts_with("protocols/ieee80211/testing/")
 }
 
 /// Only a port issues a proof of its state: outside its implementation and
@@ -4819,16 +4818,11 @@ const BOOL_TRAIT_METHODS: &[(&str, &str)] = &[
     ("DataPort::lend_room", P3),
     ("DataPortHarness::publish_held_arena", HARNESS),
     ("DataPortHarness::take_configured", HARNESS),
-    ("Device::cut_held_by_units", P3),
-    ("Device::event_waiting", P3),
     ("Device::is_running", P2),
-    ("Device::returns_quiet", P3),
     (
         "Diagnostics::on",
         "predicate: the switchable diagnostics are on",
     ),
-    ("DriverEnv::reject_group_replacement", P3),
-    ("DriverEnv::stopping", P2),
     ("EarlyText::text", "predicate: the bytes are whole text"),
     ("EndpointRegisters::has_data", SAMPLED_BIT),
     ("EndpointRegisters::has_room", SAMPLED_BIT),
@@ -5949,7 +5943,7 @@ const ERROR_STATES: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/radio/ieee80211/backend/src/port.rs",
+        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs",
         1,
         BY_P3,
     ),
@@ -6094,17 +6088,7 @@ const STATUS_FAILURES: &[(&str, usize, &str)] = &[
         BY_RADIO_SYSTEM,
     ),
     (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs",
-        1,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/radio/ieee80211/backend/src/mac/tx.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs",
         1,
         BY_P3,
     ),
@@ -6431,26 +6415,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs",
-        8,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs",
-        4,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/keys.rs",
-        1,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle.rs",
-        1,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/epoch.rs",
         7,
         BY_P3,
@@ -6493,26 +6457,6 @@ const KEPT_OUT: &[(&str, usize, &str)] = &[
     (
         "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs",
         7,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs",
-        2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/runtime.rs",
-        1,
         BY_P3,
     ),
     (
@@ -7057,11 +7001,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
         BY_P3,
     ),
     (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs",
-        3,
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/radio/ieee80211/backend/src/mac/rx/prefix.rs",
         1,
         BY_P3,
@@ -7069,11 +7008,6 @@ const RAW_REGISTERS: &[(&str, usize, &str)] = &[
     (
         "chips/esp32s31/radio/ieee80211/backend/src/mac/tx/metadata.rs",
         2,
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs",
-        3,
         BY_P3,
     ),
     (
@@ -8771,46 +8705,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::LowerMacCore.fault",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac.rs::LowerMacCore.tbtt",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/ampdu.rs::AmpduBudget.he",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Chain.admission",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Esp32s31TxArena.fault",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::Esp32s31TxArena.program",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::OnAir.retry",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/arena.rs::SingleRetry.air_rate",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs::CoreOwner.bank",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/lower_mac/lifecycle/bank.rs::VacantView.bank",
-        BY_P3,
-    ),
-    (
         "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/consumer.rs::IrqPublication.receive",
         BY_P3,
     ),
@@ -8876,142 +8770,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
     ),
     (
         "chips/esp32s31/radio/ieee80211/backend/src/ordinary_tx.rs::OrdinaryTxReport.completion",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::Buffer.admission",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::Buffer.loan",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::Execution.beacon",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::NetworkBuffer.admission",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/buffer.rs::NetworkBuffer.loan",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.active",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.actor",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.continuation",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.failed_retune",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.power",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::RadioDevice.retune",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/device.rs::StallOwner.after",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.arena",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.barrier",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.closing",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.configuring",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.observations",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Driver.retained_group",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.air",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.beacon",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Pending.try_work",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/driver.rs::Sink.tbtt",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.access_point_holding",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.access_point_since",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.deadline",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.fault",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.group_mutator",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.group_since",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.holding",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.receipt",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::Esp32s31Port.waker",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::PortSettings.color",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs::PortSettings.he",
-        BY_P3,
-    ),
-    (
-        "chips/esp32s31/radio/ieee80211/backend/src/port/keys.rs::Removing.place",
         BY_P3,
     ),
     (

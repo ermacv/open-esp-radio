@@ -524,15 +524,9 @@ queued operations, including queues held by the model air, and a quarantine
 keeps every owner the port holds. Hardware backends provide the same
 resource and terminal contract.
 
-The S31 driver implements the data port, not yet the access-point role: it
-mints the access point's permissions and its station-only split drops them.
-It implements this contract in its
-[`port` module](../../../../chips/esp32s31/radio/ieee80211/backend/src/port.rs)
-(`Esp32s31Port`, statically dispatched). It drives `LowerMacCore`,
-cooperative registers and the RX ring; P3 posts only static typed signals.
-The image supplies the timer, entropy and opaque contexts. Ordinary MPDUs
-retain caller-supplied PNs and external bodies; a reinstallation starts from
-the stopped resources.
+No chip implements this contract: the S31 backend has no port. The
+reference model and the shared conformance cases are its only
+implementation.
 
 Station group-key slots are fungible, affine resources. The backend stores
 and returns each raw slot with its installed key; it carries no station-cell

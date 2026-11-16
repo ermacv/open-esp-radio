@@ -1,8 +1,7 @@
 //! Host model of the hardware atoms under the real backend (test support).
 //!
-//! The port, the device, the receive session and the HAL's DMA owners run
-//! unchanged above it: [`ModelRegisters`] stands where the chip has
-//! `RadioAccess`, [`ModelFrontier`] where it has `WifiStopped`, the HAL's
+//! The receive session and the HAL's DMA owners run unchanged above it:
+//! [`ModelRegisters`] stands where the chip has `RadioAccess`, the HAL's
 //! `RxWalkerModel` (through its `SharedRxWalker`) under the walker and
 //! [`MacInterruptModel`] under the line. A test plays the air: it reads the
 //! PPDUs ([`Atoms::take_air`]), ends them ([`Atoms::end_ppdu`]) and lands
@@ -40,7 +39,7 @@
 //! A call outside these rules goes in [`Atoms::rule_breaks`], for the test to
 //! fail on: the model answers the product without panicking.
 
-use core::{cell::RefCell, convert::Infallible, task::Poll};
+use core::cell::RefCell;
 use std::{boxed::Box, rc::Rc, vec, vec::Vec};
 
 use oer_chips_esp32s31_hal::{
@@ -52,7 +51,6 @@ use oer_chips_esp32s31_hal::{
         space::HostDma,
         tx_storage::{CommitTxDma, TxChainUnreadable},
     },
-    system::owner::maintenance,
     types::{
         MacCcmpKeyIdentity, MacHeTbLinkReservation, MacHeTbProgramError, MacHeTbTidLimit, MacHeTid,
         MacHeTriggerTxQueueSnapshot, MacHeTxProgram, MacHtAmpduCompletionObservation,
@@ -67,14 +65,12 @@ use oer_chips_family_platform_interrupt_table::{
     Context as HandlerContext, signal::SignalExecutor,
 };
 use oer_portable_memory::{HandlerCell, PreparedTxDma};
-use oer_protocols_ieee80211_contracts_port::RegulatedChannel;
-use oer_protocols_ieee80211_wire::{channel::Ghz2_4Channel, sequence::SequenceNumber};
-use oer_protocols_radio_regulatory::{Permitted, TxCeiling};
+use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use crate::{
     cooperative_hardware::ReceiveRegisters,
+    facts::{RxBeaconPriorityHardware, StationTbttHardware, TxGateHardware},
     irq::{DoorbellAcknowledge, RadioDoorbell, WifiIrqLine, WifiIrqPart, WifiIrqRequests},
-    lower_mac::{RxBeaconPriorityHardware, StationTbttHardware, TxGateHardware},
     mac::{
         ap_policy::ApRxPolicyHardware,
         ap_tsf::{AccessPointTsfWrite, ApTsfHardware},
@@ -93,7 +89,6 @@ use crate::{
         tx::{TxHardware, ampdu::HtAmpduHardware},
     },
     ordinary_tx::{WifiTxPowerPair, WifiTxPowerProfile},
-    port::{WifiRetuneError, device::Frontier, device::RetuneEnd},
     station_tsf::{StationTsfHardware, StationTsfWrite},
 };
 
@@ -852,7 +847,7 @@ impl TxGateHardware for ModelRegisters {
     }
 }
 
-impl crate::lower_mac::StaHeHardware for ModelRegisters {
+impl crate::facts::StaHeHardware for ModelRegisters {
     fn connect_he20_bss(
         &mut self,
         color: oer_chips_esp32s31_hal::types::MacHeBssColor,
@@ -904,65 +899,6 @@ impl WifiTxPowerProfile for ModelPower {
             primary: 8,
             alternate: 8,
         }
-    }
-}
-
-/// The stopped radio's owner over the model: where the chip has
-/// `WifiStopped`. The model has no radio system: a start on another channel
-/// is a retune it refuses, with the radio changed in nothing.
-pub struct ModelFrontier {
-    registers: ModelRegisters,
-    channel: Ghz2_4Channel,
-}
-
-impl ModelFrontier {
-    pub const fn new(registers: ModelRegisters, channel: Ghz2_4Channel) -> Self {
-        Self { registers, channel }
-    }
-
-    pub const fn channel(&self) -> Ghz2_4Channel {
-        self.channel
-    }
-}
-
-impl Frontier for ModelFrontier {
-    type Registers = ModelRegisters;
-    type Space = HostDma;
-    type Calibrated = ModelPower;
-    type Context = Ghz2_4Channel;
-    type Cell = ();
-    type Retune = Option<Self>;
-    type Failed = Infallible;
-    fn into_running(self) -> (ModelRegisters, Ghz2_4Channel) {
-        (self.registers, self.channel)
-    }
-    fn into_stopped(registers: ModelRegisters, channel: Ghz2_4Channel) -> Self {
-        Self { registers, channel }
-    }
-    fn current_channel(context: &Ghz2_4Channel) -> Ghz2_4Channel {
-        *context
-    }
-    fn start_retune(
-        self,
-        (): (),
-        _channel: Permitted<RegulatedChannel<Ghz2_4Channel>>,
-        _ceiling: TxCeiling,
-    ) -> Option<Self> {
-        self.registers.atoms.unmodelled("start_retune");
-        Some(self)
-    }
-    fn poll_retune(
-        retune: &mut Option<Self>,
-        _cx: &mut core::task::Context<'_>,
-    ) -> Poll<RetuneEnd<Self>> {
-        Poll::Ready(match retune.take() {
-            Some(stopped) => RetuneEnd::Unchanged {
-                stopped,
-                cell: (),
-                cause: WifiRetuneError::NotStopped(maintenance::Error::RxWalkerEnabled),
-            },
-            None => RetuneEnd::Abandoned,
-        })
     }
 }
 

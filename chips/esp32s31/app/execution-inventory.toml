@@ -692,24 +692,6 @@ site = "chips/esp32s31/radio/phy/src/sar_pilot.rs"
 anchor = "let bundle = core::future::poll_fn(|cx: &mut Context<'_>| {"
 
 [[wait]]
-id = "network-lent-return"
-cfg = "feature = \"wifi\""
-waiter = "datapath actor, lend capacity and returned receive units"
-served_by = "the task dropping a network-owned LentReceive returns memory, lowers held count and notifies the actor unless quiet suppresses notification for another selected ring service"
-condition = "NetworkCredit::poll_count registers before checking held; lend room needs held below its limit and full return needs held == 0"
-held = "the network owns each lent receive unit until drop; the actor retains the remaining receive ring and staged frames"
-bound = "normal lend-room and return waits have no local timeout; the retiring-stop wait has its separate deadline below"
-state = "read"
-
-[[wait.evidence]]
-site = "chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs"
-anchor = "fn poll_count(&self, cx: &mut Context<'_>, ready: impl Fn(usize) -> bool) -> Poll<()> {"
-
-[[wait.evidence]]
-site = "chips/esp32s31/radio/ieee80211/backend/src/port/lent.rs"
-anchor = "impl<P: LentNotifies> Drop for ReturnOnDrop<P> {"
-
-[[wait]]
 id = "application-send"
 cfg = ""
 waiter = "application or group End::send"
@@ -754,10 +736,6 @@ condition = "an active port polls device events and RX work; signal polling regi
 held = "the actor/port retain installed radio, RX/TX custody and queued work while idle"
 bound = "an idle fact wait has no timeout; outstanding port, TX arena, receive and stop work supply deadlines through the port's deadline, so missing hardware facts do not imply every active operation waits forever"
 state = "read"
-
-[[wait.evidence]]
-site = "chips/esp32s31/radio/ieee80211/backend/src/port/engines.rs"
-anchor = "fn poll_facts(&mut self, cx: &mut Context<'_>) -> Facts {"
 
 [[wait.evidence]]
 site = "chips/esp32s31/radio/ieee80211/backend/src/mac/irq/consumer.rs"
