@@ -125,8 +125,10 @@ access point offering no admitted format is no candidate: if no access
 point of the network offers one, the join ends with `NoAdmittedFormat`
 before any frame. The decision (`NegotiatedPhy`) goes with the join to the
 request's encoder, which cannot refuse it. The HE Power Capability and HE
-UL-MU power elements are the station's fact (`StaConfig::he_power`), given
-by its composition. An HE association takes
+UL-MU power elements are the scanned channel's (`ScanChannel::he_power`):
+the composition computes one value a channel from its transmit ceiling when
+it builds the configuration, and an HE request carries its channel's. They
+are the scanned primary's because HE is offered at 20 MHz only. An HE association takes
 its HE facts (capabilities, peer state, BSS color) from the Association
 Response's HE Capabilities and HE Operation, which must parse and still admit
 HE20; the scan's elements chose the request only. A response that lacks,

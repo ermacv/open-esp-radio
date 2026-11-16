@@ -25,9 +25,10 @@ pub fn he_admitted(access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord
         .is_ok()
 }
 
-/// The power elements an HE Association Request carries: the Power
-/// Capability and the HE UL-MU power capability, from the composition's
-/// calibrated transmit power.
+/// The power elements an HE Association Request carries on one channel:
+/// the Power Capability and the HE UL-MU power capability, which the
+/// composition computes from that channel's transmit ceiling
+/// ([`crate::machine::ScanChannel`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct StaHePower {
     pub power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability,

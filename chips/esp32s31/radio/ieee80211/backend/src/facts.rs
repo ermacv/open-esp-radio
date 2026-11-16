@@ -18,6 +18,7 @@ use oer_protocols_ieee80211_wire::{
 };
 
 pub mod ampdu;
+pub mod he_power;
 pub use ampdu::{
     ESP32S31_AMPDU_LENGTHS, ESP32S31_AMPDU_MAX_LENGTH, esp32s31_ampdu_capabilities,
     esp32s31_ampdu_length, protection_spacing,
