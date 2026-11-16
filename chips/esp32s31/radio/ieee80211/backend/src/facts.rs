@@ -14,6 +14,12 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs};
 
+pub mod ampdu;
+pub use ampdu::{
+    ESP32S31_AMPDU_LENGTHS, ESP32S31_AMPDU_MAX_LENGTH, esp32s31_ampdu_capabilities,
+    esp32s31_ampdu_length, protection_spacing,
+};
+
 /// Number of frame positions carried by the port's `u32` retry/aging masks.
 pub const AMPDU_SUBFRAME_MASK_BITS: usize = u32::BITS as usize;
 
@@ -311,3 +317,12 @@ pub struct ConnectionFramePriorities {
     pub packet: u8,
     pub scheduler: u8,
 }
+
+/// The station's pairwise key slots.
+pub const STATION_PAIRWISE_SLOTS: usize = 1;
+/// The station's receive-only group key slots.
+pub const STATION_GROUP_SLOTS: usize = 1;
+/// The access point's pairwise key slots, one per association.
+pub const ACCESS_POINT_PAIRWISE_SLOTS: usize = 15;
+/// The access point's group key slots.
+pub const ACCESS_POINT_GROUP_SLOTS: usize = 3;
