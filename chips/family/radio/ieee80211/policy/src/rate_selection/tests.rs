@@ -91,7 +91,7 @@ fn metric(db: i8) -> Measured {
 
 fn legacy_peer() -> RatePeer {
     RatePeer {
-        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode { format: oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt, width: oer_protocols_ieee80211_contracts_port::Width::Mhz20 },
+        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::NonHt.mode(),
         legacy_rates:
             oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                 &[2, 4, 11, 22, 12, 18, 24, 36],
@@ -108,7 +108,7 @@ fn ht20_peer() -> RatePeer {
     let mut element = [0_u8; 28];
     element[..6].copy_from_slice(&[45, 26, 0x20, 0, 0x17, 0xff]);
     RatePeer {
-        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode { format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht, width: oer_protocols_ieee80211_contracts_port::Width::Mhz20 },
+        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::Ht { width: oer_protocols_ieee80211_contracts_port::Width::Mhz20 }.mode(),
         legacy_rates:
             oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                 &[2, 4, 11, 22, 12, 18, 24, 36],
@@ -380,7 +380,7 @@ fn ht40_peer() -> RatePeer {
     let mut element = [0_u8; 28];
     element[..6].copy_from_slice(&[45, 26, 0x02, 0, 0x17, 0xff]);
     RatePeer {
-        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode { format: oer_protocols_ieee80211_contracts_port::PhyFormat::Ht, width: oer_protocols_ieee80211_contracts_port::Width::Mhz40 },
+        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::Ht { width: oer_protocols_ieee80211_contracts_port::Width::Mhz40 }.mode(),
         legacy_rates:
             oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                 &[2, 4, 11, 22, 12, 18, 24, 36],
@@ -508,10 +508,7 @@ fn a_zero_retry_budget_never_creates_a_transmission() {
 fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
     use oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates;
     let he = RatePeer {
-        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
-            format: oer_protocols_ieee80211_contracts_port::PhyFormat::He,
-            width: oer_protocols_ieee80211_contracts_port::Width::Mhz20,
-        },
+        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
         he_capabilities: Some(
             oer_protocols_ieee80211_wire::he::parse_he_capabilities(&[
                 255, 22, 35, 0x03, 0x18, 0x9c, 0xca, 0x10, 0x80, 0x00, 0x10, 0x8a, 0x1b, 0x0d,
@@ -549,11 +546,7 @@ fn every_data_and_control_rate_belongs_to_the_negotiated_legacy_set() {
                             } else {
                                 assert_ne!(
                                     peer.phy,
-                                    oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
-                                        format:
-                                            oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
-                                        width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
-                                    }
+                                    oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::NonHt.mode()
                                 );
                             }
                         }

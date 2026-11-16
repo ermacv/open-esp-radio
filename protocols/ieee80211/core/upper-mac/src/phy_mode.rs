@@ -5,11 +5,24 @@ use oer_protocols_ieee80211_wire::station::{
     AssociationCapabilities, AssociationPhyElements, HeUlMuPowerCapability, StaPowerCapability,
 };
 
-/// The PHY of one association: a format and a channel width.
+/// The PHY of one association: a format and a channel width, as a
+/// negotiation decided them ([`NegotiatedPhy::mode`]), its only maker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhyMode {
-    pub format: PhyFormat,
-    pub width: Width,
+    format: PhyFormat,
+    width: Width,
+}
+
+impl PhyMode {
+    /// The format.
+    pub const fn format(self) -> PhyFormat {
+        self.format
+    }
+
+    /// The width.
+    pub const fn width(self) -> Width {
+        self.width
+    }
 }
 
 /// The PHY a join decided with its access point, before its request: what

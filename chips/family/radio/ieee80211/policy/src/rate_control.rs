@@ -1300,7 +1300,7 @@ impl RateControl for EspressifRateControl {
 
     fn for_peer((): (), peer: &RatePeer, link_metric: LinkMetric) -> Self {
         let he = peer.he_capabilities;
-        let phy = match peer.phy.format {
+        let phy = match peer.phy.format() {
             PhyFormat::NonHt if !peer.legacy_rates.has_ofdm() => StaRateControlPhy::Dot11B,
             PhyFormat::NonHt => StaRateControlPhy::Dot11G,
             PhyFormat::Ht => StaRateControlPhy::Ht,
@@ -1309,7 +1309,7 @@ impl RateControl for EspressifRateControl {
         // As the vendor station: an HE peer's maximum one-stream MCS, capped
         // at MCS 9.
         let peer_highest_rate = he
-            .filter(|_| peer.phy.format == PhyFormat::He)
+            .filter(|_| peer.phy.format() == PhyFormat::He)
             .and_then(|capability| match capability.receive_nss1() {
                 HeMcsNssSupport::Mcs0To7 => HeMcs::new(7),
                 HeMcsNssSupport::Mcs0To9 | HeMcsNssSupport::Mcs0To11 => HeMcs::new(9),
@@ -1331,17 +1331,16 @@ impl RateControl for EspressifRateControl {
                     .is_some_and(HePeerState::extended_range_single_user_permitted),
             },
         });
-        let (ht_bandwidth, width) =
-            if peer.phy.format == PhyFormat::Ht && peer.phy.width == Width::Mhz40 {
-                (PpduBandwidth::Mhz40, ChannelWidth::Mhz40Above)
-            } else {
-                (PpduBandwidth::Mhz20, ChannelWidth::Mhz20)
-            };
+        let (ht_bandwidth, width) = if peer.phy.width() == Width::Mhz40 {
+            (PpduBandwidth::Mhz40, ChannelWidth::Mhz40Above)
+        } else {
+            (PpduBandwidth::Mhz20, ChannelWidth::Mhz20)
+        };
         Self {
             association,
             decode: RateDecode {
                 legacy_rates: peer.legacy_rates,
-                high_throughput: peer.phy.format != PhyFormat::NonHt,
+                high_throughput: peer.phy.format() != PhyFormat::NonHt,
                 ht_bandwidth,
                 ht_short_gi: peer
                     .ht_capabilities

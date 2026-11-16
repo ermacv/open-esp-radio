@@ -1880,7 +1880,7 @@ fn tx_agreements<'c, T: StaTypes, K>(
         connected.tx_block_ack = true;
         tx.associate(
             connected.qos
-                && connected.peer.associated.phy.format
+                && connected.peer.associated.phy.format()
                     != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
         );
     }
@@ -5589,7 +5589,7 @@ impl<'s, 'id, T: StaTypes, K: Ieee80211Capabilities, C: StaCallbacks>
                 connected.bssid,
                 action,
                 connected.qos
-                    && connected.peer.associated.phy.format
+                    && connected.peer.associated.phy.format()
                         != oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
             );
             return (

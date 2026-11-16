@@ -1,5 +1,0 @@
-error[E0080]: evaluation panicked: the capability offers no HE at 40 MHz
-  --> tests/ui/he_at_40_mhz.rs:60:17
-   |
-60 | ...   None => panic!("the capability offers no HE at 40 MHz"), // ui-error: E0080: evaluation panicked: the capability offers no HE ...
-   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `HE_AT_40_MHZ` failed here

@@ -345,7 +345,7 @@ impl StaAssociatedPeer {
             .ht_capability_ie_bytes()
             .map_or(0, |capability| capability[4]);
         let (he_capability, he_capabilities, he_peer_state, he_bss_color) =
-            if phy.format == oer_protocols_ieee80211_contracts_port::PhyFormat::He {
+            if phy.format() == oer_protocols_ieee80211_contracts_port::PhyFormat::He {
                 let he = &response.he;
                 if he.unusable() {
                     return Err(StaAssociatedPeerError::HeElementsUnusable);

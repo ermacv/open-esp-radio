@@ -128,8 +128,8 @@ pub use oer_protocols_radio_port::{
 };
 pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
-    AccessPoint, AckHeader, AmpduRate, BssColor, FormatWidth, FrameHeader, GroupAddress,
-    HeaderSpec, Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
+    AccessPoint, AckHeader, AmpduRate, BssColor, FrameHeader, GroupAddress, HeaderSpec,
+    Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
     NoAckHeader, PortRate, QosBody, QosControl, ReceiverAddress, ResponseHeader, ServicePeriod,
     SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck, SupportedChannel,
     SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,

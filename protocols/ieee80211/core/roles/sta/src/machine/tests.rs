@@ -1309,10 +1309,8 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
                     )
                     .unwrap(),
                     channel: 6,
-                    phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
-                        format: oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
-                        width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
-                    },
+                    phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::NonHt
+                        .mode(),
                 }),
                 Seen::Upstream(UpstreamFact::Connected(channel(6))),
             ]
@@ -1323,10 +1321,7 @@ fn a_station_alone_scans_joins_an_open_network_and_leaves_it() {
         let peer = world.station.peer().unwrap();
         assert_eq!(
             peer.associated.phy,
-            oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
-                format: oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
-                width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
-            }
+            oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::NonHt.mode()
         );
         assert_eq!(peer.response, meta);
 
@@ -2467,10 +2462,8 @@ fn a_station_joins_a_wpa2_network_through_the_four_way_handshake() {
                         )
                         .unwrap(),
                         channel: 6,
-                        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode {
-                            format: oer_protocols_ieee80211_contracts_port::PhyFormat::NonHt,
-                            width: oer_protocols_ieee80211_contracts_port::Width::Mhz20
-                        },
+                        phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::NonHt
+                            .mode(),
                     }),
                     Seen::Upstream(UpstreamFact::Connected(channel(6))),
                 ]
