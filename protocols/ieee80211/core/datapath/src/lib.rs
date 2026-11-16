@@ -37,8 +37,7 @@
 //! It holds today the station's data transmission over the port's two
 //! data arenas ([`plane`]), the link's transmit numbers that plane and the
 //! link's holder draw from ([`numbers`]), the MAC's transmit queues
-//! ([`queues`]) and what the plane reports ([`events`]). The engine's
-//! sections come with B3e and B3f.
+//! ([`queues`]) and what the plane reports ([`events`]).
 //!
 //! An MSDU comes in the network's memory, its Ethernet frame where the
 //! plane reads it ([`MSDU_ETHERNET_OFFSET`]), and becomes one MPDU in

@@ -82,6 +82,12 @@ pub struct TxQueues<M, const POOL: usize, const PEERS: usize> {
     dearest: u32,
 }
 
+impl<M, const POOL: usize, const PEERS: usize> Default for TxQueues<M, POOL, PEERS> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
     pub fn new() -> Self {
         const {

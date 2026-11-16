@@ -24,8 +24,6 @@ its own: every instant and every arena is its caller's. It holds today:
   under the station's transmit agreements, and where an MSDU sits in a frame
   region (`MSDU_ETHERNET_OFFSET`).
 
-The engine's sections come with B3e and B3f.
-
 The station's data transmission over the port's two DMA
 arenas (`TxArena`). `DataPlane::handover` takes one link's `DataLink`
 (from the `LinkHandover`: header template, `AcAdmission`, retry policy,
