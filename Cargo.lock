@@ -2642,6 +2642,8 @@ dependencies = [
  "oer-protocols-ieee80211-core-upper-mac",
  "oer-protocols-ieee80211-testing-model",
  "oer-protocols-ieee80211-wire",
+ "oer-protocols-radio-port",
+ "oer-protocols-radio-regulatory",
 ]
 
 [[package]]
