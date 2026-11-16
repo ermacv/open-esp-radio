@@ -1035,6 +1035,7 @@ async fn series(
             .try_start(access.rx_dma())
             .map_err(|_| (phase::SECOND_RING, index32 | 0x8000_0000))?;
         access.wifi_mac_hal().start_mac_runtime(&ring);
+        ring = settle_cycle(storage, ring, &mut access, mac_irq, power_irq)?;
         let counted_second = statistics(&access);
         let units_after = receive(storage, &mut ring, &mut access, RECEIVE_MS)
             .await
@@ -1261,6 +1262,24 @@ fn restart(
     Ok(ring)
 }
 
+/// One ordinary stop and start after a restart that followed the cold
+/// preparation: run 7 found the walker on no descriptor (next 0) and the
+/// MAC counting every MPDU as buffer-full after that first restart, and
+/// reception back after the next ordinary cycle.
+fn settle_cycle(
+    storage: &'static Storage,
+    ring: Ring,
+    access: &mut RadioAccess,
+    mac_irq: &mut MacInterruptRegisters,
+    power_irq: &mut MacPowerInterruptRegisters,
+) -> Result<Ring, Failure> {
+    access.wifi_mac_hal().request_channel_stop();
+    let halted = ring
+        .try_stop(access.rx_dma())
+        .map_err(|_| (phase::RESTART, 0x0800_0002))?;
+    restart(storage, halted, access, mac_irq, power_irq)
+}
+
 /// The phases a recovery case's failure names.
 const CASE_FAILED: u32 = 20;
 
@@ -1323,6 +1342,7 @@ async fn cases(
     cold.map_err(|_| fail(0x02))?;
     (access, clocks_on) = clocked.into_running();
     ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
+    ring = settle_cycle(storage, ring, &mut access, mac_irq, power_irq)?;
     mark(21);
     let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
     record(journal, 0, w, walker(&access.receive_dma_snapshot())[1]);
@@ -1346,6 +1366,7 @@ async fn cases(
     cold.map_err(|_| fail(0x13))?;
     (access, clocks_on) = clocked.into_running();
     ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
+    ring = settle_cycle(storage, ring, &mut access, mac_irq, power_irq)?;
     mark(31);
     let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
     record(journal, 1, w, walker(&access.receive_dma_snapshot())[1]);
@@ -1403,6 +1424,7 @@ async fn cases(
     cold.map_err(|_| fail(0x40))?;
     (access, clocks_on) = clocked.into_running();
     ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
+    ring = settle_cycle(storage, ring, &mut access, mac_irq, power_irq)?;
     mark(51);
     let w = window(storage, &mut ring, &mut access, CASE_WINDOW_MS).await?;
     record(journal, 3, w, walker(&access.receive_dma_snapshot())[1]);
