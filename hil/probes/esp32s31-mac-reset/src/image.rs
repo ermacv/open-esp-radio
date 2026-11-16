@@ -46,10 +46,18 @@ use oer_portable_time::{Clock, Duration, Timer, settle::Settle, settle::SettleLi
 use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 
-/// The descriptors of the receive ring and their buffers, as the RX-chain
-/// probe has them.
+/// The descriptors of the receive ring and their buffers: a frame of the
+/// air takes one or two, and no unit can span the whole ring
+/// (`rx_ring_outspans_any_unit`, which the product's geometry asserts too).
 const COUNT: usize = 32;
-const BUFFER: usize = 128;
+const BUFFER: usize = 1_600;
+const _: () = {
+    if !oer_chips_esp32s31_hal::radio::ieee80211::dma::rx_ring::rx_ring_outspans_any_unit(
+        COUNT, BUFFER,
+    ) {
+        panic!("one receive unit could span the whole ring");
+    }
+};
 const NODES: usize = COUNT + 1;
 const WORDS: usize = BUFFER / 4;
 /// The stand's busy channel.
