@@ -1,0 +1,11 @@
+error[E0080]: evaluation panicked: the capability offers no HE at 40 MHz
+  --> tests/ui/phy_request.rs:66:19
+   |
+66 | ...   Err(_) => panic!("the capability offers no HE at 40 MHz"), // ui-error: E0080: evaluation panicked: the capability offers no H...
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `HE_AT_40_MHZ` failed here
+
+error[E0080]: evaluation panicked: a request admits no format
+  --> tests/ui/phy_request.rs:74:19
+   |
+74 |         Err(_) => panic!("a request admits no format"), // ui-error: E0080: evaluation panicked: a request admits no format
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `NO_FORMAT` failed here

@@ -1,53 +1,200 @@
-//! Association preference among modes admitted by both local and peer profiles.
-//!
-//! The hardware profile decides eligibility, including supported MCS and width.
-//! This policy neither advertises capabilities nor encodes a PHY channel command.
+//! What a station asks an access point for, and what it negotiates with it
+//! from its scan record before any frame: the format once, then the width.
 
-use oer_protocols_ieee80211_core_upper_mac::phy_mode::PhyMode;
+use oer_protocols_ieee80211_contracts_port::{
+    Ieee80211Capabilities, PhyFormat, PhyFormatSet, SupportedChannel, Width,
+};
+use oer_protocols_ieee80211_core_upper_mac::phy_mode::{NegotiatedPhy, PhyMode};
 use oer_protocols_ieee80211_core_upper_mac::protection::{
     BasicRates, BssProtection, HePacketPadding, HeTxopDurationRtsThreshold,
 };
 use oer_protocols_ieee80211_wire::management::CapabilityInformation;
 
-/// Caller policy applied before constructing one STA association request.
-///
-/// These are preferences rather than unchecked PHY claims. `PreferHe20`
-/// still falls back when the peer does not advertise the complete HE20 MCS9
-/// contract; `ForceHt20` is retained as the diagnostic negative-control mode
-/// and may subsequently be rejected by
-/// [`AssociationRequest::encode`](oer_protocols_ieee80211_wire::station::AssociationRequest::encode).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Preference {
-    /// Select among the mutually supported modes.
-    Automatic,
-    /// Prefer HE20 when the peer admits it.
-    PreferHe20,
-    /// Require the diagnostic HT20 selection.
-    ForceHt20,
+/// Whether `access_point` admits an HE association: it advertises HT
+/// Capabilities, HE Capabilities with HE-MCS 0..9 both ways on one stream
+/// and an HE Operation element that parses.
+pub fn he_admitted(access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord) -> bool {
+    access_point.ht_capability_ie_bytes().is_some()
+        && oer_protocols_ieee80211_wire::he::parse_he_capabilities(
+            access_point.he_capability_ie_bytes(),
+        )
+        .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
+        && oer_protocols_ieee80211_wire::he::parse_he_operation(
+            access_point.he_operation_ie_bytes(),
+        )
+        .is_ok()
 }
 
-/// Choose a mode after the caller has intersected local and peer capabilities.
-/// A peer without HT is legacy; HT20 is the baseline of one with HT; a later
-/// association encoder may still reject the peer.
-pub fn select_phy(
-    preference: Preference,
-    ht_available: bool,
-    ht40_available: bool,
-    he20_available: bool,
-) -> PhyMode {
-    if !ht_available {
-        PhyMode::Legacy
-    } else if preference == Preference::PreferHe20 && he20_available {
-        PhyMode::He20
-    } else if preference == Preference::ForceHt20 {
-        PhyMode::Ht20
-    } else if ht40_available {
-        PhyMode::Ht40
-    } else if he20_available {
-        PhyMode::He20
-    } else {
-        PhyMode::Ht20
+/// The power elements an HE Association Request carries: the Power
+/// Capability and the HE UL-MU power capability, from the composition's
+/// calibrated transmit power.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StaHePower {
+    pub power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability,
+    pub ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability,
+}
+
+/// What a station asks an access point for: the formats it admits and the
+/// widest width it may use, checked against what the chip `K` offers. A
+/// request of constants is built in a const item, where one outside the
+/// chip does not compile; one that arrives at run time gets the same answer
+/// as a handled error. The power elements an HE request carries are the
+/// station's fact ([`StaConfig::he_power`](crate::machine::StaConfig::he_power)).
+pub struct StaPhyRequest<K> {
+    formats: PhyFormatSet,
+    widest: Width,
+    brand: core::marker::PhantomData<fn() -> K>,
+}
+
+impl<K> Clone for StaPhyRequest<K> {
+    fn clone(&self) -> Self {
+        *self
     }
+}
+
+impl<K> Copy for StaPhyRequest<K> {}
+
+impl<K> PartialEq for StaPhyRequest<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.formats == other.formats && self.widest == other.widest
+    }
+}
+
+impl<K> Eq for StaPhyRequest<K> {}
+
+impl<K> core::fmt::Debug for StaPhyRequest<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("StaPhyRequest")
+            .field("formats", &self.formats)
+            .field("widest", &self.widest)
+            .finish()
+    }
+}
+
+/// Why a request is none.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StaPhyRequestError {
+    /// It admits no format.
+    NoFormat,
+    /// It admits a format the chip offers at no width.
+    FormatNotOffered(PhyFormat),
+    /// No format it admits is offered at its widest width.
+    WidthNotOffered(Width),
+}
+
+impl<K: Ieee80211Capabilities> StaPhyRequest<K> {
+    /// A request of `formats` up to `widest`: each format offered by the
+    /// chip at some width, and the widest width offered for one of them.
+    pub const fn new(formats: PhyFormatSet, widest: Width) -> Result<Self, StaPhyRequestError> {
+        let offered = K::CAPS.formats;
+        let mut admitted_widest = false;
+        let mut any = false;
+        let all = [PhyFormat::NonHt, PhyFormat::Ht, PhyFormat::He];
+        let mut index = 0;
+        while index < all.len() {
+            let format = all[index];
+            index += 1;
+            if !formats.contains(format) {
+                continue;
+            }
+            any = true;
+            let widths = offered.of(format);
+            if !widths.contains_width(Width::Mhz20) && !widths.contains_width(Width::Mhz40) {
+                return Err(StaPhyRequestError::FormatNotOffered(format));
+            }
+            admitted_widest = admitted_widest || widths.contains_width(widest);
+        }
+        if !any {
+            return Err(StaPhyRequestError::NoFormat);
+        }
+        if !admitted_widest {
+            return Err(StaPhyRequestError::WidthNotOffered(widest));
+        }
+        Ok(Self {
+            formats,
+            widest,
+            brand: core::marker::PhantomData,
+        })
+    }
+}
+
+impl<K> StaPhyRequest<K> {
+    /// The formats it admits.
+    pub const fn formats(&self) -> PhyFormatSet {
+        self.formats
+    }
+
+    /// The widest width it may use.
+    pub const fn widest(&self) -> Width {
+        self.widest
+    }
+}
+
+/// The PHY and channel a join of `access_point`, scanned on `scanned`,
+/// takes under `request`, decided from its scan record before any frame;
+/// `None` when it offers no format the request admits.
+///
+/// The format first: HE where the request admits it and the access point
+/// admits HE ([`he_admitted`]), at 20 MHz on `scanned`, with the station's
+/// `he_power`; else HT where both
+/// admit it, at 40 MHz on the one of `wide` whose primary is `scanned`'s
+/// and whose secondary the access point's HT elements name, when the
+/// request's widest width and the widths HT is offered at allow it, else
+/// at 20 MHz; else non-HT where the request admits it.
+pub fn negotiate<K: Ieee80211Capabilities>(
+    request: &StaPhyRequest<K>,
+    he_power: StaHePower,
+    access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord,
+    wide: &[SupportedChannel<K>],
+    scanned: SupportedChannel<K>,
+) -> Option<(SupportedChannel<K>, NegotiatedPhy)> {
+    use oer_protocols_ieee80211_wire::{channel::ChannelWidth, scan::HtSecondaryChannel};
+    let formats = request.formats();
+    if formats.contains(PhyFormat::He) && he_admitted(access_point) {
+        return Some((
+            scanned,
+            NegotiatedPhy::He {
+                power_capability: he_power.power_capability,
+                he_ul_mu_power: he_power.ul_mu_power,
+            },
+        ));
+    }
+    if formats.contains(PhyFormat::Ht) && access_point.ht_capability_ie_bytes().is_some() {
+        let primary = scanned.channel();
+        let wide = (request.widest == Width::Mhz40
+            && K::CAPS.formats.ht.contains_width(Width::Mhz40))
+        .then(|| access_point.secondary_channel(primary.number()))
+        .flatten()
+        .and_then(|secondary| {
+            let width = match secondary {
+                HtSecondaryChannel::Above => ChannelWidth::Mhz40Above,
+                HtSecondaryChannel::Below => ChannelWidth::Mhz40Below,
+            };
+            wide.iter().copied().find(|channel| {
+                let channel = channel.channel();
+                channel.band() == primary.band()
+                    && channel.number() == primary.number()
+                    && channel.width() == width
+            })
+        });
+        return Some(match wide {
+            Some(channel) => (
+                channel,
+                NegotiatedPhy::Ht {
+                    width: Width::Mhz40,
+                },
+            ),
+            None => (
+                scanned,
+                NegotiatedPhy::Ht {
+                    width: Width::Mhz20,
+                },
+            ),
+        });
+    }
+    formats
+        .contains(PhyFormat::NonHt)
+        .then_some((scanned, NegotiatedPhy::NonHt))
 }
 
 /// The ERP protection one frame's ERP elements ask for: the station's one
@@ -73,81 +220,6 @@ pub fn erp_protection(
                 .with_use_protection(true)
                 .with_barker(true),
         ),
-    }
-}
-
-/// The mode a station associates with `access_point` in under `preference`:
-/// HE20 when the access point's HE Capabilities admit bidirectional MCS 9
-/// and its HE Operation parses, HT40 when its HT Capabilities and HT
-/// Operation agree on a usable secondary channel and the station tunes
-/// 40 MHz (`ht40_capable`), HT20 otherwise, and legacy for an access point
-/// without HT Capabilities.
-pub fn select_association_phy(
-    access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord,
-    channel: u8,
-    preference: Preference,
-    ht40_capable: bool,
-) -> PhyMode {
-    select_phy(
-        preference,
-        access_point.ht_capability_ie_bytes().is_some(),
-        ht40_capable && access_point.secondary_channel(channel).is_some(),
-        he20_admitted(access_point),
-    )
-}
-
-/// Whether `access_point` admits an HE20 association: it advertises HT
-/// Capabilities, HE Capabilities with HE-MCS 0..9 both ways on one stream
-/// and an HE Operation element that parses. The same rule admits the HE20
-/// request's elements ([`PhyMode`]'s `AssociationPhy`).
-pub fn he20_admitted(access_point: &oer_protocols_ieee80211_wire::scan::ScanRecord) -> bool {
-    access_point.ht_capability_ie_bytes().is_some()
-        && oer_protocols_ieee80211_wire::he::parse_he_capabilities(
-            access_point.he_capability_ie_bytes(),
-        )
-        .is_ok_and(|capability| capability.supports_bidirectional_mcs9())
-        && oer_protocols_ieee80211_wire::he::parse_he_operation(
-            access_point.he_operation_ie_bytes(),
-        )
-        .is_ok()
-}
-
-/// The power elements an HE20 Association Request carries: the Power
-/// Capability and the HE UL-MU power capability, from the composition's
-/// calibrated transmit power.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StaHePower {
-    pub power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability,
-    pub ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability,
-}
-
-/// The PHY a station asks its access point for.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum StaPhyRequest {
-    /// Non-HT.
-    Legacy,
-    /// HT20. A request to an access point without HT does not encode.
-    Ht20,
-    /// HT40 on one of the station's 40 MHz channels where the access
-    /// point's HT elements admit it, else HT20 with an access point that
-    /// advertises HT, else non-HT.
-    Ht40,
-    /// HE20 with an access point that admits it ([`he20_admitted`]), with
-    /// `power`'s elements; with any other access point the request
-    /// [`Self::Ht40`] names when `ht40` holds, else [`Self::Ht20`].
-    PreferHe20 { ht40: bool, power: StaHePower },
-}
-
-impl StaPhyRequest {
-    /// This request without HE20: [`Self::PreferHe20`]'s fallback,
-    /// [`Self::Ht40`] when `ht40` holds, else [`Self::Ht20`]; any other
-    /// request unchanged.
-    pub const fn without_he20(self) -> Self {
-        match self {
-            Self::PreferHe20 { ht40: true, .. } => Self::Ht40,
-            Self::PreferHe20 { ht40: false, .. } => Self::Ht20,
-            other => other,
-        }
     }
 }
 
@@ -272,37 +344,37 @@ impl StaAssociatedPeer {
         let ht_ampdu_parameters = access_point
             .ht_capability_ie_bytes()
             .map_or(0, |capability| capability[4]);
-        let (he_capability, he_capabilities, he_peer_state, he_bss_color) = if phy == PhyMode::He20
-        {
-            let he = &response.he;
-            if he.unusable() {
-                return Err(StaAssociatedPeerError::HeElementsUnusable);
-            }
-            let (capability, operation) = (he.capability(), he.operation());
-            if capability.is_empty() || operation.is_empty() {
-                return Err(StaAssociatedPeerError::HeNotGranted);
-            }
-            let capabilities = parse_he_capabilities(capability)
-                .map_err(StaAssociatedPeerError::HeCapabilities)?;
-            if !capabilities.supports_bidirectional_mcs9() {
-                return Err(StaAssociatedPeerError::HeUnsupported);
-            }
-            let bss_color = parse_he_operation(operation)
-                .map_err(StaAssociatedPeerError::HeOperation)?
-                .effective_bss_color();
-            let state = parse_he_peer_state(capability, operation)
-                .map_err(StaAssociatedPeerError::HePeer)?;
-            (capability, Some(capabilities), Some(state), bss_color)
-        } else {
-            let capability = access_point.he_capability_ie_bytes();
-            (
-                capability,
-                parse_he_capabilities(capability).ok(),
-                None,
-                parse_he_operation(access_point.he_operation_ie_bytes())
-                    .map_or(0, |operation| operation.effective_bss_color()),
-            )
-        };
+        let (he_capability, he_capabilities, he_peer_state, he_bss_color) =
+            if phy.format() == oer_protocols_ieee80211_contracts_port::PhyFormat::He {
+                let he = &response.he;
+                if he.unusable() {
+                    return Err(StaAssociatedPeerError::HeElementsUnusable);
+                }
+                let (capability, operation) = (he.capability(), he.operation());
+                if capability.is_empty() || operation.is_empty() {
+                    return Err(StaAssociatedPeerError::HeNotGranted);
+                }
+                let capabilities = parse_he_capabilities(capability)
+                    .map_err(StaAssociatedPeerError::HeCapabilities)?;
+                if !capabilities.supports_bidirectional_mcs9() {
+                    return Err(StaAssociatedPeerError::HeUnsupported);
+                }
+                let bss_color = parse_he_operation(operation)
+                    .map_err(StaAssociatedPeerError::HeOperation)?
+                    .effective_bss_color();
+                let state = parse_he_peer_state(capability, operation)
+                    .map_err(StaAssociatedPeerError::HePeer)?;
+                (capability, Some(capabilities), Some(state), bss_color)
+            } else {
+                let capability = access_point.he_capability_ie_bytes();
+                (
+                    capability,
+                    parse_he_capabilities(capability).ok(),
+                    None,
+                    parse_he_operation(access_point.he_operation_ie_bytes())
+                        .map_or(0, |operation| operation.effective_bss_color()),
+                )
+            };
         // SOURCE(esp32s31): complete pinned `libnet80211.a[wl_cnx.o]::ic_set_sta`
         // +0x140..0x150 passes the peer's A-MPDU Parameters bits 4:2 (its
         // Minimum MPDU Start Spacing, IEEE Std 802.11-2020, 9.4.2.55.3) and

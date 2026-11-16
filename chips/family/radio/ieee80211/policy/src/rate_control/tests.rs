@@ -581,7 +581,7 @@ mod seam {
         let mut element = [0_u8; 28];
         element[..6].copy_from_slice(&[45, 26, if short_gi { 0x20 } else { 0 }, 0, 0x17, 0xff]);
         RatePeer {
-            phy: PhyMode::Ht20,
+            phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::Ht { width: oer_protocols_ieee80211_contracts_port::Width::Mhz20 }.mode(),
             legacy_rates:
                 oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                     &[2, 4, 11, 22, 12, 18, 24, 36],
@@ -657,7 +657,10 @@ mod seam {
         let info = if short_gi40 { 0x6e } else { 0x2e };
         element[..6].copy_from_slice(&[45, 26, info, 0, 0x17, 0xff]);
         RatePeer {
-            phy: PhyMode::Ht40,
+            phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::Ht {
+                width: oer_protocols_ieee80211_contracts_port::Width::Mhz40,
+            }
+            .mode(),
             ht_capabilities: ht_peer_capabilities(&element),
             ..ht20_peer(true)
         }
@@ -748,7 +751,7 @@ mod seam {
     #[test]
     fn an_unavailable_aggregate_controller_returns_the_refusal_without_mutation() {
         let peer = RatePeer {
-            phy: PhyMode::Legacy,
+            phy: oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::NonHt.mode(),
             legacy_rates:
                 oer_protocols_ieee80211_core_upper_mac::rate_control::NegotiatedLegacyRates::from_rate_elements(
                     &[2, 4, 11, 22, 12, 18, 24, 36],

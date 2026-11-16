@@ -2,21 +2,21 @@
 //! replaced only while idle, kept across reconnections.
 use super::*;
 
-fn open_profile(ssid: &[u8]) -> StaProfile {
+fn open_profile(ssid: &[u8]) -> StaProfile<Caps> {
     StaProfile {
         ssid: heapless::Vec::from_slice(ssid).unwrap(),
         security: StaSecurity::Open,
-        prefer_he20: false,
+        phy: request(PHY_NON_HT, Width::Mhz20),
     }
 }
 
-fn wpa2_profile(ssid: &[u8], pmk: [u8; 32]) -> StaProfile {
+fn wpa2_profile(ssid: &[u8], pmk: [u8; 32]) -> StaProfile<Caps> {
     StaProfile {
         ssid: heapless::Vec::from_slice(ssid).unwrap(),
         security: StaSecurity::Wpa2Personal {
             pmk: Pmk::from_bytes(pmk),
         },
-        prefer_he20: false,
+        phy: request(PHY_NON_HT, Width::Mhz20),
     }
 }
 

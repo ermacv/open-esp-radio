@@ -1,6 +1,6 @@
-use super::PhyMode;
+use super::NegotiatedPhy;
 use crate::seq;
-use oer_protocols_ieee80211_wire::station::association::AssociationPhy;
+use oer_protocols_ieee80211_contracts_port::Width;
 use oer_protocols_ieee80211_wire::{
     scan::ScanRecord,
     security::{AssociationAkm, Spp},
@@ -22,22 +22,8 @@ const TEST_ASSOCIATION_CAPABILITIES: AssociationCapabilities = AssociationCapabi
     wmm: [0; 9],
 };
 
-#[test]
-fn non_he_modes_refuse_he_power_elements() {
-    let mut peer = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    peer.set_ht_capability_ie(Some([0; 28]));
-    let power = StaPowerCapability::new(0, 10).unwrap();
-    for mode in [PhyMode::Legacy, PhyMode::Ht20] {
-        assert!(matches!(
-            mode.elements(&peer, 6, &TEST_ASSOCIATION_CAPABILITIES, Some(power), None),
-            Err(AssociationRequestError::UnexpectedPowerCapability)
-        ));
-    }
-}
-
 /// An HT request carries the HT Capabilities element of its width: a
-/// 20 MHz one the first, a 40 MHz one, to an access point whose HT
-/// Operation names a secondary channel, the second.
+/// 20 MHz one the first, a 40 MHz one the second.
 #[test]
 fn an_ht_request_carries_the_element_of_its_width() {
     let capabilities = AssociationCapabilities {
@@ -47,21 +33,24 @@ fn an_ht_request_carries_the_element_of_its_width() {
         },
         ..TEST_ASSOCIATION_CAPABILITIES
     };
-    let mut peer = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    let mut capability = [0; oer_protocols_ieee80211_wire::ht::HT_CAPABILITY_IE_LEN];
-    capability[0..4].copy_from_slice(&[45, 26, 0x02, 0]);
-    let mut operation = [0; oer_protocols_ieee80211_wire::ht::HT_OPERATION_IE_LEN];
-    operation[0..4].copy_from_slice(&[61, 22, 6, 0x05]);
-    peer.set_ht_capability_ie(Some(capability));
-    peer.set_ht_operation_ie(Some(operation));
-    let narrow = PhyMode::Ht20
-        .elements(&peer, 6, &capabilities, None, None)
-        .unwrap();
-    assert_eq!(narrow.ht_capability, Some(&[20; 28]));
-    let wide = PhyMode::Ht40
-        .elements(&peer, 6, &capabilities, None, None)
-        .unwrap();
-    assert_eq!(wide.ht_capability, Some(&[40; 28]));
+    assert_eq!(
+        NegotiatedPhy::Ht {
+            width: Width::Mhz20
+        }
+        .elements(&capabilities),
+        AssociationPhyElements::Ht {
+            ht_capability: &[20; 28]
+        }
+    );
+    assert_eq!(
+        NegotiatedPhy::Ht {
+            width: Width::Mhz40
+        }
+        .elements(&capabilities),
+        AssociationPhyElements::Ht {
+            ht_capability: &[40; 28]
+        }
+    );
 }
 
 /// The selection a WPA2-Personal station makes for a PSK access point
@@ -136,13 +125,10 @@ fn association_request_contains_selected_rsn() {
             oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
         access_point: &record,
-        channel: 6,
         sequence_number: seq(2),
         listen_interval: 1,
-        phy: PhyMode::Legacy,
+        phy: NegotiatedPhy::NonHt.elements(&TEST_ASSOCIATION_CAPABILITIES),
         security: &wpa2_rsn(),
-        power_capability: None,
-        he_ul_mu_power: None,
     }
     .encode(&mut output, &TEST_ASSOCIATION_CAPABILITIES)
     .unwrap();
@@ -154,28 +140,6 @@ fn association_request_contains_selected_rsn() {
         &[
             48, 20, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 4, 1, 0, 0, 0x0f, 0xac, 2, 0, 4,
         ]
-    );
-}
-
-#[test]
-fn ht20_request_fails_closed_when_the_ap_did_not_advertise_ht() {
-    let record = access_point_with_rsn(&[[0, 0x0f, 0xac, 2]], 0);
-    assert_eq!(
-        AssociationRequest {
-            source: oer_protocols_ieee80211_wire::address::OwnAddress::new(
-                oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap()
-            ),
-            access_point: &record,
-            channel: 6,
-            sequence_number: seq(2),
-            listen_interval: 1,
-            phy: PhyMode::Ht20,
-            security: &wpa2_rsn(),
-            power_capability: None,
-            he_ul_mu_power: None,
-        }
-        .encode(&mut [0; 160], &TEST_ASSOCIATION_CAPABILITIES),
-        Err(AssociationRequestError::HtUnsupportedByAccessPoint)
     );
 }
 
@@ -194,13 +158,13 @@ fn association_encoder_uses_the_explicit_local_profile() {
             oer_protocols_ieee80211_wire::address::IndividualAddress::new(LOCAL).unwrap(),
         ),
         access_point: &record,
-        channel: 6,
         sequence_number: seq(2),
         listen_interval: 1,
-        phy: PhyMode::Ht20,
+        phy: NegotiatedPhy::Ht {
+            width: Width::Mhz20,
+        }
+        .elements(&capabilities),
         security: &wpa2_rsn(),
-        power_capability: None,
-        he_ul_mu_power: None,
     }
     .encode(&mut output, &capabilities)
     .unwrap();

@@ -114,7 +114,7 @@ pub type Ieee80211ClockSample = oer_protocols_radio_port::ClockSample<Ieee80211R
 
 pub use capabilities::{
     BandSet, FormatWidths, HardwareServices, LowerMacCapabilities, PhyFormat, PhyFormatSet,
-    RateSupport, Support, WidthSet,
+    RateSupport, Support, Width, WidthSet,
 };
 pub use control::{ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{
@@ -128,8 +128,8 @@ pub use oer_protocols_radio_port::{
 };
 pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
-    AccessPoint, AckHeader, AmpduRate, BssColor, FormatWidth, FrameHeader, GroupAddress,
-    HeaderSpec, Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
+    AccessPoint, AckHeader, AmpduRate, BssColor, FrameHeader, GroupAddress, HeaderSpec,
+    Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
     NoAckHeader, PortRate, QosBody, QosControl, ReceiverAddress, ResponseHeader, ServicePeriod,
     SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck, SupportedChannel,
     SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,

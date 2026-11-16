@@ -216,54 +216,6 @@ impl<K: Ieee80211Capabilities> SupportedChannel<K> {
     }
 }
 
-/// A PPDU format at a channel width that the capabilities `K` offer it at
-/// ([`FormatWidths`](crate::FormatWidths)).
-///
-/// A pair known when the image builds is made in a const item, where a pair
-/// `K` does not offer fails to compile; a pair from the air (what an access
-/// point offers) is the same constructor's answer at run time.
-pub struct FormatWidth<K> {
-    format: crate::PhyFormat,
-    width: oer_protocols_ieee80211_wire::channel::ChannelWidth,
-    brand: PhantomData<fn() -> K>,
-}
-
-impl<K: Ieee80211Capabilities> FormatWidth<K> {
-    /// `format` at `width`, when `K` offers that pair.
-    pub const fn new(
-        format: crate::PhyFormat,
-        width: oer_protocols_ieee80211_wire::channel::ChannelWidth,
-    ) -> Option<Self> {
-        if K::CAPS.formats.of(format).contains(width) {
-            Some(Self {
-                format,
-                width,
-                brand: PhantomData,
-            })
-        } else {
-            None
-        }
-    }
-
-    /// The format.
-    pub const fn format(&self) -> crate::PhyFormat {
-        self.format
-    }
-
-    /// The width.
-    pub const fn width(&self) -> oer_protocols_ieee80211_wire::channel::ChannelWidth {
-        self.width
-    }
-}
-
-impl<K> Clone for FormatWidth<K> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<K> Copy for FormatWidth<K> {}
-
 impl<K> Clone for SupportedChannel<K> {
     fn clone(&self) -> Self {
         *self

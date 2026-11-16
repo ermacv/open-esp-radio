@@ -7,7 +7,6 @@
 
 use core::{fmt, num::NonZeroU16};
 
-use crate::association::Preference;
 use oer_protocols_ieee80211_wire::channel::Ghz2_4Channel;
 pub use oer_protocols_ieee80211_wire::ssid::{Ssid, SsidError};
 use oer_protocols_radio_regulatory::{Initiate, RegulatoryDomain};
@@ -285,19 +284,13 @@ impl core::error::Error for StationScanChannelsError {}
 pub struct StationScanPolicy {
     channels: StationScanChannels,
     dwell_millis: NonZeroU16,
-    association: Preference,
 }
 
 impl StationScanPolicy {
-    pub const fn new(
-        channels: StationScanChannels,
-        dwell_millis: NonZeroU16,
-        association: Preference,
-    ) -> Self {
+    pub const fn new(channels: StationScanChannels, dwell_millis: NonZeroU16) -> Self {
         Self {
             channels,
             dwell_millis,
-            association,
         }
     }
 
@@ -311,10 +304,6 @@ impl StationScanPolicy {
 
     pub const fn dwell(self) -> NonZeroU16 {
         self.dwell_millis
-    }
-
-    pub const fn association_preference(self) -> Preference {
-        self.association
     }
 }
 

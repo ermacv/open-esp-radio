@@ -263,7 +263,15 @@ fn station_config() -> StaConfig<ModelCaps24, Callbacks> {
         association: &CAPABILITIES,
         listen_interval:
             oer_protocols_ieee80211_core_roles_sta::request::StationListenInterval::DEFAULT,
-        phy: oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::Legacy,
+        he_power: oer_protocols_ieee80211_core_roles_sta::association::StaHePower {
+            power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20)
+                .unwrap(),
+            ul_mu_power:
+                oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices(
+                    [20; 10],
+                )
+                .unwrap(),
+        },
         tx_block_ack: None,
         callbacks: Callbacks {
             aes: SoftwareAes128,
@@ -283,7 +291,11 @@ fn profile(protected: bool, pmk: [u8; 32]) -> StaProfile {
         } else {
             StaSecurity::Open
         },
-        prefer_he20: false,
+        phy: oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::new(
+            oer_protocols_ieee80211_contracts_port::PhyFormatSet::NON_HT,
+            oer_protocols_ieee80211_contracts_port::Width::Mhz20,
+        )
+        .unwrap(),
     }
 }
 

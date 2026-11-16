@@ -118,6 +118,29 @@ impl core::fmt::Debug for StationSettings {
         f.write_str("StationSettings(<redacted>)")
     }
 }
+/// The request of a network whose settings ask for HE: non-HT, HT and HE
+/// at 20 MHz (the application's one request replaces this pair).
+const HE_REQUEST: oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest<crate::Caps> =
+    match oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::new(
+        oer_protocols_ieee80211_contracts_port::PhyFormatSet::NON_HT
+            .union(oer_protocols_ieee80211_contracts_port::PhyFormatSet::HT)
+            .union(oer_protocols_ieee80211_contracts_port::PhyFormatSet::HE),
+        oer_protocols_ieee80211_contracts_port::Width::Mhz20,
+    ) {
+        Ok(request) => request,
+        Err(_) => panic!("the ESP32-S31 offers non-HT, HT and HE at 20 MHz"),
+    };
+/// The request of any other network: non-HT and HT at 20 MHz.
+const HT_REQUEST: oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest<crate::Caps> =
+    match oer_protocols_ieee80211_core_roles_sta::association::StaPhyRequest::new(
+        oer_protocols_ieee80211_contracts_port::PhyFormatSet::NON_HT
+            .union(oer_protocols_ieee80211_contracts_port::PhyFormatSet::HT),
+        oer_protocols_ieee80211_contracts_port::Width::Mhz20,
+    ) {
+        Ok(request) => request,
+        Err(_) => panic!("the ESP32-S31 offers non-HT and HT at 20 MHz"),
+    };
+
 /// The prepared credential owner is consumed by the station profile.
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 pub struct PreparedCredentials {
@@ -129,7 +152,7 @@ impl PreparedCredentials {
     /// The station's profile of this network; the PMK moves, never copied.
     pub(crate) fn into_profile(
         self,
-    ) -> oer_protocols_ieee80211_core_roles_sta::machine::StaProfile {
+    ) -> oer_protocols_ieee80211_core_roles_sta::machine::StaProfile<crate::Caps> {
         use oer_protocols_ieee80211_core_roles_sta::machine::StaSecurity;
         let Self {
             ssid,
@@ -142,7 +165,7 @@ impl PreparedCredentials {
                 None => StaSecurity::Open,
                 Some(pmk) => StaSecurity::Wpa2Personal { pmk },
             },
-            prefer_he20,
+            phy: if prefer_he20 { HE_REQUEST } else { HT_REQUEST },
         }
     }
 }
