@@ -61,13 +61,6 @@ pub enum RxCryptoStatus {
     DecryptedAndIntegrityVerified,
 }
 
-/// The receive operation whose count did not hold.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ReceiveOperation {
-    /// [`DataPort::recycle`](crate::DataPort::recycle).
-    Recycle,
-}
-
 /// The metadata a backend gives a received MPDU: the portable fields
 /// ([`RxMeta`]), and whatever more the backend's type guarantees
 /// ([`SignalMetadata`]).

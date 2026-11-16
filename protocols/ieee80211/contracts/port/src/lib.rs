@@ -117,9 +117,9 @@ pub use capabilities::{
 };
 pub use control::{ReceiveFilter, VifRole, VifRoleSet};
 pub use extensions::{
-    AmpduCapabilities, AmpduLengthTable, AmpduRateRefused, BeaconTimingCapabilities,
-    MonitorCapabilities, TSF_DRIFT_PPM, TSF_RELATION, TbttEvent, TsfArithmeticError, TsfGeneration,
-    TsfProjectionError, TsfSample, TsfVifMismatch, VifTsf,
+    AmpduCapabilities, AmpduLengthTable, AmpduRateRefused, BeaconTimingCapabilities, TSF_DRIFT_PPM,
+    TSF_RELATION, TbttEvent, TsfArithmeticError, TsfGeneration, TsfProjectionError, TsfSample,
+    TsfVifMismatch, VifTsf,
 };
 pub use oer_protocols_radio_port::{
     ClockInfo, ClockRelation, EventsLost, Generation, GenerationSource, Poisoned, PortResult,
@@ -133,9 +133,7 @@ pub use owner::{
     SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck, SupportedChannel,
     SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
-pub use rx::{
-    LinkMetric, ReceiveOperation, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata,
-};
+pub use rx::{LinkMetric, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata};
 pub use tx::{
     AckSnr, AggregateEnd, AggregateOutcome, Air, BlockAckReport, BlockAckSnr, IndeterminateCause,
     Protection, RETRY_STAGES, RateSample, RetryPlan, RetryStage, SingleEnd, SingleOutcome,
@@ -173,9 +171,8 @@ pub use contract::{
 };
 pub use edca::{EdcaAcParameters, EdcaParameterSet};
 pub use monitor::{
-    ChannelContextId, MonitorDropReason, MonitorFrame, MonitorInjectionBindingError,
-    MonitorInjectionChannelBinding, MonitorInjectionRate, MonitorInjectionRequest,
-    MonitorPublishOutcome, MonitorSink, MonitorTapPoint,
+    ChannelContextId, MonitorFrame, MonitorInjectionBindingError, MonitorInjectionChannelBinding,
+    MonitorInjectionRate, MonitorInjectionRequest, MonitorTapPoint,
 };
 
 pub mod backend;

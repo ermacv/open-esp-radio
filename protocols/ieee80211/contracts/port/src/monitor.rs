@@ -188,51 +188,5 @@ impl<Rate> MonitorFrame<'_, Rate> {
     }
 }
 
-/// Why a best-effort monitor sink did not retain an observation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MonitorDropReason {
-    /// Every caller-owned capture slot was occupied.
-    Full,
-    /// The frame exceeds the sink's configured capture capacity.
-    TooLong,
-    /// Caller policy intentionally excluded this observation.
-    Filtered,
-}
-
-/// Immediate result of a non-blocking monitor publication attempt.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MonitorPublishOutcome {
-    Published,
-    Dropped(MonitorDropReason),
-}
-
-/// Best-effort observation endpoint for one receive tap.
-///
-/// Implementations must return without waiting for capacity. An async adapter
-/// can wake a consumer after copying into bounded storage, but the radio owner
-/// never awaits that consumer and continues recycling its RX descriptor.
-pub trait MonitorSink<Rate> {
-    /// Start a fresh physical-channel capture epoch.
-    ///
-    /// The default preserves source-only sinks which do not retain channel
-    /// metadata. Queue-backed product sinks override this edge and stamp the
-    /// exact channel into every independently retained frame.
-    fn begin_channel_epoch(&mut self, _channel: Ghz2_4Channel) {}
-
-    /// Revoke dwell-bound injection authority before stop or retune begins.
-    fn end_channel_epoch(&mut self) {}
-
-    /// Exact authority for injection during the currently live dwell.
-    ///
-    /// Legacy and observation-only sinks return `None`. A production sink
-    /// overrides this only after its task owner has bound the supervisor
-    /// generation, tuned channel and monotonically increasing capture epoch.
-    fn injection_channel_binding(&self) -> Option<MonitorInjectionChannelBinding> {
-        None
-    }
-
-    fn try_publish(&mut self, frame: MonitorFrame<'_, Rate>) -> MonitorPublishOutcome;
-}
-
 #[cfg(test)]
 mod tests;
