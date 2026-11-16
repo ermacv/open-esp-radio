@@ -577,7 +577,7 @@ mod seam {
 
     /// An HT20 peer, with or without the 20 MHz short guard
     /// interval.
-    fn ht20_peer(short_gi: bool) -> RatePeer {
+    fn ht_peer_at_20_mhz(short_gi: bool) -> RatePeer {
         let mut element = [0_u8; 28];
         element[..6].copy_from_slice(&[45, 26, if short_gi { 0x20 } else { 0 }, 0, 0x17, 0xff]);
         RatePeer {
@@ -601,7 +601,7 @@ mod seam {
 
     #[test]
     fn a_weaker_link_starts_at_a_slower_rate() {
-        let peer = ht20_peer(true);
+        let peer = ht_peer_at_20_mhz(true);
         let weakest = EspressifRateControl::for_peer((), &peer, metric(i8::MIN));
         let strong = EspressifRateControl::for_peer((), &peer, metric(60));
         assert!(weakest.mpdu_rate().nominal_kbps() < strong.mpdu_rate().nominal_kbps());
@@ -609,8 +609,9 @@ mod seam {
 
     #[test]
     fn every_ht_schedule_rate_takes_the_short_guard_interval_exactly_where_the_peer_supports_it() {
-        let with = EspressifRateControl::for_peer((), &ht20_peer(true), metric(60)).decode;
-        let without = EspressifRateControl::for_peer((), &ht20_peer(false), metric(60)).decode;
+        let with = EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(true), metric(60)).decode;
+        let without =
+            EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(false), metric(60)).decode;
         let mut long_in_schedule = 0;
         for index in 0..14 {
             let Some(schedule) =
@@ -643,14 +644,15 @@ mod seam {
 
     #[test]
     fn an_association_at_the_long_guard_mcs7_record_sends_with_the_short_guard_interval() {
-        let decode = EspressifRateControl::for_peer((), &ht40_peer(true), metric(60)).decode;
+        let decode =
+            EspressifRateControl::for_peer((), &ht_peer_at_40_mhz(true), metric(60)).decode;
         let schedule = crate::rate_schedule::rate_schedule(RateScheduleKind::Dot11N, 1)
             .expect("the long-GI MCS 7 record");
         assert_eq!(decode.rate(schedule).nominal_kbps(), 150_000);
     }
 
     /// An HT40 peer, with or without the 40 MHz short guard interval.
-    fn ht40_peer(short_gi40: bool) -> RatePeer {
+    fn ht_peer_at_40_mhz(short_gi40: bool) -> RatePeer {
         let mut element = [0_u8; 28];
         // Supported Channel Width Set, SM power save disabled and the 20 MHz
         // short guard interval; the 40 MHz one on request.
@@ -662,12 +664,13 @@ mod seam {
             }
             .mode(),
             ht_capabilities: ht_peer_capabilities(&element),
-            ..ht20_peer(true)
+            ..ht_peer_at_20_mhz(true)
         }
     }
 
     #[test]
-    fn an_ht40_association_reaches_mcs7_at_40_mhz_with_the_short_guard_interval_both_support() {
+    fn an_ht_association_at_40_mhz_reaches_mcs7_at_40_mhz_with_the_short_guard_interval_both_support()
+     {
         let fastest = |peer: &RatePeer| {
             let decode = EspressifRateControl::for_peer((), peer, metric(60)).decode;
             (0..14)
@@ -682,12 +685,12 @@ mod seam {
                 .max_by_key(|rate| PhyRate::Ht(*rate).nominal_kbps())
                 .expect("an HT schedule rate")
         };
-        let short = fastest(&ht40_peer(true));
+        let short = fastest(&ht_peer_at_40_mhz(true));
         assert_eq!(short.mcs(), HtMcs::SINGLE_STREAM_MAX);
         assert!(short.short_gi());
         assert_eq!(PhyRate::Ht(short).nominal_kbps(), 150_000);
         // A peer without the 40 MHz short guard interval gets the long one.
-        let long = fastest(&ht40_peer(false));
+        let long = fastest(&ht_peer_at_40_mhz(false));
         assert_eq!(long.mcs(), HtMcs::SINGLE_STREAM_MAX);
         assert!(!long.short_gi());
         assert_eq!(PhyRate::Ht(long).nominal_kbps(), 135_000);
@@ -695,7 +698,7 @@ mod seam {
 
     #[test]
     fn retry_pressure_lowers_the_rate() {
-        let mut control = EspressifRateControl::for_peer((), &ht20_peer(true), metric(60));
+        let mut control = EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(true), metric(60));
         let before = control.mpdu_rate().nominal_kbps();
         // Exchanges of ten attempts each add two to the retry pressure; past
         // six the controller moves to the next, slower schedule.
@@ -711,7 +714,7 @@ mod seam {
 
     #[test]
     fn a_block_ack_s_ack_snr_feeds_the_filter() {
-        let mut control = EspressifRateControl::for_peer((), &ht20_peer(true), metric(60));
+        let mut control = EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(true), metric(60));
         assert_eq!(control.association().filtered_ack_snr(), None);
         assert_eq!(
             control.observe_ampdu(
@@ -726,7 +729,7 @@ mod seam {
 
     #[test]
     fn a_block_ack_without_a_sample_leaves_the_filter_and_still_counts_its_window() {
-        let mut control = EspressifRateControl::for_peer((), &ht20_peer(true), metric(60));
+        let mut control = EspressifRateControl::for_peer((), &ht_peer_at_20_mhz(true), metric(60));
         let now = oer_portable_time::Instant::from_micros(1_000);
         assert_eq!(
             control.observe_ampdu(now, tally(4, 4), &Evidence::Measured(30)),

@@ -697,16 +697,30 @@ pub struct Link {
     pub tx: TxLink,
 }
 
+/// HT MCS 0 to 7 by channel width.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct HtCounts {
+    /// At 20 MHz.
+    pub mhz20: GuardCounts,
+    /// At 40 MHz.
+    pub mhz40: GuardCounts,
+}
+
+/// MCS 0 to 7 by guard interval.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
+pub struct GuardCounts {
+    /// The long (800 ns) guard interval.
+    pub long: [u32; 8],
+    /// The short (400 ns) guard interval.
+    pub short: [u32; 8],
+}
+
 /// Counts by a PPDU's rate: HT MCS 0 to 7 by channel width and guard
 /// interval, the other formats each in one count.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, Schema)]
 pub struct Rates {
-    /// HT 20 MHz with the long and the short guard interval, by MCS.
-    pub ht20_long_gi: [u32; 8],
-    pub ht20_short_gi: [u32; 8],
-    /// HT 40 MHz with the long and the short guard interval, by MCS.
-    pub ht40_long_gi: [u32; 8],
-    pub ht40_short_gi: [u32; 8],
+    /// HT MCS 0 to 7 by channel width.
+    pub ht: HtCounts,
     /// HT MCS 8 to 31: more than one spatial stream.
     pub ht_other: u32,
     /// DSSS, CCK and OFDM.
@@ -761,10 +775,16 @@ impl Rates {
             })
         };
         Self {
-            ht20_long_gi: each(&start.ht20_long_gi, &end.ht20_long_gi),
-            ht20_short_gi: each(&start.ht20_short_gi, &end.ht20_short_gi),
-            ht40_long_gi: each(&start.ht40_long_gi, &end.ht40_long_gi),
-            ht40_short_gi: each(&start.ht40_short_gi, &end.ht40_short_gi),
+            ht: HtCounts {
+                mhz20: GuardCounts {
+                    long: each(&start.ht.mhz20.long, &end.ht.mhz20.long),
+                    short: each(&start.ht.mhz20.short, &end.ht.mhz20.short),
+                },
+                mhz40: GuardCounts {
+                    long: each(&start.ht.mhz40.long, &end.ht.mhz40.long),
+                    short: each(&start.ht.mhz40.short, &end.ht.mhz40.short),
+                },
+            },
             ht_other: end.ht_other.wrapping_sub(start.ht_other),
             non_ht: end.non_ht.wrapping_sub(start.non_ht),
             he: end.he.wrapping_sub(start.he),

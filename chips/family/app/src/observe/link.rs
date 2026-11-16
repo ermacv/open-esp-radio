@@ -23,14 +23,30 @@ pub enum Rate {
     Unknown,
 }
 
+/// HT MCS 0 to 7 by channel width.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct HtCounts {
+    /// At 20 MHz.
+    pub mhz20: GuardCounts,
+    /// At 40 MHz.
+    pub mhz40: GuardCounts,
+}
+
+/// MCS 0 to 7 by guard interval.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct GuardCounts {
+    /// The long (800 ns) guard interval.
+    pub long: [u32; 8],
+    /// The short (400 ns) guard interval.
+    pub short: [u32; 8],
+}
+
 /// Counts by rate: HT MCS 0 to 7 by width and guard interval, the other
 /// HT MCSs, non-HT, HE and no rate.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rates {
-    pub ht20_long_gi: [u32; 8],
-    pub ht20_short_gi: [u32; 8],
-    pub ht40_long_gi: [u32; 8],
-    pub ht40_short_gi: [u32; 8],
+    /// HT MCS 0 to 7 by channel width.
+    pub ht: HtCounts,
     pub ht_other: u32,
     pub non_ht: u32,
     pub he: u32,
@@ -208,10 +224,16 @@ fn rates(buckets: &[u32; RATE_BUCKETS]) -> Rates {
         })
     };
     Rates {
-        ht20_long_gi: mcs(false, false),
-        ht20_short_gi: mcs(false, true),
-        ht40_long_gi: mcs(true, false),
-        ht40_short_gi: mcs(true, true),
+        ht: HtCounts {
+            mhz20: GuardCounts {
+                long: mcs(false, false),
+                short: mcs(false, true),
+            },
+            mhz40: GuardCounts {
+                long: mcs(true, false),
+                short: mcs(true, true),
+            },
+        },
         ht_other: at(HT_OTHER),
         non_ht: at(NON_HT),
         he: at(HE),

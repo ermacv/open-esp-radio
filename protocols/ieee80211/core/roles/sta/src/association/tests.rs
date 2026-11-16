@@ -18,7 +18,7 @@ mod associated_peer {
     ];
     const HE20_OPERATION: [u8; 9] = [255, 7, 36, 0, 0, 0, 5, 0xfd, 0xff];
 
-    fn he20_access_point() -> ScanRecord {
+    fn he_access_point() -> ScanRecord {
         let mut access_point = ScanRecord::new(
             oer_protocols_ieee80211_wire::address::Bssid::new(
                 oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 1])
@@ -64,7 +64,7 @@ mod associated_peer {
     fn an_he_association_keeps_the_peer_s_he_state() {
         let padding = std::boxed::Box::new(HePacketPadding::Us8);
         let peer = StaAssociatedPeer::derive(
-            &he20_access_point(),
+            &he_access_point(),
             oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
             oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),
@@ -87,7 +87,7 @@ mod associated_peer {
         assert_eq!(peer.protection.he_packet_padding, HePacketPadding::Us8);
         // An HT association keeps the HE capabilities but no HE state.
         let ht = StaAssociatedPeer::derive(
-            &he20_access_point(),
+            &he_access_point(),
             oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
             &response(0),
             oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::Ht {
@@ -104,7 +104,7 @@ mod associated_peer {
     fn a_refused_association_has_no_peer() {
         assert_eq!(
             StaAssociatedPeer::derive(
-                &he20_access_point(),
+                &he_access_point(),
                 oer_protocols_ieee80211_wire::protection::ErpProtection::NONE,
                 &response(17),
                 oer_protocols_ieee80211_core_upper_mac::phy_mode::NegotiatedPhy::He { power_capability: oer_protocols_ieee80211_wire::station::StaPowerCapability::new(0, 20).unwrap(), he_ul_mu_power: oer_protocols_ieee80211_wire::station::HeUlMuPowerCapability::from_rate_power_indices([20; 10]).unwrap() }.mode(),

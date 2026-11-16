@@ -80,17 +80,18 @@ pub enum EspNowHtGuardInterval {
     Short400Ns,
 }
 
-/// A complete standard HT20 rate requested for one ESP-NOW peer.
+/// A complete standard HT rate requested for one ESP-NOW peer, at 20 MHz:
+/// the one width this extension sends at.
 ///
 /// MCS32 is deliberately absent: duplicate mode has a distinct hardware
 /// certification boundary and cannot be represented as a one-stream MCS.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EspNowHt20Rate {
+pub struct EspNowHtRate {
     mcs: EspNowHtMcs,
     guard_interval: EspNowHtGuardInterval,
 }
 
-impl EspNowHt20Rate {
+impl EspNowHtRate {
     /// Combine the admitted MCS and guard interval.
     pub const fn new(mcs: EspNowHtMcs, guard_interval: EspNowHtGuardInterval) -> Self {
         Self {
@@ -123,8 +124,8 @@ pub enum EspNowPhyMode {
     LegacyDsss1M,
     /// Standard OFDM with the dedicated P2P retry record.
     StandardP2pOfdm(EspNowOfdmRate),
-    /// Standard HT20 with the dedicated P2P retry record.
-    StandardP2pHt20(EspNowHt20Rate),
+    /// Standard HT at 20 MHz with the dedicated P2P retry record.
+    StandardP2pHt(EspNowHtRate),
     /// Espressif LR; requires complete backend LR support.
     LongRange(EspressifLongRangeRate),
 }

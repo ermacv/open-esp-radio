@@ -5629,7 +5629,7 @@ fn ht_access_point(operation_width: Option<ChannelWidth>) -> ScanRecord {
 }
 
 #[test]
-fn an_ht40_join_tunes_the_secondary_the_access_point_names() {
+fn a_40_mhz_join_tunes_the_secondary_the_access_point_names() {
     let scanned = wide(13, ChannelWidth::Mhz20);
     let below = wide(13, ChannelWidth::Mhz40Below);
     let offered = ht_access_point(Some(ChannelWidth::Mhz40Below));

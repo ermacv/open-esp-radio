@@ -253,7 +253,7 @@ transmissions per MPDU. RX and TX stay the image's.
   (null from the measuring build). `rx`: the data MPDUs addressed to the station that
   reached its port, by their PPDU's rate as the receive metadata decodes
   it (`mpdus`: `total`, every nonzero `rates` entry, e.g. `HT40 SGI MCS7`,
-  with its `count` and `percent`, and `ht40_percent`, `short_gi_percent`,
+  with its `count` and `percent`, and `width_40_mhz_percent` (the share of HT MPDUs at 40 MHz), `short_gi_percent`,
   `mcs7_percent`), and by A-MPDU containment (`in_ampdu`, `single`,
   `containment_unknown`, `in_ampdu_percent`). The metadata marks no
   A-MPDU boundary: `ampdus` and `mpdus_per_ampdu` stay null. `tx`: the

@@ -15,8 +15,9 @@ use oer::observe::parts::{PARTS, PartReading};
 #[cfg(feature = "trace")]
 use oer::observe::tracking::TrackingSample;
 use oer_hil_services_load::{
-    Addba, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, HartLoad, InstructionBus, Link,
-    Mac, PartWindow, Positions, RxCounts, StationRx, TxAmpdu, TxCounts,
+    Addba, CacheCounts, CacheGeometry, Counters, DataBus, DriverRx, GuardCounts, HartLoad,
+    HtCounts, InstructionBus, Link, Mac, PartWindow, Positions, RxCounts, StationRx, TxAmpdu,
+    TxCounts,
 };
 #[cfg(feature = "trace")]
 use oer_hil_services_load::{
@@ -136,10 +137,16 @@ pub(crate) fn tracking(start: &TrackingSample, end: &TrackingSample) -> Tracking
 #[cfg(feature = "trace")]
 fn rates(rates: &link::Rates) -> Rates {
     Rates {
-        ht20_long_gi: rates.ht20_long_gi,
-        ht20_short_gi: rates.ht20_short_gi,
-        ht40_long_gi: rates.ht40_long_gi,
-        ht40_short_gi: rates.ht40_short_gi,
+        ht: HtCounts {
+            mhz20: GuardCounts {
+                long: rates.ht.mhz20.long,
+                short: rates.ht.mhz20.short,
+            },
+            mhz40: GuardCounts {
+                long: rates.ht.mhz40.long,
+                short: rates.ht.mhz40.short,
+            },
+        },
         ht_other: rates.ht_other,
         non_ht: rates.non_ht,
         he: rates.he,

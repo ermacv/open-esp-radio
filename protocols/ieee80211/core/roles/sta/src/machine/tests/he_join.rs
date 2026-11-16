@@ -26,17 +26,17 @@ const HE_OPERATION: [u8; 9] = [255, 7, 36, 0x04, 0x00, 0x01, 0x1b, 0xfc, 0xff];
 /// one it carries.
 static ELEMENTS: AssociationCapabilities = AssociationCapabilities {
     ht: oer_protocols_ieee80211_wire::station::HtCapabilityElements {
-        mhz20: ht20_element(0x11),
-        mhz40: ht20_element(0x22),
+        mhz20: ht_element(0x11),
+        mhz40: ht_element(0x22),
     },
-    ht_with_he: ht20_element(0x33),
+    ht_with_he: ht_element(0x33),
     he: HE_CAPABILITY,
     he_extended: Some([127, 12, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     wmm: [221, 7, 0, 0x50, 0xf2, 2, 0, 1, 0],
 };
 
 /// An HT Capabilities element whose capability information is `marker`.
-const fn ht20_element(marker: u8) -> [u8; 28] {
+const fn ht_element(marker: u8) -> [u8; 28] {
     let mut element = [0; 28];
     element[0] = 45;
     element[1] = 26;
@@ -333,7 +333,7 @@ fn the_response_s_bss_color_is_the_link_s() {
 }
 
 #[test]
-fn a_response_that_no_longer_admits_he20_is_refused() {
+fn a_response_that_no_longer_admits_he_is_refused() {
     // HE-MCS 0..7 only: not the HE20 the scan admitted.
     let mut capability = HE_CAPABILITY;
     capability[20..24].copy_from_slice(&[0xfc, 0xff, 0xfc, 0xff]);
