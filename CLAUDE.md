@@ -52,6 +52,15 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   automatically. Air, peer, host and API input return a handled error.
   [Operation results](docs/architecture.md#operation-results) is the
   decision procedure.
+- **An anomaly is an indication.** A backend that observes what its
+  hardware must not do raises one indication with no payload to the core
+  that owns the peripheral's life, which answers with the stop it has. It
+  is never the return value of a data call, a state, or an owner set aside,
+  and until the stop the place that saw it gives nothing. What was observed
+  goes to the backend's diagnostic record. A cause is admitted with its
+  `SOURCE:`. A port contract and a sans-IO core name no chip's cause.
+  Whether to start again, how often and after what delay is the
+  application's policy value, never a constant of a core or a backend.
 - **Decisions are values.** A function another module calls to learn
   whether a transition may happen never answers `bool` or a bare variant:
   it returns the proof of the transition, or the value that names
@@ -84,6 +93,14 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   The order of a caller's requests is the caller's type: a permit the
   request takes and its end returns. An existing flag or slot of these
   kinds is debt to remove, never a precedent to repeat.
+- **Set up, take down.** An operation that sets hardware up has the one
+  that takes it down: an install its retirement, a start its stop, a key's
+  installation its removal. A stop leaves its block as its start found it,
+  so that a second run is as the first. A block has one owner, which resets
+  it once, when it takes it: no start resets a block, and no code resets a
+  block of another owner. A port holds state about its hardware only: no
+  count or delay of a policy, no plan for later, nothing that outlives a
+  stop.
 - **Runtime panics.** Runtime code has zero panics; a change adds no runtime
   panic site. Compile-time panics and test assertions are allowed; a
   compile-time check is `const { if !cond { panic!("…") } }` as a const item
@@ -117,10 +134,14 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   would hand another owner memory or a peripheral the hardware may still use.
   Without such a proof, return a handled typed error and handle it at its own
   level: an error never travels up the stack to end in a panic or reset. An
-  impossible state returns a named fault retaining its source observations;
-  its owners stay quarantined, then the image or HAL owner calls safe
-  `fatal::reset_recording`, without `panic!`. A watchdog is not this
-  mechanism. That sequence is no license to quarantine. A quarantine (a
+  impossible state of a peripheral whose owner can take it down is an
+  indication to that owner and ends in its stop, not in a reset (**An
+  anomaly is an indication**). What no stop can take down (a CPU exception,
+  an invalid hart, a peripheral whose own reset a stand run refuted)
+  returns a named fault retaining its source observations, and the image or
+  HAL owner calls safe `fatal::reset_recording`, without `panic!`. A
+  watchdog is not this mechanism. That sequence is no license to
+  quarantine. A quarantine (a
   peripheral, an installation, an owner or a buffer left unusable until reset:
   a poisoned state, memory kept out of its pool on purpose) counts as a
   runtime panic: every peripheral and every owner has a recovery path. A new
@@ -194,6 +215,8 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   fixed image marked `whole-word`, a vendor's store of a whole word with
   its `SOURCE:`. Write-trigger (WT/WTC) and `read-observed` words follow
   [tools/registers/model/README.md](tools/registers/model/README.md).
+  A register the code wrote is not read again to decide anything, unless
+  its `SOURCE:` does so.
 - **Hardware dictionaries and geometry.** Field codes and opcodes are named
   values in the register model, including analog-I2C and hardware-consumed
   memory layouts; HAL selects the generated names. Field widths, maxima,
