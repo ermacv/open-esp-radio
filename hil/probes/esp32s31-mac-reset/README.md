@@ -55,9 +55,11 @@ table's section 2.3): the ring prepared with BASE on its reserved
 descriptor, the open promiscuous receive, the interrupt epoch (both banks
 masked and cleared, the station mask published, the station TBTT enabled;
 no line of this image takes a Wi-Fi source), the walker enabled, the MAC's
-runtime released. The station's receive policy of a virtual interface
-(`apply_vif`) is not programmed: the open receive is the probe's only
-filter.
+runtime released. After the open receive each start applies the station's scan policy as
+the backend does (`StaScanRxPolicyHardware`: the normal station transition,
+which clears queue three's `AUTOACK_DISABLE`, then the scan's policy with
+the broadcast BSSID): a frame addressed to the station's own address is
+taken and acknowledged whatever its BSSID, with no key.
 
 ## Records
 
@@ -70,6 +72,7 @@ The console prints one line a record, `R <kind> <values…>`, then
 | 2 stop | index, units before it, cycles to the stop request, cycles to the walker stopped, cycles to the activity field clear (or the 10 ms bound), the field then, the MAC's raw interrupts, the walker's flags and next descriptor, the MAC's MPDU and data-success counts over the window (high and low half), its FCS-error and buffer-full counts over it |
 | 3 pulse | index, units before it, delay (µs), the pulse's cycle, its length in cycles, the walker's flags and next descriptor before, its flags, next, last descriptor and base after, the activity field after, the MAC's raw interrupts after, the power bank's causes after, the key entry valid after the pulse, the guard's changed words, units in the second run, the key entry valid after the second run's cold preparation, the MPDU and data-success counts over the window before the pulse and over the second run's |
 | 6 quiet | a pulse with the walker stopped first: index, the walker's flags and base before, its flags, next, last and base after, its flags and base after the cold preparation |
+| 7 hold | a pulse under load left without the cold preparation for 20 ms: index, units before it, the walker's flags, next and base at the pulse, its flags, next, last and base after the 20 ms, the activity field then, the MPDU and data-success counts over the 20 ms, the FCS-error and buffer-full counts over them, the guard's changed words in the ring |
 | 4 end | cycles and microseconds over the series: the `mcycle` rate |
 | 5 failed | the phase and the index where the session stopped |
 
@@ -78,12 +81,16 @@ The walker's flags are bit 0 `RX_CONTROL.WALKER_ENABLE`, bit 1 a reload pending,
 ## Running
 
 Build with `cargo fw build esp32s31-mac-reset --diagnostic` before the
-lease. Under a board and air lease, with the stand's access point on
-channel 13 and the load generator sending to it:
+lease. The load is the stand's injector peer (`tools/lab/peers/esp32c5-wifi-injector`)
+sending to the probe board's station address on channel 13, both boards
+under one lease (the run's script holds the peer's lines beside the
+probe's console):
 
 ```console
-cargo stand --owner wifi lease --board s31-a --air exclusive -- \
-  cargo fw run esp32s31-mac-reset --board s31-a --timeout 120s
+cargo stand --owner wifi lease --board s31-a --board c5-a --air exclusive -- sh -c '
+  cargo stand board send c5-a --timeout 30s SYNC "MODE 13 20 6m" &&
+  { cargo stand board send c5-a --timeout 90s "TX 60000 2500 1500 <s31-a station> <c5-a> <c5-a> 0" &
+    cargo fw run esp32s31-mac-reset --board s31-a --timeout 180s; wait; }'
 ```
 
 Every owner stays held until the leased host reset; the probe returns no

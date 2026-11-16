@@ -68,6 +68,10 @@ const PULSES: usize = 100;
 const STOPS: usize = 1_000;
 /// The pulses with the walker stopped first (question 1's walker flag).
 const QUIET: usize = 10;
+/// The pulses left without the cold preparation for [`HOLD_MS`].
+const HOLDS: usize = 10;
+/// How long the block stays in its reset state under the load.
+const HOLD_MS: u32 = 20;
 /// How long a run receives before its pulse or its stop, and after a
 /// second run's start.
 const RECEIVE_MS: u32 = 20;
@@ -342,10 +346,12 @@ enum Kind {
     Failed = 5,
     /// One pulse with the walker stopped before it.
     Quiet = 6,
+    /// One pulse under load left in the block's reset state.
+    Hold = 7,
 }
 
 const WIDTH: usize = 22;
-const ROWS: usize = 4 + STOPS + PULSES + QUIET;
+const ROWS: usize = 4 + STOPS + PULSES + QUIET + HOLDS;
 
 /// The session's records, filled on hart 0's radio executor and printed by
 /// the console's task once the session has ended.
@@ -808,6 +814,7 @@ async fn series(
     // The port's start, in its order: the open receive, the interrupt
     // epoch, the walker, the MAC's runtime.
     access.wifi_mac_hal().configure_open_promiscuous_receive();
+    station_policy(&mut access);
     open_epoch(mac_irq, power_irq);
     let mut ring = stopped
         .try_start(access.rx_dma())
@@ -871,6 +878,7 @@ async fn series(
             .map_err(|_| (phase::RESTART, index32))?;
         access.wifi_mac_hal().reopen_mac_core(&stopped);
         access.wifi_mac_hal().configure_open_promiscuous_receive();
+        station_policy(&mut access);
         open_epoch(mac_irq, power_irq);
         ring = stopped
             .try_start(access.rx_dma())
@@ -935,6 +943,7 @@ async fn series(
             .map_err(|_| (phase::SECOND_RING, index32))?;
         access.wifi_mac_hal().reopen_mac_core(&stopped);
         access.wifi_mac_hal().configure_open_promiscuous_receive();
+        station_policy(&mut access);
         open_epoch(mac_irq, power_irq);
         ring = stopped
             .try_start(access.rx_dma())
@@ -1013,6 +1022,7 @@ async fn series(
             .map_err(|_| (phase::SECOND_RING, index32 | 0x2000_0000))?;
         access.wifi_mac_hal().reopen_mac_core(&stopped);
         access.wifi_mac_hal().configure_open_promiscuous_receive();
+        station_policy(&mut access);
         open_epoch(mac_irq, power_irq);
         ring = stopped
             .try_start(access.rx_dma())
@@ -1030,6 +1040,74 @@ async fn series(
                 walker(&after)[3],
                 walker(&cold_after)[0],
                 walker(&cold_after)[3],
+            ],
+        );
+    }
+    // The reset state under load: the pulse with the walker live, then no
+    // cold preparation for HOLD_MS while the injector's frames arrive.
+    for index in 0..HOLDS {
+        let index32 = u32::try_from(index).unwrap_or(u32::MAX);
+        let units = receive(storage, &mut ring, &mut access, RECEIVE_MS)
+            .await
+            .map_err(|code| (phase::RECEIVE, code | 0x1000_0000))?;
+        let (pulsed, pulsed_clocks) = {
+            let mut clocked = WifiClocked::from_running(access, clocks_on);
+            clocked.reset_mac(radio);
+            clocked.into_running()
+        };
+        access = pulsed;
+        clocks_on = pulsed_clocks;
+        let at_pulse = access.receive_dma_snapshot();
+        let counted = statistics(&access);
+        paint(storage, index32 | 0x80).map_err(|code| (phase::RING, code))?;
+        wait_micros(u64::from(HOLD_MS) * 1_000).await;
+        let held = access.receive_dma_snapshot();
+        let active = access.wifi_mac_hal().channel_active_state();
+        let counted_after = statistics(&access);
+        let changed = changed_words(storage, index32 | 0x80).map_err(|code| (phase::RING, code))?;
+        let halted = match ring.try_stop(access.rx_dma()) {
+            Ok(halted) => halted,
+            Err((_live, _error)) => return Err((phase::WALKER_STOP, index32 | 0x1000_0000)),
+        };
+        let second_cold = {
+            let mut clocked = WifiClocked::from_running(access, clocks_on);
+            let result = {
+                let mut hal = clocked.cold_mac_hal(radio);
+                initialize_wifi_mac(sources, &mut hal, timer, mac).await
+            };
+            let (running, on) = clocked.into_running();
+            access = running;
+            clocks_on = on;
+            result
+        };
+        second_cold.map_err(|_| (phase::SECOND_COLD, index32 | 0x1000_0000))?;
+        let stopped = storage
+            .prepare_halted(halted, access.rx_dma())
+            .map_err(|_| (phase::SECOND_RING, index32 | 0x1000_0000))?;
+        access.wifi_mac_hal().reopen_mac_core(&stopped);
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        station_policy(&mut access);
+        open_epoch(mac_irq, power_irq);
+        ring = stopped
+            .try_start(access.rx_dma())
+            .map_err(|_| (phase::SECOND_RING, index32 | 0x5000_0000))?;
+        access.wifi_mac_hal().start_mac_runtime(&ring);
+        journal.record(
+            Kind::Hold,
+            &[
+                index32,
+                units,
+                walker(&at_pulse)[0],
+                walker(&at_pulse)[1],
+                walker(&at_pulse)[3],
+                walker(&held)[0],
+                walker(&held)[1],
+                walker(&held)[2],
+                walker(&held)[3],
+                u32::from(active),
+                advance(counted, counted_after, 0, 1),
+                advance(counted, counted_after, 2, 3),
+                changed,
             ],
         );
     }
@@ -1058,6 +1136,18 @@ fn open_epoch(mac_irq: &mut MacInterruptRegisters, power_irq: &mut MacPowerInter
         oer_chips_esp32s31_hal::radio::ieee80211::init::MAC_STATION_INTERRUPT_MASK,
     );
     power_irq.enable_station_tbtt_interrupt();
+}
+
+/// The station's receive policy under which a frame addressed to the
+/// station is taken and acknowledged whatever its BSSID: the HAL's scan
+/// transition, as the backend applies it (`StaScanRxPolicyHardware`: the
+/// normal station transition, which clears queue three's
+/// `AUTOACK_DISABLE`, then the scan's policy, with the broadcast BSSID). The
+/// station's own address is the cold start's; no key is installed for it.
+fn station_policy(access: &mut RadioAccess) {
+    let broadcast = [0xff; 6];
+    access.wifi_mac_hal().configure_station_receive_policy(broadcast);
+    access.wifi_mac_hal().configure_station_scan_policy(broadcast);
 }
 
 /// The MAC's receive statistics this probe reads: MPDUs, data successes,
