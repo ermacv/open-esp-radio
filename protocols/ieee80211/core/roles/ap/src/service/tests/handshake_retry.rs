@@ -166,7 +166,7 @@ fn a_lost_message4_is_recovered_by_a_message3_under_a_larger_counter() {
     begin(&mut service);
     // The BSS has sent group frames before this station joins.
     for _ in 0..5 {
-        gtk.number().unwrap();
+        gtk.packet_numbers().allocate().unwrap();
     }
     let message3 = first_message3(&mut service, &gtk);
     let mut station = station();
@@ -183,8 +183,8 @@ fn a_lost_message4_is_recovered_by_a_message3_under_a_larger_counter() {
 
     // Message 4 is lost; group traffic continues meanwhile. The same
     // Message 3 again would be dropped by this station.
-    gtk.number().unwrap();
-    gtk.number().unwrap();
+    gtk.packet_numbers().allocate().unwrap();
+    gtk.packet_numbers().allocate().unwrap();
     assert!(station.on_message3(&message3).is_none());
     let retry = retried_message3(&mut service, &gtk);
     let Some(Message4 {
@@ -358,12 +358,12 @@ fn a_recreated_service_announces_the_continuing_numbering_of_the_same_gtk() {
     {
         let mut first = service(&mut storage);
         begin(&mut first);
-        gtk.number().unwrap();
+        gtk.packet_numbers().allocate().unwrap();
         first_message3(&mut first, &gtk);
     }
     // The key stays installed while the service is created again.
-    gtk.number().unwrap();
-    gtk.number().unwrap();
+    gtk.packet_numbers().allocate().unwrap();
+    gtk.packet_numbers().allocate().unwrap();
     let mut second = service(&mut storage);
     begin(&mut second);
     let message3 = first_message3(&mut second, &gtk);
