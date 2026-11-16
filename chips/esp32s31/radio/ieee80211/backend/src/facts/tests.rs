@@ -90,3 +90,32 @@ fn the_he_element_carries_the_widths_of_the_capability() {
     assert_eq!(wide.he_channel_width_set(BandSet::GHZ5), None);
     assert_eq!(wide.he_channel_width_set(BandSet::NONE), None);
 }
+
+/// The ESP32-S31's pairs: non-HT at 20 MHz, HT at 20 and 40 MHz, HE at
+/// 20 MHz are offered; HE at 40 MHz is not.
+#[test]
+fn the_esp32s31_offers_its_five_pairs_and_not_he_at_40_mhz() {
+    use oer_protocols_ieee80211_contracts_port::{FormatWidth, Ieee80211Capabilities, PhyFormat};
+    use oer_protocols_ieee80211_wire::channel::ChannelWidth::{Mhz20, Mhz40Above, Mhz40Below};
+    struct Esp32s31;
+    impl Ieee80211Capabilities for Esp32s31 {
+        type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
+        const CAPS: LowerMacCapabilities = esp32s31_lower_mac_capabilities(1664);
+    }
+    for (format, width) in [
+        (PhyFormat::NonHt, Mhz20),
+        (PhyFormat::Ht, Mhz20),
+        (PhyFormat::Ht, Mhz40Above),
+        (PhyFormat::Ht, Mhz40Below),
+        (PhyFormat::He, Mhz20),
+    ] {
+        assert!(FormatWidth::<Esp32s31>::new(format, width).is_some());
+    }
+    for (format, width) in [
+        (PhyFormat::He, Mhz40Above),
+        (PhyFormat::He, Mhz40Below),
+        (PhyFormat::NonHt, Mhz40Above),
+    ] {
+        assert!(FormatWidth::<Esp32s31>::new(format, width).is_none());
+    }
+}

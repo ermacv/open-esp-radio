@@ -5,11 +5,11 @@ use oer_protocols_ieee80211_contracts_port::{
 };
 use oer_protocols_ieee80211_wire::channel::ChannelWidth;
 
-/// The ESP32-S31's pairs: non-HT at 20 MHz, HT at 20 and 40 MHz, HE at
+/// A capability offering non-HT at 20 MHz, HT at 20 and 40 MHz and HE at
 /// 20 MHz.
-pub struct S31;
+pub struct HtWideHeNarrow;
 
-impl Ieee80211Capabilities for S31 {
+impl Ieee80211Capabilities for HtWideHeNarrow {
     type SppScope = oer_protocols_ieee80211_wire::security::spp::Association;
     const CAPS: LowerMacCapabilities = LowerMacCapabilities {
         bands: BandSet::GHZ2_4,
@@ -44,18 +44,18 @@ impl Ieee80211Capabilities for S31 {
     };
 }
 
-/// HT at 40 MHz: the S31 offers the pair, and the constant builds.
-pub const HT_AT_40_MHZ: FormatWidth<S31> =
+/// HT at 40 MHz: the capability offers the pair, and the constant builds.
+pub const HT_AT_40_MHZ: FormatWidth<HtWideHeNarrow> =
     match FormatWidth::new(PhyFormat::Ht, ChannelWidth::Mhz40Above) {
         Some(pair) => pair,
-        None => panic!("the ESP32-S31 offers no HT at 40 MHz"),
+        None => panic!("the capability offers no HT at 40 MHz"),
     };
 
-/// HE at 40 MHz: the S31 does not offer the pair, and the constant does not
-/// build.
+/// HE at 40 MHz: the capability does not offer the pair, and the constant
+/// does not build.
 #[cfg(ui_reject)]
-pub const HE_AT_40_MHZ: FormatWidth<S31> =
+pub const HE_AT_40_MHZ: FormatWidth<HtWideHeNarrow> =
     match FormatWidth::new(PhyFormat::He, ChannelWidth::Mhz40Above) {
         Some(pair) => pair,
-        None => panic!("the ESP32-S31 offers no HE at 40 MHz"), // ui-error: E0080: evaluation panicked: the ESP32-S31 offers no HE at 40 MHz
+        None => panic!("the capability offers no HE at 40 MHz"), // ui-error: E0080: evaluation panicked: the capability offers no HE at 40 MHz
     };

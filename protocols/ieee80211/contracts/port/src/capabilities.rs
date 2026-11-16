@@ -171,7 +171,7 @@ impl FormatWidths {
     /// SOURCE: IEEE Std 802.11ax-2021, 9.4.2.248.3; see
     /// [`HeChannelWidthSet`].
     pub const fn he_channel_width_set(self, bands: BandSet) -> Option<HeChannelWidthSet> {
-        let wide = self.he.contains(ChannelWidth::Mhz40Above);
+        let wide = self.he.contains_bandwidth(PpduBandwidth::Mhz40);
         if bands.0 == 0 {
             return None;
         }
@@ -388,5 +388,83 @@ impl LowerMacCapabilities {
             VifRole::Station => self.station_receive_filters,
             VifRole::AccessPoint => self.access_point_receive_filters,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oer_protocols_ieee80211_wire::{
+        channel::Ghz2_4Channel,
+        phy::{Dcm, HeGiLtf, HeRate, HtGuardInterval, HtRate, SpatialStreams},
+    };
+
+    fn capabilities(ht: WidthSet) -> LowerMacCapabilities {
+        LowerMacCapabilities {
+            bands: BandSet::GHZ2_4,
+            formats: FormatWidths {
+                non_ht: WidthSet::MHZ20,
+                ht,
+                he: WidthSet::MHZ20,
+            },
+            rates: RateSupport {
+                dsss_cck: Support::Supported,
+                ofdm: Support::Supported,
+                ht_max_mcs: HtMcs::new(7),
+                he_max_mcs: HeMcs::new(9),
+                he_dcm: Support::Supported,
+                he_ldpc: Support::Supported,
+                spatial_streams: 1,
+            },
+            services: HardwareServices::FCS,
+            vifs: 2,
+            tx_queues: 4,
+            max_mpdu_length: 2304,
+            tx_power_ceiling_min_dbm: Some(0),
+            individual_no_ack: PhyFormatSet::NON_HT,
+            station_receive_filters: ReceiveFilter::BSS_MEMBER,
+            access_point_receive_filters: ReceiveFilter::BSS_MEMBER,
+            rx_block_ack_max_tid: 7,
+            rx_block_ack_max_window: 64,
+            rx_amsdu_in_ampdu: true,
+            edca_max_aifsn: 15,
+            edca_max_cw_exponent: 10,
+            edca_max_txop_limit_units_32_us: u16::MAX,
+        }
+    }
+
+    /// A rate is sent at a bandwidth its format is offered at: on a 40 MHz
+    /// channel, with HT at 20 and 40 MHz and HE at 20 MHz, an HT rate at
+    /// 40 MHz is sent and an HE rate at 40 MHz is not; with HT at 20 MHz
+    /// only, neither is.
+    #[test]
+    fn a_rate_is_sent_at_the_widths_of_its_format() {
+        let channel = Channel::from(Ghz2_4Channel::new(6, ChannelWidth::Mhz40Above).unwrap());
+        let ht = PhyRate::Ht(
+            HtRate::new(
+                HtMcs::new(7).unwrap(),
+                PpduBandwidth::Mhz40,
+                HtGuardInterval::Normal,
+            )
+            .unwrap(),
+        );
+        let he = PhyRate::He(
+            HeRate::new(
+                HeMcs::new(7).unwrap(),
+                SpatialStreams::ONE,
+                PpduBandwidth::Mhz40,
+                HeGiLtf::Ltf2xGi800Ns,
+                FecCoding::Bcc,
+                Dcm::NotUsed,
+            )
+            .unwrap(),
+        );
+        let wide = capabilities(WidthSet::MHZ20.union(WidthSet::MHZ40));
+        assert!(wide.supports_channel(channel));
+        assert!(wide.supports_rate(ht, channel));
+        assert!(!wide.supports_rate(he, channel));
+        let narrow = capabilities(WidthSet::MHZ20);
+        assert!(!narrow.supports_rate(ht, channel));
+        assert!(!narrow.supports_rate(he, channel));
     }
 }

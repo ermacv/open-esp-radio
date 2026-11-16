@@ -130,9 +130,9 @@ pub use operation::{ConnectionFrame, Operation, TxOperation};
 pub use owner::{
     AccessPoint, AckHeader, AmpduRate, BssColor, FormatWidth, FrameHeader, GroupAddress,
     HeaderSpec, Ieee80211Capabilities, InterfaceRole, LegacyPortRate, MpduLength, MpduStartSpacing,
-    NoAckHeader, PhyChannel, PortRate, QosBody, QosControl, ReceiverAddress, ResponseHeader,
-    ServicePeriod, SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck,
-    SupportedChannel, SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
+    NoAckHeader, PortRate, QosBody, QosControl, ReceiverAddress, ResponseHeader, ServicePeriod,
+    SizedFrame, Station, StationReceive, StorageTooShort, SupportedBlockAck, SupportedChannel,
+    SupportedEdca, SupportedFilter, SupportedNoAck, SupportedPower, Tid, TxFrame,
 };
 pub use rx::{LinkMetric, RxCryptoStatus, RxEvidence, RxMeta, RxMetadata, SignalMetadata};
 pub use tx::{

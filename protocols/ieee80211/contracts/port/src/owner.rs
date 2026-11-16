@@ -264,48 +264,6 @@ impl<K> Clone for FormatWidth<K> {
 
 impl<K> Copy for FormatWidth<K> {}
 
-/// A channel the capabilities `K` tune to, with the PPDU format a link
-/// uses on it, at the channel's width.
-pub struct PhyChannel<K> {
-    format: crate::PhyFormat,
-    channel: SupportedChannel<K>,
-}
-
-impl<K: Ieee80211Capabilities> PhyChannel<K> {
-    /// `pair` on `channel`, when the channel has the pair's width.
-    pub const fn new(pair: FormatWidth<K>, channel: SupportedChannel<K>) -> Option<Self> {
-        if channel_width_eq(pair.width, channel.channel().width()) {
-            Some(Self {
-                format: pair.format,
-                channel,
-            })
-        } else {
-            None
-        }
-    }
-
-    /// The format.
-    pub const fn format(&self) -> crate::PhyFormat {
-        self.format
-    }
-
-    /// The channel.
-    pub const fn channel(&self) -> SupportedChannel<K> {
-        self.channel
-    }
-}
-
-const fn channel_width_eq(
-    left: oer_protocols_ieee80211_wire::channel::ChannelWidth,
-    right: oer_protocols_ieee80211_wire::channel::ChannelWidth,
-) -> bool {
-    use oer_protocols_ieee80211_wire::channel::ChannelWidth::{Mhz20, Mhz40Above, Mhz40Below};
-    matches!(
-        (left, right),
-        (Mhz20, Mhz20) | (Mhz40Above, Mhz40Above) | (Mhz40Below, Mhz40Below)
-    )
-}
-
 impl<K> Clone for SupportedChannel<K> {
     fn clone(&self) -> Self {
         *self
