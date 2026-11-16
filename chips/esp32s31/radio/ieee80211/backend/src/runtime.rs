@@ -1,6 +1,15 @@
 //! Role-neutral ownership after the one-way cold-MAC/runtime transition.
 
-use crate::{port::WifiRetuneError, startup::WifiStartReport};
+use crate::startup::WifiStartReport;
+
+/// Why the radio front end did not retune a stopped Wi-Fi client.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WifiRetuneError {
+    /// The MAC or its RX walker was still active; nothing was posted.
+    NotStopped(oer_chips_esp32s31_hal::system::owner::maintenance::Error),
+    /// The radio system answered the retune with this failure.
+    Radio(oer_chips_esp32s31_radio_client::Failure),
+}
 
 use oer_chips_esp32s31_hal::{
     radio::ieee80211::client::{WifiClocked, WifiClocksOn},
@@ -325,77 +334,6 @@ impl<W> WifiStopped<W> {
                 current_channel: self.current_channel,
             },
         }
-    }
-}
-
-/// The chip's frontier of a device: its registers run on, its platform and
-/// common state wait beside them.
-impl<W: crate::startup::WifiMacPlatform + 'static> crate::port::device::Frontier
-    for WifiStopped<W>
-{
-    type Registers = RadioAccess;
-    type Space = oer_chips_esp32s31_hal::radio::ieee80211::dma::space::ChipDma;
-    type Calibrated = oer_chips_esp32s31_radio_phy::PhyTxTargetPowerProfile;
-    type Context = (W, WifiRuntimeContext);
-    type Cell = MembershipCell<Wifi>;
-    type Retune = WifiRetunePending<W>;
-    type Failed = WifiRetuneFailure<W>;
-    fn into_running(self) -> (RadioAccess, (W, WifiRuntimeContext)) {
-        let WifiRuntimeParts {
-            platform,
-            registers,
-            context,
-        } = self.into_runtime_parts();
-        (registers, (platform, context))
-    }
-    fn into_stopped(registers: RadioAccess, (platform, context): (W, WifiRuntimeContext)) -> Self {
-        context.into_stopped(platform, registers)
-    }
-    fn current_channel((_, context): &(W, WifiRuntimeContext)) -> Ghz2_4Channel {
-        context.current_channel()
-    }
-    fn start_retune(
-        self,
-        cell: MembershipCell<Wifi>,
-        channel: oer_protocols_radio_regulatory::Permitted<
-            oer_protocols_ieee80211_contracts_port::RegulatedChannel<Ghz2_4Channel>,
-        >,
-        ceiling: oer_protocols_radio_regulatory::TxCeiling,
-    ) -> WifiRetunePending<W> {
-        WifiStopped::start_retune(self, cell, channel, ceiling)
-    }
-    fn poll_retune(
-        retune: &mut WifiRetunePending<W>,
-        cx: &mut core::task::Context<'_>,
-    ) -> core::task::Poll<crate::port::device::RetuneEnd<Self>> {
-        use crate::port::device::RetuneEnd;
-        use core::{future::Future as _, pin::Pin};
-        core::task::Poll::Ready(match core::task::ready!(Pin::new(retune).poll(cx)) {
-            Err(quarantine) => {
-                drop(quarantine);
-                RetuneEnd::Abandoned
-            }
-            Ok((cell, Ok((stopped, report)))) => RetuneEnd::Moved {
-                stopped,
-                cell,
-                tx_power: report.tx_power,
-            },
-            Ok((cell, Err(failure))) => {
-                let cause = failure.cause;
-                match failure.resume() {
-                    Ok(stopped) => RetuneEnd::Unchanged {
-                        stopped,
-                        cell,
-                        cause,
-                    },
-                    Err(failed) => RetuneEnd::Poisoned {
-                        failed,
-                        cell,
-                        cause,
-                    },
-                }
-            }
-        })
     }
 }
 

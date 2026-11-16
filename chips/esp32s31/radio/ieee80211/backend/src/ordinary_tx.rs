@@ -1740,7 +1740,7 @@ where
             .get(TX_METADATA_SIZE..)
             .and_then(|bytes| bytes.get(..active.frame_length))
         {
-            crate::port::trace::encoded_mpdu(frame);
+            trace::encoded_mpdu(frame);
         }
         let cookie = self
             .free_slot()?
@@ -2034,6 +2034,9 @@ impl FixedRateRetry {
         }
     }
 }
+
+#[cfg(all(oer_trace, oer_debug_control))]
+pub mod trace;
 
 #[cfg(test)]
 mod tests;
