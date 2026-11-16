@@ -249,6 +249,35 @@ line shifts preserve keys; file moves, enclosing-item changes and changes
 to the site itself require reviewed registry updates. Do not
 regenerate classifications without checking their cause and owner.
 
+## The answers registry
+
+`wifi-answers.toml` holds every public enum of the Wi-Fi contracts and cores
+(`PACKAGES` in `tests/wifi_answers.rs`: today `contracts/port`,
+`core/installation` and `core/datapath`; a core of the Wi-Fi path joins as it
+is rewritten, and a package never leaves). The test reads each package's
+non-test sources with `syn`, so the check stands at the enum's declaration:
+an enum the registry does not name fails, and so does a variant without its
+entry or an entry whose enum or variant is gone.
+
+An enum is `"vocabulary"` (a rate, a category, a frame's kind: no variants
+listed) or `kind = "answer"`: anything a call, a step or a sink hands back
+about what happened or did not. Each variant of an answer has a kind:
+
+| Kind | Means | Needs |
+|---|---|---|
+| `outcome` | the operation's result | — |
+| `hardware` | what the hardware did or did not do | — |
+| `air`, `peer`, `host`, `input` | what the air, a peer, the host or the application gave | — |
+| `load` | not now, for a load that ends | `next`: the event, waker or instant that ends it |
+| `own-state` | the caller's own state, or a contract between two of our modules, told at run time | `by`: the step that removes it |
+| `kept-out` | an owner, memory or a peripheral left unusable | `by` |
+
+**A variant's kind is what it means, whatever it is called**: renaming a
+variant changes nothing in the registry, and its kind follows it. Each
+package's `own-state` and `kept-out` counts (`COUNTS`) only shrink: a rise
+fails, and a variant moved to another kind changes a count, which the list
+follows only with its entry under **Checks changed**.
+
 ## Scans of production code
 
 Each scan reads the production modules of its packages from their crate

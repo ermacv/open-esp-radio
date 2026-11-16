@@ -1,0 +1,338 @@
+# Every public enum of the Wi-Fi contracts and cores, and the kind of each variant
+# of an answer. The rule and the kinds: README.md, "The answers registry".
+
+["protocols/ieee80211/contracts/port"]
+AccessPoint = "vocabulary"
+AccessPointCommand = "vocabulary"
+AccessPointCommandKind = "vocabulary"
+AccessPointProgress.kind = "answer"
+AccessPointProgress.variants.Done = { kind = "outcome" }
+AccessPointProgress.variants.Held = { kind = "own-state", by = "B3d" }
+AccessPointProgress.variants.Refused = { kind = "outcome" }
+AccessPointReceive = "vocabulary"
+AccessPointRefusal.kind = "answer"
+AccessPointRefusal.variants.NotEnabled = { kind = "own-state", by = "B3d" }
+AccessPointRefusal.variants.StalePermission = { kind = "own-state", by = "B4" }
+AccessPointRefusal.variants.Expired = { kind = "hardware" }
+AccessPointRefusal.variants.UnsupportedGroupKeyId = { kind = "own-state", by = "B4" }
+AggregateEnd.kind = "answer"
+AggregateEnd.variants.Delivered = { kind = "outcome" }
+AggregateEnd.variants.AckTimeout = { kind = "air" }
+AggregateEnd.variants.CtsTimeout = { kind = "air" }
+AggregateEnd.variants.ContentionLimit = { kind = "hardware" }
+AggregateEnd.variants.AirDenied = { kind = "hardware" }
+ArenaFormat = "vocabulary"
+ArenaId = "vocabulary"
+ArenaState.kind = "answer"
+ArenaState.variants.Returnable = { kind = "outcome" }
+ArenaState.variants.Held = { kind = "own-state", by = "B3c" }
+ArenaState.variants.Absent = { kind = "own-state", by = "B3c" }
+AttemptEnd.kind = "answer"
+AttemptEnd.variants.Answered = { kind = "air" }
+AttemptEnd.variants.Acked = { kind = "air" }
+AttemptEnd.variants.NoResponse = { kind = "air" }
+AttemptEnd.variants.ProtectionFailure = { kind = "air" }
+AttemptEnd.variants.Collision = { kind = "air" }
+AttemptEnd.variants.AirDenied = { kind = "hardware" }
+AttemptEnd.variants.Aborted = { kind = "hardware" }
+AttemptKey = "vocabulary"
+BeaconTimestamp = "vocabulary"
+BssColorScope = "vocabulary"
+BssColorUse = "vocabulary"
+CheckedTxSource = "vocabulary"
+CleanupRefused.kind = "answer"
+CleanupRefused.variants.Stale = { kind = "own-state", by = "B3d" }
+CleanupRefused.variants.Faulted = { kind = "hardware" }
+CleanupRefused.variants.Unavailable = { kind = "hardware" }
+CleanupRefused.variants.Held = { kind = "hardware" }
+CommandFailed.kind = "answer"
+CommandFailed.variants.Returned = { kind = "hardware" }
+CommandFailed.variants.Taken = { kind = "kept-out", by = "B3d" }
+CommandKind = "vocabulary"
+CommandProgress.kind = "answer"
+CommandProgress.variants.Done = { kind = "outcome" }
+CommandProgress.variants.Held = { kind = "own-state", by = "B3d" }
+CommandProgress.variants.Refused = { kind = "outcome" }
+CommandRefusal.kind = "answer"
+CommandRefusal.variants.Busy = { kind = "own-state", by = "B3d" }
+CommandRefusal.variants.GateClosed = { kind = "own-state", by = "B3d" }
+CommandRefusal.variants.Configuring = { kind = "own-state", by = "B3d" }
+CommandRefusal.variants.EdcaUnsupported = { kind = "peer" }
+CommandRefusal.variants.NotEnabled = { kind = "own-state", by = "B3d" }
+CommandRefusal.variants.StalePermission = { kind = "own-state", by = "B4" }
+CommandRefusal.variants.Expired = { kind = "hardware" }
+Configured = "vocabulary"
+ConnectionEpochKind = "vocabulary"
+ConnectionFrame = "vocabulary"
+He20AssociationError.kind = "answer"
+He20AssociationError.variants.AssociationId = { kind = "peer" }
+He20AssociationError.variants.MinimumMpduStartSpacing = { kind = "peer" }
+He20AssociationError.variants.PacketPadding = { kind = "peer" }
+He20AssociationError.variants.DefaultPacketExtension = { kind = "peer" }
+He20AssociationError.variants.BssColor = { kind = "peer" }
+He20AssociationError.variants.MaxCoHostedBssidIndicator = { kind = "peer" }
+Ieee80211Radio = "vocabulary"
+Ieee80211Tsf = "vocabulary"
+IndeterminateCause.kind = "answer"
+IndeterminateCause.variants.HardwareTimeout = { kind = "hardware" }
+IndeterminateCause.variants.KeyRefused = { kind = "hardware" }
+InstalledGroup = "vocabulary"
+InstalledPairwise = "vocabulary"
+IntakeRefused.kind = "answer"
+IntakeRefused.variants.Full = { kind = "own-state", by = "none yet: the caller's own value, which no step removes yet" }
+IntakeRefused.variants.Declined = { kind = "own-state", by = "none yet: the caller's own value, which no step removes yet" }
+IntakeRefused.variants.Length = { kind = "hardware" }
+IntakeRefused.variants.Busy = { kind = "own-state", by = "B3c" }
+IntakeRefused.variants.Quarantined = { kind = "kept-out", by = "B3c" }
+LayoutError.kind = "answer"
+LayoutError.variants.StorageTooShort = { kind = "own-state", by = "B4a" }
+LayoutError.variants.CcmpHeaderTooShort = { kind = "own-state", by = "B4a" }
+LayoutError.variants.BodyOverlap = { kind = "own-state", by = "B4a" }
+LayoutError.variants.BufferUnavailable = { kind = "own-state", by = "B4a" }
+LendRefusal.kind = "answer"
+LendRefusal.variants.Unsupported = { kind = "own-state", by = "B3f" }
+LendRefusal.variants.Capacity = { kind = "load", next = "a buffer the network returns: the returns signal" }
+LendRefusal.variants.Stopping = { kind = "own-state", by = "B3d" }
+LowerMacTerminal.kind = "answer"
+LowerMacTerminal.variants.TxCompleted = { kind = "outcome" }
+LowerMacTerminal.variants.GateClosed = { kind = "outcome" }
+LowerMacTerminal.variants.Configured = { kind = "outcome" }
+LowerMacTerminal.variants.KeyRemoved = { kind = "outcome" }
+LowerMacTerminal.variants.GroupKeyReplaced = { kind = "outcome" }
+LowerMacTerminal.variants.GroupKeyInstalled = { kind = "outcome" }
+LowerMacTerminal.variants.PairwiseKeyInstalled = { kind = "outcome" }
+LowerMacTerminal.variants.GroupKeySelected = { kind = "outcome" }
+MacOperationOwner = "vocabulary"
+MacTxResult.kind = "answer"
+MacTxResult.variants.Transmitted = { kind = "outcome" }
+MacTxResult.variants.HardwareFailure = { kind = "hardware" }
+MacTxResult.variants.HardwareTimeout = { kind = "hardware" }
+MacTxResult.variants.CollisionLimit = { kind = "air" }
+MonitorDropReason.kind = "answer"
+MonitorDropReason.variants.Full = { kind = "load", next = "a capture slot the caller frees" }
+MonitorDropReason.variants.TooLong = { kind = "air" }
+MonitorDropReason.variants.Filtered = { kind = "outcome" }
+MonitorInjectionBindingError.kind = "answer"
+MonitorInjectionBindingError.variants.ZeroChannelEpoch = { kind = "own-state", by = "none yet: the caller's own value, which no step removes yet" }
+MonitorInjectionRate = "vocabulary"
+MonitorPublishOutcome.kind = "answer"
+MonitorPublishOutcome.variants.Published = { kind = "outcome" }
+MonitorPublishOutcome.variants.Dropped = { kind = "outcome" }
+MonitorTapPoint = "vocabulary"
+MpduKind = "vocabulary"
+MpduProtection = "vocabulary"
+Operation = "vocabulary"
+PortCommand = "vocabulary"
+PreparationError.kind = "answer"
+PreparationError.variants.MissingBodyLoan = { kind = "own-state", by = "B4a" }
+PreparationError.variants.RetransmissionKey = { kind = "own-state", by = "B4a" }
+PreparationError.variants.RetransmissionKind = { kind = "own-state", by = "B4a" }
+ProofRefused.kind = "answer"
+ProofRefused.variants.Stale = { kind = "own-state", by = "B3d" }
+ProofRefused.variants.Refused = { kind = "outcome" }
+Protection = "vocabulary"
+PublishError.kind = "answer"
+PublishError.variants.Refused = { kind = "outcome" }
+PublishError.variants.FaultBeforeTaking = { kind = "hardware" }
+PublishError.variants.Fault = { kind = "kept-out", by = "B3c" }
+PublishRefused.kind = "answer"
+PublishRefused.variants.Empty = { kind = "own-state", by = "B3c" }
+PublishRefused.variants.Busy = { kind = "own-state", by = "B3c, B3d, B4a" }
+PublishRefused.variants.NoKey = { kind = "own-state", by = "B3d" }
+PublishRefused.variants.Protection = { kind = "own-state", by = "B3c" }
+PublishRefused.variants.Length = { kind = "hardware" }
+QosBody = "vocabulary"
+RateSample.kind = "answer"
+RateSample.variants.Acked = { kind = "air" }
+RateSample.variants.Unsolicited = { kind = "outcome" }
+RateSample.variants.Unanswered = { kind = "air" }
+RateScheduleKind = "vocabulary"
+ReceiveOperation = "vocabulary"
+Recovered.kind = "answer"
+Recovered.variants.Clear = { kind = "outcome" }
+Recovered.variants.TakenBack = { kind = "outcome" }
+ReinstallRefused.kind = "answer"
+ReinstallRefused.variants.Epochs = { kind = "own-state", by = "none yet: the caller's own value, which no step removes yet" }
+ReinstallRefused.variants.ChannelUnset = { kind = "own-state", by = "B3d" }
+ReinstallRefused.variants.Receipt = { kind = "own-state", by = "B3d" }
+ReinstallRefused.variants.Resources = { kind = "kept-out", by = "B3d" }
+Removed = "vocabulary"
+RemovedKey = "vocabulary"
+RetainError.kind = "answer"
+RetainError.variants.Outside = { kind = "own-state", by = "B3c" }
+RetainError.variants.Fault = { kind = "kept-out", by = "B3c" }
+RetransmissionPlan = "vocabulary"
+ReturnedMpdu = "vocabulary"
+RunPhase.kind = "answer"
+RunPhase.variants.Stopped = { kind = "outcome" }
+RunPhase.variants.Starting = { kind = "own-state", by = "B3d" }
+RunPhase.variants.Running = { kind = "own-state", by = "B3d" }
+RunPhase.variants.Recovering = { kind = "own-state", by = "B3d" }
+RunPhase.variants.Stopping = { kind = "own-state", by = "B3d" }
+RunPhase.variants.RollingBack = { kind = "own-state", by = "B3d" }
+RxCryptoStatus = "vocabulary"
+RxEvidence = "vocabulary"
+RxPull.kind = "answer"
+RxPull.variants.Unit = { kind = "outcome" }
+RxPull.variants.Empty = { kind = "load", next = "the ring's next unit: the receive signal" }
+RxPull.variants.Later = { kind = "load", next = "the instant it names" }
+ServicePeriod = "vocabulary"
+Signal = "vocabulary"
+SingleEnd.kind = "answer"
+SingleEnd.variants.Delivered = { kind = "outcome" }
+SingleEnd.variants.AckTimeout = { kind = "air" }
+SingleEnd.variants.CtsTimeout = { kind = "air" }
+SingleEnd.variants.ContentionLimit = { kind = "hardware" }
+SingleEnd.variants.AirDenied = { kind = "hardware" }
+SingleResponse.kind = "answer"
+SingleResponse.variants.Unsolicited = { kind = "outcome" }
+SingleResponse.variants.Ack = { kind = "air" }
+SingleResponse.variants.BlockAck = { kind = "air" }
+SnrSample = "vocabulary"
+StartFailure.kind = "answer"
+StartFailure.variants.Retune = { kind = "hardware" }
+StartFailure.variants.Deadline = { kind = "hardware" }
+StartFailure.variants.Device = { kind = "hardware" }
+StartProgress.kind = "answer"
+StartProgress.variants.Started = { kind = "outcome" }
+StartProgress.variants.Pending = { kind = "load", next = "the start's next poll: the port's wake" }
+StartProof = "vocabulary"
+StartRefused.kind = "answer"
+StartRefused.variants.Refused = { kind = "outcome" }
+StartRefused.variants.Unstopped = { kind = "hardware" }
+StartRefused.variants.Stale = { kind = "own-state", by = "B3d" }
+Station = "vocabulary"
+StationHe = "vocabulary"
+StationReceive = "vocabulary"
+StopCause.kind = "answer"
+StopCause.variants.Deadline = { kind = "hardware" }
+StopCause.variants.Device = { kind = "hardware" }
+StopCause.variants.CoreEnabled = { kind = "hardware" }
+SubmitRefusal.kind = "answer"
+SubmitRefusal.variants.NotEnabled = { kind = "own-state", by = "B3d" }
+SubmitRefusal.variants.Stopping = { kind = "own-state", by = "B3d" }
+SubmitRefusal.variants.StalePermission = { kind = "own-state", by = "B4" }
+Support = "vocabulary"
+TsfArithmeticError.kind = "answer"
+TsfArithmeticError.variants.VifMismatch = { kind = "own-state", by = "none yet: the caller's own value, which no step removes yet" }
+TsfArithmeticError.variants.ReversedTime = { kind = "hardware" }
+TsfControl = "vocabulary"
+TsfProjectionError.kind = "answer"
+TsfProjectionError.variants.StaleStamp = { kind = "hardware" }
+TsfProjectionError.variants.StaleSample = { kind = "hardware" }
+TsfProjectionError.variants.OutOfRange = { kind = "hardware" }
+TxBufferForm = "vocabulary"
+TxCompleted.kind = "answer"
+TxCompleted.variants.Single = { kind = "outcome" }
+TxCompleted.variants.Beacon = { kind = "outcome" }
+TxEstimate = "vocabulary"
+TxFrame = "vocabulary"
+TxOperation = "vocabulary"
+TxOutcome.kind = "answer"
+TxOutcome.variants.Expired = { kind = "outcome" }
+TxOutcome.variants.Withdrawn = { kind = "outcome" }
+TxOutcome.variants.Ended = { kind = "outcome" }
+TxOutcome.variants.Indeterminate = { kind = "hardware" }
+TxPower = "vocabulary"
+TxProtection = "vocabulary"
+TxResponse = "vocabulary"
+TxSource = "vocabulary"
+TxStatus.kind = "answer"
+TxStatus.variants.Success = { kind = "air" }
+TxStatus.variants.AckTimeout = { kind = "air" }
+TxStatus.variants.CtsTimeout = { kind = "air" }
+TxStatus.variants.Collision = { kind = "air" }
+TxStatus.variants.TimedOut = { kind = "hardware" }
+TxStatus.variants.KeyRefused = { kind = "hardware" }
+VifRole = "vocabulary"
+WithdrawCause.kind = "answer"
+WithdrawCause.variants.GateClosed = { kind = "outcome" }
+WithdrawCause.variants.KeyRemoved = { kind = "outcome" }
+WithdrawCause.variants.Disabled = { kind = "outcome" }
+WithdrawCause.variants.StalePermission = { kind = "own-state", by = "B4" }
+WithdrawCause.variants.Unpublishable = { kind = "own-state", by = "B4a" }
+
+["protocols/ieee80211/core/installation"]
+DataStop.kind = "answer"
+DataStop.variants.Stopped = { kind = "outcome" }
+DataStop.variants.Going = { kind = "load", next = "the plane's completions wake" }
+End.kind = "answer"
+End.variants.Started = { kind = "outcome" }
+End.variants.Halted = { kind = "outcome" }
+End.variants.Reinstalled = { kind = "outcome" }
+Ended.kind = "answer"
+Ended.variants.Request = { kind = "outcome" }
+Ended.variants.Released = { kind = "outcome" }
+Input = "vocabulary"
+Network = "vocabulary"
+Permit = "vocabulary"
+Rest.kind = "answer"
+Rest.variants.Wake = { kind = "load", next = "an input, a waker or the instant it names" }
+Rest.variants.Round = { kind = "load", next = "the pump's next round" }
+Step.kind = "answer"
+Step.variants.Start = { kind = "outcome" }
+Step.variants.Stop = { kind = "outcome" }
+Step.variants.StopData = { kind = "outcome" }
+Step.variants.Clean = { kind = "outcome" }
+Step.variants.Retire = { kind = "outcome" }
+Step.variants.Reinstall = { kind = "outcome" }
+Step.variants.Release = { kind = "outcome" }
+Step.variants.Released = { kind = "outcome" }
+Step.variants.Recover = { kind = "outcome" }
+Step.variants.Tell = { kind = "outcome" }
+Step.variants.Ended = { kind = "outcome" }
+Step.variants.Interrupted = { kind = "outcome" }
+Step.variants.Held = { kind = "outcome" }
+Step.variants.Rest = { kind = "outcome" }
+Tell = "vocabulary"
+Unreached.kind = "answer"
+Unreached.variants.StartRefused = { kind = "hardware" }
+Unreached.variants.StartUnstopped = { kind = "hardware" }
+Unreached.variants.StartInterrupted = { kind = "hardware" }
+Unreached.variants.RestartRefused = { kind = "hardware" }
+Unreached.variants.Deadline = { kind = "hardware" }
+Waited = "vocabulary"
+Waiting.kind = "answer"
+Waiting.variants.Nothing = { kind = "outcome" }
+Waiting.variants.Radio = { kind = "hardware" }
+Waiting.variants.Fault = { kind = "hardware" }
+Waiting.variants.Cleanup = { kind = "hardware" }
+Waiting.variants.Outstanding = { kind = "load", next = "what is out comes home: the port wakes" }
+
+["protocols/ieee80211/core/datapath"]
+DataEvent.kind = "answer"
+DataEvent.variants.DataLost = { kind = "outcome" }
+DataEvent.variants.AggregateSettled = { kind = "outcome" }
+DataLoss.kind = "answer"
+DataLoss.variants.Indeterminate = { kind = "hardware" }
+DataLoss.variants.Expired = { kind = "outcome" }
+DataLoss.variants.RetryLimit = { kind = "air" }
+DataLoss.variants.ContentionLimited = { kind = "hardware" }
+DataLoss.variants.Overflow = { kind = "outcome" }
+DataLoss.variants.LeftBehind = { kind = "outcome" }
+DataProtection = "vocabulary"
+HandoverRefused.kind = "answer"
+HandoverRefused.variants.Connected = { kind = "own-state", by = "B3c" }
+Intake.kind = "answer"
+Intake.variants.Taken = { kind = "outcome" }
+Intake.variants.Wait = { kind = "load", next = "the event its reason names" }
+Intake.variants.Refused = { kind = "outcome" }
+IntakeRefusal.kind = "answer"
+IntakeRefusal.variants.NoLink = { kind = "own-state", by = "B3c" }
+IntakeRefusal.variants.NoKey = { kind = "own-state", by = "B3c" }
+IntakeRefusal.variants.Numbering = { kind = "own-state", by = "B3c" }
+IntakeRefusal.variants.NoAdmittedAccessCategory = { kind = "peer" }
+IntakeRefusal.variants.ShortFrame = { kind = "host" }
+IntakeRefusal.variants.TooLong = { kind = "host" }
+IntakeRefusal.variants.PacketNumberExhausted = { kind = "load", next = "the next key's installation" }
+IntakeRefusal.variants.Arena = { kind = "outcome" }
+LinkSpace = "vocabulary"
+PpduKind = "vocabulary"
+RateLesson = "vocabulary"
+SettleError.kind = "answer"
+SettleError.variants.Unexpected = { kind = "own-state", by = "B3c" }
+SettleError.variants.Fault = { kind = "kept-out", by = "B3c" }
+Waits.kind = "answer"
+Waits.variants.Arena = { kind = "load", next = "the next settlement" }
+Waits.variants.Standby = { kind = "load", next = "the next arena" }
+Waits.variants.Window = { kind = "load", next = "a settlement or a new agreement" }
