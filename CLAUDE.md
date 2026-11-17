@@ -66,21 +66,23 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   it returns the proof of the transition, or the value that names
   everything blocking it, and it changes nothing while it answers. A
   predicate of one fact inside its own module may be `bool`.
-- **State stays in its place.** An object with state larger than two
-  machine words (a machine, a driver, a table, a queue, an owner of memory)
-  is built where it will live and reached by reference from then on: no
-  constructor returns it to be moved into its place, no transition consumes
-  it, no function passes it on by value. Ownership crosses a function, a
-  task or a hart as at most two machine words: a small `Copy` value, a
-  proof, or the handle of the place the object stays in. A refusal leaves
-  its owner where it was: the callee is lent the place and takes the owner
-  at its acceptance point. Outside the rule are data kept between turns (a
-  payload, a stored block), whose copy names its reason at the site, and a
-  report made once an operation (a failure with its diagnostic path). An
-  existing move of state is debt to remove, never a precedent to repeat.
-  The measure is the image's copy and frame reports
-  ([image checks](tools/image/checks/README.md)), not the source's shape:
-  the compiler elides no move by contract.
+- **Values stay in their place.** A value larger than two machine words
+  (state, an argument, a return, a temporary on the stack) is built
+  where it will live and reached by reference from then on: no function
+  takes it or returns it by value, no constructor returns it to be moved
+  into its place, no transition consumes it, and a step's temporaries
+  are views of the places they describe. What crosses a call, a return,
+  a task or a hart is at most two machine words, which the calling
+  convention passes in registers: a small `Copy` value, a proof, a
+  reference or the handle of a place. A refusal leaves its owner where it
+  was: the callee is lent the place and takes the owner at its
+  acceptance point. The one copy outside the rule is a payload's into
+  memory its consumer can reach (a frame into the radio's DMA memory, a
+  received unit into the network's storage), named at its site. An
+  existing copy is debt to remove, never a precedent to repeat. The
+  measure is Clippy's size lints on the target and the image's copy and
+  frame reports ([image checks](tools/image/checks/README.md)), not the
+  source's shape: the compiler elides no move by contract.
 - **A state is a sum.** A state is an enum whose variant holds
   exactly what exists in it: two fields that are not independent are one
   enum, and a fact that can be derived is not stored. An `Option` is a
