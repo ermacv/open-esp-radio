@@ -579,6 +579,37 @@ fn a_rekey_removes_the_installed_key_and_installs_the_new_one() {
     });
 }
 
+/// A stop during a rekey's removal ends the link the new key was for: the
+/// new key is not installed, the removal is told, and the data stops.
+#[test]
+fn a_stop_during_a_rekey_installs_no_new_key() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        let _ = change_key(&mut engine, &mut around, 1);
+        let _ = engine.round(&mut around.turn());
+        around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        // The rekey's removal waits for the arena on the air.
+        let _ = change_key(&mut engine, &mut around, 2);
+        assert!(matches!(
+            station_flowing(&mut engine).stop(&mut around.turn()),
+            DataStop::Going
+        ));
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        let mut answer = DataStop::Going;
+        for _ in 0..4 {
+            let DataPlace::Stopping(stopping) = engine.data() else {
+                break;
+            };
+            answer = stopping.poll(&mut around.turn());
+        }
+        assert!(matches!(answer, DataStop::Stopped(_)));
+        assert_eq!(around.told.keys, [KeyEnd::Installed, KeyEnd::Removed]);
+    });
+}
+
 /// An installation that expired leaves no key: nothing protected goes, and
 /// the controller is told.
 #[test]

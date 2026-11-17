@@ -104,6 +104,20 @@ enum Stop {
     Stopped,
 }
 
+/// Whether the world asked for a command and was not yet told its end.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Awaited {
+    No,
+    Yes,
+}
+
+/// The link's key as the world was last told.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum KeyTold {
+    Empty,
+    Installed,
+}
+
 /// The engine and everything around it.
 struct World<'id> {
     engine: StationEngine<'id, POOL>,
@@ -117,6 +131,14 @@ struct World<'id> {
     /// What the last move owed.
     owed: Rest,
     stop: Stop,
+    /// A close asked (or a stop with the gate lent), no `gate_closed` yet.
+    closing: Awaited,
+    /// A key change asked (or a stop with a key installed), no `key_ended`
+    /// yet.
+    keying: Awaited,
+    key: KeyTold,
+    /// The keys' ends read so far.
+    keys_told: usize,
     agreed: [bool; 2],
     hold: Option<usize>,
     /// Each offered MSDU's TID.
@@ -155,6 +177,10 @@ impl<'id> World<'id> {
             tids: Vec::new(),
             checked: 0,
             link_from: (0, 0),
+            closing: Awaited::No,
+            keying: Awaited::No,
+            key: KeyTold::Empty,
+            keys_told: 0,
             next: [None; 2],
             named: Vec::new(),
             problems: Vec::new(),
@@ -243,7 +269,7 @@ impl<'id> World<'id> {
         // A command's end and a stop's answer wait for the air to be quiet,
         // as the model's "gate_closed" and "command_done": a turn before it
         // changes nothing.
-        if self.owed == Rest::Round || (self.engine.command_runs() && !self.on_air()) {
+        if self.owed == Rest::Round || (self.awaits_a_command() && !self.on_air()) {
             moves.push(Move::Turn);
         }
         if self.stop == Stop::Going && !self.on_air() {
@@ -346,7 +372,17 @@ impl<'id> World<'id> {
         self.owed = rest.unwrap_or(Rest::Wake(None));
         if let Some(gate) = self.around.told.gate.take() {
             self.gate = Some(gate);
+            self.closing = Awaited::No;
         }
+        for end in &self.around.told.keys[self.keys_told..] {
+            self.keying = Awaited::No;
+            self.key = match end {
+                KeyEnd::Installed => KeyTold::Installed,
+                KeyEnd::Expired | KeyEnd::Removed => KeyTold::Empty,
+            };
+        }
+        self.keys_told = self.around.told.keys.len();
+        self.stop_awaits();
         let _ = published;
         self.check(rest);
     }
@@ -377,7 +413,10 @@ impl<'id> World<'id> {
                     return None;
                 };
                 match (ask, flowing.gate()) {
-                    (Ask::CloseGate, GatePlace::Open(open)) => Some(open.close(&mut turn)),
+                    (Ask::CloseGate, GatePlace::Open(open)) => {
+                        self.closing = Awaited::Yes;
+                        Some(open.close(&mut turn))
+                    }
                     (Ask::OpenGate, GatePlace::Shut(shut)) => {
                         let gate = self.gate.take()?;
                         Some(shut.open(gate, &mut turn))
@@ -443,7 +482,10 @@ impl<'id> World<'id> {
                         Some(linked.named(&mut turn))
                     }
                     Ask::ChangeKey => match linked.key() {
-                        KeyPlace::Idle(idle) => Some(idle.change(key_change(1), &mut turn)),
+                        KeyPlace::Idle(idle) => {
+                            self.keying = Awaited::Yes;
+                            Some(idle.change(key_change(1), &mut turn))
+                        }
                         _ => {
                             self.problems.push(refused);
                             None
@@ -463,7 +505,33 @@ impl<'id> World<'id> {
         answer
     }
 
+    /// What a stop the world asked awaits, from what it knows: a key it
+    /// was told installed is removed, a gate it lent is closed.
+    fn stop_awaits(&mut self) {
+        if self.stop != Stop::Going {
+            return;
+        }
+        if self.key == KeyTold::Installed {
+            self.keying = Awaited::Yes;
+        }
+        if self.gate.is_none() {
+            self.closing = Awaited::Yes;
+        }
+    }
+
+    /// Whether the world awaits a command's end it asked for.
+    fn awaits_a_command(&self) -> bool {
+        self.keying == Awaited::Yes || self.closing == Awaited::Yes
+    }
+
     fn stop_data(&mut self) {
+        let again = self.stop == Stop::Going;
+        if self.stop == Stop::NotAsked {
+            self.stop = Stop::Going;
+            self.stop_awaits();
+        }
+        let quiet = !self.on_air();
+        let told = (self.around.told.gate.is_some(), self.around.told.keys.len());
         let mut turn = self.around.turn();
         let answer = match self.engine.data() {
             DataPlace::Flowing(flowing) => flowing.stop(&mut turn),
@@ -480,11 +548,19 @@ impl<'id> World<'id> {
             }
             DataStop::Going => {
                 self.stop = Stop::Going;
-                // A stop goes on only while something ends: the air or the
-                // gate's closing.
-                if !self.on_air() && !self.engine.command_runs() {
+                // A stop goes on only while something ends: the air, or a
+                // command the world awaits.
+                if !self.on_air() && !self.awaits_a_command() {
                     self.problems
                         .push("a stop goes on with nothing on the air and no command");
+                }
+                // The port ends a command at its first poll with the air
+                // quiet: a stop asked again then ends one of those the
+                // world awaits.
+                let told_now = (self.around.told.gate.is_some(), self.around.told.keys.len());
+                if again && quiet && !self.on_air() && told_now == told {
+                    self.problems
+                        .push("a stop asked again with the air quiet ends nothing");
                 }
             }
         }
@@ -542,7 +618,7 @@ impl<'id> World<'id> {
         // consecutive numbers, a number a sequence request took aside.
         self.check_order();
         // Nothing waits for a call nobody makes.
-        if rest == Some(Rest::Wake(None)) && !self.engine.command_runs() && self.flowing() {
+        if rest == Some(Rest::Wake(None)) && !self.awaits_a_command() && self.flowing() {
             let before = (
                 self.around.net.home.len(),
                 self.around.port.published().len(),
@@ -636,7 +712,7 @@ impl<'id> World<'id> {
             .map(|memory| memory.id)
             .collect();
         std::format!(
-            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
+            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
             (self.left.offers, self.left.losses, self.left.requests),
             self.offered,
             self.owed,
@@ -651,6 +727,7 @@ impl<'id> World<'id> {
             self.next,
             self.named,
             self.link_from,
+            (self.closing, self.keying, self.key),
             self.engine.key(),
             self.around.port.state_key(),
         )

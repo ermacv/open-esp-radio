@@ -313,12 +313,19 @@ pub struct KeyChange<T> {
     pub transmit: T,
 }
 
+/// What the station's key slot is to become.
+pub enum KeyTarget<T> {
+    /// Empty: the data's stop.
+    Empty,
+    /// This key installed: a first installation, or a rekey.
+    Install(KeyChange<T>),
+}
+
 /// Where a key's command is.
 enum KeyStep<T> {
     /// The installed key goes, and its transmit key `old` with it; then
-    /// `then` is installed, when there is one (a rekey), else the slot
-    /// stays empty (the data's stop).
-    Removing { old: T, then: Option<KeyChange<T>> },
+    /// the slot becomes `then`.
+    Removing { old: T, then: KeyTarget<T> },
     /// A key is installed; `transmit` is the link's once it is.
     Installing { transmit: T },
 }
@@ -609,21 +616,6 @@ impl<
         )
     }
 
-    /// Whether a command runs, for the crate's search.
-    #[cfg(test)]
-    pub(crate) fn command_runs(&self) -> bool {
-        matches!(
-            &self.data,
-            Data::Flowing(Running {
-                interface: Interface::Keying { .. } | Interface::Closing { .. },
-                ..
-            }) | Data::Stopping(Running {
-                interface: Interface::Keying { .. } | Interface::Closing { .. },
-                ..
-            })
-        )
-    }
-
     /// The MSDUs the queues hold.
     #[cfg(test)]
     pub(crate) fn queued(&self) -> usize {
@@ -658,20 +650,20 @@ impl<
         };
     }
 
-    /// Begin a key's command, when no command runs: the installed key's
-    /// removal (then `change`'s installation), or `change`'s installation
-    /// in the empty slot; [`Begun::Busy`] with the change back while a
+    /// Begin a key's command toward `target`, when no command runs: the
+    /// installed key's removal (then `target`), or `target`'s installation
+    /// in the empty slot; [`Begun::Busy`] with the target back while a
     /// command runs.
     fn begin_key<N, R, E, C>(
         &mut self,
-        change: Option<KeyChange<T>>,
+        target: KeyTarget<T>,
         turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Begun<KeyChange<T>> {
+    ) -> Begun<T> {
         let Some(interface) = self.interface_mut() else {
-            return Begun::Busy(change);
+            return Begun::Busy(target);
         };
         let Interface::Idle { .. } = interface else {
-            return Begun::Busy(change);
+            return Begun::Busy(target);
         };
         let (next, begun) = match core::mem::replace(interface, Interface::InTransition) {
             Interface::Idle {
@@ -686,7 +678,7 @@ impl<
                         PairwiseCommand::Remove(installed),
                         turn.now,
                     ),
-                    step: KeyStep::Removing { old, then: change },
+                    step: KeyStep::Removing { old, then: target },
                 },
                 Begun::Started,
             ),
@@ -694,8 +686,8 @@ impl<
                 gate,
                 place,
                 key: StationKey::Empty(slot),
-            } => match change {
-                Some(KeyChange {
+            } => match target {
+                KeyTarget::Install(KeyChange {
                     peer,
                     key,
                     spp,
@@ -717,7 +709,7 @@ impl<
                     },
                     Begun::Started,
                 ),
-                None => (
+                KeyTarget::Empty => (
                     Interface::Idle {
                         gate,
                         place,
@@ -728,7 +720,7 @@ impl<
             },
             // Checked idle above: this does not happen. Should it, the
             // interface keeps what it was.
-            other => (other, Begun::Busy(change)),
+            other => (other, Begun::Busy(target)),
         };
         *interface = next;
         begun
@@ -776,14 +768,14 @@ impl<
                             StationKey::Installed(installed, transmit),
                             Ending::Key {
                                 end: KeyEnd::Installed,
-                                then: None,
+                                then: KeyTarget::Empty,
                             },
                         ),
                         (PairwiseEnd::Empty(slot), KeyStep::Installing { .. }) => (
                             StationKey::Empty(slot),
                             Ending::Key {
                                 end: KeyEnd::Expired,
-                                then: None,
+                                then: KeyTarget::Empty,
                             },
                         ),
                         (PairwiseEnd::Empty(slot), KeyStep::Removing { then, .. }) => (
@@ -800,7 +792,7 @@ impl<
                             StationKey::Installed(installed, old),
                             Ending::Key {
                                 end: KeyEnd::Installed,
-                                then: None,
+                                then: KeyTarget::Empty,
                             },
                         ),
                     };
@@ -815,12 +807,12 @@ impl<
 }
 
 /// Whether a command began.
-enum Begun<C> {
+enum Begun<T> {
     Started,
     /// Nothing to begin.
     Nothing,
-    /// A command runs: the change back.
-    Busy(Option<C>),
+    /// A command runs: the target back.
+    Busy(KeyTarget<T>),
 }
 
 /// What a command's end leaves for the engine to tell: made by the
@@ -829,8 +821,8 @@ pub enum Ending<'id, T> {
     GateClosed(GateClosed<'id>),
     Key {
         end: KeyEnd,
-        /// The key to install now, after a removal.
-        then: Option<KeyChange<T>>,
+        /// What the slot is to become now, after a removal.
+        then: KeyTarget<T>,
     },
 }
 
@@ -1013,8 +1005,15 @@ where
                     self.keyed(Seal(()), turn.port, turn.network, turn.events);
                     // A rekey's removal is followed by its installation at
                     // once: the intake stands between them.
-                    let begun = then.map(|change| self.begin_key(Some(change), turn));
-                    if !matches!(begun, Some(Begun::Started)) {
+                    // A stop ended the link the rekey was for: its key is
+                    // not installed, and the removal is told.
+                    let begun = match (then, &self.data) {
+                        (KeyTarget::Install(change), Data::Flowing(_)) => {
+                            self.begin_key(KeyTarget::Install(change), turn)
+                        }
+                        (KeyTarget::Install(_) | KeyTarget::Empty, _) => Begun::Nothing,
+                    };
+                    if !matches!(begun, Begun::Started) {
                         turn.told.key_ended(end);
                     }
                     self.queues.unblock();
@@ -1029,7 +1028,7 @@ where
     /// The stopping data's next command, when none runs: the installed
     /// key's removal, then the open gate's closing.
     fn advance_stop<N, R, E, C>(&mut self, turn: &mut Turn<'_, P, N, R, E, C>) {
-        if let Begun::Nothing = self.begin_key(None, turn) {
+        if let Begun::Nothing = self.begin_key(KeyTarget::Empty, turn) {
             self.close_gate(turn);
         }
     }
@@ -1646,7 +1645,7 @@ where
     ) -> Rest {
         let engine = self.0;
         // The handle is an idle place's: the key's command begins.
-        let _begun = engine.begin_key(Some(change), turn);
+        let _begun = engine.begin_key(KeyTarget::Install(change), turn);
         engine.intake(turn)
     }
 }
@@ -2914,9 +2913,14 @@ where
                             "keying {} {}",
                             gate(g),
                             match step {
-                                KeyStep::Removing { then: Some(_), .. } =>
-                                    "removing, then installing",
-                                KeyStep::Removing { then: None, .. } => "removing",
+                                KeyStep::Removing {
+                                    then: KeyTarget::Install(_),
+                                    ..
+                                } => "removing, then installing",
+                                KeyStep::Removing {
+                                    then: KeyTarget::Empty,
+                                    ..
+                                } => "removing",
                                 KeyStep::Installing { .. } => "installing",
                             }
                         ),
