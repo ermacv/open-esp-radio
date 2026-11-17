@@ -283,50 +283,44 @@ struct Ended {
     detail: u32,
 }
 
-/// How a frame's end is taken.
-#[derive(Clone, Copy, Eq, PartialEq)]
-enum Finish {
-    /// Its completion awaited.
-    Await,
-    /// Given up first, unless already complete: the abort, then the
-    /// completion if the abort finds it on the air.
-    Abort,
+/// The frame's end after a stop: its completion if it had one, else the
+/// abort and the queue's detach. `None` when the abort found the frame on
+/// the air: its completion comes once the MAC runs again
+/// ([`await_completion`]).
+fn abort(access: &mut RadioAccess, descriptor: &mut Descriptor) -> Result<Option<Ended>, Failure> {
+    if let Some(observation) = access.wifi_mac_hal().take_tx_completion(QUEUE) {
+        return complete(access, descriptor, observation, 0).map(Some);
+    }
+    let _forced = access
+        .wifi_mac_hal()
+        .begin_tx_timeout_abort(QUEUE, MacTxAbortCause::Forced);
+    match access.wifi_mac_hal().with_tx_queue_detached(
+        QUEUE,
+        MacTxDetachReason::Timeout,
+        |detached| descriptor.release_aborted(detached),
+    ) {
+        MacTxDetachOutcome::Detached(Ok(())) => {
+            let _lease = descriptor.detach();
+            Ok(Some(Ended {
+                how: 1,
+                status: 0,
+                detail: 0,
+            }))
+        }
+        MacTxDetachOutcome::OnAir => Ok(None),
+        MacTxDetachOutcome::Detached(Err(_)) => Err((tx_phase::RELEASE, 1)),
+        MacTxDetachOutcome::NoEvent | MacTxDetachOutcome::Failed => Err((tx_phase::RELEASE, 2)),
+    }
 }
 
-/// Await the queue's completion for at most [`COMPLETION_MS`], or give the
-/// frame up first ([`Finish::Abort`]): either way the descriptor is free
-/// again and its lease back in the pool.
-async fn finish(
+/// Await the queue's completion for at most [`COMPLETION_MS`]; the
+/// descriptor is free again and its lease back in the pool. `how` is
+/// recorded: 0 an ordinary completion, 2 one an abort found on the air.
+async fn await_completion(
     access: &mut RadioAccess,
     descriptor: &mut Descriptor,
-    finish: Finish,
+    how: u32,
 ) -> Result<Ended, Failure> {
-    let mut how = 0;
-    if finish == Finish::Abort && access.wifi_mac_hal().take_tx_completion(QUEUE).is_none() {
-        let _forced = access
-            .wifi_mac_hal()
-            .begin_tx_timeout_abort(QUEUE, MacTxAbortCause::Forced);
-        let outcome = access.wifi_mac_hal().with_tx_queue_detached(
-            QUEUE,
-            MacTxDetachReason::Timeout,
-            |detached| descriptor.release_aborted(detached),
-        );
-        match outcome {
-            MacTxDetachOutcome::Detached(Ok(())) => {
-                let _lease = descriptor.detach();
-                return Ok(Ended {
-                    how: 1,
-                    status: 0,
-                    detail: 0,
-                });
-            }
-            MacTxDetachOutcome::OnAir => how = 2,
-            MacTxDetachOutcome::Detached(Err(_)) => return Err((tx_phase::RELEASE, 1)),
-            MacTxDetachOutcome::NoEvent | MacTxDetachOutcome::Failed => {
-                return Err((tx_phase::RELEASE, 2));
-            }
-        }
-    }
     let end = EmbassyClock
         .now()
         .checked_add(Duration::from_millis(COMPLETION_MS))
@@ -336,10 +330,20 @@ async fn finish(
             break observation;
         }
         if EmbassyClock.now() >= end {
-            return Err((tx_phase::COMPLETION, 1));
+            return Err((tx_phase::COMPLETION, 1 | how << 4));
         }
         wait_micros(50).await;
     };
+    complete(access, descriptor, observation, how)
+}
+
+/// A completion taken: the descriptor released by the queue's detach.
+fn complete(
+    access: &mut RadioAccess,
+    descriptor: &mut Descriptor,
+    observation: oer_chips_esp32s31_hal::types::MacTxCompletionObservation,
+    how: u32,
+) -> Result<Ended, Failure> {
     descriptor
         .mark_completed()
         .map_err(|_| (tx_phase::RELEASE, 3))?;
@@ -370,7 +374,7 @@ async fn send(
     let lease = frames.lease(ORDINARY_SLOT, chain)?;
     let begin = oer_portable_riscv::cycle32();
     start(access, ordinary, lease)?;
-    let ended = finish(access, ordinary, Finish::Await).await?;
+    let ended = await_completion(access, ordinary, 0).await?;
     Ok((ended, oer_portable_riscv::cycle32().wrapping_sub(begin)))
 }
 
@@ -571,7 +575,12 @@ pub(super) async fn series(
         }
         let idle = oer_portable_riscv::cycle32();
         let after = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
-        let ended = finish(&mut access, &mut ordinary, Finish::Abort).await?;
+        let aborted = abort(&mut access, &mut ordinary)?;
+        ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
+        let ended = match aborted {
+            Some(ended) => ended,
+            None => await_completion(&mut access, &mut ordinary, 2).await?,
+        };
         journal.record(
             Kind::TxStop,
             &[
@@ -589,7 +598,6 @@ pub(super) async fn series(
                 mac_irq.mac_interrupt_raw().bits(),
             ],
         );
-        ring = restart(storage, halted, &mut access, mac_irq, power_irq)?;
     }
 
     // A1 and A2: the pulse with a frame of its own on the air, then a
