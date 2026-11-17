@@ -11,7 +11,10 @@ use core::{
 
 use crate::layouts::{DmaWindowAddress, WifiRxDmaDescriptorControl};
 use crate::system::memory::dma_static::Placed;
-use oer_portable_memory::{ExternalRxBuffer, ExternalRxReturnState};
+use oer_portable_memory::{DmaBytes, ExternalRxBuffer, ExternalRxReturnState, OnceValue};
+
+use crate::radio::ieee80211::dma::rx_rebind::{RX_REBIND_SPARES, RxBinding, RxSpareBank};
+use crate::system::memory::dma_address::PlacedAddresses;
 
 use crate::radio::ieee80211::dma::{
     descriptor::RxDescriptor,
@@ -35,6 +38,34 @@ pub use buffers::RxDmaBuffer;
 pub enum RxDmaStorageError {
     AddressWidth,
     Count,
+}
+
+/// TEMPORARY experiment: the buffer a descriptor's binding names.
+#[derive(Clone, Copy)]
+pub(crate) enum BoundBuffer<'a, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize> {
+    /// The arena's own ring buffer.
+    Arena(&'a RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>),
+    /// A spare: never leased and never borrowed; its return state is
+    /// permanently attached.
+    Spare(&'a [DmaBytes<4>]),
+}
+
+impl<const BUFFER_SIZE: usize, const STORAGE_SIZE: usize>
+    BoundBuffer<'_, BUFFER_SIZE, STORAGE_SIZE>
+{
+    fn is_released(&self) -> bool {
+        match self {
+            Self::Arena(buffer) => buffer.is_released(),
+            Self::Spare(_) => false,
+        }
+    }
+
+    fn state(&self) -> ExternalRxReturnState {
+        match self {
+            Self::Arena(buffer) => buffer.state(),
+            Self::Spare(_) => ExternalRxReturnState::Attached,
+        }
+    }
 }
 
 /// Read authority for one completed descriptor and its matching DMA buffer.
@@ -177,6 +208,8 @@ pub struct RxDmaCompletedUnit<
     storage: &'storage RxDmaStorage<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
     ring: Option<&'owner mut RxRingLive<'ring, COUNT>>,
     requires_recycle: bool,
+    /// TEMPORARY experiment: [`Self::detach_before_last`] cleared its owner bit.
+    detached_before_last: bool,
     // Keep physical descriptor credit on the core-local DMA owner. The
     // consuming detach transition deliberately returns a separate Send-able
     // packet-buffer type.
@@ -394,6 +427,51 @@ impl<
         self.requires_recycle = false;
     }
 
+    /// TEMPORARY experiment: detach this completed single-descriptor unit in
+    /// place (owner bit clear, fence) when it lies strictly before the LAST
+    /// of `cursor`, the current frozen cursor. The unit then recycles through
+    /// [`Self::retain_discard`] and the production append, which sets the
+    /// owner bit again.
+    ///
+    /// # Errors
+    ///
+    /// A chain, a stale cursor, LAST, the descriptor NEXT names, or an
+    /// unobserved descriptor; nothing is written then.
+    pub fn detach_before_last<M: RxDma>(
+        &mut self,
+        mmio: &mut M,
+        cursor: RxFrozenCursor,
+    ) -> Result<(), RxRingError> {
+        if self.unit.descriptor_count() != 1 {
+            return Err(RxRingError::Count);
+        }
+        let index = self.unit.head_index();
+        self.ring
+            .as_deref_mut()
+            .ok_or(RxRingError::ResetRequired)?
+            .detach_before_last(mmio, cursor, index)?;
+        self.detached_before_last = true;
+        Ok(())
+    }
+
+    /// TEMPORARY experiment: bind the next re-arm of this unit's descriptor,
+    /// detached by [`Self::detach_before_last`], to unbound spare `spare`,
+    /// retiring the buffer its BUFFER word names.
+    ///
+    /// # Errors
+    ///
+    /// The unit was not detached before LAST, the spare is bound or retired,
+    /// or a rebind is already pending.
+    pub fn rebind_next(&mut self, spare: usize) -> Result<(), RxRingError> {
+        if !self.detached_before_last {
+            return Err(RxRingError::Corrupt);
+        }
+        self.storage
+            .arena
+            .rebind
+            .bind_next(self.unit.head_index(), spare)
+    }
+
     /// Retain a discard, returning append authority only when this unit is
     /// already at the recycle frontier. A preceding detached upper owner
     /// leaves it deferred; that owner's release must advance the frontier.
@@ -466,6 +544,10 @@ pub struct RxDmaStorage<
     /// when the storage is placed ([`RxDmaStorage::place`]).
     buffer_addresses: RxDmaBufferAddresses<COUNT>,
     arena: RxArenaWords,
+    /// TEMPORARY experiment (`rx_rebind`, branch only): the spare bank an
+    /// experiment arena was placed with.
+    /// Every spare's words, spare after spare.
+    spare_buffers: OnceValue<&'static [DmaBytes<4>]>,
     space: PhantomData<S>,
 }
 
@@ -570,6 +652,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             descriptor_buffer_offsets: [const { AtomicU8::new(0) }; COUNT],
             buffer_addresses: RxDmaBufferAddresses::new(),
             arena: RxArenaWords::new(),
+            spare_buffers: OnceValue::new(),
             space: PhantomData,
         }
     }
@@ -677,15 +760,102 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         rotation: usize,
     ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, (RxDmaStorageError, Placed<Self>)>
     {
+        Self::place_inner(placed, rotation, None)
+    }
+
+    /// TEMPORARY experiment: place the arena with descriptor `i` bound to
+    /// spare `i` of `spares`, painting every spare while it is still the
+    /// CPU's. The arena's own ring buffers are never published; the bank
+    /// stays with this arena until reset and its spares are never leased.
+    ///
+    /// # Errors
+    ///
+    /// The ring is larger than the bank or the rebind table, the arena is not
+    /// reusable, or an address does not fit the DMA address width.
+    /// `paint(spare, word)` gives each word's initial value.
+    #[allow(clippy::type_complexity)]
+    pub fn place_with_spares<const WORDS: usize>(
+        placed: Placed<Self>,
+        spares: Placed<RxSpareBank<WORDS>>,
+        mut paint: impl FnMut(usize, usize) -> u32,
+    ) -> Result<
+        (
+            PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>,
+            &'static RxSpareBank<WORDS>,
+        ),
+        RxDmaStorageError,
+    > {
+        const {
+            if WORDS * 4 != BUFFER_SIZE {
+                panic!("a spare holds exactly one buffer of words");
+            }
+        }
+        if COUNT > RX_REBIND_SPARES {
+            return Err(RxDmaStorageError::Count);
+        }
+        let (bank, _range, _projection, ()) = spares
+            .bind_dma::<S, _, _>(|bank, _range, projection| {
+                for (spare, buffer) in bank.buffers.iter_mut().enumerate() {
+                    let address = projection
+                        .address(&*buffer)
+                        .map_err(|_| RxDmaStorageError::AddressWidth)?;
+                    if !bank.addresses.record(spare, address) {
+                        return Err(RxDmaStorageError::Count);
+                    }
+                    for (word, bytes) in buffer.iter_mut().enumerate() {
+                        bytes.write(&paint(spare, word).to_le_bytes());
+                    }
+                }
+                Ok(())
+            })
+            .map_err(|(refusal, _)| refusal.cause(RxDmaStorageError::AddressWidth))?;
+        let bank: &'static RxSpareBank<WORDS> = bank;
+        let placed =
+            Self::place_inner(placed, 0, Some(&bank.addresses)).map_err(|(error, _)| error)?;
+        placed
+            .storage
+            .spare_buffers
+            .set(bank.buffers.as_flattened())
+            .map_err(|_| RxDmaStorageError::Count)?;
+        placed
+            .storage
+            .arena
+            .rebind
+            .attach(&bank.addresses, COUNT)
+            .map_err(|_| RxDmaStorageError::Count)?;
+        Ok((placed, bank))
+    }
+
+    #[allow(
+        clippy::result_large_err,
+        reason = "a refused place returns its placement whole"
+    )]
+    fn place_inner(
+        placed: Placed<Self>,
+        rotation: usize,
+        spares: Option<&PlacedAddresses<RX_REBIND_SPARES>>,
+    ) -> Result<PlacedRxDma<COUNT, BUFFER_SIZE, STORAGE_SIZE, S>, (RxDmaStorageError, Placed<Self>)>
+    {
         RxDmaBuffer::<BUFFER_SIZE, STORAGE_SIZE>::check_geometry();
         let (storage, _range, _projection, (descriptors, reserved_buffer)) = placed
             .bind_dma::<S, _, _>(|storage, _range, projection| {
                 storage.validate_descriptor_rotation(rotation)?;
                 for descriptor_index in 0..COUNT {
                     let buffer_id = (descriptor_index + rotation) % COUNT;
-                    let address = projection
-                        .address(&storage.buffers[buffer_id])
-                        .map_err(|_| RxDmaStorageError::AddressWidth)?;
+                    let address = match spares {
+                        // TEMPORARY experiment: descriptor `i` starts on spare `i`.
+                        Some(spares) => spares
+                            .get(descriptor_index)
+                            .ok_or(RxDmaStorageError::AddressWidth)?,
+                        None => projection
+                            .address(
+                                storage
+                                    .buffers
+                                    .get(buffer_id)
+                                    .ok_or(RxDmaStorageError::Count)?,
+                            )
+                            .map_err(|_| RxDmaStorageError::AddressWidth)?,
+                    };
                     storage.buffer_addresses.record(descriptor_index, address);
                 }
                 storage.bind_descriptor_rotation(rotation)?;
@@ -743,11 +913,41 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             .map(|offset| (descriptor_index + usize::from(offset.load(Ordering::Acquire))) % COUNT)
     }
 
+    /// The buffer descriptor `descriptor_index`'s BUFFER word names by the
+    /// binding accounting (TEMPORARY experiment: a spare of the bank).
     fn buffer_for_descriptor(
         &self,
         descriptor_index: usize,
-    ) -> Option<&RxDmaBuffer<BUFFER_SIZE, STORAGE_SIZE>> {
-        self.buffer_by_id(self.descriptor_buffer_id(descriptor_index)?)
+    ) -> Option<BoundBuffer<'_, BUFFER_SIZE, STORAGE_SIZE>> {
+        match self.arena.rebind.published(descriptor_index)? {
+            RxBinding::Arena => self
+                .buffer_by_id(self.descriptor_buffer_id(descriptor_index)?)
+                .map(BoundBuffer::Arena),
+            RxBinding::Spare(spare) => {
+                let words = BUFFER_SIZE / 4;
+                let start = spare.checked_mul(words)?;
+                self.spare_buffers
+                    .get()?
+                    .get(start..start.checked_add(words)?)
+                    .map(BoundBuffer::Spare)
+            }
+        }
+    }
+
+    /// TEMPORARY experiment: the binding descriptor `index`'s BUFFER word
+    /// names.
+    pub fn rebind_published(&self, index: usize) -> Option<RxBinding> {
+        self.arena.rebind.published(index)
+    }
+
+    /// TEMPORARY experiment: whether spare `spare` is retired.
+    pub fn rebind_spare_retired(&self, spare: usize) -> bool {
+        self.arena.rebind.spare_retired(spare)
+    }
+
+    /// TEMPORARY experiment: whether spare `spare` was never bound.
+    pub fn rebind_spare_unbound(&self, spare: usize) -> bool {
+        self.arena.rebind.spare_unbound(spare)
     }
 
     fn any_buffer_in_state(&self, state: ExternalRxReturnState) -> bool {
@@ -813,6 +1013,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         mmio: &mut M,
     ) -> Result<RxRingStopped<'storage, COUNT>, (RxRingHalted<'storage, COUNT>, RxRingError)> {
         let binding = BoundBuffers::halted(self, ring)?;
+        // TEMPORARY experiment: an arena with a rebind is never rebuilt.
+        if self.arena.rebind.attached() {
+            return Err((binding.into_parts().1, RxRingError::ResetRequired));
+        }
         if self.any_buffer_in_state(ExternalRxReturnState::Detached) {
             return Err((binding.into_parts().1, RxRingError::OutstandingLeases));
         }
@@ -853,6 +1057,10 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         Option<RxDmaCompletedDescriptor<'owner, 'ring, COUNT, BUFFER_SIZE, STORAGE_SIZE>>,
         RxRingError,
     > {
+        // TEMPORARY experiment: spares are never lent by reference.
+        if self.arena.rebind.attached() {
+            return Err(RxRingError::BufferOwnershipConflict);
+        }
         let mut binding = BoundBuffers::live(self, ring)?;
         {
             let ring = binding.live_ring_mut();
@@ -878,9 +1086,9 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         else {
             return Ok(None);
         };
-        let buffer = self
-            .buffer_for_descriptor(index)
-            .ok_or(RxRingError::Count)?;
+        let Some(BoundBuffer::Arena(buffer)) = self.buffer_for_descriptor(index) else {
+            return Err(RxRingError::Count);
+        };
         Ok(Some(RxDmaCompletedDescriptor {
             descriptor,
             buffer,
@@ -1003,7 +1211,13 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
                     return Ok(None);
                 }
             }
-            if self.descriptors()[index].word0().rx_done() {
+            if self
+                .descriptors()
+                .get(index)
+                .ok_or(RxRingError::Count)?
+                .word0()
+                .rx_done()
+            {
                 return Ok(Some(step + 1));
             }
         }
@@ -1074,6 +1288,14 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         else {
             return Ok(false);
         };
+        // TEMPORARY experiment: a spare is copied out by volatile reads.
+        if let Some(BoundBuffer::Spare(spare)) = self.buffer_for_descriptor(index) {
+            for (at, byte) in (offset..end).zip(output.iter_mut()) {
+                let word = spare.get(at / 4).ok_or(RxRingError::Size)?.read();
+                *byte = *word.get(at % 4).ok_or(RxRingError::Size)?;
+            }
+            return Ok(true);
+        }
         // SAFETY: the frozen cursor and terminal unit frontier establish that
         // DMA has released this descriptor. Only values are copied, and the
         // immutable view ends before this function returns.
@@ -1127,6 +1349,7 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
             storage: self,
             ring: Some(ring),
             requires_recycle: true,
+            detached_before_last: false,
             _not_send: PhantomData,
         }))
     }
