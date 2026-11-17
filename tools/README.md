@@ -64,11 +64,14 @@ under the clone's `target/`, never `/tmp`:
 mkdir -p target/mutants/tmp
 git diff origin/<base>... > target/mutants/pr.diff
 TMPDIR=$PWD/target/mutants/tmp cargo mutants -p <package> \
-  --in-diff target/mutants/pr.diff --output target/mutants --jobs 8
+  --in-diff target/mutants/pr.diff --output target/mutants --jobs 4
 ```
 
-Each job builds and tests its own copy of the tree, so the jobs are
-independent: give it the cores the machine has to spare. Run it without a
+Four jobs: over the whole engine crate (582 mutants), four took 11 min
+19 s with 25 missed and 10 timed out, eight 9 min 34 s with 22 missed and
+13 timed out. More jobs gained little, and the load turned missed mutants
+into timeouts, whose limit is set from the unmutated baseline. Run it
+without a
 `CARGO_TARGET_DIR` inside the clone: with one, the compile-fail cases of the
 unmutated baseline keep the copy's absolute path in their output and fail.
 
