@@ -961,12 +961,15 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
     /// Compute `tid`'s A-MPDU bound again.
     fn limit(&mut self, tid: WmmUserPriority) {
         let limit = self.current().and_then(|link| {
-            let window = (*tid.select(&link.windows))?;
+            // An aggregate needs the TID's agreement. Its window bounds an
+            // arena too, frame by frame at the intake (`TxWindow::ahead`):
+            // no MSDU beyond the window is written into an arena, so the
+            // window needs no term here.
+            let _window = (*tid.select(&link.windows))?;
             let ht = link.ht?;
             let rate = self.rate?;
-            let subframes = window.size.min(rate.max_subframes);
             Some(PpduLimit::new(
-                usize::from(subframes),
+                usize::from(rate.max_subframes),
                 rate.max_length.min(ht.max_length),
                 Some(rate.rate),
             ))

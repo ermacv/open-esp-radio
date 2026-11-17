@@ -74,6 +74,21 @@ enum Ask {
     ChangeKey,
 }
 
+/// The named TID's place as its view shows it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Naming {
+    Unnamed,
+    Draining(usize),
+    Named(usize),
+}
+
+/// The search's index of `tid`.
+fn tid_index(tid: WmmUserPriority) -> usize {
+    TIDS.iter()
+        .position(|known| *known == tid)
+        .unwrap_or(TIDS.len())
+}
+
 /// One step of the search.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Move {
@@ -102,6 +117,19 @@ enum Stop {
     NotAsked,
     Going,
     Stopped,
+}
+
+/// The world before a step.
+struct Before {
+    published: usize,
+    keying: Awaited,
+    arenas: Vec<u32>,
+    /// The MSDUs the arenas keep for a retry, the air quiet.
+    kept: Vec<u32>,
+    /// The MSDU of a single MPDU on the air.
+    single: Option<u32>,
+    /// The named TID.
+    hold: Option<usize>,
 }
 
 /// Whether the world asked for a command and was not yet told its end.
@@ -139,6 +167,12 @@ struct World<'id> {
     key: KeyTold,
     /// The keys' ends read so far.
     keys_told: usize,
+    /// The link generation: one more at each link.
+    generation: u32,
+    /// The generation each offered MSDU was offered in, by its id.
+    born: Vec<u32>,
+    /// The times each MSDU's frame went on the air, by its id.
+    aired: Vec<u8>,
     agreed: [bool; 2],
     hold: Option<usize>,
     /// Each offered MSDU's TID.
@@ -151,8 +185,10 @@ struct World<'id> {
     link_from: (usize, usize),
     /// Each TID's next first transmission's number, this link.
     next: [Option<u16>; 2],
-    /// The numbers a sequence request took, by TID, this generation.
+    /// The numbers told for named TIDs, by TID, this generation.
     named: Vec<(usize, u16)>,
+    /// A told number no first transmission of its TID carried yet.
+    carried: [Option<u16>; 2],
     problems: Vec<&'static str>,
 }
 
@@ -181,8 +217,12 @@ impl<'id> World<'id> {
             keying: Awaited::No,
             key: KeyTold::Empty,
             keys_told: 0,
+            generation: 0,
+            born: Vec::new(),
+            aired: Vec::new(),
             next: [None; 2],
             named: Vec::new(),
+            carried: [None; 2],
             problems: Vec::new(),
         }
     }
@@ -207,6 +247,22 @@ impl<'id> World<'id> {
                 PeerPlace::Free(_) => false,
             },
             _ => false,
+        }
+    }
+
+    /// The named TID's place, by the view: none named, its number not told,
+    /// or told.
+    fn naming(&mut self) -> Option<Naming> {
+        match self.engine.data() {
+            DataPlace::Flowing(mut flowing) => match flowing.peer(ACCESS_POINT) {
+                PeerPlace::Linked(mut linked) => Some(match linked.naming() {
+                    NamePlace::Unnamed(_) => Naming::Unnamed,
+                    NamePlace::Draining(draining) => Naming::Draining(tid_index(draining.tid())),
+                    NamePlace::Named(named) => Naming::Named(tid_index(named.tid())),
+                }),
+                PeerPlace::Free(_) => None,
+            },
+            _ => None,
         }
     }
 
@@ -286,15 +342,18 @@ impl<'id> World<'id> {
         }
         let linked = self.linked();
         let held = self.held();
+        let naming = self.naming();
         if linked && !held {
             asks.extend([Ask::Hold, Ask::Unlink]);
             for tid in 0..TIDS.len() {
-                asks.push(if self.agreed[tid] {
-                    Ask::EndAgreement(tid)
-                } else {
-                    Ask::Agree(tid)
-                });
-                if self.hold.is_none() {
+                // An agreement begins where the view offers it: on the TID
+                // whose named number was told.
+                if self.agreed[tid] {
+                    asks.push(Ask::EndAgreement(tid));
+                } else if naming == Some(Naming::Named(tid)) {
+                    asks.push(Ask::Agree(tid));
+                }
+                if naming == Some(Naming::Unnamed) {
                     asks.push(Ask::Sequence(tid));
                 }
             }
@@ -305,7 +364,7 @@ impl<'id> World<'id> {
         if linked && self.key_idle() {
             asks.push(Ask::ChangeKey);
         }
-        if self.hold.is_some() && linked {
+        if matches!(naming, Some(Naming::Draining(_) | Naming::Named(_))) {
             asks.push(Ask::Named);
         }
         if flowing && self.gate_open() {
@@ -328,12 +387,14 @@ impl<'id> World<'id> {
         if let Some(prefix) = step.prefix {
             self.around.port.send_at_most(prefix);
         }
-        let published = self.around.port.published().len();
+        let before = self.before();
         let rest = match step.action {
             Move::Offer(tid) => {
                 self.left.offers -= 1;
                 self.offered += 1;
                 self.tids.push(tid);
+                self.born.push(self.generation);
+                self.aired.push(0);
                 self.around.net.offer(self.offered, TIDS[tid], DESTINATION);
                 Some(self.engine.offered(&mut self.around.turn()))
             }
@@ -382,9 +443,218 @@ impl<'id> World<'id> {
             };
         }
         self.keys_told = self.around.told.keys.len();
+        for (tid, number) in self.around.told.named.drain(..) {
+            let tid = tid_index(tid);
+            if self.hold != Some(tid) {
+                self.problems
+                    .push("a number was told for a TID nobody named");
+            }
+            self.named.push((tid, number.get()));
+            if let Some(carried) = self.carried.get_mut(tid) {
+                *carried = Some(number.get());
+            }
+        }
         self.stop_awaits();
-        let _ = published;
+        self.check_step(&before, step.action);
         self.check(rest);
+    }
+
+    /// What a step is checked against: the world before it.
+    fn before(&self) -> Before {
+        let arenas = self.arena_ids();
+        let quiet = !self.on_air();
+        let kept = arenas
+            .iter()
+            .copied()
+            .filter(|id| quiet && self.aired_of(*id) > 0)
+            .collect();
+        let single = match self.around.port.published().last() {
+            Some(went) if !quiet && went.single == Went::Single => {
+                self.on_air_ids().first().copied()
+            }
+            _ => None,
+        };
+        Before {
+            published: self.around.port.published().len(),
+            keying: self.keying,
+            arenas,
+            kept,
+            single,
+            hold: self.hold,
+        }
+    }
+
+    /// The MSDUs the arenas hold.
+    fn arena_ids(&self) -> Vec<u32> {
+        [ArenaSide::First, ArenaSide::Second]
+            .into_iter()
+            .flat_map(|side| self.around.port.arena_memories(side))
+            .collect()
+    }
+
+    fn aired_of(&self, id: u32) -> u8 {
+        self.aired.get(id as usize - 1).copied().unwrap_or(0)
+    }
+
+    /// The MSDUs of the arena on the air, in its order: a publication's.
+    fn on_air_ids(&self) -> Vec<u32> {
+        self.around
+            .port
+            .on_air_side()
+            .map(|side| self.around.port.arena_memories(side))
+            .unwrap_or_default()
+    }
+
+    /// The model's checks of a publication and of the arenas, from what the
+    /// world sees: the publications, the arenas' MSDUs and their fronts.
+    fn check_step(&mut self, before: &Before, action: Move) {
+        let published: Vec<Vec<Vec<u8>>> = self.around.port.published()[before.published..]
+            .iter()
+            .map(|went| went.frames.clone())
+            .collect();
+        let after = self.arena_ids();
+        // A named TID's intake waits until its agreement begins or its name
+        // is released.
+        let unholds = matches!(action, Move::Asked(Ask::Agree(_) | Ask::Named));
+        if let Some(tid) = before.hold
+            && !unholds
+            && after.iter().any(|id| {
+                !before.arenas.contains(id) && self.tids.get(*id as usize - 1) == Some(&tid)
+            })
+        {
+            self.problems
+                .push("an MSDU of a named TID was written before its hold ended");
+        }
+        for (index, frames) in published.iter().enumerate() {
+            if before.keying == Awaited::Yes && self.keying == Awaited::Yes {
+                self.problems
+                    .push("an arena went while a key change awaited");
+            }
+            // One arena on the air at a time: the step's publication is the
+            // arena on the air after it, its frames the prefix that went.
+            let ids: Vec<u32> = self.on_air_ids().into_iter().take(frames.len()).collect();
+            if index == 0
+                && !before.kept.is_empty()
+                && !ids.iter().any(|id| before.kept.contains(id))
+            {
+                self.problems
+                    .push("the standby went before an arena kept for its retry");
+            }
+            for (front, id) in frames.iter().zip(&ids) {
+                if self.born.get(*id as usize - 1) != Some(&self.generation) {
+                    self.problems.push("an ended link's frame went");
+                }
+                let up = front[24] & 0x07;
+                let Some(tid) = TIDS.iter().position(|tid| tid.value() == up) else {
+                    continue;
+                };
+                if self.agreed[tid] {
+                    let sequence = |front: &[u8]| {
+                        SequenceNumber::from_sequence_control(u16::from_le_bytes([
+                            front[22], front[23],
+                        ]))
+                        .get()
+                    };
+                    let oldest = after
+                        .iter()
+                        .filter(|held| self.born.get(**held as usize - 1) == Some(&self.generation))
+                        .filter_map(|held| self.around.port.front(*held))
+                        .filter(|held| held[24] & 0x07 == up)
+                        .map(sequence)
+                        .min();
+                    if oldest.is_some_and(|oldest| sequence(front) - oldest >= WINDOW) {
+                        self.problems.push("a frame went beyond its window");
+                    }
+                }
+            }
+            for id in ids {
+                if let Some(count) = self.aired.get_mut(id as usize - 1) {
+                    *count += 1;
+                }
+            }
+        }
+        if before.keying == Awaited::Yes
+            && self.keying == Awaited::Yes
+            && after.iter().any(|id| !before.arenas.contains(id))
+        {
+            self.problems
+                .push("an MSDU was written while a key change awaited");
+        }
+        if let (Move::Ended(Answer::NoAck), Some(single)) = (action, before.single)
+            && after.contains(&single)
+        {
+            self.problems
+                .push("a frame that went as one MPDU and missed was kept");
+        }
+        if !self.on_air() && after.iter().any(|id| self.aired_of(*id) >= ATTEMPTS) {
+            self.problems.push("a frame is kept with no attempt left");
+        }
+        self.check_window(&after);
+        self.check_blocked(&after);
+    }
+
+    /// No MSDU numbered beyond its TID's window is in an arena: the window
+    /// begins at the oldest number the arenas hold of the TID, and one
+    /// beyond it waits in its queue.
+    fn check_window(&mut self, arenas: &[u32]) {
+        for (tid, up) in TIDS.iter().enumerate() {
+            if !self.agreed[tid] {
+                continue;
+            }
+            let numbers: Vec<u16> = arenas
+                .iter()
+                .filter(|id| self.born.get(**id as usize - 1) == Some(&self.generation))
+                .filter_map(|id| self.around.port.front(*id))
+                .filter(|front| front[24] & 0x07 == up.value())
+                .map(|front| {
+                    SequenceNumber::from_sequence_control(u16::from_le_bytes([
+                        front[22], front[23],
+                    ]))
+                    .get()
+                })
+                .collect();
+            if let (Some(oldest), Some(newest)) = (numbers.iter().min(), numbers.iter().max())
+                && newest - oldest >= WINDOW
+            {
+                self.problems
+                    .push("an MSDU numbered beyond its TID's window is in an arena");
+            }
+        }
+    }
+
+    /// A TID held by its window moves when its frames in the arenas
+    /// settle: with none there, the air quiet and nothing awaited, its
+    /// queued MSDUs go.
+    fn check_blocked(&mut self, arenas: &[u32]) {
+        if self.owed == Rest::Round
+            || self.on_air()
+            || self.awaits_a_command()
+            || self.hold.is_some()
+            || !self.linked()
+            || self.held()
+            || !self.gate_open()
+        {
+            return;
+        }
+        let home = &self.around.net.home;
+        let waiting: Vec<u32> = self
+            .around
+            .net
+            .offered
+            .iter()
+            .map(|memory| memory.id)
+            .collect();
+        for tid in 0..TIDS.len() {
+            let mut ids = (1..=self.offered).filter(|id| self.tids[*id as usize - 1] == tid);
+            let queued = ids
+                .clone()
+                .any(|id| !home.contains(&id) && !arenas.contains(&id) && !waiting.contains(&id));
+            let in_arenas = ids.any(|id| arenas.contains(&id));
+            if self.agreed[tid] && queued && !in_arenas {
+                self.problems
+                    .push("a TID is blocked by its window and nothing can move it");
+            }
+        }
     }
 
     fn ask(&mut self, ask: Ask) -> Option<Rest> {
@@ -438,10 +708,12 @@ impl<'id> World<'id> {
                 self.agreed = [false; 2];
                 self.hold = None;
                 self.named.clear();
+                self.carried = [None; 2];
                 self.link_from = (
                     self.around.port.published().len(),
                     self.around.net.home.len(),
                 );
+                self.generation += 1;
                 Some(owed)
             }
             ask => {
@@ -461,25 +733,47 @@ impl<'id> World<'id> {
                         self.hold = None;
                         Some(linked.unlink(&mut turn))
                     }
-                    Ask::Agree(tid) => {
-                        self.agreed[tid] = true;
-                        Some(linked.tx_agreement(TIDS[tid], WINDOW, &mut turn))
-                    }
+                    Ask::Agree(tid) => match linked.naming() {
+                        NamePlace::Named(named) if named.tid() == TIDS[tid] => {
+                            self.agreed[tid] = true;
+                            self.hold = None;
+                            Some(named.tx_agreement(WINDOW, &mut turn))
+                        }
+                        _ => {
+                            self.problems.push(refused);
+                            None
+                        }
+                    },
                     Ask::EndAgreement(tid) => {
                         self.agreed[tid] = false;
                         Some(linked.tx_agreement_ended(TIDS[tid], &mut turn))
                     }
-                    Ask::Sequence(tid) => {
-                        self.hold = Some(tid);
-                        match linked.name_next(LinkSpace::Tid(TIDS[tid])) {
-                            Ok(number) => self.named.push((tid, number.get())),
-                            Err(NoSpace) => self.problems.push(refused),
+                    Ask::Sequence(tid) => match linked.naming() {
+                        NamePlace::Unnamed(unnamed) => {
+                            self.hold = Some(tid);
+                            match unnamed.name(TIDS[tid], &mut turn) {
+                                Ok(rest) => Some(rest),
+                                Err(NoSpace) => {
+                                    self.problems.push(refused);
+                                    None
+                                }
+                            }
                         }
-                        None
-                    }
+                        _ => {
+                            self.problems.push(refused);
+                            None
+                        }
+                    },
                     Ask::Named => {
                         self.hold = None;
-                        Some(linked.named(&mut turn))
+                        match linked.naming() {
+                            NamePlace::Draining(draining) => Some(draining.release(&mut turn)),
+                            NamePlace::Named(named) => Some(named.release(&mut turn)),
+                            NamePlace::Unnamed(_) => {
+                                self.problems.push(refused);
+                                None
+                            }
+                        }
                     }
                     Ask::ChangeKey => match linked.key() {
                         KeyPlace::Idle(idle) => {
@@ -652,14 +946,18 @@ impl<'id> World<'id> {
                     continue;
                 };
                 let mut expected = self.next[tid].unwrap_or(0);
-                while self.named.contains(&(tid, expected))
-                    || self.withdrawn_below_a_named_number(tid, expected)
-                {
+                while self.withdrawn_below_a_named_number(tid, expected) {
                     expected += 1;
                 }
                 if sequence != expected {
                     self.problems
                         .push("a TID's first transmissions are out of order or have a gap");
+                }
+                if let Some(told) = self.carried[tid].take()
+                    && sequence != told
+                {
+                    self.problems
+                        .push("the first transmission after a named number does not carry it");
                 }
                 self.next[tid] = Some(sequence + 1);
             }
@@ -668,8 +966,8 @@ impl<'id> World<'id> {
     }
 
     /// Whether `sequence` of `tid` is a number this link drew for an MSDU
-    /// that went home before any transmission, below a number `name_next`
-    /// took: it named nothing to anyone, and the peer counts from the named
+    /// that went home before any transmission, below a number told for a
+    /// named TID: it named nothing to anyone, and the peer counts from the named
     /// one.
     fn withdrawn_below_a_named_number(&self, tid: usize, sequence: u16) -> bool {
         let named_above = self
@@ -712,7 +1010,7 @@ impl<'id> World<'id> {
             .map(|memory| memory.id)
             .collect();
         std::format!(
-            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
+            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
             (self.left.offers, self.left.losses, self.left.requests),
             self.offered,
             self.owed,
@@ -725,9 +1023,10 @@ impl<'id> World<'id> {
             waiting,
             home,
             self.next,
-            self.named,
+            (&self.named, self.carried),
             self.link_from,
             (self.closing, self.keying, self.key),
+            (self.generation, &self.born, &self.aired),
             self.engine.key(),
             self.around.port.state_key(),
         )
@@ -880,6 +1179,30 @@ fn every_order_at_the_mutants_bounds() {
     run(Bounds {
         offers: 3,
         losses: 1,
+        requests: 6,
+    });
+}
+
+/// The bounds where the window binds: a fourth MSDU behind a full window,
+/// as the model's mutant of the intake's window check is run at.
+#[test]
+#[ignore = "the window's bounds: run by name"]
+fn every_order_at_the_windows_bounds() {
+    run(Bounds {
+        offers: 4,
+        losses: 1,
+        requests: 4,
+    });
+}
+
+/// The bounds where a frame spends every attempt: two losses, as the
+/// model's mutant of the attempts is run at.
+#[test]
+#[ignore = "the attempts' bounds: run by name"]
+fn every_order_at_the_attempts_bounds() {
+    run(Bounds {
+        offers: 3,
+        losses: 2,
         requests: 6,
     });
 }

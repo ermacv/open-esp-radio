@@ -200,12 +200,13 @@ impl EventSink<DataEvent> for Seen {
     }
 }
 
-/// What the engine told the controller: TBTTs, the closed gate and the
-/// keys' ends.
+/// What the engine told the controller: TBTTs, the closed gate, the keys'
+/// ends and the named TIDs' numbers.
 pub(super) struct Controller<'id> {
     pub tbtts: Vec<TbttEvent>,
     pub gate: Option<GateClosed<'id>>,
     pub keys: Vec<KeyEnd>,
+    pub named: Vec<(WmmUserPriority, SequenceNumber)>,
 }
 
 impl<'id> Told<'id> for Controller<'id> {
@@ -219,6 +220,15 @@ impl<'id> Told<'id> for Controller<'id> {
 
     fn key_ended(&mut self, end: KeyEnd) {
         self.keys.push(end);
+    }
+
+    fn tid_named<const PEERS: usize>(
+        &mut self,
+        _peer: Peer<PEERS>,
+        tid: WmmUserPriority,
+        number: SequenceNumber,
+    ) {
+        self.named.push((tid, number));
     }
 }
 
@@ -319,6 +329,7 @@ impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
                 tbtts: Vec::new(),
                 gate: None,
                 keys: Vec::new(),
+                named: Vec::new(),
             },
             micros: 1,
         }
@@ -375,6 +386,24 @@ pub(super) fn linked<'id, const POOL: usize>(
         panic!("the peer is linked");
     };
     act(&mut linked);
+}
+
+/// Name `tid` of a link whose places hold nothing of it, and begin its
+/// transmit agreement of `size` on the number told.
+pub(super) fn agree<'id, const POOL: usize>(
+    peer: &mut LinkedPeer<'_, StationEngine<'id, POOL>>,
+    tid: WmmUserPriority,
+    size: u16,
+    around: &mut Around<'id, STATION_SINGLES, 0>,
+) {
+    let NamePlace::Unnamed(unnamed) = peer.naming() else {
+        panic!("no TID is named");
+    };
+    let _ = unnamed.name(tid, &mut around.turn()).unwrap();
+    let NamePlace::Named(named) = peer.naming() else {
+        panic!("the TID's places hold nothing of it: its number is told at once");
+    };
+    let _ = named.tx_agreement(size, &mut around.turn());
 }
 
 /// A station's engine flowing, its gate open, linked, aggregating at HT
@@ -538,7 +567,7 @@ fn a_key_change_owes_a_block_ack_request_for_a_transmitted_frame_it_sent_home() 
         let mut engine = StationEngine::<'_, 8>::new(8);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
-            let _ = peer.tx_agreement(WmmUserPriority::UP0, 2, &mut around.turn());
+            agree(peer, WmmUserPriority::UP0, 2, &mut around);
         });
         for id in 1..=2 {
             around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
@@ -690,7 +719,7 @@ fn a_station_under_an_agreement_aggregates_within_its_window() {
         let mut engine = StationEngine::<'_, 8>::new(8);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
-            let _ = peer.tx_agreement(WmmUserPriority::UP0, 2, &mut around.turn());
+            agree(peer, WmmUserPriority::UP0, 2, &mut around);
         });
         for id in 1..=4 {
             around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
@@ -749,28 +778,182 @@ fn a_held_link_keeps_its_data_until_released() {
     });
 }
 
+/// The deleted actor's test of this name: a TID's named number (an ADDBA
+/// Request's Starting Sequence Number) holds the TID's data until its
+/// agreement begins, on that number, and the first data MPDU after carries
+/// it.
 #[test]
-fn a_named_number_holds_its_tid_until_the_frame_that_names_it_went() {
+fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
     running::<STATION_SINGLES, 0, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
-            let named = peer
-                .name_next(LinkSpace::Tid(WmmUserPriority::UP0))
-                .unwrap();
-            assert_eq!(named, SequenceNumber::ZERO);
+            let NamePlace::Unnamed(unnamed) = peer.naming() else {
+                panic!("no TID is named");
+            };
+            let _ = unnamed.name(WmmUserPriority::UP0, &mut around.turn());
         });
+        // Nothing of UP0 was in the arenas: its number is told at once.
+        assert_eq!(
+            around.told.named,
+            [(WmmUserPriority::UP0, SequenceNumber::ZERO)]
+        );
         around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
         let _ = engine.offered(&mut around.turn());
         assert!(around.port.published().is_empty());
         linked(&mut engine, |peer| {
-            let _ = peer.named(&mut around.turn());
+            let NamePlace::Named(named) = peer.naming() else {
+                panic!("UP0's number was told");
+            };
+            assert_eq!(named.number(), SequenceNumber::ZERO);
+            let _ = named.tx_agreement(2, &mut around.turn());
         });
         assert_eq!(around.port.published().len(), 1);
-        // The data drew the number after the named one.
+        // The first data MPDU after the name carries the named number.
         let front = around.port.front(1).unwrap();
         let control = u16::from_le_bytes([front[22], front[23]]);
-        assert_eq!(SequenceNumber::from_sequence_control(control).get(), 1);
+        assert_eq!(SequenceNumber::from_sequence_control(control).get(), 0);
+    });
+}
+
+/// A TID named while the arenas hold its frames is told its number only
+/// once they have gone: nothing of it is below the number, and the first
+/// data MPDU after carries it.
+#[test]
+fn a_named_tid_is_told_its_number_once_its_frames_in_the_arenas_have_gone() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        for id in 1..=2 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        // 1 (number 0) on the air, 2 (number 1) in the standby.
+        linked(&mut engine, |peer| {
+            let NamePlace::Unnamed(unnamed) = peer.naming() else {
+                panic!("no TID is named");
+            };
+            let _ = unnamed.name(WmmUserPriority::UP0, &mut around.turn());
+        });
+        around.net.offer(3, WmmUserPriority::UP0, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        assert!(
+            around.told.named.is_empty(),
+            "UP0's frames are in the arenas"
+        );
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert!(around.told.named.is_empty(), "the standby holds UP0's 2");
+        linked(&mut engine, |peer| {
+            assert!(matches!(peer.naming(), NamePlace::Draining(_)));
+        });
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(around.port.published().len(), 2, "3 waits in its queue");
+        assert_eq!(
+            around.told.named,
+            [(WmmUserPriority::UP0, SequenceNumber::new(2).unwrap())]
+        );
+        linked(&mut engine, |peer| {
+            let NamePlace::Named(named) = peer.naming() else {
+                panic!("UP0's number was told");
+            };
+            let _ = named.tx_agreement(2, &mut around.turn());
+        });
+        let front = around.port.front(3).unwrap();
+        let control = u16::from_le_bytes([front[22], front[23]]);
+        assert_eq!(SequenceNumber::from_sequence_control(control).get(), 2);
+    });
+}
+
+/// The deleted actor's `a_voice_frame_goes_ahead_of_a_best_effort_backlog`:
+/// a voice MSDU behind a best-effort backlog goes in the next arena.
+#[test]
+fn a_voice_msdu_goes_in_the_next_arena_ahead_of_a_best_effort_backlog() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        for id in 1..=3 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        // 1 on the air, 2 in the standby, 3 queued behind them.
+        around.net.offer(4, WmmUserPriority::UP6, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        // After the standby that was written, voice goes before the backlog.
+        let third = &around.port.published()[2].frames[0];
+        assert_eq!(third[24] & 0x07, 6, "the voice MSDU went third");
+    });
+}
+
+/// The deleted actor's
+/// `a_tid_held_by_its_window_does_not_hold_the_other_tid_of_its_category`:
+/// a TID held by its window lets the other TID of its category take the
+/// next arena, and goes once its window moves.
+#[test]
+fn a_tid_held_by_its_window_lets_the_other_tid_of_its_category_go() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        linked(&mut engine, |peer| {
+            agree(peer, WmmUserPriority::UP0, 1, &mut around);
+        });
+        for id in 1..=2 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        around.net.offer(3, WmmUserPriority::UP3, DESTINATION);
+        let _ = engine.offered(&mut around.turn());
+        // UP0's window of one holds 2 behind 1; UP3, best effort too, takes
+        // the standby.
+        assert_eq!(around.port.published().len(), 1);
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        let second = &around.port.published()[1].frames[0];
+        assert_eq!(second[24] & 0x07, 3, "the other TID went while UP0 waited");
+        for _ in 0..2 {
+            around.port.set_air(BEST_EFFORT, Air::Ack);
+            let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        }
+        // UP0's window moved at 1's end: 2 went last.
+        assert_eq!(around.net.home, [1, 3, 2]);
+    });
+}
+
+/// The deleted actor's `a_link_that_goes_returns_every_queued_msdu_once`:
+/// a link that ends while its MSDUs wait (behind a window, behind the air)
+/// sends each home exactly once.
+#[test]
+fn a_link_that_ends_sends_every_waiting_msdu_home_once() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        linked(&mut engine, |peer| {
+            agree(peer, WmmUserPriority::UP0, 1, &mut around);
+        });
+        for id in 1..=4 {
+            around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
+        }
+        let _ = engine.offered(&mut around.turn());
+        around.port.set_air(BEST_EFFORT, Air::Hold);
+        {
+            let mut data = station_flowing(&mut engine);
+            let PeerPlace::Linked(peer) = data.peer(ACCESS_POINT) else {
+                panic!("the access point is linked");
+            };
+            let _ = peer.unlink(&mut around.turn());
+        }
+        // The queued ones went home at the unlink; the one on the air at
+        // its end.
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        let mut home = around.net.home.clone();
+        home.sort_unstable();
+        assert_eq!(home, [1, 2, 3, 4]);
+        assert_eq!(engine.queued(), 0);
     });
 }
 
@@ -875,6 +1058,52 @@ fn an_access_points_msdu_is_copied_into_its_queues_place_and_its_memory_goes_hom
         around.port.set_air(BEST_EFFORT, Air::Ack);
         let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
         assert_eq!(around.rates.lessons, 1);
+    });
+}
+
+/// An access point's client's named TID is told its number once its single
+/// on the air ended, and its next data MPDU carries it.
+#[test]
+fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
+    running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
+        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut around = access_point(run, &mut engine);
+        let client = Peer::new(1).unwrap();
+        around.net.offer(1, WmmUserPriority::UP0, CLIENT_B);
+        let _ = engine.offered(&mut around.turn());
+        {
+            let mut data = ap_flowing(&mut engine);
+            let PeerPlace::Linked(mut peer) = data.peer(client) else {
+                panic!("the client is linked");
+            };
+            let NamePlace::Unnamed(unnamed) = peer.naming() else {
+                panic!("no TID is named");
+            };
+            let _ = unnamed.name(WmmUserPriority::UP0, &mut around.turn());
+        }
+        around.net.offer(2, WmmUserPriority::UP0, CLIENT_B);
+        let _ = engine.offered(&mut around.turn());
+        assert!(around.told.named.is_empty(), "its single is on the air");
+        around.port.set_air(BEST_EFFORT, Air::Ack);
+        let _ = engine.transmitted(TxFacts::DUE, Signal::Quiet, &mut around.turn());
+        assert_eq!(
+            around.told.named,
+            [(WmmUserPriority::UP0, SequenceNumber::new(1).unwrap())]
+        );
+        assert_eq!(engine.queued(), 1, "2 waits for the name's end");
+        {
+            let mut data = ap_flowing(&mut engine);
+            let PeerPlace::Linked(mut peer) = data.peer(client) else {
+                panic!("the client is linked");
+            };
+            let NamePlace::Named(named) = peer.naming() else {
+                panic!("its number was told");
+            };
+            let _ = named.release(&mut around.turn());
+        }
+        let single = around.port.single(data_place(BEST_EFFORT)).unwrap();
+        let control = u16::from_le_bytes([single[22], single[23]]);
+        assert_eq!(SequenceNumber::from_sequence_control(control).get(), 1);
     });
 }
 
@@ -1039,7 +1268,7 @@ fn aggregating<'id>(
 ) -> Around<'id, STATION_SINGLES, 0> {
     let mut around = station(run, engine, 3, Duration::from_millis(1));
     linked(engine, |peer| {
-        let _ = peer.tx_agreement(WmmUserPriority::UP0, 4, &mut around.turn());
+        agree(peer, WmmUserPriority::UP0, 4, &mut around);
         let _ = peer.hold(&mut around.turn());
     });
     around.net.offer(1, WmmUserPriority::UP0, DESTINATION);

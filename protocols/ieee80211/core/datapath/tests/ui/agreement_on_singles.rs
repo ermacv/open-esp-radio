@@ -1,6 +1,6 @@
 #![no_std]
 use oer_protocols_ieee80211_core_datapath::engine::{
-    Arenas, DATA_SINGLES, DataPlace, Engine, Peer, PeerPlace, Singles,
+    Arenas, DATA_SINGLES, DataPlace, Engine, NamePlace, Peer, PeerPlace, Singles,
 };
 use oer_protocols_ieee80211_core_datapath::numbers::TxKey;
 use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelPort};
@@ -19,14 +19,15 @@ pub type AccessPoint<'id, T> = Engine<
     MODEL_AGREEMENTS,
 >;
 
-// An access point's data goes as singles: its linked peer offers no
-// transmit agreement.
+// An access point's data goes as singles: its named TID offers no transmit
+// agreement.
 pub fn agreement<T: TxKey>(engine: &mut AccessPoint<'_, T>) {
     if let DataPlace::Flowing(mut data) = engine.data()
-        && let PeerPlace::Linked(peer) = data.peer(Peer::new(0).unwrap())
+        && let PeerPlace::Linked(mut peer) = data.peer(Peer::new(0).unwrap())
+        && let NamePlace::Named(named) = peer.naming()
     {
-        let _ = &peer;
+        let _ = &named;
         #[cfg(ui_reject)]
-        peer.tx_agreement(); // ui-error: E0599
+        named.tx_agreement(); // ui-error: E0599
     }
 }
