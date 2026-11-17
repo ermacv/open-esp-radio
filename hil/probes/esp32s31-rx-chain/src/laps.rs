@@ -544,14 +544,20 @@ mod c {
             }
             _ => {
                 per.length_disagrees = per.length_disagrees.saturating_add(1);
-                per.length_seen.get_or_insert(mpdu.unwrap_or(0) as u32);
-                return None;
+                // The tail's MPDU length and the bytes the unit holds after
+                // the header.
+                per.length_seen
+                    .get_or_insert(((mpdu.unwrap_or(0) as u32) << 16) | held as u32);
+                // Cell E compares what the unit holds: its MIC may be cut.
+                if !protected {
+                    return None;
+                }
             }
         }
         let mut mismatches = 0_u32;
         let mut foreign = false;
         let mut first = None;
-        for offset in 0..length {
+        for offset in 0..length.min(held) {
             let want = if protected {
                 // The packet number and the MIC are not compared.
                 match case_c::protected_expected(case, sender, station, counter, offset) {
@@ -615,7 +621,7 @@ mod c {
             line.clear();
             let _ = writeln!(
                 line,
-                "CASE tag={} mpdu={} units={} distinct={} retries={} absent={absent} length_disagrees={} mismatch_units={} mismatch_bytes={} counter_disagrees={} spans={}..{} first_mismatch={:?} length_seen={:?} absent_first={:?}",
+                "CASE tag={} mpdu={} units={} distinct={} retries={} absent={absent} length_disagrees={} mismatch_units={} mismatch_bytes={} counter_disagrees={} spans={}..{} first_mismatch={:?} length_seen={:x?} absent_first={:?}",
                 case.tag(),
                 case.length(),
                 per.units,
