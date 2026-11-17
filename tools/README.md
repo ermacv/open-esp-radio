@@ -64,8 +64,13 @@ under the clone's `target/`, never `/tmp`:
 mkdir -p target/mutants/tmp
 git diff origin/<base>... > target/mutants/pr.diff
 TMPDIR=$PWD/target/mutants/tmp cargo mutants -p <package> \
-  --in-diff target/mutants/pr.diff --output target/mutants --jobs 4
+  --in-diff target/mutants/pr.diff --output target/mutants --jobs 8
 ```
+
+Each job builds and tests its own copy of the tree, so the jobs are
+independent: give it the cores the machine has to spare. Run it without a
+`CARGO_TARGET_DIR` inside the clone: with one, the compile-fail cases of the
+unmutated baseline keep the copy's absolute path in their output and fail.
 
 The pull request lists every missed mutant
 (`target/mutants/mutants.out/missed.txt`) with its outcome: a test added,
