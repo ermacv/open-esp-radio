@@ -611,14 +611,32 @@ async fn run_direct(
     let stopped_ring = ready
         .publish(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-publish"; 32))?;
+    // Case D starts receive in the port's order (`ReceiveSession::port_start`,
+    // as the mac-reset probe does): the open receive and the station's scan
+    // policy before the walker, then the MAC's runtime released. Selections
+    // 200–209 keep their recorded order.
+    #[cfg(feature = "laps")]
+    {
+        let broadcast = [0xff; 6];
+        access.wifi_mac_hal().configure_open_promiscuous_receive();
+        access
+            .wifi_mac_hal()
+            .configure_station_receive_policy(broadcast);
+        access
+            .wifi_mac_hal()
+            .configure_station_scan_policy(broadcast);
+    }
     let mut ring = stopped_ring
         .try_start(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-start"; 32))?;
+    #[cfg(feature = "laps")]
+    access.wifi_mac_hal().start_mac_runtime(&ring);
     let stale = mac_irq.mac_interrupt_raw();
     if stale.fatal_assertion_raw().is_some() {
         return Err(oer_portable_diagnostics::name!("traffic-initial-fatal"; 32));
     }
     mac_irq.acknowledge_mac_interrupt_raw(stale);
+    #[cfg(not(feature = "laps"))]
     access.wifi_mac_hal().configure_open_promiscuous_receive();
     mac_irq.mask_all_mac_interrupts();
     traffic::checkpoint(trace, 202, 0, &mac_irq)?;
@@ -633,16 +651,7 @@ async fn run_direct(
     // taken and acknowledged whatever its BSSID, as the mac-reset probe and
     // the backend's `StaScanRxPolicyHardware` apply it.
     #[cfg(feature = "laps")]
-    let observation = {
-        let broadcast = [0xff; 6];
-        access
-            .wifi_mac_hal()
-            .configure_station_receive_policy(broadcast);
-        access
-            .wifi_mac_hal()
-            .configure_station_scan_policy(broadcast);
-        laps::run(console, storage, &mut ring, access, output.station).await
-    };
+    let observation = laps::run(console, storage, &mut ring, access, output.station).await;
     access.wifi_mac_hal().request_channel_stop();
     let deadline = EmbassyClock
         .now()

@@ -152,7 +152,7 @@ pub(super) async fn run(
     access: &mut RadioAccess,
     station: [u8; 6],
 ) -> Result<(), oer_portable_diagnostics::Name<32>> {
-    let mut line = heapless::String::<192>::new();
+    let mut line = heapless::String::<512>::new();
     let lengths = mpdu_lengths();
     let _ = writeln!(
         line,
