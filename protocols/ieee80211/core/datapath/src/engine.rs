@@ -530,8 +530,8 @@ pub trait Sections<'id, P: DataPort<'id>> {
     /// shut and nothing the port's; else nothing changes.
     fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights>;
 
-    /// The next number of `peer`'s link's `space`, taken.
-    fn take_number(&mut self, _seal: Seal, peer: u8, space: LinkSpace) -> Option<SequenceNumber>;
+    /// The next number of `peer`'s link's `space`, named (`TxNumbers::name`).
+    fn name_number(&mut self, _seal: Seal, peer: u8, space: LinkSpace) -> Option<SequenceNumber>;
 }
 
 /// The engine type of a handle's methods.
@@ -1369,8 +1369,11 @@ where
     }
 
     /// The next number of the link's `space`, for a frame of the
-    /// controller: a TID's data waits until the controller says the frame
-    /// that names it went ([`Self::named`]).
+    /// controller. The station's own space's is taken: the controller's
+    /// frame carries it. A TID's is named and not taken (an ADDBA
+    /// Request's Starting Sequence Number): the TID's data waits until the
+    /// controller says the frame that names it went ([`Self::named`]), and
+    /// its first data MPDU after carries the number.
     ///
     /// # Errors
     ///
@@ -1378,7 +1381,7 @@ where
     pub fn name_next(&mut self, space: LinkSpace) -> Result<SequenceNumber, NoSpace> {
         let number = self
             .engine
-            .take_number(Seal(()), self.peer, space)
+            .name_number(Seal(()), self.peer, space)
             .ok_or(NoSpace)?;
         if let (LinkSpace::Tid(tid), Some(linked)) = (space, self.engine.linked_mut(self.peer)) {
             linked.hold = Hold::Named(tid);
@@ -2094,9 +2097,11 @@ where
             let went = tid.select(&withdrawn);
             // A number never transmitted named nothing to anyone: the
             // TID's counter goes back to the oldest of them, when they are
-            // its last draws (no number was drawn after them, a named one
-            // included).
-            if let Some(next) = went.rewind_to(linked.link.numbers.next(tid)) {
+            // its last draws. A TID held for a named number is not set back
+            // below it: the peer counts from the named number.
+            if linked.hold != Hold::Named(tid)
+                && let Some(next) = went.rewind_to(linked.link.numbers.next(tid))
+            {
                 linked.link.numbers.rewind(tid, next);
                 plane.rewound(tid, next);
             }
@@ -2221,9 +2226,9 @@ where
         }
     }
 
-    fn take_number(&mut self, _seal: Seal, _peer: u8, space: LinkSpace) -> Option<SequenceNumber> {
+    fn name_number(&mut self, _seal: Seal, _peer: u8, space: LinkSpace) -> Option<SequenceNumber> {
         match &mut self.entries {
-            [Entry::Linked(linked)] => linked.link.numbers.take(space),
+            [Entry::Linked(linked)] => linked.link.numbers.name(space),
             [Entry::Free] => None,
         }
     }
@@ -2670,9 +2675,9 @@ where
         }
     }
 
-    fn take_number(&mut self, _seal: Seal, peer: u8, space: LinkSpace) -> Option<SequenceNumber> {
+    fn name_number(&mut self, _seal: Seal, peer: u8, space: LinkSpace) -> Option<SequenceNumber> {
         match self.entries.get_mut(usize::from(peer)) {
-            Some(Entry::Linked(linked)) => linked.link.numbers.take(space),
+            Some(Entry::Linked(linked)) => linked.link.numbers.name(space),
             _ => None,
         }
     }

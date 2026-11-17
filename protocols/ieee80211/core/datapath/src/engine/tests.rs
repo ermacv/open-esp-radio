@@ -750,7 +750,10 @@ fn a_held_link_keeps_its_data_until_released() {
 }
 
 #[test]
-fn a_named_number_holds_its_tid_until_the_frame_that_names_it_went() {
+/// The deleted actor's test of this name: a TID's named number (an ADDBA
+/// Request's Starting Sequence Number) holds the TID's data until the frame
+/// that names it went, and the first data MPDU after carries it.
+fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
     running::<STATION_SINGLES, 0, _>(|run| {
         let mut engine = StationEngine::<'_, 8>::new(4);
         let mut around = station(run, &mut engine, 2, HOUR);
@@ -767,10 +770,10 @@ fn a_named_number_holds_its_tid_until_the_frame_that_names_it_went() {
             let _ = peer.named(&mut around.turn());
         });
         assert_eq!(around.port.published().len(), 1);
-        // The data drew the number after the named one.
+        // The first data MPDU after the name carries the named number.
         let front = around.port.front(1).unwrap();
         let control = u16::from_le_bytes([front[22], front[23]]);
-        assert_eq!(SequenceNumber::from_sequence_control(control).get(), 1);
+        assert_eq!(SequenceNumber::from_sequence_control(control).get(), 0);
     });
 }
 

@@ -526,7 +526,37 @@ impl<'id> World<'id> {
         if !self.on_air() && after.iter().any(|id| self.aired_of(*id) >= ATTEMPTS) {
             self.problems.push("a frame is kept with no attempt left");
         }
+        self.check_window(&after);
         self.check_blocked(&after);
+    }
+
+    /// No MSDU numbered beyond its TID's window is in an arena: the window
+    /// begins at the oldest number the arenas hold of the TID, and one
+    /// beyond it waits in its queue.
+    fn check_window(&mut self, arenas: &[u32]) {
+        for tid in 0..TIDS.len() {
+            if !self.agreed[tid] {
+                continue;
+            }
+            let numbers: Vec<u16> = arenas
+                .iter()
+                .filter(|id| self.born.get(**id as usize - 1) == Some(&self.generation))
+                .filter_map(|id| self.around.port.front(*id))
+                .filter(|front| front[24] & 0x07 == TIDS[tid].value())
+                .map(|front| {
+                    SequenceNumber::from_sequence_control(u16::from_le_bytes([
+                        front[22], front[23],
+                    ]))
+                    .get()
+                })
+                .collect();
+            if let (Some(oldest), Some(newest)) = (numbers.iter().min(), numbers.iter().max())
+                && newest - oldest >= WINDOW
+            {
+                self.problems
+                    .push("an MSDU numbered beyond its TID's window is in an arena");
+            }
+        }
     }
 
     /// A TID held by its window moves when its frames in the arenas
@@ -830,9 +860,7 @@ impl<'id> World<'id> {
                     continue;
                 };
                 let mut expected = self.next[tid].unwrap_or(0);
-                while self.named.contains(&(tid, expected))
-                    || self.withdrawn_below_a_named_number(tid, expected)
-                {
+                while self.withdrawn_below_a_named_number(tid, expected) {
                     expected += 1;
                 }
                 if sequence != expected {
