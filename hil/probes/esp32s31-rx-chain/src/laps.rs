@@ -29,6 +29,9 @@ const RUN_MS: u32 = 150_000;
 /// The units of the injector's the run aims at, and the laps.
 const UNITS: u32 = 10_000;
 const LAPS: u32 = 100;
+/// The units of each length the run aims at besides: every length is
+/// covered, not only the first ones the host sends.
+const PER_LENGTH: u32 = 1_000;
 /// The most descriptors a unit is counted under; longer ones share the last.
 const SPANS: usize = 16;
 /// The mismatching units printed in full.
@@ -164,7 +167,9 @@ pub(super) async fn run(
     let mut counts = Counts::default();
     let mut peer: Option<[u8; 6]> = None;
     while EmbassyClock.now() < end
-        && !(counts.peer_units >= UNITS && counts.descriptors / COUNT as u64 >= u64::from(LAPS))
+        && !(counts.peer_units >= UNITS
+            && counts.descriptors / COUNT as u64 >= u64::from(LAPS)
+            && counts.per_length.iter().all(|per| per.units >= PER_LENGTH))
     {
         storage
             .observe_reserved(ring, access.rx_dma())
