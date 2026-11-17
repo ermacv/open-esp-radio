@@ -31,6 +31,15 @@ use oer_portable_memory::{FrameLen, PinnedDmaTxPool, PinnedDmaTxRadioLease};
 /// The frames' MPDU bytes, FCS excluded: about 1.4 ms on the air at
 /// 6 Mb/s, the time a pulse or a stop is spread over.
 const FRAME: usize = 1_024;
+/// The TX metadata before the frame in its buffer: the first word holds
+/// the MPDU's length with its FCS (`WIFI_TX_METADATA_HEAD`), the second is
+/// zero, as the backend's ordinary transmit writes it (`ordinary_tx.rs`,
+/// `TX_METADATA_SIZE`).
+const METADATA: usize = 8;
+/// The FCS the hardware appends, its room left zero after the frame.
+const FCS: usize = 4;
+/// A pool slot: a frame of [`FRAME`] with its metadata and FCS room.
+const SLOT: usize = METADATA + FRAME + FCS;
 /// The pulses that land on a frame of their own, each chain abandoned.
 const ABANDONED: usize = 100;
 /// The pool's slots: a guard before, between and after the abandoned
@@ -42,7 +51,9 @@ const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
 const TIMEOUT: u16 = 0x03ff;
 /// The medium's observation (`tasks/157`): each timeout, each length, this
 /// many frames, with the peer silent and then sending.
-const OBSERVED_TIMEOUTS: [u16; 3] = [0, TIMEOUT, 0xffff];
+const OBSERVED_TIMEOUTS: [u16; 3] = [0, TIMEOUT, TIMEOUT_MAX];
+/// The largest timeout `MacLegacyTxProgram::new` admits.
+const TIMEOUT_MAX: u16 = oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX as u16;
 const OBSERVED_LENGTHS: [usize; 2] = [30, FRAME];
 const OBSERVED_REPEATS: usize = 4;
 const OBSERVED: usize = OBSERVED_TIMEOUTS.len() * OBSERVED_LENGTHS.len() * OBSERVED_REPEATS;
@@ -65,9 +76,9 @@ const QUEUE: MacTxQueueIndex = MacTxQueueIndex::Zero;
 /// The records part two prints.
 pub(super) const ROWS: usize = 4 + BASELINE + STOPS + ABANDONED + 2;
 
-type Pool = PinnedDmaTxPool<FRAME, 0, 0, SLOTS>;
-type Placed = PlacedTxPool<FRAME, 0, 0, SLOTS>;
-type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, FRAME, 0, 0>>;
+type Pool = PinnedDmaTxPool<SLOT, 0, 0, SLOTS>;
+type Placed = PlacedTxPool<SLOT, 0, 0, SLOTS>;
+type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, SLOT, 0, 0>>;
 type Descriptor = PinnedTxDmaStorage<Lease>;
 
 macro_rules! abandoned_descriptors {
@@ -144,6 +155,24 @@ fn frame_byte(header: &[u8; 24], chain: u32, offset: usize) -> u8 {
     (chain as u8) ^ (offset as u8) ^ 0x5a
 }
 
+/// The buffer byte at `offset` of a frame of `length` octets: its TX
+/// metadata, the frame, then the FCS room.
+fn buffer_byte(header: &[u8; 24], chain: u32, length: usize, offset: usize) -> u8 {
+    let head = ((length + FCS) as u32).to_le_bytes();
+    if let Some(byte) = head.get(offset) {
+        return *byte;
+    }
+    match offset.checked_sub(METADATA) {
+        Some(at) if at < length => frame_byte(header, chain, at),
+        _ => 0,
+    }
+}
+
+/// The bytes a frame of `length` octets takes in its buffer.
+const fn transfer(length: usize) -> usize {
+    METADATA + length + FCS
+}
+
 /// An action frame from the station to the peer with the wildcard BSSID,
 /// as ESP-NOW sends one: an unassociated ESP-IDF station takes it and its
 /// MAC acknowledges it, where it drops a data frame of another BSS.
@@ -195,7 +224,7 @@ fn parameters(length: usize, power: u8, timeout: u16) -> MacLegacyTxParameters {
 struct Frames {
     pool: &'static Placed,
     guards: heapless::Vec<
-        oer_portable_memory::PinnedDmaTxNetworkLease<'static, FRAME, 0, 0>,
+        oer_portable_memory::PinnedDmaTxNetworkLease<'static, SLOT, 0, 0>,
         { ABANDONED + 1 },
     >,
     header: [u8; 24],
@@ -254,14 +283,15 @@ impl Frames {
     /// Slot `slot`'s frame of chain `chain`, as the radio holds it.
     fn lease(&self, slot: u8, chain: u32, length: usize) -> Result<Lease, Failure> {
         let header = self.header;
-        let length = FrameLen::new(length).map_err(|_| (tx_phase::FRAME, 0))?;
+        let frame = length;
+        let length = FrameLen::new(transfer(frame)).map_err(|_| (tx_phase::FRAME, 0))?;
         let network = self
             .pool
             .claim_network(slot)
             .map_err(|_| (tx_phase::FRAME, 1 | u32::from(slot) << 8))?;
         let _published = network.publish(length, |bytes| {
             for (offset, byte) in bytes.iter_mut().enumerate() {
-                *byte = frame_byte(&header, chain, offset);
+                *byte = buffer_byte(&header, chain, frame, offset);
             }
         });
         self.pool
@@ -283,7 +313,9 @@ fn start(
     let TxDmaAccess::Free(free) = descriptor.access() else {
         return Err((tx_phase::START, 2));
     };
-    free.reserve(FRAME as u32, length as u32)
+    // The descriptor's capacity: the transfer rounded up to a word.
+    let total = transfer(length);
+    free.reserve(total.next_multiple_of(4) as u32, total as u32)
         .map_err(|_| (tx_phase::START, 3))?;
     let publication = descriptor.publication().map_err(|_| (tx_phase::START, 4))?;
     let program = MacLegacyTxProgram::new(&publication, parameters(length, power, timeout))
@@ -598,10 +630,10 @@ impl Abandoned {
             .filter(|(now, then)| **now != *then)
             .count() as u32;
         let mut buffer = 0_u32;
-        for word in 0..FRAME / 4 {
+        for word in 0..transfer(FRAME) / 4 {
             let offset = (word * 4) as u32;
             let expected = u32::from_le_bytes(core::array::from_fn(|byte| {
-                frame_byte(header, chain, word * 4 + byte)
+                buffer_byte(header, chain, FRAME, word * 4 + byte)
             }));
             if read_placed_word(self.buffer_start, self.buffer_len, offset) != Some(expected) {
                 buffer = buffer.saturating_add(1);

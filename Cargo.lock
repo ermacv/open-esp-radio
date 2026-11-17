@@ -2081,6 +2081,7 @@ dependencies = [
  "embedded-io-async",
  "heapless",
  "oer-chips-esp32s31-hal",
+ "oer-chips-esp32s31-pac",
  "oer-chips-esp32s31-platform-board",
  "oer-chips-esp32s31-platform-layout",
  "oer-chips-esp32s31-platform-runtime",
