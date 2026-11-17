@@ -8,8 +8,7 @@
 pub enum DataEvent {
     /// The data machine lost one MSDU or MPDU.
     DataLost(DataLoss),
-    /// A data aggregate's terminal, or its refusal before the port, settled
-    /// its members.
+    /// A data aggregate's terminal settled its members.
     AggregateSettled(AggregateSettled),
     /// The engine refused an MSDU before its queue or its place; its memory
     /// went home.
@@ -25,11 +24,9 @@ pub struct AggregateSettled {
     pub acknowledged: u8,
     /// Members back in their queue for a later aggregate.
     pub retried: u8,
-    /// Members dropped: their lifetime or the policy's attempts ran out, a
-    /// refusal or an outcome ended them, or their memory was lost.
+    /// Members dropped: their lifetime or the policy's attempts ran out, an
+    /// outcome ended them, or their memory was lost.
     pub dropped: u8,
-    /// Whether the aggregate was refused before the port.
-    pub refused: bool,
     /// The positions its BlockAck left unacknowledged, bit 0 the first
     /// subframe on air: of a first transmission that got an answer.
     pub holes: Option<u64>,

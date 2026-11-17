@@ -531,5 +531,5 @@ fn an_msdu_header_parses_from_the_networks_ethernet_frame() {
     assert_eq!(header.source, [2, 0, 0, 0, 0, 1]);
     assert_eq!(header.ether_type, 0x888e);
     assert_eq!(payload, [0xaa, 0xbb]);
-    assert!(MsduHeader::parse(&frame[..13]).is_none());
+    assert_eq!(MsduHeader::parse(&frame[..13]), Err(MsduTooShort));
 }

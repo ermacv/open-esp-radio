@@ -9113,10 +9113,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/datapath/src/plane.rs::DataPlane.link",
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/core/datapath/src/plane.rs::DataPlane.rate",
         BY_P3,
     ),

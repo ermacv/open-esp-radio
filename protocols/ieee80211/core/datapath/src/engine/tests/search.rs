@@ -19,7 +19,8 @@
 
 use super::*;
 use oer_protocols_ieee80211_contracts_port::{ArenaSide, GateClosed};
-use oer_protocols_ieee80211_testing_model::{ModelRights, Went};
+use oer_protocols_ieee80211_testing_model::ModelRights;
+use oer_protocols_ieee80211_testing_model::Went;
 use std::string::String;
 use std::time::Instant as Clock;
 
@@ -101,20 +102,27 @@ enum Stop {
     Stopped,
 }
 
+/// Whether the gate's closing was asked and has not ended.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Closing {
+    None,
+    Asked,
+}
+
 /// The engine and everything around it.
 struct World<'id> {
     engine: StationEngine<'id, POOL>,
-    around: Around<'id, STATION_SINGLES>,
-    /// The machine's, while the data is stopped.
-    rights: Option<ModelRights<'id, STATION_SINGLES>>,
+    around: Around<'id, STATION_SINGLES, 0>,
+    /// The data's rights, the machine's while the data is stopped.
+    stopped: Option<ModelRights<'id, STATION_SINGLES, 0>>,
     /// The controller's, while closed.
     gate: Option<GateClosed<'id>>,
     left: Bounds,
     offered: u32,
-    round: bool,
+    /// What the last move owed.
+    owed: Rest,
     stop: Stop,
-    /// The gate's closing was asked and has not ended.
-    closing: bool,
+    closing: Closing,
     agreed: [bool; 2],
     hold: Option<usize>,
     /// Each offered MSDU's TID.
@@ -130,18 +138,22 @@ struct World<'id> {
 }
 
 impl<'id> World<'id> {
-    fn new(run: Running<'id, STATION_SINGLES>, bounds: Bounds) -> Self {
-        let Running { port, data, gate } = run;
+    fn new(run: Running<'id, STATION_SINGLES, 0>, bounds: Bounds) -> Self {
+        let Running {
+            port,
+            data: rights,
+            gate,
+        } = run;
         Self {
             engine: StationEngine::new(BUDGET),
             around: Around::new(port),
-            rights: Some(data),
+            stopped: Some(rights),
             gate: Some(gate),
             left: bounds,
             offered: 0,
-            round: false,
+            owed: Rest::Wake(None),
             stop: Stop::NotAsked,
-            closing: false,
+            closing: Closing::None,
             agreed: [false; 2],
             hold: None,
             tids: Vec::new(),
@@ -152,12 +164,34 @@ impl<'id> World<'id> {
         }
     }
 
-    fn flowing(&self) -> bool {
-        self.engine.is_flowing()
+    fn flowing(&mut self) -> bool {
+        matches!(self.engine.data(), DataPlace::Flowing(_))
     }
 
-    fn linked(&self) -> bool {
-        self.engine.is_linked(ACCESS_POINT)
+    fn linked(&mut self) -> bool {
+        match self.engine.data() {
+            DataPlace::Flowing(mut flowing) => {
+                matches!(flowing.peer(ACCESS_POINT), PeerPlace::Linked(_))
+            }
+            _ => false,
+        }
+    }
+
+    fn held(&mut self) -> bool {
+        match self.engine.data() {
+            DataPlace::Flowing(mut flowing) => match flowing.peer(ACCESS_POINT) {
+                PeerPlace::Linked(mut linked) => linked.is_held(),
+                PeerPlace::Free(_) => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn gate_open(&mut self) -> bool {
+        match self.engine.data() {
+            DataPlace::Flowing(mut flowing) => matches!(flowing.gate(), GatePlace::Open(_)),
+            _ => false,
+        }
     }
 
     fn on_air(&self) -> bool {
@@ -165,7 +199,7 @@ impl<'id> World<'id> {
     }
 
     /// What may happen next.
-    fn moves(&self) -> Vec<Move> {
+    fn moves(&mut self) -> Vec<Move> {
         let mut moves = Vec::new();
         if self.left.offers > 0 {
             moves.extend((0..TIDS.len()).map(Move::Offer));
@@ -192,7 +226,7 @@ impl<'id> World<'id> {
         // A command's end and a stop's answer wait for the air to be quiet,
         // as the model's "gate_closed" and "command_done": a turn before it
         // changes nothing.
-        if self.round || (self.closing && !self.on_air()) {
+        if self.owed == Rest::Round || (self.closing == Closing::Asked && !self.on_air()) {
             moves.push(Move::Turn);
         }
         if self.stop == Stop::Going && !self.on_air() {
@@ -201,13 +235,15 @@ impl<'id> World<'id> {
         moves
     }
 
-    fn requests(&self) -> Vec<Ask> {
+    fn requests(&mut self) -> Vec<Ask> {
         let mut asks = Vec::new();
         let flowing = self.flowing();
         if flowing && !self.linked() {
             asks.push(Ask::Link);
         }
-        if self.linked() && !self.engine.is_held(ACCESS_POINT) {
+        let linked = self.linked();
+        let held = self.held();
+        if linked && !held {
             asks.extend([Ask::Hold, Ask::Unlink]);
             for tid in 0..TIDS.len() {
                 asks.push(if self.agreed[tid] {
@@ -220,19 +256,19 @@ impl<'id> World<'id> {
                 }
             }
         }
-        if self.linked() && self.engine.is_held(ACCESS_POINT) {
+        if linked && held {
             asks.extend([Ask::Release, Ask::Unlink]);
         }
-        if self.hold.is_some() && self.linked() {
+        if self.hold.is_some() && linked {
             asks.push(Ask::Named);
         }
-        if flowing && self.engine.gate_open() {
+        if flowing && self.gate_open() {
             asks.push(Ask::CloseGate);
         }
         if flowing && self.gate.is_some() {
             asks.push(Ask::OpenGate);
         }
-        if !flowing && self.rights.is_some() {
+        if !flowing && self.stopped.is_some() {
             asks.push(Ask::Flows);
         }
         if flowing {
@@ -287,125 +323,146 @@ impl<'id> World<'id> {
                 None
             }
         };
-        self.round = rest == Some(Rest::Round);
-        if let Some(gate) = self.engine.take_closed_gate() {
+        self.owed = rest.unwrap_or(Rest::Wake(None));
+        if let Some(gate) = self.around.told.gate.take() {
             self.gate = Some(gate);
-            self.closing = false;
+            self.closing = Closing::None;
         }
         let _ = published;
         self.check(rest);
     }
 
     fn ask(&mut self, ask: Ask) -> Option<Rest> {
+        if ask == Ask::StopData {
+            self.agreed = [false; 2];
+            self.hold = None;
+            if self.gate_open() {
+                self.closing = Closing::Asked;
+            }
+            self.stop_data();
+            return None;
+        }
         let mut turn = self.around.turn();
+        let refused = "a request the engine's state admits was refused";
         let answer = match ask {
+            Ask::Flows => {
+                let DataPlace::Stopped(data) = self.engine.data() else {
+                    self.problems.push(refused);
+                    return None;
+                };
+                let stopped = self.stopped.take()?;
+                self.stop = Stop::NotAsked;
+                let _ = data.flows(stopped);
+                return None;
+            }
+            Ask::CloseGate | Ask::OpenGate => {
+                let DataPlace::Flowing(mut flowing) = self.engine.data() else {
+                    self.problems.push(refused);
+                    return None;
+                };
+                match (ask, flowing.gate()) {
+                    (Ask::CloseGate, GatePlace::Open(open)) => {
+                        self.closing = Closing::Asked;
+                        Some(open.close(&mut turn))
+                    }
+                    (Ask::OpenGate, GatePlace::Shut(shut)) => {
+                        let gate = self.gate.take()?;
+                        Some(shut.open(gate, &mut turn))
+                    }
+                    _ => None,
+                }
+            }
             Ask::Link => {
+                let DataPlace::Flowing(mut flowing) = self.engine.data() else {
+                    self.problems.push(refused);
+                    return None;
+                };
+                let PeerPlace::Free(free) = flowing.peer(ACCESS_POINT) else {
+                    self.problems.push(refused);
+                    return None;
+                };
+                let owed = free.link(station_link(ATTEMPTS, HOUR), &mut turn);
                 self.next = [None; 2];
-                let rest = self
-                    .engine
-                    .link(ACCESS_POINT, station_link(ATTEMPTS), &mut turn);
-                self.engine.aggregate_rate(Some(AggregateRate {
-                    rate: ht(),
-                    max_subframes: CAPACITY,
-                    max_length: 65_535,
-                }));
                 self.agreed = [false; 2];
                 self.hold = None;
                 self.named.clear();
-                rest.map_err(|(_, refused)| refused)
+                Some(owed)
             }
-            Ask::Hold => self.engine.asked(Request::Hold(ACCESS_POINT), &mut turn),
-            Ask::Release => self.engine.asked(Request::Release(ACCESS_POINT), &mut turn),
-            Ask::Unlink => {
-                self.agreed = [false; 2];
-                self.hold = None;
-                self.engine.asked(Request::Unlink(ACCESS_POINT), &mut turn)
-            }
-            Ask::Agree(tid) => {
-                self.agreed[tid] = true;
-                self.engine.asked(
-                    Request::TxAgreement(ACCESS_POINT, TIDS[tid], WINDOW),
-                    &mut turn,
-                )
-            }
-            Ask::EndAgreement(tid) => {
-                self.agreed[tid] = false;
-                self.engine.asked(
-                    Request::TxAgreementEnded(ACCESS_POINT, TIDS[tid]),
-                    &mut turn,
-                )
-            }
-            Ask::Sequence(tid) => {
-                let number = self
-                    .engine
-                    .name_next(ACCESS_POINT, LinkSpace::Tid(TIDS[tid]));
-                self.hold = Some(tid);
-                match number {
-                    Ok(number) => {
-                        self.named.push((tid, number.get()));
-                        return None;
+            ask => {
+                let DataPlace::Flowing(mut flowing) = self.engine.data() else {
+                    self.problems.push(refused);
+                    return None;
+                };
+                let PeerPlace::Linked(mut linked) = flowing.peer(ACCESS_POINT) else {
+                    self.problems.push(refused);
+                    return None;
+                };
+                match ask {
+                    Ask::Hold => Some(linked.hold(&mut turn)),
+                    Ask::Release => Some(linked.release(&mut turn)),
+                    Ask::Unlink => {
+                        self.agreed = [false; 2];
+                        self.hold = None;
+                        Some(linked.unlink(&mut turn))
                     }
-                    Err(refused) => Err(refused),
+                    Ask::Agree(tid) => {
+                        self.agreed[tid] = true;
+                        Some(linked.tx_agreement(TIDS[tid], WINDOW, &mut turn))
+                    }
+                    Ask::EndAgreement(tid) => {
+                        self.agreed[tid] = false;
+                        Some(linked.tx_agreement_ended(TIDS[tid], &mut turn))
+                    }
+                    Ask::Sequence(tid) => {
+                        self.hold = Some(tid);
+                        match linked.name_next(LinkSpace::Tid(TIDS[tid])) {
+                            Ok(number) => self.named.push((tid, number.get())),
+                            Err(NoSpace) => self.problems.push(refused),
+                        }
+                        None
+                    }
+                    Ask::Named => {
+                        self.hold = None;
+                        Some(linked.named(&mut turn))
+                    }
+                    _ => None,
                 }
-            }
-            Ask::Named => {
-                self.hold = None;
-                self.engine.asked(Request::Named(ACCESS_POINT), &mut turn)
-            }
-            Ask::CloseGate => {
-                self.closing = true;
-                self.engine.asked(Request::CloseGate, &mut turn)
-            }
-            Ask::OpenGate => {
-                let gate = self.gate.take()?;
-                self.engine
-                    .open_gate(gate, &mut turn)
-                    .map_err(|(gate, refused)| {
-                        self.gate = Some(gate);
-                        refused
-                    })
-            }
-            Ask::Flows => {
-                let rights = self.rights.take()?;
-                self.stop = Stop::NotAsked;
-                return Some(self.engine.flows(rights));
-            }
-            Ask::StopData => {
-                self.agreed = [false; 2];
-                self.hold = None;
-                if self.engine.gate_open() {
-                    self.closing = true;
-                }
-                self.stop_data();
-                return None;
             }
         };
-        match answer {
-            Ok(rest) => Some(rest),
-            Err(_) => {
-                self.problems
-                    .push("a request the engine's state admits was refused");
-                None
-            }
+        if ask == Ask::Link {
+            self.engine.aggregate_rate(&AggregateRate {
+                rate: ht(),
+                max_subframes: CAPACITY,
+                max_length: 65_535,
+            });
         }
+        answer
     }
 
     fn stop_data(&mut self) {
-        match self.engine.stop_data(&mut self.around.turn()) {
-            Ok(DataStop::Stopped(rights)) => {
-                self.rights = Some(rights);
+        let mut turn = self.around.turn();
+        let answer = match self.engine.data() {
+            DataPlace::Flowing(flowing) => flowing.stop(&mut turn),
+            DataPlace::Stopping(stopping) => stopping.poll(&mut turn),
+            DataPlace::Stopped(_) => {
+                self.problems.push("a stop of stopped data was asked");
+                return;
+            }
+        };
+        match answer {
+            DataStop::Stopped(stopped) => {
+                self.stopped = Some(stopped);
                 self.stop = Stop::Stopped;
             }
-            Ok(DataStop::Going) => {
+            DataStop::Going => {
                 self.stop = Stop::Going;
                 // A stop goes on only while something ends: the air or the
                 // gate's closing.
-                if !self.on_air() && !self.closing {
+                if !self.on_air() && self.closing == Closing::None {
                     self.problems
                         .push("a stop goes on with nothing on the air and no command");
                 }
             }
-            Err(NotFlowing) => self.problems.push("a stop of flowing data was refused"),
         }
     }
 
@@ -420,7 +477,7 @@ impl<'id> World<'id> {
             .net
             .offered
             .iter()
-            .map(|msdu| msdu.memory.id)
+            .map(|memory| memory.id)
             .collect();
         (arenas, waiting, self.engine.queued())
     }
@@ -446,7 +503,7 @@ impl<'id> World<'id> {
             if queued != 0 || !arenas.is_empty() {
                 self.problems.push("the data stopped with memory out");
             }
-            if self.engine.gate_open() || self.closing {
+            if self.gate_open() || self.closing == Closing::Asked {
                 self.problems
                     .push("the data stopped with the gate not closed");
             }
@@ -461,7 +518,7 @@ impl<'id> World<'id> {
         // consecutive numbers, a number a sequence request took aside.
         self.check_order();
         // Nothing waits for a call nobody makes.
-        if rest == Some(Rest::Wake(None)) && !self.closing && self.flowing() {
+        if rest == Some(Rest::Wake(None)) && self.closing == Closing::None && self.flowing() {
             let before = (
                 self.around.net.home.len(),
                 self.around.port.published().len(),
@@ -510,7 +567,7 @@ impl<'id> World<'id> {
 
     /// The whole state: the world's, the engine's private fields and the
     /// model port's. Equal keys behave alike.
-    fn key(&self) -> String {
+    fn key(&mut self) -> String {
         let mut home = self.around.net.home.clone();
         home.sort_unstable();
         let waiting: Vec<u32> = self
@@ -518,19 +575,19 @@ impl<'id> World<'id> {
             .net
             .offered
             .iter()
-            .map(|msdu| msdu.memory.id)
+            .map(|memory| memory.id)
             .collect();
         std::format!(
-            "{:?}|{}|{}|{:?}|{}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
+            "{:?}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}|{:?}|{:?}|{:?}|{:?}|{:?}|{}|{}",
             (self.left.offers, self.left.losses, self.left.requests),
             self.offered,
-            self.round,
+            self.owed,
             self.stop,
             self.closing,
             self.agreed,
             self.hold,
             self.gate.is_some(),
-            self.rights.is_some(),
+            self.stopped.is_some(),
             self.tids,
             waiting,
             home,
@@ -553,7 +610,7 @@ struct Visit {
 }
 
 fn replay(path: &[Step], bounds: Bounds) -> Visit {
-    running::<STATION_SINGLES, _>(|run| {
+    running::<STATION_SINGLES, 0, _>(|run| {
         let mut world = World::new(run, bounds);
         let mut sent = None;
         for (index, step) in path.iter().enumerate() {

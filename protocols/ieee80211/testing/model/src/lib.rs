@@ -170,11 +170,12 @@ pub const MODEL_GROUPS: usize = 2;
 pub const MODEL_AGREEMENTS: usize = 2;
 
 /// The layout of the model's data's rights, with `SINGLES` single places.
-pub type ModelLayout<const SINGLES: usize> = DataLayout<SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>;
+pub type ModelLayout<const SINGLES: usize, const DATA: usize> =
+    DataLayout<SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA>;
 
 /// The model's data's rights.
-pub type ModelRights<'id, const SINGLES: usize> =
-    DataRights<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS>;
+pub type ModelRights<'id, const SINGLES: usize, const DATA: usize> =
+    DataRights<'id, SINGLES, MODEL_GROUPS, MODEL_AGREEMENTS, DATA>;
 
 /// The network's memory of one MSDU, by its handle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -435,8 +436,7 @@ struct ArenaBuffer {
     /// The rate the publication went at.
     rate: Option<PhyRate>,
     air: Option<Air>,
-    ended: Option<ArenaOutcome<(), (), ()>>,
-    acknowledged: FrameSet,
+    ended: Option<Ended<(), (), ()>>,
 }
 
 /// What an arena's publication put on the air.
@@ -493,8 +493,9 @@ impl Drop for ModelLent {
     }
 }
 
-/// The model port of one installation, with `SINGLES` single places.
-pub struct ModelPort<'id, const SINGLES: usize> {
+/// The model port of one installation, with `SINGLES` single places of
+/// its controller and `DATA` of an access point's data.
+pub struct ModelPort<'id, const SINGLES: usize, const DATA: usize> {
     key: PortKey<'id>,
     issuer: GateIssuer<'id>,
     phase: Phase,
@@ -545,7 +546,7 @@ const fn side_index(side: ArenaSide) -> usize {
     }
 }
 
-impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA> {
     /// The model of one installation, from what its mint gave the port, on
     /// `channel` before its first start.
     pub fn new(
@@ -565,7 +566,9 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
             anomaly: None,
             arenas: [ArenaBuffer::default(), ArenaBuffer::default()],
             queues: [Queue::default(); 4],
-            singles: (0..SINGLES).map(|_| Vec::new()).collect(),
+            singles: (0..SINGLES.saturating_add(DATA))
+                .map(|_| Vec::new())
+                .collect(),
             ring: VecDeque::new(),
             places: (0..MODEL_PLACES).map(|_| None).collect(),
             returns: Rc::new(Cell::new(0)),
@@ -757,9 +760,13 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
         for arena in &mut self.arenas {
             if arena.air.take().is_some() && arena.ended.is_none() {
                 let cause = WithdrawCause::Disabled;
-                arena.ended = Some(match arena.went {
-                    Went::Single => ArenaOutcome::Single(TxOutcome::Withdrawn(cause)),
-                    Went::Aggregate => ArenaOutcome::Aggregate(TxOutcome::Withdrawn(cause)),
+                arena.ended = Some(Ended {
+                    outcome: match arena.went {
+                        Went::Single => ArenaOutcome::Single(TxOutcome::Withdrawn(cause)),
+                        Went::Aggregate => ArenaOutcome::Aggregate(TxOutcome::Withdrawn(cause)),
+                    },
+                    sent: FrameSet::prefix(arena.sent),
+                    acknowledged: FrameSet::EMPTY,
                 });
             }
         }
@@ -788,10 +795,12 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
     }
 }
 
-impl<'id, const SINGLES: usize> RadioPort<'id> for ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> RadioPort<'id>
+    for ModelPort<'id, SINGLES, DATA>
+{
     type Caps = ModelCaps;
     type Channel = SupportedChannel<ModelCaps>;
-    type Data = ModelRights<'id, SINGLES>;
+    type Data = ModelRights<'id, SINGLES, DATA>;
     type Released<'a>
         = ()
     where
@@ -924,7 +933,7 @@ impl<'id, const SINGLES: usize> RadioPort<'id> for ModelPort<'id, SINGLES> {
     }
 }
 
-impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'id, SINGLES, DATA> {
     type Link = ModelLink;
     type Memory = ModelMemory;
     type Ack = ();
@@ -1073,7 +1082,6 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             };
             buffer.air = Some(air);
             buffer.ended = None;
-            buffer.acknowledged = FrameSet::EMPTY;
             let went_at = match (how, buffer.went) {
                 (Ppdu::Single(plan) | Ppdu::Aggregate { alone: plan, .. }, Went::Single) => {
                     plan.first().rate.get()
@@ -1106,7 +1114,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
             });
         }
         self.published.extend(record);
-        self.key.publish(arena, FrameSet::prefix(sent))
+        self.key.publish(arena, sent)
     }
 
     fn withdraw(
@@ -1129,7 +1137,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
         _facts: TxFacts,
         on_air: &OnAir<'id>,
         _now: Instant,
-    ) -> Option<Ended<'_, Self::Ack, Self::BlockAck, Self::Denial>> {
+    ) -> Option<&Ended<Self::Ack, Self::BlockAck, Self::Denial>> {
         self.call();
         let acknowledge = self.acknowledge;
         // The air answers at the end, as it is set then.
@@ -1205,16 +1213,14 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
                     FrameSet::EMPTY,
                 ),
             };
-            buffer.ended = Some(outcome);
-            buffer.acknowledged = acknowledged;
+            buffer.ended = Some(Ended {
+                outcome,
+                sent: on_air.sent(),
+                acknowledged,
+            });
             self.acknowledge = None;
         }
-        let outcome = buffer.ended.as_ref()?;
-        Some(Ended {
-            outcome,
-            sent: on_air.sent(),
-            acknowledged: buffer.acknowledged,
-        })
+        buffer.ended.as_ref()
     }
 
     fn settle(
@@ -1439,7 +1445,7 @@ impl<'id, const SINGLES: usize> DataPort<'id> for ModelPort<'id, SINGLES> {
     }
 }
 
-impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA> {
     fn set_group(&mut self, index: u8, slot: Slot) {
         let installed = matches!(slot, Slot::Held);
         if let Some(place) = self.groups.get_mut(usize::from(index)) {
@@ -1465,7 +1471,9 @@ impl<'id, const SINGLES: usize> ModelPort<'id, SINGLES> {
     }
 }
 
-impl<'id, const SINGLES: usize> ReceivePort<'id> for ModelPort<'id, SINGLES> {
+impl<'id, const SINGLES: usize, const DATA: usize> ReceivePort<'id>
+    for ModelPort<'id, SINGLES, DATA>
+{
     type Meta = RxMeta;
     type Lent = ModelLent;
 

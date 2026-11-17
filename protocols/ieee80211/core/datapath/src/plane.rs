@@ -175,8 +175,8 @@ impl TxWindow {
     }
 }
 
-/// One link's data state, handed to the plane at connect and returned at
-/// stop.
+/// One link's data state, which the plane holds while it is linked
+/// ([`DataPlane::link`]).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DataLink {
     /// The prefix of every data MPDU of the association.
@@ -195,12 +195,11 @@ pub struct DataLink {
     /// ([`ProtectionPolicy::every_he_txop_protection`](oer_protocols_ieee80211_core_upper_mac::ProtectionPolicy::every_he_txop_protection)).
     pub protection: oer_protocols_ieee80211_core_upper_mac::protection::BssProtection,
 }
-
-/// Why the plane did not take a link.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HandoverRefused {
-    /// The plane holds a link already.
-    Connected,
+/// Whether the plane holds a link, and the link's parameters.
+#[derive(Debug)]
+enum Linkage {
+    Unlinked,
+    Linked(DataLink),
 }
 
 /// The port's A-MPDU limits at the rate the aggregate rate selection
@@ -425,9 +424,9 @@ enum Held<'id> {
 /// of `pending` in their order; a settlement compacts the arena, not the
 /// book.
 struct ArenaBook<'id, K> {
-    /// The arena's right. `None` while the data is stopped (the
-    /// installation holds the arena), and inside a transition of the plane,
-    /// which puts the next right back before it returns.
+    /// The arena's right. `None` only inside a transition of the plane,
+    /// which puts the next right back before it returns, and after
+    /// [`DataPlane::idle_arenas`], which the plane does not outlive.
     right: Option<Held<'id>>,
     /// The link generation that filled it.
     epoch: u32,
@@ -513,9 +512,9 @@ const fn ones(bits: u64) -> u8 {
 }
 
 impl<'id, K> ArenaBook<'id, K> {
-    const fn new() -> Self {
+    const fn new(arena: IdleArena<'id>) -> Self {
         Self {
-            right: None,
+            right: Some(Held::Idle(arena)),
             epoch: 0,
             tid: WmmUserPriority::UP0,
             first: SequenceNumber::from_low_bits(0),
@@ -556,10 +555,12 @@ impl<'id, K> ArenaBook<'id, K> {
     }
 
     /// Record `frame` at `position`.
-    fn set(&mut self, position: Position, frame: BookFrame) {
+    fn set(&mut self, position: Position, psdu: u16, admitted: Instant) {
         for (entry, at) in self.frames.iter_mut().zip(0_u8..) {
             if at == position.0 {
-                *entry = frame;
+                entry.psdu = psdu;
+                entry.admitted = admitted;
+                entry.attempts = 0;
             }
         }
     }
@@ -608,7 +609,7 @@ const fn subframe(psdu: u16) -> u32 {
 
 /// The connected station's data plane over a port's two arenas.
 pub struct DataPlane<'id, K> {
-    link: Option<DataLink>,
+    linkage: Linkage,
     /// The generation of the current link, which each book records.
     epoch: u32,
     /// The port's A-MPDU limits at the aggregate rate.
@@ -622,35 +623,38 @@ pub struct DataPlane<'id, K> {
     second: ArenaBook<'id, K>,
 }
 
-impl<K: Ieee80211Capabilities> Default for DataPlane<'_, K> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
-    /// The plane of stopped data: it holds no arena until
-    /// [`Self::give`].
-    pub const fn new() -> Self {
+impl<'id, K> DataPlane<'id, K> {
+    /// The plane of flowing data, with the installation's two idle arenas,
+    /// each to its book; it holds no link.
+    pub const fn new(arenas: [IdleArena<'id>; 2]) -> Self {
+        let [first, second] = arenas;
         Self {
-            link: None,
+            linkage: Linkage::Unlinked,
             epoch: 0,
             rate: None,
             limits: [None; 8],
             next: [None; 8],
-            first: ArenaBook::new(),
-            second: ArenaBook::new(),
+            first: ArenaBook::new(first),
+            second: ArenaBook::new(second),
+        }
+    }
+}
+
+impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
+    /// The link, when the plane holds one.
+    const fn current(&self) -> Option<&DataLink> {
+        match &self.linkage {
+            Linkage::Linked(link) => Some(link),
+            Linkage::Unlinked => None,
         }
     }
 
-    /// The data flows: the installation's two idle arenas, each to its
-    /// book.
-    pub fn give(&mut self, arenas: [IdleArena<'id>; 2]) {
-        let [first, second] = arenas;
-        self.first.right = Some(Held::Idle(first));
-        self.first.clear();
-        self.second.right = Some(Held::Idle(second));
-        self.second.clear();
+    /// The link to change, when the plane holds one.
+    const fn current_mut(&mut self) -> Option<&mut DataLink> {
+        match &mut self.linkage {
+            Linkage::Linked(link) => Some(link),
+            Linkage::Unlinked => None,
+        }
     }
 
     /// The plane's whole state but its frames' admission instants, for the
@@ -659,7 +663,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
     pub(crate) fn key(&self) -> std::string::String {
         let book = |book: &ArenaBook<'id, K>| {
             let right = match &book.right {
-                None => std::string::String::from("away"),
+                None => std::string::String::from("moving"),
                 Some(Held::Idle(_)) => std::string::String::from("idle"),
                 Some(Held::Open(arena)) => std::format!("open{}", arena.frames()),
                 Some(Held::Air(air)) => std::format!("air{}", air.sent().bits()),
@@ -684,7 +688,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         };
         std::format!(
             "{:?}|{}|{:?}|{:?}|{:?}|{}|{}",
-            self.link,
+            self.linkage,
             self.epoch,
             self.rate,
             self.limits,
@@ -694,9 +698,18 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         )
     }
 
-    /// The two arenas back, when both are idle: the data stops. `None`
-    /// while one holds frames or is on the air; the plane keeps them.
-    pub fn take(&mut self) -> Option<[IdleArena<'id>; 2]> {
+    /// Whether both arenas are idle: the data may stop.
+    pub const fn is_idle(&self) -> bool {
+        matches!(
+            (&self.first.right, &self.second.right),
+            (Some(Held::Idle(_)), Some(Held::Idle(_)))
+        )
+    }
+
+    /// The two arenas back, when both are idle: the data stops, and the
+    /// plane goes with it (its caller drops it). `None` while one holds
+    /// frames or is on the air; the plane keeps them.
+    pub fn idle_arenas(&mut self) -> Option<[IdleArena<'id>; 2]> {
         match (self.first.right.take(), self.second.right.take()) {
             (Some(Held::Idle(first)), Some(Held::Idle(second))) => Some([first, second]),
             (first, second) => {
@@ -724,14 +737,14 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
 
     /// Whether the plane holds a link.
     pub const fn is_connected(&self) -> bool {
-        self.link.is_some()
+        matches!(self.linkage, Linkage::Linked(_))
     }
 
     /// The TID an MSDU of user priority `priority` goes in on the plane's
     /// link: its admitted user priority on a QoS link, UP0 otherwise;
     /// `None` without a link or an admitted access category.
     pub fn tid(&self, priority: WmmUserPriority) -> Option<WmmUserPriority> {
-        let link = self.link.as_ref()?;
+        let link = self.current()?;
         if link.header.peer_qos() == PeerQos::Qos {
             link.admission.admitted_user_priority(priority)
         } else {
@@ -741,48 +754,38 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
 
     /// The operational window of `tid`.
     pub fn window(&self, tid: WmmUserPriority) -> Option<TxWindow> {
-        *tid.select(&self.link.as_ref()?.windows)
+        *tid.select(&self.current()?.windows)
     }
 
-    /// Take the link's data state. The plane starts it without aggregate
-    /// rate ([`Self::aggregate_rate`]).
-    ///
-    /// # Errors
-    ///
-    /// The link, unchanged, when the plane holds one.
-    #[expect(
-        clippy::result_large_err,
-        reason = "a refused link comes back by value; the plane has no allocator"
-    )]
-    pub fn handover(&mut self, link: DataLink) -> Result<(), (DataLink, HandoverRefused)> {
-        if self.link.is_some() {
-            return Err((link, HandoverRefused::Connected));
-        }
+    /// The link is the plane's: it starts without an aggregate rate
+    /// ([`Self::aggregate_rate`]). Its caller links the station's one peer
+    /// when it is free, and ends the link ([`Self::stop`]) before it frees
+    /// the peer.
+    pub fn link(&mut self, link: DataLink) {
         self.epoch = self.epoch.wrapping_add(1);
         self.rate = None;
         self.limits = [None; 8];
         self.next = [None; 8];
-        self.link = Some(link);
-        Ok(())
+        self.linkage = Linkage::Linked(link);
     }
 
     /// End the link: every frame an arena holds unpublished goes back to the
-    /// network through `returned`, counted, and the link's data state, its
-    /// agreements' windows with it, comes back to its holder. The arena on
-    /// the air settles at its end, its frames released.
+    /// network through `returned`, counted, and the link's place, its
+    /// agreements' windows with it, is free again. The arena on the air
+    /// settles at its end, its frames released.
     pub fn stop<P: DataPort<'id, Caps = K>>(
         &mut self,
         port: &mut P,
         mut returned: impl FnMut(P::Memory),
         events: &mut impl EventSink<DataEvent>,
-    ) -> Option<DataLink> {
+    ) {
         for side in [ArenaSide::First, ArenaSide::Second] {
             self.withdraw(port, side, &mut returned, events);
         }
         self.rate = None;
         self.limits = [None; 8];
         self.next = [None; 8];
-        self.link.take()
+        self.linkage = Linkage::Unlinked;
     }
 
     /// Return every frame the arenas hold unpublished, keeping the link:
@@ -877,7 +880,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
 
     /// Compute `tid`'s A-MPDU bound again.
     fn limit(&mut self, tid: WmmUserPriority) {
-        let limit = self.link.as_ref().and_then(|link| {
+        let limit = self.current().and_then(|link| {
             let window = (*tid.select(&link.windows))?;
             let ht = link.ht?;
             let rate = self.rate?;
@@ -893,8 +896,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
 
     /// Whether `tid` aggregates: its agreement is operational on an HT link.
     fn aggregates(&self, tid: WmmUserPriority) -> bool {
-        self.link
-            .as_ref()
+        self.current()
             .is_some_and(|link| link.ht.is_some() && tid.select(&link.windows).is_some())
     }
 
@@ -902,7 +904,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
     /// ended (`None`). An arena of more than one frame of a TID without
     /// agreement goes as single MPDUs, one frame at a time.
     pub fn agreement(&mut self, tid: WmmUserPriority, window: Option<TxWindow>) {
-        let Some(link) = self.link.as_mut() else {
+        let Some(link) = self.current_mut() else {
             return;
         };
         *tid.select_mut(&mut link.windows) = window;
@@ -951,7 +953,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             memory: msdu.memory,
             reason,
         };
-        let Some(data) = self.link.as_ref() else {
+        let Some(data) = self.current() else {
             return refused(msdu, IntakeRefusal::NoLink);
         };
         let header = data.header;
@@ -1041,8 +1043,8 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             let idle = match book.right.take() {
                 Some(Held::Open(arena)) => Some(port.withdraw(arena, &mut |_memory| {})),
                 Some(Held::Idle(idle)) => Some(idle),
-                Some(air @ Held::Air(_)) => {
-                    book.right = Some(air);
+                Some(held @ Held::Air(_)) => {
+                    book.right = Some(held);
                     None
                 }
                 None => None,
@@ -1085,14 +1087,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             book.first = sequence;
             book.clear();
         }
-        book.set(
-            position,
-            BookFrame {
-                psdu,
-                admitted: now,
-                attempts: 0,
-            },
-        );
+        book.set(position, psdu, now);
         book.pending |= position.bit();
         book.taken = position.0.saturating_add(1);
         book.octets = book.octets.saturating_add(octets);
@@ -1127,7 +1122,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         side: ArenaSide,
         how: impl FnOnce(PpduPlan) -> Option<Ppdu<'id, K>>,
     ) -> Option<PpduPlan> {
-        let link = self.link.as_ref()?;
+        let link = self.current()?;
         let book = self.book(side);
         let frames = book.count();
         // More frames than one of a TID without agreement go as single
@@ -1311,13 +1306,13 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
                 return None;
             };
             let ended = port.aggregate_ended(facts, on_air, now)?;
-            (*ended.outcome, ended.sent, ended.acknowledged)
+            (ended.outcome, ended.sent, ended.acknowledged)
         };
         let book = self.book(side);
         let published = book.published?;
         let tid = book.tid;
         let count = book.count();
-        let current = self.link.is_some() && book.epoch == self.epoch;
+        let current = self.is_connected() && book.epoch == self.epoch;
         let cost = match &outcome {
             ArenaOutcome::Single(single) => {
                 let (Ppdu::Single(plan) | Ppdu::Aggregate { alone: plan, .. }) = published.ppdu;
@@ -1338,7 +1333,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             }
             _ => None,
         };
-        let retry = self.link.as_ref().and_then(|link| link.retry);
+        let retry = self.current().and_then(|link| link.retry);
         let book = self.book_mut(side);
         let Some(Held::Air(on_air)) = book.right.take() else {
             return None;
@@ -1390,6 +1385,12 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
                     let loss = if matches!(aggregate, TxOutcome::Indeterminate(_)) {
                         Some(DataLoss::Indeterminate)
                     } else if retry.is_some_and(|retry| {
+                        // The MSDU's lifetime, dot11MaxTransmitMSDULifetime
+                        // (IEEE Std 802.11-2020, Annex C): the time after the
+                        // MSDU's initial transmission after which no further
+                        // attempt is made. Its age counts from its admission
+                        // to its arena, which its initial transmission
+                        // follows by at most the other arena's air time.
                         now.checked_duration_since(admitted)
                             .is_some_and(|age| age >= retry.lifetime)
                     }) {
@@ -1442,17 +1443,15 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             }
         };
         if let ArenaOutcome::Aggregate(aggregate) = &outcome {
-            report(events, || {
-                DataEvent::AggregateSettled(AggregateSettled {
-                    members: sent_count,
-                    acknowledged: decision.delivered,
-                    retried: decision.keep.count(),
-                    dropped: decision.dropped,
-                    refused: false,
-                    holes: decision.first.then_some(decision.missed.bits()),
-                    rate: aggregate_rate(aggregate),
-                })
-            });
+            let settled = AggregateSettled {
+                members: sent_count,
+                acknowledged: decision.delivered,
+                retried: decision.keep.count(),
+                dropped: decision.dropped,
+                holes: decision.first.then_some(decision.missed.bits()),
+                rate: aggregate_rate(aggregate),
+            };
+            report(events, || DataEvent::AggregateSettled(settled));
         }
         let head = self.advance(tid);
         Some(Settled {
@@ -1492,7 +1491,7 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             self.second.oldest(epoch, tid),
         ];
         let next = (*tid.select(&self.next))?;
-        let link = self.link.as_mut()?;
+        let link = self.current_mut()?;
         let head =
             oldest.into_iter().flatten().fold(
                 next,

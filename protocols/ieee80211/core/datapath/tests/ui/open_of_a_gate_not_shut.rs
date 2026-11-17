@@ -1,0 +1,31 @@
+#![no_std]
+use oer_protocols_ieee80211_core_datapath::engine::{
+    Arenas, DATA_SINGLES, DataPlace, Engine, GatePlace, Singles,
+};
+use oer_protocols_ieee80211_core_datapath::numbers::TxKey;
+use oer_protocols_ieee80211_testing_model::{MODEL_AGREEMENTS, MODEL_GROUPS, ModelPort};
+
+pub type Station<'id, T> =
+    Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS>;
+pub type AccessPoint<'id, T> = Engine<
+    'id,
+    ModelPort<'id, 17, DATA_SINGLES>,
+    Singles,
+    T,
+    2,
+    8,
+    17,
+    MODEL_GROUPS,
+    MODEL_AGREEMENTS,
+>;
+
+// An open gate offers no opening: a shut gate does.
+pub fn open<T: TxKey>(engine: &mut Station<'_, T>) {
+    if let DataPlace::Flowing(mut data) = engine.data()
+        && let GatePlace::Open(gate) = data.gate()
+    {
+        let _ = &gate;
+        #[cfg(ui_reject)]
+        gate.open(); // ui-error: E0599
+    }
+}

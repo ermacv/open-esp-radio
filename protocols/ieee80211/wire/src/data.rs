@@ -163,21 +163,28 @@ pub struct MsduHeader {
     pub ether_type: u16,
 }
 
+/// An MSDU shorter than its Ethernet II header.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MsduTooShort;
+
 impl MsduHeader {
     /// The header at the front of an MSDU as the network hands it: an
     /// Ethernet II header (destination, source, EtherType, the last most
-    /// significant octet first), and the payload after it; `None` for a
-    /// frame shorter than the header.
+    /// significant octet first), and the payload after it.
+    ///
+    /// # Errors
+    ///
+    /// The frame is shorter than the header: the network's input.
     ///
     /// SOURCE: IEEE Std 802.3-2022, 3.1.1 (the MAC frame: Destination
     /// Address, Source Address, Length/Type, most significant octet
     /// first), which RFC 1042 encapsulates (IEEE Std 802.11-2020, 5.1.4).
-    pub fn parse(frame: &[u8]) -> Option<(Self, &[u8])> {
+    pub fn parse(frame: &[u8]) -> Result<(Self, &[u8]), MsduTooShort> {
         let mut reader = oer_portable_wire::Reader::new(frame);
-        let destination = reader.read::<6>().ok()?;
-        let source = reader.read::<6>().ok()?;
-        let ether_type = reader.u16_be().ok()?;
-        Some((
+        let destination = reader.read::<6>().map_err(|_| MsduTooShort)?;
+        let source = reader.read::<6>().map_err(|_| MsduTooShort)?;
+        let ether_type = reader.u16_be().map_err(|_| MsduTooShort)?;
+        Ok((
             Self {
                 destination,
                 source,

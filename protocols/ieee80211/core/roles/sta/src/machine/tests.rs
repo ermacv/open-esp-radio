@@ -2830,23 +2830,22 @@ fn eapol_and_data_on_tid_7_share_one_counter_and_tid_0_runs_on_across_a_rekey() 
         )
         .unwrap();
         let model = core::pin::pin!(branded(
-            async |mint: Mint<'_, PortPools<ModelLayout<8>>>| {
+            async |mint: Mint<'_, PortPools<ModelLayout<8, 0>>>| {
                 let install = mint.into_pools();
-                let mut port =
-                    ModelPort::<'_, 8>::new(install.key, install.issuer, channel::<ModelCaps>(1));
-                let mut plane = DataPlane::<'_, ModelCaps>::new();
-                plane.give(install.data.arenas);
-                plane
-                    .handover(DataLink {
-                        header,
-                        admission: AcAdmission::default(),
-                        retry: None,
-                        ht: None,
-                        windows: [None; 8],
-                        protection: Default::default(),
-                    })
-                    .ok()
-                    .unwrap();
+                let mut port = ModelPort::<'_, 8, 0>::new(
+                    install.key,
+                    install.issuer,
+                    channel::<ModelCaps>(1),
+                );
+                let mut plane = DataPlane::<'_, ModelCaps>::new(install.data.arenas);
+                plane.link(DataLink {
+                    header,
+                    admission: AcAdmission::default(),
+                    retry: None,
+                    ht: None,
+                    windows: [None; 8],
+                    protection: Default::default(),
+                });
                 let mut tag = 0;
                 let mut send = |world: &mut World<'_>, priority: u8| -> (u8, u16) {
                     // The link's holder numbers the data from the link's

@@ -3,45 +3,58 @@
 //! one sans-IO core an interface, between the port, the network's
 //! transport and the interface's controller.
 //!
-//! The engine holds the data's rights while the data flows
-//! ([`Engine::flows`] to [`Engine::stop_data`]), the peer table (a free
-//! entry or a link a peer), the transmit queues a peer and TID
-//! ([`TxQueues`]) and the gate the controller lent it. Its sections are
-//! functions of what woke the pump, each lent the port, the network's end,
-//! the rate policy and the instant ([`Turn`]):
+//! **A state is a sum.** The engine is built where it lives
+//! ([`Engine::new`] is `const`): the data's state is stopped, or flowing
+//! or stopping with everything the running data holds (the plane built
+//! with its arenas or the access point's lanes, the gate with the
+//! command's place, the rights); a peer's entry is free, or linked with
+//! its link. Where a large value is built into a variant (the plane at the
+//! data's start, a link at an association, the running data at its stop),
+//! the copy is marked at its site for the audit of copies and frames.
 //!
-//! - [`Engine::offered`]: the network has MSDUs. The intake is one loop of
-//!   drain, fill and publish, repeated while it changed something, within
-//!   one budget of MSDUs taken; a budget that ran out with more to take
-//!   owes a round ([`Rest::Round`]).
-//! - [`Engine::transmitted`]: the port's transmit facts. An arena's end is
-//!   read, the other arena published at once when the end allows it, the
-//!   arena settled; then the singles' ends; then the command in progress;
-//!   then the intake again.
-//! - [`Engine::asked`], [`Engine::link`], [`Engine::name_next`]: the
-//!   controller's requests.
-//! - [`Engine::stop_data`]: the installation machine's "stop the data".
+//! A controller lent the engine in its step reads a **view of a place** and
+//! acts on its variant: a transition is a method of the variant's handle,
+//! so it exists only where it may happen, and nothing outlives the step:
+//!
+//! - [`DataPlace`]: [`StoppedData::flows`]; [`FlowingData::peer`],
+//!   [`FlowingData::gate`], [`FlowingData::stop`]; [`StoppingData::poll`];
+//! - [`PeerPlace`]: `FreePeer::link`; [`LinkedPeer::unlink`],
+//!   [`LinkedPeer::hold`], [`LinkedPeer::release`],
+//!   [`LinkedPeer::name_next`], [`LinkedPeer::named`], and on the station's
+//!   form `LinkedPeer::tx_agreement`, `LinkedPeer::tx_agreement_ended`;
+//! - [`GatePlace`]: [`ShutGate::open`]; [`OpenGate::close`]; the closing
+//!   ends in the port, and the closed gate goes to the controller
+//!   ([`Told::gate_closed`]).
+//!
+//! The pump calls the sections, functions of what woke it, each lent the
+//! port, the network's end, the rate policy, the events' sink and the
+//! controller's end ([`Turn`]): [`Engine::offered`] (the intake: drain,
+//! fill, publish, again while it moved something, within one budget; a
+//! budget that ran out with more to take owes a round), [`Engine::round`]
+//! and [`Engine::transmitted`] (the arena's end, the other arena at once
+//! when the end allows it, the settlement, the singles' ends, the
+//! command's poll, the intake). The pump makes the installation machine's
+//! `Rest` of the answer.
 //!
 //! An interface's data goes in one of two forms ([`Form`], D1 of the
-//! engine's contract): a station's in the port's two arenas
-//! ([`Arenas`], the [`DataPlane`]), an access point's as single MPDUs
-//! ([`Singles`]) until its aggregation. A single is written into a single's
-//! place by copy (`DataPort::write_single`): the MAC's DMA does not read the
+//! engine's contract): a station's in the port's two arenas ([`Arenas`],
+//! the [`DataPlane`]), an access point's as single MPDUs ([`Singles`])
+//! until its aggregation. A single is written into its queue's data place
+//! by copy (`DataPort::write_single`): the MAC's DMA does not read the
 //! network's memory on the ESP32-S31, so the memory goes home at the write.
-//! An access point's data has one single's place a hardware queue, the last
-//! [`DATA_SINGLES`] of its layout's places, one a queue in
-//! [`QUEUES`](oer_protocols_ieee80211_contracts_port::QUEUES)' order; a
-//! station's layout has none.
+//! An access point's data has one place a transmit queue
+//! (`DataRights::data`, [`DATA_SINGLES`]); a station's layout has none.
 
 use core::marker::PhantomData;
 
 use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
+pub use oer_protocols_ieee80211_contracts_port::DATA_SINGLES;
 use oer_protocols_ieee80211_contracts_port::{
     AckHeader, AgreementSlot, Command, CommandEnd, CommandPlace, CommandPoll, DataPort, DataRights,
     GateClosed, GateOpen, GroupSlot, HeaderSpec, IdleArena, InCommand, MpduLength, PairwiseSlot,
-    PortRate, PortSink, QUEUES, QueueRight, RetryPlan, Signal, SingleEnd, SingleOutcome,
-    SinglePlace, SizedFrame, TbttEvent, TxFacts, TxFrame, TxOutcome,
+    PortRate, PortSink, QueueRight, RetryPlan, Signal, SingleEnd, SingleOutcome, SinglePlace,
+    SizedFrame, TbttEvent, TxFacts, TxFrame, TxOutcome,
 };
 use oer_protocols_ieee80211_core_installation::{DataStop, Rest};
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
@@ -60,30 +73,22 @@ use crate::plane::{
 };
 use crate::queues::{QueueId, TxQueues};
 
-/// The single's places an access point's data takes: one a hardware queue,
-/// the last of its layout's places.
-pub const DATA_SINGLES: usize = QUEUES.len();
-
-/// The single's places of an access point's layout with `MANAGEMENT`
-/// places of its controller's: its data's [`DATA_SINGLES`] after them.
-pub const fn access_point_singles<const MANAGEMENT: usize>() -> usize {
-    const {
-        match MANAGEMENT.checked_add(DATA_SINGLES) {
-            Some(singles) => singles,
-            None => panic!("an access point's places are counted"),
-        }
-    }
-}
-
 /// The FCS every MPDU carries on the air (IEEE Std 802.11-2020, 9.2.4.8).
 const FCS_LEN: u32 = 4;
 
 /// The network's end of the transmit path, which the binding implements
 /// over the network's own interface. The network names no IEEE 802.11
-/// type; the engine reads an MSDU's Ethernet frame in its memory.
+/// type; the engine reads an MSDU's Ethernet frame in its memory. `M` is
+/// the network's handle of an MSDU's memory.
 pub trait Network<M> {
     /// The next MSDU the network offers; `None` while it offers none.
-    fn take(&mut self) -> Option<OutboundMsdu<M>>;
+    fn take(&mut self) -> Option<M>;
+
+    /// The length of `memory`'s Ethernet frame.
+    fn length(&self, memory: &M) -> usize;
+
+    /// The user priority the network gave `memory`'s MSDU.
+    fn priority(&self, memory: &M) -> WmmUserPriority;
 
     /// The Ethernet frame of `memory`, `length` octets: its header, then its
     /// payload. Read for a copy.
@@ -120,9 +125,12 @@ pub trait Rates<'id, K> {
 
 /// What the engine tells the interface's controller in a section, handed
 /// over at once: the pump's end of the controller.
-pub trait Told {
+pub trait Told<'id> {
     /// The port served a TBTT of the station's schedule.
     fn tbtt(&mut self, event: TbttEvent);
+
+    /// The gate's closing ended: the closed gate is the controller's again.
+    fn gate_closed(&mut self, gate: GateClosed<'id>);
 }
 
 /// What one section is lent: the port, the network's end, the rate policy,
@@ -163,19 +171,25 @@ pub const ACCESS_POINT: Peer<1> = match Peer::new(0) {
     None => panic!("a station's table has its access point"),
 };
 
+/// The link's numbers have no space of that kind: a link without QoS has
+/// no TID spaces (its peer did not negotiate QoS).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NoSpace;
+
 mod sealed {
     pub trait Sealed {}
 }
 
 /// How an interface's data goes: a closed set.
 pub trait Form: sealed::Sealed {
-    /// What the form keeps of the data path: a station's plane, an access
-    /// point's arenas aside.
-    type Sender<'id, K>;
-    /// What a link request carries for the form.
-    type Link<L, T>;
-    /// What a linked peer's entry keeps.
+    /// What the form holds while its data runs.
+    type Running<'id, K>;
+    /// What a linked peer's entry keeps of its link.
     type Entry<L, T>;
+    /// The data's rights of the form's layout, which the installation
+    /// machine hands over when the data flows and takes back when it
+    /// stops.
+    type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize>;
 }
 
 /// A station's data, in the port's two arenas.
@@ -190,26 +204,30 @@ impl sealed::Sealed for Arenas {}
 impl sealed::Sealed for Singles {}
 
 impl Form for Arenas {
-    type Sender<'id, K> = DataPlane<'id, K>;
-    type Link<L, T> = StationLink<L, T>;
+    type Running<'id, K> = StationRunning<'id, K>;
     type Entry<L, T> = StationEntry<L, T>;
+    type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
+        DataRights<'id, SINGLES, GROUPS, AGREEMENTS, 0>;
 }
 
 impl Form for Singles {
-    type Sender<'id, K> = Aside<'id>;
-    type Link<L, T> = ClientLink<T>;
+    type Running<'id, K> = ApRunning<'id, K>;
     type Entry<L, T> = ClientLink<T>;
+    type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
+        DataRights<'id, SINGLES, GROUPS, AGREEMENTS, DATA_SINGLES>;
 }
 
-/// A station's link: the data plane's state, the port's link its arenas
-/// open for, and its transmit numbers.
+/// A station's link to its access point, as its controller links it: the
+/// plane's data state, the port's link its arenas open for, and the link's
+/// transmit numbers.
 pub struct StationLink<L, T> {
     pub data: DataLink,
     pub port: L,
     pub numbers: TxNumbers<T>,
 }
 
-/// What a station's linked entry keeps; the plane holds its data state.
+/// What a station's linked entry keeps; the plane holds the link's data
+/// state.
 pub struct StationEntry<L, T> {
     port: L,
     numbers: TxNumbers<T>,
@@ -219,81 +237,39 @@ pub struct StationEntry<L, T> {
 /// negotiated QoS and the link's transmit numbers. Its data is open:
 /// protection comes with the access point's keys.
 pub struct ClientLink<T> {
-    pub client: IndividualAddress,
-    pub access_point: IndividualAddress,
+    pub client: [u8; 6],
+    pub access_point: [u8; 6],
     pub qos: PeerQos,
     pub numbers: TxNumbers<T>,
 }
 
-/// An access point's arenas, which its data does not use, held while the
-/// data flows.
-pub enum Aside<'id> {
-    /// With the installation.
-    Away,
-    /// Here.
-    Here([IdleArena<'id>; 2]),
+/// What a station's data holds while it runs: the plane, built with the
+/// two arenas, and the transmit queues' rights, which its data does not
+/// lend.
+pub struct StationRunning<'id, K> {
+    plane: DataPlane<'id, K>,
+    /// In [`QUEUES`](oer_protocols_ieee80211_contracts_port::QUEUES)'
+    /// order.
+    queues: [QueueRight<'id>; 4],
 }
 
-/// One right's place while the data flows.
-enum Slot<T> {
-    /// With the installation: the data is stopped.
-    Away,
-    /// Here.
-    Here(T),
-    /// The port's, until the end that gives it back.
-    Port,
+/// What an access point's data holds while it runs: a lane a transmit
+/// queue, in [`WmmAccessCategory::select`]'s order, and the arenas, which
+/// its data does not use until its aggregation.
+pub struct ApRunning<'id, K> {
+    lanes: [Lane<'id, K>; 4],
+    arenas: [IdleArena<'id>; 2],
 }
 
-impl<T> Slot<T> {
-    /// Where the right is, for the search's key.
-    #[cfg(test)]
-    const fn mark(&self) -> char {
-        match self {
-            Self::Away => 'a',
-            Self::Here(_) => 'h',
-            Self::Port => 'p',
-        }
-    }
-
-    const fn is_here(&self) -> bool {
-        matches!(self, Self::Here(_))
-    }
-
-    /// The right, the slot left to the port.
-    fn lend(&mut self) -> Option<T> {
-        match core::mem::replace(self, Self::Port) {
-            Self::Here(right) => Some(right),
-            other => {
-                *self = other;
-                None
-            }
-        }
-    }
-}
-
-/// Every slot's right, when all are here; else nothing moves.
-fn gather<T, const N: usize>(slots: &mut [Slot<T>; N]) -> Option<[T; N]> {
-    if !slots.iter().all(Slot::is_here) {
-        return None;
-    }
-    let mut rights = heapless::Vec::<T, N>::new();
-    for slot in slots.iter_mut() {
-        if let Slot::Here(right) = core::mem::replace(slot, Slot::Away) {
-            // As many as the slots: the vector holds them.
-            let _kept: Result<(), T> = rights.push(right);
-        }
-    }
-    rights.into_array().ok()
-}
-
-/// A hardware queue's state for the data.
+/// A transmit queue of an access point's data.
 enum Lane<'id, K> {
-    /// With the installation.
-    Away,
-    /// Free: its right.
-    Free(QueueRight<'id>),
-    /// A single of the access point's data on it: the port holds its right
-    /// and its place until its end.
+    /// Free: its queue's right and its data place.
+    Free {
+        right: QueueRight<'id>,
+        place: SinglePlace<'id>,
+    },
+    /// A single of the data on it: the port holds the queue's right and the
+    /// place until its end.
     Air(InFlight<'id, K>),
 }
 
@@ -305,6 +281,44 @@ struct InFlight<'id, K> {
     psdu: u32,
 }
 
+/// The gate the controller lent, with the interface's command place: the
+/// gate's closing is this half's one command.
+enum Gate<'id> {
+    /// The controller holds the gate, closed.
+    Shut(CommandPlace<'id>),
+    /// Open: arenas and singles go.
+    Open(GateOpen<'id>, CommandPlace<'id>),
+    /// Its closing runs, with the command's place: nothing goes.
+    Closing(InCommand<'id>),
+    /// Inside one method, between two of the above: the port's command
+    /// takes the open gate and the place by value, so safe Rust moves them
+    /// out through a value left in their place. Never seen outside it.
+    InTransition,
+}
+
+/// The data's rights and parts while it runs.
+struct Running<'id, F: Form, K, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize>
+{
+    form: F::Running<'id, K>,
+    /// The controller's single places, which the engine does not lend.
+    singles: [SinglePlace<'id>; SINGLES],
+    gate: Gate<'id>,
+    pairwise: PairwiseSlot<'id>,
+    groups: [GroupSlot<'id>; GROUPS],
+    agreements: [AgreementSlot<'id>; AGREEMENTS],
+}
+
+/// The data's state.
+enum Data<'id, F: Form, K, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> {
+    /// The installation machine holds the rights.
+    Stopped,
+    /// The data flows.
+    Flowing(Running<'id, F, K, SINGLES, GROUPS, AGREEMENTS>),
+    /// Asked to stop: every link ended; what is on the air or in the gate's
+    /// closing ends first.
+    Stopping(Running<'id, F, K, SINGLES, GROUPS, AGREEMENTS>),
+}
+
 /// A link's state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Carrying {
@@ -314,107 +328,33 @@ enum Carrying {
     Held,
 }
 
+/// Whether a TID's data waits for the controller's frame that names the
+/// number it was given.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Hold {
+    Nothing,
+    Named(WmmUserPriority),
+}
+
+/// A linked peer: its link, its state, and the BlockAckReqs owed it.
+struct Linked<E> {
+    link: E,
+    carrying: Carrying,
+    hold: Hold,
+    /// A BlockAckReq owed a TID, to the window's head.
+    owed: [Option<SequenceNumber>; 8],
+}
+
 /// One entry of the peer table.
 enum Entry<E> {
     Free,
-    Linked {
-        link: E,
-        carrying: Carrying,
-        /// The TID whose data waits for the controller's frame that names
-        /// the number it was given.
-        hold: Option<WmmUserPriority>,
-    },
-}
-
-/// The gate the controller lent.
-enum Gate<'id> {
-    /// The controller holds it, closed.
-    Away,
-    /// Open: arenas and singles go.
-    Open(GateOpen<'id>),
-    /// Its closing is asked: nothing goes.
-    Closing,
-    /// Closed, for the controller to take.
-    Closed(GateClosed<'id>),
-}
-
-/// The interface's command place.
-enum Commanding<'id> {
-    Away,
-    Here(CommandPlace<'id>),
-    /// The gate's closing, in progress.
-    CloseGate(InCommand<'id>),
-}
-
-/// Whether the data flows.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Flow {
-    Stopped,
-    Flowing,
-    /// Asked to stop; what is on the air or in a command ends first.
-    Stopping,
-}
-
-/// The engine's data is not flowing: it holds no rights to give back.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct NotFlowing;
-
-/// Why a request was refused; nothing changed.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Refused {
-    /// The data does not flow.
-    NotFlowing,
-    /// The peer has a link already.
-    Linked,
-    /// The peer has no link.
-    NotLinked,
-    /// The form has no transmit agreements: an access point's data goes as
-    /// single MPDUs.
-    NoAgreements,
-    /// The plane holds a link already.
-    PlaneLinked,
-    /// The engine holds a gate already.
-    GateHeld,
-}
-
-/// What a refused request hands back, with why.
-pub type Refusal<T> = (T, Refused);
-
-/// A link taken into a form: its entry, or the link back with why.
-pub type Linked<F, L, T> = Result<<F as Form>::Entry<L, T>, Refusal<<F as Form>::Link<L, T>>>;
-
-/// A request of the controller.
-pub enum Request<const PEERS: usize> {
-    /// End the peer's link: its queued data goes home.
-    Unlink(Peer<PEERS>),
-    /// Hold the peer's data.
-    Hold(Peer<PEERS>),
-    /// Let it go again.
-    Release(Peer<PEERS>),
-    /// The TID's transmit agreement is operational with a window of this
-    /// size, 1 to 64; its head is derived: the oldest number the link's
-    /// arenas hold of the TID, else its next.
-    TxAgreement(Peer<PEERS>, WmmUserPriority, u16),
-    /// The TID's transmit agreement ended.
-    TxAgreementEnded(Peer<PEERS>, WmmUserPriority),
-    /// The controller's frame that names the held number went: the held
-    /// TID's data goes on.
-    Named(Peer<PEERS>),
-    /// Close the gate: nothing new goes, and the port closes it once its
-    /// air is quiet.
-    CloseGate,
-}
-
-/// What the engine owes the controller of one link.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct Owed {
-    /// A BlockAckReq a TID, to the window's head.
-    bars: [Option<SequenceNumber>; 8],
+    Linked(Linked<E>),
 }
 
 /// The engine of one interface: `PEERS` peers, a pool of `POOL` MSDUs, and
-/// the data's rights of a layout of `SINGLES` single's places, `GROUPS`
-/// group key slots and `AGREEMENTS` receive agreements.
+/// the data's rights of a layout of `SINGLES` single places of its
+/// controller, `GROUPS` group key slots and `AGREEMENTS` receive
+/// agreements.
 pub struct Engine<
     'id,
     P: DataPort<'id>,
@@ -426,43 +366,40 @@ pub struct Engine<
     const GROUPS: usize,
     const AGREEMENTS: usize,
 > {
-    flow: Flow,
     /// The MSDUs a section takes at most.
     budget: u8,
-    peers: [Entry<F::Entry<P::Link, T>>; PEERS],
-    owed: [Owed; PEERS],
+    data: Data<'id, F, P::Caps, SINGLES, GROUPS, AGREEMENTS>,
+    /// Linked only while the data flows: a stop ends every link.
+    entries: [Entry<F::Entry<P::Link, T>>; PEERS],
     queues: TxQueues<P::Memory, POOL, PEERS>,
-    sender: F::Sender<'id, P::Caps>,
-    /// The hardware queues, in [`WmmAccessCategory::select`]'s order.
-    lanes: [Lane<'id, P::Caps>; 4],
-    singles: [Slot<SinglePlace<'id>>; SINGLES],
-    command: Commanding<'id>,
-    pairwise: Slot<PairwiseSlot<'id>>,
-    groups: [Slot<GroupSlot<'id>>; GROUPS],
-    agreements: [Slot<AgreementSlot<'id>>; AGREEMENTS],
-    gate: Gate<'id>,
-    brand: PhantomData<fn(&'id ()) -> &'id ()>,
 }
 
-/// The rights of the engine's layout.
-pub type Rights<'id, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> =
-    DataRights<'id, SINGLES, GROUPS, AGREEMENTS>;
+/// The seal of the forms' halves: only this crate makes one, so only the
+/// engine's sections call them.
+#[derive(Debug)]
+pub struct Seal(());
 
 /// The form-specific half of the sections, which only the engine calls
 /// ([`Seal`]).
-pub trait Sections<'id, P: DataPort<'id>, T, const PEERS: usize> {
+pub trait Sections<'id, P: DataPort<'id>> {
+    /// The data's rights of the form's layout.
+    type Rights;
+
+    /// The data flows, with its rights.
+    fn start(&mut self, _seal: Seal, rights: Self::Rights);
+
     /// The queue an MSDU goes into, or why it is refused.
     fn route<N: Network<P::Memory>>(
         &self,
         _seal: Seal,
         network: &N,
-        msdu: &OutboundMsdu<P::Memory>,
+        memory: &P::Memory,
     ) -> Result<QueueId, IntakeRefusal>;
 
     /// Take queued MSDUs into the form's places, counting each taken
-    /// against the budget in `taken`; the MSDUs that left their queues
+    /// against the budget in `taken`: the MSDUs that left their queues
     /// (taken, sent or refused).
-    fn fill<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
+    fn fill<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told<'id>>(
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
@@ -470,7 +407,7 @@ pub trait Sections<'id, P: DataPort<'id>, T, const PEERS: usize> {
     ) -> u8;
 
     /// Put the next arena on the air: the plan that went.
-    fn publish<N, R: Rates<'id, P::Caps>, E, C: Told>(
+    fn publish<N, R: Rates<'id, P::Caps>, E, C>(
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
@@ -479,8 +416,9 @@ pub trait Sections<'id, P: DataPort<'id>, T, const PEERS: usize> {
     /// The queue the next MSDU would be taken from now.
     fn next_queue(&self, _seal: Seal) -> Option<QueueId>;
 
-    /// Read the end of the form's air and settle it.
-    fn ended<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
+    /// Read the end of the form's air and settle it, and serve the port's
+    /// transmit facts.
+    fn ended<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told<'id>>(
         &mut self,
         _seal: Seal,
         facts: TxFacts,
@@ -488,8 +426,14 @@ pub trait Sections<'id, P: DataPort<'id>, T, const PEERS: usize> {
         turn: &mut Turn<'_, P, N, R, E, C>,
     );
 
-    /// End the link of `peer`: what its entry and the form hold of it goes
-    /// home.
+    /// Poll the gate's closing, through the form's sink.
+    fn poll_command<N, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told<'id>>(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    );
+
+    /// End the link of `peer`: what the form holds of it goes home.
     fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
         &mut self,
         _seal: Seal,
@@ -502,19 +446,33 @@ pub trait Sections<'id, P: DataPort<'id>, T, const PEERS: usize> {
     /// The form's transmissions on the air: an arena, or a single a queue.
     fn in_flight(&self, _seal: Seal) -> usize;
 
-    /// The form's part of the data's rights comes: the arenas.
-    fn give_arenas(&mut self, _seal: Seal, arenas: [IdleArena<'id>; 2]);
+    /// The rights back and the data stopped, when it is stopping, its gate
+    /// shut and nothing the port's; else nothing changes.
+    fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights>;
 
-    /// The arenas back, when the form holds them all idle.
-    fn take_arenas(&mut self, _seal: Seal) -> Option<[IdleArena<'id>; 2]>;
+    /// The next number of `peer`'s link's `space`, taken.
+    fn take_number(&mut self, _seal: Seal, peer: u8, space: LinkSpace) -> Option<SequenceNumber>;
+}
 
-    /// The form's TID agreements.
-    fn agreement(
-        &mut self,
-        _seal: Seal,
-        tid: WmmUserPriority,
-        size: Option<u16>,
-    ) -> Result<(), Refused>;
+/// The engine type of a handle's methods.
+macro_rules! engine {
+    () => {
+        Engine<'id, P, F, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
+    };
+}
+
+/// A station's engine type.
+macro_rules! station {
+    () => {
+        Engine<'id, P, Arenas, T, 1, POOL, SINGLES, GROUPS, AGREEMENTS>
+    };
+}
+
+/// An access point's engine type.
+macro_rules! access_point {
+    () => {
+        Engine<'id, P, Singles, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
+    };
 }
 
 impl<
@@ -527,52 +485,1828 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
-> Engine<'id, P, F, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
-where
-    F::Sender<'id, P::Caps>: Stopped,
+> engine!()
 {
     /// The engine of stopped data, taking at most `budget` MSDUs a section
-    /// (at least one).
-    pub fn new(budget: u8) -> Self {
+    /// (at least one): built in its place, a `const` item or a placed
+    /// initializer.
+    pub const fn new(budget: u8) -> Self {
         Self {
-            flow: Flow::Stopped,
-            budget: budget.max(1),
-            peers: core::array::from_fn(|_| Entry::Free),
-            owed: [Owed::default(); PEERS],
+            budget: if budget == 0 { 1 } else { budget },
+            data: Data::Stopped,
+            entries: [const { Entry::Free }; PEERS],
             queues: TxQueues::new(),
-            sender: <F::Sender<'id, P::Caps> as Stopped>::STOPPED,
-            lanes: [const { Lane::Away }; 4],
-            singles: [const { Slot::Away }; SINGLES],
-            command: Commanding::Away,
-            pairwise: Slot::Away,
-            groups: [const { Slot::Away }; GROUPS],
-            agreements: [const { Slot::Away }; AGREEMENTS],
-            gate: Gate::Away,
-            brand: PhantomData,
+        }
+    }
+
+    /// The data's place: what it is now, and the transitions it offers.
+    pub fn data(&mut self) -> DataPlace<'_, Self> {
+        match self.data {
+            Data::Stopped => DataPlace::Stopped(StoppedData(self)),
+            Data::Flowing(_) => DataPlace::Flowing(FlowingData(self)),
+            Data::Stopping(_) => DataPlace::Stopping(StoppingData(self)),
+        }
+    }
+
+    /// `peer`'s linked entry, while the data flows.
+    fn linked_mut(&mut self, peer: u8) -> Option<&mut Linked<F::Entry<P::Link, T>>> {
+        match (&self.data, self.entries.get_mut(usize::from(peer))) {
+            (Data::Flowing(_), Some(Entry::Linked(linked))) => Some(linked),
+            _ => None,
+        }
+    }
+
+    /// The data's gate, while it runs.
+    const fn gate_mut(&mut self) -> Option<&mut Gate<'id>> {
+        match &mut self.data {
+            Data::Flowing(running) | Data::Stopping(running) => Some(&mut running.gate),
+            Data::Stopped => None,
+        }
+    }
+
+    /// The MSDUs the queues hold.
+    #[cfg(test)]
+    pub(crate) fn queued(&self) -> usize {
+        self.queues.len()
+    }
+
+    /// Begin the gate's closing, when it is open: nothing new goes from now.
+    fn close_gate<N, R, E, C>(&mut self, turn: &mut Turn<'_, P, N, R, E, C>) {
+        let Some(gate) = self.gate_mut() else {
+            return;
+        };
+        let Gate::Open(..) = gate else {
+            return;
+        };
+        if let Gate::Open(open, place) = core::mem::replace(gate, Gate::InTransition) {
+            *gate = Gate::Closing(turn.port.begin(place, Command::CloseGate(open), turn.now));
+        }
+    }
+
+    /// The gate's command polled through `sink`: its end puts the
+    /// command's place back and gives the closed gate, for the controller.
+    fn poll_through(
+        gate: &mut Gate<'id>,
+        port: &mut P,
+        now: Instant,
+        sink: &mut impl PortSink<'id, P::Ack, P::Denial>,
+    ) -> Option<GateClosed<'id>> {
+        let Gate::Closing(_) = gate else {
+            return None;
+        };
+        let Gate::Closing(command) = core::mem::replace(gate, Gate::InTransition) else {
+            return None;
+        };
+        match port.poll_command(command, now, sink) {
+            CommandPoll::Pending(command) => {
+                *gate = Gate::Closing(command);
+                None
+            }
+            CommandPoll::Ended(place, end) => {
+                *gate = Gate::Shut(place);
+                match end {
+                    CommandEnd::GateClosed(closed) => Some(closed),
+                    _ => None,
+                }
+            }
         }
     }
 }
 
-/// What a search reads of a form's state and of an entry.
+impl<
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> engine!()
+where
+    Self: Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// The network has MSDUs.
+    pub fn offered<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.intake(turn)
+    }
+
+    /// The pump's turn: a round a section owed, or a deadline.
+    pub fn round<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.poll_command(Seal(()), turn);
+        self.intake(turn)
+    }
+
+    /// The port's transmit facts: the arena's end and the singles', then
+    /// the command in progress, then the intake.
+    pub fn transmitted<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        facts: TxFacts,
+        tbtt: Signal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.ended(Seal(()), facts, tbtt, turn);
+        self.poll_command(Seal(()), turn);
+        self.intake(turn)
+    }
+
+    /// The rights back, when the data is stopping, the gate shut and
+    /// nothing the port's.
+    fn finish(&mut self) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
+        if self.in_flight(Seal(())) != 0 {
+            return DataStop::Going;
+        }
+        match self.stopped(Seal(())) {
+            Some(rights) => DataStop::Stopped(rights),
+            None => DataStop::Going,
+        }
+    }
+
+    /// End `peer`'s link: its queued MSDUs go home, its entry is free.
+    fn unlink<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+        &mut self,
+        peer: u8,
+        port: &mut P,
+        network: &mut N,
+        events: &mut E,
+    ) {
+        while let Some(msdu) = self.queues.pop_peer(peer) {
+            report(events, || DataEvent::DataLost(DataLoss::LeftBehind));
+            network.home(msdu.memory);
+        }
+        self.queues.reset_peer(peer);
+        self.unlink_form(Seal(()), peer, port, network, events);
+        if let Some(entry) = self.entries.get_mut(usize::from(peer)) {
+            *entry = Entry::Free;
+        }
+    }
+
+    /// Link the free `peer`: its entry holds `link`.
+    fn link<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        peer: u8,
+        link: F::Entry<P::Link, T>,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        if let Some(entry) = self.entries.get_mut(usize::from(peer)) {
+            *entry = Entry::Linked(Linked {
+                link,
+                carrying: Carrying::Carrying,
+                hold: Hold::Nothing,
+                owed: [None; 8],
+            });
+        }
+        self.queues.reset_peer(peer);
+        self.intake(turn)
+    }
+
+    /// What the network offers, into the queues while the pool has room;
+    /// what has no link goes back at once. Whether it moved anything.
+    fn drain<N: Network<P::Memory>, R, E: EventSink<DataEvent>, C>(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> bool {
+        let mut moved = false;
+        while self.queues.has_room() {
+            let Some(memory) = turn.network.take() else {
+                break;
+            };
+            moved = true;
+            match self.route(Seal(()), turn.network, &memory) {
+                Ok(queue) => {
+                    let length = turn.network.length(&memory);
+                    let priority = turn.network.priority(&memory);
+                    if let Err(memory) = self.queues.push_parts(queue, memory, length, priority) {
+                        // The pool had room: this does not happen.
+                        report(turn.events, || DataEvent::DataLost(DataLoss::Overflow));
+                        turn.network.home(memory);
+                    }
+                }
+                Err(reason) => {
+                    report(turn.events, || DataEvent::MsduRefused(reason));
+                    turn.network.home(memory);
+                }
+            }
+        }
+        moved
+    }
+
+    /// The intake: drain, fill, publish, again while it moved something,
+    /// within one budget. A round is owed when the budget ran out with more
+    /// to take.
+    fn intake<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let mut taken = 0;
+        loop {
+            let drained = self.drain(turn);
+            let filled = self.fill(Seal(()), turn, &mut taken);
+            let published = self.publish(Seal(()), turn);
+            if !drained && filled == 0 && published.is_none() {
+                break;
+            }
+        }
+        if taken >= self.budget && self.next_queue(Seal(())).is_some() {
+            Rest::Round
+        } else {
+            Rest::Wake(None)
+        }
+    }
+}
+/// What the data is now: a view of the engine's own place, lent for the
+/// step.
+pub enum DataPlace<'a, E> {
+    /// The installation machine holds the rights: the data flows when it
+    /// hands them over.
+    Stopped(StoppedData<'a, E>),
+    /// The data flows: its peers and its gate.
+    Flowing(FlowingData<'a, E>),
+    /// The data's stop runs: what is still the port's ends first.
+    Stopping(StoppingData<'a, E>),
+}
+
+/// The stopped data's handle.
+pub struct StoppedData<'a, E>(&'a mut E);
+
+/// The flowing data's handle.
+pub struct FlowingData<'a, E>(&'a mut E);
+
+/// The stopping data's handle.
+pub struct StoppingData<'a, E>(&'a mut E);
+
+/// What a peer's place is now.
+pub enum PeerPlace<'a, E> {
+    /// It has no link.
+    Free(FreePeer<'a, E>),
+    /// It has one.
+    Linked(LinkedPeer<'a, E>),
+}
+
+/// A free peer's handle.
+pub struct FreePeer<'a, E> {
+    engine: &'a mut E,
+    peer: u8,
+}
+
+/// A linked peer's handle.
+pub struct LinkedPeer<'a, E> {
+    engine: &'a mut E,
+    peer: u8,
+}
+
+/// What the gate's place is now.
+pub enum GatePlace<'a, E> {
+    /// The controller holds it, closed.
+    Shut(ShutGate<'a, E>),
+    /// The engine holds it open.
+    Open(OpenGate<'a, E>),
+    /// Its closing runs in the port; it ends in [`Told::gate_closed`].
+    Closing(ClosingGate<'a, E>),
+}
+
+/// A shut gate's handle.
+pub struct ShutGate<'a, E>(&'a mut E);
+
+/// An open gate's handle.
+pub struct OpenGate<'a, E>(&'a mut E);
+
+/// A closing gate's handle: it offers no transition.
+pub struct ClosingGate<'a, E>(PhantomData<&'a mut E>);
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> FlowingData<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// `peer`'s place.
+    pub fn peer(&mut self, peer: Peer<PEERS>) -> PeerPlace<'_, engine!()> {
+        let engine = &mut *self.0;
+        if let Some(Entry::Linked(_)) = engine.entries.get(usize::from(peer.0)) {
+            PeerPlace::Linked(LinkedPeer {
+                engine,
+                peer: peer.0,
+            })
+        } else {
+            PeerPlace::Free(FreePeer {
+                engine,
+                peer: peer.0,
+            })
+        }
+    }
+
+    /// The gate's place.
+    pub fn gate(&mut self) -> GatePlace<'_, engine!()> {
+        let engine = &mut *self.0;
+        let open = matches!(engine.gate_mut(), Some(Gate::Open(..)));
+        let shut = matches!(engine.gate_mut(), Some(Gate::Shut(_)) | None);
+        match (open, shut) {
+            (true, _) => GatePlace::Open(OpenGate(engine)),
+            (false, true) => GatePlace::Shut(ShutGate(engine)),
+            (false, false) => GatePlace::Closing(ClosingGate(PhantomData)),
+        }
+    }
+
+    /// Stop the data, as the installation machine asks: every link ends,
+    /// its queued and unpublished data goes home, an open gate closes. The
+    /// rights come back once nothing is the port's; until
+    /// then the answer is [`DataStop::Going`], and the machine asks again
+    /// ([`StoppingData::poll`]).
+    pub fn stop<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
+        let engine = self.0;
+        for peer in 0..PEERS {
+            if let Ok(peer) = u8::try_from(peer)
+                && let Some(Entry::Linked(_)) = engine.entries.get(usize::from(peer))
+            {
+                engine.unlink(peer, turn.port, turn.network, turn.events);
+            }
+        }
+        engine.data = match core::mem::replace(&mut engine.data, Data::Stopped) {
+            // The data's parts move into the stopping variant: a copy of
+            // the running data, once a stop.
+            Data::Flowing(running) => Data::Stopping(running),
+            other => other,
+        };
+        engine.close_gate(turn);
+        // With no link, what the network still offers goes back.
+        engine.drain(turn);
+        engine.finish()
+    }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> StoppingData<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// The machine asks the data's stop again: the gate's closing is
+    /// polled, and the rights come back once nothing is the port's.
+    pub fn poll<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
+        let engine = self.0;
+        engine.poll_command(Seal(()), turn);
+        engine.finish()
+    }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> LinkedPeer<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// End the link: its queued data goes home.
+    pub fn unlink<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let Self { engine, peer } = self;
+        engine.unlink(peer, turn.port, turn.network, turn.events);
+        engine.intake(turn)
+    }
+
+    /// Change the linked entry and run the intake. The handle borrows the
+    /// engine, so the peer is linked while the handle lives.
+    fn change<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+        change: impl FnOnce(&mut Linked<F::Entry<P::Link, T>>),
+    ) -> Rest {
+        if let Some(linked) = self.engine.linked_mut(self.peer) {
+            change(linked);
+        }
+        self.engine.queues.unblock();
+        self.engine.intake(turn)
+    }
+
+    /// Hold the link's data.
+    pub fn hold<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.change(turn, |linked| linked.carrying = Carrying::Held)
+    }
+
+    /// Let it go again.
+    pub fn release<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.change(turn, |linked| linked.carrying = Carrying::Carrying)
+    }
+
+    /// The controller's frame that names the held number went: the held
+    /// TID's data goes on.
+    pub fn named<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.change(turn, |linked| linked.hold = Hold::Nothing)
+    }
+
+    /// The next number of the link's `space`, for a frame of the
+    /// controller: a TID's data waits until the controller says the frame
+    /// that names it went ([`Self::named`]).
+    ///
+    /// # Errors
+    ///
+    /// The link has no such space: its peer did not negotiate QoS.
+    pub fn name_next(&mut self, space: LinkSpace) -> Result<SequenceNumber, NoSpace> {
+        let number = self
+            .engine
+            .take_number(Seal(()), self.peer, space)
+            .ok_or(NoSpace)?;
+        if let (LinkSpace::Tid(tid), Some(linked)) = (space, self.engine.linked_mut(self.peer)) {
+            linked.hold = Hold::Named(tid);
+        }
+        Ok(number)
+    }
+
+    /// The BlockAckReq owed for `tid`, to its window's head.
+    pub fn bar_owed(&mut self, tid: WmmUserPriority) -> Option<SequenceNumber> {
+        self.engine
+            .linked_mut(self.peer)
+            .and_then(|linked| *tid.select(&linked.owed))
+    }
+
+    /// The BlockAckReq owed for `tid` went: it is owed no more.
+    pub fn bar_sent(&mut self, tid: WmmUserPriority) {
+        if let Some(linked) = self.engine.linked_mut(self.peer) {
+            *tid.select_mut(&mut linked.owed) = None;
+        }
+    }
+
+    /// The link's state, for the crate's search.
+    #[cfg(test)]
+    pub(crate) fn is_held(&mut self) -> bool {
+        self.engine
+            .linked_mut(self.peer)
+            .is_some_and(|linked| linked.carrying == Carrying::Held)
+    }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> ShutGate<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// Open the closed gate the controller lends: arenas and singles go.
+    pub fn open<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        gate: GateClosed<'id>,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let engine = self.0;
+        if let Some(place) = engine.gate_mut() {
+            *place = match core::mem::replace(place, Gate::InTransition) {
+                Gate::Shut(command) => Gate::Open(turn.port.open_gate(gate), command),
+                // The handle is a shut gate's: the data holds no other.
+                other => other,
+            };
+        }
+        engine.intake(turn)
+    }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> OpenGate<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// Close the gate: nothing new goes, and the port closes it once its
+    /// air is quiet; the closed gate then goes to the controller
+    /// ([`Told::gate_closed`]).
+    pub fn close<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let engine = self.0;
+        engine.close_gate(turn);
+        engine.intake(turn)
+    }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> StoppedData<'a, engine!()>
+where
+    engine!(): Sections<'id, P, Rights = F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>>,
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// The data flows: the installation machine hands its rights over.
+    pub fn flows(
+        self,
+        rights: F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>,
+    ) -> FlowingData<'a, engine!()> {
+        let engine = self.0;
+        engine.start(Seal(()), rights);
+        FlowingData(engine)
+    }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> FreePeer<'a, station!()>
+where
+    P::Ack: Copy,
+    P::BlockAck: Copy,
+    P::Denial: Copy,
+{
+    /// Link the access point: the plane takes the link's data state, the
+    /// entry the port's link and the numbers. Its data goes while the gate
+    /// is open.
+    pub fn link<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        link: StationLink<P::Link, T>,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let Self { engine, peer } = self;
+        let StationLink {
+            data,
+            port,
+            numbers,
+        } = link;
+        if let Data::Flowing(running) = &mut engine.data {
+            // The link's data state into the plane's variant: a copy, once
+            // an association.
+            running.form.plane.link(data);
+        }
+        engine.link(peer, StationEntry { port, numbers }, turn)
+    }
+}
+
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> FreePeer<'a, access_point!()>
+where
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    /// Link the client.
+    pub fn link<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        self,
+        link: ClientLink<T>,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let Self { engine, peer } = self;
+        engine.link(peer, link, turn)
+    }
+}
+
+/// The station's transmit agreements: the arenas' form alone aggregates.
+impl<
+    'a,
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> LinkedPeer<'a, station!()>
+where
+    P::Ack: Copy,
+    P::BlockAck: Copy,
+    P::Denial: Copy,
+{
+    /// The TID's transmit agreement is operational with a window of `size`,
+    /// 1 to 64; its head is derived: the oldest number the link's arenas
+    /// hold of the TID, else its next.
+    pub fn tx_agreement<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        tid: WmmUserPriority,
+        size: u16,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let engine = &mut *self.engine;
+        if let (Data::Flowing(running), [Entry::Linked(linked)]) =
+            (&mut engine.data, &engine.entries)
+        {
+            let plane = &mut running.form.plane;
+            let window = TxWindow {
+                head: match plane.oldest_held(tid) {
+                    Some(oldest) => oldest,
+                    None => linked.link.numbers.next(tid),
+                },
+                size,
+            };
+            plane.agreement(tid, Some(window));
+        }
+        engine.queues.unblock();
+        engine.intake(turn)
+    }
+
+    /// The TID's transmit agreement ended.
+    pub fn tx_agreement_ended<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        tid: WmmUserPriority,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let engine = &mut *self.engine;
+        if let Data::Flowing(running) = &mut engine.data {
+            running.form.plane.agreement(tid, None);
+        }
+        engine.queues.unblock();
+        engine.intake(turn)
+    }
+}
+
+impl<
+    'id,
+    P: DataPort<'id>,
+    T,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> station!()
+{
+    /// The port's A-MPDU limits at the rate the aggregate rate selection
+    /// gives now: the arenas' fill follows them.
+    pub fn aggregate_rate(&mut self, rate: &crate::plane::AggregateRate) {
+        if let Data::Flowing(running) | Data::Stopping(running) = &mut self.data {
+            running.form.plane.aggregate_rate(Some(*rate));
+        }
+    }
+}
+
+/// The right of `category` among rights in `QUEUES`' order.
+fn in_queues_order<T>(rights: &mut [T; 4], category: WmmAccessCategory) -> &mut T {
+    let [voice, video, best_effort, background] = rights;
+    match category {
+        WmmAccessCategory::Voice => voice,
+        WmmAccessCategory::Video => video,
+        WmmAccessCategory::BestEffort => best_effort,
+        WmmAccessCategory::Background => background,
+    }
+}
+
+/// The sink of a station's port: its data lends no single and no queue,
+/// and the controller's singles are B4's; the TBTT goes to the controller.
+struct StationEnds<'a, 'id, C, const SINGLES: usize> {
+    singles: &'a mut [SinglePlace<'id>; SINGLES],
+    queues: &'a mut [QueueRight<'id>; 4],
+    told: &'a mut C,
+}
+
+impl<'id, A, D, C: Told<'id>, const SINGLES: usize> PortSink<'id, A, D>
+    for StationEnds<'_, 'id, C, SINGLES>
+{
+    fn single_ended(
+        &mut self,
+        _outcome: SingleOutcome<A, D>,
+        place: SinglePlace<'id>,
+        queue: QueueRight<'id>,
+    ) {
+        // The port gives back only what it was lent, and the station's data
+        // lends nothing, so this end does not come. Each right is its
+        // installation's one: it is written over its own index.
+        if let Some(home) = self.singles.get_mut(usize::from(place.index())) {
+            *home = place;
+        }
+        let category = queue.category();
+        *in_queues_order(self.queues, category) = queue;
+    }
+
+    fn tbtt(&mut self, event: TbttEvent) {
+        self.told.tbtt(event);
+    }
+}
+
+/// A station: its access point's link in the plane.
+impl<
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> Sections<'id, P> for station!()
+where
+    P::Ack: Copy,
+    P::BlockAck: Copy,
+    P::Denial: Copy,
+{
+    type Rights = DataRights<'id, SINGLES, GROUPS, AGREEMENTS, 0>;
+
+    fn start(&mut self, _seal: Seal, rights: Self::Rights) {
+        let DataRights {
+            arenas,
+            singles,
+            data: [],
+            queues,
+            command,
+            pairwise,
+            groups,
+            agreements,
+        } = rights;
+        // The plane is built with the arenas into the flowing variant: a
+        // copy, once the data's start.
+        self.data = Data::Flowing(Running {
+            form: StationRunning {
+                plane: DataPlane::new(arenas),
+                queues,
+            },
+            singles,
+            gate: Gate::Shut(command),
+            pairwise,
+            groups,
+            agreements,
+        });
+    }
+
+    fn route<N: Network<P::Memory>>(
+        &self,
+        _seal: Seal,
+        network: &N,
+        memory: &P::Memory,
+    ) -> Result<QueueId, IntakeRefusal> {
+        let (Data::Flowing(running), [Entry::Linked(_)]) = (&self.data, &self.entries) else {
+            return Err(IntakeRefusal::NoLink);
+        };
+        running
+            .form
+            .plane
+            .tid(network.priority(memory))
+            .map(QueueId::of_tid)
+            .ok_or(IntakeRefusal::NoAdmittedAccessCategory)
+    }
+
+    fn fill<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+        taken: &mut u8,
+    ) -> u8 {
+        let Self {
+            data: Data::Flowing(running),
+            entries:
+                [
+                    Entry::Linked(Linked {
+                        link,
+                        carrying: Carrying::Carrying,
+                        hold,
+                        ..
+                    }),
+                ],
+            queues,
+            budget,
+        } = self
+        else {
+            return 0;
+        };
+        let plane = &mut running.form.plane;
+        let hold = match hold {
+            Hold::Named(tid) => Some(QueueId::of_tid(*tid)),
+            Hold::Nothing => None,
+        };
+        let mut moved: u8 = 0;
+        while *taken < *budget {
+            let queue = match plane.standby_tid() {
+                // The standby's TID goes on, or nothing does.
+                Some(tid) => {
+                    let queue = QueueId::of_tid(tid);
+                    if !queues.ready(queue) || Some(queue) == hold {
+                        break;
+                    }
+                    queue
+                }
+                None => match queues.select(hold) {
+                    Some(queue) => queue,
+                    None => break,
+                },
+            };
+            let Some(msdu) = queues.pop(queue) else {
+                break;
+            };
+            *taken = taken.saturating_add(1);
+            match plane.intake(turn.port, &link.port, msdu, &mut link.numbers, turn.now) {
+                Intake::Taken(_) => moved = moved.saturating_add(1),
+                Intake::Wait(msdu, why) => {
+                    if let Err(msdu) = queues.push_front(queue, msdu) {
+                        report(turn.events, || DataEvent::DataLost(DataLoss::Overflow));
+                        turn.network.home(msdu.memory);
+                    }
+                    match why {
+                        // Only this TID waits for its window.
+                        Waits::Window => queues.block(queue),
+                        Waits::Arena | Waits::Standby => break,
+                    }
+                }
+                Intake::Refused { memory, reason } => {
+                    moved = moved.saturating_add(1);
+                    report(turn.events, || DataEvent::MsduRefused(reason));
+                    turn.network.home(memory);
+                }
+            }
+        }
+        moved
+    }
+
+    fn publish<N, R: Rates<'id, P::Caps>, E, C>(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Option<PpduPlan> {
+        let Self {
+            data:
+                Data::Flowing(Running {
+                    form: StationRunning { plane, .. },
+                    gate: Gate::Open(gate, _),
+                    ..
+                }),
+            entries:
+                [
+                    Entry::Linked(Linked {
+                        carrying: Carrying::Carrying,
+                        ..
+                    }),
+                ],
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let rates = &mut *turn.rates;
+        plane.publication(turn.port, gate, turn.now, |plan| rates.arena(0, plan))
+    }
+
+    fn next_queue(&self, _seal: Seal) -> Option<QueueId> {
+        match &self.data {
+            Data::Flowing(running) if running.form.plane.takes() => self.queues.select(None),
+            _ => None,
+        }
+    }
+
+    fn ended<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        _seal: Seal,
+        facts: TxFacts,
+        tbtt: Signal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) {
+        let Self {
+            data: Data::Flowing(running) | Data::Stopping(running),
+            entries,
+            queues,
+            ..
+        } = self
+        else {
+            // Stopped data has nothing of the port's.
+            return;
+        };
+        let Running {
+            form:
+                StationRunning {
+                    plane,
+                    queues: rights,
+                },
+            singles,
+            gate,
+            ..
+        } = running;
+        let gate = match gate {
+            Gate::Open(gate, _) => Some(&*gate),
+            _ => None,
+        };
+        let rates = &mut *turn.rates;
+        let network = &mut *turn.network;
+        let settled = plane.completed(
+            turn.port,
+            facts,
+            gate,
+            turn.now,
+            |plan| rates.arena(0, plan),
+            |memory| network.home(memory),
+            turn.events,
+        );
+        if let Some(settled) = settled {
+            if let Some(lesson) = settled.lesson {
+                turn.rates.learn(0, lesson, turn.now);
+            }
+            queues.charge(QueueId::of_tid(settled.tid), settled.cost);
+            if let (Some((tid, head)), [Entry::Linked(linked)]) = (settled.bar, entries) {
+                *tid.select_mut(&mut linked.owed) = Some(head);
+            }
+            queues.unblock();
+        }
+        let mut ends = StationEnds {
+            singles,
+            queues: rights,
+            told: &mut *turn.told,
+        };
+        turn.port.serve(facts, tbtt, turn.now, &mut ends);
+    }
+
+    fn poll_command<N, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told<'id>>(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) {
+        let (Data::Flowing(running) | Data::Stopping(running)) = &mut self.data else {
+            return;
+        };
+        let Running {
+            form: StationRunning { queues, .. },
+            singles,
+            gate,
+            ..
+        } = running;
+        let Gate::Closing(_) = gate else {
+            return;
+        };
+        let mut sink = StationEnds {
+            singles,
+            queues,
+            told: &mut *turn.told,
+        };
+        let closed = Self::poll_through(gate, turn.port, turn.now, &mut sink);
+        if let Some(closed) = closed {
+            turn.told.gate_closed(closed);
+        }
+    }
+
+    fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+        &mut self,
+        _seal: Seal,
+        _peer: u8,
+        port: &mut P,
+        network: &mut N,
+        events: &mut E,
+    ) {
+        // The arena on the air settles at its end, its frames released.
+        if let Data::Flowing(running) | Data::Stopping(running) = &mut self.data {
+            running
+                .form
+                .plane
+                .stop(port, |memory| network.home(memory), events);
+        }
+    }
+
+    fn in_flight(&self, _seal: Seal) -> usize {
+        match &self.data {
+            Data::Flowing(running) | Data::Stopping(running) => {
+                usize::from(running.form.plane.on_air())
+            }
+            Data::Stopped => 0,
+        }
+    }
+
+    fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights> {
+        let Data::Stopping(Running {
+            form: StationRunning { plane, .. },
+            gate: Gate::Shut(_),
+            ..
+        }) = &self.data
+        else {
+            return None;
+        };
+        if !plane.is_idle() {
+            return None;
+        }
+        // The running data moves out of its variant: a copy, once the
+        // data's stop.
+        let Data::Stopping(running) = core::mem::replace(&mut self.data, Data::Stopped) else {
+            return None;
+        };
+        let Running {
+            form: StationRunning { mut plane, queues },
+            singles,
+            gate,
+            pairwise,
+            groups,
+            agreements,
+        } = running;
+        match (gate, plane.idle_arenas()) {
+            (Gate::Shut(command), Some(arenas)) => Some(DataRights {
+                arenas,
+                singles,
+                data: [],
+                queues,
+                command,
+                pairwise,
+                groups,
+                agreements,
+            }),
+            (gate, None) => {
+                // Checked idle above: this does not happen. Should it, the
+                // data stays stopping with every part.
+                self.data = Data::Stopping(Running {
+                    form: StationRunning { plane, queues },
+                    singles,
+                    gate,
+                    pairwise,
+                    groups,
+                    agreements,
+                });
+                None
+            }
+            (gate, Some(arenas)) => {
+                // Checked shut above: this does not happen. Should it, the
+                // data stays stopping with every right; its plane holds no
+                // link, so a new one with the arenas is all it was.
+                self.data = Data::Stopping(Running {
+                    form: StationRunning {
+                        plane: DataPlane::new(arenas),
+                        queues,
+                    },
+                    singles,
+                    gate,
+                    pairwise,
+                    groups,
+                    agreements,
+                });
+                None
+            }
+        }
+    }
+
+    fn take_number(&mut self, _seal: Seal, _peer: u8, space: LinkSpace) -> Option<SequenceNumber> {
+        match &mut self.entries {
+            [Entry::Linked(linked)] => linked.link.numbers.take(space),
+            [Entry::Free] => None,
+        }
+    }
+}
+
+/// The sink of an access point's port: its data's singles settle, each
+/// giving its queue's right and data place back to its lane.
+struct ApEnds<'a, 'id, K, R, E, C, M, const SINGLES: usize, const PEERS: usize, const POOL: usize> {
+    lanes: &'a mut [Lane<'id, K>; 4],
+    singles: &'a mut [SinglePlace<'id>; SINGLES],
+    queues: &'a mut TxQueues<M, POOL, PEERS>,
+    rates: &'a mut R,
+    events: &'a mut E,
+    told: &'a mut C,
+    now: Instant,
+}
+
+impl<
+    'id,
+    K,
+    A: Copy,
+    D: Copy,
+    R: Rates<'id, K>,
+    E: EventSink<DataEvent>,
+    C: Told<'id>,
+    M,
+    const SINGLES: usize,
+    const PEERS: usize,
+    const POOL: usize,
+> PortSink<'id, A, D> for ApEnds<'_, 'id, K, R, E, C, M, SINGLES, PEERS, POOL>
+{
+    fn single_ended(
+        &mut self,
+        outcome: SingleOutcome<A, D>,
+        place: SinglePlace<'id>,
+        queue: QueueRight<'id>,
+    ) {
+        if usize::from(place.index()) < SINGLES {
+            // A controller's single: the engine lends none, so this end
+            // does not come; the place is written over its own index.
+            if let Some(home) = self.singles.get_mut(usize::from(place.index())) {
+                *home = place;
+            }
+            return;
+        }
+        // The port gives back what the engine lent it: the lane of the
+        // queue is free again with both.
+        let lane = queue.category().select_mut(self.lanes);
+        let Lane::Air(flight) = core::mem::replace(
+            lane,
+            Lane::Free {
+                right: queue,
+                place,
+            },
+        ) else {
+            return;
+        };
+        let delivered = matches!(outcome, TxOutcome::Ended(SingleEnd::Delivered { .. }));
+        if !delivered {
+            report(self.events, || {
+                DataEvent::DataLost(crate::plane::single_loss(&outcome))
+            });
+        }
+        self.queues.charge(
+            flight.queue,
+            single_cost(&flight.plan, flight.psdu, &outcome),
+        );
+        self.rates.learn(
+            flight.peer,
+            RateLesson::<A, (), D>::Single(outcome),
+            self.now,
+        );
+        self.queues.unblock();
+    }
+
+    fn tbtt(&mut self, event: TbttEvent) {
+        self.told.tbtt(event);
+    }
+}
+
+/// An access point: its clients' data as singles.
+impl<
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> Sections<'id, P> for access_point!()
+where
+    P::Ack: Copy,
+    P::Denial: Copy,
+{
+    type Rights = DataRights<'id, SINGLES, GROUPS, AGREEMENTS, DATA_SINGLES>;
+
+    fn start(&mut self, _seal: Seal, rights: Self::Rights) {
+        let DataRights {
+            arenas,
+            singles,
+            data:
+                [
+                    voice_place,
+                    video_place,
+                    best_effort_place,
+                    background_place,
+                ],
+            queues: [voice, video, best_effort, background],
+            command,
+            pairwise,
+            groups,
+            agreements,
+        } = rights;
+        // QUEUES' order is voice, video, best effort, background; the lanes
+        // are in the categories' selection order.
+        self.data = Data::Flowing(Running {
+            form: ApRunning {
+                lanes: [
+                    Lane::Free {
+                        right: best_effort,
+                        place: best_effort_place,
+                    },
+                    Lane::Free {
+                        right: background,
+                        place: background_place,
+                    },
+                    Lane::Free {
+                        right: video,
+                        place: video_place,
+                    },
+                    Lane::Free {
+                        right: voice,
+                        place: voice_place,
+                    },
+                ],
+                arenas,
+            },
+            singles,
+            gate: Gate::Shut(command),
+            pairwise,
+            groups,
+            agreements,
+        });
+    }
+
+    fn route<N: Network<P::Memory>>(
+        &self,
+        _seal: Seal,
+        network: &N,
+        memory: &P::Memory,
+    ) -> Result<QueueId, IntakeRefusal> {
+        let Data::Flowing(_) = self.data else {
+            return Err(IntakeRefusal::NoLink);
+        };
+        let frame = network.frame(memory, network.length(memory));
+        let (header, _) = MsduHeader::parse(frame).map_err(|_| IntakeRefusal::ShortFrame)?;
+        let found = self
+            .entries
+            .iter()
+            .zip(0_u8..)
+            .find_map(|(entry, peer)| match entry {
+                Entry::Linked(linked) if linked.link.client == header.destination => {
+                    Some((peer, linked.link.qos))
+                }
+                _ => None,
+            });
+        let Some((peer, qos)) = found else {
+            return Err(IntakeRefusal::NoLink);
+        };
+        let tid = match qos {
+            PeerQos::Qos => network.priority(memory),
+            PeerQos::NonQos => WmmUserPriority::UP0,
+        };
+        QueueId::new(peer, tid).ok_or(IntakeRefusal::NoLink)
+    }
+
+    fn fill<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+        taken: &mut u8,
+    ) -> u8 {
+        let mut moved: u8 = 0;
+        while *taken < self.budget {
+            let Data::Flowing(Running {
+                form: ApRunning { lanes, .. },
+                gate: Gate::Open(..),
+                ..
+            }) = &self.data
+            else {
+                break;
+            };
+            let Some(queue) = self.queues.select(None) else {
+                break;
+            };
+            let tid = queue.tid();
+            let free = matches!(tid.access_category().select(lanes), Lane::Free { .. });
+            let carries = matches!(
+                self.entries.get(usize::from(queue.peer())),
+                Some(Entry::Linked(Linked { carrying: Carrying::Carrying, hold, .. }))
+                    if *hold != Hold::Named(tid)
+            );
+            if !free || !carries {
+                // This queue waits for its hardware queue, or for its link.
+                self.queues.block(queue);
+                continue;
+            }
+            let Some(msdu) = self.queues.pop(queue) else {
+                break;
+            };
+            *taken = taken.saturating_add(1);
+            moved = moved.saturating_add(1);
+            self.send(queue, msdu, turn);
+        }
+        moved
+    }
+
+    fn publish<N, R: Rates<'id, P::Caps>, E, C>(
+        &mut self,
+        _seal: Seal,
+        _turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Option<PpduPlan> {
+        // A single goes as it is written: no arena is published.
+        None
+    }
+
+    fn next_queue(&self, _seal: Seal) -> Option<QueueId> {
+        let Data::Flowing(running) = &self.data else {
+            return None;
+        };
+        self.queues.select(None).filter(|queue| {
+            matches!(
+                queue.tid().access_category().select(&running.form.lanes),
+                Lane::Free { .. }
+            )
+        })
+    }
+
+    fn ended<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        _seal: Seal,
+        facts: TxFacts,
+        tbtt: Signal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) {
+        let Self {
+            data: Data::Flowing(running) | Data::Stopping(running),
+            queues,
+            ..
+        } = self
+        else {
+            // Stopped data has nothing of the port's.
+            return;
+        };
+        let mut ends = ApEnds {
+            lanes: &mut running.form.lanes,
+            singles: &mut running.singles,
+            queues,
+            rates: &mut *turn.rates,
+            events: &mut *turn.events,
+            told: &mut *turn.told,
+            now: turn.now,
+        };
+        turn.port.serve(facts, tbtt, turn.now, &mut ends);
+    }
+
+    fn poll_command<N, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told<'id>>(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) {
+        let Self {
+            data: Data::Flowing(running) | Data::Stopping(running),
+            queues,
+            ..
+        } = self
+        else {
+            return;
+        };
+        let Running {
+            form: ApRunning { lanes, .. },
+            singles,
+            gate,
+            ..
+        } = running;
+        let Gate::Closing(_) = gate else {
+            return;
+        };
+        let mut ends = ApEnds {
+            lanes,
+            singles,
+            queues,
+            rates: &mut *turn.rates,
+            events: &mut *turn.events,
+            told: &mut *turn.told,
+            now: turn.now,
+        };
+        let closed = Self::poll_through(gate, turn.port, turn.now, &mut ends);
+        if let Some(closed) = closed {
+            turn.told.gate_closed(closed);
+        }
+    }
+
+    fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+        &mut self,
+        _seal: Seal,
+        _peer: u8,
+        _port: &mut P,
+        _network: &mut N,
+        _events: &mut E,
+    ) {
+        // A client's singles in flight hold no memory of the network: it
+        // went home at the write.
+    }
+
+    fn in_flight(&self, _seal: Seal) -> usize {
+        match &self.data {
+            Data::Flowing(running) | Data::Stopping(running) => running
+                .form
+                .lanes
+                .iter()
+                .filter(|lane| matches!(lane, Lane::Air(_)))
+                .count(),
+            Data::Stopped => 0,
+        }
+    }
+
+    fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights> {
+        let Data::Stopping(Running {
+            form: ApRunning { lanes, .. },
+            gate: Gate::Shut(_),
+            ..
+        }) = &self.data
+        else {
+            return None;
+        };
+        if lanes.iter().any(|lane| !matches!(lane, Lane::Free { .. })) {
+            return None;
+        }
+        // The running data moves out of its variant: a copy, once the
+        // data's stop.
+        let Data::Stopping(running) = core::mem::replace(&mut self.data, Data::Stopped) else {
+            return None;
+        };
+        match running {
+            Running {
+                form:
+                    ApRunning {
+                        lanes:
+                            [
+                                Lane::Free {
+                                    right: best_effort,
+                                    place: best_effort_place,
+                                },
+                                Lane::Free {
+                                    right: background,
+                                    place: background_place,
+                                },
+                                Lane::Free {
+                                    right: video,
+                                    place: video_place,
+                                },
+                                Lane::Free {
+                                    right: voice,
+                                    place: voice_place,
+                                },
+                            ],
+                        arenas,
+                    },
+                singles,
+                gate: Gate::Shut(command),
+                pairwise,
+                groups,
+                agreements,
+            } => Some(DataRights {
+                arenas,
+                singles,
+                data: [
+                    voice_place,
+                    video_place,
+                    best_effort_place,
+                    background_place,
+                ],
+                queues: [voice, video, best_effort, background],
+                command,
+                pairwise,
+                groups,
+                agreements,
+            }),
+            running => {
+                // Checked above: this does not happen. Should it, the data
+                // stays stopping with every part.
+                self.data = Data::Stopping(running);
+                None
+            }
+        }
+    }
+
+    fn take_number(&mut self, _seal: Seal, peer: u8, space: LinkSpace) -> Option<SequenceNumber> {
+        match self.entries.get_mut(usize::from(peer)) {
+            Some(Entry::Linked(linked)) => linked.link.numbers.take(space),
+            _ => None,
+        }
+    }
+}
+impl<
+    'id,
+    P: DataPort<'id>,
+    T: TxKey,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> access_point!()
+{
+    /// Write `msdu` of `queue` by copy into its queue's data place and
+    /// publish it; its memory goes home at the write. An MSDU that cannot
+    /// go now (no rate) waits at its queue's head, the queue blocked until
+    /// an end; one that can never go is refused. No number is drawn for an
+    /// MSDU that does not go. The caller found the lane free, the gate open
+    /// and the link carrying.
+    fn send<
+        N: Network<P::Memory>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        queue: QueueId,
+        msdu: OutboundMsdu<P::Memory>,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) {
+        let tid = queue.tid();
+        let category = tid.access_category();
+        let Self {
+            data,
+            entries,
+            queues,
+            ..
+        } = self;
+        let refuse = |turn: &mut Turn<'_, P, N, R, E, C>, memory, reason| {
+            report(turn.events, || DataEvent::MsduRefused(reason));
+            turn.network.home(memory);
+        };
+        let (
+            Data::Flowing(Running {
+                form: ApRunning { lanes, .. },
+                gate: Gate::Open(gate, _),
+                ..
+            }),
+            Some(Entry::Linked(Linked { link, .. })),
+        ) = (data, entries.get_mut(usize::from(queue.peer())))
+        else {
+            return refuse(turn, msdu.memory, IntakeRefusal::NoLink);
+        };
+        let Some(plan) = turn.rates.single(queue.peer(), tid) else {
+            // It waits at its queue's head until an end unblocks it.
+            if let Err(msdu) = queues.push_front(queue, msdu) {
+                report(turn.events, || DataEvent::DataLost(DataLoss::Overflow));
+                turn.network.home(msdu.memory);
+            }
+            queues.block(queue);
+            return;
+        };
+        let frame = turn.network.frame(&msdu.memory, msdu.length);
+        let Ok((msdu_header, payload)) = MsduHeader::parse(frame) else {
+            return refuse(turn, msdu.memory, IntakeRefusal::ShortFrame);
+        };
+        let encapsulation = plan_data_encapsulation(
+            DataInterfaceRole::AccessPoint,
+            link.access_point,
+            link.access_point,
+            msdu_header,
+            tid,
+            link.qos,
+            QosAckPolicy::Normal,
+        );
+        let header_len = usize::from(encapsulation.header_len);
+        let length = header_len
+            .checked_add(LLC_SNAP_HEADER_LEN)
+            .and_then(|front| front.checked_add(payload.len()))
+            .and_then(MpduLength::<P::Caps>::new);
+        let Some(length) = length else {
+            return refuse(turn, msdu.memory, IntakeRefusal::TooLong);
+        };
+        let (counter, _key) = link.numbers.data_and_key(tid);
+        let header = MacHeader::decode(&encapsulation.header)
+            .map(|mac| mac.with_sequence_control(counter.peek().sequence_control()));
+        let described = header
+            .and_then(|mac| HeaderSpec::from_mac_header(mac, IndividualAddress::new))
+            .and_then(AckHeader::new)
+            .and_then(|header| SizedFrame::new(header, length));
+        let (Some(header), Some(described)) = (header, described) else {
+            // The header the encapsulation wrote names an individual client
+            // and holds in the MPDU: this does not happen.
+            return refuse(turn, msdu.memory, IntakeRefusal::TooLong);
+        };
+        // The single's flight takes the lane; the lane's right and place go
+        // to the port.
+        let psdu =
+            u32::try_from(length.get()).map_or(u32::MAX, |mpdu| mpdu.saturating_add(FCS_LEN));
+        let lane = category.select_mut(lanes);
+        let flight = Lane::Air(InFlight {
+            peer: queue.peer(),
+            queue,
+            plan,
+            psdu,
+        });
+        let (right, mut place) = match core::mem::replace(lane, flight) {
+            Lane::Free { right, place } => (right, place),
+            air @ Lane::Air(_) => {
+                // The caller found the lane free: this does not happen.
+                // Should it, the lane keeps its flight and the MSDU waits.
+                *lane = air;
+                if let Err(msdu) = queues.push_front(queue, msdu) {
+                    report(turn.events, || DataEvent::DataLost(DataLoss::Overflow));
+                    turn.network.home(msdu.memory);
+                }
+                queues.block(queue);
+                return;
+            }
+        };
+        let _number = counter.take();
+        let llc_snap = encapsulation.llc_snap;
+        turn.port.write_single(&mut place, |buffer| {
+            let octets = header
+                .octets()
+                .chain(llc_snap)
+                .chain(payload.iter().copied());
+            for (out, octet) in buffer.iter_mut().zip(octets) {
+                *out = octet;
+            }
+            length
+        });
+        // Copied out: the network's memory goes home at the write.
+        turn.network.home(msdu.memory);
+        let frame = TxFrame::Individual {
+            frame: described,
+            plan,
+        };
+        turn.port
+            .publish_single(place, right, gate, &frame, turn.now);
+    }
+}
+
+/// What a search reads of a form's running part and of a link.
 #[cfg(test)]
 pub trait Keyed {
     fn key(&self) -> std::string::String;
 }
 
 #[cfg(test)]
-impl<K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities> Keyed for DataPlane<'_, K> {
+impl<K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities> Keyed
+    for StationRunning<'_, K>
+{
     fn key(&self) -> std::string::String {
-        DataPlane::key(self)
+        self.plane.key()
     }
 }
 
 #[cfg(test)]
-impl Keyed for Aside<'_> {
+impl<K> Keyed for ApRunning<'_, K> {
     fn key(&self) -> std::string::String {
-        std::string::String::from(match self {
-            Self::Away => "away",
-            Self::Here(_) => "here",
-        })
+        self.lanes
+            .iter()
+            .map(|lane| match lane {
+                Lane::Free { .. } => std::string::String::from("free;"),
+                Lane::Air(flight) => {
+                    std::format!("air{}|{:?}|{};", flight.peer, flight.queue, flight.psdu)
+                }
+            })
+            .collect()
     }
 }
 
@@ -607,1333 +2341,53 @@ impl<
     const SINGLES: usize,
     const GROUPS: usize,
     const AGREEMENTS: usize,
-> Engine<'id, P, F, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
+> engine!()
 where
-    F::Sender<'id, P::Caps>: Keyed,
+    F::Running<'id, P::Caps>: Keyed,
     F::Entry<P::Link, T>: Keyed,
     P::Memory: core::fmt::Debug,
 {
     /// The engine's whole state, read from its private fields, for the
-    /// search that merges equal states; the TBTT it keeps for the
-    /// controller is left out.
+    /// search that merges equal states.
     pub(crate) fn key(&self) -> std::string::String {
         use core::fmt::Write;
-        let mut key = std::format!("{:?}|{}|{:?}|", self.flow, self.budget, self.owed);
-        for entry in &self.peers {
+        let running =
+            |name: &str, running: &Running<'id, F, P::Caps, SINGLES, GROUPS, AGREEMENTS>| {
+                std::format!(
+                    "{name}|{}|{}",
+                    match running.gate {
+                        Gate::Shut(_) => "shut",
+                        Gate::Open(..) => "open",
+                        Gate::Closing(_) => "closing",
+                        Gate::InTransition => "moving",
+                    },
+                    running.form.key()
+                )
+            };
+        let mut key = std::format!(
+            "{}|{}|",
+            self.budget,
+            match &self.data {
+                Data::Stopped => std::string::String::from("stopped"),
+                Data::Flowing(flowing) => running("flowing", flowing),
+                Data::Stopping(stopping) => running("stopping", stopping),
+            }
+        );
+        for entry in &self.entries {
             let _ = match entry {
                 Entry::Free => write!(key, "free;"),
-                Entry::Linked {
-                    link,
-                    carrying,
-                    hold,
-                } => write!(key, "{}|{carrying:?}|{hold:?};", link.key()),
-            };
-        }
-        let _ = write!(key, "{}|{}|", self.queues.key(), self.sender.key());
-        for lane in &self.lanes {
-            let _ = match lane {
-                Lane::Away => write!(key, "away;"),
-                Lane::Free(_) => write!(key, "free;"),
-                Lane::Air(flight) => write!(
+                Entry::Linked(linked) => write!(
                     key,
-                    "air{}|{:?}|{};",
-                    flight.peer, flight.queue, flight.psdu
+                    "{}|{:?}|{:?}|{:?};",
+                    linked.link.key(),
+                    linked.carrying,
+                    linked.hold,
+                    linked.owed
                 ),
             };
         }
-        key.extend(self.singles.iter().map(Slot::mark));
-        key.push(self.pairwise.mark());
-        key.extend(self.groups.iter().map(Slot::mark));
-        key.extend(self.agreements.iter().map(Slot::mark));
-        key.push(match self.command {
-            Commanding::Away => 'A',
-            Commanding::Here(_) => 'H',
-            Commanding::CloseGate(_) => 'C',
-        });
-        key.push(match self.gate {
-            Gate::Away => 'w',
-            Gate::Open(_) => 'o',
-            Gate::Closing => 'g',
-            Gate::Closed(_) => 'c',
-        });
+        let _ = write!(key, "{}", self.queues.key());
         key
-    }
-}
-
-/// A form's state of stopped data.
-pub trait Stopped {
-    const STOPPED: Self;
-}
-
-impl<K: oer_protocols_ieee80211_contracts_port::Ieee80211Capabilities> Stopped
-    for DataPlane<'_, K>
-{
-    const STOPPED: Self = DataPlane::new();
-}
-
-impl Stopped for Aside<'_> {
-    const STOPPED: Self = Self::Away;
-}
-
-impl<
-    'id,
-    P: DataPort<'id>,
-    F: Form,
-    T,
-    const PEERS: usize,
-    const POOL: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> Engine<'id, P, F, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
-where
-    Self: Sections<'id, P, T, PEERS>,
-    P::Ack: Copy,
-    P::Denial: Copy,
-{
-    /// The data flows, with its rights. Nothing waits for it: a stop ended
-    /// every link, and what the network offered without one was refused.
-    pub fn flows(&mut self, rights: Rights<'id, SINGLES, GROUPS, AGREEMENTS>) -> Rest {
-        let DataRights {
-            arenas,
-            singles,
-            queues,
-            command,
-            pairwise,
-            groups,
-            agreements,
-        } = rights;
-        self.give_arenas(Seal(()), arenas);
-        self.singles = singles.map(Slot::Here);
-        // QUEUES' order is voice, video, best effort, background; the lanes
-        // are in the categories' selection order.
-        let [voice, video, best_effort, background] = queues;
-        self.lanes = [best_effort, background, video, voice].map(Lane::Free);
-        self.command = Commanding::Here(command);
-        self.pairwise = Slot::Here(pairwise);
-        self.groups = groups.map(Slot::Here);
-        self.agreements = agreements.map(Slot::Here);
-        self.flow = Flow::Flowing;
-        Rest::Wake(None)
-    }
-
-    /// Whether the data flows.
-    pub fn is_flowing(&self) -> bool {
-        self.flow == Flow::Flowing
-    }
-
-    /// Whether `peer` has a link.
-    pub fn is_linked(&self, peer: Peer<PEERS>) -> bool {
-        matches!(self.entry(peer.0), Some(Entry::Linked { .. }))
-    }
-
-    /// Whether `peer`'s link is held.
-    pub fn is_held(&self, peer: Peer<PEERS>) -> bool {
-        matches!(
-            self.entry(peer.0),
-            Some(Entry::Linked {
-                carrying: Carrying::Held,
-                ..
-            })
-        )
-    }
-
-    /// Whether the gate is open.
-    pub const fn gate_open(&self) -> bool {
-        matches!(self.gate, Gate::Open(_))
-    }
-
-    /// The MSDUs the queues hold.
-    pub fn queued(&self) -> usize {
-        self.queues.len()
-    }
-
-    /// The BlockAckReq owed to `peer` for `tid`, to its window's head.
-    pub fn bar_owed(&self, peer: Peer<PEERS>, tid: WmmUserPriority) -> Option<SequenceNumber> {
-        self.owed
-            .get(usize::from(peer.0))
-            .and_then(|owed| *tid.select(&owed.bars))
-    }
-
-    /// The BlockAckReq owed to `peer` for `tid` went: it is owed no more.
-    pub fn bar_sent(&mut self, peer: Peer<PEERS>, tid: WmmUserPriority) {
-        if let Some(owed) = self.owed.get_mut(usize::from(peer.0)) {
-            *tid.select_mut(&mut owed.bars) = None;
-        }
-    }
-
-    /// The closed gate, for the controller, once its closing ended.
-    pub fn take_closed_gate(&mut self) -> Option<GateClosed<'id>> {
-        match core::mem::replace(&mut self.gate, Gate::Away) {
-            Gate::Closed(gate) => Some(gate),
-            other => {
-                self.gate = other;
-                None
-            }
-        }
-    }
-
-    fn entry(&self, peer: u8) -> Option<&Entry<F::Entry<P::Link, T>>> {
-        self.peers.get(usize::from(peer))
-    }
-
-    fn entry_mut(&mut self, peer: u8) -> Option<&mut Entry<F::Entry<P::Link, T>>> {
-        self.peers.get_mut(usize::from(peer))
-    }
-
-    /// Link `peer`. Its data goes while the data flows and the gate is
-    /// open.
-    ///
-    /// # Errors
-    ///
-    /// The link back, with why: the data does not flow, or the peer has a
-    /// link.
-    pub fn link<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        peer: Peer<PEERS>,
-        link: F::Link<P::Link, T>,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Result<Rest, Refusal<F::Link<P::Link, T>>>
-    where
-        Self: Linking<'id, P, F, T, PEERS>,
-    {
-        if self.flow != Flow::Flowing {
-            return Err((link, Refused::NotFlowing));
-        }
-        if self.is_linked(peer) {
-            return Err((link, Refused::Linked));
-        }
-        let entry = self.take_link(Seal(()), link)?;
-        if let Some(slot) = self.entry_mut(peer.0) {
-            *slot = Entry::Linked {
-                link: entry,
-                carrying: Carrying::Carrying,
-                hold: None,
-            };
-        }
-        self.queues.reset_peer(peer.0);
-        if let Some(owed) = self.owed.get_mut(usize::from(peer.0)) {
-            *owed = Owed::default();
-        }
-        Ok(self.intake(turn))
-    }
-
-    /// The next number of `peer`'s `space`, for a frame of the controller:
-    /// the TID's data waits until the controller says the frame that names
-    /// it went ([`Request::Named`]).
-    ///
-    /// # Errors
-    ///
-    /// The peer has no link, or the link's numbers have no such space.
-    pub fn name_next(
-        &mut self,
-        peer: Peer<PEERS>,
-        space: LinkSpace,
-    ) -> Result<SequenceNumber, Refused>
-    where
-        Self: Linking<'id, P, F, T, PEERS>,
-    {
-        let Some(Entry::Linked { link, hold, .. }) = self.peers.get_mut(usize::from(peer.0)) else {
-            return Err(Refused::NotLinked);
-        };
-        let number = Self::numbers(Seal(()), link)
-            .take(space)
-            .ok_or(Refused::NotLinked)?;
-        if let LinkSpace::Tid(tid) = space {
-            *hold = Some(tid);
-        }
-        Ok(number)
-    }
-
-    /// A request of the controller.
-    ///
-    /// # Errors
-    ///
-    /// The request does not fit the engine's state; nothing changed.
-    pub fn asked<
-        N: Network<P::Memory>,
-        R: Rates<'id, P::Caps>,
-        E: EventSink<DataEvent>,
-        C: Told,
-    >(
-        &mut self,
-        request: Request<PEERS>,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Result<Rest, Refused> {
-        match request {
-            Request::Unlink(peer) => {
-                if !self.is_linked(peer) {
-                    return Err(Refused::NotLinked);
-                }
-                self.unlink(peer.0, turn.port, turn.network, turn.events);
-            }
-            Request::Hold(peer) | Request::Release(peer) | Request::Named(peer) => {
-                let Some(Entry::Linked { carrying, hold, .. }) =
-                    self.peers.get_mut(usize::from(peer.0))
-                else {
-                    return Err(Refused::NotLinked);
-                };
-                match request {
-                    Request::Hold(_) => *carrying = Carrying::Held,
-                    Request::Release(_) => *carrying = Carrying::Carrying,
-                    _ => *hold = None,
-                }
-                self.queues.unblock();
-            }
-            Request::TxAgreement(peer, tid, size) => {
-                if !self.is_linked(peer) {
-                    return Err(Refused::NotLinked);
-                }
-                self.agreement(Seal(()), tid, Some(size))?;
-                self.queues.unblock();
-            }
-            Request::TxAgreementEnded(peer, tid) => {
-                if !self.is_linked(peer) {
-                    return Err(Refused::NotLinked);
-                }
-                self.agreement(Seal(()), tid, None)?;
-                self.queues.unblock();
-            }
-            Request::CloseGate => self.close_gate(turn),
-        }
-        Ok(self.intake(turn))
-    }
-
-    /// Open the closed gate the controller lends: arenas and singles go.
-    ///
-    /// # Errors
-    ///
-    /// The gate back: the data does not flow, or the engine holds a gate
-    /// (open, closing, or closed and not yet taken).
-    pub fn open_gate<
-        N: Network<P::Memory>,
-        R: Rates<'id, P::Caps>,
-        E: EventSink<DataEvent>,
-        C: Told,
-    >(
-        &mut self,
-        gate: GateClosed<'id>,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Result<Rest, (GateClosed<'id>, Refused)> {
-        if self.flow != Flow::Flowing {
-            return Err((gate, Refused::NotFlowing));
-        }
-        if !matches!(self.gate, Gate::Away) {
-            return Err((gate, Refused::GateHeld));
-        }
-        self.gate = Gate::Open(turn.port.open_gate(gate));
-        Ok(self.intake(turn))
-    }
-
-    /// The network has MSDUs.
-    pub fn offered<
-        N: Network<P::Memory>,
-        R: Rates<'id, P::Caps>,
-        E: EventSink<DataEvent>,
-        C: Told,
-    >(
-        &mut self,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Rest {
-        self.intake(turn)
-    }
-
-    /// The pump's turn: a round a section owed, or a deadline.
-    pub fn round<
-        N: Network<P::Memory>,
-        R: Rates<'id, P::Caps>,
-        E: EventSink<DataEvent>,
-        C: Told,
-    >(
-        &mut self,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Rest {
-        self.poll_command(turn);
-        self.intake(turn)
-    }
-
-    /// The port's transmit facts: the arena's end and the singles', then
-    /// the command in progress, then the intake.
-    pub fn transmitted<
-        N: Network<P::Memory>,
-        R: Rates<'id, P::Caps>,
-        E: EventSink<DataEvent>,
-        C: Told,
-    >(
-        &mut self,
-        facts: TxFacts,
-        tbtt: Signal,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Rest {
-        self.ended(Seal(()), facts, tbtt, turn);
-        self.poll_command(turn);
-        self.intake(turn)
-    }
-
-    /// Stop the data: every link ends, its queued and unpublished data goes
-    /// home, an open gate closes. The rights come back once nothing is on
-    /// the air and the gate's closing ended; until then the answer is
-    /// [`DataStop::Going`] and the transmit facts wake.
-    ///
-    /// # Errors
-    ///
-    /// The data was not flowing: the installation holds its rights.
-    pub fn stop_data<
-        N: Network<P::Memory>,
-        R: Rates<'id, P::Caps>,
-        E: EventSink<DataEvent>,
-        C: Told,
-    >(
-        &mut self,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Result<DataStop<Rights<'id, SINGLES, GROUPS, AGREEMENTS>>, NotFlowing> {
-        match self.flow {
-            Flow::Stopped => return Err(NotFlowing),
-            Flow::Flowing => {
-                for peer in 0..PEERS {
-                    if let Ok(peer) = u8::try_from(peer)
-                        && matches!(self.entry(peer), Some(Entry::Linked { .. }))
-                    {
-                        self.unlink(peer, turn.port, turn.network, turn.events);
-                    }
-                }
-                self.flow = Flow::Stopping;
-                self.close_gate(turn);
-                // With no link, what the network still offers goes back.
-                self.drain(turn);
-            }
-            Flow::Stopping => self.poll_command(turn),
-        }
-        Ok(self.finish())
-    }
-
-    /// The rights, when nothing is on the air and no command runs.
-    fn finish(&mut self) -> DataStop<Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
-        let quiet = self.in_flight(Seal(())) == 0
-            && matches!(self.command, Commanding::Here(_))
-            && !matches!(self.gate, Gate::Open(_) | Gate::Closing)
-            && self.lanes.iter().all(|lane| matches!(lane, Lane::Free(_)))
-            && self.singles.iter().all(Slot::is_here)
-            && self.pairwise.is_here()
-            && self.groups.iter().all(Slot::is_here)
-            && self.agreements.iter().all(Slot::is_here);
-        if !quiet {
-            return DataStop::Going;
-        }
-        let Some(arenas) = self.take_arenas(Seal(())) else {
-            return DataStop::Going;
-        };
-        // Each part is here, as checked above; a part that is not puts every
-        // part back as it was.
-        let parts = (
-            gather(&mut self.singles),
-            gather(&mut self.groups),
-            gather(&mut self.agreements),
-            core::mem::replace(&mut self.command, Commanding::Away),
-            core::mem::replace(&mut self.pairwise, Slot::Away),
-            core::mem::replace(&mut self.lanes, [const { Lane::Away }; 4]),
-        );
-        let (
-            Some(singles),
-            Some(groups),
-            Some(agreements),
-            Commanding::Here(command),
-            Slot::Here(pairwise),
-            [
-                Lane::Free(best_effort),
-                Lane::Free(background),
-                Lane::Free(video),
-                Lane::Free(voice),
-            ],
-        ) = parts
-        else {
-            let (singles, groups, agreements, command, pairwise, lanes) = parts;
-            if let Some(singles) = singles {
-                self.singles = singles.map(Slot::Here);
-            }
-            if let Some(groups) = groups {
-                self.groups = groups.map(Slot::Here);
-            }
-            if let Some(agreements) = agreements {
-                self.agreements = agreements.map(Slot::Here);
-            }
-            self.command = command;
-            self.pairwise = pairwise;
-            self.lanes = lanes;
-            self.give_arenas(Seal(()), arenas);
-            return DataStop::Going;
-        };
-        self.flow = Flow::Stopped;
-        DataStop::Stopped(DataRights {
-            arenas,
-            singles,
-            queues: [voice, video, best_effort, background],
-            command,
-            pairwise,
-            groups,
-            agreements,
-        })
-    }
-
-    /// End `peer`'s link.
-    fn unlink<N: Network<P::Memory>, E: EventSink<DataEvent>>(
-        &mut self,
-        peer: u8,
-        port: &mut P,
-        network: &mut N,
-        events: &mut E,
-    ) {
-        while let Some(msdu) = self.queues.pop_peer(peer) {
-            report(events, || DataEvent::DataLost(DataLoss::LeftBehind));
-            network.home(msdu.memory);
-        }
-        self.queues.reset_peer(peer);
-        self.unlink_form(Seal(()), peer, port, network, events);
-        if let Some(entry) = self.entry_mut(peer) {
-            *entry = Entry::Free;
-        }
-        if let Some(owed) = self.owed.get_mut(usize::from(peer)) {
-            *owed = Owed::default();
-        }
-    }
-
-    /// Ask the gate's closing: nothing new goes from now.
-    fn close_gate<N, R, E, C: Told>(&mut self, turn: &mut Turn<'_, P, N, R, E, C>) {
-        // The command's place is free while no command runs: the gate's
-        // closing is the one command of this half.
-        if !matches!(
-            (&self.gate, &self.command),
-            (Gate::Open(_), Commanding::Here(_))
-        ) {
-            return;
-        }
-        match (
-            core::mem::replace(&mut self.gate, Gate::Closing),
-            core::mem::replace(&mut self.command, Commanding::Away),
-        ) {
-            (Gate::Open(open), Commanding::Here(place)) => {
-                self.command = Commanding::CloseGate(turn.port.begin(
-                    place,
-                    Command::CloseGate(open),
-                    turn.now,
-                ));
-            }
-            (gate, command) => {
-                self.gate = gate;
-                self.command = command;
-            }
-        }
-    }
-
-    /// Poll the command in progress.
-    fn poll_command<N, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) {
-        let command = match core::mem::replace(&mut self.command, Commanding::Away) {
-            Commanding::CloseGate(command) => command,
-            other => {
-                self.command = other;
-                return;
-            }
-        };
-        match turn
-            .port
-            .poll_command(command, turn.now, &mut ends!(self, turn))
-        {
-            CommandPoll::Pending(command) => self.command = Commanding::CloseGate(command),
-            CommandPoll::Ended(place, end) => {
-                self.command = Commanding::Here(place);
-                if let CommandEnd::GateClosed(gate) = end {
-                    self.gate = Gate::Closed(gate);
-                }
-            }
-        }
-    }
-
-    /// What the network offers, into the queues while the pool has room;
-    /// what has no link goes back at once. Whether it moved anything.
-    fn drain<N: Network<P::Memory>, R, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> bool {
-        let mut moved = false;
-        while self.queues.has_room() {
-            let Some(msdu) = turn.network.take() else {
-                break;
-            };
-            moved = true;
-            match self.route(Seal(()), turn.network, &msdu) {
-                Ok(queue) => {
-                    if let Err(msdu) = self.queues.push(queue, msdu) {
-                        // The pool had room: this does not happen.
-                        report(turn.events, || DataEvent::DataLost(DataLoss::Overflow));
-                        turn.network.home(msdu.memory);
-                    }
-                }
-                Err(reason) => {
-                    report(turn.events, || DataEvent::MsduRefused(reason));
-                    turn.network.home(msdu.memory);
-                }
-            }
-        }
-        moved
-    }
-
-    /// The intake: drain, fill, publish, again while it changed something,
-    /// within one budget. A round is owed when the budget ran out with
-    /// more to take.
-    fn intake<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Rest {
-        let mut taken = 0;
-        loop {
-            let drained = self.drain(turn);
-            if self.flow != Flow::Flowing {
-                break;
-            }
-            let filled = self.fill(Seal(()), turn, &mut taken);
-            let published = self.publish(Seal(()), turn);
-            if !drained && filled == 0 && published.is_none() {
-                break;
-            }
-        }
-        if taken >= self.budget && self.next_queue(Seal(())).is_some() {
-            Rest::Round
-        } else {
-            Rest::Wake(None)
-        }
-    }
-}
-
-/// The seal of the forms' halves: only this crate makes one, so only the
-/// engine's sections call them.
-#[derive(Debug)]
-pub struct Seal(());
-
-/// The form's part of a link request.
-pub trait Linking<'id, P: DataPort<'id>, F: Form, T, const PEERS: usize> {
-    /// Take the link into the form; its entry.
-    ///
-    /// # Errors
-    ///
-    /// The link back: the form cannot take it.
-    fn take_link(&mut self, _seal: Seal, link: F::Link<P::Link, T>) -> Linked<F, P::Link, T>;
-
-    /// The entry's numbers.
-    fn numbers(_seal: Seal, entry: &mut F::Entry<P::Link, T>) -> &mut TxNumbers<T>;
-}
-
-/// A station: its access point's link in the plane.
-impl<
-    'id,
-    P: DataPort<'id>,
-    T: TxKey,
-    const POOL: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> Linking<'id, P, Arenas, T, 1>
-    for Engine<'id, P, Arenas, T, 1, POOL, SINGLES, GROUPS, AGREEMENTS>
-{
-    fn take_link(
-        &mut self,
-        _seal: Seal,
-        link: StationLink<P::Link, T>,
-    ) -> Result<StationEntry<P::Link, T>, (StationLink<P::Link, T>, Refused)> {
-        let StationLink {
-            data,
-            port,
-            numbers,
-        } = link;
-        match self.sender.handover(data) {
-            Ok(()) => Ok(StationEntry { port, numbers }),
-            Err((data, _)) => Err((
-                StationLink {
-                    data,
-                    port,
-                    numbers,
-                },
-                Refused::PlaneLinked,
-            )),
-        }
-    }
-
-    fn numbers(_seal: Seal, entry: &mut StationEntry<P::Link, T>) -> &mut TxNumbers<T> {
-        &mut entry.numbers
-    }
-}
-
-impl<
-    'id,
-    P: DataPort<'id>,
-    T: TxKey,
-    const POOL: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> Sections<'id, P, T, 1> for Engine<'id, P, Arenas, T, 1, POOL, SINGLES, GROUPS, AGREEMENTS>
-where
-    P::Ack: Copy,
-    P::BlockAck: Copy,
-    P::Denial: Copy,
-{
-    fn route<N: Network<P::Memory>>(
-        &self,
-        _seal: Seal,
-        _network: &N,
-        msdu: &OutboundMsdu<P::Memory>,
-    ) -> Result<QueueId, IntakeRefusal> {
-        match self.peers.first() {
-            Some(Entry::Linked { .. }) => {}
-            _ => return Err(IntakeRefusal::NoLink),
-        }
-        self.sender
-            .tid(msdu.priority)
-            .map(QueueId::of_tid)
-            .ok_or(IntakeRefusal::NoAdmittedAccessCategory)
-    }
-
-    fn fill<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        _seal: Seal,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-        taken: &mut u8,
-    ) -> u8 {
-        let Self {
-            peers,
-            queues,
-            sender,
-            budget,
-            ..
-        } = self;
-        let Some(Entry::Linked {
-            link,
-            carrying: Carrying::Carrying,
-            hold,
-        }) = peers.first_mut()
-        else {
-            return 0;
-        };
-        let hold = hold.map(QueueId::of_tid);
-        let mut moved: u8 = 0;
-        while *taken < *budget {
-            let queue = match sender.standby_tid() {
-                // The standby's TID goes on, or nothing does.
-                Some(tid) => {
-                    let queue = QueueId::of_tid(tid);
-                    if !queues.ready(queue) || Some(queue) == hold {
-                        break;
-                    }
-                    queue
-                }
-                None => match queues.select(hold) {
-                    Some(queue) => queue,
-                    None => break,
-                },
-            };
-            let Some(msdu) = queues.pop(queue) else {
-                break;
-            };
-            *taken = taken.saturating_add(1);
-            match sender.intake(turn.port, &link.port, msdu, &mut link.numbers, turn.now) {
-                Intake::Taken(_) => moved = moved.saturating_add(1),
-                Intake::Wait(msdu, why) => {
-                    let back = queues.push_front(queue, msdu);
-                    if let Err(msdu) = back {
-                        report(turn.events, || DataEvent::DataLost(DataLoss::Overflow));
-                        turn.network.home(msdu.memory);
-                    }
-                    match why {
-                        // Only this TID waits for its window.
-                        Waits::Window => queues.block(queue),
-                        Waits::Arena | Waits::Standby => break,
-                    }
-                }
-                Intake::Refused { memory, reason } => {
-                    moved = moved.saturating_add(1);
-                    report(turn.events, || DataEvent::MsduRefused(reason));
-                    turn.network.home(memory);
-                }
-            }
-        }
-        moved
-    }
-
-    fn publish<N, R: Rates<'id, P::Caps>, E, C: Told>(
-        &mut self,
-        _seal: Seal,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Option<PpduPlan> {
-        let Gate::Open(gate) = &self.gate else {
-            return None;
-        };
-        let Some(Entry::Linked {
-            carrying: Carrying::Carrying,
-            ..
-        }) = self.peers.first()
-        else {
-            return None;
-        };
-        let rates = &mut *turn.rates;
-        self.sender
-            .publication(turn.port, gate, turn.now, |plan| rates.arena(0, plan))
-    }
-
-    fn next_queue(&self, _seal: Seal) -> Option<QueueId> {
-        if self.sender.takes() {
-            self.queues.select(None)
-        } else {
-            None
-        }
-    }
-
-    fn ended<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        _seal: Seal,
-        facts: TxFacts,
-        tbtt: Signal,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) {
-        let gate = match &self.gate {
-            Gate::Open(gate) => Some(gate),
-            _ => None,
-        };
-        let rates = &mut *turn.rates;
-        let network = &mut *turn.network;
-        let settled = self.sender.completed(
-            turn.port,
-            facts,
-            gate,
-            turn.now,
-            |plan| rates.arena(0, plan),
-            |memory| network.home(memory),
-            turn.events,
-        );
-        if let Some(settled) = settled {
-            if let Some(lesson) = settled.lesson {
-                turn.rates.learn(0, lesson, turn.now);
-            }
-            self.queues
-                .charge(QueueId::of_tid(settled.tid), settled.cost);
-            if let (Some((tid, head)), Some(owed)) = (settled.bar, self.owed.first_mut()) {
-                *tid.select_mut(&mut owed.bars) = Some(head);
-            }
-            self.queues.unblock();
-        }
-        turn.port
-            .serve(facts, tbtt, turn.now, &mut ends!(self, turn));
-    }
-
-    fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
-        &mut self,
-        _seal: Seal,
-        _peer: u8,
-        port: &mut P,
-        network: &mut N,
-        events: &mut E,
-    ) {
-        // The arena on the air settles at its end, its frames released.
-        let _data: Option<DataLink> = self
-            .sender
-            .stop(port, |memory| network.home(memory), events);
-    }
-
-    fn in_flight(&self, _seal: Seal) -> usize {
-        usize::from(self.sender.on_air())
-    }
-
-    fn give_arenas(&mut self, _seal: Seal, arenas: [IdleArena<'id>; 2]) {
-        self.sender.give(arenas);
-    }
-
-    fn take_arenas(&mut self, _seal: Seal) -> Option<[IdleArena<'id>; 2]> {
-        self.sender.take()
-    }
-
-    fn agreement(
-        &mut self,
-        _seal: Seal,
-        tid: WmmUserPriority,
-        size: Option<u16>,
-    ) -> Result<(), Refused> {
-        let Some(Entry::Linked { link, .. }) = self.peers.first() else {
-            return Err(Refused::NotLinked);
-        };
-        let window = size.map(|size| TxWindow {
-            head: match self.sender.oldest_held(tid) {
-                Some(oldest) => oldest,
-                None => link.numbers.next(tid),
-            },
-            size,
-        });
-        self.sender.agreement(tid, window);
-        Ok(())
-    }
-}
-
-impl<
-    'id,
-    P: DataPort<'id>,
-    T,
-    const POOL: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> Engine<'id, P, Arenas, T, 1, POOL, SINGLES, GROUPS, AGREEMENTS>
-{
-    /// The port's A-MPDU limits at the rate the aggregate rate selection
-    /// gives now: the arenas' fill follows them.
-    pub fn aggregate_rate(&mut self, rate: Option<crate::plane::AggregateRate>) {
-        self.sender.aggregate_rate(rate);
-    }
-}
-
-/// An access point: its clients' data as singles.
-impl<
-    'id,
-    P: DataPort<'id>,
-    T,
-    const PEERS: usize,
-    const POOL: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> Linking<'id, P, Singles, T, PEERS>
-    for Engine<'id, P, Singles, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
-{
-    fn take_link(
-        &mut self,
-        _seal: Seal,
-        link: ClientLink<T>,
-    ) -> Result<ClientLink<T>, (ClientLink<T>, Refused)> {
-        Ok(link)
-    }
-
-    fn numbers(_seal: Seal, entry: &mut ClientLink<T>) -> &mut TxNumbers<T> {
-        &mut entry.numbers
-    }
-}
-
-impl<
-    'id,
-    P: DataPort<'id>,
-    T,
-    const PEERS: usize,
-    const POOL: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> Engine<'id, P, Singles, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
-{
-    /// The single's place of the access point's data on the queue of
-    /// `category`: the last [`DATA_SINGLES`] places, in `QUEUES`' order.
-    const fn data_place(category: WmmAccessCategory) -> u8 {
-        const {
-            if SINGLES < DATA_SINGLES || SINGLES > u8::MAX as usize {
-                panic!("an access point's layout holds a single's place a queue");
-            }
-        }
-        // The check above bounds both.
-        let first = SINGLES.saturating_sub(DATA_SINGLES) as u8;
-        let offset = match category {
-            WmmAccessCategory::Voice => 0,
-            WmmAccessCategory::Video => 1,
-            WmmAccessCategory::BestEffort => 2,
-            WmmAccessCategory::Background => 3,
-        };
-        first.saturating_add(offset)
-    }
-}
-
-/// The sink of an engine's singles' ends, over the engine's fields and
-/// the turn's.
-macro_rules! ends {
-    ($engine:expr, $turn:expr) => {
-        SingleEnds {
-            lanes: &mut $engine.lanes,
-            singles: &mut $engine.singles,
-            queues: &mut $engine.queues,
-            rates: &mut *$turn.rates,
-            events: &mut *$turn.events,
-            told: &mut *$turn.told,
-            now: $turn.now,
-        }
-    };
-}
-use ends;
-
-/// The sink of the singles' ends and the TBTT: an access point's data's
-/// singles settle; a single of the controller gives its place and its
-/// queue's right back. The engine holds every queue's right while the data
-/// flows, so the port gives back only what the engine lent it.
-struct SingleEnds<
-    'a,
-    'id,
-    K,
-    R,
-    E,
-    C,
-    M,
-    const PEERS: usize,
-    const POOL: usize,
-    const SINGLES: usize,
-> {
-    lanes: &'a mut [Lane<'id, K>; 4],
-    singles: &'a mut [Slot<SinglePlace<'id>>; SINGLES],
-    queues: &'a mut TxQueues<M, POOL, PEERS>,
-    rates: &'a mut R,
-    events: &'a mut E,
-    told: &'a mut C,
-    now: Instant,
-}
-
-impl<
-    'id,
-    K,
-    A: Copy,
-    D: Copy,
-    R: Rates<'id, K>,
-    E: EventSink<DataEvent>,
-    C: Told,
-    M,
-    const PEERS: usize,
-    const POOL: usize,
-    const SINGLES: usize,
-> PortSink<'id, A, D> for SingleEnds<'_, 'id, K, R, E, C, M, PEERS, POOL, SINGLES>
-{
-    fn single_ended(
-        &mut self,
-        outcome: SingleOutcome<A, D>,
-        place: SinglePlace<'id>,
-        queue: QueueRight<'id>,
-    ) {
-        let lane = queue.category().select_mut(self.lanes);
-        let Lane::Air(flight) = core::mem::replace(lane, Lane::Free(queue)) else {
-            // Not the data's single: its place goes back where it was.
-            if let Some(slot) = self.singles.get_mut(usize::from(place.index())) {
-                *slot = Slot::Here(place);
-            }
-            return;
-        };
-        if let Some(slot) = self.singles.get_mut(usize::from(place.index())) {
-            *slot = Slot::Here(place);
-        }
-        let delivered = matches!(outcome, TxOutcome::Ended(SingleEnd::Delivered { .. }));
-        if !delivered {
-            report(self.events, || {
-                DataEvent::DataLost(crate::plane::single_loss(&outcome))
-            });
-        }
-        self.queues.charge(
-            flight.queue,
-            single_cost(&flight.plan, flight.psdu, &outcome),
-        );
-        self.rates.learn(
-            flight.peer,
-            RateLesson::<A, (), D>::Single(outcome),
-            self.now,
-        );
-        self.queues.unblock();
-    }
-
-    fn tbtt(&mut self, event: TbttEvent) {
-        self.told.tbtt(event);
-    }
-}
-
-impl<
-    'id,
-    P: DataPort<'id>,
-    T: TxKey,
-    const PEERS: usize,
-    const POOL: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> Sections<'id, P, T, PEERS>
-    for Engine<'id, P, Singles, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
-where
-    P::Ack: Copy,
-    P::Denial: Copy,
-{
-    fn route<N: Network<P::Memory>>(
-        &self,
-        _seal: Seal,
-        network: &N,
-        msdu: &OutboundMsdu<P::Memory>,
-    ) -> Result<QueueId, IntakeRefusal> {
-        let frame = network.frame(&msdu.memory, msdu.length);
-        let Some(&destination) = frame.first_chunk::<6>() else {
-            return Err(IntakeRefusal::ShortFrame);
-        };
-        let peer = self
-            .peers
-            .iter()
-            .zip(0_u8..)
-            .find_map(|(entry, peer)| match entry {
-                Entry::Linked { link, .. } if link.client.get() == destination => {
-                    Some((peer, link))
-                }
-                _ => None,
-            });
-        let Some((peer, link)) = peer else {
-            return Err(IntakeRefusal::NoLink);
-        };
-        let tid = match link.qos {
-            PeerQos::Qos => msdu.priority,
-            PeerQos::NonQos => WmmUserPriority::UP0,
-        };
-        QueueId::new(peer, tid).ok_or(IntakeRefusal::NoLink)
-    }
-
-    fn fill<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        _seal: Seal,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-        taken: &mut u8,
-    ) -> u8 {
-        let mut moved: u8 = 0;
-        while *taken < self.budget {
-            let Gate::Open(_) = &self.gate else {
-                break;
-            };
-            let Some(queue) = self.queues.select(None) else {
-                break;
-            };
-            let tid = queue.tid();
-            let category = tid.access_category();
-            let free = matches!(category.select(&self.lanes), Lane::Free(_));
-            let carries = matches!(
-                self.entry(queue.peer()),
-                Some(Entry::Linked { carrying: Carrying::Carrying, hold, .. }) if *hold != Some(tid)
-            );
-            if !free || !carries {
-                // This queue waits for its hardware queue, or for its link.
-                self.queues.block(queue);
-                continue;
-            }
-            let Some(msdu) = self.queues.pop(queue) else {
-                break;
-            };
-            *taken = taken.saturating_add(1);
-            moved = moved.saturating_add(1);
-            self.send(queue, msdu, turn);
-        }
-        moved
-    }
-
-    fn publish<N, R: Rates<'id, P::Caps>, E, C: Told>(
-        &mut self,
-        _seal: Seal,
-        _turn: &mut Turn<'_, P, N, R, E, C>,
-    ) -> Option<PpduPlan> {
-        // A single goes as it is written: no arena is published.
-        None
-    }
-
-    fn next_queue(&self, _seal: Seal) -> Option<QueueId> {
-        self.queues.select(None).filter(|queue| {
-            matches!(
-                queue.tid().access_category().select(&self.lanes),
-                Lane::Free(_)
-            )
-        })
-    }
-
-    fn ended<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        _seal: Seal,
-        facts: TxFacts,
-        tbtt: Signal,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) {
-        turn.port
-            .serve(facts, tbtt, turn.now, &mut ends!(self, turn));
-    }
-
-    fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
-        &mut self,
-        _seal: Seal,
-        _peer: u8,
-        _port: &mut P,
-        _network: &mut N,
-        _events: &mut E,
-    ) {
-        // A client's singles in flight hold no memory of the network: it
-        // went home at the write.
-    }
-
-    fn in_flight(&self, _seal: Seal) -> usize {
-        self.lanes
-            .iter()
-            .filter(|lane| matches!(lane, Lane::Air(_)))
-            .count()
-    }
-
-    fn give_arenas(&mut self, _seal: Seal, arenas: [IdleArena<'id>; 2]) {
-        self.sender = Aside::Here(arenas);
-    }
-
-    fn take_arenas(&mut self, _seal: Seal) -> Option<[IdleArena<'id>; 2]> {
-        match core::mem::replace(&mut self.sender, Aside::Away) {
-            Aside::Here(arenas) => Some(arenas),
-            Aside::Away => None,
-        }
-    }
-
-    fn agreement(
-        &mut self,
-        _seal: Seal,
-        _tid: WmmUserPriority,
-        _size: Option<u16>,
-    ) -> Result<(), Refused> {
-        Err(Refused::NoAgreements)
-    }
-}
-
-impl<
-    'id,
-    P: DataPort<'id>,
-    T: TxKey,
-    const PEERS: usize,
-    const POOL: usize,
-    const SINGLES: usize,
-    const GROUPS: usize,
-    const AGREEMENTS: usize,
-> Engine<'id, P, Singles, T, PEERS, POOL, SINGLES, GROUPS, AGREEMENTS>
-{
-    /// Write `msdu` of `queue` by copy into its queue's data place and
-    /// publish it; its memory goes home at the write. An MSDU that cannot
-    /// go now (its queue's lane busy, the gate not open, no rate) waits at
-    /// its queue's head, the queue blocked until an end; one that can never
-    /// go is refused. No number is drawn for an MSDU that does not go.
-    fn send<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told>(
-        &mut self,
-        queue: QueueId,
-        msdu: OutboundMsdu<P::Memory>,
-        turn: &mut Turn<'_, P, N, R, E, C>,
-    ) {
-        let tid = queue.tid();
-        let category = tid.access_category();
-        let place = Self::data_place(category);
-        let Self {
-            peers,
-            queues,
-            lanes,
-            singles,
-            gate,
-            ..
-        } = self;
-        let refuse = |turn: &mut Turn<'_, P, N, R, E, C>, memory, reason| {
-            report(turn.events, || DataEvent::MsduRefused(reason));
-            turn.network.home(memory);
-        };
-        let Some(Entry::Linked { link, .. }) = peers.get_mut(usize::from(queue.peer())) else {
-            return refuse(turn, msdu.memory, IntakeRefusal::NoLink);
-        };
-        let ready = matches!(category.select(lanes), Lane::Free(_))
-            && matches!(gate, Gate::Open(_))
-            && singles
-                .iter()
-                .any(|slot| matches!(slot, Slot::Here(held) if held.index() == place));
-        let plan = if ready {
-            turn.rates.single(queue.peer(), tid)
-        } else {
-            None
-        };
-        let Some(plan) = plan else {
-            // It waits at its queue's head until an end unblocks it.
-            if let Err(msdu) = queues.push_front(queue, msdu) {
-                report(turn.events, || DataEvent::DataLost(DataLoss::Overflow));
-                turn.network.home(msdu.memory);
-            }
-            queues.block(queue);
-            return;
-        };
-        let frame = turn.network.frame(&msdu.memory, msdu.length);
-        let Some((msdu_header, payload)) = MsduHeader::parse(frame) else {
-            return refuse(turn, msdu.memory, IntakeRefusal::ShortFrame);
-        };
-        let encapsulation = plan_data_encapsulation(
-            DataInterfaceRole::AccessPoint,
-            link.access_point.get(),
-            link.access_point.get(),
-            msdu_header,
-            tid,
-            link.qos,
-            QosAckPolicy::Normal,
-        );
-        let header_len = usize::from(encapsulation.header_len);
-        let length = header_len
-            .checked_add(LLC_SNAP_HEADER_LEN)
-            .and_then(|front| front.checked_add(payload.len()))
-            .and_then(MpduLength::<P::Caps>::new);
-        let Some(length) = length else {
-            return refuse(turn, msdu.memory, IntakeRefusal::TooLong);
-        };
-        let (counter, _key) = link.numbers.data_and_key(tid);
-        let header = MacHeader::decode(&encapsulation.header)
-            .map(|mac| mac.with_sequence_control(counter.peek().sequence_control()));
-        let described = header
-            .and_then(|mac| HeaderSpec::from_mac_header(mac, IndividualAddress::new))
-            .and_then(AckHeader::new)
-            .and_then(|header| SizedFrame::new(header, length));
-        let (Some(header), Some(described)) = (header, described) else {
-            // The header the encapsulation wrote names an individual
-            // client and holds in the MPDU: this does not happen.
-            return refuse(turn, msdu.memory, IntakeRefusal::TooLong);
-        };
-        // Found ready above: the gate is open, the lane free, the place
-        // here; a part that is not leaves every part as it was.
-        let Gate::Open(gate) = &*gate else {
-            return refuse(turn, msdu.memory, IntakeRefusal::NoLink);
-        };
-        let lane = category.select_mut(lanes);
-        let right = match core::mem::replace(lane, Lane::Away) {
-            Lane::Free(right) => right,
-            other => {
-                *lane = other;
-                return refuse(turn, msdu.memory, IntakeRefusal::NoLink);
-            }
-        };
-        let Some(mut place) = singles.iter_mut().find_map(|slot| match slot {
-            Slot::Here(held) if held.index() == place => slot.lend(),
-            _ => None,
-        }) else {
-            *lane = Lane::Free(right);
-            return refuse(turn, msdu.memory, IntakeRefusal::NoLink);
-        };
-        let _number = counter.take();
-        let llc_snap = encapsulation.llc_snap;
-        turn.port.write_single(&mut place, |buffer| {
-            let octets = header
-                .octets()
-                .chain(llc_snap)
-                .chain(payload.iter().copied());
-            for (out, octet) in buffer.iter_mut().zip(octets) {
-                *out = octet;
-            }
-            length
-        });
-        // Copied out: the network's memory goes home at the write.
-        turn.network.home(msdu.memory);
-        let frame = TxFrame::Individual {
-            frame: described,
-            plan,
-        };
-        turn.port
-            .publish_single(place, right, gate, &frame, turn.now);
-        // An MPDU's length is far below `u32::MAX`.
-        let psdu =
-            u32::try_from(length.get()).map_or(u32::MAX, |mpdu| mpdu.saturating_add(FCS_LEN));
-        *lane = Lane::Air(InFlight {
-            peer: queue.peer(),
-            queue,
-            plan,
-            psdu,
-        });
     }
 }
 

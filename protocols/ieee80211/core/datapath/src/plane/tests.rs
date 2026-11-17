@@ -117,7 +117,7 @@ fn once<R>(rate: R) -> RetryPlan<R> {
 
 /// The plane over a running model installation.
 struct World<'id> {
-    port: ModelPort<'id, SINGLES>,
+    port: ModelPort<'id, SINGLES, 0>,
     gate: GateOpen<'id>,
     plane: DataPlane<'id, ModelCaps>,
     single: PortRate<'id, ModelCaps>,
@@ -140,11 +140,10 @@ impl<'id> World<'id> {
     /// The plane whose aggregates go at `rate`, its singles at 24 Mb/s.
     fn at(model: Installed<'id>, link: DataLink, rate: PhyRate) -> Self {
         let Installed {
-            port, data, gate, ..
+            port, arenas, gate, ..
         } = model;
-        let mut plane = DataPlane::new();
-        plane.give(data.arenas);
-        plane.handover(link).ok().unwrap();
+        let mut plane = DataPlane::new(arenas);
+        plane.link(link);
         plane.aggregate_rate(Some(AggregateRate {
             rate,
             max_subframes: 8,
@@ -190,7 +189,7 @@ impl<'id> World<'id> {
         let link = ModelLink {
             protected: self
                 .plane
-                .link
+                .current()
                 .is_some_and(|link| link.header.protection() == LinkProtection::Ccmp),
         };
         let intake = self
@@ -206,20 +205,32 @@ impl<'id> World<'id> {
         assert_eq!(self.take(tag, tid), Intake::Taken(tid));
     }
 
-    /// The rates of a plan.
-    fn how(
+    /// The PPDUs a plan goes as: a single's and an aggregate's (the plane
+    /// takes the spacing from its plan).
+    fn ppdus(
         single: PortRate<'id, ModelCaps>,
         aggregate: AmpduRate<'id, ModelCaps>,
+    ) -> [Ppdu<'id, ModelCaps>; 2] {
+        [
+            Ppdu::Single(once(single)),
+            Ppdu::Aggregate {
+                rate: aggregate,
+                spacing: MpduStartSpacing::new(0).unwrap(),
+                protection: Protection::None,
+                alone: once(single),
+            },
+        ]
+    }
+
+    /// The PPDU of `plan`, lent.
+    fn how(
+        ppdus: &[Ppdu<'id, ModelCaps>; 2],
     ) -> impl FnOnce(PpduPlan) -> Option<Ppdu<'id, ModelCaps>> {
+        let [single, aggregate] = *ppdus;
         move |plan| {
             Some(match plan.kind {
-                PpduKind::Single => Ppdu::Single(once(single)),
-                PpduKind::Aggregate { spacing } => Ppdu::Aggregate {
-                    rate: aggregate,
-                    spacing,
-                    protection: Protection::None,
-                    alone: once(single),
-                },
+                PpduKind::Single => single,
+                PpduKind::Aggregate { .. } => aggregate,
             })
         }
     }
@@ -227,7 +238,8 @@ impl<'id> World<'id> {
     /// Publish the next arena; its plan and the fronts the model sent.
     fn publish(&mut self) -> (PpduPlan, Vec<Vec<u8>>) {
         let now = self.now();
-        let how = Self::how(self.single, self.aggregate);
+        let ppdus = Self::ppdus(self.single, self.aggregate);
+        let how = Self::how(&ppdus);
         let plan = self
             .plane
             .publication(&mut self.port, &self.gate, now, how)
@@ -248,7 +260,8 @@ impl<'id> World<'id> {
 
     fn settle_with(&mut self, events: &mut impl EventSink<DataEvent>) -> Settled<(), (), ()> {
         let now = self.now();
-        let how = Self::how(self.single, self.aggregate);
+        let ppdus = Self::ppdus(self.single, self.aggregate);
+        let how = Self::how(&ppdus);
         let returned = &mut self.returned;
         let settled = self
             .plane
@@ -727,12 +740,9 @@ fn key_and_link(model: Installed<'_>) {
     assert_eq!(reason, IntakeRefusal::TooLong);
     world.taken(3, BE);
     let returned = &mut world.returned;
-    assert!(
-        world
-            .plane
-            .stop(&mut world.port, |memory| returned.push(memory), &mut ())
-            .is_some()
-    );
+    world
+        .plane
+        .stop(&mut world.port, |memory| returned.push(memory), &mut ());
     // The numbers stay the station's, advanced past every frame taken.
     let key = world.key.as_ref().unwrap();
     assert_eq!(
@@ -753,18 +763,16 @@ fn round_trip(model: Installed<'_>) {
         world.taken(tag, BE);
     }
     let returned = &mut world.returned;
-    let link = world
+    let Some(&link) = world.plane.current() else {
+        panic!("the plane holds its link");
+    };
+    world
         .plane
-        .stop(&mut world.port, |memory| returned.push(memory), &mut ())
-        .unwrap();
+        .stop(&mut world.port, |memory| returned.push(memory), &mut ());
     assert_eq!(world.returned_sequences(), [0, 1, 2]);
     assert_eq!(world.sequences[0].peek().get(), 3);
     assert_eq!(world.sequences[5].peek().get(), 0);
-    assert!(world.plane.handover(link).is_ok());
-    assert!(matches!(
-        world.plane.handover(link),
-        Err((_, HandoverRefused::Connected))
-    ));
+    world.plane.link(link);
     world.taken(3, BE);
     let (plan, frames) = world.publish();
     assert_eq!(plan.kind, PpduKind::Single);
@@ -1132,28 +1140,27 @@ fn he_publication(link: DataLink, rate: PhyRate, frames: u8) -> Vec<Protection> 
         let single = world.port.rate(rate).unwrap();
         let aggregate = world.aggregate;
         let now = world.now();
+        let ppdus = [
+            Ppdu::Single(
+                once(single)
+                    .then(RetryStage {
+                        rate: single,
+                        transmissions: NonZeroU8::MIN,
+                        protection: Protection::None,
+                    })
+                    .ok()
+                    .unwrap(),
+            ),
+            Ppdu::Aggregate {
+                rate: aggregate,
+                spacing: MpduStartSpacing::new(0).unwrap(),
+                protection: Protection::None,
+                alone: once(single),
+            },
+        ];
         world
             .plane
-            .publication(&mut world.port, &world.gate, now, |plan| {
-                Some(match plan.kind {
-                    PpduKind::Single => Ppdu::Single(
-                        once(single)
-                            .then(RetryStage {
-                                rate: single,
-                                transmissions: NonZeroU8::MIN,
-                                protection: Protection::None,
-                            })
-                            .ok()
-                            .unwrap(),
-                    ),
-                    PpduKind::Aggregate { spacing } => Ppdu::Aggregate {
-                        rate: aggregate,
-                        spacing,
-                        protection: Protection::None,
-                        alone: once(single),
-                    },
-                })
-            })
+            .publication(&mut world.port, &world.gate, now, World::how(&ppdus))
             .unwrap();
         let publication = world.port.published().last().unwrap();
         assert_eq!(

@@ -17,6 +17,7 @@ oer-protocols-ieee80211-core-upper-mac = { path = "../upper-mac" }
 oer-protocols-ieee80211-wire = { path = "../../wire" }
 
 [dev-dependencies]
+oer-tools-test-ui-cases = { path = "../../../../tools/test/ui-cases" }
 oer-protocols-ieee80211-testing-model = { path = "../../testing/model" }
 oer-protocols-radio-port = { path = "../../../radio/port", features = ["test-support"] }
 oer-protocols-radio-regulatory = { path = "../../../radio/regulatory", features = ["test-support"] }
