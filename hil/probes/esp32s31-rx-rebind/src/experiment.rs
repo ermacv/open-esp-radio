@@ -1,15 +1,20 @@
-//! TEMPORARY experiment: one live RX ring run in four time segments: fixed
-//! binding A, rebind B, rebind B, then A′, fixed binding on the already
-//! changed bindings (late-write observation, not a restored control), with
-//! the same detach cadence in every segment. Only completed
-//! single-descriptor units strictly before the frozen LAST are detached;
-//! LAST, the descriptor NEXT names and R are never touched.
+//! TEMPORARY experiment (`tasks/165`, branch `probe/rx-rebind-2`, never
+//! merged): one live RX ring run in segments that alternate a fixed binding
+//! and a rebind, each under a hold-back of 8 and of 1 descriptors
+//! ([`ARMS`]). A unit is taken only when at least the hold's completed
+//! descriptors lie between it and the frozen LAST and NEXT does not name it;
+//! LAST, the descriptor NEXT names and R are never touched. In a rebind
+//! segment every such unit is rebound; in a fixed one, one detach every
+//! [`ACTION_MS`] checks the window. A retired spare is held two laps, its
+//! CRC checked and returned to the bank; every [`KEEP_EVERY`]th is kept to
+//! the run's end, and spares from [`POOL_END`] are never bound.
 //!
 //! Every buffer the walker can reach is a spare of the bank; the probe
 //! reads spares only by the bank's volatile copies.
 use super::{BUFFER, COUNT, Spares, Storage, usb};
+use crate::case_c::{Case, byte};
 use crate::crc::{CRC32, crc32};
-use crate::verdict::{Counts, Kind, LATE_SEGMENT, Observations, REBIND_SEGMENT, SEGMENTS};
+use crate::verdict::{ARMS, Counts, Kind, Observations, RESERVE_BUCKETS, SEGMENTS};
 use bytemuck::Zeroable;
 use core::fmt::Write as _;
 use oer_chips_esp32s31_hal::{
@@ -40,12 +45,27 @@ const UNITS_PER_SCAN: usize = 8;
 const RETIRED_CHECKS_PER_SCAN: usize = 2;
 const SPARE_CHECKS_PER_SCAN: usize = 1;
 const VIOLATION_CAPACITY: usize = 16;
+/// The pool the rebinds draw from and return to; spares from here on are
+/// never bound and keep their canary to the run's end.
+const POOL_END: usize = 176;
+/// Every so many retirements one is kept to the run's end.
+const KEEP_EVERY: u32 = 8;
+/// A retired spare returns after this many descriptors: two laps.
+const RETURN_AFTER: u32 = 2 * COUNT as u32;
+/// The Retry flag of Frame Control's second octet (IEEE 802.11-2020
+/// 9.2.4.1.6), the MAC's.
+const RETRY: u8 = 0x08;
 /// Bytes compared between the HAL's copy and the bound spare.
 const COPY_BYTES: usize = 64;
 /// The words of one spare.
 const WORDS: usize = BUFFER / 4;
 const _: () = {
-    if !BUFFER.is_multiple_of(4) || COPY_BYTES > BUFFER || COUNT > RX_REBIND_SPARES {
+    if !BUFFER.is_multiple_of(4)
+        || COPY_BYTES > BUFFER
+        || COUNT > RX_REBIND_SPARES
+        || POOL_END > RX_REBIND_SPARES
+        || POOL_END <= COUNT
+    {
         panic!("experiment geometry");
     }
 };
@@ -80,9 +100,20 @@ struct Retired {
 #[derive(Zeroable)]
 pub(super) struct State {
     counts: [Counts; SEGMENTS],
-    retired: [Retired; RX_REBIND_SPARES],
-    retired_len: usize,
-    retired_cursor: usize,
+    /// Retirements waiting their two laps, oldest first.
+    pending: [Retired; RX_REBIND_SPARES],
+    pending_head: usize,
+    pending_len: usize,
+    /// Retirements kept to the run's end.
+    kept: [Retired; RX_REBIND_SPARES],
+    kept_len: usize,
+    kept_cursor: usize,
+    /// The unbound spares of the pool, a ring of spare numbers.
+    free: [u8; RX_REBIND_SPARES],
+    free_head: usize,
+    free_len: usize,
+    retired_total: u32,
+    returned_total: u32,
     violations: [Violation; VIOLATION_CAPACITY],
     violations_len: usize,
     violations_total: u32,
@@ -92,15 +123,18 @@ pub(super) struct State {
     /// Per descriptor, the segment + 1 of a rebind whose new spare has
     /// received no checked frame yet; zero otherwise.
     fresh: [u32; COUNT],
-    next_spare: usize,
     spare_cursor: usize,
     descriptors_total: u32,
     hw_last: [u16; 4],
-    retired_final_checks: u32,
-    retired_with_lap: u32,
+    kept_final_checks: u32,
+    kept_with_lap: u32,
+    kept_at_end: u32,
     min_lap_descriptors: u32,
     unbound: u32,
     unbound_final_checks: u32,
+    station: [u8; 6],
+    sender: [u8; 6],
+    sender_known: bool,
 }
 
 /// The HAL's copy of one completed frame.
@@ -115,7 +149,12 @@ pub(super) fn take() -> Result<(&'static mut State, &'static mut Frame), Name<32
     for (descriptor, expected) in state.expected.iter_mut().enumerate() {
         *expected = descriptor as u32;
     }
-    state.next_spare = COUNT;
+    for spare in COUNT..POOL_END {
+        state.free_push(spare)?;
+    }
+    for counts in &mut state.counts {
+        counts.reserve_min = u32::MAX;
+    }
     Ok((state, frame))
 }
 
@@ -140,6 +179,164 @@ fn crc_spare(bank: &Spares, spare: usize) -> Option<u32> {
 }
 
 impl State {
+    fn free_push(&mut self, spare: usize) -> Result<(), Name<32>> {
+        let at = (self.free_head + self.free_len) % RX_REBIND_SPARES;
+        let slot = self.free.get_mut(at).ok_or(name!("free"; 32))?;
+        *slot = u8::try_from(spare).map_err(|_| name!("free-spare"; 32))?;
+        self.free_len = self.free_len.saturating_add(1);
+        Ok(())
+    }
+
+    fn free_pop(&mut self) -> Option<usize> {
+        if self.free_len == 0 {
+            return None;
+        }
+        let spare = usize::from(*self.free.get(self.free_head)?);
+        self.free_head = (self.free_head + 1) % RX_REBIND_SPARES;
+        self.free_len -= 1;
+        Some(spare)
+    }
+
+    fn keep(&mut self, retired: Retired) -> Result<(), Name<32>> {
+        let slot = self
+            .kept
+            .get_mut(self.kept_len)
+            .ok_or(name!("kept-full"; 32))?;
+        *slot = retired;
+        self.kept_len = self.kept_len.saturating_add(1);
+        Ok(())
+    }
+
+    /// Return the pending retirements held two laps: each CRC checked
+    /// unchanged, then given back to the bank. A changed one is a violation
+    /// and is kept out.
+    fn service_pending(
+        &mut self,
+        segment: usize,
+        storage: &'static Storage,
+        bank: &'static Spares,
+    ) -> Result<(), Name<32>> {
+        while self.pending_len != 0 {
+            let retired = *self
+                .pending
+                .get(self.pending_head)
+                .ok_or(name!("pending"; 32))?;
+            if self
+                .descriptors_total
+                .saturating_sub(retired.descriptors_at_retire)
+                < RETURN_AFTER
+            {
+                break;
+            }
+            self.pending_head = (self.pending_head + 1) % RX_REBIND_SPARES;
+            self.pending_len -= 1;
+            let spare = usize::try_from(retired.spare).map_err(|_| name!("pending"; 32))?;
+            bump(&mut self.counts(segment)?.retired_checks);
+            let crc = crc_spare(bank, spare).ok_or(name!("pending-read"; 32))?;
+            if crc != retired.crc {
+                self.record(
+                    segment,
+                    Violation {
+                        kind: Kind::Retired as u32,
+                        segment: segment as u32,
+                        spare: retired.spare,
+                        offset: retired.segment,
+                        expected: retired.crc,
+                        observed: crc,
+                    },
+                );
+                self.keep(retired)?;
+                continue;
+            }
+            if storage.rebind_spare_return(spare).is_err() {
+                self.record(
+                    segment,
+                    Violation {
+                        kind: Kind::Accounting as u32,
+                        segment: segment as u32,
+                        spare: retired.spare,
+                        offset: retired.descriptor,
+                        expected: 0,
+                        observed: 1,
+                    },
+                );
+                self.keep(retired)?;
+                continue;
+            }
+            self.free_push(spare)?;
+            bump(&mut self.returned_total);
+            bump(&mut self.counts(segment)?.returned);
+        }
+        Ok(())
+    }
+
+    /// The sender's frame, checked by content: the counter in every 64
+    /// octets one frame's, every other byte the sender's.
+    fn check_content(&mut self, segment: usize, spare: usize, mpdu: &[u8]) -> Result<(), Name<32>> {
+        let (Some(&[kind, _]), Some(to), Some(from)) = (
+            mpdu.get(0..2)
+                .map(|b| <&[u8; 2]>::try_from(b).ok())
+                .flatten(),
+            mpdu.get(4..10),
+            mpdu.get(10..16),
+        ) else {
+            return Ok(());
+        };
+        if kind != 0x08 || to != self.station {
+            return Ok(());
+        }
+        let Ok(from) = <[u8; 6]>::try_from(from) else {
+            return Ok(());
+        };
+        if !self.sender_known {
+            self.sender = from;
+            self.sender_known = true;
+        }
+        if from != self.sender {
+            return Ok(());
+        }
+        let counter = mpdu
+            .get(Case::Provenance700.counter_at()..Case::Provenance700.counter_at() + 4)
+            .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
+            .map(u32::from_le_bytes);
+        let first = match counter.filter(|c| Case::from_counter(*c) == Some(Case::Provenance700)) {
+            None => Some(Case::Provenance700.counter_at()),
+            Some(counter) => mpdu.iter().enumerate().find_map(|(offset, got)| {
+                let want = byte(
+                    Case::Provenance700,
+                    self.sender,
+                    self.station,
+                    counter,
+                    offset,
+                );
+                let same = match offset {
+                    1 => got & !RETRY == want,
+                    2..4 | 22..24 => true,
+                    _ => *got == want,
+                };
+                (!same).then_some(offset)
+            }),
+        };
+        match first {
+            None => bump(&mut self.counts(segment)?.content_ok),
+            Some(offset) => {
+                bump(&mut self.counts(segment)?.content_bad);
+                self.record(
+                    segment,
+                    Violation {
+                        kind: Kind::Content as u32,
+                        segment: segment as u32,
+                        spare: spare as u32,
+                        offset: offset as u32,
+                        expected: counter.unwrap_or(0),
+                        observed: u32::from(mpdu.get(offset).copied().unwrap_or(0)),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
     fn record(&mut self, segment: usize, violation: Violation) {
         if let Some(counts) = self.counts.get_mut(segment) {
             bump(&mut counts.violations);
@@ -277,6 +474,9 @@ impl State {
             }
             _ => bump(&mut counts.fcs_absent),
         }
+        if let Some(mpdu) = frame.get(layout.frame_offset..body_end) {
+            self.check_content(segment, spare, mpdu)?;
+        }
         // The rebind is covered: the BUFFER word named the new spare, DMA
         // landed this frame in it, and every check ran on it.
         if fresh != 0 && clean {
@@ -287,20 +487,20 @@ impl State {
         Ok(())
     }
 
-    /// Recheck `limit` retired spares round-robin.
+    /// Recheck `limit` kept spares round-robin.
     fn check_retired(
         &mut self,
         segment: usize,
         bank: &'static Spares,
         limit: usize,
     ) -> Result<(), Name<32>> {
-        for _ in 0..limit.min(self.retired_len) {
-            let position = self.retired_cursor % self.retired_len.max(1);
-            self.retired_cursor = position.saturating_add(1);
-            let retired = *self.retired.get(position).ok_or(name!("retired"; 32))?;
-            let spare = usize::try_from(retired.spare).map_err(|_| name!("retired"; 32))?;
+        for _ in 0..limit.min(self.kept_len) {
+            let position = self.kept_cursor % self.kept_len.max(1);
+            self.kept_cursor = position.saturating_add(1);
+            let retired = *self.kept.get(position).ok_or(name!("kept"; 32))?;
+            let spare = usize::try_from(retired.spare).map_err(|_| name!("kept"; 32))?;
             bump(&mut self.counts(segment)?.retired_checks);
-            let crc = crc_spare(bank, spare).ok_or(name!("retired-read"; 32))?;
+            let crc = crc_spare(bank, spare).ok_or(name!("kept-read"; 32))?;
             if crc != retired.crc {
                 self.record(
                     segment,
@@ -399,8 +599,10 @@ fn reload(ring: &mut RxRingLive<'_, COUNT>, access: &mut RadioAccess) -> Result<
     .map_err(|_| name!("reload"; 32))
 }
 
-/// Serve one scan: up to `UNITS_PER_SCAN` units, each checked and recycled
-/// through the production append; at most one detach when `action` is due.
+/// Serve one scan: up to `UNITS_PER_SCAN` units, each taken only outside
+/// the segment's hold, checked and recycled through the production append; a
+/// rebind segment rebinds every one, a fixed segment detaches one when
+/// `action` is due.
 #[allow(clippy::too_many_arguments)]
 fn scan(
     state: &mut State,
@@ -413,13 +615,13 @@ fn scan(
     access: &mut RadioAccess,
     irq: &mut MacInterruptRegisters,
 ) -> Result<(), Name<32>> {
-    let rebind = *REBIND_SEGMENT.get(segment).ok_or(name!("segment"; 32))?;
+    let arm = *ARMS.get(segment).ok_or(name!("segment"; 32))?;
     bump(&mut state.counts(segment)?.services);
     if irq.mac_interrupt_raw().fatal_assertion_raw().is_some() {
         return Err(name!("fatal-raw"; 32));
     }
     let status = irq.mac_interrupt_status();
-    irq.acknowledge_mac_interrupts(status.retain_rx_causes(MacRxInterrupts::ALL));
+    irq.acknowledge_mac_interrupts(status.retain_rx_causes(MacRxInterrupts::all()));
     storage
         .observe_reserved(ring, access.rx_dma())
         .map_err(|_| name!("reserved"; 32))?;
@@ -451,6 +653,16 @@ fn scan(
             .completion_frontier_head(ring)
             .map_err(|_| name!("head"; 32))?
             .ok_or(name!("head-none"; 32))?;
+        // The hold: at least `arm.hold` completed descriptors between the
+        // head and the frozen LAST, and NEXT not naming the head.
+        let base = ring.descriptor_base();
+        let last = cursor_ring_index(frozen.last_descriptor_low(), base, COUNT);
+        let next = cursor_ring_index(frozen.next_descriptor_low(), base, COUNT);
+        let behind = last.map(|last| (last + COUNT - head) % COUNT);
+        if next == Some(head) || behind.is_none_or(|behind| behind < arm.hold) {
+            bump(&mut state.counts(segment)?.held_back);
+            break;
+        }
         let length = usize::from(
             storage
                 .descriptors()
@@ -470,12 +682,11 @@ fn scan(
                     frame.get_mut(..length).ok_or(name!("copy-range"; 32))?,
                 )
                 .map_err(|_| name!("copy"; 32))?;
-        // Strictly before the frozen LAST and not the descriptor NEXT names.
-        let before_last = {
-            let base = ring.descriptor_base();
-            let last = cursor_ring_index(frozen.last_descriptor_low(), base, COUNT);
-            let next = cursor_ring_index(frozen.next_descriptor_low(), base, COUNT);
-            last.is_some() && last != Some(head) && next != Some(head)
+        // The armed reserve a rebind would be linked behind: the descriptors
+        // from NEXT through the published tail.
+        let reserve = match next {
+            Some(next) => (ring.topology_snapshot().tail_index + COUNT - next) % COUNT + 1,
+            None => 0,
         };
         let mut unit = storage
             .take_completed_unit(ring, frozen)
@@ -500,16 +711,14 @@ fn scan(
             unit.retain_for_deferred_recycle();
             return Err(error);
         }
-        if copied && *action {
-            if !before_last {
-                bump(&mut state.counts(segment)?.not_before_last);
-            } else if let Err(error) = act(state, segment, rebind, bank, &mut unit, frozen, access)
-            {
+        if copied && (arm.rebind || *action) {
+            if let Err(error) = act(
+                state, segment, arm.rebind, bank, &mut unit, frozen, access, reserve,
+            ) {
                 unit.retain_for_deferred_recycle();
                 return Err(error);
-            } else {
-                *action = false;
             }
+            *action = false;
         }
         let Some(credit) = unit.retain_discard() else {
             return Err(name!("recycle-frontier"; 32));
@@ -525,15 +734,18 @@ fn scan(
         }
         reload(ring, access)?;
     }
+    state.service_pending(segment, storage, bank)?;
     state.check_retired(segment, bank, RETIRED_CHECKS_PER_SCAN)?;
     state.check_spares(segment, storage, bank, SPARE_CHECKS_PER_SCAN)?;
     state.sample_hardware(segment, access)
 }
 
 /// Detach the taken unit in place. A rebind segment binds its next re-arm to
-/// the next unbound spare and retires the old one with its CRC taken now; a
-/// fixed segment rechecks the old spare once more before the same re-arm
-/// (a short window only).
+/// an unbound spare of the pool and retires the old one with its CRC taken
+/// now, recording the armed reserve it is linked behind; a fixed segment
+/// rechecks the old spare once more before the same re-arm (a short window
+/// only).
+#[allow(clippy::too_many_arguments)]
 fn act(
     state: &mut State,
     segment: usize,
@@ -542,6 +754,7 @@ fn act(
     unit: &mut RxDmaCompletedUnit<'static, '_, '_, COUNT, BUFFER, BUFFER>,
     frozen: RxFrozenCursor,
     access: &mut RadioAccess,
+    reserve: usize,
 ) -> Result<(), Name<32>> {
     let index = unit.head_index();
     unit.detach_before_last(access.rx_dma(), frozen)
@@ -568,28 +781,34 @@ fn act(
         }
         return Ok(());
     }
-    if state.next_spare >= RX_REBIND_SPARES {
+    let Some(spare) = state.free_pop() else {
         bump(&mut state.counts(segment)?.spares_exhausted);
         return Ok(());
-    }
-    let spare = state.next_spare;
+    };
     unit.rebind_next(spare).map_err(|_| name!("rebind"; 32))?;
-    state.next_spare = spare.saturating_add(1);
-    let slot = state
-        .retired
-        .get_mut(state.retired_len)
-        .ok_or(name!("retired-full"; 32))?;
-    *slot = Retired {
+    let retired = Retired {
         spare: old,
         descriptor: index as u32,
         crc,
         segment: segment as u32,
         descriptors_at_retire: state.descriptors_total,
     };
-    state.retired_len = state.retired_len.saturating_add(1);
+    bump(&mut state.retired_total);
+    if state.retired_total % KEEP_EVERY == 0 {
+        state.keep(retired)?;
+    } else {
+        let at = (state.pending_head + state.pending_len) % RX_REBIND_SPARES;
+        *state.pending.get_mut(at).ok_or(name!("pending-full"; 32))? = retired;
+        state.pending_len = state.pending_len.saturating_add(1);
+    }
     *state.expected.get_mut(index).ok_or(name!("expected"; 32))? = spare as u32;
     *state.fresh.get_mut(index).ok_or(name!("fresh"; 32))? = segment as u32 + 1;
-    bump(&mut state.counts(segment)?.rebinds);
+    let counts = state.counts(segment)?;
+    bump(&mut counts.rebinds);
+    if let Some(bucket) = counts.reserve.get_mut(reserve.min(RESERVE_BUCKETS - 1)) {
+        bump(bucket);
+    }
+    counts.reserve_min = counts.reserve_min.min(reserve as u32);
     Ok(())
 }
 
@@ -609,7 +828,8 @@ async fn yield_once() {
     .await;
 }
 
-/// Run the four segments on the started ring.
+/// Run the segments on the started ring.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn run(
     state: &mut State,
     frame: &mut Frame,
@@ -618,7 +838,9 @@ pub(super) async fn run(
     ring: &mut RxRingLive<'_, COUNT>,
     access: &mut RadioAccess,
     irq: &mut MacInterruptRegisters,
+    station: [u8; 6],
 ) -> Result<(), Name<32>> {
+    state.station = station;
     irq.publish_mac_interrupt_mask(MacInterruptMask::STATION);
     access.wifi_mac_hal().start_mac_runtime(ring);
     let start = EmbassyClock.now();
@@ -656,7 +878,7 @@ pub(super) async fn run(
             access,
             irq,
         )?;
-        // An action that found no eligible unit stays due for the next scan.
+        // A fixed segment's action that found no eligible unit stays due.
         if due && !action {
             next_action = now
                 .checked_add(Duration::from_millis(ACTION_MS))
@@ -668,18 +890,29 @@ pub(super) async fn run(
     Ok(())
 }
 
-/// After the walker stopped: recheck every retired spare and every never
-/// bound spare, and the HAL's retirement accounting.
+/// After the walker stopped: recheck every kept and every still pending
+/// retired spare, every never bound spare, and the HAL's accounting.
 pub(super) fn finish(
     state: &mut State,
     storage: &'static Storage,
     bank: &'static Spares,
 ) -> Result<(), Name<32>> {
-    let last = LATE_SEGMENT;
+    let last = SEGMENTS - 1;
+    // The pending ones are kept from here: the run ended before their laps.
+    while state.pending_len != 0 {
+        let retired = *state
+            .pending
+            .get(state.pending_head)
+            .ok_or(name!("pending"; 32))?;
+        state.pending_head = (state.pending_head + 1) % RX_REBIND_SPARES;
+        state.pending_len -= 1;
+        state.keep(retired)?;
+        bump(&mut state.kept_at_end);
+    }
     state.min_lap_descriptors = u32::MAX;
-    for position in 0..state.retired_len {
-        let retired = *state.retired.get(position).ok_or(name!("retired"; 32))?;
-        let spare = usize::try_from(retired.spare).map_err(|_| name!("retired"; 32))?;
+    for position in 0..state.kept_len {
+        let retired = *state.kept.get(position).ok_or(name!("kept"; 32))?;
+        let spare = usize::try_from(retired.spare).map_err(|_| name!("kept"; 32))?;
         if !storage.rebind_spare_retired(spare) {
             state.record(
                 last,
@@ -698,10 +931,10 @@ pub(super) fn finish(
             .saturating_sub(retired.descriptors_at_retire);
         state.min_lap_descriptors = state.min_lap_descriptors.min(held);
         if held >= COUNT as u32 {
-            bump(&mut state.retired_with_lap);
+            bump(&mut state.kept_with_lap);
         }
-        bump(&mut state.retired_final_checks);
-        let crc = crc_spare(bank, spare).ok_or(name!("retired-read"; 32))?;
+        bump(&mut state.kept_final_checks);
+        let crc = crc_spare(bank, spare).ok_or(name!("kept-read"; 32))?;
         if crc != retired.crc {
             state.record(
                 last,
@@ -717,10 +950,10 @@ pub(super) fn finish(
         }
     }
     for spare in 0..RX_REBIND_SPARES {
-        if storage.rebind_spare_unbound(spare) {
+        if storage.rebind_spare_unbound(spare) && spare >= POOL_END {
             bump(&mut state.unbound);
         }
-        if state.check_spare(last, storage, bank, spare)?.is_some() {
+        if spare >= POOL_END && state.check_spare(last, storage, bank, spare)?.is_some() {
             bump(&mut state.unbound_final_checks);
         }
     }
@@ -736,6 +969,7 @@ fn kind(code: u32) -> Option<Kind> {
         Kind::Retired,
         Kind::Spare,
         Kind::Accounting,
+        Kind::Content,
     ]
     .into_iter()
     .find(|kind| *kind as u32 == code)
@@ -747,31 +981,30 @@ pub(super) fn observations(state: &State) -> Observations {
         counts: state.counts,
         violations: state.violations_total,
         first_violation: kind(state.first_violation),
-        retired: state.retired_len as u32,
-        retired_final_checks: state.retired_final_checks,
-        retired_with_lap: state.retired_with_lap,
+        retired: state.retired_total,
+        returned: state.returned_total,
+        kept: state.kept_len as u32,
+        kept_final_checks: state.kept_final_checks,
+        kept_with_lap: state.kept_with_lap,
         unbound: state.unbound,
         unbound_final_checks: state.unbound_final_checks,
     }
 }
 
 pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<(), Name<32>> {
-    let mut line = heapless::String::<640>::new();
-    for (segment, counts) in state.counts.iter().enumerate() {
+    let mut line = heapless::String::<768>::new();
+    for (segment, (counts, arm)) in state.counts.iter().zip(ARMS).enumerate() {
         line.clear();
-        let arm = match (REBIND_SEGMENT.get(segment).copied(), segment) {
-            (Some(true), _) => "rebind",
-            (_, LATE_SEGMENT) => "fixed-late",
-            _ => "fixed",
-        };
         writeln!(
             &mut line,
-            "SEG {segment} arm={arm} services={} units={} descriptors={} chained={} frames={} \
-             prefix_ok={} prefix_err={} fcs_ok={} fcs_bad={} fcs_absent={} \
-             frames_on_rebound={} detached={} window_checks={} rebinds={} covered_rebinds={} \
-             spares_exhausted={} not_before_last={} retired_checks={} spare_checks={} \
-             reload_deferred={} violations={} hw_mpdu={} hw_fcs_error={} hw_buffer_full={} \
-             hw_data_success={}",
+            "SEG {segment} arm={} hold={} services={} units={} descriptors={} chained={} frames={} \
+             prefix_ok={} prefix_err={} fcs_ok={} fcs_bad={} fcs_absent={} content_ok={} \
+             content_bad={} frames_on_rebound={} detached={} window_checks={} rebinds={} \
+             covered_rebinds={} returned={} spares_exhausted={} held_back={} retired_checks={} \
+             spare_checks={} reload_deferred={} violations={} hw_mpdu={} hw_fcs_error={} \
+             hw_buffer_full={} hw_data_success={} reserve_min={} reserve={:?}",
+            if arm.rebind { "rebind" } else { "fixed" },
+            arm.hold,
             counts.services,
             counts.units,
             counts.descriptors,
@@ -782,13 +1015,16 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             counts.fcs_ok,
             counts.fcs_bad,
             counts.fcs_absent,
+            counts.content_ok,
+            counts.content_bad,
             counts.frames_on_rebound,
             counts.detached,
             counts.window_checks,
             counts.rebinds,
             counts.covered_rebinds,
+            counts.returned,
             counts.spares_exhausted,
-            counts.not_before_last,
+            counts.held_back,
             counts.retired_checks,
             counts.spare_checks,
             counts.reload_deferred,
@@ -797,6 +1033,12 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
             counts.hw_fcs_error,
             counts.hw_buffer_full,
             counts.hw_data_success,
+            if counts.rebinds == 0 {
+                0
+            } else {
+                counts.reserve_min
+            },
+            counts.reserve,
         )
         .map_err(|_| name!("format"; 32))?;
         usb::text(console, line.as_bytes())
@@ -806,20 +1048,22 @@ pub(super) async fn dump(state: &State, console: &mut usb::Console) -> Result<()
     line.clear();
     writeln!(
         &mut line,
-        "FINAL retired={} retired_final_checks={} retired_with_lap={} \
-         min_held_descriptors={} unbound={} unbound_final_checks={} spares_used={} \
+        "FINAL retired={} returned={} kept={} kept_at_end={} kept_final_checks={} \
+         kept_with_lap={} min_held_descriptors={} unbound={} unbound_final_checks={} \
          descriptors={} violations={} violations_recorded={}",
-        state.retired_len,
-        state.retired_final_checks,
-        state.retired_with_lap,
-        if state.retired_len == 0 {
+        state.retired_total,
+        state.returned_total,
+        state.kept_len,
+        state.kept_at_end,
+        state.kept_final_checks,
+        state.kept_with_lap,
+        if state.kept_len == 0 {
             0
         } else {
             state.min_lap_descriptors
         },
         state.unbound,
         state.unbound_final_checks,
-        state.next_spare,
         state.descriptors_total,
         state.violations_total,
         state.violations_len,

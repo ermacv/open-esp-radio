@@ -247,7 +247,9 @@ impl RxRebindTable {
     pub(crate) fn return_retired(&self, spare: usize) -> Result<(), RxRingError> {
         let word = u8::try_from(spare + 1).map_err(|_| RxRingError::Count)?;
         let named = |words: &[AtomicU8; RX_REBIND_DESCRIPTORS]| {
-            words.iter().any(|each| each.load(Ordering::Acquire) == word)
+            words
+                .iter()
+                .any(|each| each.load(Ordering::Acquire) == word)
         };
         if named(&self.published) || named(&self.next) {
             return Err(RxRingError::BufferOwnershipConflict);

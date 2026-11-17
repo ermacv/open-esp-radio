@@ -22,6 +22,11 @@ mod phy_pilot;
 mod usb;
 #[cfg(target_arch = "riscv32")]
 use image::*;
+/// Block B's frames: case C's layout, the sender's (`tasks/165`).
+#[cfg(target_arch = "riscv32")]
+#[path = "../../esp32s31-mac-reset/src/case_c.rs"]
+#[allow(dead_code, reason = "the sender's half is esp32s31-mac-reset's")]
+mod case_c;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]
 mod console_write;
 #[cfg_attr(not(target_arch = "riscv32"), allow(dead_code))]

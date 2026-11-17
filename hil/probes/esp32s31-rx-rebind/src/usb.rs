@@ -53,7 +53,7 @@ impl OpenError {
 /// moves the interrupt's part to its handler and routes it. The pads stay
 /// apart, held so that nothing switches them off.
 pub(crate) fn open<const H: u8, C: Controller>(
-    router: &mut Router<C, H>,
+    router: &mut Router<C, H, crate::InterruptTable>,
     token: crate::ConsoleUsb,
 ) -> Result<(Console, UsbPads), OpenError> {
     let (endpoint, interrupt, pads) =

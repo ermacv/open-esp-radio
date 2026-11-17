@@ -5,21 +5,58 @@
 //! A violation fails the run. Without one, the run passes only when every
 //! arm exercised what it claims; otherwise it is an insufficient experiment.
 
-/// The segments of one run and what each is: fixed control A, rebind B,
-/// rebind B, then A′, fixed binding on already changed bindings, an
-/// observation of late writes and not a restored control.
-pub const SEGMENTS: usize = 4;
-pub const REBIND_SEGMENT: [bool; SEGMENTS] = [false, true, true, false];
-pub const LATE_SEGMENT: usize = 3;
+/// One segment's arm: whether it rebinds, and the hold-back `hold`, the
+/// completed descriptors a taken unit keeps between itself and the frozen
+/// LAST (`tasks/165`: 8 comfortably, 1 the port's own condition).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Arm {
+    pub rebind: bool,
+    pub hold: usize,
+}
+
+/// The segments of one run: fixed and rebind alternated, each under both
+/// holds.
+pub const SEGMENTS: usize = 12;
+pub const ARMS: [Arm; SEGMENTS] = {
+    let pattern = [
+        Arm {
+            rebind: false,
+            hold: 8,
+        },
+        Arm {
+            rebind: true,
+            hold: 8,
+        },
+        Arm {
+            rebind: false,
+            hold: 1,
+        },
+        Arm {
+            rebind: true,
+            hold: 1,
+        },
+    ];
+    let mut arms = [pattern[0]; SEGMENTS];
+    let mut at = 0;
+    while at < SEGMENTS {
+        arms[at] = pattern[at % pattern.len()];
+        at += 1;
+    }
+    arms
+};
+/// The holds the run reports apart.
+pub const HOLDS: [usize; 2] = [8, 1];
 
 /// Frames a fixed segment checks at least.
 pub const MIN_FRAMES: u32 = 500;
 /// Detaches with their window check a fixed control segment runs at least.
 pub const MIN_FIXED_DETACHES: u32 = 16;
-/// Rebinds a rebind segment performs at least, each covered: the BUFFER
-/// word changed and a later frame landed in the new spare with every frame
-/// check run.
-pub const MIN_COVERED_REBINDS: u32 = 16;
+/// Covered rebinds each hold performs at least over its segments: the
+/// BUFFER word changed and a later frame landed in the new spare with every
+/// frame check run.
+pub const MIN_COVERED_REBINDS: u32 = 1_000;
+/// The buckets of the armed reserve at a rebind: 0 to 15, then 16 or more.
+pub const RESERVE_BUCKETS: usize = 17;
 
 /// One segment's counters.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -53,6 +90,19 @@ pub struct Counts {
     pub hw_fcs_error: u32,
     pub hw_buffer_full: u32,
     pub hw_data_success: u32,
+    /// Takes left for later: the unit was within the hold of LAST.
+    pub held_back: u32,
+    /// Frames whose counters, every 64 octets, named more than one frame
+    /// or whose bytes differed from the sender's.
+    pub content_bad: u32,
+    /// Frames checked by content (the sender's counted frames).
+    pub content_ok: u32,
+    /// The armed descriptors between NEXT and the tail at each rebind.
+    pub reserve: [u32; RESERVE_BUCKETS],
+    /// The least of them; `u32::MAX` before the first rebind.
+    pub reserve_min: u32,
+    /// Retired spares returned to the bank after two laps and their CRC.
+    pub returned: u32,
 }
 
 /// What a violation found.
@@ -74,6 +124,9 @@ pub enum Kind {
     Spare = 6,
     /// The HAL did not account a retired spare as retired.
     Accounting = 7,
+    /// A committed frame's counters named two frames, or its bytes were not
+    /// the sender's.
+    Content = 8,
 }
 
 impl Kind {
@@ -86,6 +139,7 @@ impl Kind {
             Self::Retired => "retired",
             Self::Spare => "spare",
             Self::Accounting => "accounting",
+            Self::Content => "content",
         }
     }
 }
@@ -96,12 +150,17 @@ pub struct Observations {
     pub counts: [Counts; SEGMENTS],
     pub violations: u32,
     pub first_violation: Option<Kind>,
-    /// Retired spares, each CRC-checked after the walker stopped.
+    /// Retirements: every rebind retires the spare it replaces.
     pub retired: u32,
-    pub retired_final_checks: u32,
-    /// Retired spares that stayed retired while at least one ring lap of
+    /// Of them, returned to the bank after two laps and an unchanged CRC.
+    pub returned: u32,
+    /// Of them, kept to the run's end and CRC-checked after the walker
+    /// stopped.
+    pub kept: u32,
+    pub kept_final_checks: u32,
+    /// Kept spares that stayed retired while at least one ring lap of
     /// descriptors completed past them.
-    pub retired_with_lap: u32,
+    pub kept_with_lap: u32,
     /// Never bound spares, each canary-checked after the walker stopped.
     pub unbound: u32,
     pub unbound_final_checks: u32,
@@ -115,8 +174,6 @@ pub enum Shortfall {
     RebindCoverage,
     RetiredUnchecked,
     RetiredWithoutLap,
-    LateFrames,
-    LateRetiredChecks,
     UnboundUnchecked,
 }
 
@@ -128,8 +185,6 @@ impl Shortfall {
             Self::RebindCoverage => "rebind-coverage",
             Self::RetiredUnchecked => "retired-unchecked",
             Self::RetiredWithoutLap => "retired-without-lap",
-            Self::LateFrames => "late-frames",
-            Self::LateRetiredChecks => "late-retired-checks",
             Self::UnboundUnchecked => "unbound-unchecked",
         }
     }
@@ -158,20 +213,15 @@ pub fn decide(observations: &Observations) -> Verdict {
 }
 
 fn shortfall(observations: &Observations) -> Option<Shortfall> {
-    let mut retired_rebinds = 0u32;
-    for (segment, counts) in observations.counts.iter().enumerate() {
-        let rebind = REBIND_SEGMENT.get(segment).copied().unwrap_or(false);
-        if rebind {
-            retired_rebinds = retired_rebinds.saturating_add(counts.rebinds);
-            if counts.covered_rebinds < MIN_COVERED_REBINDS {
-                return Some(Shortfall::RebindCoverage);
-            }
-        } else if segment == LATE_SEGMENT {
-            if counts.frames < MIN_FRAMES {
-                return Some(Shortfall::LateFrames);
-            }
-            if counts.retired_checks < observations.retired {
-                return Some(Shortfall::LateRetiredChecks);
+    let mut rebinds = 0u32;
+    let mut covered = [0u32; HOLDS.len()];
+    for (counts, arm) in observations.counts.iter().zip(ARMS) {
+        if arm.rebind {
+            rebinds = rebinds.saturating_add(counts.rebinds);
+            if let Some(at) = HOLDS.iter().position(|hold| *hold == arm.hold)
+                && let Some(sum) = covered.get_mut(at)
+            {
+                *sum = sum.saturating_add(counts.covered_rebinds);
             }
         } else {
             if counts.frames < MIN_FRAMES {
@@ -182,12 +232,16 @@ fn shortfall(observations: &Observations) -> Option<Shortfall> {
             }
         }
     }
-    if observations.retired != retired_rebinds
-        || observations.retired_final_checks != observations.retired
+    if covered.iter().any(|sum| *sum < MIN_COVERED_REBINDS) {
+        return Some(Shortfall::RebindCoverage);
+    }
+    if observations.retired != rebinds
+        || observations.returned.saturating_add(observations.kept) != observations.retired
+        || observations.kept_final_checks != observations.kept
     {
         return Some(Shortfall::RetiredUnchecked);
     }
-    if observations.retired_with_lap != observations.retired {
+    if observations.kept_with_lap != observations.kept {
         return Some(Shortfall::RetiredWithoutLap);
     }
     if observations.unbound_final_checks != observations.unbound {
@@ -206,26 +260,34 @@ mod tests {
             window_checks: MIN_FIXED_DETACHES,
             ..Counts::default()
         };
+        // Three rebind segments a hold.
         let rebind = Counts {
             frames: MIN_FRAMES,
-            rebinds: 20,
-            covered_rebinds: 20,
+            rebinds: 400,
+            covered_rebinds: 400,
             ..Counts::default()
         };
-        let late = Counts {
-            frames: MIN_FRAMES,
-            retired_checks: 40,
-            ..Counts::default()
-        };
+        let counts = ARMS.map(|arm| if arm.rebind { rebind } else { fixed });
         Observations {
-            counts: [fixed, rebind, rebind, late],
+            counts,
             violations: 0,
             first_violation: None,
-            retired: 40,
-            retired_final_checks: 40,
-            retired_with_lap: 40,
+            retired: 2_400,
+            returned: 2_300,
+            kept: 100,
+            kept_final_checks: 100,
+            kept_with_lap: 100,
             unbound: 24,
             unbound_final_checks: 24,
+        }
+    }
+
+    #[test]
+    fn both_holds_alternate_with_their_controls() {
+        assert_eq!(ARMS.iter().filter(|arm| arm.rebind).count(), SEGMENTS / 2);
+        for hold in HOLDS {
+            assert!(ARMS.iter().any(|arm| arm.rebind && arm.hold == hold));
+            assert!(ARMS.iter().any(|arm| !arm.rebind && arm.hold == hold));
         }
     }
 
@@ -238,18 +300,8 @@ mod tests {
     fn any_violation_fails_even_with_full_coverage() {
         let mut observations = covered();
         observations.violations = 1;
-        observations.first_violation = Some(Kind::Retired);
-        assert_eq!(decide(&observations), Verdict::Fail(Kind::Retired));
-    }
-
-    #[test]
-    fn a_violation_fails_a_run_without_coverage() {
-        let observations = Observations {
-            violations: 2,
-            first_violation: Some(Kind::Binding),
-            ..Observations::default()
-        };
-        assert_eq!(decide(&observations), Verdict::Fail(Kind::Binding));
+        observations.first_violation = Some(Kind::Content);
+        assert_eq!(decide(&observations), Verdict::Fail(Kind::Content));
     }
 
     #[test]
@@ -261,10 +313,12 @@ mod tests {
     }
 
     #[test]
-    fn rebinds_without_a_landed_frame_are_insufficient() {
+    fn one_hold_short_of_its_rebinds_is_insufficient() {
         let mut observations = covered();
-        if let Some(counts) = observations.counts.get_mut(2) {
-            counts.covered_rebinds = MIN_COVERED_REBINDS - 1;
+        for (counts, arm) in observations.counts.iter_mut().zip(ARMS) {
+            if arm.rebind && arm.hold == 1 {
+                counts.covered_rebinds = 300;
+            }
         }
         assert_eq!(
             decide(&observations),
@@ -273,9 +327,9 @@ mod tests {
     }
 
     #[test]
-    fn a_retired_spare_without_a_final_check_is_insufficient() {
+    fn a_retirement_neither_returned_nor_kept_is_insufficient() {
         let mut observations = covered();
-        observations.retired_final_checks = 39;
+        observations.returned -= 1;
         assert_eq!(
             decide(&observations),
             Verdict::Insufficient(Shortfall::RetiredUnchecked)
@@ -283,24 +337,12 @@ mod tests {
     }
 
     #[test]
-    fn a_retired_spare_held_less_than_a_lap_is_insufficient() {
+    fn a_kept_spare_held_less_than_a_lap_is_insufficient() {
         let mut observations = covered();
-        observations.retired_with_lap = 39;
+        observations.kept_with_lap = 99;
         assert_eq!(
             decide(&observations),
             Verdict::Insufficient(Shortfall::RetiredWithoutLap)
-        );
-    }
-
-    #[test]
-    fn a_late_segment_without_frames_is_insufficient() {
-        let mut observations = covered();
-        if let Some(counts) = observations.counts.get_mut(LATE_SEGMENT) {
-            counts.frames = 0;
-        }
-        assert_eq!(
-            decide(&observations),
-            Verdict::Insufficient(Shortfall::LateFrames)
         );
     }
 }

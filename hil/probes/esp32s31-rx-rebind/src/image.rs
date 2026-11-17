@@ -38,7 +38,7 @@ mod experiment;
 
 const COUNT: usize = 32;
 /// One buffer holds a whole 1500-byte MSDU frame with its RX-control prefix.
-const BUFFER: usize = 1664;
+const BUFFER: usize = 640;
 const CHANNEL: u8 = 13;
 type Storage = RxDmaStorage<COUNT, BUFFER, BUFFER>;
 type Spares = RxSpareBank<{ BUFFER / 4 }>;
@@ -52,6 +52,7 @@ type Backend = Esp32s31Radio<
 static DIRECT_BACKEND: StaticCell<Backend> = StaticCell::new();
 struct DirectOutput {
     access: oer_chips_esp32s31_hal::system::owner::RadioAccess,
+    station: [u8; 6],
     _clocks: oer_chips_esp32s31_hal::radio::ieee80211::client::WifiClocksOn,
 }
 static DIRECT_OUTPUT: StaticCell<DirectOutput> = StaticCell::new();
@@ -127,10 +128,11 @@ fn main(
         oer_chips_esp32s31_platform_runtime::Esp32s31,
         _,
         _,
+        _,
     >(
         handoff,
         root.into_runtime(),
-        INTERRUPT_TABLE,
+        InterruptTable,
         board::BootstrapPsram,
         oer_chips_esp32s31_platform_runtime::phy_fault::report_previous,
         |hardware| {
@@ -194,7 +196,7 @@ fn main(
         fail(oer_portable_diagnostics::name!("direct-backend"; 32));
     };
     let timer = runtime_system_timer;
-    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _>(
+    let mut timer_ready = oer_chips_family_platform_executor::init::<Esp32s31, 2, _, _, _, _>(
         oer_chips_family_platform_executor::systimer::SystemTimer {
             comparators: timer.comparators,
             counter: timer.counter,
@@ -204,7 +206,7 @@ fn main(
         timer.alarm0,
     )
     .unwrap_or_else(|failure| failure.reset());
-    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _>(
+    oer_chips_family_platform_executor::bind::<Esp32s31, 0, _, _, _, _>(
         &mut timer_ready,
         adopted.router(),
         interrupts.app_alarm,
@@ -403,6 +405,7 @@ fn direct_future(
         let (access, clocks) = tracked.wifi.into_running();
         Ok(DirectOutput {
             access,
+            station,
             _clocks: clocks,
         })
     }
@@ -561,6 +564,7 @@ async fn run_direct(
             )
             .await;
     };
+    let station = output.station;
     let access = &mut output.access;
     let (state, frame) = experiment::take()?;
     // Every buffer the walker can reach is a spare, painted while it is
@@ -586,10 +590,19 @@ async fn run_direct(
     // anything runs.
     usb::text(
         console,
-        b"REBIND begin v=2 channel=13 count=32 buffer=1664 spares=96 pool=64 segment_ms=2500 action_ms=80 arms=fixed,rebind,rebind,fixed-late\n",
+        b"REBIND begin v=3 channel=13 count=32 buffer=640 spares=192 pool=32..176 reserved=176..192 segment_ms=2500 holds=8,1 arms=fixed8,rebind8,fixed1,rebind1x3\n",
     )
     .await
     .map_err(|_| oer_portable_diagnostics::name!("console-write"; 32))?;
+    // The port's order (case D, `tasks/156`): the open receive and the
+    // station's policies before the walker, the MAC's runtime after it.
+    {
+        let broadcast = [0xff; 6];
+        let mut hal = access.wifi_mac_hal();
+        hal.configure_open_promiscuous_receive();
+        hal.configure_station_receive_policy(broadcast);
+        hal.configure_station_scan_policy(broadcast);
+    }
     let mut ring = stopped_ring
         .try_start(access.rx_dma())
         .map_err(|_| oer_portable_diagnostics::name!("rx-start"; 32))?;
@@ -601,9 +614,18 @@ async fn run_direct(
         Err(oer_portable_diagnostics::name!("initial-fatal"; 32))
     } else {
         mac_irq.acknowledge_mac_interrupt_raw(stale);
-        access.wifi_mac_hal().configure_open_promiscuous_receive();
         mac_irq.mask_all_mac_interrupts();
-        experiment::run(state, frame, storage, bank, &mut ring, access, &mut mac_irq).await
+        experiment::run(
+            state,
+            frame,
+            storage,
+            bank,
+            &mut ring,
+            access,
+            &mut mac_irq,
+            station,
+        )
+        .await
     };
     let mut stop = ProbeStop {
         access,
