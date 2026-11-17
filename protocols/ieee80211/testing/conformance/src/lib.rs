@@ -34,11 +34,11 @@ use oer_protocols_ieee80211_contracts_port::{
     AckHeader, HeaderSpec, Protection, RetryPlan, RetryStage, SizedFrame, TxFrame,
 };
 use oer_protocols_ieee80211_contracts_port::{
-    AmpduRate, ArenaOutcome, Command, CommandEnd, CommandPlace, CommandPoll, DataPort, DataRights,
-    FrameSet, GateClosed, GateOpen, HEADROOM, HeaderLen, IdleArena, MpduLength, MpduStartSpacing,
-    PhyRate, PortRate, PortSink, Ppdu, QueueRight, RadioPort, ReceivePort, Round, Settled,
-    SingleOutcome, SinglePlace, StartPoll, StopFrom, StopPoll, StopRight, Stopped, TbttEvent,
-    TxFacts, TxOutcome,
+    AmpduRate, ArenaOutcome, CloseGate, CommandPlace, CommandPoll, DataPort, DataRights, FrameSet,
+    GateClosed, GateOpen, GroupCommand, GroupEnd, HEADROOM, HeaderLen, IdleArena, InCommand,
+    MpduLength, MpduStartSpacing, PairwiseCommand, PairwiseEnd, PhyRate, PortRate, PortSink, Ppdu,
+    QueueRight, RadioPort, ReceivePort, Round, Settled, SingleOutcome, SinglePlace, StartPoll,
+    StopFrom, StopPoll, StopRight, Stopped, TbttEvent, TxFacts, TxOutcome, ValueCommand, ValueEnd,
 };
 use oer_protocols_ieee80211_wire::address::IndividualAddress;
 use oer_protocols_ieee80211_wire::frame::FrameControl;
@@ -188,22 +188,25 @@ fn stop<'id, H, const S: usize, const G: usize, const A: usize, const D: usize>(
     rights.stopped = Some(stopped);
 }
 
-/// Run a command to its end.
-fn command<'id, H, const S: usize, const G: usize, const A: usize, const D: usize>(
+/// Run a command of one kind to its end: its poll ends only with that
+/// kind's end, and gives the place back.
+fn run_command<'id, H, C, K, E, const S: usize, const G: usize, const A: usize, const D: usize>(
     harness: &mut H,
     place: CommandPlace<'id>,
-    command: Command<'id, <H::Port as RadioPort<'id>>::Caps>,
-) -> (CommandPlace<'id>, CommandEnd<'id>)
+    command: C,
+    begin: impl Fn(&mut H::Port, CommandPlace<'id>, C) -> InCommand<'id, K>,
+    poll: impl Fn(&mut H::Port, InCommand<'id, K>, &mut Ends<'id>) -> CommandPoll<'id, K, E>,
+) -> (CommandPlace<'id>, E)
 where
     H: Harness<'id, S, G, A, D>,
     H::Port: DataPort<'id, Ack = (), Denial = ()>,
 {
-    let mut flight = harness.port().begin(place, command, NOW);
+    let mut flight = begin(harness.port(), place, command);
     let mut ends = Ends {
         singles: Vec::new(),
     };
     for _ in 0..16 {
-        match harness.port().poll_command(flight, NOW, &mut ends) {
+        match poll(harness.port(), flight, &mut ends) {
             CommandPoll::Ended(place, end) => return (place, end),
             CommandPoll::Pending(again) => flight = again,
         }
@@ -215,6 +218,82 @@ where
         );
     }
     panic!("a command ends within its bound");
+}
+
+/// Close the gate.
+fn close_gate<'id, H, const S: usize, const G: usize, const A: usize, const D: usize>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    open: GateOpen<'id>,
+) -> (CommandPlace<'id>, GateClosed<'id>)
+where
+    H: Harness<'id, S, G, A, D>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    run_command(
+        harness,
+        place,
+        CloseGate(open),
+        |port, place, command| port.begin_close(place, command, NOW),
+        |port, flight, ends| port.poll_close(flight, NOW, ends),
+    )
+}
+
+/// A pairwise key command.
+fn pairwise_command<'id, H, const S: usize, const G: usize, const A: usize, const D: usize>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    command: PairwiseCommand<'id>,
+) -> (CommandPlace<'id>, PairwiseEnd<'id>)
+where
+    H: Harness<'id, S, G, A, D>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    run_command(
+        harness,
+        place,
+        command,
+        |port, place, command| port.begin_pairwise(place, command, NOW),
+        |port, flight, ends| port.poll_pairwise(flight, NOW, ends),
+    )
+}
+
+/// A group key command.
+fn group_command<'id, H, const S: usize, const G: usize, const A: usize, const D: usize>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    command: GroupCommand<'id>,
+) -> (CommandPlace<'id>, GroupEnd<'id>)
+where
+    H: Harness<'id, S, G, A, D>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    run_command(
+        harness,
+        place,
+        command,
+        |port, place, command| port.begin_group(place, command, NOW),
+        |port, flight, ends| port.poll_group(flight, NOW, ends),
+    )
+}
+
+/// A command of values.
+fn value_command<'id, H, const S: usize, const G: usize, const A: usize, const D: usize>(
+    harness: &mut H,
+    place: CommandPlace<'id>,
+    command: ValueCommand<<H::Port as RadioPort<'id>>::Caps>,
+) -> (CommandPlace<'id>, ValueEnd)
+where
+    H: Harness<'id, S, G, A, D>,
+    H::Port: DataPort<'id, Ack = (), Denial = ()>,
+{
+    run_command(
+        harness,
+        place,
+        command,
+        |port, place, command| port.begin_value(place, command, NOW),
+        |port, flight, ends| port.poll_value(flight, NOW, ends),
+    )
 }
 
 /// The data path's settings over the port, taken down by the data's stop
@@ -241,27 +320,52 @@ fn data_run<'id, H, const S: usize, const G: usize, const A: usize, const D: usi
     } = rights.data.take().expect("the data's rights are home");
     let peer =
         oer_protocols_ieee80211_wire::address::IndividualAddress::new([2, 0, 0, 0, 0, 2]).unwrap();
-    let (place, end) = command(
+    let (place, end) = pairwise_command(
         harness,
         place,
-        Command::InstallPairwise {
+        PairwiseCommand::Install {
             slot: pairwise,
             peer,
             key: oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[1; 16]),
             spp: oer_protocols_ieee80211_wire::security::Spp::NotNegotiated,
         },
     );
-    let CommandEnd::PairwiseInstalled(installed) = end else {
+    let PairwiseEnd::Installed(installed) = end else {
         panic!("the pairwise key installs");
     };
-    let (place, end) = command(harness, place, Command::RemovePairwise(installed));
-    let CommandEnd::PairwiseEmpty(pairwise) = end else {
+    let (place, end) = pairwise_command(harness, place, PairwiseCommand::Remove(installed));
+    let PairwiseEnd::Empty(pairwise) = end else {
         panic!("the pairwise key is removed");
     };
-    let (command, end) = command(harness, place, Command::CloseGate(open));
-    let CommandEnd::GateClosed(closed) = end else {
-        panic!("the gate closes");
+    // A group key's install and removal give its slot back.
+    let mut groups = Vec::from(groups);
+    let first = groups.remove(0);
+    let (place, end) = group_command(
+        harness,
+        place,
+        GroupCommand::Install {
+            slot: first,
+            key_id: oer_protocols_ieee80211_wire::ccmp::GroupKeyId::new(1).unwrap(),
+            key: oer_protocols_ieee80211_contracts_security::Ccmp128Key::new(&[2; 16]),
+        },
+    );
+    let GroupEnd::Installed(installed) = end else {
+        panic!("the group key installs");
     };
+    let (place, end) = group_command(harness, place, GroupCommand::Remove(installed));
+    let GroupEnd::Empty(first) = end else {
+        panic!("the group key is removed");
+    };
+    groups.insert(0, first);
+    let groups = home(groups, "every group slot is back");
+    // A command of values ends done.
+    let (place, end) = value_command(
+        harness,
+        place,
+        ValueCommand::SetBssColor(oer_protocols_ieee80211_contracts_port::BssColor::ZERO),
+    );
+    assert_eq!(end, ValueEnd::Done, "a command of values takes effect");
+    let (command, closed) = close_gate(harness, place, open);
     rights.gate = Some(closed);
     rights.data = Some(DataRights {
         arenas,
@@ -490,10 +594,7 @@ pub fn a_stop_ends_everything_on_the_air<
     harness.release_air();
     singles.insert(0, place);
     queues.insert(0, queue);
-    let (command, end) = command(harness, data.command, Command::CloseGate(open));
-    let CommandEnd::GateClosed(closed) = end else {
-        panic!("the gate closes");
-    };
+    let (command, closed) = close_gate(harness, data.command, open);
     rights.gate = Some(closed);
     rights.data = Some(DataRights {
         arenas: data.arenas,
@@ -659,10 +760,7 @@ where
         }
     };
     data.arenas = [idle, other];
-    let (place, end) = command(harness, data.command, Command::CloseGate(open));
-    let CommandEnd::GateClosed(closed) = end else {
-        panic!("the gate closes");
-    };
+    let (place, closed) = close_gate(harness, data.command, open);
     data.command = place;
     rights.gate = Some(closed);
     rights.data = Some(data);
