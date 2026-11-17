@@ -52,6 +52,9 @@ quiet = ["transmit"]
 # Case C's sender (`tasks/154`, `159`): A-MSDU cases and the provenance
 # series to the receiving rx-chain probe, in place of part two's A.
 amsdu = ["transmit"]
+# The gap run (`tasks/163`): a short frame after a 1 500-octet one under nine
+# settings, in place of case C's rounds.
+gap = ["amsdu"]
 
 [lints]
 workspace = true

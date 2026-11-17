@@ -49,6 +49,9 @@ laps = []
 # provenance series from `esp32s31-mac-reset --features amsdu`, checked by
 # that probe's frame layout.
 amsdu = ["laps"]
+# The gap run's receiver (`tasks/163`): case C's check, its units and the
+# receive counters split by the sender's blocks.
+gap = ["amsdu"]
 # Case D's second geometry: 256-byte buffers in place of 128.
 ring256 = []
 

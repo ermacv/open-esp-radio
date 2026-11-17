@@ -183,6 +183,8 @@ pub(super) async fn run(
     let mut cases = c::Cases::default();
     #[cfg(feature = "amsdu")]
     let mut last_peer = None;
+    #[cfg(feature = "gap")]
+    let mut snapshot = access.receive_statistics_snapshot();
     while EmbassyClock.now() < end && !done(&counts) {
         // Case C ends when its sender has been quiet for a while.
         #[cfg(feature = "amsdu")]
@@ -248,7 +250,23 @@ pub(super) async fn run(
         #[cfg(feature = "amsdu")]
         let first = {
             let before = counts.peer_units;
+            #[cfg(feature = "gap")]
+            let block = cases.gap_current;
             let first = c::check(&joined, &mut counts, &mut cases, station, &mut peer);
+            // A new block: the counters since the last snapshot belong to
+            // the block before.
+            #[cfg(feature = "gap")]
+            if cases.gap_current != block {
+                let now = access.receive_statistics_snapshot();
+                if let Some(row) = block.and_then(|block| cases.gap.get_mut(block)) {
+                    for (cell, delta) in
+                        row.iter_mut().skip(2).zip(c::gap_counters(&now, &snapshot))
+                    {
+                        *cell = cell.saturating_add(delta);
+                    }
+                }
+                snapshot = now;
+            }
             if counts.peer_units != before {
                 last_peer = EmbassyClock
                     .now()
@@ -285,6 +303,39 @@ pub(super) async fn run(
     }
     let after = access.receive_statistics_snapshot().primary;
     let laps = counts.descriptors / COUNT as u64;
+    #[cfg(feature = "gap")]
+    {
+        let now = access.receive_statistics_snapshot();
+        if let Some(row) = cases.gap_current.and_then(|block| cases.gap.get_mut(block)) {
+            for (cell, delta) in row.iter_mut().skip(2).zip(c::gap_counters(&now, &snapshot)) {
+                *cell = cell.saturating_add(delta);
+            }
+        }
+        for (setting, row) in cases.gap.iter().enumerate() {
+            line.clear();
+            let _ = writeln!(
+                line,
+                "GAP setting={setting} long={} short={} mpdu_count={} fcs_error={} abort={} abort_fcs_pass={} power_drop_error={} signal_field={} end={} data_success={} brx_agc={} brx={} nrx={} nrx_abort={} nrx_restart={} nrx_agc_exit={}",
+                row[0],
+                row[1],
+                row[2],
+                row[3],
+                row[4],
+                row[5],
+                row[6],
+                row[7],
+                row[8],
+                row[9],
+                row[10],
+                row[11],
+                row[12],
+                row[13],
+                row[14],
+                row[15]
+            );
+            usb::text(console, line.as_bytes()).await;
+        }
+    }
     #[cfg(feature = "amsdu")]
     c::print(console, &mut line, &cases).await;
     for (length, per) in lengths.iter().zip(&counts.per_length) {
@@ -426,6 +477,49 @@ mod c {
     pub(super) struct Cases {
         per: [PerCase; CASES.len()],
         unknown: u32,
+        /// The gap run's blocks (`tasks/163`): per setting, the long and
+        /// the short frames completed and the receive counters' deltas.
+        #[cfg(feature = "gap")]
+        pub(super) gap: [[u32; 2 + GAP_COUNTERS]; GAP_SETTINGS],
+        /// The setting of the block the last unit belonged to.
+        #[cfg(feature = "gap")]
+        pub(super) gap_current: Option<usize>,
+    }
+
+    /// The gap run's settings, the sender's order.
+    #[cfg(feature = "gap")]
+    pub(super) const GAP_SETTINGS: usize = 9;
+    #[cfg(feature = "gap")]
+    pub(super) const GAP_COUNTERS: usize = 14;
+
+    /// The receive counters the gap run reports, by the HAL snapshot's
+    /// names: the MAC's primary counters, then the baseband decoders'.
+    #[cfg(feature = "gap")]
+    pub(super) fn gap_counters(
+        after: &oer_chips_esp32s31_hal::radio::ieee80211::mac::MacRxStatisticsSnapshot,
+        before: &oer_chips_esp32s31_hal::radio::ieee80211::mac::MacRxStatisticsSnapshot,
+    ) -> [u32; GAP_COUNTERS] {
+        let primary = after.primary.wrapping_delta_since(before.primary);
+        let decode = after
+            .decode_errors
+            .wrapping_delta_since(before.decode_errors);
+        [
+            primary.mpdu_count,
+            primary.fcs_error,
+            primary.abort,
+            primary.abort_fcs_pass,
+            primary.power_drop_error,
+            primary.signal_field,
+            primary.end,
+            primary.data_success,
+            decode.brx_agc,
+            decode.brx,
+            decode.nrx,
+            decode.nrx_abort,
+            decode.nrx_restart,
+            decode.nrx_agc_exit,
+        ]
+        .map(u32::from)
     }
 
     /// Check one unit to the station: the sender's when its Frame Control
@@ -477,6 +571,18 @@ mod c {
         };
         per.spans_max = per.spans_max.max(spans);
         let round = Case::round(counter);
+        #[cfg(feature = "gap")]
+        {
+            let setting = (round >> 16) as usize;
+            cases.gap_current = Some(setting);
+            if let Some(cell) = cases
+                .gap
+                .get_mut(setting)
+                .and_then(|row| row.get_mut(usize::from(case == Case::Control)))
+            {
+                *cell = cell.saturating_add(1);
+            }
+        }
         if let Some(word) = per.seen.get_mut((round / 32) as usize) {
             let bit = 1 << (round % 32);
             if *word & bit == 0 {
