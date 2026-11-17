@@ -7,11 +7,15 @@ use super::amsdu::AmsduParts;
 use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start};
 use super::*;
 use crate::case_c::{Case, byte};
+use oer_portable_embassy_time::EmbassyClock;
+use oer_portable_time::{Clock, Duration, Timer};
 
 /// The frame's length: with the receiver's 64-octet RX-control header and
 /// the FCS, one 640-byte buffer.
 const LENGTH: usize = 500;
 const FRAMES: u32 = 90_000;
+/// The wait after the peer is learned.
+const QUIET_MS: u32 = 1_500;
 
 pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
     let AmsduParts {
@@ -23,6 +27,15 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
         power_24m: _,
     } = parts;
     mark(94);
+    // The injector's burst that taught this board its peer ends within half
+    // a second (run c5, `tasks/167`): the stream starts after it, on a quiet
+    // air.
+    if let Some(at) = EmbassyClock
+        .now()
+        .checked_add(Duration::from_millis(QUIET_MS))
+    {
+        EmbassyClock.wait_until(at).await;
+    }
     let mut ends = [0_u32; 3];
     for sequence in 0..FRAMES {
         let counter = Case::Provenance700.counter(sequence);
