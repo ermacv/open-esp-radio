@@ -33,7 +33,7 @@ use crate::system::memory::dma_address::PlacedAddresses;
 
 /// The spares of one experiment arena: the ring's initial bindings first,
 /// then the rebind pool.
-pub const RX_REBIND_SPARES: usize = 96;
+pub const RX_REBIND_SPARES: usize = 192;
 
 /// The largest ring the table covers: the observed mask's capacity.
 pub(crate) const RX_REBIND_DESCRIPTORS: usize = 96;
@@ -242,6 +242,23 @@ impl RxRebindTable {
             .is_some_and(|word| word.load(Ordering::Acquire) == RETIRED)
     }
 
+    /// Return retired spare `spare` to the unbound spares, refused while a
+    /// descriptor's BUFFER word or next re-arm names it.
+    pub(crate) fn return_retired(&self, spare: usize) -> Result<(), RxRingError> {
+        let word = u8::try_from(spare + 1).map_err(|_| RxRingError::Count)?;
+        let named = |words: &[AtomicU8; RX_REBIND_DESCRIPTORS]| {
+            words.iter().any(|each| each.load(Ordering::Acquire) == word)
+        };
+        if named(&self.published) || named(&self.next) {
+            return Err(RxRingError::BufferOwnershipConflict);
+        }
+        let state = self.spare_state.get(spare).ok_or(RxRingError::Count)?;
+        state
+            .compare_exchange(RETIRED, UNBOUND, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| ())
+            .map_err(|_| RxRingError::BufferOwnershipConflict)
+    }
+
     /// Whether spare `spare` was never bound.
     pub(crate) fn spare_unbound(&self, spare: usize) -> bool {
         self.spare_state
@@ -288,6 +305,26 @@ mod tests {
         );
         assert_eq!(
             table.bind_next(1, 2),
+            Err(RxRingError::BufferOwnershipConflict)
+        );
+    }
+
+    #[test]
+    fn a_retired_spare_returns_once_nothing_names_it() {
+        let table = table();
+        table.bind_next(0, 4).unwrap();
+        // Descriptor 0's BUFFER word still names spare 0 until its rearm.
+        assert_eq!(
+            table.return_retired(0),
+            Err(RxRingError::BufferOwnershipConflict)
+        );
+        table.commit(0);
+        table.return_retired(0).unwrap();
+        assert!(table.spare_unbound(0));
+        table.bind_next(1, 0).unwrap();
+        // A bound spare does not return.
+        assert_eq!(
+            table.return_retired(4),
             Err(RxRingError::BufferOwnershipConflict)
         );
     }

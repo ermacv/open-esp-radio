@@ -951,6 +951,19 @@ impl<const COUNT: usize, const BUFFER_SIZE: usize, const STORAGE_SIZE: usize, S:
         self.arena.rebind.spare_unbound(spare)
     }
 
+    /// TEMPORARY experiment: return retired spare `spare` to the bank's
+    /// unbound spares, as a port's lent buffer comes back. The caller holds
+    /// it retired as long as its own criterion asks (the probe: two laps and
+    /// an unchanged CRC).
+    ///
+    /// # Errors
+    ///
+    /// The spare is not retired, or a descriptor's BUFFER word or next
+    /// re-arm still names it.
+    pub fn rebind_spare_return(&self, spare: usize) -> Result<(), RxRingError> {
+        self.arena.rebind.return_retired(spare)
+    }
+
     fn any_buffer_in_state(&self, state: ExternalRxReturnState) -> bool {
         self.buffers.iter().any(|buffer| buffer.state() == state)
     }
