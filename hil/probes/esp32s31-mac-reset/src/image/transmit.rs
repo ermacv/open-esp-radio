@@ -122,7 +122,7 @@ pub(super) mod counter {
 }
 
 /// The phases part two's failures name.
-mod tx_phase {
+pub(super) mod tx_phase {
     pub const POOL: u32 = 30;
     pub const PEER: u32 = 31;
     pub const FRAME: u32 = 32;

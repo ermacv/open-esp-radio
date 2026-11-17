@@ -49,6 +49,9 @@ laps = []
 # provenance series from `esp32s31-mac-reset --features amsdu`, checked by
 # that probe's frame layout.
 amsdu = ["laps"]
+# Cell E's receiver (`tasks/161`): case C's QoS cases protected under CCMP,
+# the pairwise key installed through the HAL, the MAC decrypting.
+ccmp = ["amsdu"]
 # Case D's second geometry: 256-byte buffers in place of 128.
 ring256 = []
 

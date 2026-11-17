@@ -32,6 +32,8 @@ oer-portable-cooperate = { path = "../../../portable/cooperate" }
 oer-chips-esp32s31-radio-client = { path = "../../../chips/esp32s31/radio/client" }
 oer-protocols-ieee80211-contracts-port = { path = "../../../protocols/ieee80211/contracts/port" }
 oer-protocols-ieee80211-wire = { path = "../../../protocols/ieee80211/wire" }
+oer-protocols-ieee80211-core-security-cipher = { path = "../../../protocols/ieee80211/core/security/cipher" }
+oer-protocols-ieee80211-contracts-security = { path = "../../../protocols/ieee80211/contracts/security" }
 oer-protocols-radio-regulatory = { path = "../../../protocols/radio/regulatory" }
 
 [dev-dependencies]
@@ -52,6 +54,9 @@ quiet = ["transmit"]
 # Case C's sender (`tasks/154`, `159`): A-MSDU cases and the provenance
 # series to the receiving rx-chain probe, in place of part two's A.
 amsdu = ["transmit"]
+# Cell E of `tasks/161`: case C's QoS cases protected under CCMP, sealed in
+# software, in place of case C's rounds.
+ccmp = ["amsdu"]
 
 [lints]
 workspace = true
