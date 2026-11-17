@@ -32,8 +32,17 @@ use oer_protocols_ieee80211_wire::channel::{ChannelWidth, Ghz2_4Channel};
 use oer_protocols_radio_regulatory::{Country, RegulatoryDomain};
 use static_cell::StaticCell;
 
+/// Case C's frames, the sender's layout (`tasks/154`, `159`).
+#[cfg(feature = "amsdu")]
+#[path = "../../esp32s31-mac-reset/src/case_c.rs"]
+#[allow(dead_code, reason = "the sender's half is esp32s31-mac-reset's")]
+mod case_c;
 #[cfg(feature = "laps")]
 #[path = "laps.rs"]
+#[cfg_attr(
+    feature = "amsdu",
+    allow(dead_code, reason = "case D's checks stand beside case C's")
+)]
 mod laps;
 #[path = "traffic.rs"]
 mod traffic;

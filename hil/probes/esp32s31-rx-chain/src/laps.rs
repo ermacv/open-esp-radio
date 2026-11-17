@@ -179,11 +179,18 @@ pub(super) async fn run(
         .ok_or(oer_portable_diagnostics::name!("laps-deadline"; 32))?;
     let mut counts = Counts::default();
     let mut peer: Option<[u8; 6]> = None;
-    while EmbassyClock.now() < end
-        && !(counts.peer_units >= UNITS
-            && counts.descriptors / COUNT as u64 >= u64::from(LAPS)
-            && counts.per_length.iter().all(|per| per.units >= PER_LENGTH))
-    {
+    #[cfg(feature = "amsdu")]
+    let mut cases = c::Cases::default();
+    #[cfg(feature = "amsdu")]
+    let mut last_peer = None;
+    while EmbassyClock.now() < end && !done(&counts) {
+        // Case C ends when its sender has been quiet for a while.
+        #[cfg(feature = "amsdu")]
+        if let Some(at) = last_peer
+            && EmbassyClock.now() >= at
+        {
+            break;
+        }
         storage
             .observe_reserved(ring, access.rx_dma())
             .map_err(|_| oer_portable_diagnostics::name!("laps-reserved"; 32))?;
@@ -236,7 +243,19 @@ pub(super) async fn run(
         if formula != unit.total_length() || formula != joined.len() {
             counts.formula_disagrees = counts.formula_disagrees.saturating_add(1);
         }
+        #[cfg(not(feature = "amsdu"))]
         let first = check(&joined, &mut counts, station, &mut peer, &lengths);
+        #[cfg(feature = "amsdu")]
+        let first = {
+            let before = counts.peer_units;
+            let first = c::check(&joined, &mut counts, &mut cases, station, &mut peer);
+            if counts.peer_units != before {
+                last_peer = EmbassyClock
+                    .now()
+                    .checked_add(Duration::from_millis(c::QUIET_MS));
+            }
+            first
+        };
         drop(joined);
         if let Some(first) = first
             && let Some(slot) = counts.shown.get_mut(counts.shown_used)
@@ -266,6 +285,8 @@ pub(super) async fn run(
     }
     let after = access.receive_statistics_snapshot().primary;
     let laps = counts.descriptors / COUNT as u64;
+    #[cfg(feature = "amsdu")]
+    c::print(console, &mut line, &cases).await;
     for (length, per) in lengths.iter().zip(&counts.per_length) {
         line.clear();
         let _ = writeln!(
@@ -334,6 +355,258 @@ pub(super) async fn run(
         usb::text(console, line.as_bytes()).await;
     }
     Ok(())
+}
+
+/// Whether case D's run has what it aims at.
+#[cfg(not(feature = "amsdu"))]
+fn done(counts: &Counts) -> bool {
+    counts.peer_units >= UNITS
+        && counts.descriptors / COUNT as u64 >= u64::from(LAPS)
+        && counts.per_length.iter().all(|per| per.units >= PER_LENGTH)
+}
+
+/// Case C's run ends at its deadline or when its sender is quiet.
+#[cfg(feature = "amsdu")]
+const fn done(_counts: &Counts) -> bool {
+    false
+}
+
+/// Case C's receive (`tasks/154`, `159`): the sender's frames checked
+/// byte by byte against [`case_c`]'s layout, counted per case and round.
+#[cfg(feature = "amsdu")]
+mod c {
+    use super::super::case_c::{self, CASES, Case, ROUNDS};
+    use super::*;
+
+    /// The sender's quiet that ends the run once it has begun.
+    pub(super) const QUIET_MS: u32 = 5_000;
+    const WORDS: usize = (ROUNDS as usize).div_ceil(32);
+    /// The missing rounds printed per case.
+    const MISSING: usize = 8;
+
+    /// One case's counts.
+    #[derive(Clone, Copy)]
+    pub(super) struct PerCase {
+        units: u32,
+        /// Units of a round not seen before.
+        distinct: u32,
+        retries: u32,
+        length_disagrees: u32,
+        mismatch_units: u32,
+        mismatch_bytes: u32,
+        /// Units whose counters name more than one frame: a foreign prefix
+        /// by content.
+        counter_disagrees: u32,
+        spans_min: u32,
+        spans_max: u32,
+        first_mismatch: Option<(u32, u32)>,
+        seen: [u32; WORDS],
+    }
+
+    impl Default for PerCase {
+        fn default() -> Self {
+            Self {
+                units: 0,
+                distinct: 0,
+                retries: 0,
+                length_disagrees: 0,
+                mismatch_units: 0,
+                mismatch_bytes: 0,
+                counter_disagrees: 0,
+                spans_min: 0,
+                spans_max: 0,
+                first_mismatch: None,
+                seen: [0; WORDS],
+            }
+        }
+    }
+
+    /// Every case's counts, and the sender's units no case names.
+    #[derive(Default)]
+    pub(super) struct Cases {
+        per: [PerCase; CASES.len()],
+        unknown: u32,
+    }
+
+    /// Check one unit to the station: the sender's when its Frame Control
+    /// (Retry masked) is one of the cases' and it comes from the sender
+    /// learned first.
+    pub(super) fn check(
+        joined: &Joined<'_>,
+        counts: &mut Counts,
+        cases: &mut Cases,
+        station: [u8; 6],
+        peer: &mut Option<[u8; 6]>,
+    ) -> Option<usize> {
+        let to = joined.array::<6>(HEADER + 4);
+        let from = joined.array::<6>(HEADER + 10)?;
+        let [kind, flags] = joined.array::<2>(HEADER)?;
+        if to != Some(station) || flags & !RETRY != 0 || !matches!(kind, 0x88 | 0x08) {
+            return None;
+        }
+        let sender = *peer.get_or_insert(from);
+        if from != sender {
+            return None;
+        }
+        counts.peer_units = counts.peer_units.saturating_add(1);
+        let probe = if kind == 0x88 {
+            Case::Amsdu2
+        } else {
+            Case::Provenance700
+        };
+        let counter = joined
+            .array::<4>(HEADER + probe.counter_at())
+            .map(u32::from_le_bytes);
+        let Some((case, counter)) =
+            counter.and_then(|counter| Some((Case::from_counter(counter)?, counter)))
+        else {
+            cases.unknown = cases.unknown.saturating_add(1);
+            return None;
+        };
+        let at = CASES.iter().position(|each| *each == case)?;
+        let per = cases.per.get_mut(at)?;
+        per.units = per.units.saturating_add(1);
+        if flags & RETRY != 0 {
+            per.retries = per.retries.saturating_add(1);
+        }
+        let spans = joined.steps.len() as u32;
+        per.spans_min = if per.units == 1 {
+            spans
+        } else {
+            per.spans_min.min(spans)
+        };
+        per.spans_max = per.spans_max.max(spans);
+        let round = Case::round(counter);
+        if let Some(word) = per.seen.get_mut((round / 32) as usize) {
+            let bit = 1 << (round % 32);
+            if *word & bit == 0 {
+                *word |= bit;
+                per.distinct = per.distinct.saturating_add(1);
+            }
+        }
+        // The frame's length from the RX-control tail, as in case D.
+        let tail = joined.array::<{ WifiRxControlTail::SIZE }>(WifiRxControlPrefix::SIZE);
+        let signal =
+            tail.map(|tail| usize::from(WifiRxControlTail::new(&tail).signal_length().length()));
+        let held = joined.len().saturating_sub(HEADER);
+        let mpdu = signal.and_then(|signal| signal.checked_sub(4));
+        match mpdu.and_then(|mpdu| Some((mpdu, held.checked_sub(mpdu)?))) {
+            Some((mpdu, padding @ 0..4)) if mpdu == case.length() => {
+                if let Some(slot) = counts.padding.get_mut(padding) {
+                    *slot = slot.saturating_add(1);
+                }
+            }
+            _ => {
+                per.length_disagrees = per.length_disagrees.saturating_add(1);
+                return None;
+            }
+        }
+        let mut mismatches = 0_u32;
+        let mut foreign = false;
+        let mut first = None;
+        for offset in 0..case.length() {
+            let want = case_c::byte(case, sender, station, counter, offset);
+            let got = joined.get(HEADER + offset);
+            let same = match offset {
+                // The Retry flag, the Duration and the Sequence Control are
+                // the MAC's.
+                1 => got.map(|got| got & !RETRY) == Some(want),
+                2..4 | 22..24 => true,
+                _ => got == Some(want),
+            };
+            if !same {
+                mismatches = mismatches.saturating_add(1);
+                first.get_or_insert(offset);
+                foreign |= case.counter_place(offset);
+            }
+        }
+        if mismatches != 0 {
+            per.mismatch_units = per.mismatch_units.saturating_add(1);
+            per.mismatch_bytes = per.mismatch_bytes.saturating_add(mismatches);
+            per.first_mismatch
+                .get_or_insert((counter, first.unwrap_or(0) as u32));
+            counts.byte_mismatch_units = counts.byte_mismatch_units.saturating_add(1);
+        }
+        if foreign {
+            per.counter_disagrees = per.counter_disagrees.saturating_add(1);
+        }
+        first
+    }
+
+    /// One `CASE` line a case: its units, the rounds seen, what disagreed,
+    /// and the first rounds never completed.
+    pub(super) async fn print(
+        console: &mut usb::Console,
+        line: &mut heapless::String<512>,
+        cases: &Cases,
+    ) {
+        for (case, per) in CASES.iter().zip(&cases.per) {
+            let mut missing = heapless::Vec::<u32, MISSING>::new();
+            let mut absent = 0_u32;
+            for round in 0..ROUNDS {
+                let seen = per
+                    .seen
+                    .get((round / 32) as usize)
+                    .is_some_and(|word| word & 1 << (round % 32) != 0);
+                if !seen {
+                    absent = absent.saturating_add(1);
+                    let _ = missing.push(round);
+                }
+            }
+            line.clear();
+            let _ = writeln!(
+                line,
+                "CASE tag={} mpdu={} units={} distinct={} retries={} absent={absent} length_disagrees={} mismatch_units={} mismatch_bytes={} counter_disagrees={} spans={}..{} first_mismatch={:?} absent_first={:?}",
+                case.tag(),
+                case.length(),
+                per.units,
+                per.distinct,
+                per.retries,
+                per.length_disagrees,
+                per.mismatch_units,
+                per.mismatch_bytes,
+                per.counter_disagrees,
+                per.spans_min,
+                per.spans_max,
+                per.first_mismatch,
+                missing.as_slice(),
+            );
+            usb::text(console, line.as_bytes()).await;
+        }
+        // By the frame before (`tasks/160`): completed / sent, the last
+        // column the run's first frame.
+        for (case, per) in CASES.iter().zip(&cases.per) {
+            let mut after = [[0_u32; 2]; CASES.len() + 1];
+            for round in 0..ROUNDS {
+                let seen = per
+                    .seen
+                    .get((round / 32) as usize)
+                    .is_some_and(|word| word & 1 << (round % 32) != 0);
+                if let Some(cell) = after.get_mut(case_c::before_index(round, *case)) {
+                    cell[0] = cell[0].saturating_add(u32::from(seen));
+                    cell[1] = cell[1].saturating_add(1);
+                }
+            }
+            line.clear();
+            let _ = writeln!(line, "PLACE tag={} after={:?}", case.tag(), after);
+            usb::text(console, line.as_bytes()).await;
+        }
+        // The rounds completed, for the air capture's comparison.
+        for (case, per) in CASES.iter().zip(&cases.per) {
+            for (at, words) in per.seen.chunks(16).enumerate() {
+                line.clear();
+                let _ = write!(line, "SEEN tag={} from={}", case.tag(), at * 16 * 32);
+                for word in words {
+                    let _ = write!(line, " {word:08x}");
+                }
+                let _ = writeln!(line);
+                usb::text(console, line.as_bytes()).await;
+            }
+        }
+        line.clear();
+        let _ = writeln!(line, "CASE unknown={}", cases.unknown);
+        usb::text(console, line.as_bytes()).await;
+    }
 }
 
 /// Classify one joined unit: the injector's, checked byte by byte and by its

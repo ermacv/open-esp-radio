@@ -30,7 +30,11 @@ use oer_portable_memory::{FrameLen, PinnedDmaTxPool, PinnedDmaTxRadioLease};
 
 /// The frames' MPDU bytes, FCS excluded: about 1.4 ms on the air at
 /// 6 Mb/s, the time a pulse or a stop is spread over.
+#[cfg(not(feature = "amsdu"))]
 const FRAME: usize = 1_024;
+/// Case C's longest frame (`tasks/154`, `159`): the provenance series' 1 500.
+#[cfg(feature = "amsdu")]
+pub(super) const FRAME: usize = 1_500;
 /// The TX metadata before the frame in its buffer: the first word holds
 /// the MPDU's length with its FCS (`WIFI_TX_METADATA_HEAD`), the second is
 /// zero, as the backend's ordinary transmit writes it (`ordinary_tx.rs`,
@@ -44,11 +48,15 @@ const SLOT: usize = METADATA + FRAME + FCS;
 const ABANDONED: usize = 100;
 /// The pool's slots: a guard before, between and after the abandoned
 /// frames, then the ordinary frames' one slot.
+#[cfg(not(feature = "amsdu"))]
 const SLOTS: usize = 2 * ABANDONED + 2;
+/// Case C abandons no chain: the ordinary frames' slot and one spare.
+#[cfg(feature = "amsdu")]
+const SLOTS: usize = 2;
 /// The ordinary frames' slot.
-const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
+pub(super) const ORDINARY_SLOT: u8 = (SLOTS - 1) as u8;
 /// The queue's timeout of the backend's direct-MPDU profile.
-const TIMEOUT: u16 = 0x03ff;
+pub(super) const TIMEOUT: u16 = 0x03ff;
 /// The medium's observation (`tasks/157`): each timeout, each length, this
 /// many frames, with the peer silent and then sending.
 const OBSERVED_TIMEOUTS: [u16; 3] = [0, TIMEOUT, TIMEOUT_MAX];
@@ -79,7 +87,7 @@ pub(super) const ROWS: usize = 4 + BASELINE + STOPS + ABANDONED + 2;
 type Pool = PinnedDmaTxPool<SLOT, 0, 0, SLOTS>;
 type Placed = PlacedTxPool<SLOT, 0, 0, SLOTS>;
 type Lease = PlacedTxLease<PinnedDmaTxRadioLease<'static, SLOT, 0, 0>>;
-type Descriptor = PinnedTxDmaStorage<Lease>;
+pub(super) type Descriptor = PinnedTxDmaStorage<Lease>;
 
 macro_rules! abandoned_descriptors {
     ($($name:ident)*) => {
@@ -123,6 +131,8 @@ mod tx_phase {
     pub const RELEASE: u32 = 35;
     pub const STOP: u32 = 36;
     pub const PULSE: u32 = 37;
+    /// An abandoned chain's words or buffer could not be read (`tasks/169`).
+    pub const READ: u32 = 38;
 }
 
 /// The single site that reads the probe's own placed DMA memory while the
@@ -237,7 +247,7 @@ fn parameters(length: usize, power: u8, timeout: u16) -> MacLegacyTxParameters {
 }
 
 /// The pool and its guard slots, held for the whole run.
-struct Frames {
+pub(super) struct Frames {
     pool: &'static Placed,
     guards: heapless::Vec<
         oer_portable_memory::PinnedDmaTxNetworkLease<'static, SLOT, 0, 0>,
@@ -247,7 +257,7 @@ struct Frames {
     /// The data power code at 6 Mb/s: the calibrated profile's, under the
     /// regulatory ceiling, as the station's ordinary transmit takes it
     /// (`ordinary_tx.rs`, `capped_power(self.power.power_pair(rate.code()))`).
-    power: u8,
+    pub(super) power: u8,
 }
 
 impl Frames {
@@ -299,15 +309,31 @@ impl Frames {
     /// Slot `slot`'s frame of chain `chain`, as the radio holds it.
     fn lease(&self, slot: u8, chain: u32, length: usize) -> Result<Lease, Failure> {
         let header = self.header;
+        self.lease_frame(slot, length, |offset| frame_byte(&header, chain, offset))
+    }
+
+    /// Slot `slot`'s frame of `length` octets, each `byte(offset)`, behind
+    /// its TX metadata, as the radio holds it.
+    pub(super) fn lease_frame(
+        &self,
+        slot: u8,
+        length: usize,
+        byte: impl Fn(usize) -> u8,
+    ) -> Result<Lease, Failure> {
         let frame = length;
+        let head = ((frame + FCS) as u32).to_le_bytes();
         let length = FrameLen::new(transfer(frame)).map_err(|_| (tx_phase::FRAME, 0))?;
         let network = self
             .pool
             .claim_network(slot)
             .map_err(|_| (tx_phase::FRAME, 1 | u32::from(slot) << 8))?;
         let _published = network.publish(length, |bytes| {
-            for (offset, byte) in bytes.iter_mut().enumerate() {
-                *byte = buffer_byte(&header, chain, frame, offset);
+            for (offset, cell) in bytes.iter_mut().enumerate() {
+                *cell = match (head.get(offset), offset.checked_sub(METADATA)) {
+                    (Some(byte), _) => *byte,
+                    (None, Some(at)) if at < frame => byte(at),
+                    _ => 0,
+                };
             }
         });
         self.pool
@@ -317,7 +343,7 @@ impl Frames {
 }
 
 /// A descriptor with its frame attached, reserved and its queue started.
-fn start(
+pub(super) fn start(
     access: &mut RadioAccess,
     descriptor: &mut Descriptor,
     lease: Lease,
@@ -347,12 +373,12 @@ fn start(
 /// How one ordinary frame ended: its completion's status and detail, or
 /// how the queue gave it back.
 #[derive(Clone, Copy)]
-struct Ended {
+pub(super) struct Ended {
     /// 0 completed, 1 aborted and detached, 2 completed after the abort
     /// found it on the air.
-    how: u32,
-    status: u32,
-    detail: u32,
+    pub(super) how: u32,
+    pub(super) status: u32,
+    pub(super) detail: u32,
 }
 
 /// The frame's end after a stop: its completion if it had one, else the
@@ -388,7 +414,7 @@ fn abort(access: &mut RadioAccess, descriptor: &mut Descriptor) -> Result<Option
 /// Await the queue's completion for at most [`COMPLETION_MS`]; the
 /// descriptor is free again and its lease back in the pool. `how` is
 /// recorded: 0 an ordinary completion, 2 one an abort found on the air.
-async fn await_completion(
+pub(super) async fn await_completion(
     access: &mut RadioAccess,
     descriptor: &mut Descriptor,
     how: u32,
@@ -613,19 +639,23 @@ struct Abandoned {
 }
 
 impl Abandoned {
-    /// The descriptor's three words now.
-    fn words(&self) -> [u32; 3] {
+    /// The descriptor's three words now; a word that cannot be read fails
+    /// the series with its chain, never compares as a value (`tasks/169`).
+    fn words(&self, chain: u32) -> Result<[u32; 3], Failure> {
         let len = WifiTxDmaDescriptor::SIZE as u32;
-        [0, 4, 8].map(|offset| {
-            read_placed_word(self.descriptor_address, len, offset).unwrap_or(u32::MAX)
-        })
+        let mut words = [0_u32; 3];
+        for (word, offset) in words.iter_mut().zip([0, 4, 8]) {
+            *word = read_placed_word(self.descriptor_address, len, offset)
+                .ok_or((tx_phase::READ, chain | offset << 24))?;
+        }
+        Ok(words)
     }
 
     /// The descriptor's words that differ from their reference, and the
     /// buffer's words that differ from the frame written into it.
-    fn changed(&self, header: &[u8; 24], chain: u32) -> (u32, u32) {
+    fn changed(&self, header: &[u8; 24], chain: u32) -> Result<(u32, u32), Failure> {
         let descriptor = self
-            .words()
+            .words(chain)?
             .iter()
             .zip(self.reference)
             .filter(|(now, then)| **now != *then)
@@ -636,11 +666,13 @@ impl Abandoned {
             let expected = u32::from_le_bytes(core::array::from_fn(|byte| {
                 buffer_byte(header, chain, FRAME, word * 4 + byte)
             }));
-            if read_placed_word(self.buffer_start, self.buffer_len, offset) != Some(expected) {
+            let read = read_placed_word(self.buffer_start, self.buffer_len, offset)
+                .ok_or((tx_phase::READ, chain | 0x0080_0000))?;
+            if read != expected {
                 buffer = buffer.saturating_add(1);
             }
         }
-        (descriptor, buffer)
+        Ok((descriptor, buffer))
     }
 }
 
@@ -662,6 +694,15 @@ pub(super) struct TransmitParts<'a> {
 #[expect(
     clippy::too_many_lines,
     reason = "one series in the order the task states it, each step recorded where it happens"
+)]
+#[cfg_attr(
+    feature = "amsdu",
+    allow(
+        unreachable_code,
+        unused_variables,
+        unused_mut,
+        reason = "case C's image sends its own series and leaves part two's A out"
+    )
 )]
 pub(super) async fn series(
     parts: TransmitParts<'_>,
@@ -704,6 +745,18 @@ pub(super) async fn series(
         header: header(station, peer),
         power: sources.tx_power.pair(MacLegacyRate::Ofdm6M.code()).primary as u8,
     };
+    #[cfg(feature = "amsdu")]
+    return super::amsdu::series(
+        super::amsdu::AmsduParts {
+            frames: &frames,
+            ordinary: &mut ordinary,
+            station,
+            peer,
+            journal,
+        },
+        &mut access,
+    )
+    .await;
     frames.paint_guards()?;
 
     // The medium (`tasks/157`): with the peer silent, then sending, each
@@ -869,7 +922,7 @@ pub(super) async fn series(
             buffer_len: region.len(),
             reference: [0; 3],
         };
-        abandoned.reference = abandoned.words();
+        abandoned.reference = abandoned.words(chain32)?;
         let after = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
         let active = access.wifi_mac_hal().channel_active_state();
         let raw = mac_irq.mac_interrupt_raw().bits();
@@ -914,7 +967,7 @@ pub(super) async fn series(
             EmbassyClock.wait_until(waited).await;
         }
         let (descriptor_changed, buffer_changed) =
-            abandoned.changed(&frames.header, counter::PULSE | chain32);
+            abandoned.changed(&frames.header, counter::PULSE | chain32)?;
         let guards_changed = frames.changed_guard_words(chain..chain + 2);
         // The second run transmits.
         let (second, second_cycles) = send(
@@ -962,7 +1015,8 @@ pub(super) async fn series(
     let mut buffers = 0_u32;
     let mut first = u32::MAX;
     for (chain, abandoned) in chains.iter().enumerate() {
-        let (descriptor, buffer) = abandoned.changed(&frames.header, counter::PULSE | chain as u32);
+        let (descriptor, buffer) =
+            abandoned.changed(&frames.header, counter::PULSE | chain as u32)?;
         if (descriptor != 0 || buffer != 0) && first == u32::MAX {
             first = chain as u32;
         }
