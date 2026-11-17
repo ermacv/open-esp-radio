@@ -50,8 +50,10 @@ const VIOLATION_CAPACITY: usize = 16;
 /// The pool the rebinds draw from and return to; spares from here on are
 /// never bound and keep their canary to the run's end.
 const POOL_END: usize = 176;
-/// Every so many retirements one is kept to the run's end.
+/// Every so many retirements one is kept to the run's end, until
+/// [`KEPT_MAX`] are kept: the rest return, so the pool is not drained.
 const KEEP_EVERY: u32 = 8;
+const KEPT_MAX: usize = 32;
 /// A retired spare returns after this many descriptors: two laps.
 const RETURN_AFTER: u32 = 2 * COUNT as u32;
 /// The Retry flag of Frame Control's second octet (IEEE 802.11-2020
@@ -528,7 +530,9 @@ impl State {
         bank: &'static Spares,
         spare: usize,
     ) -> Result<Option<()>, Name<32>> {
-        if !storage.rebind_spare_unbound(spare) {
+        // A returned spare is unbound again but holds its frames: only the
+        // reserved spares, never bound, keep their canary.
+        if spare < POOL_END || !storage.rebind_spare_unbound(spare) {
             return Ok(None);
         }
         if let Some(word) =
@@ -796,7 +800,7 @@ fn act(
         descriptors_at_retire: state.descriptors_total,
     };
     bump(&mut state.retired_total);
-    if state.retired_total % KEEP_EVERY == 0 {
+    if state.retired_total % KEEP_EVERY == 0 && state.kept_len < KEPT_MAX {
         state.keep(retired)?;
     } else {
         let at = (state.pending_head + state.pending_len) % RX_REBIND_SPARES;
