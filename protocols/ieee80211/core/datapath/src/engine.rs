@@ -552,9 +552,6 @@ pub trait Sections<'id, P: DataPort<'id>> {
         events: &mut E,
     );
 
-    /// The form's transmissions on the air: an arena, or a single a queue.
-    fn in_flight(&self, _seal: Seal) -> usize;
-
     /// The rights back and the data stopped, when it is stopping, its gate
     /// shut and nothing the port's; else nothing changes.
     fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights>;
@@ -659,7 +656,7 @@ impl<
     /// The MSDUs the queues hold.
     #[cfg(test)]
     pub(crate) fn queued(&self) -> usize {
-        self.queues.len()
+        self.queues.count()
     }
 
     /// Begin the gate's closing, when it is open and no command runs:
@@ -2208,8 +2205,13 @@ where
     }
 
     fn next_queue(&self, _seal: Seal) -> Option<QueueId> {
+        // A named TID's queue waits for its name's end.
+        let hold = match &self.entries {
+            [Entry::Linked(linked)] => linked.hold.tid().map(QueueId::of_tid),
+            [Entry::Free] => None,
+        };
         match &self.data {
-            Data::Flowing(running) if running.form.plane.takes() => self.queues.select(None),
+            Data::Flowing(_) => self.queues.select(hold),
             _ => None,
         }
     }
@@ -2356,15 +2358,6 @@ where
                 .form
                 .plane
                 .stop(port, |memory| network.home(memory), events);
-        }
-    }
-
-    fn in_flight(&self, _seal: Seal) -> usize {
-        match &self.data {
-            Data::Flowing(running) | Data::Stopping(running) => {
-                usize::from(running.form.plane.on_air())
-            }
-            Data::Stopped => 0,
         }
     }
 
@@ -2828,18 +2821,6 @@ where
     ) {
         // A client's singles in flight hold no memory of the network: it
         // went home at the write.
-    }
-
-    fn in_flight(&self, _seal: Seal) -> usize {
-        match &self.data {
-            Data::Flowing(running) | Data::Stopping(running) => running
-                .form
-                .lanes
-                .iter()
-                .filter(|lane| matches!(lane, Lane::Air(_)))
-                .count(),
-            Data::Stopped => 0,
-        }
     }
 
     fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights> {

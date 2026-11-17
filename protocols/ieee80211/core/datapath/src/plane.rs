@@ -908,16 +908,6 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         Some(bound.saturating_sub(count))
     }
 
-    /// The frames the arenas hold: published, retained or taken.
-    pub const fn frames(&self) -> u8 {
-        self.first.count().saturating_add(self.second.count())
-    }
-
-    /// Whether an arena holds a frame: published, retained or taken.
-    pub const fn holds_frames(&self) -> bool {
-        self.first.pending != 0 || self.second.pending != 0
-    }
-
     /// Return every frame the arena of `side` holds while it is not on the
     /// air; its right goes back to idle.
     fn withdraw<P: DataPort<'id, Caps = K>>(
@@ -1002,11 +992,6 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             .into_iter()
             .find(|side| self.book(*side).takes() && self.book(*side).pending != 0)
             .or_else(|| sides.into_iter().find(|side| self.book(*side).takes()))
-    }
-
-    /// Whether an arena takes frames now.
-    pub fn takes(&self) -> bool {
-        self.standby().is_some()
     }
 
     /// The TID whose frames the standby holds: only its next frames join

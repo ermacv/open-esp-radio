@@ -128,6 +128,18 @@ pub struct AggregateRetry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An aggregate member is its delimiter and its MPDU with the MIC of a
+    /// protected one and the FCS, padded to four octets (IEEE Std
+    /// 802.11-2020, 9.7.1; 12.5.3.2: an 8-octet MIC).
+    #[test]
+    fn a_member_is_its_mpdu_its_mic_and_fcs_padded_to_four_and_its_delimiter() {
+        assert_eq!(subframe_octets(100, DataProtection::Open), Some(108));
+        assert_eq!(subframe_octets(101, DataProtection::Open), Some(112));
+        assert_eq!(subframe_octets(103, DataProtection::Open), Some(112));
+        assert_eq!(subframe_octets(100, DataProtection::Ccmp(())), Some(116));
+        assert_eq!(subframe_octets(usize::MAX, DataProtection::Open), None);
+    }
     use oer_protocols_ieee80211_contracts_port::PhyRate;
     use oer_protocols_ieee80211_wire::phy::{HtMcs, HtRate, LegacyRate, PpduBandwidth};
 

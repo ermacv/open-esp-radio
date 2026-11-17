@@ -141,23 +141,13 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
     }
 
     /// The MSDUs the queues hold.
-    pub fn len(&self) -> usize {
+    pub fn count(&self) -> usize {
         self.msdus.iter().filter(|msdu| msdu.is_some()).count()
     }
 
     /// Whether the pool takes another MSDU.
     pub const fn has_room(&self) -> bool {
         self.free != END || (self.fresh as usize) < POOL
-    }
-
-    /// Whether any queue holds an MSDU.
-    pub const fn is_empty(&self) -> bool {
-        self.active == 0
-    }
-
-    /// Whether a queue that does not wait holds an MSDU.
-    pub const fn has_ready(&self) -> bool {
-        self.active & !self.blocked != 0
     }
 
     /// Whether `queue` holds an MSDU and does not wait.
@@ -301,9 +291,6 @@ impl<M, const POOL: usize, const PEERS: usize> TxQueues<M, POOL, PEERS> {
             let Some(peer_id) = u8::try_from(peer).ok() else {
                 continue;
             };
-            if ready & Self::peer_mask(peer_id) == 0 {
-                continue;
-            }
             let peer_air = self.peer_served.get(peer).copied().unwrap_or(0);
             for tid in WmmUserPriority::ALL {
                 let Some(queue) = QueueId::new(peer_id, tid) else {
