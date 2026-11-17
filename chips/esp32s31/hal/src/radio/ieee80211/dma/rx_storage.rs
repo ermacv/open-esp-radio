@@ -386,10 +386,11 @@ impl<
         if word0.rx_done() != (count.checked_sub(1) == Some(step)) {
             return Err(RxUnitStepError::Terminal);
         }
-        let buffer = self
-            .storage
-            .buffer_for_descriptor(index)
-            .ok_or(RxUnitStepError::Step)?;
+        // TEMPORARY experiment: a spare's bytes are read through its bank's
+        // volatile copies, never lent as a step.
+        let Some(BoundBuffer::Arena(buffer)) = self.storage.buffer_for_descriptor(index) else {
+            return Err(RxUnitStepError::Step);
+        };
         // The unit holds every descriptor from its head through its count.
         let bytes = lend_held(self, buffer, index)
             .get(..usize::from(word0.length()))
