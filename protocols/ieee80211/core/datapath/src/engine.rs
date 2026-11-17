@@ -289,7 +289,7 @@ enum Gate<'id> {
     /// Open: arenas and singles go.
     Open(GateOpen<'id>, CommandPlace<'id>),
     /// Its closing runs, with the command's place: nothing goes.
-    Closing(InCommand<'id, CloseGate<'id>>),
+    Closing(InCommand<'id, GateOpen<'id>>),
     /// Inside one method, between two of the above: the port's command
     /// takes the open gate and the place by value, so safe Rust moves them
     /// out through a value left in their place. Never seen outside it.

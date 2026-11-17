@@ -44,7 +44,7 @@ or build dependency turns that on (`oer-tools-test-layers`,
 | `GateOpen` | `open_gate` | the controller, lent to a publication | the close-gate command |
 | `IdleArena`, `Arena`, `OnAir` | the install; `open`, `publish`, `settle`, `withdraw` | the engine | the next of them |
 | `SinglePlace`, `QueueRight` | the install; a single's end (`PortSink::single_ended`) | the engine; the port from a single's publication to its end | `publish_single` |
-| `CommandPlace`, `InCommand<'id, C>` | the install; a kind's `begin_*`; its end | the engine | a kind's `begin_*`, `poll_*` |
+| `CommandPlace`, `InCommand<'id, H>` | the install; a kind's `begin_*`; its end | the engine | a kind's `begin_*`, `poll_*` |
 | `PairwiseSlot`, `GroupSlot`, `AgreementSlot` and their installed forms | the install (empty); a key's or an agreement's command end | the engine | the commands that install, replace and remove them |
 
 ## The radio's life
@@ -102,7 +102,9 @@ role's frame always has its place.
 `CloseGate` (`begin_close`, `poll_close`), `PairwiseCommand`
 (`begin_pairwise`, `poll_pairwise`), `GroupCommand`, `AgreementCommand`
 and `ValueCommand` (configuration, EDCA, the BSS color, HE). A command in
-progress is `InCommand<'id, C>`, typed by its kind, and its poll ends only
+progress is `InCommand<'id, H>`, typed by its kind: `H` holds the kind
+and the rights its end returns, no value (the begin consumes the key, the
+peer and the parameters). Its poll ends only
 with that kind's end: the closed gate; `PairwiseEnd`, `GroupEnd` or
 `AgreementEnd`, the slot always back, installed or empty (an expired key
 command with its slot empty); `ValueEnd::Done` or `Expired`. Every end gives

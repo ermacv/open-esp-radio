@@ -190,12 +190,12 @@ fn stop<'id, H, const S: usize, const G: usize, const A: usize, const D: usize>(
 
 /// Run a command of one kind to its end: its poll ends only with that
 /// kind's end, and gives the place back.
-fn run_command<'id, H, C, E, const S: usize, const G: usize, const A: usize, const D: usize>(
+fn run_command<'id, H, C, K, E, const S: usize, const G: usize, const A: usize, const D: usize>(
     harness: &mut H,
     place: CommandPlace<'id>,
     command: C,
-    begin: impl Fn(&mut H::Port, CommandPlace<'id>, C) -> InCommand<'id, C>,
-    poll: impl Fn(&mut H::Port, InCommand<'id, C>, &mut Ends<'id>) -> CommandPoll<'id, C, E>,
+    begin: impl Fn(&mut H::Port, CommandPlace<'id>, C) -> InCommand<'id, K>,
+    poll: impl Fn(&mut H::Port, InCommand<'id, K>, &mut Ends<'id>) -> CommandPoll<'id, K, E>,
 ) -> (CommandPlace<'id>, E)
 where
     H: Harness<'id, S, G, A, D>,

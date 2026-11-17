@@ -69,17 +69,18 @@ use std::vec::Vec;
 use oer_portable_time::Instant;
 use oer_protocols_ieee80211_contracts_port::data::Sealed;
 use oer_protocols_ieee80211_contracts_port::{
-    AggregateEnd, AgreementCommand, AgreementEnd, Air as OnAirAir, AmpduCapabilities,
-    AmpduLengthTable, Arena, ArenaOutcome, ArenaSide, BandSet, BlockAckReport, Channel, CloseGate,
-    CommandPlace, CommandPoll, Complete, DataLayout, DataPort, DataRights, Ended, Facts, FrameSet,
-    GateClosed, GateIssuer, GateLent, GateOpen, GroupCommand, GroupEnd, HEADROOM, HardwareServices,
-    HeaderLen, IdleArena, Ieee80211Capabilities, Ieee80211Instant, InCommand, IndeterminateCause,
-    LowerMacCapabilities, MpduLength, OnAir, PairwiseCommand, PairwiseEnd, PhyFormatSet, Place,
-    PortKey, PortSink, Ppdu, Protection, QueueRight, RadioPort, RateSupport, ReceiveFilter,
-    ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead, RxMeta, Settled, Signal,
-    SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged, StagedPlaces, StartFailure,
-    StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped, Stopping, SupportedChannel, Tid,
-    TxFacts, TxFrame, TxOutcome, UnitsHome, ValueCommand, ValueEnd, WidthSet, WithdrawCause,
+    AggregateEnd, AgreementCommand, AgreementEnd, AgreementHeld, Air as OnAirAir,
+    AmpduCapabilities, AmpduLengthTable, Arena, ArenaOutcome, ArenaSide, BandSet, BlockAckReport,
+    Channel, CloseGate, CommandPlace, CommandPoll, Complete, DataLayout, DataPort, DataRights,
+    Ended, Facts, FrameSet, GateClosed, GateIssuer, GateLent, GateOpen, GroupCommand, GroupEnd,
+    GroupHeld, HEADROOM, HardwareServices, HeaderLen, IdleArena, Ieee80211Capabilities,
+    Ieee80211Instant, InCommand, IndeterminateCause, LowerMacCapabilities, MpduLength, OnAir,
+    PairwiseCommand, PairwiseEnd, PairwiseHeld, PhyFormatSet, Place, PortKey, PortSink, Ppdu,
+    Protection, QueueRight, RadioPort, RateSupport, ReceiveFilter, ReceivePort, Rest, Retired,
+    RetunePoll, Retuning, Running, RxHead, RxMeta, Settled, Signal, SingleEnd, SingleOutcome,
+    SinglePlace, SingleResponse, Staged, StagedPlaces, StartFailure, StartPoll, Starting, StopFrom,
+    StopPoll, StopRight, Stopped, Stopping, SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome,
+    UnitsHome, ValueCommand, ValueEnd, ValueKind, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -1337,16 +1338,17 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
         place: CommandPlace<'id>,
         command: CloseGate<'id>,
         _now: Instant,
-    ) -> InCommand<'id, CloseGate<'id>> {
-        self.begin(place, command)
+    ) -> InCommand<'id, GateOpen<'id>> {
+        let CloseGate(open) = command;
+        self.begin(place, open)
     }
 
     fn poll_close(
         &mut self,
-        command: InCommand<'id, CloseGate<'id>>,
+        command: InCommand<'id, GateOpen<'id>>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, CloseGate<'id>, GateClosed<'id>> {
+    ) -> CommandPoll<'id, GateOpen<'id>, GateClosed<'id>> {
         self.polled(now, sink);
         if self.queues.iter().any(|queue| queue.single.is_some())
             || self.arenas.iter().any(|arena| arena.air.is_some())
@@ -1354,7 +1356,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
             // The barrier waits for what is on the air.
             return CommandPoll::Pending(command);
         }
-        let (place, CloseGate(open)) = self.ended(command);
+        let (place, open) = self.ended(command);
         self.parts.off(Part::Gate);
         self.program(Programmed::Gate(false));
         CommandPoll::Ended(place, self.issuer.close(open))
@@ -1365,21 +1367,26 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
         place: CommandPlace<'id>,
         command: PairwiseCommand<'id>,
         _now: Instant,
-    ) -> InCommand<'id, PairwiseCommand<'id>> {
-        self.begin(place, command)
+    ) -> InCommand<'id, PairwiseHeld<'id>> {
+        // The model programs none of the key's values: they end here.
+        let held = match command {
+            PairwiseCommand::Install { slot, .. } => PairwiseHeld::Installing(slot),
+            PairwiseCommand::Remove(installed) => PairwiseHeld::Removing(installed),
+        };
+        self.begin(place, held)
     }
 
     fn poll_pairwise(
         &mut self,
-        command: InCommand<'id, PairwiseCommand<'id>>,
+        command: InCommand<'id, PairwiseHeld<'id>>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, PairwiseCommand<'id>, PairwiseEnd<'id>> {
+    ) -> CommandPoll<'id, PairwiseHeld<'id>, PairwiseEnd<'id>> {
         self.polled(now, sink);
         let expire = self.parts.take(Part::Expire);
         let (place, running) = self.ended(command);
         let end = match running {
-            PairwiseCommand::Install { slot, .. } => {
+            PairwiseHeld::Installing(slot) => {
                 if expire {
                     self.parts.off(Part::Pairwise);
                     self.program(Programmed::Pairwise(false));
@@ -1390,7 +1397,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
                     PairwiseEnd::Installed(self.key.pairwise_installed(slot))
                 }
             }
-            PairwiseCommand::Remove(key) => {
+            PairwiseHeld::Removing(key) => {
                 self.parts.off(Part::Pairwise);
                 self.program(Programmed::Pairwise(false));
                 PairwiseEnd::Empty(self.key.pairwise_removed(key))
@@ -1404,21 +1411,27 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
         place: CommandPlace<'id>,
         command: GroupCommand<'id>,
         _now: Instant,
-    ) -> InCommand<'id, GroupCommand<'id>> {
-        self.begin(place, command)
+    ) -> InCommand<'id, GroupHeld<'id>> {
+        let held = match command {
+            GroupCommand::Install { slot, .. } => GroupHeld::Installing(slot),
+            GroupCommand::Replace { installed, .. } => GroupHeld::Replacing(installed),
+            GroupCommand::Select(installed) => GroupHeld::Selecting(installed),
+            GroupCommand::Remove(installed) => GroupHeld::Removing(installed),
+        };
+        self.begin(place, held)
     }
 
     fn poll_group(
         &mut self,
-        command: InCommand<'id, GroupCommand<'id>>,
+        command: InCommand<'id, GroupHeld<'id>>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, GroupCommand<'id>, GroupEnd<'id>> {
+    ) -> CommandPoll<'id, GroupHeld<'id>, GroupEnd<'id>> {
         self.polled(now, sink);
         let expire = self.parts.take(Part::Expire);
         let (place, running) = self.ended(command);
         let end = match running {
-            GroupCommand::Install { slot, .. } => {
+            GroupHeld::Installing(slot) => {
                 let index = slot.index();
                 if expire {
                     self.set_group(index, Slot::Empty);
@@ -1428,7 +1441,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
                     GroupEnd::Installed(self.key.group_installed(slot))
                 }
             }
-            GroupCommand::Replace { installed, .. } | GroupCommand::Select(installed) => {
+            GroupHeld::Replacing(installed) | GroupHeld::Selecting(installed) => {
                 let index = installed.index();
                 if expire {
                     self.set_group(index, Slot::Empty);
@@ -1438,7 +1451,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
                     GroupEnd::Installed(installed)
                 }
             }
-            GroupCommand::Remove(installed) => {
+            GroupHeld::Removing(installed) => {
                 let index = installed.index();
                 self.set_group(index, Slot::Empty);
                 GroupEnd::Empty(self.key.group_removed(installed))
@@ -1452,21 +1465,25 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
         place: CommandPlace<'id>,
         command: AgreementCommand<'id, Self::Caps>,
         _now: Instant,
-    ) -> InCommand<'id, AgreementCommand<'id, Self::Caps>> {
-        self.begin(place, command)
+    ) -> InCommand<'id, AgreementHeld<'id>> {
+        let held = match command {
+            AgreementCommand::Add { slot, .. } => AgreementHeld::Adding(slot),
+            AgreementCommand::End(agreement) => AgreementHeld::Ending(agreement),
+        };
+        self.begin(place, held)
     }
 
     fn poll_agreement(
         &mut self,
-        command: InCommand<'id, AgreementCommand<'id, Self::Caps>>,
+        command: InCommand<'id, AgreementHeld<'id>>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, AgreementCommand<'id, Self::Caps>, AgreementEnd<'id>> {
+    ) -> CommandPoll<'id, AgreementHeld<'id>, AgreementEnd<'id>> {
         self.polled(now, sink);
         let expire = self.parts.take(Part::Expire);
         let (place, running) = self.ended(command);
         let end = match running {
-            AgreementCommand::Add { slot, .. } => {
+            AgreementHeld::Adding(slot) => {
                 let index = slot.index();
                 if expire {
                     AgreementEnd::Empty(slot)
@@ -1475,7 +1492,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
                     AgreementEnd::Added(self.key.agreement_added(slot))
                 }
             }
-            AgreementCommand::End(agreement) => {
+            AgreementHeld::Ending(agreement) => {
                 let index = agreement.index();
                 self.set_agreement(index, Slot::Empty);
                 AgreementEnd::Empty(self.key.agreement_ended(agreement))
@@ -1489,16 +1506,22 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
         place: CommandPlace<'id>,
         command: ValueCommand<Self::Caps>,
         _now: Instant,
-    ) -> InCommand<'id, ValueCommand<Self::Caps>> {
-        self.begin(place, command)
+    ) -> InCommand<'id, ValueKind> {
+        let kind = match command {
+            ValueCommand::Configure(_) => ValueKind::Configure,
+            ValueCommand::SetEdca(_) => ValueKind::SetEdca,
+            ValueCommand::SetBssColor(_) => ValueKind::SetBssColor,
+            ValueCommand::SetHe(_) => ValueKind::SetHe,
+        };
+        self.begin(place, kind)
     }
 
     fn poll_value(
         &mut self,
-        command: InCommand<'id, ValueCommand<Self::Caps>>,
+        command: InCommand<'id, ValueKind>,
         now: Instant,
         sink: &mut impl PortSink<'id, Self::Ack, Self::Denial>,
-    ) -> CommandPoll<'id, ValueCommand<Self::Caps>, ValueEnd> {
+    ) -> CommandPoll<'id, ValueKind, ValueEnd> {
         self.polled(now, sink);
         let end = if self.parts.take(Part::Expire) {
             ValueEnd::Expired
@@ -1508,10 +1531,10 @@ impl<'id, const SINGLES: usize, const DATA: usize> DataPort<'id> for ModelPort<'
         let (place, running) = self.ended(command);
         if end == ValueEnd::Done {
             self.program(match running {
-                ValueCommand::Configure(_) => Programmed::Configure,
-                ValueCommand::SetEdca(_) => Programmed::Edca,
-                ValueCommand::SetBssColor(_) => Programmed::Color,
-                ValueCommand::SetHe(_) => Programmed::He,
+                ValueKind::Configure => Programmed::Configure,
+                ValueKind::SetEdca => Programmed::Edca,
+                ValueKind::SetBssColor => Programmed::Color,
+                ValueKind::SetHe => Programmed::He,
             });
         }
         CommandPoll::Ended(place, end)
@@ -1543,10 +1566,10 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
     }
 
     /// A command began on the one place.
-    fn begin<C>(&mut self, place: CommandPlace<'id>, command: C) -> InCommand<'id, C> {
+    fn begin<H>(&mut self, place: CommandPlace<'id>, held: H) -> InCommand<'id, H> {
         self.call();
         self.commanding = Commanding::Running;
-        self.key.began(place, command)
+        self.key.began(place, held)
     }
 
     /// A command's poll: the singles' ends first, when the lever says so.
@@ -1557,8 +1580,8 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
         }
     }
 
-    /// A command ended: its place back with the command.
-    fn ended<C>(&mut self, command: InCommand<'id, C>) -> (CommandPlace<'id>, C) {
+    /// A command ended: its place back with what it held.
+    fn ended<H>(&mut self, command: InCommand<'id, H>) -> (CommandPlace<'id>, H) {
         self.commanding = Commanding::Idle;
         self.key.command_ended(command)
     }

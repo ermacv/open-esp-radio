@@ -11,7 +11,7 @@ pub fn close<'a, 'b, P: DataPort<'a>>(
     own: GateOpen<'a>,
     foreign: GateOpen<'b>,
     now: Instant,
-) -> InCommand<'a, CloseGate<'a>> {
+) -> InCommand<'a, GateOpen<'a>> {
     let _ = (&own, &foreign);
     #[cfg(ui_reject)]
     let gate = foreign; // ui-error: lifetime may not live long enough
