@@ -374,6 +374,9 @@ enum Kind {
     /// Part two's receiver: what it received from the transmitting probe.
     #[cfg(feature = "receiver")]
     Rx = 14,
+    /// Case C's sender: one case's frames and how they ended.
+    #[cfg(feature = "amsdu")]
+    AmsduSent = 15,
 }
 
 const WIDTH: usize = 22;
@@ -545,6 +548,8 @@ macro_rules! apart {
         core::future::poll_fn(|context| poll_apart(future.as_mut(), context)).await
     }};
 }
+#[cfg(feature = "amsdu")]
+mod amsdu;
 #[cfg(feature = "receiver")]
 mod receiver;
 #[cfg(feature = "transmit")]

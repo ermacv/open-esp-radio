@@ -49,6 +49,9 @@ receiver = []
 # Part A on a quiet air (`tasks/168`): the medium observed with the peer
 # silent only, since nothing else transmits.
 quiet = ["transmit"]
+# Case C's sender (`tasks/154`, `159`): A-MSDU cases and the provenance
+# series to the receiving rx-chain probe, in place of part two's A.
+amsdu = ["transmit"]
 
 [lints]
 workspace = true
