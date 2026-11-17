@@ -336,6 +336,16 @@ impl<A, const WINDOW: usize, const SLOTS: usize> RxBlockAckSession<A, WINDOW, SL
             .is_some_and(|deadline| now.as_micros() >= deadline.get())
     }
 
+    /// Whether an MPDU of `sequence` would be retained, not released at
+    /// once: it does not close the window's hole.
+    ///
+    /// # Errors
+    ///
+    /// The sequence is a buffered duplicate.
+    pub fn retains(&self, sequence: SequenceNumber) -> Result<bool, RxReorderError> {
+        self.reorder.retains_on_ingest(sequence)
+    }
+
     pub fn peer_delba(&self, action: BlockAckAction) -> bool {
         matches!(action, BlockAckAction::Delba { tid, initiator: true, .. } if tid == self.tid)
     }

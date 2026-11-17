@@ -9349,14 +9349,6 @@ const OPTION_SLOTS: &[(&str, &str)] = &[
         BY_P3,
     ),
     (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Bank.active",
-        BY_P3,
-    ),
-    (
-        "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Bank.free",
-        BY_P3,
-    ),
-    (
         "protocols/ieee80211/core/upper-mac/src/block_ack/banks.rs::Header.association",
         BY_P3,
     ),

@@ -189,6 +189,9 @@ pub trait ReceivePort<'id>: DataPort<'id> {
     type Meta: RxMetadata;
     /// A unit lent to the network, in place.
     type Lent;
+    /// The port's staging places: every unit out of the ring is in one, at
+    /// most [`PLACES`].
+    const STAGING: usize;
 
     /// Open a round: take what the network gave back; its count.
     fn round_open(&mut self, seal: &Sealed, now: Instant) -> usize;

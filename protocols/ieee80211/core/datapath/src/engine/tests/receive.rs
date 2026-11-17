@@ -111,7 +111,7 @@ fn refusals<const POOL: usize>(engine: &mut StationEngine<'_, POOL>) -> RxRefusa
 #[test]
 fn received_data_is_lent_to_the_network_as_an_ethernet_frame_and_the_controller_is_told_nothing() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&data(1, IPV4, 9), meta());
         assert_eq!(engine.received(&mut around.turn()), Rest::Wake(None));
@@ -135,7 +135,7 @@ fn received_data_is_lent_to_the_network_as_an_ethernet_frame_and_the_controller_
 #[test]
 fn a_frame_whose_header_does_not_decode_reaches_no_one() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&data(1, IPV4, 9)[..20], meta());
         let _ = engine.received(&mut around.turn());
@@ -151,7 +151,7 @@ fn a_frame_whose_header_does_not_decode_reaches_no_one() {
 #[test]
 fn management_and_eapol_are_read_by_the_controller_inside_the_round() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&beacon(1), meta());
         around.port.land(
@@ -184,7 +184,7 @@ fn management_and_eapol_are_read_by_the_controller_inside_the_round() {
 #[test]
 fn every_management_frame_is_read_in_its_round_and_none_waits() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         for sequence in 0..6 {
             around.port.land(&beacon(sequence), meta());
@@ -202,7 +202,7 @@ fn every_management_frame_is_read_in_its_round_and_none_waits() {
 #[test]
 fn every_staged_unit_is_routed_once() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         let mut foreign = data(2, IPV4, 2);
         foreign[10..16].copy_from_slice(&[2, 0, 0, 0, 0, 0x30]);
@@ -226,7 +226,7 @@ fn every_staged_unit_is_routed_once() {
 #[test]
 fn above_the_lend_limit_a_unit_is_copied_then_waits_until_the_bound() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 1;
         around.net.copy_room = 1;
@@ -279,7 +279,7 @@ fn above_the_lend_limit_a_unit_is_copied_then_waits_until_the_bound() {
 #[test]
 fn refusals_are_counted_by_reason() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         // Protected without the port's evidence.
         around.port.land(&protected(1, 1), meta());
@@ -318,7 +318,7 @@ fn refusals_are_counted_by_reason() {
 #[test]
 fn verified_protected_data_is_delivered_after_its_ccmp_header() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&protected(1, 5), verified());
         let _ = engine.received(&mut around.turn());
@@ -332,7 +332,7 @@ fn verified_protected_data_is_delivered_after_its_ccmp_header() {
 #[test]
 fn a_protected_link_takes_unprotected_eapol_alone() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         {
             let mut data = station_flowing(&mut engine);
@@ -372,7 +372,7 @@ fn a_protected_link_takes_unprotected_eapol_alone() {
 #[test]
 fn an_a_msdus_msdus_are_copied_each_in_order() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.land(&amsdu(&[1, 2, 3]), meta());
         let _ = engine.received(&mut around.turn());
@@ -394,7 +394,7 @@ fn an_a_msdus_msdus_are_copied_each_in_order() {
 #[test]
 fn a_stop_delivers_nothing_and_sends_back_what_waited() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.lend_limit = 1;
         around.net.copy_room = 0;
@@ -417,7 +417,7 @@ fn a_stop_delivers_nothing_and_sends_back_what_waited() {
 #[test]
 fn an_access_points_client_data_goes_to_the_network() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, POLICY);
         let mut around = access_point(run, &mut engine);
         let mut to_ds = data(1, IPV4, 6);
         to_ds[1] = 0x01;
@@ -433,5 +433,279 @@ fn an_access_points_client_data_goes_to_the_network() {
         let _ = engine.received(&mut around.turn());
         assert_eq!(around.net.received, [Got::Lent(0)]);
         assert_eq!(around.told.frames, [(None, request)]);
+    });
+}
+
+/// A QoS data MPDU of TID 0 from the access point: sequence `sequence`, a
+/// payload of `tag`.
+pub(super) fn qos_data(sequence: u16, tag: u8) -> Vec<u8> {
+    let plain = data(sequence, IPV4, tag);
+    let mut frame = plain[..24].to_vec();
+    frame[0] = 0x88;
+    // QoS Control: TID 0.
+    frame.extend_from_slice(&[0, 0]);
+    frame.extend_from_slice(&plain[24..]);
+    frame
+}
+
+/// The access point's ADDBA Request for TID 0: a window of 8 from
+/// `starting`, no inactivity timeout.
+pub(super) fn addba(starting: u16) -> Vec<u8> {
+    use oer_protocols_ieee80211_wire::block_ack::frame::{AmsduSupport, encode_addba_request};
+    let mut frame = std::vec![0xd0, 0x00, 0, 0];
+    frame.extend_from_slice(&STATION);
+    frame.extend_from_slice(&ACCESS_POINT_ADDRESS);
+    frame.extend_from_slice(&ACCESS_POINT_ADDRESS);
+    frame.extend_from_slice(&[0, 0]);
+    frame.extend_from_slice(
+        &encode_addba_request(
+            5,
+            0,
+            8,
+            0,
+            AmsduSupport::NotSupported,
+            SequenceNumber::new(starting).unwrap(),
+        )
+        .unwrap(),
+    );
+    frame
+}
+
+/// The access point's BlockAckReq for TID 0 from `starting`.
+fn bar(starting: u16) -> Vec<u8> {
+    oer_protocols_ieee80211_wire::block_ack::frame::encode_block_ack_request(
+        STATION,
+        ACCESS_POINT_ADDRESS,
+        0,
+        SequenceNumber::new(starting).unwrap(),
+    )
+    .to_vec()
+}
+
+/// The tags of the data the network got, in order.
+fn tags(around: &Around<'_, STATION_SINGLES, 0>) -> Vec<u8> {
+    around
+        .net
+        .received
+        .iter()
+        .filter_map(|got| match got {
+            Got::Copied(frame) => frame.last().copied(),
+            Got::Lent(place) => around
+                .port
+                .place_bytes(*place)
+                .and_then(|bytes| bytes.last().copied()),
+        })
+        .collect()
+}
+
+/// A station whose access point's ADDBA Request for TID 0 from `starting`
+/// was taken: the agreement added by its command, its reply sent.
+fn agreed<'id>(
+    engine: &mut StationEngine<'id, 8>,
+    around: &mut Around<'id, STATION_SINGLES, 0>,
+    starting: u16,
+) {
+    around.port.land(&addba(starting), meta());
+    let _ = engine.received(&mut around.turn());
+    assert!(around.told.frames.is_empty(), "the agreements took it");
+    let _ = engine.round(&mut around.turn());
+    assert_eq!(around.told.replies, 1, "its response is owed once added");
+    linked(engine, |peer| {
+        let reply = peer.rx_reply().expect("the response is owed");
+        assert_eq!(reply.body()[1], 1, "an ADDBA Response");
+        reply.sent();
+        assert!(peer.rx_reply().is_none());
+    });
+}
+
+/// The access point's ADDBA Request is the agreements': its agreement is
+/// added by a command of the port, and the controller is told its response
+/// is owed only once the agreement runs.
+#[test]
+fn an_addba_request_adds_its_agreement_by_a_command_and_owes_its_response() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        around.port.land(&addba(100), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(around.told.replies, 0, "the addition runs");
+        assert!(
+            key_busy(&mut engine),
+            "the command place is the agreement's"
+        );
+        agreed_after(&mut engine, &mut around);
+    });
+}
+
+fn key_busy<const POOL: usize>(engine: &mut StationEngine<'_, POOL>) -> bool {
+    let mut busy = false;
+    linked(engine, |peer| {
+        busy = matches!(peer.key(), KeyPlace::Busy(_))
+    });
+    busy
+}
+
+fn agreed_after<'id>(
+    engine: &mut StationEngine<'id, 8>,
+    around: &mut Around<'id, STATION_SINGLES, 0>,
+) {
+    let _ = engine.round(&mut around.turn());
+    assert_eq!(around.told.replies, 1);
+    assert!(!key_busy(engine));
+}
+
+/// The deleted actor's `a_frame_held_for_reorder_is_delivered_by_the_link_at_its_release`,
+/// with the reorder's order: data after a hole waits, the frame that closes
+/// it releases both in order; while the link is held its data is refused,
+/// and what the reorder still holds when the link carries again goes once.
+#[test]
+fn a_frame_held_for_reorder_is_delivered_once_the_link_carries_again() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        around.port.land(&qos_data(102, 2), meta());
+        let _ = engine.received(&mut around.turn());
+        assert!(around.net.received.is_empty(), "102 waits for 100 and 101");
+        around.port.land(&qos_data(100, 0), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(tags(&around), [0], "100 at once; 102 waits for 101");
+        linked(&mut engine, |peer| {
+            let _ = peer.hold(&mut around.turn());
+        });
+        around.port.land(&qos_data(101, 1), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(
+            refusals(&mut engine).link_held,
+            1,
+            "101: a held link's data"
+        );
+        linked(&mut engine, |peer| {
+            let _ = peer.release(&mut around.turn());
+        });
+        // Past the gap: what the window still holds goes, once.
+        around.pass(POLICY.gap.as_micros());
+        let _ = engine.due(&mut around.turn());
+        assert_eq!(tags(&around), [0, 2]);
+        let _ = engine.due(&mut around.turn());
+        assert_eq!(tags(&around), [0, 2], "once");
+    });
+}
+
+/// The deleted actor's `a_frame_expires_from_reorder_while_the_link_is_still_held`:
+/// what the reorder releases while the link is held is refused with its own
+/// count, and the link's release delivers nothing of it.
+#[test]
+fn a_frame_the_reorder_releases_while_the_link_is_held_is_refused() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        around.port.land(&qos_data(101, 1), meta());
+        let _ = engine.received(&mut around.turn());
+        linked(&mut engine, |peer| {
+            let _ = peer.hold(&mut around.turn());
+        });
+        around.pass(POLICY.gap.as_micros());
+        let _ = engine.due(&mut around.turn());
+        assert_eq!(refusals(&mut engine).link_held, 1);
+        linked(&mut engine, |peer| {
+            let _ = peer.release(&mut around.turn());
+        });
+        let _ = engine.due(&mut around.turn());
+        assert!(around.net.received.is_empty());
+        assert_eq!(around.port.places_held(), 0, "101 went back");
+    });
+}
+
+/// A BlockAckReq moves the window: what the reorder held before its start
+/// goes, and the request goes back to the ring.
+#[test]
+fn a_block_ack_request_releases_what_it_moves_past() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        around.port.land(&qos_data(101, 1), meta());
+        around.port.land(&bar(102), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(tags(&around), [1]);
+        assert_eq!(around.port.places_held(), 1, "101, lent; the request back");
+    });
+}
+
+/// The reorder keeps a place free for the frame that closes its hole: with
+/// one unit lent, six may be retained in eight places; the seventh is
+/// refused, and the hole's frame is still taken and releases what was held,
+/// in order.
+#[test]
+fn the_reorder_keeps_a_place_for_the_frame_that_closes_its_hole() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        around.port.land(&qos_data(100, 100), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(around.net.lent.len(), 1);
+        for sequence in 102..109 {
+            around
+                .port
+                .land(&qos_data(sequence, sequence as u8), meta());
+            let _ = engine.received(&mut around.turn());
+        }
+        assert_eq!(refusals(&mut engine).reorder, 1, "108 found no place");
+        around.port.land(&qos_data(101, 101), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(&tags(&around)[..3], [100, 101, 102]);
+    });
+}
+
+/// A control frame no agreement reads (a BlockAckReq without one) goes
+/// back to the ring: nothing delivered, nothing refused.
+#[test]
+fn a_control_frame_without_an_agreement_goes_back() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        around.port.land(&bar(5), meta());
+        let _ = engine.received(&mut around.turn());
+        assert!(around.net.received.is_empty());
+        assert_eq!(refusals(&mut engine), RxRefusals::default());
+        assert_eq!(around.port.places_held(), 0);
+    });
+}
+
+/// The data's stop ends the agreements: what the reorder holds goes back
+/// undelivered, the agreement is ended by a command, and the rights come
+/// home with its slot.
+#[test]
+fn a_stop_ends_the_agreements_and_their_slots_come_home() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        around.port.land(&qos_data(101, 1), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(around.port.places_held(), 1);
+        assert!(matches!(
+            station_flowing(&mut engine).stop(&mut around.turn()),
+            DataStop::Going
+        ));
+        assert_eq!(around.port.places_held(), 0, "101 went back");
+        assert!(around.net.received.is_empty());
+        let mut stopped = false;
+        for _ in 0..4 {
+            let DataPlace::Stopping(stopping) = engine.data() else {
+                break;
+            };
+            if let DataStop::Stopped(_) = stopping.poll(&mut around.turn()) {
+                stopped = true;
+                break;
+            }
+        }
+        assert!(
+            stopped,
+            "the agreement's end, the gate's closing, the rights"
+        );
     });
 }

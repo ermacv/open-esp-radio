@@ -103,6 +103,9 @@ pub enum ReorderCause {
     Duplicate,
     /// Other rejected or stale input.
     Rejected,
+    /// A frame that would be retained found no place: the caller's room
+    /// for the hole's frame, or the owner's frames.
+    Full,
 }
 
 /// Why an agreement ended.
@@ -122,9 +125,6 @@ pub const RX_BLOCK_ACK_WINDOW: usize = 16;
 const WINDOW: usize = RX_BLOCK_ACK_WINDOW;
 /// Encoded replies waiting for a control transmit credit.
 const PENDING: usize = 8;
-/// The Action subtype of a non-data frame.
-/// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (Action is subtype 13).
-const ACTION_SUBTYPE: u16 = 13;
 
 /// The owners an integration lends the receive agreements.
 pub trait RxBlockAckTypes {
@@ -132,11 +132,11 @@ pub trait RxBlockAckTypes {
     type Slot;
     /// An agreement installed in a slot.
     type Running;
-    /// A received MPDU's owner. The agreements know nothing of it: what
-    /// they decide from is its view ([`RxView`]), given beside it.
+    /// A received MPDU's owner, a handle the reorder names: the agreements
+    /// know nothing of it, and decide from its view ([`RxView`]).
     type Frame;
-    /// Its receive metadata.
-    type Meta: RxMetadata;
+    /// The capabilities that bound an agreement's TID and window.
+    type Caps: Ieee80211Capabilities;
 }
 
 /// A received MPDU read in place, beside its owner: its header, decoded
@@ -149,25 +149,77 @@ pub struct RxView<'a> {
     pub bytes: &'a [u8],
 }
 
-/// The port calls that carry out the owner's decisions, in the order made.
-pub trait RxBlockAckPort<T: RxBlockAckTypes> {
-    /// The capabilities that bound an agreement's TID and window.
-    type Caps: Ieee80211Capabilities;
-    /// Install `agreement` in `slot`.
-    fn add(&mut self, slot: T::Slot, agreement: SupportedBlockAck<Self::Caps>) -> T::Running;
-    /// End `running`, returning its slot.
-    fn remove(&mut self, running: T::Running) -> T::Slot;
-    /// Return a retained frame's receive owner.
-    fn recycle(&mut self, frame: T::Frame);
+type Session<T> = RxBlockAckSession<<T as RxBlockAckTypes>::Running, WINDOW, WINDOW>;
+
+/// Whether an agreement's success response is owed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Reply {
+    Owed,
+    Sent,
 }
 
-type Session<T> = RxBlockAckSession<<T as RxBlockAckTypes>::Running, WINDOW, WINDOW>;
-type Retained<T> = (<T as RxBlockAckTypes>::Frame, <T as RxBlockAckTypes>::Meta);
+/// One agreement bank, a sum of where its slot is.
+enum Bank<T: RxBlockAckTypes> {
+    /// Free: its slot.
+    Free(T::Slot),
+    /// A request accepted: its slot and agreement wait for the command
+    /// place ([`RxBlockAckView::next_command`]).
+    Adding {
+        slot: T::Slot,
+        agreement: SupportedBlockAck<T::Caps>,
+        negotiation: RxBlockAckNegotiation,
+    },
+    /// Its addition runs in the port.
+    AddCommand { negotiation: RxBlockAckNegotiation },
+    /// The agreement runs.
+    Active { session: Session<T>, reply: Reply },
+    /// Ended: the agreement waits for the command place to be removed.
+    Ending(T::Running),
+    /// Its removal runs in the port.
+    EndCommand,
+    /// Inside one method, between two of the above: the slot or the
+    /// agreement moves by value. Never seen outside it.
+    InTransition,
+}
 
-struct Bank<T: RxBlockAckTypes> {
-    free: Option<T::Slot>,
-    active: Option<Session<T>>,
-    response: bool,
+impl<T: RxBlockAckTypes> Bank<T> {
+    const fn active(&self) -> Option<&Session<T>> {
+        match self {
+            Self::Active { session, .. } => Some(session),
+            _ => None,
+        }
+    }
+
+    const fn active_mut(&mut self) -> Option<&mut Session<T>> {
+        match self {
+            Self::Active { session, .. } => Some(session),
+            _ => None,
+        }
+    }
+}
+
+/// A command an agreement bank owes the port: its addition or its end.
+pub enum BankCommand<T: RxBlockAckTypes> {
+    /// Add `agreement` in `slot` for the bank.
+    Add {
+        bank: u8,
+        slot: T::Slot,
+        agreement: SupportedBlockAck<T::Caps>,
+    },
+    /// End the bank's agreement.
+    End { bank: u8, running: T::Running },
+}
+
+/// Whether the caller has a place for one more retained frame: the reorder
+/// retains a frame that does not close its window's hole only while a place
+/// stays free for the one that does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RetainRoom {
+    /// A place is free beyond the one kept for the hole.
+    Free,
+    /// Only the hole's place is free: a frame that would be retained is
+    /// given back.
+    Full,
 }
 
 struct Header<E> {
@@ -175,19 +227,17 @@ struct Header<E> {
     pending: heapless::Deque<[u8; ADDBA_ACTION_BODY_LEN], PENDING>,
     ready: [u8; WINDOW],
     ready_len: u8,
-    // Slot reuse must not reorder management CCMP packet numbers.
-    deferred: heapless::Deque<u8, WINDOW>,
     failed: bool,
     gap_timeout: Duration,
 }
 
-/// Placed backing selected by an image: `BANKS` agreement slots and `FRAMES`
-/// retained-frame owners of association identity `E`. Frame storage contains
-/// owners and metadata, never copies of MPDU payloads.
+/// Placed backing selected by an image: `BANKS` agreement slots and
+/// `FRAMES` retained frames of association identity `E`. Frame storage
+/// holds the frames' handles, never their bytes.
 pub struct RxBlockAckStorage<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize> {
     header: Header<E>,
     banks: [Bank<T>; BANKS],
-    frames: [Option<Retained<T>>; FRAMES],
+    frames: [Option<T::Frame>; FRAMES],
 }
 
 impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
@@ -205,15 +255,10 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
                 pending: heapless::Deque::new(),
                 ready: [0; WINDOW],
                 ready_len: 0,
-                deferred: heapless::Deque::new(),
                 failed: false,
                 gap_timeout,
             },
-            banks: slots.map(|slot| Bank {
-                free: Some(slot),
-                active: None,
-                response: false,
-            }),
+            banks: slots.map(Bank::Free),
             frames: [const { None }; FRAMES],
         }
     }
@@ -226,26 +271,72 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
         }
     }
 
-    /// Construct directly in the image's placed storage. The complete owner
-    /// is bounded by the image's explicit memory budget; no retained payload
-    /// allocation is constructed here.
-    pub fn init_in_place(
-        storage: &mut core::mem::MaybeUninit<Self>,
-        slots: [T::Slot; BANKS],
-        gap_timeout: Duration,
-    ) -> &mut Self {
-        storage.write(Self::new(slots, gap_timeout))
+    /// Whether every bank is free: no agreement runs and no command of one
+    /// is in the port.
+    pub fn is_free(&self) -> bool {
+        self.banks.iter().all(|bank| matches!(bank, Bank::Free(_)))
+    }
+
+    /// Every slot back, when every bank is free; the storage keeps no
+    /// slot after it and serves no agreement until it is built again.
+    ///
+    /// # Errors
+    ///
+    /// A bank is not free ([`Self::is_free`]); nothing moved.
+    pub fn slots_home(&mut self) -> Result<[T::Slot; BANKS], BanksBusy> {
+        if !self.is_free() {
+            return Err(BanksBusy);
+        }
+        // Every bank is free: each slot goes into one of BANKS places, so no
+        // push below is refused; a refused one stays in its bank.
+        let mut slots = heapless::Vec::<T::Slot, BANKS>::new();
+        for bank in self.banks.iter_mut() {
+            if let Bank::Free(slot) = core::mem::replace(bank, Bank::InTransition)
+                && let Err(slot) = slots.push(slot)
+            {
+                *bank = Bank::Free(slot);
+            }
+        }
+        slots.into_array::<BANKS>().map_err(|slots| {
+            // Not every bank gave its slot: this does not happen. The slots
+            // go back to the banks they left, in order.
+            let mut slots = slots.into_iter();
+            for bank in self.banks.iter_mut() {
+                if matches!(bank, Bank::InTransition)
+                    && let Some(slot) = slots.next()
+                {
+                    *bank = Bank::Free(slot);
+                }
+            }
+            BanksBusy
+        })
     }
 }
+
+impl<T: RxBlockAckTypes, E, const BANKS: usize, const FRAMES: usize>
+    RxBlockAckStorage<T, E, BANKS, FRAMES>
+{
+    /// The slots [`Self::slots_home`] gave, back in their banks, each free.
+    pub fn slots_back(&mut self, slots: [T::Slot; BANKS]) {
+        for (bank, slot) in self.banks.iter_mut().zip(slots) {
+            *bank = Bank::Free(slot);
+        }
+    }
+}
+
+/// A bank is not free: an agreement runs or a command of one is in the port.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BanksBusy;
 
 /// The loans a service carries, including through stop and restart.
 pub struct RxBlockAckView<'a, T: RxBlockAckTypes, E> {
     header: &'a mut Header<E>,
     banks: &'a mut [Bank<T>],
-    frames: &'a mut [Option<Retained<T>>],
+    frames: &'a mut [Option<T::Frame>],
 }
 
-/// Where the reply [`RxBlockAckView::next_reply`] returned waits.
+/// Where the reply [`RxBlockAckView::next_reply`] returned waits: a TID's
+/// bank, or the queue of refusals and DELBAs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ReplyPlace {
     Queued,
@@ -264,26 +355,11 @@ pub struct RxBlockAckReplyBody<E> {
 /// What becomes of one received MPDU.
 pub enum RxDisposition<T: RxBlockAckTypes> {
     /// Deliver it now, in order.
-    Deliver(Retained<T>),
-    /// The owner retains it: reordering, or a management Action deferred
-    /// until a reply place is free.
+    Deliver(T::Frame),
+    /// The reorder retains it.
     Retained,
-    /// Return its receive owner without delivery.
+    /// Give its owner back without delivery.
     Recycle(T::Frame),
-    /// No retained-frame credit remains: a capacity fault.
-    Capacity(T::Frame),
-}
-
-/// What [`RxBlockAckView::park`] did with a frame its consumer had no room
-/// for.
-pub enum Parked<T: RxBlockAckTypes> {
-    /// Held: it leaves through [`RxBlockAckView::pop_ready`] after every
-    /// frame queued before it.
-    Waiting,
-    /// Not a data frame: deliver it now.
-    Deliver(Retained<T>),
-    /// No retained-frame credit remains: a capacity fault.
-    Capacity(T::Frame),
 }
 
 /// No reply place or bank remains for an admitted request.
@@ -349,7 +425,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     }
 
     /// The next frame released in sequence order.
-    pub fn pop_ready(&mut self) -> Option<Retained<T>> {
+    pub fn pop_ready(&mut self) -> Option<T::Frame> {
         let (first, rest) = self.header.ready.split_first_mut()?;
         if self.header.ready_len == 0 {
             return None;
@@ -369,112 +445,58 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         self.header.ready_len != 0
     }
 
-    /// Whether the agreements hold any received frame: in a reorder window,
-    /// in delivery order, parked or deferred.
-    pub fn holds_frames(&self) -> bool {
-        self.frames.iter().any(Option::is_some)
-    }
-
-    /// Hold one data MPDU released for delivery while its consumer has no
-    /// room: it waits behind the frames already in delivery order. A
-    /// management or control frame is not held; the caller delivers it.
-    pub fn park(&mut self, frame: T::Frame, view: RxView<'_>, meta: T::Meta) -> Parked<T> {
-        if !view
-            .head
-            .header()
-            .is_some_and(|header| header.control.is_data())
-        {
-            return Parked::Deliver((frame, meta));
-        }
-        let next = usize::from(self.header.ready_len);
-        let Some(slot) = self.frames.iter().position(Option::is_none) else {
-            return Parked::Capacity(frame);
-        };
-        let (Ok(id), true) = (u8::try_from(slot), next < self.header.ready.len()) else {
-            return Parked::Capacity(frame);
-        };
-        let (Some(place), Some(stored)) =
-            (self.header.ready.get_mut(next), self.frames.get_mut(slot))
-        else {
-            return Parked::Capacity(frame);
-        };
-        *place = id;
-        *stored = Some((frame, meta));
-        self.header.ready_len = self.header.ready_len.saturating_add(1);
-        Parked::Waiting
-    }
-
-    fn defer(&mut self, frame: T::Frame, meta: T::Meta) -> Result<(), Retained<T>> {
-        let Some((slot, place)) = self
-            .frames
-            .iter_mut()
-            .enumerate()
-            .find(|(_, place)| place.is_none())
-        else {
-            return Err((frame, meta));
-        };
-        let Ok(slot) = u8::try_from(slot) else {
-            return Err((frame, meta));
-        };
-        if self.header.deferred.push_back(slot).is_err() {
-            return Err((frame, meta));
-        }
-        *place = Some((frame, meta));
-        Ok(())
-    }
-
-    /// A deferred management frame, once its reply has a place.
-    pub fn pop_deferred(&mut self) -> Option<Retained<T>> {
-        if !self.can_receive_management() {
-            return None;
-        }
-        let slot = self.header.deferred.pop_front()?;
-        self.frames.get_mut(usize::from(slot))?.take()
+    /// The frames the agreements retain: in a reorder window or in delivery
+    /// order.
+    pub fn retained(&self) -> usize {
+        self.frames.iter().filter(|frame| frame.is_some()).count()
     }
 
     /// The earliest inactivity or reorder-gap deadline.
     pub fn deadline(&self) -> Option<Instant> {
         self.banks
             .iter()
-            .filter_map(|bank| bank.active.as_ref()?.deadline())
+            .filter_map(|bank| bank.active()?.deadline())
             .min()
     }
 
-    /// End only this role's agreements; every bank and retained frame returns
-    /// through the same port before a healthy Stop; temporary absences keep them.
+    /// End this role's agreements: each running one waits to be removed
+    /// ([`Self::next_command`]), one not yet added frees its slot, and every
+    /// retained frame goes to `released`, undelivered.
     pub fn clear(
         &mut self,
-        port: &mut impl RxBlockAckPort<T>,
         events: &mut impl EventSink<RxBlockAckEvent>,
+        mut released: impl FnMut(T::Frame),
     ) {
         for bank in self.banks.iter_mut() {
-            if let Some(active) = bank.active.take() {
-                let tid = active.tid();
-                report(events, || RxBlockAckEvent::Stopped {
-                    tid,
-                    reason: AgreementStop::Clear,
-                });
-                let (running, released) = active.stop();
-                report(events, || RxBlockAckEvent::Reordered {
-                    tid,
-                    cause: ReorderCause::Clear,
-                    held: 0,
-                    released: u8::try_from(released.iter().count()).unwrap_or(u8::MAX),
-                    missing: 0,
-                });
-                bank.free = Some(port.remove(running));
-            }
-            bank.response = false;
+            *bank = match core::mem::replace(bank, Bank::InTransition) {
+                Bank::Active { session, .. } => {
+                    let tid = session.tid();
+                    report(events, || RxBlockAckEvent::Stopped {
+                        tid,
+                        reason: AgreementStop::Clear,
+                    });
+                    let (running, freed) = session.stop();
+                    report(events, || RxBlockAckEvent::Reordered {
+                        tid,
+                        cause: ReorderCause::Clear,
+                        held: 0,
+                        released: u8::try_from(freed.iter().count()).unwrap_or(u8::MAX),
+                        missing: 0,
+                    });
+                    Bank::Ending(running)
+                }
+                Bank::Adding { slot, .. } => Bank::Free(slot),
+                other => other,
+            };
         }
         for place in self.frames.iter_mut() {
-            if let Some((frame, _meta)) = place.take() {
-                port.recycle(frame);
+            if let Some(frame) = place.take() {
+                released(frame);
             }
         }
         self.header.association = None;
         self.header.pending.clear();
         self.header.ready_len = 0;
-        self.header.deferred.clear();
         self.header.failed = false;
     }
 
@@ -483,37 +505,125 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         self.header.association.map(|(association, _)| association)
     }
 
+    /// The next command a bank owes the port, its bank waiting for its end:
+    /// an addition, else a removal.
+    pub fn next_command(&mut self) -> Option<BankCommand<T>> {
+        let (index, bank) = (0_u8..)
+            .zip(self.banks.iter_mut())
+            .find(|(_, bank)| matches!(bank, Bank::Adding { .. } | Bank::Ending(_)))?;
+        match core::mem::replace(bank, Bank::InTransition) {
+            Bank::Adding {
+                slot,
+                agreement,
+                negotiation,
+            } => {
+                *bank = Bank::AddCommand { negotiation };
+                Some(BankCommand::Add {
+                    bank: index,
+                    slot,
+                    agreement,
+                })
+            }
+            Bank::Ending(running) => {
+                *bank = Bank::EndCommand;
+                Some(BankCommand::End {
+                    bank: index,
+                    running,
+                })
+            }
+            // Found adding or ending above: this does not happen. Should
+            // it, the bank keeps what it was.
+            other => {
+                *bank = other;
+                None
+            }
+        }
+    }
+
+    /// The addition of `bank` ended: its agreement runs, and its success
+    /// response is owed. An agreement the session refuses (its geometry)
+    /// waits to be removed, and the request is declined.
+    pub fn added(
+        &mut self,
+        bank: u8,
+        running: T::Running,
+        events: &mut impl EventSink<RxBlockAckEvent>,
+    ) {
+        let Some(place) = self.banks.get_mut(usize::from(bank)) else {
+            return;
+        };
+        let Bank::AddCommand { negotiation } = core::mem::replace(place, Bank::InTransition) else {
+            // The engine ends only the command it began on this bank.
+            *place = Bank::Ending(running);
+            return;
+        };
+        let response = negotiation.response();
+        match RxBlockAckSession::activate(negotiation, running) {
+            Ok(session) => {
+                let (tid, window) = (session.tid(), session.window());
+                report(events, || RxBlockAckEvent::Started { tid, window });
+                *place = Bank::Active {
+                    session,
+                    reply: Reply::Owed,
+                };
+            }
+            Err((running, _)) => {
+                *place = Bank::Ending(running);
+                let _queued = self.queue_response(AddbaResponse {
+                    status: AddbaStatus::RequestDeclined,
+                    ..response
+                });
+            }
+        }
+    }
+
+    /// `running` waits again to be removed: the end [`Self::next_command`]
+    /// gave could not begin.
+    pub fn owe_end(&mut self, bank: u8, running: T::Running) {
+        if let Some(place) = self.banks.get_mut(usize::from(bank)) {
+            *place = Bank::Ending(running);
+        }
+    }
+
+    /// The command of `bank` ended with its slot empty: an addition that
+    /// expired, or a removal.
+    pub fn emptied(&mut self, bank: u8, slot: T::Slot) {
+        if let Some(place) = self.banks.get_mut(usize::from(bank)) {
+            *place = Bank::Free(slot);
+        }
+    }
+
     /// Take one Block Ack Action the station validated for `association`
-    /// with `bssid`; `agreements` is whether the station admits them.
-    /// A new association first ends every agreement of the previous one.
+    /// with `bssid`; `agreements` is whether the station admits them. A new
+    /// association first ends every agreement of the previous one, its
+    /// retained frames to `released`.
     #[inline(never)]
     #[allow(
         clippy::too_many_arguments,
-        reason = "the validated action's fields, the port and the caller's event sink"
+        reason = "the validated action's fields, the caller's event sink and where released frames go"
     )]
-    pub fn offer<P: RxBlockAckPort<T>>(
+    pub fn offer(
         &mut self,
         now: Instant,
         association: E,
         bssid: Bssid,
         action: BlockAckAction,
         agreements: RxAgreements,
-        port: &mut P,
         events: &mut impl EventSink<RxBlockAckEvent>,
+        released: impl FnMut(T::Frame),
     ) -> Result<(), RxBlockAckRefused> {
         if self.association() != Some(association) {
-            self.clear(port, events);
+            self.clear(events, released);
             self.header.association = Some((association, bssid));
         }
         match action {
             BlockAckAction::Delba { .. } => {
                 let found = self.banks.iter().position(|bank| {
-                    bank.active
-                        .as_ref()
+                    bank.active()
                         .is_some_and(|active| active.peer_delba(action))
                 });
                 if let Some(index) = found {
-                    self.stop(index, port, AgreementStop::Peer, events);
+                    self.stop(index, AgreementStop::Peer, events);
                 }
                 return Ok(());
             }
@@ -523,7 +633,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let Some(parsed) = RxAddbaRequest::from_action(action) else {
             return Ok(());
         };
-        let answered = self.request(now, bssid, parsed, agreements, port, events);
+        let answered = self.request(now, bssid, parsed, agreements, events);
         report(events, || RxBlockAckEvent::Requested {
             tid: parsed.tid(),
             requested: parsed.window(),
@@ -535,25 +645,25 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         answered.map(|_| ()).map_err(RxBlockAckRefused::Capacity)
     }
 
-    /// Answer one ADDBA Request: start, repeat or refuse its agreement.
-    fn request<P: RxBlockAckPort<T>>(
+    /// Answer one ADDBA Request: start, repeat or refuse its agreement. A
+    /// running agreement of the TID asked anew is ended first, and the
+    /// request goes unanswered until its bank is free: the peer asks again.
+    fn request(
         &mut self,
         now: Instant,
         bssid: Bssid,
         parsed: RxAddbaRequest,
         agreements: RxAgreements,
-        port: &mut P,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> Result<AddbaOutcome, RxBlockAckCapacity> {
         if let Some((index, response)) = self.banks.iter().enumerate().find_map(|(index, bank)| {
-            bank.active
-                .as_ref()?
+            bank.active()?
                 .repeated_request(parsed)
                 .map(|response| (index, response))
         }) {
             if response.status == AddbaStatus::Success {
-                if let Some(bank) = self.banks.get_mut(index) {
-                    bank.response = true;
+                if let Some(Bank::Active { reply, .. }) = self.banks.get_mut(index) {
+                    *reply = Reply::Owed;
                 }
                 return Ok(AddbaOutcome::Repeated {
                     window: response.window,
@@ -562,28 +672,43 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             return self.queue_response(response);
         }
         let tid = parsed.tid();
-        let existing = self.banks.iter().position(|bank| {
-            bank.active
-                .as_ref()
-                .is_some_and(|active| active.tid() == tid)
+        if let Some(existing) = self
+            .banks
+            .iter()
+            .position(|bank| bank.active().is_some_and(|active| active.tid() == tid))
+        {
+            self.stop(existing, AgreementStop::Replaced, events);
+            return Err(RxBlockAckCapacity);
+        }
+        let available = self
+            .banks
+            .iter()
+            .position(|bank| matches!(bank, Bank::Free(_)));
+        // A bank whose command runs or waits frees itself: the request goes
+        // unanswered until then, and the peer asks again.
+        let freeing = self.banks.iter().any(|bank| {
+            matches!(
+                bank,
+                Bank::Adding { .. } | Bank::AddCommand { .. } | Bank::Ending(_) | Bank::EndCommand
+            )
         });
-        let available = existing.or_else(|| self.banks.iter().position(|bank| bank.free.is_some()));
+        if available.is_none() && freeing && agreements == RxAgreements::Admitted {
+            return Err(RxBlockAckCapacity);
+        }
         let reserved: usize = self
             .banks
             .iter()
-            .enumerate()
-            .filter(|(index, _)| Some(*index) != existing)
-            .filter_map(|(_, bank)| bank.active.as_ref())
+            .filter_map(Bank::active)
             .map(|active| usize::from(active.window()).saturating_sub(1))
             .sum();
         let capacity = self.frames.len().saturating_sub(reserved).min(WINDOW);
         let capacity = u16::try_from(capacity)
             .unwrap_or(u16::MAX)
-            .min(P::Caps::CAPS.rx_block_ack_max_window);
+            .min(T::Caps::CAPS.rx_block_ack_max_window);
         let negotiation = match RxBlockAckNegotiation::request(
             parsed,
-            P::Caps::CAPS.rx_block_ack_max_tid,
-            if P::Caps::CAPS.rx_amsdu_in_ampdu {
+            T::Caps::CAPS.rx_block_ack_max_tid,
+            if T::Caps::CAPS.rx_amsdu_in_ampdu {
                 AmsduInAmpdu::Delivered
             } else {
                 AmsduInAmpdu::NotDelivered
@@ -600,7 +725,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         };
         let response = negotiation.response();
         let Some(agreement) = Tid::new(response.tid).and_then(|tid| {
-            SupportedBlockAck::<P::Caps>::new(
+            SupportedBlockAck::<T::Caps>::new(
                 bssid.individual(),
                 tid,
                 negotiation.starting_sequence(),
@@ -612,35 +737,25 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                 ..response
             });
         };
-        let Some(index) = available else {
+        let Some(bank) = available.and_then(|index| self.banks.get_mut(index)) else {
             return Err(RxBlockAckCapacity);
         };
-        if existing.is_some() {
-            self.stop(index, port, AgreementStop::Replaced, events);
-        }
-        let Some(bank) = self.banks.get_mut(index) else {
-            return Err(RxBlockAckCapacity);
-        };
-        let Some(slot) = bank.free.take() else {
-            return Err(RxBlockAckCapacity);
-        };
-        let running = port.add(slot, agreement);
-        match RxBlockAckSession::activate(negotiation, running) {
-            Ok(active) => {
-                let (tid, window) = (active.tid(), active.window());
-                report(events, || RxBlockAckEvent::Started { tid, window });
-                bank.active = Some(active);
-                bank.response = true;
-                Ok(AddbaOutcome::Accepted { window })
+        *bank = match core::mem::replace(bank, Bank::InTransition) {
+            Bank::Free(slot) => Bank::Adding {
+                slot,
+                agreement,
+                negotiation,
+            },
+            // Found free above: this does not happen. Should it, the bank
+            // keeps what it was.
+            other => {
+                *bank = other;
+                return Err(RxBlockAckCapacity);
             }
-            Err((running, _)) => {
-                bank.free = Some(port.remove(running));
-                self.queue_response(AddbaResponse {
-                    status: AddbaStatus::RequestDeclined,
-                    ..response
-                })
-            }
-        }
+        };
+        Ok(AddbaOutcome::Accepted {
+            window: response.window,
+        })
     }
 
     fn queue_response(
@@ -653,23 +768,25 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         }
     }
 
+    /// End the running agreement of `index`: what it retained is released
+    /// in order, and the agreement waits to be removed.
     fn stop(
         &mut self,
         index: usize,
-        port: &mut impl RxBlockAckPort<T>,
         reason: AgreementStop,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) {
-        if let Some(bank) = self.banks.get_mut(index) {
-            bank.response = false;
-            if let Some(active) = bank.active.take() {
-                let tid = active.tid();
-                report(events, || RxBlockAckEvent::Stopped { tid, reason });
-                let (running, released) = active.stop();
-                bank.free = Some(port.remove(running));
-                self.released(released, tid, ReorderCause::Stop, events);
-            }
-        }
+        let Some(bank) = self.banks.get_mut(index) else {
+            return;
+        };
+        let Bank::Active { session, .. } = core::mem::replace(bank, Bank::InTransition) else {
+            return;
+        };
+        let tid = session.tid();
+        report(events, || RxBlockAckEvent::Stopped { tid, reason });
+        let (running, released) = session.stop();
+        *bank = Bank::Ending(running);
+        self.released(released, tid, ReorderCause::Stop, events);
     }
 
     /// The next reply the association owes, until [`Self::sent`] retires it.
@@ -684,10 +801,14 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             });
         }
         self.banks.iter().enumerate().find_map(|(index, bank)| {
-            if !bank.response {
+            let Bank::Active {
+                session,
+                reply: Reply::Owed,
+            } = bank
+            else {
                 return None;
-            }
-            let body = bank.active.as_ref()?.response().encode()?;
+            };
+            let body = session.response().encode()?;
             Some(RxBlockAckReplyBody {
                 place: ReplyPlace::Bank(index),
                 association,
@@ -704,8 +825,8 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                 let _sent = self.header.pending.pop_front();
             }
             ReplyPlace::Bank(index) => {
-                if let Some(bank) = self.banks.get_mut(index) {
-                    bank.response = false;
+                if let Some(Bank::Active { reply, .. }) = self.banks.get_mut(index) {
+                    *reply = Reply::Sent;
                 }
             }
         }
@@ -713,14 +834,9 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
 
     /// Expire inactive agreements, each with a DELBA, and reorder gaps.
     #[inline(never)]
-    pub fn tick(
-        &mut self,
-        now: Instant,
-        port: &mut impl RxBlockAckPort<T>,
-        events: &mut impl EventSink<RxBlockAckEvent>,
-    ) {
+    pub fn tick(&mut self, now: Instant, events: &mut impl EventSink<RxBlockAckEvent>) {
         for index in 0..self.banks.len() {
-            let Some(active) = self.banks.get(index).and_then(|bank| bank.active.as_ref()) else {
+            let Some(active) = self.banks.get(index).and_then(Bank::active) else {
                 continue;
             };
             if active.expired(now) {
@@ -728,7 +844,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                     continue;
                 }
                 let tid = active.tid();
-                self.stop(index, port, AgreementStop::Timeout, events);
+                self.stop(index, AgreementStop::Timeout, events);
                 if let Ok(delba) = encode_delba(
                     tid,
                     oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Recipient,
@@ -742,45 +858,38 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                     }
                     let _queued = self.queue(body);
                 }
-            } else if let Some(active) = self
-                .banks
-                .get_mut(index)
-                .and_then(|bank| bank.active.as_mut())
-            {
+            } else if let Some(active) = self.banks.get_mut(index).and_then(Bank::active_mut) {
                 match active.expire_gap(now, self.header.gap_timeout) {
                     Ok(Some(release)) => {
                         let tid = active.tid();
                         self.released(release, tid, ReorderCause::Timeout, events);
                     }
                     Ok(None) => {}
-                    Err(_) => self.stop(index, port, AgreementStop::InvalidGap, events),
+                    Err(_) => self.stop(index, AgreementStop::InvalidGap, events),
                 }
             }
         }
     }
 
-    /// Take one received MPDU for the station whose own address is `local`
-    /// (`None` before it has a link). A management Action whose reply would
-    /// find no place waits retained until [`Self::pop_deferred`].
+    /// Take one received data MPDU or BlockAckReq for the station whose own
+    /// address is `local` (`None` before it has a link); `room` says whether
+    /// a frame that would be retained has a place. The metadata is read for
+    /// the length of the call.
     #[inline(never)]
-    pub fn receive(
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the frame's owner, view and metadata, the caller's room and event sink"
+    )]
+    pub fn receive<M: RxMetadata>(
         &mut self,
         now: Instant,
         local: Option<[u8; 6]>,
         frame: T::Frame,
         view: RxView<'_>,
-        meta: T::Meta,
+        meta: &M,
+        room: RetainRoom,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
-        let action = view.head.header().is_some_and(|header| {
-            !header.control.is_data() && header.control.subtype() == ACTION_SUBTYPE
-        });
-        if action && !self.can_receive_management() {
-            return match self.defer(frame, meta) {
-                Ok(()) => RxDisposition::Retained,
-                Err((frame, _)) => RxDisposition::Capacity(frame),
-            };
-        }
         report(events, || {
             let common = meta.common();
             RxBlockAckEvent::Contained {
@@ -790,18 +899,18 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
         });
         match local {
-            Some(local) => self.ingest(now, local, frame, view, meta, events),
-            None => RxDisposition::Deliver((frame, meta)),
+            Some(local) => self.ingest(now, local, frame, view, meta, room, events),
+            None => RxDisposition::Deliver(frame),
         }
     }
 
     /// The bank and the sequence a QoS Data MPDU of the association is
     /// reordered at, from its header: `None` for any other frame.
-    fn reorder_key(
+    fn reorder_key<M: RxMetadata>(
         &self,
         header: &RxHeader,
         local: [u8; 6],
-        meta: &T::Meta,
+        meta: &M,
     ) -> Option<(usize, SequenceNumber)> {
         let (_, bssid) = self.header.association?;
         let control = header.control;
@@ -830,31 +939,35 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let tid = QosControl::from_bytes(header.qos?.to_le_bytes())
             .tid()
             .get();
-        let index = self.banks.iter().position(|bank| {
-            bank.active
-                .as_ref()
-                .is_some_and(|active| active.tid() == tid)
-        })?;
+        let index = self
+            .banks
+            .iter()
+            .position(|bank| bank.active().is_some_and(|active| active.tid() == tid))?;
         Some((
             index,
             SequenceNumber::from_sequence_control(header.sequence_control),
         ))
     }
 
-    fn ingest(
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the frame's owner, view and metadata, the caller's room and event sink"
+    )]
+    fn ingest<M: RxMetadata>(
         &mut self,
         now: Instant,
         local: [u8; 6],
         frame: T::Frame,
         view: RxView<'_>,
-        meta: T::Meta,
+        meta: &M,
+        room: RetainRoom,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) -> RxDisposition<T> {
         if let Some((tid, sequence)) = self.bar(view.bytes, local) {
             if let Some(active) = self
                 .banks
                 .iter_mut()
-                .find_map(|bank| bank.active.as_mut().filter(|active| active.tid() == tid))
+                .find_map(|bank| bank.active_mut().filter(|active| active.tid() == tid))
                 && let Ok(Some(release)) =
                     active.block_ack_request(now, sequence, self.header.gap_timeout)
             {
@@ -863,25 +976,37 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             return RxDisposition::Recycle(frame);
         }
         let key = match view.head {
-            RxHead::Frame(header) => self.reorder_key(header, local, &meta),
+            RxHead::Frame(header) => self.reorder_key(header, local, meta),
             RxHead::Control(_) => None,
         };
         let Some((bank_index, sequence)) = key else {
-            return RxDisposition::Deliver((frame, meta));
+            return RxDisposition::Deliver(frame);
         };
-        let Some(slot) = self.frames.iter().position(Option::is_none) else {
-            return RxDisposition::Capacity(frame);
+        let Some(active) = self.banks.get_mut(bank_index).and_then(Bank::active_mut) else {
+            return RxDisposition::Deliver(frame);
         };
-        let Some(active) = self
-            .banks
-            .get_mut(bank_index)
-            .and_then(|bank| bank.active.as_mut())
-        else {
-            return RxDisposition::Deliver((frame, meta));
-        };
-        let slot_id = match u8::try_from(slot) {
-            Ok(slot) => slot,
-            Err(_) => return RxDisposition::Deliver((frame, meta)),
+        // A frame that would be retained needs a place beyond the one the
+        // caller keeps for the frame that closes the hole, and a frame
+        // place here; else it goes back.
+        let free = self.frames.iter().position(Option::is_none);
+        let retains = active.retains(sequence).unwrap_or(false);
+        let (slot, slot_id) = match (
+            free.and_then(|slot| Some((slot, u8::try_from(slot).ok()?))),
+            room,
+        ) {
+            (Some(found), RetainRoom::Free) => found,
+            (Some(found), RetainRoom::Full) if !retains => found,
+            _ => {
+                let tid = active.tid();
+                report(events, || RxBlockAckEvent::Reordered {
+                    tid,
+                    cause: ReorderCause::Full,
+                    held: 0,
+                    released: 0,
+                    missing: 0,
+                });
+                return RxDisposition::Recycle(frame);
+            }
         };
         // The common in-order MPDU, with no frame released ahead of it,
         // goes out at once: it takes no slot and no place in delivery
@@ -903,7 +1028,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                 released: 1,
                 missing: 0,
             });
-            return RxDisposition::Deliver((frame, meta));
+            return RxDisposition::Deliver(frame);
         }
         let release = active.ingest(
             now,
@@ -917,7 +1042,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         match release {
             Ok(release) if release.rejected.is_none() => {
                 if let Some(place) = self.frames.get_mut(slot) {
-                    *place = Some((frame, meta));
+                    *place = Some(frame);
                 }
                 self.released(release, tid, ReorderCause::Receive, events);
                 RxDisposition::Retained

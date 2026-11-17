@@ -200,7 +200,7 @@ impl<'id> World<'id> {
             gate,
         } = run;
         Self {
-            engine: StationEngine::new(BUDGET, LATE),
+            engine: StationEngine::new(BUDGET, POLICY),
             around: Around::new(port),
             stopped: Some(rights),
             gate: Some(gate),

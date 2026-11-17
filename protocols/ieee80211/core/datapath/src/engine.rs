@@ -55,15 +55,20 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_time::{Duration, Instant};
 pub use oer_protocols_ieee80211_contracts_port::DATA_SINGLES;
 use oer_protocols_ieee80211_contracts_port::{
-    AckHeader, AgreementSlot, CloseGate, CommandPlace, CommandPoll, DataRights, GateClosed,
-    GateOpen, GroupSlot, HeaderSpec, IdleArena, InCommand, InstalledPairwise, MpduLength,
-    PairwiseCommand, PairwiseEnd, PairwiseHeld, PairwiseSlot, PortRate, PortSink, QueueRight,
-    ReceivePort, Received, RetryPlan, RxHeader, RxMetadata, Signal, SingleEnd, SingleOutcome,
-    SinglePlace, SizedFrame, TbttEvent, TxFacts, TxFrame, TxOutcome,
+    AckHeader, Agreement, AgreementCommand, AgreementEnd, AgreementHeld, AgreementSlot, CloseGate,
+    CommandPlace, CommandPoll, DataRights, GateClosed, GateOpen, GroupSlot, HeaderSpec, IdleArena,
+    Ieee80211Capabilities, InCommand, InstalledPairwise, MpduLength, PLACES, PairwiseCommand,
+    PairwiseEnd, PairwiseHeld, PairwiseSlot, PortRate, PortSink, QueueRight, ReceivePort, Received,
+    RetryPlan, RxHeader, RxMetadata, Signal, SingleEnd, SingleOutcome, SinglePlace, SizedFrame,
+    TbttEvent, TxFacts, TxFrame, TxOutcome, UnitHandle,
 };
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_installation::{DataStop, Rest};
-use oer_protocols_ieee80211_wire::address::IndividualAddress;
+use oer_protocols_ieee80211_core_upper_mac::block_ack::{
+    BankCommand, RX_BLOCK_ACK_WINDOW, ReplyPlace, RxAgreements, RxBlockAckStorage, RxBlockAckTypes,
+};
+use oer_protocols_ieee80211_wire::address::{Bssid, IndividualAddress};
+use oer_protocols_ieee80211_wire::block_ack::frame::ADDBA_ACTION_BODY_LEN;
 use oer_protocols_ieee80211_wire::data::{
     DataInterfaceRole, LLC_SNAP_HEADER_LEN, MsduHeader, PeerQos, plan_data_encapsulation,
 };
@@ -156,6 +161,10 @@ pub trait Told<'id> {
 
     /// A key's command ended.
     fn key_ended(&mut self, end: KeyEnd);
+
+    /// The receive agreements owe a reply (an ADDBA Response or a DELBA):
+    /// the station's linked peer's `rx_reply` holds it.
+    fn reply_owed(&mut self);
 
     /// A received management frame or EAPOL of `peer` (`None`: of no linked
     /// peer), read in place inside the round: it goes back to the ring
@@ -381,6 +390,14 @@ enum Interface<'id, T> {
         command: InCommand<'id, PairwiseHeld<'id>>,
         step: KeyStep<T>,
     },
+    /// A receive agreement's command runs (its addition or its end, for
+    /// the reorder's bank `bank`); the data goes on.
+    Agreeing {
+        gate: Gate<'id>,
+        command: InCommand<'id, AgreementHeld<'id>>,
+        bank: u8,
+        key: StationKey<'id, T>,
+    },
     /// The gate's closing runs: the gate is the port's.
     Closing {
         command: InCommand<'id, GateOpen<'id>>,
@@ -393,11 +410,50 @@ enum Interface<'id, T> {
     InTransition,
 }
 
+/// The owners the receive agreements hold: the port's slots and running
+/// agreements, and the handles of the units the reorder retains.
+pub struct EngineAgreements<'id, K>(PhantomData<(Brand<'id>, K)>);
+
+/// The brand of one installation, invariant in `'id`.
+type Brand<'id> = fn(&'id ()) -> &'id ();
+
+impl<'id, K: Ieee80211Capabilities> RxBlockAckTypes for EngineAgreements<'id, K> {
+    type Slot = AgreementSlot<'id>;
+    type Running = Agreement<'id>;
+    type Frame = UnitHandle<'id>;
+    type Caps = K;
+}
+
+/// The receive agreements of the data: `AGREEMENTS` banks, each the port's
+/// slot, and the reorder's frames (its window; the engine's count keeps a
+/// place free for the frame that closes a hole).
+type Agreements<'id, K, const AGREEMENTS: usize> =
+    RxBlockAckStorage<EngineAgreements<'id, K>, u8, AGREEMENTS, RX_BLOCK_ACK_WINDOW>;
+
+/// The stopping data's agreement slots, taken in place when every bank is
+/// free; `None` otherwise, and nothing moved.
+fn agreement_slots<
+    'id,
+    F: Form,
+    K: Ieee80211Capabilities,
+    T,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+>(
+    data: &mut Data<'id, F, K, T, SINGLES, GROUPS, AGREEMENTS>,
+) -> Option<[AgreementSlot<'id>; AGREEMENTS]> {
+    match data {
+        Data::Stopping(running) => running.agreements.slots_home().ok(),
+        Data::Stopped | Data::Flowing(_) => None,
+    }
+}
+
 /// The data's rights and parts while it runs.
 struct Running<
     'id,
     F: Form,
-    K,
+    K: Ieee80211Capabilities,
     T,
     const SINGLES: usize,
     const GROUPS: usize,
@@ -408,13 +464,23 @@ struct Running<
     singles: [SinglePlace<'id>; SINGLES],
     interface: Interface<'id, T>,
     groups: [GroupSlot<'id>; GROUPS],
-    agreements: [AgreementSlot<'id>; AGREEMENTS],
+    /// The receive agreements and the reorder: a station's, which phase B
+    /// alone admits; an access point's banks stay free.
+    agreements: Agreements<'id, K, AGREEMENTS>,
     /// The received units the engine holds for the network.
     receive: Receive<'id>,
 }
 
 /// The data's state.
-enum Data<'id, F: Form, K, T, const SINGLES: usize, const GROUPS: usize, const AGREEMENTS: usize> {
+enum Data<
+    'id,
+    F: Form,
+    K: Ieee80211Capabilities,
+    T,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> {
     /// The installation machine holds the rights.
     Stopped,
     /// The data flows.
@@ -470,6 +536,30 @@ enum Entry<E> {
     Linked(Linked<E>),
 }
 
+/// The sooner of two rests: a round before any wake, else the earlier
+/// instant, a wake with none being the latest.
+fn earliest(first: Rest, second: Rest) -> Rest {
+    match (first, second) {
+        (Rest::Round, _) | (_, Rest::Round) => Rest::Round,
+        (Rest::Wake(Some(a)), Rest::Wake(Some(b))) => Rest::Wake(Some(a.min(b))),
+        (Rest::Wake(Some(at)), Rest::Wake(None)) | (Rest::Wake(None), Rest::Wake(Some(at))) => {
+            Rest::Wake(Some(at))
+        }
+        (Rest::Wake(None), Rest::Wake(None)) => Rest::Wake(None),
+    }
+}
+
+/// The receive half's policy values, the composition's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReceivePolicy {
+    /// How long the network may hold the ring back: a pressure episode's
+    /// bound from its first wait.
+    pub late: Duration,
+    /// How long a receive agreement's reorder holds a hole open before it
+    /// gives the missing frames up.
+    pub gap: Duration,
+}
+
 /// The engine of one interface: `PEERS` peers, a pool of `POOL` MSDUs, and
 /// the data's rights of a layout of `SINGLES` single places of its
 /// controller, `GROUPS` group key slots and `AGREEMENTS` receive
@@ -487,9 +577,11 @@ pub struct Engine<
 > {
     /// The MSDUs a section takes at most.
     budget: u8,
-    /// How long the network may hold the ring back: a pressure episode's
-    /// bound from its first wait.
-    late: Duration,
+    /// The receive half's policy values.
+    policy: ReceivePolicy,
+    /// The links made: a link's generation, which its receive agreements
+    /// belong to.
+    links: u8,
     data: Data<'id, F, P::Caps, T, SINGLES, GROUPS, AGREEMENTS>,
     /// Linked only while the data flows: a stop ends every link.
     entries: [Entry<F::Entry<P::Link, T>>; PEERS],
@@ -648,14 +740,19 @@ impl<
 > engine!()
 {
     /// The engine of stopped data, taking at most `budget` MSDUs a section
-    /// (at least one), and letting the network hold the ring back for at
-    /// most `late` from a pressure episode's first wait: the composition's
+    /// (at least one), its receive half under `policy`: the composition's
     /// policy values. Built in its place, a `const` item or a placed
     /// initializer.
-    pub const fn new(budget: u8, late: Duration) -> Self {
+    pub const fn new(budget: u8, policy: ReceivePolicy) -> Self {
+        const {
+            if P::STAGING > PLACES {
+                panic!("a port stages into at most the contract's PLACES");
+            }
+        }
         Self {
             budget: if budget == 0 { 1 } else { budget },
-            late,
+            policy,
+            links: 0,
             data: Data::Stopped,
             entries: [const { Entry::Free }; PEERS],
             queues: TxQueues::new(),
@@ -693,10 +790,23 @@ impl<
         matches!(
             &self.data,
             Data::Flowing(Running {
-                interface: Interface::Idle { .. },
+                interface: Interface::Idle { .. } | Interface::Agreeing { .. },
                 ..
             })
         )
+    }
+
+    /// The received units the engine holds: waiting for the network, and
+    /// retained by the reorder, for the crate's search.
+    #[cfg(test)]
+    pub(crate) fn rx_held(&mut self) -> (usize, usize) {
+        match &mut self.data {
+            Data::Flowing(running) | Data::Stopping(running) => (
+                running.receive.waiting(),
+                running.agreements.view().retained(),
+            ),
+            Data::Stopped => (0, 0),
+        }
     }
 
     /// The MSDUs the queues hold.
@@ -817,7 +927,9 @@ impl<
         now: Instant,
         sink: &mut impl PortSink<'id, P::Ack, P::Denial>,
     ) -> Option<Ending<'id, T>> {
-        let (Interface::Keying { .. } | Interface::Closing { .. }) = interface else {
+        let (Interface::Keying { .. } | Interface::Closing { .. } | Interface::Agreeing { .. }) =
+            interface
+        else {
             return None;
         };
         let (next, ending) = match core::mem::replace(interface, Interface::InTransition) {
@@ -882,6 +994,26 @@ impl<
                     (Interface::Idle { gate, place, key }, Some(ending))
                 }
             },
+            Interface::Agreeing {
+                gate,
+                command,
+                bank,
+                key,
+            } => match port.poll_agreement(command, now, sink) {
+                CommandPoll::Pending(command) => (
+                    Interface::Agreeing {
+                        gate,
+                        command,
+                        bank,
+                        key,
+                    },
+                    None,
+                ),
+                CommandPoll::Ended(place, end) => (
+                    Interface::Idle { gate, place, key },
+                    Some(Ending::Agreement { bank, end }),
+                ),
+            },
             idle @ (Interface::Idle { .. } | Interface::InTransition) => (idle, None),
         };
         *interface = next;
@@ -902,6 +1034,11 @@ enum Begun<T> {
 /// engine's sections alone ([`Seal`]).
 pub enum Ending<'id, T> {
     GateClosed(GateClosed<'id>),
+    /// A receive agreement's command ended, for the reorder's `bank`.
+    Agreement {
+        bank: u8,
+        end: AgreementEnd<'id>,
+    },
     Key {
         end: KeyEnd,
         /// What the slot is to become now, after a removal.
@@ -992,7 +1129,10 @@ where
         &mut self,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
-        self.receive_round(Seal(()), turn)
+        let rest = self.receive_round(Seal(()), turn);
+        // An agreement's command the round made owed begins, one at a time.
+        self.command(turn);
+        rest
     }
 
     /// The network gave lent units back: one receive round, which takes
@@ -1006,7 +1146,10 @@ where
         &mut self,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
-        self.receive_round(Seal(()), turn)
+        let rest = self.receive_round(Seal(()), turn);
+        // An agreement's command the round made owed begins, one at a time.
+        self.command(turn);
+        rest
     }
 
     /// A receive wake's instant: the pressure episode's bound or the ring's
@@ -1020,7 +1163,10 @@ where
         &mut self,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
-        self.receive_round(Seal(()), turn)
+        let rest = self.receive_round(Seal(()), turn);
+        // An agreement's command the round made owed begins, one at a time.
+        self.command(turn);
+        rest
     }
 
     /// The rights back, when the data is stopping, the gate shut and
@@ -1070,6 +1216,7 @@ where
         link: F::Entry<P::Link, T>,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
+        self.links = self.links.wrapping_add(1);
         if let Some(entry) = self.entries.get_mut(usize::from(peer)) {
             *entry = Entry::Linked(Linked {
                 link,
@@ -1129,6 +1276,7 @@ where
         if let Some(ending) = self.poll_command(Seal(()), turn) {
             match ending {
                 Ending::GateClosed(closed) => turn.told.gate_closed(closed),
+                Ending::Agreement { bank, end } => self.agreement_ended(bank, end, turn),
                 Ending::Key { end, then } => {
                     self.keyed(Seal(()), turn.port, turn.network, turn.events);
                     // A rekey's removal is followed by its installation at
@@ -1150,12 +1298,87 @@ where
         }
         if let Data::Stopping(_) = self.data {
             self.advance_stop(turn);
+        } else {
+            self.begin_agreement(turn);
         }
+    }
+
+    /// A receive agreement's command ended: the reorder's bank is told, and
+    /// a reply it now owes is told the controller.
+    fn agreement_ended<N, R, E, C: Told<'id>>(
+        &mut self,
+        bank: u8,
+        end: AgreementEnd<'id>,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) {
+        let (Data::Flowing(running) | Data::Stopping(running)) = &mut self.data else {
+            return;
+        };
+        let mut agreements = running.agreements.view();
+        match end {
+            AgreementEnd::Added(agreement) => agreements.added(bank, agreement, &mut ()),
+            AgreementEnd::Empty(slot) => agreements.emptied(bank, slot),
+        }
+        if agreements.next_reply().is_some() {
+            turn.told.reply_owed();
+        }
+    }
+
+    /// Begin the command a receive agreement's bank owes, when no command
+    /// runs: an addition, or an end.
+    fn begin_agreement<N, R, E, C>(&mut self, turn: &mut Turn<'_, P, N, R, E, C>) {
+        let (Data::Flowing(running) | Data::Stopping(running)) = &mut self.data else {
+            return;
+        };
+        let Running {
+            interface,
+            agreements,
+            ..
+        } = running;
+        let Interface::Idle { .. } = interface else {
+            return;
+        };
+        let Some(owed) = agreements.view().next_command() else {
+            return;
+        };
+        *interface = match core::mem::replace(interface, Interface::InTransition) {
+            Interface::Idle { gate, place, key } => {
+                let (bank, command) = match owed {
+                    BankCommand::Add {
+                        bank,
+                        slot,
+                        agreement,
+                    } => (bank, AgreementCommand::Add { slot, agreement }),
+                    BankCommand::End { bank, running } => (bank, AgreementCommand::End(running)),
+                };
+                Interface::Agreeing {
+                    gate,
+                    command: turn.port.begin_agreement(place, command, turn.now),
+                    bank,
+                    key,
+                }
+            }
+            // Checked idle above: this does not happen. Should it, the
+            // interface keeps what it was, and the bank its command, which
+            // goes back to it.
+            other => {
+                match owed {
+                    BankCommand::Add { bank, slot, .. } => agreements.view().emptied(bank, slot),
+                    BankCommand::End { bank, running } => {
+                        agreements.view().owe_end(bank, running);
+                    }
+                }
+                other
+            }
+        };
     }
 
     /// The stopping data's next command, when none runs: the installed
     /// key's removal, then the open gate's closing.
     fn advance_stop<N, R, E, C>(&mut self, turn: &mut Turn<'_, P, N, R, E, C>) {
+        // The receive agreements end first, then the installed key, then
+        // the gate.
+        self.begin_agreement(turn);
         if let Begun::Nothing = self.begin_key(KeyTarget::Empty, turn) {
             self.close_gate(turn);
         }
@@ -1264,14 +1487,47 @@ pub struct NamedTid<'a, E> {
     number: SequenceNumber,
 }
 
+/// A reply the receive agreements owe, lent the controller's step.
+pub struct RxReply<'a, E> {
+    engine: &'a mut E,
+    body: [u8; ADDBA_ACTION_BODY_LEN],
+    place: ReplyPlace,
+}
+
+impl<
+    'id,
+    P: ReceivePort<'id>,
+    F: Form,
+    T,
+    const PEERS: usize,
+    const POOL: usize,
+    const SINGLES: usize,
+    const GROUPS: usize,
+    const AGREEMENTS: usize,
+> RxReply<'_, engine!()>
+{
+    /// The Action body to send.
+    pub const fn body(&self) -> &[u8; ADDBA_ACTION_BODY_LEN] {
+        &self.body
+    }
+
+    /// The reply went: it is owed no more.
+    pub fn sent(self) {
+        if let Data::Flowing(running) | Data::Stopping(running) = &mut self.engine.data {
+            running.agreements.view().sent(self.place);
+        }
+    }
+}
+
 /// What the gate's place is now.
 pub enum GatePlace<'a, E> {
     /// The controller holds it, closed.
     Shut(ShutGate<'a, E>),
     /// The engine holds it open.
     Open(OpenGate<'a, E>),
-    /// Open while a key's command runs: nothing goes, and it offers no
-    /// closing until the key's end ([`Told::key_ended`]).
+    /// Open while a command runs (a key's, or a receive agreement's): it
+    /// offers no closing until the command's end. While a key's runs
+    /// nothing goes ([`Told::key_ended`]); an agreement's stops nothing.
     OpenKeying(KeyingGate<'a, E>),
     /// Its closing runs in the port; it ends in [`Told::gate_closed`].
     Closing(ClosingGate<'a, E>),
@@ -1358,10 +1614,16 @@ where
                 gate: Gate::Open(_),
                 ..
             }) => GatePlace::Open(OpenGate(engine)),
-            Some(Interface::Keying {
-                gate: Gate::Open(_),
-                ..
-            }) => GatePlace::OpenKeying(KeyingGate(PhantomData)),
+            Some(
+                Interface::Keying {
+                    gate: Gate::Open(_),
+                    ..
+                }
+                | Interface::Agreeing {
+                    gate: Gate::Open(_),
+                    ..
+                },
+            ) => GatePlace::OpenKeying(KeyingGate(PhantomData)),
             Some(Interface::Closing { .. } | Interface::InTransition) => {
                 GatePlace::Closing(ClosingGate(PhantomData))
             }
@@ -1370,6 +1632,9 @@ where
                     gate: Gate::Shut, ..
                 }
                 | Interface::Keying {
+                    gate: Gate::Shut, ..
+                }
+                | Interface::Agreeing {
                     gate: Gate::Shut, ..
                 },
             )
@@ -1406,13 +1671,14 @@ where
             Data::Flowing(running) => Data::Stopping(running),
             other => other,
         };
+        // What waited for the network, what the reorder retains and what the
+        // ring holds go back. A stopping round leaves nothing waiting; what
+        // the ring stages after it goes back in the round of the machine's
+        // next poll.
+        let _: Rest = engine.receive_round(Seal(()), turn);
         engine.advance_stop(turn);
         // With no link, what the network still offers goes back.
         engine.drain(turn);
-        // What waited for the network and what the ring holds go back. A
-        // stopping round leaves nothing waiting; what the ring stages after
-        // it goes back in the round of the machine's next poll.
-        let _: Rest = engine.receive_round(Seal(()), turn);
         engine.finish()
     }
 }
@@ -1483,7 +1749,11 @@ where
     ) -> Rest {
         let Self { engine, peer } = self;
         engine.unlink(peer, turn.port, turn.network, turn.events);
-        engine.intake(turn)
+        // The link's receive agreements end: what the reorder retains goes
+        // back, and their ends begin.
+        let received = engine.receive_round(Seal(()), turn);
+        engine.command(turn);
+        earliest(received, engine.intake(turn))
     }
 
     /// Change the linked entry and run the intake. The handle borrows the
@@ -1569,6 +1839,21 @@ where
         if let Some(linked) = self.engine.linked_mut(self.peer) {
             *tid.select_mut(&mut linked.owed) = None;
         }
+    }
+
+    /// The reply the receive agreements owe the peer (an ADDBA Response
+    /// or a DELBA body), when they owe one: the controller sends it, then
+    /// says so ([`RxReply::sent`]).
+    pub fn rx_reply(&mut self) -> Option<RxReply<'_, engine!()>> {
+        let (Data::Flowing(running) | Data::Stopping(running)) = &mut self.engine.data else {
+            return None;
+        };
+        let reply = running.agreements.view().next_reply()?;
+        Some(RxReply {
+            engine: &mut *self.engine,
+            body: reply.body,
+            place: reply.place,
+        })
     }
 
     /// The link's state, for the crate's search.
@@ -1761,8 +2046,11 @@ where
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> Rest {
         let engine = self.0;
-        if let Some(Interface::Idle { gate: place, .. } | Interface::Keying { gate: place, .. }) =
-            engine.interface_mut()
+        if let Some(
+            Interface::Idle { gate: place, .. }
+            | Interface::Keying { gate: place, .. }
+            | Interface::Agreeing { gate: place, .. },
+        ) = engine.interface_mut()
             && let Gate::Shut = place
         {
             *place = Gate::Open(turn.port.open_gate(gate));
@@ -1930,9 +2218,10 @@ where
         match engine.interface_mut() {
             Some(Interface::Idle { .. }) => KeyPlace::Idle(IdleKey(engine)),
             Some(Interface::Keying { .. }) => KeyPlace::Changing(ChangingKey(PhantomData)),
-            Some(Interface::Closing { .. } | Interface::InTransition) | None => {
-                KeyPlace::Busy(BusyKey(PhantomData))
-            }
+            Some(
+                Interface::Closing { .. } | Interface::Agreeing { .. } | Interface::InTransition,
+            )
+            | None => KeyPlace::Busy(BusyKey(PhantomData)),
         }
     }
 }
@@ -2161,8 +2450,8 @@ where
                 key: StationKey::Empty(pairwise),
             },
             groups,
-            agreements,
-            receive: Receive::new(self.late),
+            agreements: RxBlockAckStorage::new(agreements, self.policy.gap),
+            receive: Receive::new(self.policy.late),
         });
     }
 
@@ -2210,7 +2499,8 @@ where
                 ],
             queues,
             budget,
-            late: _,
+            policy: _,
+            links: _,
         } = self
         else {
             return 0;
@@ -2224,6 +2514,10 @@ where
         // installed; a key's command stops the intake.
         let key = match interface {
             Interface::Idle {
+                key: StationKey::Installed(_, transmit),
+                ..
+            }
+            | Interface::Agreeing {
                 key: StationKey::Installed(_, transmit),
                 ..
             } => Some(&*transmit),
@@ -2293,6 +2587,10 @@ where
                         Interface::Idle {
                             gate: Gate::Open(gate),
                             ..
+                        }
+                        | Interface::Agreeing {
+                            gate: Gate::Open(gate),
+                            ..
                         },
                     ..
                 }),
@@ -2359,6 +2657,10 @@ where
         // Nothing goes while a command that stops the intake runs.
         let gate = match interface {
             Interface::Idle {
+                gate: Gate::Open(gate),
+                ..
+            }
+            | Interface::Agreeing {
                 gate: Gate::Open(gate),
                 ..
             } => Some(&*gate),
@@ -2486,13 +2788,17 @@ where
         if !plane.is_idle() {
             return None;
         }
+        let slots = agreement_slots(&mut self.data)?;
         // The running data moves out of its variant: a copy, once the
         // data's stop.
         let running = match core::mem::replace(&mut self.data, Data::Stopped) {
             Data::Stopping(running) => running,
-            other => {
+            mut other => {
                 // Checked stopping above: this does not happen. Should it,
                 // the data keeps what it was, every right with it.
+                if let Data::Flowing(running) | Data::Stopping(running) = &mut other {
+                    running.agreements.slots_back(slots);
+                }
                 self.data = other;
                 return None;
             }
@@ -2502,7 +2808,7 @@ where
             singles,
             interface,
             groups,
-            agreements,
+            mut agreements,
             receive,
         } = running;
         match (interface, plane.idle_arenas()) {
@@ -2521,9 +2827,10 @@ where
                 command,
                 pairwise,
                 groups,
-                agreements,
+                agreements: slots,
             }),
             (interface, None) => {
+                agreements.slots_back(slots);
                 // Checked idle above: this does not happen. Should it, the
                 // data stays stopping with every part.
                 self.data = Data::Stopping(Running {
@@ -2537,6 +2844,7 @@ where
                 None
             }
             (interface, Some(arenas)) => {
+                agreements.slots_back(slots);
                 // Checked shut, idle and keyless above: this does not
                 // happen. Should it, the data stays stopping with every
                 // right; its plane holds no link, so a new one with the
@@ -2570,6 +2878,7 @@ where
         let Running {
             form: StationRunning { plane, .. },
             receive,
+            agreements,
             ..
         } = running;
         // The access point's frames to the station or to a group, while it
@@ -2579,27 +2888,44 @@ where
                 link.header.bssid(),
                 link.header.source(),
                 link.header.protection(),
+                link.header.peer_qos(),
             )
         });
         let carrying = match &self.entries {
             [Entry::Linked(linked)] => Some(linked.carrying),
             [Entry::Free] => None,
         };
+        // A QoS link admits receive agreements; without a link, or a BSSID
+        // that is no individual address, the agreements end.
+        let bssid = link.and_then(|(bssid, ..)| Bssid::new(IndividualAddress::new(bssid)?));
+        let reorder = Reorder {
+            agreements,
+            local: link.map_or([0; 6], |(_, own, ..)| own),
+            bssid,
+            admitted: match link {
+                Some((.., PeerQos::Qos)) => RxAgreements::Admitted,
+                _ => RxAgreements::Declined,
+            },
+            link: carrying.and(bssid).map(|_| self.links),
+        };
         receive.round(
             turn.port,
             turn.network,
             turn.told,
             turn.now,
-            flow,
-            |header: &RxHeader| {
-                let (bssid, own, protection) = link?;
-                let to_us =
-                    header.receiver == own || IndividualAddress::new(header.receiver).is_none();
-                (header.transmitter == bssid && to_us).then_some(RxPeer {
-                    peer: 0,
-                    protection,
-                    carrying: carrying?,
-                })
+            Links {
+                flow,
+                peer_of: |header: &RxHeader| {
+                    let (bssid, own, protection, _) = link?;
+                    let to_us =
+                        header.receiver == own || IndividualAddress::new(header.receiver).is_none();
+                    (header.transmitter == bssid && to_us).then_some(RxPeer {
+                        peer: 0,
+                        protection,
+                        carrying: carrying?,
+                    })
+                },
+                reorder: Reordering::Station(reorder),
             },
         )
     }
@@ -2789,8 +3115,8 @@ where
                 key: StationKey::Empty(pairwise),
             },
             groups,
-            agreements,
-            receive: Receive::new(self.late),
+            agreements: RxBlockAckStorage::new(agreements, self.policy.gap),
+            receive: Receive::new(self.policy.late),
         });
     }
 
@@ -2842,6 +3168,10 @@ where
                 form: ApRunning { lanes, .. },
                 interface:
                     Interface::Idle {
+                        gate: Gate::Open(_),
+                        ..
+                    }
+                    | Interface::Agreeing {
                         gate: Gate::Open(_),
                         ..
                     },
@@ -2999,13 +3329,17 @@ where
         if lanes.iter().any(|lane| !matches!(lane, Lane::Free { .. })) {
             return None;
         }
+        let slots = agreement_slots(&mut self.data)?;
         // The running data moves out of its variant: a copy, once the
         // data's stop.
         let running = match core::mem::replace(&mut self.data, Data::Stopped) {
             Data::Stopping(running) => running,
-            other => {
+            mut other => {
                 // Checked stopping above: this does not happen. Should it,
                 // the data keeps what it was, every right with it.
+                if let Data::Flowing(running) | Data::Stopping(running) = &mut other {
+                    running.agreements.slots_back(slots);
+                }
                 self.data = other;
                 return None;
             }
@@ -3043,7 +3377,7 @@ where
                         key: StationKey::Empty(pairwise),
                     },
                 groups,
-                agreements,
+                agreements: _,
                 receive: _,
             } => Some(DataRights {
                 arenas,
@@ -3058,11 +3392,12 @@ where
                 command,
                 pairwise,
                 groups,
-                agreements,
+                agreements: slots,
             }),
-            running => {
+            mut running => {
                 // Checked above: this does not happen. Should it, the data
                 // stays stopping with every part.
+                running.agreements.slots_back(slots);
                 self.data = Data::Stopping(running);
                 None
             }
@@ -3086,24 +3421,27 @@ where
             turn.network,
             turn.told,
             turn.now,
-            flow,
-            |header: &RxHeader| {
-                entries
-                    .iter()
-                    .zip(0_u8..)
-                    .find_map(|(entry, peer)| match entry {
-                        Entry::Linked(linked)
-                            if header.transmitter == linked.link.client
-                                && header.receiver == linked.link.access_point =>
-                        {
-                            Some(RxPeer {
-                                peer,
-                                protection: LinkProtection::Open,
-                                carrying: linked.carrying,
-                            })
-                        }
-                        _ => None,
-                    })
+            Links {
+                flow,
+                peer_of: |header: &RxHeader| {
+                    entries
+                        .iter()
+                        .zip(0_u8..)
+                        .find_map(|(entry, peer)| match entry {
+                            Entry::Linked(linked)
+                                if header.transmitter == linked.link.client
+                                    && header.receiver == linked.link.access_point =>
+                            {
+                                Some(RxPeer {
+                                    peer,
+                                    protection: LinkProtection::Open,
+                                    carrying: linked.carrying,
+                                })
+                            }
+                            _ => None,
+                        })
+                },
+                reorder: Reordering::<'_, 'id, P::Caps, AGREEMENTS>::AccessPoint,
             },
         )
     }
@@ -3196,6 +3534,10 @@ impl<
                 form: ApRunning { lanes, .. },
                 interface:
                     Interface::Idle {
+                        gate: Gate::Open(gate),
+                        ..
+                    }
+                    | Interface::Agreeing {
                         gate: Gate::Open(gate),
                         ..
                     },
@@ -3400,6 +3742,12 @@ where
                             }
                         ),
                         Interface::Closing { key: k, .. } => std::format!("closing {}", key(k)),
+                        Interface::Agreeing {
+                            gate: g,
+                            key: k,
+                            bank,
+                            ..
+                        } => std::format!("agreeing {bank} {} {}", gate(g), key(k)),
                         Interface::InTransition => std::string::String::from("moving"),
                     },
                     running.form.key()
@@ -3434,7 +3782,7 @@ where
 
 mod receive;
 pub use receive::{AMSDU_MSDUS, CopyPermit, EthernetSpan, LendPermit, Room, RxRefusal, RxRefusals};
-use receive::{Flow, Receive, RxPeer};
+use receive::{Flow, Links, Receive, Reorder, Reordering, RxPeer};
 
 #[cfg(test)]
 mod tests;
