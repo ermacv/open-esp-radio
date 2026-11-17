@@ -3,8 +3,9 @@
 //! pairwise key whose packet numbers a protected MPDU draws ([`TxKey`]) is
 //! held beside them, by whoever holds the port's key.
 
-use oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpTxPacketNumber, InstalledCcmpTxKey};
+use oer_protocols_ieee80211_core_upper_mac::ccmp::{CcmpTxPacketNumberError, InstalledCcmpTxKey};
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
+use oer_protocols_ieee80211_wire::ccmp::CcmpPacketNumber;
 use oer_protocols_ieee80211_wire::qos::WmmUserPriority;
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
@@ -18,15 +19,27 @@ pub enum LinkSpace {
     Tid(WmmUserPriority),
 }
 
-/// A pairwise key whose transmit packet numbers the link draws from.
+/// A pairwise key's packet numbers are spent: no MPDU is protected under it
+/// again, and the key must be replaced.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PacketNumbersSpent;
+
+/// A pairwise key whose transmit packet numbers the link draws from: what
+/// the data plane asks of it, a protected MPDU's packet number.
 pub trait TxKey {
-    /// The key's transmit packet numbers.
-    fn packet_numbers(&self) -> &CcmpTxPacketNumber;
+    /// Draw the next packet number.
+    ///
+    /// # Errors
+    ///
+    /// The key's numbers are spent; nothing was drawn.
+    fn draw(&self) -> Result<CcmpPacketNumber, PacketNumbersSpent>;
 }
 
 impl<K> TxKey for InstalledCcmpTxKey<K> {
-    fn packet_numbers(&self) -> &CcmpTxPacketNumber {
-        InstalledCcmpTxKey::packet_numbers(self)
+    fn draw(&self) -> Result<CcmpPacketNumber, PacketNumbersSpent> {
+        self.packet_numbers()
+            .allocate()
+            .map_err(|CcmpTxPacketNumberError::Exhausted| PacketNumbersSpent)
     }
 }
 

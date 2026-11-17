@@ -337,6 +337,7 @@ cases! {
     handover_and_stop_keep_the_sequence_numbers => round_trip,
     the_stations_own_frames_share_the_sequence_spaces => shared_spaces,
     numbers_of_the_other_qos_kind_are_refused => numbering,
+    a_key_whose_numbers_are_spent_refuses_the_msdu_and_writes_nothing => spent_key,
     withdrawing_unpublished_frames_keeps_the_link_and_the_arena_on_the_air => withdraw_unpublished,
     a_tid_without_agreement_goes_one_mpdu_at_a_time => single,
     a_lone_frame_under_an_agreement_goes_alone_and_owes_a_block_ack_request_when_dropped => lone_frame,
@@ -909,6 +910,36 @@ fn shared_spaces(model: Installed<'_>) {
     world.taken(2, BE);
     let (_, frames) = world.publish();
     assert_eq!(sequence(&frames[0]), 2);
+}
+
+/// A key whose packet numbers are spent.
+struct Spent;
+
+impl TxKey for Spent {
+    fn draw(&self) -> Result<CcmpPacketNumber, crate::numbers::PacketNumbersSpent> {
+        Err(crate::numbers::PacketNumbersSpent)
+    }
+}
+
+fn spent_key(model: Installed<'_>) {
+    let mut world = World::new(model, link(LinkProtection::Ccmp));
+    let now = world.now();
+    let Intake::Refused { reason, memory } = world.plane.intake(
+        &mut world.port,
+        &ModelLink { protected: true },
+        msdu(7, BE),
+        &mut TxNumbers::new(
+            SequenceCounter::new(SequenceNumber::ZERO),
+            Some(world.sequences),
+        ),
+        Some(&Spent),
+        now,
+    ) else {
+        panic!("a key whose numbers are spent refuses the MSDU");
+    };
+    assert_eq!(reason, IntakeRefusal::PacketNumberExhausted);
+    assert_eq!(memory.id, 7, "its memory comes back");
+    assert_eq!(world.port.front(7), None, "nothing was written");
 }
 
 fn numbering(model: Installed<'_>) {

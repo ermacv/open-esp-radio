@@ -1043,12 +1043,8 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
         if (header.peer_qos() == PeerQos::Qos) != numbers.qos() {
             return refused(msdu, IntakeRefusal::Numbering);
         }
-        match (protection, key.map(TxKey::packet_numbers)) {
-            (DataProtection::Ccmp(()), None) => return refused(msdu, IntakeRefusal::NoKey),
-            (DataProtection::Ccmp(()), Some(key)) if !key.available() => {
-                return refused(msdu, IntakeRefusal::PacketNumberExhausted);
-            }
-            (DataProtection::Ccmp(()), Some(_)) | (DataProtection::Open, _) => {}
+        if let (DataProtection::Ccmp(()), None) = (protection, key) {
+            return refused(msdu, IntakeRefusal::NoKey);
         }
         let Some(payload) = msdu.length.checked_sub(ETHERNET_HEADER_LEN) else {
             return refused(msdu, IntakeRefusal::ShortFrame);
@@ -1134,9 +1130,9 @@ impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
             return Intake::Wait(msdu, Waits::Arena);
         };
         let counter = numbers.counter(tid);
-        let ccmp = match (protection, key.map(TxKey::packet_numbers)) {
+        let ccmp = match (protection, key) {
             (DataProtection::Open, _) => None,
-            (DataProtection::Ccmp(()), Some(key)) => match key.allocate() {
+            (DataProtection::Ccmp(()), Some(key)) => match key.draw() {
                 Ok(packet_number) => {
                     Some(CcmpHeader::new(packet_number, CcmpKeyId::PAIRWISE).encode())
                 }
