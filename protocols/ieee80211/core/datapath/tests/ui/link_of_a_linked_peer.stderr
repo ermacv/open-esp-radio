@@ -8,7 +8,7 @@ help: there is a method `unlink` with a similar name, but with different argumen
   --> src/engine.rs
    |
    | /     pub fn unlink<
-   | |         N: Network<P::Memory>,
+   | |         N: Network<P::Memory, P::Lent>,
    | |         R: Rates<'id, P::Caps>,
    | |         E: EventSink<DataEvent>,
 ...  |

@@ -8,7 +8,7 @@ help: there is a method `tx_agreement_ended` with a similar name, but with diffe
   --> src/engine.rs
    |
    | /     pub fn tx_agreement_ended<
-   | |         N: Network<P::Memory>,
+   | |         N: Network<P::Memory, P::Lent>,
    | |         R: Rates<'id, P::Caps>,
    | |         E: EventSink<DataEvent>,
 ...  |

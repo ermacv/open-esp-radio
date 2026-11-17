@@ -367,3 +367,21 @@ fn a_checked_header_gives_none_once_its_bytes_are_rewritten() {
         assert!(checked.of(&frame).is_some(), "the same frame again");
     }
 }
+
+/// A Null and a QoS Null are data frames with no body; Data, QoS Data and a
+/// management frame of the same subtype numbers are not (IEEE Std
+/// 802.11-2020, 9.2.4.1.3, Table 9-1).
+#[test]
+fn a_null_and_a_qos_null_are_the_data_frames_with_no_body() {
+    let control = |byte: u8| FrameControl::new(u16::from(byte)).unwrap();
+    // Type in bits 2-3, subtype in bits 4-7.
+    assert!(control(0x48).is_null_data(), "Null");
+    assert!(control(0xc8).is_null_data(), "QoS Null");
+    assert!(!control(0x08).is_null_data(), "Data");
+    assert!(!control(0x88).is_null_data(), "QoS Data");
+    assert!(!control(0x40).is_null_data(), "a probe request, subtype 4");
+    assert!(
+        !control(0xc0).is_null_data(),
+        "a deauthentication, subtype 12"
+    );
+}

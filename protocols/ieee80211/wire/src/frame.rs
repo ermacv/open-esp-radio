@@ -115,6 +115,16 @@ impl FrameControl {
         self.fields().type_and_subtype() == 0b11_1000
     }
 
+    /// A Null or a QoS Null data frame: a data frame with no frame body.
+    ///
+    /// SOURCE: IEEE Std 802.11-2020, 9.2.4.1.3, Table 9-1 (data subtypes 4,
+    /// Null, and 12, QoS Null).
+    pub const fn is_null_data(self) -> bool {
+        const NULL: u16 = 4;
+        const QOS_NULL: u16 = 12;
+        self.is_data() && matches!(self.subtype(), NULL | QOS_NULL)
+    }
+
     pub const fn is_qos_data(self) -> bool {
         self.fields().kind().encoding() as u16 == Self::DATA && self.fields().qos()
     }

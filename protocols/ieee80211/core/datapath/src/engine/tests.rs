@@ -8,6 +8,7 @@ use crate::model::{Running, running};
 use crate::plane::{AggregateRate, HtLimits, PpduKind};
 use core::num::NonZeroU8;
 use oer_portable_time::Duration;
+use oer_protocols_ieee80211_contracts_port::DataPort;
 use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, FrameSet, HEADROOM, MpduStartSpacing, Ppdu, Protection, RetryStage,
 };
@@ -17,7 +18,7 @@ use oer_protocols_ieee80211_core_upper_mac::ccmp::{
 use oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission;
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_testing_model::{
-    Air, MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelLink, ModelMemory, ModelPort,
+    Air, MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelLent, ModelLink, ModelMemory, ModelPort,
 };
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::phy::{
@@ -28,8 +29,13 @@ use oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate;
 use std::collections::VecDeque;
 use std::vec::Vec;
 
+mod receive;
 mod search;
+mod search_rx;
 
+/// The pressure episode's bound the tests' engines take: the deleted
+/// actor's 10 ms.
+pub(super) const LATE: Duration = Duration::from_millis(10);
 pub(super) const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
 pub(super) const ACCESS_POINT_ADDRESS: [u8; 6] = [2, 0, 0, 0, 0, 2];
 pub(super) const CLIENT_A: [u8; 6] = [2, 0, 0, 0, 0, 0x0a];
@@ -78,12 +84,45 @@ pub(super) type ApEngine<'id, const PEERS: usize, const POOL: usize> = Engine<
 >;
 
 /// The network's end: what it offers, each MSDU's Ethernet frame, and what
-/// came home, in order.
-#[derive(Default)]
+/// came home, in order; what it received, lent or copied, in order; its
+/// lend limit and its room for copies.
 pub(super) struct Net {
     pub offered: VecDeque<ModelMemory>,
     pub frames: Vec<(u32, WmmUserPriority, Vec<u8>)>,
     pub home: Vec<u32>,
+    /// The units it holds, with the Ethernet frame of each.
+    pub lent: Vec<(ModelLent, EthernetSpan)>,
+    /// Every Ethernet frame it received, in order: a lent unit's place, or
+    /// a copy's bytes.
+    pub received: Vec<Got>,
+    /// The units it may hold at once.
+    pub lend_limit: u8,
+    /// The frames its storage takes now: a copy takes one, and the test
+    /// gives room back as the network would when it consumes a copy.
+    pub copy_room: u8,
+}
+
+/// An Ethernet frame the network received.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum Got {
+    /// A unit lent at its place.
+    Lent(u8),
+    /// A copy of these bytes.
+    Copied(Vec<u8>),
+}
+
+impl Default for Net {
+    fn default() -> Self {
+        Self {
+            offered: VecDeque::new(),
+            frames: Vec::new(),
+            home: Vec::new(),
+            lent: Vec::new(),
+            received: Vec::new(),
+            lend_limit: 4,
+            copy_room: 4,
+        }
+    }
 }
 
 impl Net {
@@ -110,7 +149,7 @@ impl Net {
     }
 }
 
-impl Network<ModelMemory> for Net {
+impl Network<ModelMemory, ModelLent> for Net {
     fn take(&mut self) -> Option<ModelMemory> {
         self.offered.pop_front()
     }
@@ -131,6 +170,21 @@ impl Network<ModelMemory> for Net {
 
     fn home(&mut self, memory: ModelMemory) {
         self.home.push(memory.id);
+    }
+
+    fn room(&self) -> Room {
+        let held = u8::try_from(self.lent.len()).unwrap_or(u8::MAX);
+        Room::new(self.lend_limit.saturating_sub(held), self.copy_room)
+    }
+
+    fn lent(&mut self, _permit: LendPermit, unit: ModelLent, frame: EthernetSpan) {
+        self.received.push(Got::Lent(unit.place()));
+        self.lent.push((unit, frame));
+    }
+
+    fn copied(&mut self, _permit: CopyPermit, frame: &[u8]) {
+        self.copy_room = self.copy_room.saturating_sub(1);
+        self.received.push(Got::Copied(frame.to_vec()));
     }
 }
 
@@ -209,6 +263,8 @@ pub(super) struct Controller<'id> {
     pub named: Vec<(WmmUserPriority, SequenceNumber)>,
     /// The peer of each number told.
     pub named_peers: Vec<u8>,
+    /// The frames read in place: the peer and the bytes.
+    pub frames: Vec<(Option<u8>, Vec<u8>)>,
 }
 
 impl<'id> Told<'id> for Controller<'id> {
@@ -232,6 +288,10 @@ impl<'id> Told<'id> for Controller<'id> {
     ) {
         self.named_peers.push(peer.index());
         self.named.push((tid, number));
+    }
+
+    fn frame<M: RxMetadata>(&mut self, peer: Option<u8>, frame: &Received<'_, M>) {
+        self.frames.push((peer, frame.bytes.to_vec()));
     }
 }
 
@@ -334,6 +394,7 @@ impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
                 keys: Vec::new(),
                 named: Vec::new(),
                 named_peers: Vec::new(),
+                frames: Vec::new(),
             },
             micros: 1,
         }
@@ -502,7 +563,7 @@ fn key_changing<'id, const POOL: usize>(engine: &mut StationEngine<'id, POOL>) -
 #[test]
 fn a_key_changes_behind_its_command_and_its_end_runs_the_intake() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         let _ = change_key(&mut engine, &mut around, 1);
         assert!(key_changing(&mut engine));
@@ -528,7 +589,7 @@ fn a_key_changes_behind_its_command_and_its_end_runs_the_intake() {
 #[test]
 fn a_key_change_waits_for_the_air_and_sends_home_what_the_old_key_wrote() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=2 {
             around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
@@ -568,7 +629,7 @@ fn first_sequence<const S: usize, const D: usize>(around: &Around<'_, S, D>, ind
 #[test]
 fn a_key_change_owes_a_block_ack_request_for_a_transmitted_frame_it_sent_home() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 2, &mut around);
@@ -600,7 +661,7 @@ fn a_key_change_owes_a_block_ack_request_for_a_transmitted_frame_it_sent_home() 
 #[test]
 fn a_key_change_owes_a_block_ack_request_to_the_number_it_set_back_and_it_ends_once_sent() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 4, &mut around);
@@ -640,7 +701,7 @@ fn a_key_change_owes_a_block_ack_request_to_the_number_it_set_back_and_it_ends_o
 #[test]
 fn a_named_tids_queue_owes_no_round() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(1);
+        let mut engine = StationEngine::<'_, 8>::new(1, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             let NamePlace::Unnamed(unnamed) = peer.naming() else {
@@ -663,7 +724,7 @@ fn a_named_tids_queue_owes_no_round() {
 #[test]
 fn a_whole_aggregates_end_puts_the_standby_on_the_air_as_it_was_written() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 3, &mut around);
@@ -697,7 +758,7 @@ fn a_whole_aggregates_end_puts_the_standby_on_the_air_as_it_was_written() {
 #[test]
 fn a_named_tids_msdu_does_not_join_its_standby() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 8, &mut around);
@@ -726,7 +787,7 @@ fn a_named_tids_msdu_does_not_join_its_standby() {
 #[test]
 fn an_arena_kept_for_a_retry_goes_before_the_standby() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 8, &mut around);
@@ -769,7 +830,7 @@ fn an_arena_kept_for_a_retry_goes_before_the_standby() {
 #[test]
 fn an_aggregate_of_an_ended_link_sends_what_it_missed_home() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 8, &mut around);
@@ -800,7 +861,7 @@ fn an_aggregate_of_an_ended_link_sends_what_it_missed_home() {
 #[test]
 fn an_aggregates_retry_settles_its_missed_frames_alone() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 8, &mut around);
@@ -831,7 +892,7 @@ fn an_aggregates_retry_settles_its_missed_frames_alone() {
 #[test]
 fn an_aggregates_retry_spends_the_attempts_of_its_missed_frames() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 8, &mut around);
@@ -859,7 +920,7 @@ fn an_aggregates_retry_spends_the_attempts_of_its_missed_frames() {
 #[test]
 fn an_aggregate_of_an_ended_link_keeps_nothing_for_the_next_link() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 8, &mut around);
@@ -896,7 +957,7 @@ fn an_aggregate_of_an_ended_link_keeps_nothing_for_the_next_link() {
 #[test]
 fn the_standbys_tid_goes_on_and_another_waits_without_taking_the_budget() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(1);
+        let mut engine = StationEngine::<'_, 8>::new(1, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 8, &mut around);
@@ -919,7 +980,7 @@ fn the_standbys_tid_goes_on_and_another_waits_without_taking_the_budget() {
 #[test]
 fn a_link_without_qos_names_no_tid() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         {
             let mut data = station_flowing(&mut engine);
@@ -962,7 +1023,7 @@ fn a_link_without_qos_names_no_tid() {
 #[test]
 fn the_stations_own_numbers_are_taken_one_by_one_apart_from_its_tids() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             assert_eq!(peer.own_number().map(SequenceNumber::get), Some(0));
@@ -981,7 +1042,7 @@ fn the_stations_own_numbers_are_taken_one_by_one_apart_from_its_tids() {
 #[test]
 fn a_section_takes_its_budget_and_owes_a_round_while_more_wait() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(2);
+        let mut engine = StationEngine::<'_, 8>::new(2, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 8, &mut around);
@@ -1003,7 +1064,7 @@ fn a_section_takes_its_budget_and_owes_a_round_while_more_wait() {
 #[test]
 fn a_rekey_removes_the_installed_key_and_installs_the_new_one() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         let _ = change_key(&mut engine, &mut around, 1);
         let _ = engine.round(&mut around.turn());
@@ -1022,7 +1083,7 @@ fn a_rekey_removes_the_installed_key_and_installs_the_new_one() {
 #[test]
 fn a_stop_during_a_rekey_installs_no_new_key() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         let _ = change_key(&mut engine, &mut around, 1);
         let _ = engine.round(&mut around.turn());
@@ -1053,7 +1114,7 @@ fn a_stop_during_a_rekey_installs_no_new_key() {
 #[test]
 fn an_expired_installation_leaves_the_link_without_a_key() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.port.expire_next();
         let _ = change_key(&mut engine, &mut around, 1);
@@ -1069,7 +1130,7 @@ fn an_expired_installation_leaves_the_link_without_a_key() {
 #[test]
 fn a_stop_during_a_key_change_waits_for_it_removes_the_key_and_closes_the_gate() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
         let _ = engine.offered(&mut around.turn());
@@ -1097,7 +1158,7 @@ fn a_stop_during_a_key_change_waits_for_it_removes_the_key_and_closes_the_gate()
 #[test]
 fn a_station_without_an_agreement_sends_one_mpdu_an_arena_and_delivers_in_order() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=3 {
             around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
@@ -1125,7 +1186,7 @@ fn a_station_without_an_agreement_sends_one_mpdu_an_arena_and_delivers_in_order(
 #[test]
 fn a_station_under_an_agreement_aggregates_within_its_window() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 2, &mut around);
@@ -1156,7 +1217,7 @@ fn a_station_without_a_link_refuses_what_the_network_offers_at_once() {
         let Running {
             port, data: rights, ..
         } = run;
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = Around::new(port);
         let DataPlace::Stopped(data) = engine.data() else {
             panic!("stopped");
@@ -1172,7 +1233,7 @@ fn a_station_without_a_link_refuses_what_the_network_offers_at_once() {
 #[test]
 fn a_held_link_keeps_its_data_until_released() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             let _ = peer.hold(&mut around.turn());
@@ -1194,7 +1255,7 @@ fn a_held_link_keeps_its_data_until_released() {
 #[test]
 fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             let NamePlace::Unnamed(unnamed) = peer.naming() else {
@@ -1231,7 +1292,7 @@ fn the_addba_starting_sequence_is_the_first_data_mpdu_numbered_after_it() {
 #[test]
 fn a_named_tid_is_told_its_number_once_its_frames_in_the_arenas_have_gone() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=2 {
             around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
@@ -1280,7 +1341,7 @@ fn a_named_tid_is_told_its_number_once_its_frames_in_the_arenas_have_gone() {
 #[test]
 fn a_voice_msdu_goes_in_the_next_arena_ahead_of_a_best_effort_backlog() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=3 {
             around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
@@ -1306,7 +1367,7 @@ fn a_voice_msdu_goes_in_the_next_arena_ahead_of_a_best_effort_backlog() {
 #[test]
 fn a_tid_held_by_its_window_lets_the_other_tid_of_its_category_go() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 1, &mut around);
@@ -1338,7 +1399,7 @@ fn a_tid_held_by_its_window_lets_the_other_tid_of_its_category_go() {
 #[test]
 fn a_link_that_ends_sends_every_waiting_msdu_home_once() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(8);
+        let mut engine = StationEngine::<'_, 8>::new(8, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         linked(&mut engine, |peer| {
             agree(peer, WmmUserPriority::UP0, 1, &mut around);
@@ -1369,7 +1430,7 @@ fn a_link_that_ends_sends_every_waiting_msdu_home_once() {
 #[test]
 fn a_stop_with_an_arena_on_the_air_ends_once_it_ended_and_the_gate_closed() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = station(run, &mut engine, 2, HOUR);
         for id in 1..=3 {
             around.net.offer(id, WmmUserPriority::UP0, DESTINATION);
@@ -1444,7 +1505,7 @@ fn data_place(category: WmmAccessCategory) -> u8 {
 #[test]
 fn an_access_points_msdu_is_copied_into_its_queues_place_and_its_memory_goes_home_at_the_write() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
         let mut around = access_point(run, &mut engine);
         around.net.offer(7, WmmUserPriority::UP0, CLIENT_B);
         let _ = engine.offered(&mut around.turn());
@@ -1475,7 +1536,7 @@ fn an_access_points_msdu_is_copied_into_its_queues_place_and_its_memory_goes_hom
 #[test]
 fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
         let mut around = access_point(run, &mut engine);
         let client = Peer::new(1).unwrap();
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_B);
@@ -1533,7 +1594,7 @@ fn an_access_points_named_tid_is_told_its_number_once_its_single_ended() {
 #[test]
 fn an_access_points_queue_carries_one_single_and_the_next_waits_for_its_end() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
         around.net.offer(2, WmmUserPriority::UP0, CLIENT_B);
@@ -1555,7 +1616,7 @@ fn an_access_points_queue_carries_one_single_and_the_next_waits_for_its_end() {
 #[test]
 fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, DESTINATION);
         let _ = engine.offered(&mut around.turn());
@@ -1569,7 +1630,7 @@ fn an_access_point_refuses_an_msdu_for_a_station_it_has_no_link_with() {
 #[test]
 fn a_second_link_of_a_peer_starts_without_the_first_links_account() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
         let mut around = access_point(run, &mut engine);
         let queue = QueueId::new(0, WmmUserPriority::UP0).unwrap();
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
@@ -1602,7 +1663,7 @@ fn a_second_link_of_a_peer_starts_without_the_first_links_account() {
 #[test]
 fn an_access_points_stop_waits_for_its_singles_and_every_right_comes_home() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
         let mut around = access_point(run, &mut engine);
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);
         around.net.offer(2, WmmUserPriority::UP0, CLIENT_A);
@@ -1728,7 +1789,7 @@ fn expired(around: &Around<'_, STATION_SINGLES, 0>) -> usize {
 #[test]
 fn a_member_missed_within_its_lifetime_is_kept_and_one_missed_after_it_is_dropped_expired() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = aggregating(run, &mut engine, |_| {});
         // Within their lifetime: the missed members are kept and go again.
         first_only(&mut around);
@@ -1750,7 +1811,7 @@ fn a_member_missed_within_its_lifetime_is_kept_and_one_missed_after_it_is_droppe
 #[test]
 fn a_member_that_waited_in_its_queue_past_its_lifetime_still_has_its_lifetime_in_the_arena() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         // The three waited in their queue, held, longer than they live.
         let mut around = aggregating(run, &mut engine, |around| around.pass(5_000));
         first_only(&mut around);
@@ -1768,7 +1829,7 @@ fn a_member_that_waited_in_its_queue_past_its_lifetime_still_has_its_lifetime_in
 #[test]
 fn a_kept_member_that_ages_while_the_gate_closes_goes_once_more_and_its_miss_expires_it() {
     running::<STATION_SINGLES, 0, _>(|run| {
-        let mut engine = StationEngine::<'_, 8>::new(4);
+        let mut engine = StationEngine::<'_, 8>::new(4, LATE);
         let mut around = aggregating(run, &mut engine, |_| {});
         // The gate's closing is asked while the aggregate is on the air.
         {
@@ -1807,7 +1868,7 @@ fn a_kept_member_that_ages_while_the_gate_closes_goes_once_more_and_its_miss_exp
 #[test]
 fn a_single_that_ends_during_the_commands_poll_gives_its_place_and_queue_back() {
     running::<AP_SINGLES, DATA_SINGLES, _>(|run| {
-        let mut engine = ApEngine::<'_, 2, 8>::new(4);
+        let mut engine = ApEngine::<'_, 2, 8>::new(4, LATE);
         let mut around = access_point(run, &mut engine);
         around.port.set_air(BEST_EFFORT, Air::Hold);
         around.net.offer(1, WmmUserPriority::UP0, CLIENT_A);

@@ -4,9 +4,9 @@
 code, has no runtime panic path and touches no port, frame buffer or clock of
 its own: every instant and every arena is its caller's. It holds today:
 
-- `engine`: one interface's transmit engine over the port, the network's
-  end (`Network`), the rate policy (`Rates`) and the controller's end
-  (`Told`). Its state is a sum: the data is `Stopped`, or flowing or
+- `engine`: one interface's engine over the port, the network's end
+  (`Network`), the rate policy (`Rates`) and the controller's end
+  (`Told`): its transmit half and its receive half (below). Its state is a sum: the data is `Stopped`, or flowing or
   stopping with what it holds while it runs (a station's plane built with
   its arenas, or an access point's lanes, the gate with the command's
   place, the rights), and a peer is free or linked with its link. A
@@ -44,6 +44,34 @@ its own: every instant and every arena is its caller's. It holds today:
   MSDU in its memory: its Ethernet header the headroom's last octets
   (`MSDU_ETHERNET_OFFSET`), its payload after the headroom
   (`MSDU_PAYLOAD_OFFSET`, the contract's `HEADROOM`).
+
+The engine's receive half. Each section that touches received units
+(`Engine::received` at the ring's signal, `returned` when the network gave
+lent units back, `due` at the pressure episode's bound or the ring's
+continuation, and the data's stop) opens one round over the port's
+receive (`Round`) and closes it. A unit stays in the port's staging place
+from the ring's service to its return; the engine reads it there and
+routes it: a management frame and EAPOL to the controller, read by
+reference inside the round (`Told::frame`); a data frame of a linked peer
+to the network; anything else back to the ring at the round's close. A
+data unit for the network is decapsulated in its place once (its Ethernet
+addresses written before the EtherType of its LLC/SNAP header,
+`Round::write_addresses`), then lent to the network while it has room to
+borrow (`Network::room`, `Network::lent`), else copied into the network's
+storage while it has room for a copy (`Network::copied`; an A-MSDU's
+MSDUs are copied, at most `AMSDU_MSDUS`), else it waits, taken, for the
+network. A unit waits at most the episode's bound (`late`, a policy value
+the composition gives `Engine::new` beside its budget) from the episode's first wait,
+not extended by returns; after it, a unit the network has no room for is
+refused, and the episode ends once the ring was walked with no unit
+waiting. While a unit waits, the ring is not serviced. A data frame of a
+held link, protected data without the port's evidence of its integrity,
+and data that does not decapsulate are refused; the refusals are counted
+by reason (`FlowingData::refusals`). After the data's stop nothing is
+delivered: what waited and what the ring stages go back unread, and the
+rights come home once nothing waits; the units the network holds are the
+installation machine's to wait for (`UnitsHome`). An access point's
+receive agreements and a station's reorder are not here yet.
 
 The station's data transmission over the port's two arenas.
 `DataPlane::new` takes the installation's two idle arenas, and each book

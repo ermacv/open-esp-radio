@@ -72,15 +72,16 @@ use oer_protocols_ieee80211_contracts_port::{
     AggregateEnd, AgreementCommand, AgreementEnd, AgreementHeld, Air as OnAirAir,
     AmpduCapabilities, AmpduLengthTable, Arena, ArenaOutcome, ArenaSide, BandSet, BlockAckReport,
     Channel, CloseGate, CommandPlace, CommandPoll, Complete, DataLayout, DataPort, DataRights,
-    Ended, Facts, FrameSet, GateClosed, GateIssuer, GateLent, GateOpen, GroupCommand, GroupEnd,
-    GroupHeld, HEADROOM, HardwareServices, HeaderLen, IdleArena, Ieee80211Capabilities,
-    Ieee80211Instant, InCommand, IndeterminateCause, LowerMacCapabilities, MpduLength, OnAir,
-    PairwiseCommand, PairwiseEnd, PairwiseHeld, PhyFormatSet, Place, PortKey, PortSink, Ppdu,
-    Protection, QueueRight, RadioPort, RateSupport, ReceiveFilter, ReceivePort, Rest, Retired,
-    RetunePoll, Retuning, Running, RxHead, RxMeta, Settled, Signal, SingleEnd, SingleOutcome,
-    SinglePlace, SingleResponse, Staged, StagedPlaces, StartFailure, StartPoll, Starting, StopFrom,
-    StopPoll, StopRight, Stopped, Stopping, SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome,
-    UnitsHome, ValueCommand, ValueEnd, ValueKind, WidthSet, WithdrawCause,
+    Ended, EthernetAddresses, Facts, FrameSet, GateClosed, GateIssuer, GateLent, GateOpen,
+    GroupCommand, GroupEnd, GroupHeld, HEADROOM, HardwareServices, HeaderLen, IdleArena,
+    Ieee80211Capabilities, Ieee80211Instant, InCommand, IndeterminateCause, Lendable,
+    LowerMacCapabilities, MpduLength, OnAir, OutsideTheUnit, PairwiseCommand, PairwiseEnd,
+    PairwiseHeld, PhyFormatSet, Place, PortKey, PortSink, Ppdu, Protection, QueueRight, RadioPort,
+    RateSupport, ReceiveFilter, ReceivePort, Rest, Retired, RetunePoll, Retuning, Running, RxHead,
+    RxMeta, Settled, Signal, SingleEnd, SingleOutcome, SinglePlace, SingleResponse, Staged,
+    StagedPlaces, StartFailure, StartPoll, Starting, StopFrom, StopPoll, StopRight, Stopped,
+    Stopping, SupportedChannel, Tid, TxFacts, TxFrame, TxOutcome, UnitsHome, ValueCommand,
+    ValueEnd, ValueKind, WidthSet, WithdrawCause,
 };
 use oer_protocols_ieee80211_wire::phy::{HeMcs, HtMcs, LegacyRate, PhyRate};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
@@ -514,6 +515,8 @@ pub struct ModelPort<'id, const SINGLES: usize, const DATA: usize> {
     singles: Vec<Vec<u8>>,
     ring: VecDeque<(Vec<u8>, RxMeta)>,
     places: Vec<Option<Unit>>,
+    /// The most units one service of the ring stages.
+    frontier: usize,
     returns: Rc<Cell<u64>>,
     /// The frames the next aggregate's BlockAck acknowledges.
     acknowledge: Option<FrameSet>,
@@ -575,6 +578,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
                 .collect(),
             ring: VecDeque::new(),
             places: (0..MODEL_PLACES).map(|_| None).collect(),
+            frontier: MODEL_PLACES,
             returns: Rc::new(Cell::new(0)),
             acknowledge: None,
             prefix: None,
@@ -593,6 +597,38 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
 
     fn program(&mut self, programmed: Programmed) {
         self.record.push(programmed);
+    }
+
+    /// Stage at most `frontier` units a service of the ring, as a ring
+    /// whose service is bounded.
+    pub fn set_frontier(&mut self, frontier: usize) {
+        self.frontier = frontier;
+    }
+
+    /// The places that hold a unit, in order.
+    pub fn held_places(&self) -> Vec<u8> {
+        (0_u8..)
+            .zip(&self.places)
+            .filter_map(|(index, place)| place.as_ref().map(|_| index))
+            .collect()
+    }
+
+    /// The received MPDUs the ring still holds.
+    pub fn ring_len(&self) -> usize {
+        self.ring.len()
+    }
+
+    /// The staging places that hold a unit: staged, taken or lent.
+    pub fn places_held(&self) -> usize {
+        self.places.iter().filter(|place| place.is_some()).count()
+    }
+
+    /// The bytes of the unit at `place`, as the port holds them.
+    pub fn place_bytes(&self, place: u8) -> Option<&[u8]> {
+        self.places
+            .get(usize::from(place))?
+            .as_ref()
+            .map(|unit| unit.bytes.as_slice())
     }
 
     /// Land a received MPDU on the ring.
@@ -705,7 +741,8 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
     /// and are left out.
     pub fn state_key(&self) -> std::string::String {
         std::format!(
-            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            "{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}|{:?}",
+            self.receive_key(),
             self.phase,
             self.parts,
             self.groups,
@@ -718,6 +755,26 @@ impl<'id, const SINGLES: usize, const DATA: usize> ModelPort<'id, SINGLES, DATA>
             self.acknowledge,
             self.prefix,
         )
+    }
+
+    /// The receive side's state: the ring's frames, each place's unit and
+    /// whether it is lent, and the returns not yet taken.
+    fn receive_key(&self) -> std::string::String {
+        let places: Vec<Option<(&[u8], bool)>> = self
+            .places
+            .iter()
+            .map(|place| {
+                place
+                    .as_ref()
+                    .map(|unit| (unit.bytes.as_slice(), unit.lent))
+            })
+            .collect();
+        let ring: Vec<&[u8]> = self
+            .ring
+            .iter()
+            .map(|(bytes, _)| bytes.as_slice())
+            .collect();
+        std::format!("{ring:?}|{places:?}|{}", self.returns.get())
     }
 
     /// The arena on the air.
@@ -1629,6 +1686,9 @@ impl<'id, const SINGLES: usize, const DATA: usize> ReceivePort<'id>
             return staged;
         }
         while let Some(free) = self.places.iter().position(Option::is_none) {
+            if staged.places().len() >= self.frontier {
+                break;
+            }
             let Some((bytes, meta)) = self.ring.pop_front() else {
                 break;
             };
@@ -1645,7 +1705,7 @@ impl<'id, const SINGLES: usize, const DATA: usize> ReceivePort<'id>
                     staged: Staged {
                         head,
                         meta,
-                        lendable: true,
+                        lendable: Some(Lendable::staged(_seal)),
                     },
                     bytes,
                     lent: false,
@@ -1671,6 +1731,29 @@ impl<'id, const SINGLES: usize, const DATA: usize> ReceivePort<'id>
             place,
             returns: Rc::clone(&self.returns),
         }
+    }
+
+    fn round_write_addresses(
+        &mut self,
+        _seal: &Sealed,
+        place: u8,
+        addresses: EthernetAddresses,
+    ) -> Result<(), OutsideTheUnit> {
+        let Some(Some(unit)) = self.places.get_mut(usize::from(place)) else {
+            return Err(OutsideTheUnit);
+        };
+        let end = usize::from(addresses.ether_type);
+        let Some(target) = end
+            .checked_sub(12)
+            .and_then(|start| unit.bytes.get_mut(start..end))
+            .and_then(|target| target.first_chunk_mut::<12>())
+        else {
+            return Err(OutsideTheUnit);
+        };
+        let [d0, d1, d2, d3, d4, d5] = addresses.destination;
+        let [s0, s1, s2, s3, s4, s5] = addresses.source;
+        *target = [d0, d1, d2, d3, d4, d5, s0, s1, s2, s3, s4, s5];
+        Ok(())
     }
 
     fn round_close(&mut self, _seal: &Sealed, back: u64) -> Rest {
