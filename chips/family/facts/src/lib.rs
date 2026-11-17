@@ -53,7 +53,7 @@ mod model;
 mod rom;
 pub mod tracked;
 
-pub use irq_stack::IrqStackAllocation;
+pub use irq_stack::{IrqStackAllocation, irq_stack_with_margin};
 pub use layers::{Layers, Source, chain, resolve};
 pub use model::*;
 
@@ -928,11 +928,13 @@ pub(crate) mod tests {
             .find(|rule| rule.name == "_runtime_mtvt")
             .map(|rule| rule.bytes);
         assert_eq!(mtvt, Some(512));
+        // The interrupt stacks are sized at link time: in SRAM, no size fixed.
         let stacks = |placement: &Placement| -> Vec<String> {
             placement
                 .range
                 .iter()
-                .filter(|rule| rule.maximum_bytes.is_some())
+                .filter(|rule| rule.range[1].contains("irq_stack"))
+                .inspect(|rule| assert!(rule.region == "sram" && rule.bytes.is_none()))
                 .map(|rule| rule.range[1].clone())
                 .collect()
         };

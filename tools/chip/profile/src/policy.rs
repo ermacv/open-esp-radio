@@ -44,6 +44,15 @@ pub struct StackPolicy {
     /// Defaults for every hart, including explicit zero allocations.
     #[serde(default)]
     pub default_task_stack_bytes: BTreeMap<u32, u32>,
+    /// The margin above an interrupt stack's proven bound, in percent: the
+    /// stack holds `ceil(bound * (100 + margin) / 100)` bytes above its guard.
+    #[serde(default)]
+    pub irq_stack_margin_percent: Option<u32>,
+    /// What the first, analysis-only link places for every used interrupt
+    /// stack: a placeholder to link and analyse with, no limit. The chip's
+    /// generated layout carries it; nothing is gated against it.
+    #[serde(default)]
+    pub analysis_irq_stack_bytes: Option<u32>,
     /// Reviewed frames above the move limit, scoped to each ELF of the image.
     #[serde(default)]
     pub frame_exceptions: FrameExceptions,
@@ -313,14 +322,13 @@ impl TaskStack {
     }
 }
 
-/// A core's dedicated SRAM interrupt stack: its bound and margin are the
-/// interrupt-stack gate's contract, without an independent free-byte reserve.
+/// A core's dedicated SRAM interrupt stack, sized at link time from its
+/// proven bound and the policy's margin, or from the size the image declares
+/// where its bound is not proven; there is no independent free-byte reserve
+/// and no size of the policy's own.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct InterruptStack {
-    /// This hart's maximum interrupt allocation; absent uses the chip contract.
-    #[serde(default)]
-    pub allocation_bytes: Option<u32>,
     /// A secondary core's launch template, as its task stack's.
     #[serde(default)]
     pub launch: Option<Launch>,
@@ -424,6 +432,14 @@ impl StackPolicy {
         {
             return Err("task defaults must be aligned to 16 bytes".into());
         }
+        if self
+            .analysis_irq_stack_bytes
+            .is_some_and(|bytes| bytes < 16 || bytes % 16 != 0)
+        {
+            return Err(
+                "`analysis_irq_stack_bytes` must be at least 16 bytes and aligned to 16".into(),
+            );
+        }
         let mut observed = std::collections::BTreeSet::new();
         for pattern in &self.observed_functions {
             if pattern.trim().is_empty() || !observed.insert(pattern) {
@@ -515,16 +531,6 @@ impl StackPolicy {
                 if task.handoff.is_some() {
                     return Err("`handoff` belongs to the bootstrap stack".into());
                 }
-            }
-            if stacks
-                .interrupt_stack
-                .used()
-                .and_then(|stack| stack.allocation_bytes)
-                .is_some_and(|bytes| bytes == 0 || bytes % 16 != 0)
-            {
-                return Err(
-                    "interrupt stack maximum must be positive and aligned to 16 bytes".into(),
-                );
             }
         }
         Ok(())
@@ -668,6 +674,27 @@ impl StackPolicy {
             .collect()
     }
 
+    /// This policy with the interrupt-stack margin the image chose, where it
+    /// chose one (`[package.metadata.open-radio] irq-stack-margin-percent`,
+    /// zero included); else the policy's own.
+    #[must_use]
+    pub fn with_image_irq_stack_margin(mut self, percent: Option<u32>) -> Self {
+        if percent.is_some() {
+            self.irq_stack_margin_percent = percent;
+        }
+        self
+    }
+
+    /// The margin above an interrupt stack's proven bound, in percent.
+    ///
+    /// # Errors
+    ///
+    /// The policy names none.
+    pub fn irq_stack_margin_percent(&self) -> Result<u32> {
+        self.irq_stack_margin_percent
+            .ok_or_else(|| "the stack policy names no `irq_stack_margin_percent`".into())
+    }
+
     /// Explicit per-hart inputs; absent allocations use that hart's chip default.
     pub fn runtime_environment(&self) -> Vec<(String, String)> {
         let mut variables = Vec::new();
@@ -686,12 +713,12 @@ impl StackPolicy {
                         .used()
                         .map_or(Some(0), |stack| self.task_bytes(hart, stack)),
                 ),
+                // A used interrupt stack takes the layout's analysis
+                // placeholder in the first link and its sized allocation
+                // from the image linker in the second.
                 (
                     "IRQ",
-                    stacks
-                        .interrupt_stack
-                        .used()
-                        .map_or(Some(0), |stack| stack.allocation_bytes),
+                    stacks.interrupt_stack.used().map_or(Some(0), |_| None),
                 ),
             ] {
                 if let Some(bytes) = allocation {
@@ -788,46 +815,28 @@ impl StackPolicy {
             })
         });
         interrupts.harts.retain(|hart| !unused.contains(hart));
-        let mut maximum = 0;
-        let mut total = 0_u64;
+        // A used interrupt stack is sized at link time: its range lies in
+        // SRAM with no size fixed, and the SRAM region limits it.
         for (&hart, stacks) in &self.core {
-            let Some(irq) = stacks.interrupt_stack.used() else {
+            if stacks.interrupt_stack.used().is_none() {
                 continue;
-            };
-            let bytes = irq.allocation_bytes.unwrap_or(interrupts.irq_stack_bytes);
-            total += u64::from(bytes);
-            maximum = maximum.max(bytes);
+            }
             let names = [
                 format!("__runtime_cpu{hart}_irq_stack_bottom"),
                 format!("__runtime_cpu{hart}_irq_stack_top"),
             ];
             let rule = placement
                 .range
-                .iter_mut()
+                .iter()
                 .find(|rule| rule.range == names)
                 .ok_or("missing per-hart IRQ placement rule")?;
-            if rule.region != "sram"
-                || rule.bytes.is_some()
-                || rule.maximum_bytes != Some(u64::from(interrupts.irq_stack_bytes))
-            {
-                return Err("interrupt stack placement and budget disagree".into());
+            if rule.region != "sram" || rule.bytes.is_some() {
+                return Err(
+                    "an interrupt stack's placement is SRAM with its size chosen at link time"
+                        .into(),
+                );
             }
-            rule.maximum_bytes = Some(u64::from(bytes));
         }
-        if total
-            >= u64::from(
-                profile
-                    .facts
-                    .memory
-                    .as_ref()
-                    .ok_or("stacks require memory")?
-                    .sram
-                    .length(),
-            )
-        {
-            return Err("interrupt allocations do not fit SRAM".into());
-        }
-        interrupts.irq_stack_bytes = maximum;
         Ok(profile)
     }
 }
@@ -950,7 +959,7 @@ mod tests {
     #[test]
     fn a_task_allocation_binds_the_link_environment_and_exact_psram_range() {
         let base = profile();
-        let mut policy = policy(None);
+        let mut policy = policy();
         policy.task_stack_mut(0).unwrap().allocation_bytes = Some(1 << 20);
         let adjusted = policy.runtime_profile(&base).unwrap();
         let rule = |profile: &crate::Profile| {
@@ -985,7 +994,7 @@ mod tests {
     }
     #[test]
     fn a_proven_task_stack_is_the_bound_plus_the_reserve_aligned_up() {
-        let stack = policy(None).task_stack(0).unwrap().clone();
+        let stack = policy().task_stack(0).unwrap().clone();
         assert_eq!(stack.minimum_free_bytes, 4096);
         assert_eq!(stack.proven_allocation_bytes(880).unwrap(), 4976);
         assert_eq!(stack.proven_allocation_bytes(881).unwrap(), 4992);
@@ -1006,7 +1015,7 @@ mod tests {
             launch: None,
             launch_bytes: None,
         };
-        let mut policy = policy(None);
+        let mut policy = policy();
         policy.bootstrap_stack = Some(bootstrap(Some("_runtime_start")));
         policy.validate().unwrap();
         policy.bootstrap_stack = Some(bootstrap(Some("")));
@@ -1018,7 +1027,7 @@ mod tests {
     }
     #[test]
     fn a_proven_task_stack_and_an_explicit_allocation_are_two_sources() {
-        let mut policy = policy(None);
+        let mut policy = policy();
         policy.proven_task_stacks().unwrap();
         policy.task_stack_mut(0).unwrap().allocation_bytes = Some(1 << 20);
         let error = policy.proven_task_stacks().unwrap_err().to_string();
@@ -1054,12 +1063,14 @@ mod tests {
             interrupt_stack: Slot::Unused(Unused { unused: true }),
         }
     }
-    fn policy(bytes: Option<u32>) -> StackPolicy {
+    fn policy() -> StackPolicy {
         StackPolicy {
             schema: SCHEMA,
             coverage_policy: Some("own-memory".into()),
             max_move_bytes: 4096,
             default_task_stack_bytes: BTreeMap::new(),
+            irq_stack_margin_percent: Some(10),
+            analysis_irq_stack_bytes: Some(0x8000),
             frame_exceptions: FrameExceptions::default(),
             observed_functions: Vec::new(),
             core: BTreeMap::from([
@@ -1078,10 +1089,7 @@ mod tests {
                             launch: None,
                             launch_bytes: None,
                         }),
-                        interrupt_stack: Slot::Used(InterruptStack {
-                            allocation_bytes: bytes,
-                            launch: None,
-                        }),
+                        interrupt_stack: Slot::Used(InterruptStack { launch: None }),
                     },
                 ),
             ]),
@@ -1089,15 +1097,12 @@ mod tests {
         }
     }
     #[test]
-    fn an_image_allocation_changes_placement_and_budget_together() {
+    fn an_image_keeps_its_interrupt_stacks_unsized_in_sram() {
         let base = profile();
         let before = base.clone();
-        let unchanged = policy(None).runtime_profile(&base).unwrap();
-        assert_eq!(unchanged.facts.interrupts.as_ref().unwrap().harts, [0]);
-        let requested = base.facts.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
-        let image = policy(Some(requested)).runtime_profile(&base).unwrap();
+        let image = policy().runtime_profile(&base).unwrap();
         let contract = image.facts.interrupts.as_ref().unwrap();
-        assert_eq!(contract.irq_stack_bytes, requested);
+        assert_eq!(contract.harts, [0]);
         assert_eq!(
             contract.irq_stack_guard_bytes,
             base.facts
@@ -1106,68 +1111,32 @@ mod tests {
                 .unwrap()
                 .irq_stack_guard_bytes
         );
-        assert_eq!(
-            contract.irq_stack_margin_percent,
-            base.facts
-                .interrupts
-                .as_ref()
-                .unwrap()
-                .irq_stack_margin_percent
-        );
-        assert_eq!(contract.harts, [0]);
-        for hart in &contract.harts {
-            let bottom = format!("__runtime_cpu{hart}_irq_stack_bottom");
-            let range = image
-                .facts
-                .placement
-                .as_ref()
-                .unwrap()
-                .range
-                .iter()
-                .find(|rule| rule.range[0] == bottom)
-                .unwrap();
-            assert_eq!(range.maximum_bytes, Some(u64::from(requested)));
-            assert_eq!(range.region, "sram");
-        }
+        let bottom = format!("__runtime_cpu{}_irq_stack_bottom", 0);
+        let range = image
+            .facts
+            .placement
+            .as_ref()
+            .unwrap()
+            .range
+            .iter()
+            .find(|rule| rule.range[0] == bottom)
+            .unwrap();
+        assert_eq!((range.region.as_str(), range.bytes), ("sram", None));
         assert_eq!(base, before);
-        assert!(policy(Some(requested)).runtime_environment().contains(&(
-            format!("OPEN_RADIO_IRQ_STACK_HART{}_BYTES", 0),
-            requested.to_string()
-        )));
+        // The first link takes the layout's placeholder: no size of the
+        // policy's own.
         assert!(
-            !policy(None)
+            !policy()
                 .runtime_environment()
                 .iter()
                 .any(|(key, _)| *key == format!("OPEN_RADIO_IRQ_STACK_HART{}_BYTES", 0))
         );
-    }
-    #[test]
-    fn guard_storage_is_optional_but_the_bound_plus_margin_is_a_gate() -> Result<()> {
-        let image = policy(None).runtime_profile(&profile())?;
-        let contract = image.facts.interrupts.ok_or("missing interrupt contract")?;
-        let allocation = contract.irq_stack_allocation(0, Some(29789))?;
-        assert_eq!(allocation.bytes, contract.irq_stack_bytes);
-        assert_eq!(allocation.guard_bytes, 0);
-        assert!(contract.irq_stack_allocation(0, Some(29790)).is_err());
-        Ok(())
+        assert_eq!(policy().irq_stack_margin_percent().unwrap(), 10);
     }
 
     #[test]
-    fn an_explicit_maximum_need_not_reserve_or_align_to_a_guard() -> Result<()> {
-        for bytes in [4096, 4096 + 16, 32768 + 16] {
-            let image = policy(Some(bytes)).runtime_profile(&profile())?;
-            let contract = image.facts.interrupts.ok_or("missing interrupt contract")?;
-            assert_eq!(contract.irq_stack_bytes, bytes);
-            let allocation = contract.irq_stack_allocation(0, Some(u64::from(bytes) * 9 / 10))?;
-            assert_eq!(allocation.guard_bytes, 0);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn a_larger_budget_requires_consistent_exact_sram_placement() {
+    fn an_interrupt_stack_placed_with_a_fixed_size_or_not_at_all_is_refused() {
         let mut base = profile();
-        let requested = base.facts.interrupts.as_ref().unwrap().irq_stack_bytes * 2;
         let name = format!("__runtime_cpu{}_irq_stack_bottom", 0);
         let rule = base
             .facts
@@ -1179,21 +1148,30 @@ mod tests {
             .find(|rule| rule.range[0] == name)
             .unwrap();
         rule.bytes = Some(1);
-        assert!(policy(Some(requested)).runtime_profile(&base).is_err());
+        assert!(policy().runtime_profile(&base).is_err());
         base.facts
             .placement
             .as_mut()
             .unwrap()
             .range
             .retain(|rule| rule.range[0] != name);
-        assert!(policy(Some(requested)).runtime_profile(&base).is_err());
+        assert!(policy().runtime_profile(&base).is_err());
     }
+
     #[test]
-    fn bad_or_unaffordable_allocations_are_refused() {
-        let base = profile();
-        for bytes in [0, 65537, u32::MAX - 15] {
-            assert!(policy(Some(bytes)).runtime_profile(&base).is_err());
-        }
+    fn the_policy_names_no_interrupt_stack_size_and_needs_its_margin() {
+        let mut sizeless = policy();
+        sizeless.irq_stack_margin_percent = None;
+        assert!(
+            sizeless
+                .irq_stack_margin_percent()
+                .unwrap_err()
+                .to_string()
+                .contains("irq_stack_margin_percent")
+        );
+        let mut placeholder = policy();
+        placeholder.analysis_irq_stack_bytes = Some(8);
+        assert!(placeholder.validate().is_err());
     }
 
     fn parse(source: &str) -> Result<StackPolicy> {
@@ -1264,7 +1242,7 @@ mod tests {
     #[test]
     fn unused_interrupt_stacks_leave_the_contract_and_the_link_environment_names_them() {
         let base = profile();
-        let image = policy(None).runtime_profile(&base).unwrap();
+        let image = policy().runtime_profile(&base).unwrap();
         let contract = image.facts.interrupts.as_ref().unwrap();
         assert_eq!(contract.harts, [0]);
         let placed = |profile: &crate::Profile, hart: u32| {
@@ -1279,11 +1257,11 @@ mod tests {
         };
         assert!(placed(&base, 1) && !placed(&image, 1) && placed(&image, 0));
         assert!(
-            policy(None)
+            policy()
                 .runtime_environment()
                 .contains(&(format!("OPEN_RADIO_IRQ_STACK_HART{}_BYTES", 1), "0".into()))
         );
-        let mut both = policy(None);
+        let mut both = policy();
         both.core.remove(&1);
         assert!(both.runtime_profile(&base).is_err());
         let environment = both.runtime_environment();
@@ -1433,7 +1411,7 @@ mod launch_tests {
         assert_eq!(roots[1].stack.root, "runtime_secondary_main_h1");
         let environment = policy.runtime_environment();
         assert!(environment.contains(&("OPEN_RADIO_TASK_STACK_HART1_BYTES".into(), "8192".into())));
-        // The interrupt stack takes the layout's contract maximum.
+        // The interrupt stack takes the layout's analysis placeholder.
         assert!(
             !environment
                 .iter()

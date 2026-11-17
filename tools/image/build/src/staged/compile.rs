@@ -15,6 +15,7 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
         task_stack_proven,
         critical_section_hart,
         harts,
+        irq_stacks,
         panics,
         output,
         log,
@@ -43,10 +44,10 @@ pub(crate) fn cargo(input: &CompileInput<'_>, bundle: &mut ImageBundle) -> Resul
             root: spec.root.clone(),
             chip: spec.chip.clone(),
             stack_policy: spec.stack_policy.clone(),
-            diagnostic: spec.checks.as_ref().and_then(|checks| checks.interrupts)
-                != Some(oer_tools_image_checks::interrupts::Required::Product),
             task_stack_proven,
             harts: harts.to_vec(),
+            irq_stacks: irq_stacks.declared.clone(),
+            irq_stack_margin_percent: irq_stacks.margin_percent,
         };
         let specification = strict::configure(&mut runtime, &analysis, output, strict)?;
         crate::cargo::ensure_fetched(root)?;

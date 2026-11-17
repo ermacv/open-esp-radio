@@ -25,7 +25,7 @@ use std::{
     path::PathBuf,
 };
 
-pub(crate) mod irq_stacks;
+pub mod irq_stacks;
 pub mod strict;
 pub mod task_stack;
 use strict::InputSection;
@@ -146,7 +146,7 @@ fn link(
     })?;
     let mut inputs = oer_tools_os_durable::inputs::Inputs::tracked();
     let spec = strict::Spec::read(spec_path, &mut inputs)?;
-    // The analysis-only first ELF reserves the policy maximum without guards.
+    // The analysis-only first ELF reserves the policy's placeholder without guards.
     // The final link supplies the selected physical guards from the chip contract.
     let profile =
         oer_tools_chip_profile::Profile::load_with_inputs(&spec.root, &spec.chip, &mut inputs)?;

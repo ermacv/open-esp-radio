@@ -839,8 +839,11 @@ fn the_fact_boot_identity_selects_which_partial_task_bound_can_pass() {
     let (_directory, policy) = policy_with(&partial, ASM_REVIEW);
     for harts in [3, 7] {
         let boot = harts - 1;
-        let mut contract =
-            Contract::of(&oer_tools_chip_profile::Profile::tracked("esp32s31").unwrap()).unwrap();
+        let mut contract = Contract::of(
+            &oer_tools_chip_profile::Profile::tracked("esp32s31").unwrap(),
+            crate::stack::contract::tracked_margin("esp32s31"),
+        )
+        .unwrap();
         contract.interrupts.harts = (0..harts).collect();
         contract.interrupts.boot_hart = boot;
         let mut image = image_with_stack(1024);

@@ -121,7 +121,8 @@ contracts: [Hardware memory](hardware-memory.md).
   complete bounds.
   Defaults cover the entire geometry, including explicit zeroes for contained
   harts; a declared launch template takes its `launch_bytes` before a proven
-  bound sizes it, and its interrupt stack the contract maximum. The
+  bound sizes it, and its interrupt stack the analysis placeholder until its
+  bound sizes it in the second link. The
   stage-two header's used-hart word names every hart with a task stack, and
   the image gate holds it to the policy. See the [image linker](../tools/image/linker/README.md).
 - The staged runtime exports `_runtime_exception_frames` from its trap policy.
@@ -132,14 +133,15 @@ contracts: [Hardware memory](hardware-memory.md).
   include those copies; a fault before a complete frame remains outside the
   software guarantee. The FPU remains disabled throughout the trap closure.
 - The image linker sizes each used hart's IRQ stack to
-  `align16(ceil(bound * (100 + margin) / 100)) + guard`. The contract margin
-  is 10%; `irq-stack-bytes` is the maximum, used without a proven bound and
-  for diagnostic images. The second link is final: its bound plus margin must fit the
-  allocation minus any placed guard. The bound plus margin gates against the
-  maximum without guard bytes; a full guard that does not fit beside it is
-  omitted and reported. Guard frame coverage, unknown frames and guard storage
-  are reported, never gates. Present guards retain their NAPOT bottom alignment.
-  A bound change above 64 bytes fails the build. See the
+  `align16(ceil(bound * (100 + margin) / 100)) + guard`, the margin the
+  image's (`irq-stack-margin-percent`, zero included) or else the stack
+  policy's (10%). A hart whose bound is not proven takes the size its image
+  declares (`irq-stack`) plus its guard; neither, or both, fails the build.
+  No maximum limits a stack: the SRAM does. The guard is always placed, hart
+  0's stack rounded to hart 1's guard. The second link is final: its bound
+  must equal the first link's, and a proven bound plus margin must fit the
+  allocation minus the guard. Guard frame coverage, unknown frames and guard
+  storage are reported, never gates. See the
   [image linker](../tools/image/linker/README.md).
 - Task-stack roots, storage and free-space reserves are policy inputs:
   [S31 policy](../chips/esp32s31/facts/stack.toml).

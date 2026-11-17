@@ -14,7 +14,7 @@ const LAYOUT: Layout = Layout {
     retained: Region::new(0x2000, 16).expect("fixture region"),
     retained_reserved_tail: 0,
     task_stack_bytes: &[16],
-    irq_stack_bytes: 16,
+    analysis_irq_stack_bytes: 16,
     harts: 1,
     boot_hart: 0,
     flash_tuning_reference_bytes: 0,

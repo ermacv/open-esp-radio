@@ -159,9 +159,9 @@ Every link using the staged runtime script (`-Truntime/link.x` from
 runs the final check's analysis after the first link. It links once more
 to place strict cached code in SRAM and size IRQ stacks independently by hart
 ([image linker](../linker/README.md)). The final ELF is analysed again before
-fingerprinting; its bound plus the rounded-up contract margin must fit the
-actual allocation minus its guard. A bound change above 64 bytes fails,
-without another link or fallback to the maximum. Without the specification the linker
+fingerprinting; its bound must equal the first link's, and a proven bound
+plus the image's rounded-up margin must fit the actual allocation minus its
+guard, without another link. Without the specification the linker
 fails with the bin name and instructions to use `cargo fw build`,
 `cargo fw probe` or `cargo hil`. Links using another script ignore a supplied
 specification and produce no analysis fragment or placement record.
@@ -320,18 +320,22 @@ Guard findings are reported, never gates in build, run or analysis. The image
 linker exports the actual physical guard as `__runtime_cpu{hart}_irq_stack_guard_bytes`;
 the runtime reads that absolute symbol and arms a trigger only for a nonzero guard.
 The IRQ stacks occupy a separate NOLOAD section at the start of internal
-SRAM, before ISR code. A placed guard must be NAPOT-aligned at its stack bottom;
-when the full guard cannot fit beside the bound plus margin within the maximum,
-or contiguous stack placement cannot align it, it is omitted and reported.
-There is no shared guard-size constant. `irq-stack-bytes` is a maximum:
-the bound plus margin must fit without guard bytes. Proven product stacks use
-`align16(ceil(bound * 1.10)) + guard` when the full guard fits, with S31
-hart 0 additionally aligned to hart 1's guard. Partial, diagnostic and probe
-stacks retain the effective contract maximum. `interrupt-stack.txt` reports
-the bound, percentage margin, guard, allocated bytes and source per hart;
-the usable budget is the actual linked allocation minus that hart's guard.
-The independent IRQ `minimum_free_bytes` reserve was removed from stack
-policies; the chip contract's percentage is the sizing margin.
+SRAM, before ISR code. A guard is NAPOT-aligned at its stack bottom and always
+placed: hart 0's stack is rounded to hart 1's guard. There is no shared
+guard-size constant and no maximum. A stack with a proven bound takes
+`align16(ceil(bound * (100 + margin) / 100)) + guard`; the margin is the
+stack policy's `irq_stack_margin_percent` (10) unless the image sets
+`irq-stack-margin-percent` under `[package.metadata.open-radio]` (a whole
+number of per cent, zero included). A hart whose bound is not proven, in any
+build, a probe's included, takes the size its image declares,
+`irq-stack = { boot = <bytes>, 1 = <bytes> }` (the bytes above the guard,
+harts named as `harts` names them), plus its guard; neither a proof nor a
+declaration, or a declaration where the bound is proven, fails the build.
+The SRAM limits the stacks. `interrupt-stack.txt` reports the bound,
+percentage margin, guard, allocated bytes and source per hart; the usable
+budget is the actual linked allocation minus that hart's guard. The task
+stack's reserve is `minimum_free_bytes`, a byte count of its own policy entry,
+not this percentage.
 The debug trigger
 catches a write into the guard, not a change of `sp`: a function may lower
 `sp` by its whole frame before writing, or skip the guard with a larger frame.

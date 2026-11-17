@@ -90,6 +90,24 @@ pub fn rom_script(rom: &Rom) -> Result<String> {
     Ok(text)
 }
 
+/// What the first, analysis-only link places for every used interrupt stack
+/// (`analysis_irq_stack_bytes` of the chip's stack policy): a placeholder to
+/// link and analyse with, no limit and no fact of the chip.
+pub fn analysis_irq_stack_bytes(policy: &str) -> Result<u32> {
+    let table: toml::Table =
+        toml::from_str(policy).map_err(|error| format!("the chip's stack policy: {error}"))?;
+    table
+        .get("analysis_irq_stack_bytes")
+        .and_then(toml::Value::as_integer)
+        .and_then(|bytes| u32::try_from(bytes).ok())
+        .filter(|bytes| *bytes >= 16 && bytes % 16 == 0)
+        .ok_or_else(|| {
+            "the chip's stack policy needs `analysis_irq_stack_bytes`, a u32 of at least 16 \
+             bytes aligned to 16"
+                .into()
+        })
+}
+
 /// Default task allocations indexed by every hart in the chip geometry.
 /// Zero is explicit storage for a contained hart.
 pub fn default_task_stack_bytes(policy: &str, harts: u32) -> Result<Vec<u32>> {
@@ -125,9 +143,14 @@ fn region(region: Region) -> String {
 }
 
 /// The Rust source of a chip's `LAYOUT` (`oer_chips_family_platform_layout::Layout`)
-/// with its compile-time check, from its facts and the default per-hart task
-/// stack of its stack policy.
-pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
+/// with its compile-time check, from its facts, the default per-hart task
+/// stack of its stack policy and the policy's interrupt-stack placeholder of
+/// the analysis-only link.
+pub fn layout(
+    facts: &Facts,
+    task_stack_bytes: &[u32],
+    analysis_irq_stack_bytes: u32,
+) -> Result<String> {
     let missing = |what: &str| format!("{}: a staged layout needs {what}", facts.id);
     let memory = facts.memory.as_ref().ok_or_else(|| missing("`[memory]`"))?;
     let psram = memory.psram.ok_or_else(|| missing("the module's PSRAM"))?;
@@ -171,7 +194,7 @@ pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
          \x20   retained: {retained},\n\
          \x20   retained_reserved_tail: {tail},\n\
          \x20   task_stack_bytes: &{task:?},\n\
-         \x20   irq_stack_bytes: {irq:#x},\n\
+         \x20   analysis_irq_stack_bytes: {irq:#x},\n\
          \x20   harts: {harts},\n\
          \x20   boot_hart: {boot_hart},\n\
          \x20   flash_tuning_reference_bytes: {tuning:#x},\n\
@@ -196,7 +219,7 @@ pub fn layout(facts: &Facts, task_stack_bytes: &[u32]) -> Result<String> {
         tail = chain.retained_reserved_tail,
         task = task_stack_bytes,
         boot_hart = interrupts.boot_hart,
-        irq = interrupts.irq_stack_bytes,
+        irq = analysis_irq_stack_bytes,
         tuning = staged.flash_tuning_reference_bytes,
         script = rom.linker_script,
     );
@@ -570,13 +593,18 @@ pub fn tracked(id: &str) -> Result<(Facts, Vec<String>)> {
 }
 
 /// The generated `LAYOUT` of the tracked chip `id`, from its facts and its
-/// stack policy's default task stack, and the files it reads.
+/// stack policy's default task stack and analysis placeholder, and the files
+/// it reads.
 pub fn tracked_layout(id: &str) -> Result<(String, Vec<String>)> {
     let (facts, mut files) = tracked(id)?;
     let policy = format!("{}/stack.toml", crate::platform_dir(id));
     let text = crate::tracked::text(&policy).ok_or_else(|| format!("{policy} is not tracked"))?;
     let harts = Vectors::of(&facts)?.harts;
-    let layout = layout(&facts, &default_task_stack_bytes(text, harts)?)?;
+    let layout = layout(
+        &facts,
+        &default_task_stack_bytes(text, harts)?,
+        analysis_irq_stack_bytes(text)?,
+    )?;
     files.push(policy);
     Ok((layout, files))
 }
@@ -783,7 +811,7 @@ mod tests {
         let harts = Vectors::of(&facts).unwrap().harts;
         let mut tasks = alloc::vec![0; harts as usize];
         tasks[facts.interrupts.as_ref().unwrap().boot_hart as usize] = 0x30000;
-        let layout = layout(&facts, &tasks).expect("a staged layout");
+        let layout = layout(&facts, &tasks, 0x8000).expect("a staged layout");
         for field in [
             "sram: const { oer_chips_family_platform_layout::Region::new(0x2f000000, 0x00080000).expect(\"region end fits u32\") },",
             "bootstrap_sram: const { oer_chips_family_platform_layout::Region::new(0x2f000000, 0x0007afc0).expect(\"region end fits u32\") },",
@@ -791,7 +819,7 @@ mod tests {
             "psram: const { oer_chips_family_platform_layout::Region::new(0x50000000, 0x01000000).expect(\"region end fits u32\") },",
             "retained: const { oer_chips_family_platform_layout::Region::new(0x2e000000, 0x00008000).expect(\"region end fits u32\") },",
             "retained_reserved_tail: 24,",
-            "irq_stack_bytes: 0x8000,",
+            "analysis_irq_stack_bytes: 0x8000,",
             "flash_tuning_reference_bytes: 0x10000,",
             "mmu_page_bytes: 0x10000,",
             "rom_script: \"rom/esp32s31-eco0.x\",",
@@ -800,13 +828,20 @@ mod tests {
         }
         assert!(layout.contains("const _: () = LAYOUT.check();"));
         // The same facts give the same text.
-        assert_eq!(layout, super::layout(&facts, &tasks).expect("again"));
+        assert_eq!(
+            layout,
+            super::layout(&facts, &tasks, 0x8000).expect("again")
+        );
         assert!(
-            super::layout(&facts, &{
-                let mut larger = tasks.clone();
-                larger[0] = 0x40000;
-                larger
-            })
+            super::layout(
+                &facts,
+                &{
+                    let mut larger = tasks.clone();
+                    larger[0] = 0x40000;
+                    larger
+                },
+                0x8000
+            )
             .expect("bigger")
             .contains("262144")
         );
@@ -814,11 +849,28 @@ mod tests {
         let mut bare = facts.clone();
         bare.boot_chain = None;
         assert!(
-            super::layout(&bare, &tasks)
+            super::layout(&bare, &tasks, 0x8000)
                 .expect_err("no boot chain")
                 .to_string()
                 .contains("`[boot-chain]`")
         );
+    }
+
+    #[test]
+    fn the_analysis_placeholder_is_the_policy_s_and_refuses_a_misaligned_one() {
+        for id in tracked_ids() {
+            let policy =
+                crate::tracked::text(&format!("chips/{id}/facts/stack.toml")).expect("policy");
+            assert_eq!(analysis_irq_stack_bytes(policy).unwrap(), 0x8000);
+        }
+        for refused in [
+            "",
+            "analysis_irq_stack_bytes = 8",
+            "analysis_irq_stack_bytes = 0x8008",
+        ] {
+            let error = analysis_irq_stack_bytes(refused).unwrap_err().to_string();
+            assert!(error.contains("analysis_irq_stack_bytes"), "{error}");
+        }
     }
 
     #[test]
@@ -886,7 +938,10 @@ mod tests {
                 .output()
                 .expect("the pinned Rust compiler runs")
         };
-        let admitted = compile("admitted", super::layout(&facts, &tasks).expect("layout"));
+        let admitted = compile(
+            "admitted",
+            super::layout(&facts, &tasks, 0x8000).expect("layout"),
+        );
         assert!(
             admitted.status.success(),
             "{}",
@@ -897,7 +952,10 @@ mod tests {
             .as_mut()
             .expect("interrupt contract")
             .boot_hart = other;
-        let refused = compile("refused", super::layout(&facts, &tasks).expect("layout"));
+        let refused = compile(
+            "refused",
+            super::layout(&facts, &tasks, 0x8000).expect("layout"),
+        );
         let stderr = String::from_utf8_lossy(&refused.stderr);
         assert!(!refused.status.success(), "{stderr}");
         assert!(

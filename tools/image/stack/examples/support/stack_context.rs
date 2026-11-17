@@ -98,7 +98,7 @@ pub fn derive<'m>(
         if let Some(bounds) = bounds
             && bounds.end == u64::from(setup.scratch())
             && range.region == "sram"
-            && bounds.capacity == u64::from(irq.irq_stack_bytes)
+            && range.range[0].contains("_irq_stack_")
         {
             println!("stack-scratch-storage\t{:?}\t{bounds:?}", range.range);
             irq_storage = Some(bounds);

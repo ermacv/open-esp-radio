@@ -31,6 +31,7 @@ pub(crate) struct CompileInput<'a> {
     task_stack_proven: bool,
     critical_section_hart: u32,
     harts: &'a [u32],
+    irq_stacks: &'a crate::irq_stack::IrqStackChoices,
     panics: &'a oer_tools_image_checks::panics::Contract,
     output: &'a Path,
     log: &'a BuildLog,
@@ -57,6 +58,7 @@ pub(crate) fn build(
     task_stack_proven: bool,
     critical_section_hart: u32,
     harts: &[u32],
+    irq_stacks: &crate::irq_stack::IrqStackChoices,
     panics: &oer_tools_image_checks::panics::Contract,
     compile: impl FnOnce(&CompileInput<'_>, &mut ImageBundle) -> Result<Compiled>,
 ) -> Result<ImageBundle> {
@@ -80,7 +82,10 @@ pub(crate) fn build(
     bundle.layout_seed = spec.layout_seed;
     let log = BuildLog::create(&output.join(files::BUILD_LOG))?;
     // The image's declared harts resolve the policy's launch templates.
-    let policy = StackPolicy::load(&root.join(&spec.stack_policy))?.for_image(harts)?;
+    // The image's own interrupt-stack margin, where it sets one.
+    let policy = StackPolicy::load(&root.join(&spec.stack_policy))?
+        .for_image(harts)?
+        .with_image_irq_stack_margin(irq_stacks.margin_percent);
     if task_stack_proven {
         // One source of the size: the bound, not also the policy.
         policy.proven_task_stacks()?;
@@ -100,6 +105,7 @@ pub(crate) fn build(
             task_stack_proven,
             critical_section_hart,
             harts,
+            irq_stacks,
             panics,
             output: &output,
             log: &log,

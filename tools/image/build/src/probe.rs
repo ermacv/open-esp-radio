@@ -127,7 +127,8 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
     // script and the image linker size them alike.
     let policy =
         oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&analysis.stack_policy))?
-            .for_image(&analysis.harts)?;
+            .for_image(&analysis.harts)?
+            .with_image_irq_stack_margin(analysis.irq_stack_margin_percent);
     let target = profile.facts.rust_target.as_str();
     let cache = target_dir(root);
     let _cache = crate::compiler::lock_compile_cache(&cache)?;
@@ -217,22 +218,24 @@ pub fn build(root: &Path, package: &str, jobs: Option<usize>) -> Result<PathBuf>
 /// Cargo reports executables for both newly linked and Fresh binaries.
 /// The image linker's analysis specification of the probe `package` of
 /// `profile`'s chip, from the workspace `metadata`: a diagnostic image, whose
-/// used harts keep the contract maximum, running the harts it declares like
-/// an image does, so a secondary it launches links its launch template's
-/// stacks.
+/// interrupt stacks are sized as an image's (a proven bound, else the size
+/// it declares), running the harts it declares like an image does, so a
+/// secondary it launches links its launch template's stacks.
 fn analysis(
     root: &Path,
     package: &str,
     profile: &oer_tools_chip_profile::Profile,
     metadata: &serde_json::Value,
 ) -> Result<oer_tools_image_checks::linker::strict::Spec> {
+    let irq_stacks = crate::irq_stack::of_metadata(metadata, package, profile)?;
     Ok(oer_tools_image_checks::linker::strict::Spec {
         root: root.to_owned(),
         chip: profile.facts.id.clone(),
         stack_policy: profile.stack_policy(),
-        diagnostic: true,
         task_stack_proven: false,
         harts: crate::harts::of_metadata(metadata, package, profile)?,
+        irq_stacks: irq_stacks.declared,
+        irq_stack_margin_percent: irq_stacks.margin_percent,
     })
 }
 
@@ -311,7 +314,6 @@ mod tests {
         ]});
         let policy = |package: &str| {
             let spec = analysis(&root, package, &profile, &metadata).unwrap();
-            assert!(spec.diagnostic);
             oer_tools_chip_profile::policy::StackPolicy::load(&root.join(&spec.stack_policy))
                 .unwrap()
                 .for_image(&spec.harts)

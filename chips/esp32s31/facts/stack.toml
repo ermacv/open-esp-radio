@@ -13,6 +13,17 @@ max_move_bytes = 4096
 # A contained hart has an explicit zero allocation.
 default_task_stack_bytes = { 0 = 0x30000, 1 = 0 }
 
+# Each used hart's SRAM interrupt stack is sized from its proven bound:
+# `align16(ceil(bound * (100 + irq_stack_margin_percent) / 100))` plus its
+# guard. An image whose bound for a hart is not proven declares that stack's
+# size itself (`[package.metadata.open-radio] irq-stack`). What limits a
+# stack is the SRAM it is placed in.
+irq_stack_margin_percent = 10
+# What the first, analysis-only link places for every used interrupt stack:
+# only large enough to link and to be analysed. No size is gated against it,
+# and the second link's allocation does not depend on it.
+analysis_irq_stack_bytes = 0x8000
+
 # Each stack is bounded from the function that runs on it from its top: the
 # worst-case call chain of that root, from the image's machine code and the
 # pinned ROM, must leave the stack's storage `minimum_free_bytes`. A root that
@@ -29,9 +40,9 @@ bottom_symbol = "__runtime_cpu0_task_stack_bottom"
 top_symbol = "__runtime_cpu0_task_stack_top"
 minimum_free_bytes = 16384
 
-# The dedicated SRAM interrupt stacks are bounded by the interrupt-stack gate
-# against the platform interrupt contract's percentage margin; there is no
-# separate fixed free-byte reserve.
+# The dedicated SRAM interrupt stacks are sized from their bound and
+# `irq_stack_margin_percent` above; there is no separate fixed free-byte
+# reserve.
 # The IRQ sum includes three complete exception entry/handler bounds, from
 # staged-runtime::trap::MAX_EXCEPTION_FRAMES and _runtime_exception_frames.
 # fatal::reset_platform_once admits one reset attempt; with intact SRAM,

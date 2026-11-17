@@ -39,7 +39,7 @@ pub const INTERRUPT_REPORT: &str = "interrupt-stack.txt";
 /// Each hart's interrupt stack of the runtime ELF `elf`.
 pub struct InterruptStacks {
     pub resources: Box<oer_tools_analysis_riscv_model::AnalysisResources>,
-    /// Each hart's actual linked storage, independently of the contract maximum.
+    /// Each hart's actual linked storage.
     pub allocations: BTreeMap<u32, LinkedStack>,
     pub expression_limited_functions: usize,
     pub witness_memory_peak: u64,
@@ -358,9 +358,9 @@ impl InterruptStacks {
                     hart.partial
                 }
             };
-            let percent = self.contract.interrupts.irq_stack_margin_percent;
+            let percent = self.contract.irq_margin_percent;
             let usable = self.usable_bytes(hart.core)?;
-            if self.contract.interrupts.irq_stack_with_margin(bytes)? > u64::from(usable) {
+            if self.contract.irq_stack_with_margin(bytes)? > u64::from(usable) {
                 return Err(format!(
                     "hart {}'s interrupt stack needs {bytes} bytes and a {}% margin, more than \
                      its usable {} bytes:\n{}",
@@ -1250,7 +1250,10 @@ pub(crate) mod tests {
         oer_chips_family_facts::tracked::ids()
             .into_iter()
             .map(|id| oer_tools_chip_profile::Profile::tracked(id).unwrap())
-            .find_map(|profile| Contract::of(&profile))
+            .find_map(|profile| {
+                let margin = crate::stack::contract::tracked_margin(&profile.facts.id);
+                Contract::of(&profile, margin)
+            })
             .expect("a chip names an interrupt contract")
     }
 
@@ -1315,7 +1318,17 @@ pub(crate) mod tests {
         };
         InterruptStacks {
             resources: Box::new(crate::stack::budget::resources(0, 0, Default::default())),
-            allocations: BTreeMap::new(),
+            // The size an image without a proof declares: 0x8000 above the
+            // guard.
+            allocations: BTreeMap::from([(
+                0,
+                LinkedStack {
+                    bottom: u64::from(contract().memory.sram.origin()),
+                    bytes: 0x8000 + 4096,
+                    guard_bytes: 4096,
+                    from_bound: false,
+                },
+            )]),
             expression_limited_functions: 0,
             witness_memory_peak: 0,
             traps: Default::default(),
@@ -1347,23 +1360,15 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn allocation_uses_only_a_proven_product_bound_and_reports_its_source() {
+    fn allocation_uses_a_proven_bound_in_every_build_and_reports_its_source() {
         let mut stacks = partial(1000);
-        let select = |stacks: &InterruptStacks, diagnostic| {
-            crate::linker::irq_stacks::select(stacks, diagnostic)
-                .unwrap()
-                .remove(0)
+        let select = |stacks: &InterruptStacks| {
+            crate::linker::irq_stacks::select(stacks, &[]).map(|mut planned| planned.remove(0))
         };
-        for diagnostic in [false, true] {
-            let partial = select(&stacks, diagnostic);
-            assert!(!partial.from_bound);
-            assert_eq!(partial.bytes, stacks.contract.interrupts.irq_stack_bytes);
-        }
+        // No proof and no declaration: no size.
+        assert!(select(&stacks).is_err());
         stacks.harts[0].bytes = Some(1000);
-        let diagnostic = select(&stacks, true);
-        assert!(!diagnostic.from_bound);
-        assert_eq!(diagnostic.bytes, stacks.contract.interrupts.irq_stack_bytes);
-        let product = select(&stacks, false);
+        let product = select(&stacks).unwrap();
         assert!(product.from_bound);
         assert_eq!(product.bytes, 6144);
         stacks.allocations.insert(
@@ -1553,7 +1558,7 @@ pub(crate) mod tests {
             "{warnings:?}"
         );
         // The proven part alone must fit the usable stack with the margin.
-        let over = u64::from(contract().irq_stack_usable_bytes(0).unwrap());
+        let over = u64::from(partial(0).usable_bytes(0).unwrap());
         assert!(partial(over).check(Required::Diagnostic).is_err());
     }
 
@@ -1603,7 +1608,7 @@ pub(crate) mod tests {
             0,
             LinkedStack {
                 bottom: 0,
-                bytes: stacks.contract.interrupts.irq_stack_bytes,
+                bytes: 0x8000 + 4096,
                 guard_bytes: 4096,
                 from_bound: true,
             },
@@ -1691,8 +1696,8 @@ pub(crate) mod tests {
     #[test]
     fn the_margin_is_a_share_of_the_bound() {
         assert_eq!(
-            contract().interrupts.irq_stack_with_margin(1000).unwrap(),
-            1000 + 1000 * u64::from(contract().interrupts.irq_stack_margin_percent) / 100
+            contract().irq_stack_with_margin(1000).unwrap(),
+            1000 + 1000 * u64::from(contract().irq_margin_percent) / 100
         );
     }
 }

@@ -185,6 +185,20 @@ impl Image {
         Self::of_bytes_with_inputs(root, profile, elf, inputs)
     }
 
+    /// Hold the interrupt stacks to `policy`'s margin: the image's own, where
+    /// the policy was resolved with it, rather than the chip's default this
+    /// analysis was read with.
+    ///
+    /// # Errors
+    ///
+    /// The image has an interrupt contract and `policy` names no margin.
+    pub fn hold_irq_stacks_to(&mut self, policy: &StackPolicy) -> Result<()> {
+        if let Some(contract) = &mut self.contract {
+            contract.irq_margin_percent = policy.irq_stack_margin_percent()?;
+        }
+        Ok(())
+    }
+
     /// [`Self::read`] of the ELF bytes `elf`.
     pub fn of_bytes(
         root: &Path,
@@ -222,7 +236,17 @@ impl Image {
             Some(path) => parse_summaries(&inputs.read_to_string(&root.join(path))?)?,
             None => Vec::new(),
         };
-        let mut image = Self::new(elf, &[&rom_elf], &summaries, Contract::of(profile))?;
+        let contract = match (&profile.facts.memory, &profile.facts.interrupts) {
+            (Some(_), Some(_)) => {
+                let policy = oer_tools_chip_profile::policy::StackPolicy::load_with_inputs(
+                    &root.join(profile.stack_policy()),
+                    inputs,
+                )?;
+                Contract::of(profile, policy.irq_stack_margin_percent()?)
+            }
+            _ => None,
+        };
+        let mut image = Self::new(elf, &[&rom_elf], &summaries, contract)?;
         image.observed_functions = profile.facts.observed_functions.clone();
         Ok(image)
     }

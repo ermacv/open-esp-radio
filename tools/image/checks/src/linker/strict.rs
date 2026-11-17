@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::Result;
-use crate::interrupts::{InterruptPlacement, interrupt_stacks_of};
+use crate::interrupts::{InterruptPlacement, InterruptStacks, interrupt_stacks_of};
 use crate::stack::{Image, StackAudit};
 use oer_tools_chip_profile::policy::StackPolicy;
 use oer_tools_os_durable::inputs::Inputs;
@@ -28,9 +28,6 @@ pub struct Spec {
     pub root: PathBuf,
     pub chip: String,
     pub stack_policy: PathBuf,
-    /// Diagnostic/probe images retain the contract maximum on every hart.
-    #[serde(default)]
-    pub diagnostic: bool,
     /// The image declares its per-hart task stacks proven: the link sizes it from
     /// the bound of the first ELF.
     #[serde(default)]
@@ -39,6 +36,14 @@ pub struct Spec {
     /// templates (`StackPolicy::for_image`).
     #[serde(default)]
     pub harts: Vec<u32>,
+    /// The interrupt-stack sizes the image declares for harts whose bound
+    /// is not proven (`[package.metadata.open-radio] irq-stack`).
+    #[serde(default)]
+    pub irq_stacks: Vec<super::irq_stacks::DeclaredIrqStack>,
+    /// The margin above a proven interrupt-stack bound the image chose
+    /// (`irq-stack-margin-percent`); absent, the stack policy's.
+    #[serde(default)]
+    pub irq_stack_margin_percent: Option<u32>,
 }
 
 impl Spec {
@@ -60,9 +65,11 @@ impl Spec {
             &self.stack_policy,
             inputs,
         )?
-        .for_image(&self.harts)?;
+        .for_image(&self.harts)?
+        .with_image_irq_stack_margin(self.irq_stack_margin_percent);
         let profile = policy.runtime_profile(&profile)?;
-        let image = Image::read_with_inputs(&self.root, &profile, elf, inputs)?;
+        let mut image = Image::read_with_inputs(&self.root, &profile, elf, inputs)?;
+        image.hold_irq_stacks_to(&policy)?;
         Ok(Some((image, profile, policy)))
     }
 }
@@ -327,15 +334,8 @@ pub(super) fn analyze(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    let irq_stacks = super::irq_stacks::select(&stacks, spec.diagnostic)?;
-    let released = irq_stacks.iter().try_fold(0_u64, |sum, stack| -> Result<u64> {
-        let previous = stacks.allocated_bytes(stack.hart);
-        let released = previous.checked_sub(stack.bytes).ok_or_else(|| {
-            format!("hart {}'s first-pass IRQ allocation {previous} is smaller than the selected {} bytes", stack.hart, stack.bytes)
-        })?;
-        Ok(sum + u64::from(released))
-    })?;
-    let free = placement.free_sram() + released;
+    let irq_stacks = super::irq_stacks::select(&stacks, &spec.irq_stacks)?;
+    let free = free_after_stacks(&stacks, placement.free_sram(), &irq_stacks)?;
     let mut placement = Placement::select(&requested, sections, free)?;
     placement.irq_stacks = irq_stacks;
     if spec.task_stack_proven {
@@ -343,6 +343,32 @@ pub(super) fn analyze(
         placement.task_stacks = super::task_stack::select(&audit, &policy)?;
     }
     Ok(placement)
+}
+
+/// The SRAM left for strict code once each interrupt stack takes its
+/// selected size: the first link's free SRAM with the placeholder stacks it
+/// placed given back. The placeholder cancels out, so the result does not
+/// depend on it; the stacks not fitting SRAM is an error with figures.
+pub(super) fn free_after_stacks(
+    stacks: &InterruptStacks,
+    free_sram: u64,
+    selected: &[super::irq_stacks::Allocation],
+) -> Result<u64> {
+    let mut placeholders = 0_u64;
+    let mut sized = 0_u64;
+    for stack in selected {
+        placeholders += u64::from(stacks.allocated_bytes(stack.hart)?);
+        sized += u64::from(stack.bytes);
+    }
+    (free_sram + placeholders)
+        .checked_sub(sized)
+        .ok_or_else(|| {
+            format!(
+                "the interrupt stacks need {sized} bytes of SRAM, {} more than it has",
+                sized - (free_sram + placeholders)
+            )
+            .into()
+        })
 }
 
 /// The second link is final: verify its bounds and linked allocations before fingerprinting.

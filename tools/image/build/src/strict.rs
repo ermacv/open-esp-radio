@@ -19,9 +19,10 @@ pub(crate) fn configure(
         root: std::fs::canonicalize(&spec.root)?,
         chip: spec.chip.clone(),
         stack_policy: std::fs::canonicalize(spec.root.join(&spec.stack_policy))?,
-        diagnostic: spec.diagnostic,
         task_stack_proven: spec.task_stack_proven,
         harts: spec.harts.clone(),
+        irq_stacks: spec.irq_stacks.clone(),
+        irq_stack_margin_percent: spec.irq_stack_margin_percent,
     };
     let path = std::path::absolute(output.join(SPEC_FILE))?;
     std::fs::write(&path, toml::to_string(&analysis)?)?;
@@ -112,9 +113,10 @@ mod tests {
             root: root.to_owned(),
             chip: "test".into(),
             stack_policy: "stack.toml".into(),
-            diagnostic: false,
             task_stack_proven: false,
             harts: Vec::new(),
+            irq_stacks: Vec::new(),
+            irq_stack_margin_percent: None,
         };
         let mut command = Command::new("not-executed");
         configure(&mut command, &spec, root, true).unwrap();

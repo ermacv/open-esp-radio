@@ -28,6 +28,7 @@ pub mod exclusion;
 mod harts;
 pub mod images;
 pub mod instrumentation;
+mod irq_stack;
 mod large_values;
 mod manifest;
 pub mod panic_budget;
@@ -117,6 +118,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
     let critical_section_hart =
         critical_section::declared(&spec.root, &spec.application.package, &profile)?;
     let harts = harts::declared(&spec.root, &spec.application, &profile)?;
+    let irq_stacks = irq_stack::declared(&spec.root, &spec.application.package, &profile)?;
     let panics = panic_budget::declared(&spec.root, &spec.application.package)?;
     staged::build(
         spec,
@@ -125,6 +127,7 @@ pub fn build(spec: &ImageSpec) -> Result<oer_tools_image_bundle::ImageBundle> {
         task_stack_proven,
         critical_section_hart,
         &harts,
+        &irq_stacks,
         &panics,
         staged::cargo,
     )

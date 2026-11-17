@@ -6641,7 +6641,7 @@ const COMPATIBILITY: &[(&str, usize, &str)] = &[
         BY_PHY,
     ),
     ("chips/family/facts/src/lib.rs", 19, BY_NONE),
-    ("chips/family/facts/src/model.rs", 27, BY_NONE),
+    ("chips/family/facts/src/model.rs", 26, BY_NONE),
     (
         "chips/family/platform/executor/src/installations.rs",
         1,

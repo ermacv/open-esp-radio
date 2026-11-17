@@ -125,8 +125,11 @@ pub struct Layout {
     pub retained_reserved_tail: u32,
     /// Default task allocations indexed by hart; contained harts have zero bytes.
     pub task_stack_bytes: &'static [u32],
-    /// Maximum IRQ allocation per used hart; proven images are sized at link time.
-    pub irq_stack_bytes: u32,
+    /// What the first, analysis-only link places for every used interrupt
+    /// stack: a placeholder of the stack policy, no limit. The image linker
+    /// sizes each stack in the second link from its bound or the image's
+    /// declared size.
+    pub analysis_irq_stack_bytes: u32,
     /// The complete hart geometry, derived from the chip's facts.
     pub harts: u32,
     /// The hart that performs primary initialization.
@@ -175,8 +178,10 @@ impl Layout {
         assert!(self.task_stack_bytes[self.boot_hart as usize] > 0);
         assert!(self.retained_reserved_tail <= self.retained.length);
         // Per-hart guards belong to chip.toml and are checked by the image
-        // linker; this chip-neutral layout only constrains the allocation.
-        assert!(self.irq_stack_bytes >= 16 && self.irq_stack_bytes % 16 == 0);
+        // linker; this chip-neutral layout only constrains the placeholder.
+        assert!(
+            self.analysis_irq_stack_bytes >= 16 && self.analysis_irq_stack_bytes.is_multiple_of(16)
+        );
         let mut hart = 0;
         while hart < self.task_stack_bytes.len() {
             assert!(self.task_stack_bytes[hart].is_multiple_of(16));

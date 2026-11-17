@@ -77,9 +77,6 @@ level-bits = 3
 # highest level, then priority, then highest interrupt ID. With no priority
 # bits, equal-level lines arbitrate by descending ID, without peer preemption.
 tie-break = "highest-line"
-# Maximum allocation of each hart's dedicated SRAM interrupt stack.
-irq-stack-bytes = 0x8000
-irq-stack-margin-percent = 10
 # Routes and line levels are written through the interrupt table's router
 # (chips/family/platform/interrupt-table) by the chip's controller, whose writer
 # functions this list names with the contexts they may run in.
@@ -105,7 +102,7 @@ range = [
     # Sized by the image's policy, else by the chip's stack policy
     # (`default_task_stack_bytes` of chips/<id>/facts/stack.toml).
     { range = ["__runtime_cpu{hart}_task_stack_bottom", "__runtime_cpu{hart}_task_stack_top"], region = "psram", per-hart = true },
-    { range = ["__runtime_cpu{hart}_irq_stack_bottom", "__runtime_cpu{hart}_irq_stack_top"], region = "sram", maximum-bytes = 0x8000, per-hart = true },
+    { range = ["__runtime_cpu{hart}_irq_stack_bottom", "__runtime_cpu{hart}_irq_stack_top"], region = "sram", per-hart = true },
 ]
 symbol = [
     { name = "_start_trap", bytes = 4, region = "sram" },

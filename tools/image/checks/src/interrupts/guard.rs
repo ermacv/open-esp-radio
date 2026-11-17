@@ -196,6 +196,9 @@ mod tests {
         hart1.core = 1;
         hart1.levels.clear();
         report.contract.interrupts.harts.push(1);
+        let mut linked = report.allocations[&0].clone();
+        linked.guard_bytes = 1024;
+        report.allocations.insert(1, linked);
         report
             .contract
             .interrupts

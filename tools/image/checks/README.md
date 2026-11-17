@@ -7,9 +7,8 @@ contracts; `cargo fw build`, including analysis builds, enforces the
 and bootstrap stack bounds and mandatory placement prerequisites remain gates.
 Stack guards are reported, never a gate, in build, run and analysis: insufficient
 exception-plus-frame coverage and unknown reachable frames produce report rows.
-The IRQ bound plus margin remains a gate against the contract maximum, excluding
-guard bytes. If the full physical NAPOT guard does not fit beside that bound and
-margin with the contiguous layout's alignment, it is omitted; its zero linked size and requested size are reported.
+The IRQ bound plus the image's margin remains a gate against the stack's
+linked allocation, excluding its guard; the guard is always placed.
 
 Every staged build also audits the final bootstrap ELF before encoding it.
 All executable sections and ordinary constants must lie wholly in the chip's
@@ -215,11 +214,11 @@ input sections using the objects' symbol tables, selects those whole sections
 in the generated `strict-text.x` inside `.isr.text`, and links once more.
 The same second link sizes the IRQ stacks independently by hart; see the
 [image linker](../linker/README.md). Even with an empty strict fragment, a
-proven product bound selects its bound plus the contract's 10% margin, rounded
-up to 16 bytes, plus its guard when it fits within the contract maximum; an unproven or diagnostic stack keeps the
-contract maximum. Checks use the actual linked ranges, and placement
-`maximum-bytes` limits their capacity. A second-pass bound change above 64
-bytes or a bound plus margin that no longer fits fails without another link.
+proven bound selects its bound plus the image's margin, rounded up to 16
+bytes, plus its guard; a stack without a proof takes the size its image
+declares plus its guard. Checks use the actual linked ranges; the SRAM region
+limits them. A second-pass bound that differs from the first, or a bound plus
+margin that no longer fits, fails without another link.
 Strict code has no manual function-section annotations. The staged platform
 places its assembly entry and trap code in SRAM;
 `.hot.text` selects code for performance. The post-build interrupt check
@@ -244,7 +243,7 @@ its known strict functions. Bootstrap has no analysis specification.
 `interrupt-stack.txt` reports each hart's bound, rounded-up percentage margin,
 guard, allocated bytes and size source (`proven bound`, `conditional bound
 (<assumptions>)` for a bound on admitted assumptions or the nesting rule, or
-`contract maximum`),
+`declared size`), the margin the image used,
 as well as its exception entry and path,
 largest reachable own frame and remaining guard bytes (including negative spare), as well as strict code in cached memory by hart/level,
 each table entry's class, exemption reasons, hardware-class breaches,

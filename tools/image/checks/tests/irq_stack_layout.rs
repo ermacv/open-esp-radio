@@ -182,13 +182,17 @@ fn per_hart_allocations_keep_both_guard_bottoms_aligned_without_growing_other_st
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for chip in ["esp32s31"] {
         let profile = oer_tools_chip_profile::Profile::load(&root, chip).unwrap();
+        let margin =
+            oer_tools_chip_profile::policy::StackPolicy::load(&root.join(profile.stack_policy()))
+                .unwrap()
+                .irq_stack_margin_percent()
+                .unwrap();
         let contract = profile.facts.interrupts.unwrap();
         let mut sizes = vec![0; contract.harts.len()];
         for &hart in &contract.harts {
-            sizes[hart as usize] = contract
-                .irq_stack_allocation(hart, Some(if hart == 0 { 16192 } else { 1008 }))
-                .unwrap()
-                .bytes;
+            let bound = if hart == 0 { 16192 } else { 1008 };
+            let usable = oer_chips_family_facts::irq_stack_with_margin(bound, margin).unwrap();
+            sizes[hart as usize] = contract.irq_stack_allocation(hart, usable).unwrap().bytes;
         }
         let bytes = link(
             contract.harts.len() as u32,

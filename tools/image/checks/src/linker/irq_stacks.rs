@@ -1,7 +1,19 @@
-//! Select once from the first ELF, then verify the final ELF without retries.
+//! Size every used hart's interrupt stack once from the first ELF, then
+//! verify the final ELF without retries.
+//!
+//! A hart whose bound is proven takes `align16(bound with the policy's
+//! margin) + guard`; a hart whose bound is not proven takes the size its
+//! image declares (`[package.metadata.open-radio] irq-stack`) plus its guard.
+//! A size has one source: a declaration where the bound is proven, or neither
+//! a proof nor a declaration, fails the build. The guard is always placed,
+//! and the stack is rounded so that the next hart's guard is aligned; what
+//! limits the allocation is the SRAM it is placed in.
 
 use crate::{Result, interrupts::InterruptStacks};
 use serde::{Deserialize, Serialize};
+
+/// The key an image declares its unproven interrupt stacks' sizes under.
+pub const DECLARATION: &str = "irq-stack";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -9,49 +21,93 @@ pub struct Allocation {
     pub hart: u32,
     pub bytes: u32,
     pub guard_bytes: u32,
-    /// The first-pass bound, including diagnostic bounds retained at maximum.
+    /// The first link's bound; the final link's must equal it.
     pub first_bound: Option<u64>,
     pub from_bound: bool,
 }
 
-pub(crate) fn select(stacks: &InterruptStacks, diagnostic: bool) -> Result<Vec<Allocation>> {
-    let mut bottom = u64::from(stacks.contract.memory.sram.origin());
+/// The size an image declares for the interrupt stack of a hart whose bound
+/// is not proven: the bytes the stack holds above its guard.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeclaredIrqStack {
+    pub hart: u32,
+    pub bytes: u32,
+}
+
+/// How the image names `hart` in its declarations: `boot` or its number.
+fn hart_name(stacks: &InterruptStacks, hart: u32) -> String {
+    if hart == stacks.contract.interrupts.boot_hart {
+        "boot".to_owned()
+    } else {
+        hart.to_string()
+    }
+}
+
+pub(crate) fn select(
+    stacks: &InterruptStacks,
+    declared: &[DeclaredIrqStack],
+) -> Result<Vec<Allocation>> {
+    for declaration in declared {
+        if !stacks
+            .harts
+            .iter()
+            .any(|hart| hart.core == declaration.hart)
+        {
+            return Err(format!(
+                "`{DECLARATION}` declares hart {}'s interrupt stack, which the image does not use",
+                hart_name(stacks, declaration.hart)
+            )
+            .into());
+        }
+    }
     stacks
         .harts
         .iter()
         .map(|hart| {
-            let from_bound = !diagnostic
-                && hart.bytes.is_some()
-                && hart.level_drops().is_empty()
-                && hart
-                    .assumptions()
-                    .iter()
-                    .all(|assumption| crate::stack::ADMITTED.contains(assumption));
+            let proven = hart.bytes.filter(|_| {
+                hart.level_drops().is_empty()
+                    && hart
+                        .assumptions()
+                        .iter()
+                        .all(|assumption| crate::stack::ADMITTED.contains(assumption))
+            });
+            let name = hart_name(stacks, hart.core);
+            let declaration = declared
+                .iter()
+                .find(|declaration| declaration.hart == hart.core);
+            let usable = match (proven, declaration) {
+                (Some(bound), Some(declaration)) => {
+                    return Err(format!(
+                        "hart {name}'s interrupt stack has a proven bound of {bound} bytes, which \
+                         sizes it; its declared size {} in `[package.metadata.open-radio] \
+                         {DECLARATION}` is a second source: remove `{name}` from it",
+                        declaration.bytes
+                    )
+                    .into());
+                }
+                (Some(bound), None) => stacks.contract.irq_stack_with_margin(bound)?,
+                (None, Some(declaration)) => u64::from(declaration.bytes),
+                (None, None) => {
+                    return Err(format!(
+                        "hart {name}'s interrupt stack has no proven bound ({} + ? bytes): \
+                         declare its size as `{DECLARATION} = {{ {name} = <bytes> }}` under \
+                         `[package.metadata.open-radio]`",
+                        hart.bytes.unwrap_or(hart.partial)
+                    )
+                    .into());
+                }
+            };
             let physical = stacks
                 .contract
                 .interrupts
-                .irq_stack_allocation(hart.core, Some(hart.bytes.unwrap_or(hart.partial)))?;
-            let bytes = if from_bound {
-                physical.bytes
-            } else {
-                stacks.contract.interrupts.irq_stack_bytes
-            };
-            let guard_bytes = if physical.guard_bytes != 0
-                && bottom.is_multiple_of(u64::from(physical.guard_bytes))
-            {
-                physical.guard_bytes
-            } else {
-                0
-            };
-            bottom = bottom
-                .checked_add(u64::from(bytes))
-                .ok_or("IRQ stack placement overflows u64")?;
+                .irq_stack_allocation(hart.core, usable)?;
             Ok(Allocation {
                 hart: hart.core,
-                bytes,
-                guard_bytes,
+                bytes: physical.bytes,
+                guard_bytes: physical.guard_bytes,
                 first_bound: hart.bytes,
-                from_bound,
+                from_bound: proven.is_some(),
             })
         })
         .collect()
@@ -81,37 +137,40 @@ pub(super) fn verify(stacks: &InterruptStacks, planned: &[Allocation]) -> Result
         if linked.bytes != allocation.bytes || linked.from_bound != allocation.from_bound {
             return Err(format!("hart {}'s final IRQ stack is {} bytes (from_bound={}), expected {} (from_bound={})", hart.core, linked.bytes, linked.from_bound, allocation.bytes, allocation.from_bound).into());
         }
-        verify_bound(
-            allocation,
-            hart.bytes,
-            hart.partial,
-            &stacks.contract.interrupts,
-        )?;
+        verify_bound(allocation, hart.bytes, &stacks.contract)?;
     }
     Ok(())
 }
 
+/// The final link's bound equals the first's (nothing the second link does
+/// changes a frame or an edge, so a difference is a fault of the analysis),
+/// and a stack sized from its bound holds it with the margin.
 fn verify_bound(
     allocation: &Allocation,
     bound: Option<u64>,
-    partial: u64,
-    contract: &oer_chips_family_facts::InterruptContract,
+    contract: &crate::stack::contract::Contract,
 ) -> Result<()> {
     let hart = allocation.hart;
-    if let (Some(first), Some(final_bound)) = (allocation.first_bound, bound)
-        && first.abs_diff(final_bound) > 64
-    {
-        return Err(format!("hart {hart}'s IRQ stack bound changed after relinking: {first} -> {final_bound} bytes (difference {}, limit 64); allocated {} bytes; no further link attempted", first.abs_diff(final_bound), allocation.bytes).into());
+    let figure = |bound: Option<u64>| bound.map_or("no proven".to_owned(), |b| b.to_string());
+    if allocation.first_bound != bound {
+        return Err(format!(
+            "hart {hart}'s IRQ stack bound changed after relinking: first link {} bytes, final \
+             link {} bytes; the two links' bounds must be equal; allocated {} bytes; no further \
+             link attempted",
+            figure(allocation.first_bound),
+            figure(bound),
+            allocation.bytes
+        )
+        .into());
     }
-    if allocation.from_bound && bound.is_none() {
-        return Err(format!("hart {hart}'s IRQ stack lost its proof after relinking (first bound {:?}, final {partial} + ?, allocated {} bytes); no further link attempted", allocation.first_bound, allocation.bytes).into());
-    }
-    let bytes = bound.unwrap_or(partial);
-    let needed = contract.irq_stack_with_margin(bytes)?;
+    let Some(bound) = bound.filter(|_| allocation.from_bound) else {
+        return Ok(());
+    };
+    let needed = contract.irq_stack_with_margin(bound)?;
     let guard = allocation.guard_bytes;
     let usable = allocation.bytes - guard;
     if needed > u64::from(usable) {
-        return Err(format!("hart {hart}'s IRQ stack after relinking: first bound {:?}, final bound {bytes}{} + {}% margin requires {needed} usable bytes; allocated {} - guard {guard} = {usable} usable bytes; no further link attempted", allocation.first_bound, if bound.is_none() { " + ?" } else { "" }, contract.irq_stack_margin_percent, allocation.bytes).into());
+        return Err(format!("hart {hart}'s IRQ stack after relinking: bound {bound} + {}% margin requires {needed} usable bytes; allocated {} - guard {guard} = {usable} usable bytes; no further link attempted", contract.irq_margin_percent, allocation.bytes).into());
     }
     Ok(())
 }
@@ -119,145 +178,249 @@ fn verify_bound(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::interrupts::{LinkedStack, tests::partial};
 
-    fn contract() -> oer_chips_family_facts::InterruptContract {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        oer_tools_chip_profile::Profile::load(&root, "esp32s31")
-            .unwrap()
-            .facts
-            .interrupts
-            .unwrap()
-    }
-
-    #[test]
-    fn guard_overflow_and_omission_pass_selection_and_final_verification() -> Result<()> {
-        use crate::interrupts::{LinkedStack, Required, tests::partial};
-        for diagnostic in [false, true] {
-            for bound in [1000, 29000, 29789] {
-                let mut stacks = partial(bound);
-                let hart = stacks.harts.first_mut().ok_or("missing test hart")?;
-                hart.bytes = Some(bound);
-                hart.exception.bound.reached.insert(0x1000);
-                stacks.frames.insert(0x1000, Some(5000));
-                let planned = select(&stacks, diagnostic)?;
-                let allocation = planned.first().ok_or("missing test allocation")?;
-                stacks.allocations.insert(
-                    0,
-                    LinkedStack {
-                        bottom: u64::from(stacks.contract.memory.sram.origin()),
-                        bytes: allocation.bytes,
-                        guard_bytes: allocation.guard_bytes,
-                        from_bound: allocation.from_bound,
-                    },
-                );
-                verify(&stacks, &planned)?;
-                for policy in [Required::Product, Required::Diagnostic] {
-                    assert!(
-                        stacks
-                            .check(policy)?
-                            .iter()
-                            .any(|warning| warning.contains("reported only"))
-                    );
-                }
-                if bound >= 29000 {
-                    assert_eq!(allocation.guard_bytes, 0);
-                    assert_eq!(allocation.bytes, stacks.contract.interrupts.irq_stack_bytes);
-                    assert!(stacks.render().contains("guard omitted (reported only)"));
-                }
-                assert!(stacks.render().contains("Interrupt guards"));
-            }
-            let stacks = partial(29790);
-            assert!(select(&stacks, diagnostic).is_err());
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn partial_bounds_and_contiguous_alignment_can_omit_guards() -> Result<()> {
-        use crate::interrupts::{Required, tests::partial};
-        let stacks = partial(29789);
-        for diagnostic in [false, true] {
-            let planned = select(&stacks, diagnostic)?;
-            assert!(planned.iter().all(|allocation| !allocation.from_bound
-                && allocation.guard_bytes == 0
-                && allocation.bytes == 32768));
-        }
-        // The bound remains unresolved; only Diagnostic may accept it.
-        let mut stacks = stacks;
-        let planned = select(&stacks, true)?;
-        for allocation in &planned {
+    fn link(stacks: &mut InterruptStacks, planned: &[Allocation]) {
+        let mut bottom = u64::from(stacks.contract.memory.sram.origin());
+        for allocation in planned {
             stacks.allocations.insert(
                 allocation.hart,
-                crate::interrupts::LinkedStack {
-                    bottom: u64::from(stacks.contract.memory.sram.origin()),
+                LinkedStack {
+                    bottom,
                     bytes: allocation.bytes,
                     guard_bytes: allocation.guard_bytes,
                     from_bound: allocation.from_bound,
                 },
             );
+            bottom += u64::from(allocation.bytes);
         }
-        verify(&stacks, &planned)?;
-        assert!(!stacks.check(Required::Diagnostic)?.is_empty());
-        assert!(stacks.check(Required::Product).is_err());
+    }
 
-        let mut stacks = partial(1000);
-        stacks.contract.interrupts.irq_stack_bytes = 4112;
-        let first = stacks.harts.first_mut().ok_or("missing test hart")?;
-        first.bytes = Some(1000);
-        let mut second = first.clone();
-        second.core = 1;
-        stacks.harts.push(second);
-        let planned = select(&stacks, false)?;
-        assert_eq!(planned.len(), 2);
-        assert!(planned.iter().all(|allocation| allocation.guard_bytes == 0));
+    #[test]
+    fn a_proven_bound_sizes_the_stack_with_its_guard_and_no_maximum() -> Result<()> {
+        for bound in [1000, 29000, 29789, 40000] {
+            let mut stacks = partial(bound);
+            stacks.harts[0].bytes = Some(bound);
+            let planned = select(&stacks, &[])?;
+            let allocation = &planned[0];
+            assert!(allocation.from_bound);
+            assert_eq!(allocation.guard_bytes, 4096);
+            let usable = stacks.contract.irq_stack_with_margin(bound)?;
+            assert_eq!(
+                allocation.bytes,
+                stacks
+                    .contract
+                    .interrupts
+                    .irq_stack_allocation(0, usable)?
+                    .bytes
+            );
+            link(&mut stacks, &planned);
+            verify(&stacks, &planned)?;
+        }
         Ok(())
     }
 
     #[test]
-    fn a_small_bound_increase_that_exceeds_the_final_capacity_is_an_error_with_figures() {
-        let contract = contract();
-        let allocation = Allocation {
-            hart: 1,
-            bytes: contract.irq_stack_allocation(1, Some(1000)).unwrap().bytes,
-            guard_bytes: 1024,
-            first_bound: Some(1000),
-            from_bound: true,
-        };
-        verify_bound(&allocation, Some(1000), 1000, &contract).unwrap();
-        let error = verify_bound(&allocation, Some(1010), 1010, &contract)
-            .unwrap_err()
-            .to_string();
-        for figure in [
-            "1000",
-            "1010",
-            "1111",
-            "2128",
-            "1024",
-            "1104",
-            "no further link",
-        ] {
-            assert!(error.contains(figure), "{error}");
+    fn a_hart_without_a_proof_takes_its_declared_size_and_without_one_fails_naming_the_key() {
+        let stacks = partial(1000);
+        let error = select(&stacks, &[]).unwrap_err().to_string();
+        for named in ["hart boot", "irq-stack = { boot = <bytes> }", "1000 + ?"] {
+            assert!(error.contains(named), "{error}");
         }
-        assert!(verify_bound(&allocation, None, 1000, &contract).is_err());
+        let planned = select(
+            &stacks,
+            &[DeclaredIrqStack {
+                hart: 0,
+                bytes: 0x8000,
+            }],
+        )
+        .unwrap();
+        assert!(!planned[0].from_bound);
+        assert_eq!(planned[0].guard_bytes, 4096);
+        assert_eq!(planned[0].bytes, 0x8000 + 4096);
+        let mut stacks = stacks;
+        link(&mut stacks, &planned);
+        verify(&stacks, &planned).unwrap();
     }
 
     #[test]
-    fn a_change_over_sixty_four_bytes_stops_even_if_the_allocation_has_room() {
-        let contract = contract();
-        let allocation = Allocation {
-            hart: 0,
-            bytes: contract.irq_stack_bytes,
-            guard_bytes: 4096,
-            first_bound: Some(1000),
-            from_bound: false,
-        };
-        verify_bound(&allocation, Some(1064), 1064, &contract).unwrap();
-        for bound in [1065, 935] {
-            let error = verify_bound(&allocation, Some(bound), bound, &contract)
-                .unwrap_err()
-                .to_string();
-            assert!(error.contains("difference 65, limit 64"), "{error}");
+    fn a_declared_size_where_the_bound_is_proven_fails_naming_the_proof() {
+        let mut stacks = partial(1000);
+        stacks.harts[0].bytes = Some(1000);
+        let error = select(
+            &stacks,
+            &[DeclaredIrqStack {
+                hart: 0,
+                bytes: 0x8000,
+            }],
+        )
+        .unwrap_err()
+        .to_string();
+        for named in [
+            "hart boot",
+            "proven bound of 1000 bytes",
+            "second source",
+            "remove `boot`",
+        ] {
+            assert!(error.contains(named), "{error}");
         }
-        verify_bound(&allocation, None, 1000, &contract).unwrap();
+        let error = select(
+            &stacks,
+            &[DeclaredIrqStack {
+                hart: 1,
+                bytes: 0x8000,
+            }],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("does not use"), "{error}");
+    }
+
+    #[test]
+    fn a_final_bound_one_byte_apart_fails_with_both_bounds() {
+        let mut stacks = partial(1000);
+        stacks.harts[0].bytes = Some(1000);
+        let planned = select(&stacks, &[]).unwrap();
+        link(&mut stacks, &planned);
+        verify(&stacks, &planned).unwrap();
+        for changed in [999, 1001] {
+            stacks.harts[0].bytes = Some(changed);
+            let error = verify(&stacks, &planned).unwrap_err().to_string();
+            for figure in [
+                "first link 1000 bytes",
+                &format!("final link {changed} bytes"),
+                "must be equal",
+            ] {
+                assert!(error.contains(figure), "{error}");
+            }
+        }
+        stacks.harts[0].bytes = None;
+        let error = verify(&stacks, &planned).unwrap_err().to_string();
+        assert!(error.contains("final link no proven bytes"), "{error}");
+    }
+
+    #[test]
+    fn hart_zero_is_rounded_to_hart_one_s_guard_and_both_guards_are_placed() -> Result<()> {
+        let mut stacks = partial(1000);
+        stacks.harts[0].bytes = Some(1000);
+        let mut second = stacks.harts[0].clone();
+        second.core = 1;
+        stacks.harts.push(second);
+        let planned = select(&stacks, &[])?;
+        assert_eq!(planned.len(), 2);
+        assert_eq!(planned[0].guard_bytes, 4096);
+        assert_eq!(planned[1].guard_bytes, 1024);
+        assert_eq!(planned[0].bytes % 1024, 0);
+        Ok(())
+    }
+
+    /// The first link's placeholder does not change the second link's
+    /// sizes or the SRAM left for strict code: two placeholders give the
+    /// same selection and the same free SRAM.
+    #[test]
+    fn two_placeholders_give_the_same_selection_and_the_same_free_sram() -> Result<()> {
+        const SRAM_FOR_STACKS_AND_CODE: u64 = 0x40000;
+        let mut outcomes = Vec::new();
+        for placeholder in [0x8000_u32, 0x2000] {
+            let mut stacks = partial(1000);
+            stacks.harts[0].bytes = Some(1000);
+            let mut second = stacks.harts[0].clone();
+            second.core = 1;
+            second.bytes = Some(700);
+            stacks.harts.push(second);
+            // The first link: every used stack at the placeholder.
+            let first: Vec<Allocation> = [0, 1]
+                .map(|hart| Allocation {
+                    hart,
+                    bytes: placeholder,
+                    guard_bytes: 0,
+                    first_bound: None,
+                    from_bound: false,
+                })
+                .into();
+            link(&mut stacks, &first);
+            let free_sram = SRAM_FOR_STACKS_AND_CODE - 2 * u64::from(placeholder);
+            let selected = select(&stacks, &[])?;
+            let free = super::super::strict::free_after_stacks(&stacks, free_sram, &selected)?;
+            outcomes.push((
+                selected
+                    .iter()
+                    .map(|allocation| (allocation.bytes, allocation.guard_bytes))
+                    .collect::<Vec<_>>(),
+                free,
+            ));
+        }
+        assert_eq!(outcomes[0], outcomes[1]);
+        Ok(())
+    }
+
+    #[test]
+    fn stacks_beyond_the_sram_fail_with_their_figures() {
+        let mut stacks = partial(1000);
+        stacks.harts[0].bytes = Some(1000);
+        let first = [Allocation {
+            hart: 0,
+            bytes: 0x100,
+            guard_bytes: 0,
+            first_bound: None,
+            from_bound: false,
+        }];
+        link(&mut stacks, &first);
+        let selected = select(&stacks, &[]).unwrap();
+        let error = super::super::strict::free_after_stacks(&stacks, 0, &selected)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!("need {} bytes", selected[0].bytes)),
+            "{error}"
+        );
+    }
+
+    /// The image's margin, zero included, sizes the stack and holds the
+    /// second link's bound; a declared size takes no margin.
+    #[test]
+    fn the_image_s_margin_sizes_the_stack_and_a_declared_size_takes_none() -> Result<()> {
+        let mut stacks = partial(1000);
+        stacks.harts[0].bytes = Some(1000);
+        stacks.contract.irq_margin_percent = 0;
+        let planned = select(&stacks, &[])?;
+        assert_eq!(
+            planned[0].bytes,
+            stacks
+                .contract
+                .interrupts
+                .irq_stack_allocation(0, 1000)?
+                .bytes
+        );
+        link(&mut stacks, &planned);
+        verify(&stacks, &planned)?;
+        stacks.contract.irq_margin_percent = 50;
+        let wider = select(&stacks, &[])?;
+        assert_eq!(
+            wider[0].bytes,
+            stacks
+                .contract
+                .interrupts
+                .irq_stack_allocation(0, 1500)?
+                .bytes
+        );
+        let mut declared = partial(1000);
+        declared.contract.irq_margin_percent = 50;
+        let planned = select(
+            &declared,
+            &[DeclaredIrqStack {
+                hart: 0,
+                bytes: 2048,
+            }],
+        )?;
+        assert_eq!(
+            planned[0].bytes,
+            declared
+                .contract
+                .interrupts
+                .irq_stack_allocation(0, 2048)?
+                .bytes
+        );
+        Ok(())
     }
 }
