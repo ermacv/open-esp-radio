@@ -104,6 +104,15 @@ oer_chips_esp32s31_hal::dma_static! {
     static TX_ORDINARY: TxDmaStorage = zeroed in ".dma.bss.mac_reset_tx_ordinary";
 }
 
+/// The classes of a frame's counter, in its top bits: what a receiver
+/// counts (`--features receiver`). A stop's frame carries its index alone.
+pub(super) mod counter {
+    pub const SECOND: u32 = 0x8000_0000;
+    pub const OBSERVED: u32 = 0x4000_0000;
+    pub const PULSE: u32 = 0x2000_0000;
+    pub const CLASSES: u32 = 0xe000_0000;
+}
+
 /// The phases part two's failures name.
 mod tx_phase {
     pub const POOL: u32 = 30;
@@ -142,10 +151,17 @@ fn read_placed_word(start: u32, len: u32, offset: u32) -> Option<u32> {
 }
 
 /// The frame byte at `offset`: a header to the peer, a vendor-specific
-/// action's category and Espressif's OUI (an ESP-NOW frame's start), then
-/// a pattern of the chain.
+/// action's category and Espressif's OUI (an ESP-NOW frame's start), the
+/// frame's counter (little-endian; its class in the top bits, below), then a
+/// pattern of it.
 fn frame_byte(header: &[u8; 24], chain: u32, offset: usize) -> u8 {
-    const SNAP: [u8; 8] = [0x7f, 0x18, 0xfe, 0x34, 0, 0, 0, 0];
+    const SNAP: [u8; 4] = [0x7f, 0x18, 0xfe, 0x34];
+    if let Some(byte) = offset
+        .checked_sub(28)
+        .and_then(|at| chain.to_le_bytes().get(at).copied())
+    {
+        return byte;
+    }
     if let Some(byte) = header.get(offset) {
         return *byte;
     }
@@ -538,21 +554,6 @@ async fn send(
     Ok((ended, oer_portable_riscv::cycle32().wrapping_sub(begin)))
 }
 
-/// A received frame's Address 1 and Address 2. The frame follows the
-/// control prefix and its tail; a frame with HE-SIG-B options between them
-/// is not the peer's (6 Mb/s).
-fn addresses(bytes: &[u8]) -> Option<([u8; 6], [u8; 6])> {
-    let prefix = WifiRxControlPrefix::new(bytes.first_chunk()?);
-    if prefix.he_sig_b().present() {
-        return None;
-    }
-    let frame = bytes.get(WifiRxControlPrefix::SIZE + WifiRxControlTail::SIZE..)?;
-    Some((
-        frame.get(4..10)?.try_into().ok()?,
-        frame.get(10..16)?.try_into().ok()?,
-    ))
-}
-
 /// The peer: the sender of the first frame addressed to the station, read
 /// from the ring within two seconds.
 async fn learn_peer(
@@ -717,7 +718,7 @@ pub(super) async fn series(
                 for _ in 0..OBSERVED_REPEATS {
                     let noise = access.wifi_mac_hal().read_noise_floor_dbm();
                     let before = access.wifi_mac_hal().ordinary_tx_queue_snapshot(QUEUE);
-                    let lease = frames.lease(ORDINARY_SLOT, index32, length)?;
+                    let lease = frames.lease(ORDINARY_SLOT, counter::OBSERVED | index32, length)?;
                     let begin = oer_portable_riscv::cycle32();
                     start(
                         &mut access,
@@ -829,7 +830,7 @@ pub(super) async fn series(
         let mut descriptor: Descriptor =
             TxDmaStorage::pin::<ChipDma, Lease>(place.take().ok_or((tx_phase::PULSE, chain32))?)
                 .map_err(|_| (tx_phase::PULSE, chain32 | 0x100))?;
-        let lease = frames.lease(Frames::frame_slot(chain), chain32, FRAME)?;
+        let lease = frames.lease(Frames::frame_slot(chain), counter::PULSE | chain32, FRAME)?;
         let region = lease
             .dma_region()
             .map_err(|_| (tx_phase::PULSE, chain32 | 0x200))?;
@@ -905,14 +906,15 @@ pub(super) async fn series(
         if EmbassyClock.now() < waited {
             EmbassyClock.wait_until(waited).await;
         }
-        let (descriptor_changed, buffer_changed) = abandoned.changed(&frames.header, chain32);
+        let (descriptor_changed, buffer_changed) =
+            abandoned.changed(&frames.header, counter::PULSE | chain32);
         let guards_changed = frames.changed_guard_words(chain..chain + 2);
         // The second run transmits.
         let (second, second_cycles) = send(
             &mut access,
             &frames,
             &mut ordinary,
-            0x8000_0000 | chain32,
+            counter::SECOND | chain32,
             FRAME,
         )
         .await?;
@@ -953,7 +955,7 @@ pub(super) async fn series(
     let mut buffers = 0_u32;
     let mut first = u32::MAX;
     for (chain, abandoned) in chains.iter().enumerate() {
-        let (descriptor, buffer) = abandoned.changed(&frames.header, chain as u32);
+        let (descriptor, buffer) = abandoned.changed(&frames.header, counter::PULSE | chain as u32);
         if (descriptor != 0 || buffer != 0) && first == u32::MAX {
             first = chain as u32;
         }

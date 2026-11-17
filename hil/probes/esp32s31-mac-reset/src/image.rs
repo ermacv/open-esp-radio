@@ -4,7 +4,7 @@
 //! (README, "The order"), so that `WifiClocked::reset_mac` can pulse the
 //! MAC's block reset with the receive walker live.
 #![cfg_attr(
-    feature = "transmit",
+    any(feature = "transmit", feature = "receiver"),
     allow(
         dead_code,
         reason = "part two's image leaves part one's series out; its helpers stay shared"
@@ -371,11 +371,16 @@ enum Kind {
     /// Part two: the peer's address, learned from its frames.
     #[cfg(feature = "transmit")]
     Peer = 13,
+    /// Part two's receiver: what it received from the transmitting probe.
+    #[cfg(feature = "receiver")]
+    Rx = 14,
 }
 
 const WIDTH: usize = 22;
-#[cfg(not(feature = "transmit"))]
+#[cfg(not(any(feature = "transmit", feature = "receiver")))]
 const ROWS: usize = 4 + STOPS + PULSES + QUIET + HOLDS + CASES;
+#[cfg(feature = "receiver")]
+const ROWS: usize = 8;
 #[cfg(feature = "transmit")]
 const ROWS: usize = transmit::ROWS;
 /// The recovery cases' records: a baseline and cases 0, 1 and 3.
@@ -540,8 +545,32 @@ macro_rules! apart {
         core::future::poll_fn(|context| poll_apart(future.as_mut(), context)).await
     }};
 }
+#[cfg(feature = "receiver")]
+mod receiver;
 #[cfg(feature = "transmit")]
 mod transmit;
+#[cfg(all(feature = "transmit", feature = "receiver"))]
+compile_error!("part two's transmit and receiver are two images: choose one");
+
+#[cfg(any(feature = "transmit", feature = "receiver"))]
+/// A received frame's Address 1 and Address 2. The frame follows the
+/// control prefix and its tail; a frame with HE-SIG-B options between them
+/// is not the peer's (6 Mb/s).
+pub(super) fn addresses(bytes: &[u8]) -> Option<([u8; 6], [u8; 6])> {
+    let prefix = oer_chips_esp32s31_hal::layouts::WifiRxControlPrefix::new(bytes.first_chunk()?);
+    if prefix.he_sig_b().present() {
+        return None;
+    }
+    let frame = bytes.get(
+        oer_chips_esp32s31_hal::layouts::WifiRxControlPrefix::SIZE
+            + oer_chips_esp32s31_hal::layouts::WifiRxControlTail::SIZE..,
+    )?;
+    Some((
+        frame.get(4..10)?.try_into().ok()?,
+        frame.get(10..16)?.try_into().ok()?,
+    ))
+}
+
 type SessionRun = impl core::future::Future<Output = ()>;
 static SESSION: static_cell::ConstStaticCell<oer_portable_memory::StaticPlace<SessionRun>> =
     static_cell::ConstStaticCell::new(oer_portable_memory::StaticPlace::new());
@@ -946,7 +975,23 @@ async fn series(
             journal,
         ))
     };
-    #[cfg(not(feature = "transmit"))]
+    #[cfg(feature = "receiver")]
+    let result = {
+        let _ = (
+            client, slot, mac_irq, power_irq, sources, timer, mac, channel, seed,
+        );
+        apart!(receiver::series(
+            receiver::ReceiverParts {
+                storage,
+                station,
+                journal,
+            },
+            access,
+            clocks_on,
+            ring,
+        ))
+    };
+    #[cfg(not(any(feature = "transmit", feature = "receiver")))]
     let result = {
         let _ = station;
         apart!(part_one(
@@ -972,7 +1017,7 @@ async fn series(
 }
 
 /// What part one borrows from the series.
-#[cfg(not(feature = "transmit"))]
+#[cfg(not(any(feature = "transmit", feature = "receiver")))]
 struct PartOne<'a> {
     storage: &'static Storage,
     slot: &'a mut Option<Radio>,
@@ -988,7 +1033,7 @@ struct PartOne<'a> {
 
 /// Part one (`tasks/084`): the recovery cases, the stops, the pulses, the
 /// quiet pulses and the holds, all under receive.
-#[cfg(not(feature = "transmit"))]
+#[cfg(not(any(feature = "transmit", feature = "receiver")))]
 async fn part_one(
     parts: PartOne<'_>,
     mut access: RadioAccess,
