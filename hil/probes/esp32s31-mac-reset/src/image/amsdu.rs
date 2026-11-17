@@ -1,6 +1,7 @@
 //! Case C's sender (`tasks/154`, with `159`'s provenance series): from this
 //! board to the receiving probe, in rounds, one frame of each of
-//! [`case_c`](crate::case_c)'s cases a round, each awaited.
+//! [`case_c`](crate::case_c)'s cases a round, each awaited, the order
+//! turned by one case a round.
 use super::transmit::{Descriptor, Frames, ORDINARY_SLOT, TIMEOUT, await_completion, start};
 use super::*;
 use crate::case_c::{CASES, ROUNDS, byte};
@@ -27,7 +28,13 @@ pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> R
     mark(90);
     let mut ends = [[0_u32; 4]; CASES.len()];
     for round in 0..ROUNDS {
-        for (at, case) in CASES.into_iter().enumerate() {
+        // The order turns by one case a round, so that every case takes
+        // every place after every other (`tasks/154`: the bit, not the place).
+        for place in 0..CASES.len() {
+            let at = (place + round as usize) % CASES.len();
+            let Some(&case) = CASES.get(at) else {
+                continue;
+            };
             let counter = case.counter(round);
             let length = case.length();
             let lease = frames.lease_frame(ORDINARY_SLOT, length, |offset| {
