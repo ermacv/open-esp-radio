@@ -688,7 +688,7 @@ impl<'id, K> DataPlane<'id, K> {
 
 impl<'id, K: Ieee80211Capabilities> DataPlane<'id, K> {
     /// The link, when the plane holds one.
-    const fn current(&self) -> Option<&DataLink> {
+    pub(crate) const fn current(&self) -> Option<&DataLink> {
         match &self.linkage {
             Linkage::Linked(link) => Some(link),
             Linkage::Unlinked => None,

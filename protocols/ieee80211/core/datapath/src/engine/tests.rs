@@ -8,6 +8,7 @@ use crate::model::{Running, running};
 use crate::plane::{AggregateRate, HtLimits, PpduKind};
 use core::num::NonZeroU8;
 use oer_portable_time::Duration;
+use oer_protocols_ieee80211_contracts_port::DataPort;
 use oer_protocols_ieee80211_contracts_port::{
     AmpduRate, FrameSet, HEADROOM, MpduStartSpacing, Ppdu, Protection, RetryStage,
 };
@@ -17,7 +18,7 @@ use oer_protocols_ieee80211_core_upper_mac::ccmp::{
 use oer_protocols_ieee80211_core_upper_mac::qos::AcAdmission;
 use oer_protocols_ieee80211_core_upper_mac::sequence::SequenceCounter;
 use oer_protocols_ieee80211_testing_model::{
-    Air, MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelLink, ModelMemory, ModelPort,
+    Air, MODEL_AGREEMENTS, MODEL_GROUPS, ModelCaps, ModelLent, ModelLink, ModelMemory, ModelPort,
 };
 use oer_protocols_ieee80211_wire::address::{Bssid, OwnAddress};
 use oer_protocols_ieee80211_wire::phy::{
@@ -28,7 +29,9 @@ use oer_protocols_ieee80211_wire::station::StaDataHeaderTemplate;
 use std::collections::VecDeque;
 use std::vec::Vec;
 
+mod receive;
 mod search;
+mod search_rx;
 
 pub(super) const STATION: [u8; 6] = [2, 0, 0, 0, 0, 1];
 pub(super) const ACCESS_POINT_ADDRESS: [u8; 6] = [2, 0, 0, 0, 0, 2];
@@ -78,12 +81,45 @@ pub(super) type ApEngine<'id, const PEERS: usize, const POOL: usize> = Engine<
 >;
 
 /// The network's end: what it offers, each MSDU's Ethernet frame, and what
-/// came home, in order.
-#[derive(Default)]
+/// came home, in order; what it received, lent or copied, in order; its
+/// lend limit and its room for copies.
 pub(super) struct Net {
     pub offered: VecDeque<ModelMemory>,
     pub frames: Vec<(u32, WmmUserPriority, Vec<u8>)>,
     pub home: Vec<u32>,
+    /// The units it holds, with the Ethernet frame of each.
+    pub lent: Vec<(ModelLent, EthernetSpan)>,
+    /// Every Ethernet frame it received, in order: a lent unit's place, or
+    /// a copy's bytes.
+    pub received: Vec<Got>,
+    /// The units it may hold at once.
+    pub lend_limit: u8,
+    /// The frames its storage takes now: a copy takes one, and the test
+    /// gives room back as the network would when it consumes a copy.
+    pub copy_room: u8,
+}
+
+/// An Ethernet frame the network received.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum Got {
+    /// A unit lent at its place.
+    Lent(u8),
+    /// A copy of these bytes.
+    Copied(Vec<u8>),
+}
+
+impl Default for Net {
+    fn default() -> Self {
+        Self {
+            offered: VecDeque::new(),
+            frames: Vec::new(),
+            home: Vec::new(),
+            lent: Vec::new(),
+            received: Vec::new(),
+            lend_limit: 4,
+            copy_room: 4,
+        }
+    }
 }
 
 impl Net {
@@ -110,7 +146,7 @@ impl Net {
     }
 }
 
-impl Network<ModelMemory> for Net {
+impl Network<ModelMemory, ModelLent> for Net {
     fn take(&mut self) -> Option<ModelMemory> {
         self.offered.pop_front()
     }
@@ -131,6 +167,21 @@ impl Network<ModelMemory> for Net {
 
     fn home(&mut self, memory: ModelMemory) {
         self.home.push(memory.id);
+    }
+
+    fn room(&self) -> Room {
+        let held = u8::try_from(self.lent.len()).unwrap_or(u8::MAX);
+        Room::new(self.lend_limit.saturating_sub(held), self.copy_room)
+    }
+
+    fn lent(&mut self, _permit: LendPermit, unit: ModelLent, frame: EthernetSpan) {
+        self.received.push(Got::Lent(unit.place()));
+        self.lent.push((unit, frame));
+    }
+
+    fn copied(&mut self, _permit: CopyPermit, frame: &[u8]) {
+        self.copy_room = self.copy_room.saturating_sub(1);
+        self.received.push(Got::Copied(frame.to_vec()));
     }
 }
 
@@ -209,6 +260,8 @@ pub(super) struct Controller<'id> {
     pub named: Vec<(WmmUserPriority, SequenceNumber)>,
     /// The peer of each number told.
     pub named_peers: Vec<u8>,
+    /// The frames read in place: the peer and the bytes.
+    pub frames: Vec<(Option<u8>, Vec<u8>)>,
 }
 
 impl<'id> Told<'id> for Controller<'id> {
@@ -232,6 +285,10 @@ impl<'id> Told<'id> for Controller<'id> {
     ) {
         self.named_peers.push(peer.index());
         self.named.push((tid, number));
+    }
+
+    fn frame<M: RxMetadata>(&mut self, peer: Option<u8>, frame: &Received<'_, M>) {
+        self.frames.push((peer, frame.bytes.to_vec()));
     }
 }
 
@@ -334,6 +391,7 @@ impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
                 keys: Vec::new(),
                 named: Vec::new(),
                 named_peers: Vec::new(),
+                frames: Vec::new(),
             },
             micros: 1,
         }

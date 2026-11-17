@@ -18,6 +18,7 @@ use oer_protocols_ieee80211_wire::frame::{
 };
 
 use crate::data::{DataPort, Sealed};
+use crate::rx::RxMetadata;
 
 /// The brand of one installation, invariant in `'id`.
 type Brand<'id> = PhantomData<fn(&'id ()) -> &'id ()>;
@@ -97,8 +98,16 @@ impl RxHead {
 }
 
 /// A unit can be lent: a property of the unit, read before the decision.
+/// The port makes it at the unit's staging, under the round's seal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Lendable(());
+
+impl Lendable {
+    /// The unit the port stages now can be lent.
+    pub const fn staged(_seal: &Sealed) -> Self {
+        Self(())
+    }
+}
 
 /// A staged unit, as the port holds it in its place.
 #[derive(Debug)]
@@ -107,8 +116,8 @@ pub struct Staged<M> {
     pub head: RxHead,
     /// What the hardware observed of it.
     pub meta: M,
-    /// Whether it can be lent.
-    pub lendable: bool,
+    /// Whether it can be lent: [`Lendable`] when it can.
+    pub lendable: Option<Lendable>,
 }
 
 /// A unit read in place: its header, the hardware's evidence, the bytes.
@@ -120,19 +129,33 @@ pub struct Received<'a, M> {
     pub meta: &'a M,
     /// The MPDU, from its header to the end of its body.
     pub bytes: &'a [u8],
-    lendable: bool,
+    lendable: Option<Lendable>,
 }
 
 impl<M> Received<'_, M> {
     /// Whether the unit can be lent.
     pub const fn lendable(&self) -> Option<Lendable> {
-        if self.lendable {
-            Some(Lendable(()))
-        } else {
-            None
-        }
+        self.lendable
     }
 }
+
+/// The Ethernet addresses written in a taken unit's place, before an
+/// EtherType its LLC/SNAP header already holds: the place's bytes become an
+/// Ethernet frame from `at`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EthernetAddresses {
+    /// The Destination Address.
+    pub destination: [u8; 6],
+    /// The Source Address.
+    pub source: [u8; 6],
+    /// The offset of the EtherType in the unit: the addresses take the
+    /// twelve octets before it.
+    pub ether_type: u16,
+}
+
+/// The addresses fall outside the unit's bytes: nothing was written.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct OutsideTheUnit;
 
 /// The name of a unit the engine took: it stays in its place.
 #[must_use = "a taken unit is released or lent"]
@@ -163,7 +186,7 @@ pub enum Rest {
 /// The port's primitives of a round, each taking the seal.
 pub trait ReceivePort<'id>: DataPort<'id> {
     /// What the hardware observed of a unit.
-    type Meta;
+    type Meta: RxMetadata;
     /// A unit lent to the network, in place.
     type Lent;
 
@@ -175,6 +198,20 @@ pub trait ReceivePort<'id>: DataPort<'id> {
     fn round_unit(&self, seal: &Sealed, place: u8) -> Option<(&Staged<Self::Meta>, &[u8])>;
     /// Lend the unit at `place`, in place.
     fn round_lend(&mut self, seal: &Sealed, place: u8) -> Self::Lent;
+    /// Write `addresses` into the unit at `place`, a unit taken and not
+    /// lent. The place is the port's, not the hardware's, from the unit's
+    /// staging to its return: the write reaches no DMA in flight.
+    ///
+    /// # Errors
+    ///
+    /// The twelve octets fall outside the unit's bytes; nothing was
+    /// written.
+    fn round_write_addresses(
+        &mut self,
+        seal: &Sealed,
+        place: u8,
+        addresses: EthernetAddresses,
+    ) -> Result<(), OutsideTheUnit>;
     /// Close the round: the units of `back` go back to the ring.
     fn round_close(&mut self, seal: &Sealed, back: u64) -> Rest;
 }
@@ -267,6 +304,11 @@ impl<'p, 'id, P: ReceivePort<'id>> Round<'p, 'id, P> {
     }
 
     /// A taken unit, read in place.
+    ///
+    /// `None` does not happen: the port's places are a table read by a
+    /// handle's index, a handle is made only for a place the port staged,
+    /// and the place is given up only at the handle's release or loan. The
+    /// `Option` is the table's read, which safe Rust gives a failure path.
     pub fn unit(&self, handle: &UnitHandle<'id>) -> Option<Received<'_, P::Meta>> {
         let (staged, bytes) = self.port.round_unit(&self.seal, handle.place)?;
         Some(Received {
@@ -275,6 +317,21 @@ impl<'p, 'id, P: ReceivePort<'id>> Round<'p, 'id, P> {
             bytes,
             lendable: staged.lendable,
         })
+    }
+
+    /// Write the Ethernet addresses of a decapsulated MSDU into a taken
+    /// unit's place, once, before it is lent or copied.
+    ///
+    /// # Errors
+    ///
+    /// The addresses fall outside the unit; nothing was written.
+    pub fn write_addresses(
+        &mut self,
+        handle: &UnitHandle<'id>,
+        addresses: EthernetAddresses,
+    ) -> Result<(), OutsideTheUnit> {
+        self.port
+            .round_write_addresses(&self.seal, handle.place, addresses)
     }
 
     /// Lend a taken unit to the network: it keeps its place.
@@ -309,7 +366,8 @@ pub struct Unit<'r, 'p, 'id, P: ReceivePort<'id>> {
 }
 
 impl<'id, P: ReceivePort<'id>> Unit<'_, '_, 'id, P> {
-    /// The unit read in place.
+    /// The unit read in place; `None` does not happen, for the reason
+    /// [`Round::unit`] gives.
     pub fn view(&self) -> Option<Received<'_, P::Meta>> {
         let (staged, bytes) = self.round.port.round_unit(&self.round.seal, self.place)?;
         Some(Received {

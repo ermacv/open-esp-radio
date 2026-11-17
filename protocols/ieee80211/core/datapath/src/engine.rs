@@ -55,11 +55,11 @@ use oer_portable_events::{EventSink, report};
 use oer_portable_time::Instant;
 pub use oer_protocols_ieee80211_contracts_port::DATA_SINGLES;
 use oer_protocols_ieee80211_contracts_port::{
-    AckHeader, AgreementSlot, CloseGate, CommandPlace, CommandPoll, DataPort, DataRights,
-    GateClosed, GateOpen, GroupSlot, HeaderSpec, IdleArena, InCommand, InstalledPairwise,
-    MpduLength, PairwiseCommand, PairwiseEnd, PairwiseHeld, PairwiseSlot, PortRate, PortSink,
-    QueueRight, RetryPlan, Signal, SingleEnd, SingleOutcome, SinglePlace, SizedFrame, TbttEvent,
-    TxFacts, TxFrame, TxOutcome,
+    AckHeader, AgreementSlot, CloseGate, CommandPlace, CommandPoll, DataRights, GateClosed,
+    GateOpen, GroupSlot, HeaderSpec, IdleArena, InCommand, InstalledPairwise, MpduLength,
+    PairwiseCommand, PairwiseEnd, PairwiseHeld, PairwiseSlot, PortRate, PortSink, QueueRight,
+    ReceivePort, Received, RetryPlan, RxHeader, RxMetadata, Signal, SingleEnd, SingleOutcome,
+    SinglePlace, SizedFrame, TbttEvent, TxFacts, TxFrame, TxOutcome,
 };
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_installation::{DataStop, Rest};
@@ -69,7 +69,7 @@ use oer_protocols_ieee80211_wire::data::{
 };
 use oer_protocols_ieee80211_wire::frame::{MacHeader, QosAckPolicy};
 use oer_protocols_ieee80211_wire::qos::{WmmAccessCategory, WmmUserPriority};
-use oer_protocols_ieee80211_wire::security::Spp;
+use oer_protocols_ieee80211_wire::security::{LinkProtection, Spp};
 use oer_protocols_ieee80211_wire::sequence::SequenceNumber;
 
 use crate::cost::single_cost;
@@ -83,11 +83,12 @@ use crate::queues::{QueueId, TxQueues};
 /// The FCS every MPDU carries on the air (IEEE Std 802.11-2020, 9.2.4.8).
 const FCS_LEN: u32 = 4;
 
-/// The network's end of the transmit path, which the binding implements
-/// over the network's own interface. The network names no IEEE 802.11
-/// type; the engine reads an MSDU's Ethernet frame in its memory. `M` is
-/// the network's handle of an MSDU's memory.
-pub trait Network<M> {
+/// The network's end of the data path, which the binding implements over
+/// the network's own interface. The network names no IEEE 802.11 type: the
+/// engine reads an MSDU's Ethernet frame in its memory, and hands it the
+/// Ethernet frames of received units. `M` is the network's handle of an
+/// MSDU's memory, `L` a received unit the port lends.
+pub trait Network<M, L> {
     /// The next MSDU the network offers; `None` while it offers none.
     fn take(&mut self) -> Option<M>;
 
@@ -104,6 +105,20 @@ pub trait Network<M> {
     /// The memory comes home: the MSDU was delivered, lost, refused or
     /// copied out.
     fn home(&mut self, memory: M);
+
+    /// What the network takes of received frames now. The value is read
+    /// once a round and spent a delivery at a time; while the network holds
+    /// a lent unit, the binding counts it against its lend limit, which
+    /// leaves the ring its reserve.
+    fn room(&self) -> Room;
+
+    /// A received unit lent in place: its one Ethernet frame is `frame`.
+    /// It comes home when the network drops it.
+    fn lent(&mut self, permit: LendPermit, unit: L, frame: EthernetSpan);
+
+    /// A received MSDU's Ethernet frame, to copy into the network's
+    /// storage now: its unit goes back to the ring after the call.
+    fn copied(&mut self, permit: CopyPermit, frame: &[u8]);
 }
 
 /// The rate policy the engine asks a publication's rates of and teaches
@@ -141,6 +156,11 @@ pub trait Told<'id> {
 
     /// A key's command ended.
     fn key_ended(&mut self, end: KeyEnd);
+
+    /// A received management frame or EAPOL of `peer` (`None`: of no linked
+    /// peer), read in place inside the round: it goes back to the ring
+    /// after the call.
+    fn frame<M: RxMetadata>(&mut self, peer: Option<u8>, frame: &Received<'_, M>);
 
     /// The TID `peer`'s link named ([`UnnamedTids::name`]) has nothing in
     /// the port's places: `number` is the one its next data MPDU carries,
@@ -389,6 +409,8 @@ struct Running<
     interface: Interface<'id, T>,
     groups: [GroupSlot<'id>; GROUPS],
     agreements: [AgreementSlot<'id>; AGREEMENTS],
+    /// The received units the engine holds for the network.
+    receive: Receive<'id>,
 }
 
 /// The data's state.
@@ -454,7 +476,7 @@ enum Entry<E> {
 /// agreements.
 pub struct Engine<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -478,7 +500,7 @@ pub struct Seal(());
 
 /// The form-specific half of the sections, which only the engine calls
 /// ([`Seal`]).
-pub trait Sections<'id, P: DataPort<'id>> {
+pub trait Sections<'id, P: ReceivePort<'id>> {
     /// The data's rights of the form's layout.
     type Rights;
     /// The link's transmit key.
@@ -488,7 +510,7 @@ pub trait Sections<'id, P: DataPort<'id>> {
     fn start(&mut self, _seal: Seal, rights: Self::Rights);
 
     /// The queue an MSDU goes into, or why it is refused.
-    fn route<N: Network<P::Memory>>(
+    fn route<N: Network<P::Memory, P::Lent>>(
         &self,
         _seal: Seal,
         network: &N,
@@ -498,7 +520,12 @@ pub trait Sections<'id, P: DataPort<'id>> {
     /// Take queued MSDUs into the form's places, counting each taken
     /// against the budget in `taken`: the MSDUs that left their queues
     /// (taken, sent or refused).
-    fn fill<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told<'id>>(
+    fn fill<
+        N: Network<P::Memory, P::Lent>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
         &mut self,
         _seal: Seal,
         turn: &mut Turn<'_, P, N, R, E, C>,
@@ -517,7 +544,12 @@ pub trait Sections<'id, P: DataPort<'id>> {
 
     /// Read the end of the form's air and settle it, and serve the port's
     /// transmit facts.
-    fn ended<N: Network<P::Memory>, R: Rates<'id, P::Caps>, E: EventSink<DataEvent>, C: Told<'id>>(
+    fn ended<
+        N: Network<P::Memory, P::Lent>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
         &mut self,
         _seal: Seal,
         facts: TxFacts,
@@ -534,7 +566,7 @@ pub trait Sections<'id, P: DataPort<'id>> {
 
     /// The link's transmit key changed: what the form holds unpublished,
     /// written under the old one, goes home first.
-    fn keyed<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+    fn keyed<N: Network<P::Memory, P::Lent>, E: EventSink<DataEvent>>(
         &mut self,
         _seal: Seal,
         port: &mut P,
@@ -543,7 +575,7 @@ pub trait Sections<'id, P: DataPort<'id>> {
     );
 
     /// End the link of `peer`: what the form holds of it goes home.
-    fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+    fn unlink_form<N: Network<P::Memory, P::Lent>, E: EventSink<DataEvent>>(
         &mut self,
         _seal: Seal,
         peer: u8,
@@ -555,6 +587,14 @@ pub trait Sections<'id, P: DataPort<'id>> {
     /// The rights back and the data stopped, when it is stopping, its gate
     /// shut and nothing the port's; else nothing changes.
     fn stopped(&mut self, _seal: Seal) -> Option<Self::Rights>;
+
+    /// One receive round over the port, the form's links naming a frame's
+    /// peer.
+    fn receive_round<N: Network<P::Memory, P::Lent>, R, E, C: Told<'id>>(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest;
 
     /// Take the next number of `peer`'s link's own space.
     fn own_number(&mut self, _seal: Seal, peer: u8) -> Option<SequenceNumber>;
@@ -594,7 +634,7 @@ macro_rules! access_point {
 
 impl<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -877,7 +917,7 @@ pub enum KeyEnd {
 
 impl<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -893,7 +933,7 @@ where
 {
     /// The network has MSDUs.
     pub fn offered<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -906,7 +946,7 @@ where
 
     /// The pump's turn: a round a section owed, or a deadline.
     pub fn round<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -921,7 +961,7 @@ where
     /// The port's transmit facts: the arena's end and the singles', then
     /// the command in progress, then the intake.
     pub fn transmitted<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -936,9 +976,54 @@ where
         self.intake(turn)
     }
 
+    /// The ring has units: one receive round.
+    pub fn received<
+        N: Network<P::Memory, P::Lent>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.receive_round(Seal(()), turn)
+    }
+
+    /// The network gave lent units back: one receive round, which takes
+    /// them first.
+    pub fn returned<
+        N: Network<P::Memory, P::Lent>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.receive_round(Seal(()), turn)
+    }
+
+    /// A receive wake's instant: the pressure episode's bound or the ring's
+    /// continuation. One receive round.
+    pub fn due<
+        N: Network<P::Memory, P::Lent>,
+        R: Rates<'id, P::Caps>,
+        E: EventSink<DataEvent>,
+        C: Told<'id>,
+    >(
+        &mut self,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        self.receive_round(Seal(()), turn)
+    }
+
     /// The rights back, when the data is stopping, the gate shut and
     /// nothing the port's.
     fn finish(&mut self) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
+        // The engine's own places are quiet: the stop's round sent back
+        // every unit that waited for the network, and a stopping round takes
+        // none. The units the network holds are the installation machine's
+        // to wait for (`UnitsHome`).
         // `stopped` answers only for quiet air: an arena on the air is not
         // idle, a single on the air keeps its lane.
         match self.stopped(Seal(())) {
@@ -948,7 +1033,7 @@ where
     }
 
     /// End `peer`'s link: its queued MSDUs go home, its entry is free.
-    fn unlink<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+    fn unlink<N: Network<P::Memory, P::Lent>, E: EventSink<DataEvent>>(
         &mut self,
         peer: u8,
         port: &mut P,
@@ -969,7 +1054,7 @@ where
 
     /// Link the free `peer`: its entry holds `link`.
     fn link<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -995,7 +1080,7 @@ where
 
     /// What the network offers, into the queues while the pool has room;
     /// what has no link goes back at once. Whether it moved anything.
-    fn drain<N: Network<P::Memory>, R, E: EventSink<DataEvent>, C>(
+    fn drain<N: Network<P::Memory, P::Lent>, R, E: EventSink<DataEvent>, C>(
         &mut self,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) -> bool {
@@ -1027,7 +1112,7 @@ where
     /// The command that runs, polled; what ended told; a stopping data's
     /// next command begun.
     fn command<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1074,7 +1159,7 @@ where
     /// within one budget. A round is owed when the budget ran out with more
     /// to take.
     fn intake<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1221,7 +1306,7 @@ pub struct BusyKey<'a, E>(PhantomData<&'a mut E>);
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1235,6 +1320,14 @@ where
     P::Ack: Copy,
     P::Denial: Copy,
 {
+    /// The receive refusals counted so far, by reason.
+    pub fn refusals(&self) -> RxRefusals {
+        match &self.0.data {
+            Data::Flowing(running) | Data::Stopping(running) => running.receive.refusals(),
+            Data::Stopped => RxRefusals::default(),
+        }
+    }
+
     /// `peer`'s place.
     pub fn peer(&mut self, peer: Peer<PEERS>) -> PeerPlace<'_, engine!()> {
         let engine = &mut *self.0;
@@ -1285,7 +1378,7 @@ where
     /// then the answer is [`DataStop::Going`], and the machine asks again
     /// ([`StoppingData::poll`]).
     pub fn stop<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1310,6 +1403,10 @@ where
         engine.advance_stop(turn);
         // With no link, what the network still offers goes back.
         engine.drain(turn);
+        // What waited for the network and what the ring holds go back. A
+        // stopping round leaves nothing waiting; what the ring stages after
+        // it goes back in the round of the machine's next poll.
+        let _: Rest = engine.receive_round(Seal(()), turn);
         engine.finish()
     }
 }
@@ -1317,7 +1414,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1334,7 +1431,7 @@ where
     /// The machine asks the data's stop again: the gate's closing is
     /// polled, and the rights come back once nothing is the port's.
     pub fn poll<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1344,6 +1441,9 @@ where
     ) -> DataStop<F::Rights<'id, SINGLES, GROUPS, AGREEMENTS>> {
         let engine = self.0;
         engine.command(turn);
+        // The ring's next units go back unread; the machine polls again
+        // until the rights come home.
+        let _: Rest = engine.receive_round(Seal(()), turn);
         engine.finish()
     }
 }
@@ -1351,7 +1451,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1367,7 +1467,7 @@ where
 {
     /// End the link: its queued data goes home.
     pub fn unlink<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1383,7 +1483,7 @@ where
     /// Change the linked entry and run the intake. The handle borrows the
     /// engine, so the peer is linked while the handle lives.
     fn change<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1401,7 +1501,7 @@ where
 
     /// Hold the link's data.
     pub fn hold<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1414,7 +1514,7 @@ where
 
     /// Let it go again.
     pub fn release<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1477,7 +1577,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1501,7 +1601,7 @@ where
     /// The link has no TID's space: its peer did not negotiate QoS. Nothing
     /// changed.
     pub fn name<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1518,7 +1618,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1540,7 +1640,7 @@ where
     /// The controller releases the name before its number was told: the
     /// TID's intake goes on.
     pub fn release<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1554,7 +1654,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1582,7 +1682,7 @@ where
     /// number was refused or failed): the TID's intake goes on, its first
     /// data MPDU carrying the number.
     pub fn release<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1597,10 +1697,10 @@ where
 /// A name's hold ends: the TID's intake goes on.
 fn unhold<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
-    N: Network<P::Memory>,
+    N: Network<P::Memory, P::Lent>,
     R: Rates<'id, P::Caps>,
     E: EventSink<DataEvent>,
     C: Told<'id>,
@@ -1629,7 +1729,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1645,7 +1745,7 @@ where
 {
     /// Open the closed gate the controller lends: arenas and singles go.
     pub fn open<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1668,7 +1768,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1686,7 +1786,7 @@ where
     /// air is quiet; the closed gate then goes to the controller
     /// ([`Told::gate_closed`]).
     pub fn close<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1703,7 +1803,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -1731,7 +1831,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const POOL: usize,
     const SINGLES: usize,
@@ -1747,7 +1847,7 @@ where
     /// entry the port's link and the numbers. Its data goes while the gate
     /// is open.
     pub fn link<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1774,7 +1874,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const PEERS: usize,
     const POOL: usize,
@@ -1788,7 +1888,7 @@ where
 {
     /// Link the client.
     pub fn link<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1806,7 +1906,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const POOL: usize,
     const SINGLES: usize,
@@ -1834,7 +1934,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const POOL: usize,
     const SINGLES: usize,
@@ -1851,7 +1951,7 @@ where
     /// until the installation's end; then what the arenas hold unpublished
     /// goes home and the key is the link's ([`Told::key_ended`]).
     pub fn change<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1872,7 +1972,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const POOL: usize,
     const SINGLES: usize,
@@ -1889,7 +1989,7 @@ where
     /// Starting Sequence Number, which the peer counts from (IEEE Std
     /// 802.11-2020, 10.25.2). The name's hold ends.
     pub fn tx_agreement<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1918,7 +2018,7 @@ where
 impl<
     'a,
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const POOL: usize,
     const SINGLES: usize,
@@ -1932,7 +2032,7 @@ where
 {
     /// The TID's transmit agreement ended.
     pub fn tx_agreement_ended<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -1952,7 +2052,7 @@ where
 
 impl<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T,
     const POOL: usize,
     const SINGLES: usize,
@@ -2015,7 +2115,7 @@ impl<'id, A, D, C: Told<'id>, const SINGLES: usize> PortSink<'id, A, D>
 /// A station: its access point's link in the plane.
 impl<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const POOL: usize,
     const SINGLES: usize,
@@ -2056,10 +2156,11 @@ where
             },
             groups,
             agreements,
+            receive: Receive::new(),
         });
     }
 
-    fn route<N: Network<P::Memory>>(
+    fn route<N: Network<P::Memory, P::Lent>>(
         &self,
         _seal: Seal,
         network: &N,
@@ -2077,7 +2178,7 @@ where
     }
 
     fn fill<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -2217,7 +2318,7 @@ where
     }
 
     fn ended<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -2307,7 +2408,7 @@ where
         Self::poll_interface(interface, turn.port, turn.now, &mut sink)
     }
 
-    fn keyed<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+    fn keyed<N: Network<P::Memory, P::Lent>, E: EventSink<DataEvent>>(
         &mut self,
         _seal: Seal,
         port: &mut P,
@@ -2344,7 +2445,7 @@ where
         }
     }
 
-    fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+    fn unlink_form<N: Network<P::Memory, P::Lent>, E: EventSink<DataEvent>>(
         &mut self,
         _seal: Seal,
         _peer: u8,
@@ -2395,6 +2496,7 @@ where
             interface,
             groups,
             agreements,
+            receive,
         } = running;
         match (interface, plane.idle_arenas()) {
             (
@@ -2423,6 +2525,7 @@ where
                     interface,
                     groups,
                     agreements,
+                    receive,
                 });
                 None
             }
@@ -2440,10 +2543,58 @@ where
                     interface,
                     groups,
                     agreements,
+                    receive,
                 });
                 None
             }
         }
+    }
+
+    fn receive_round<N: Network<P::Memory, P::Lent>, R, E, C: Told<'id>>(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let (flow, running) = match &mut self.data {
+            Data::Flowing(running) => (Flow::Flowing, running),
+            Data::Stopping(running) => (Flow::Stopping, running),
+            Data::Stopped => return Rest::Wake(None),
+        };
+        let Running {
+            form: StationRunning { plane, .. },
+            receive,
+            ..
+        } = running;
+        // The access point's frames to the station or to a group, while it
+        // is linked.
+        let link = plane.current().map(|link| {
+            (
+                link.header.bssid(),
+                link.header.source(),
+                link.header.protection(),
+            )
+        });
+        let carrying = match &self.entries {
+            [Entry::Linked(linked)] => Some(linked.carrying),
+            [Entry::Free] => None,
+        };
+        receive.round(
+            turn.port,
+            turn.network,
+            turn.told,
+            turn.now,
+            flow,
+            |header: &RxHeader| {
+                let (bssid, own, protection) = link?;
+                let to_us =
+                    header.receiver == own || IndividualAddress::new(header.receiver).is_none();
+                (header.transmitter == bssid && to_us).then_some(RxPeer {
+                    peer: 0,
+                    protection,
+                    carrying: carrying?,
+                })
+            },
+        )
     }
 
     fn own_number(&mut self, _seal: Seal, _peer: u8) -> Option<SequenceNumber> {
@@ -2566,7 +2717,7 @@ impl<
 /// An access point: its clients' data as singles.
 impl<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const PEERS: usize,
     const POOL: usize,
@@ -2632,10 +2783,11 @@ where
             },
             groups,
             agreements,
+            receive: Receive::new(),
         });
     }
 
-    fn route<N: Network<P::Memory>>(
+    fn route<N: Network<P::Memory, P::Lent>>(
         &self,
         _seal: Seal,
         network: &N,
@@ -2667,7 +2819,7 @@ where
     }
 
     fn fill<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -2738,7 +2890,7 @@ where
     }
 
     fn ended<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -2801,7 +2953,7 @@ where
         Self::poll_interface(interface, turn.port, turn.now, &mut ends)
     }
 
-    fn keyed<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+    fn keyed<N: Network<P::Memory, P::Lent>, E: EventSink<DataEvent>>(
         &mut self,
         _seal: Seal,
         _port: &mut P,
@@ -2811,7 +2963,7 @@ where
         // The access point's data asks no key's command in this half.
     }
 
-    fn unlink_form<N: Network<P::Memory>, E: EventSink<DataEvent>>(
+    fn unlink_form<N: Network<P::Memory, P::Lent>, E: EventSink<DataEvent>>(
         &mut self,
         _seal: Seal,
         _peer: u8,
@@ -2885,6 +3037,7 @@ where
                     },
                 groups,
                 agreements,
+                receive: _,
             } => Some(DataRights {
                 arenas,
                 singles,
@@ -2907,6 +3060,45 @@ where
                 None
             }
         }
+    }
+
+    fn receive_round<N: Network<P::Memory, P::Lent>, R, E, C: Told<'id>>(
+        &mut self,
+        _seal: Seal,
+        turn: &mut Turn<'_, P, N, R, E, C>,
+    ) -> Rest {
+        let (flow, running) = match &mut self.data {
+            Data::Flowing(running) => (Flow::Flowing, running),
+            Data::Stopping(running) => (Flow::Stopping, running),
+            Data::Stopped => return Rest::Wake(None),
+        };
+        let entries = &self.entries;
+        // A client's frames to the access point.
+        running.receive.round(
+            turn.port,
+            turn.network,
+            turn.told,
+            turn.now,
+            flow,
+            |header: &RxHeader| {
+                entries
+                    .iter()
+                    .zip(0_u8..)
+                    .find_map(|(entry, peer)| match entry {
+                        Entry::Linked(linked)
+                            if header.transmitter == linked.link.client
+                                && header.receiver == linked.link.access_point =>
+                        {
+                            Some(RxPeer {
+                                peer,
+                                protection: LinkProtection::Open,
+                                carrying: linked.carrying,
+                            })
+                        }
+                        _ => None,
+                    })
+            },
+        )
     }
 
     fn own_number(&mut self, _seal: Seal, peer: u8) -> Option<SequenceNumber> {
@@ -2954,7 +3146,7 @@ where
 }
 impl<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     T: TxKey,
     const PEERS: usize,
     const POOL: usize,
@@ -2970,7 +3162,7 @@ impl<
     /// MSDU that does not go. The caller found the lane free, the gate open
     /// and the link carrying.
     fn send<
-        N: Network<P::Memory>,
+        N: Network<P::Memory, P::Lent>,
         R: Rates<'id, P::Caps>,
         E: EventSink<DataEvent>,
         C: Told<'id>,
@@ -3150,7 +3342,7 @@ impl Keyed for ClientLink {
 #[cfg(test)]
 impl<
     'id,
-    P: DataPort<'id>,
+    P: ReceivePort<'id>,
     F: Form,
     T,
     const PEERS: usize,
@@ -3179,7 +3371,8 @@ where
                     StationKey::Installed(..) => "installed",
                 };
                 std::format!(
-                    "{name}|{}|{}",
+                    "{name}|{}|{}|{}",
+                    running.receive.key(),
                     match &running.interface {
                         Interface::Idle {
                             gate: g, key: k, ..
@@ -3231,6 +3424,12 @@ where
         key
     }
 }
+
+mod receive;
+pub use receive::{
+    AMSDU_MSDUS, CopyPermit, EthernetSpan, LendPermit, NETWORK_LATE, Room, RxRefusal, RxRefusals,
+};
+use receive::{Flow, Receive, RxPeer};
 
 #[cfg(test)]
 mod tests;

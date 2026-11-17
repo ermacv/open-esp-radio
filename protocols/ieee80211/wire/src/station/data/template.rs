@@ -87,6 +87,16 @@ impl StaDataHeaderTemplate {
         self.protection
     }
 
+    /// The BSSID the template's data goes to: Address 1.
+    pub const fn bssid(&self) -> [u8; 6] {
+        self.header.address1()
+    }
+
+    /// The station's own address: Address 2.
+    pub const fn source(&self) -> [u8; 6] {
+        self.header.address2()
+    }
+
     /// Whether this is the template of these association inputs.
     pub fn serves(
         &self,
@@ -246,6 +256,15 @@ mod tests {
         (PeerQos::NonQos, LinkProtection::Ccmp),
         (PeerQos::Qos, LinkProtection::Ccmp),
     ];
+
+    #[test]
+    fn a_template_names_its_bssid_and_its_source() {
+        let template =
+            StaDataHeaderTemplate::new(source(), bssid(), PeerQos::Qos, LinkProtection::Open)
+                .unwrap();
+        assert_eq!(template.bssid(), BSSID);
+        assert_eq!(template.source(), LOCAL);
+    }
 
     #[test]
     fn the_template_writes_the_bytes_and_header_of_the_full_encode_in_every_mode() {

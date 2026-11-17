@@ -195,6 +195,6 @@ pub use life::{
     UnitsHome,
 };
 pub use receive::{
-    Lendable, ReceivePort, Received, Rest, Round, RxHead, RxHeader, Staged, StagedPlaces, Unit,
-    UnitHandle,
+    EthernetAddresses, Lendable, OutsideTheUnit, PLACES, ReceivePort, Received, Rest, Round,
+    RxHead, RxHeader, Staged, StagedPlaces, Unit, UnitHandle,
 };
