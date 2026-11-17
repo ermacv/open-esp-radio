@@ -380,6 +380,9 @@ enum Kind {
     /// The gap run's sender: one setting's pairs and how they ended.
     #[cfg(feature = "gap")]
     GapSent = 16,
+    /// The stream's sender: frames sent and how they ended.
+    #[cfg(feature = "stream")]
+    StreamSent = 17,
 }
 
 const WIDTH: usize = 22;
@@ -557,6 +560,8 @@ mod amsdu;
 mod gap;
 #[cfg(feature = "receiver")]
 mod receiver;
+#[cfg(feature = "stream")]
+mod stream;
 #[cfg(feature = "transmit")]
 mod transmit;
 #[cfg(all(feature = "transmit", feature = "receiver"))]

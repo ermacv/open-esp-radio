@@ -55,6 +55,9 @@ amsdu = ["transmit"]
 # The gap run (`tasks/163`): a short frame after a 1 500-octet one under nine
 # settings, in place of case C's rounds.
 gap = ["amsdu"]
+# Block B's sender (`tasks/165`, on the unmerged branch `probe/rx-rebind-2`):
+# 500-octet frames with their counter every 64 octets, one after another.
+stream = ["amsdu"]
 
 [lints]
 workspace = true

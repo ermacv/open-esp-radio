@@ -3,10 +3,10 @@
 //! [`case_c`](crate::case_c)'s cases a round, each awaited, in the round's
 //! drawn order; counted per case and per the frame before it.
 use super::transmit::{Descriptor, Frames};
-#[cfg(not(feature = "gap"))]
+#[cfg(not(any(feature = "gap", feature = "stream")))]
 use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start};
 use super::*;
-#[cfg(not(feature = "gap"))]
+#[cfg(not(any(feature = "gap", feature = "stream")))]
 use crate::case_c::{CASES, ROUNDS, before_index, byte, order};
 
 /// What case C borrows from part two's series.
@@ -23,18 +23,22 @@ pub(super) struct AmsduParts<'a> {
 /// The rounds, each frame awaited; per case: sent, acknowledged (status
 /// 0), ACK timeouts (status 5), other ends.
 pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
-    #[cfg(feature = "gap")]
+    #[cfg(feature = "stream")]
+    {
+        super::stream::series(parts, access).await
+    }
+    #[cfg(all(feature = "gap", not(feature = "stream")))]
     {
         super::gap::series(parts, access).await
     }
-    #[cfg(not(feature = "gap"))]
+    #[cfg(not(any(feature = "gap", feature = "stream")))]
     {
         rounds(parts, access).await
     }
 }
 
 /// Case C's rounds.
-#[cfg(not(feature = "gap"))]
+#[cfg(not(any(feature = "gap", feature = "stream")))]
 async fn rounds(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
     let AmsduParts {
         frames,
