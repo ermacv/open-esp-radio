@@ -274,6 +274,8 @@ pub(super) struct Controller<'id> {
     pub frames: Vec<(Option<u8>, Vec<u8>)>,
     /// The times a reply of the receive agreements was told owed.
     pub replies: u32,
+    /// The receive agreements' commands told ended.
+    pub agreements_ended: u32,
 }
 
 impl<'id> Told<'id> for Controller<'id> {
@@ -301,6 +303,10 @@ impl<'id> Told<'id> for Controller<'id> {
 
     fn reply_owed(&mut self) {
         self.replies += 1;
+    }
+
+    fn agreement_ended(&mut self) {
+        self.agreements_ended += 1;
     }
 
     fn frame<M: RxMetadata>(&mut self, peer: Option<u8>, frame: &Received<'_, M>) {
@@ -409,6 +415,7 @@ impl<'id, const S: usize, const D: usize> Around<'id, S, D> {
                 named_peers: Vec::new(),
                 frames: Vec::new(),
                 replies: 0,
+                agreements_ended: 0,
             },
             micros: 1,
         }

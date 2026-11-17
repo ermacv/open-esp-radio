@@ -1,12 +1,16 @@
 //! The receive Block Ack agreements of one association: ADDBA negotiation,
 //! reorder, BlockAckReq, inactivity, DELBA and the replies they owe.
 //!
-//! The owner holds the integration's affine bank slots and retained-frame
-//! owners and decides every agreement edge. It never touches a port itself:
-//! each bank and frame transition is one call of the caller's
-//! [`RxBlockAckPort`], which carries it out. Retained frames are the port's
-//! receive owners; their payloads are never copied. A receive credit stays
-//! free to close a reorder hole.
+//! The owner holds the integration's affine bank slots and the handles of
+//! the frames it retains, and decides every agreement edge. It never
+//! touches a port itself: an agreement's addition and its end are commands
+//! its caller begins ([`RxBlockAckView::next_command`]) and reports by the
+//! bank's ticket ([`RxBlockAckView::added`], [`RxBlockAckView::emptied`]).
+//! A received frame is read in place for the length of a call (its view and
+//! its metadata by reference); the owner keeps its handle alone, never its
+//! bytes. A frame it would retain is taken only while the caller has room
+//! beyond the place it keeps for the frame that closes the hole
+//! ([`RetainRoom`]).
 
 use oer_portable_events::{EventSink, report};
 
@@ -173,16 +177,34 @@ enum Bank<T: RxBlockAckTypes> {
     AddCommand { negotiation: RxBlockAckNegotiation },
     /// The agreement runs.
     Active { session: Session<T>, reply: Reply },
-    /// Ended: the agreement waits for the command place to be removed.
-    Ending(T::Running),
-    /// Its removal runs in the port.
-    EndCommand,
+    /// Ended: the agreement of `tid` waits for the command place to be
+    /// removed.
+    Ending { running: T::Running, tid: u8 },
+    /// The removal of `tid`'s agreement runs in the port.
+    EndCommand { tid: u8 },
+    /// The slot went home with the data's stop ([`RxBlockAckStorage::slots_home`]);
+    /// the storage serves nothing until it is built again or the slots come
+    /// back ([`RxBlockAckStorage::slots_back`]).
+    Away,
     /// Inside one method, between two of the above: the slot or the
     /// agreement moves by value. Never seen outside it.
     InTransition,
 }
 
 impl<T: RxBlockAckTypes> Bank<T> {
+    /// The TID the bank is not free for: its agreement's, added, running or
+    /// ending.
+    fn tid(&self) -> Option<u8> {
+        match self {
+            Self::Adding { negotiation, .. } | Self::AddCommand { negotiation } => {
+                Some(negotiation.response().tid)
+            }
+            Self::Active { session, .. } => Some(session.tid()),
+            Self::Ending { tid, .. } | Self::EndCommand { tid } => Some(*tid),
+            Self::Free(_) | Self::Away | Self::InTransition => None,
+        }
+    }
+
     const fn active(&self) -> Option<&Session<T>> {
         match self {
             Self::Active { session, .. } => Some(session),
@@ -198,16 +220,27 @@ impl<T: RxBlockAckTypes> Bank<T> {
     }
 }
 
-/// A command an agreement bank owes the port: its addition or its end.
+/// A command an agreement bank owes the port: its addition or its end, with
+/// the ticket its end is reported by.
 pub enum BankCommand<T: RxBlockAckTypes> {
     /// Add `agreement` in `slot` for the bank.
     Add {
-        bank: u8,
+        ticket: BankTicket,
         slot: T::Slot,
         agreement: SupportedBlockAck<T::Caps>,
     },
     /// End the bank's agreement.
-    End { bank: u8, running: T::Running },
+    End {
+        ticket: BankTicket,
+        running: T::Running,
+    },
+}
+
+/// The bank whose command runs: made only by [`RxBlockAckView::next_command`]
+/// and consumed by the command's end, so an end names the bank that began it.
+#[derive(Debug, Eq, PartialEq)]
+pub struct BankTicket {
+    bank: u8,
 }
 
 /// Whether the caller has a place for one more retained frame: the reorder
@@ -291,7 +324,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
         // push below is refused; a refused one stays in its bank.
         let mut slots = heapless::Vec::<T::Slot, BANKS>::new();
         for bank in self.banks.iter_mut() {
-            if let Bank::Free(slot) = core::mem::replace(bank, Bank::InTransition)
+            if let Bank::Free(slot) = core::mem::replace(bank, Bank::Away)
                 && let Err(slot) = slots.push(slot)
             {
                 *bank = Bank::Free(slot);
@@ -302,7 +335,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq, const BANKS: usize, const FRAMES: usize>
             // go back to the banks they left, in order.
             let mut slots = slots.into_iter();
             for bank in self.banks.iter_mut() {
-                if matches!(bank, Bank::InTransition)
+                if matches!(bank, Bank::Away)
                     && let Some(slot) = slots.next()
                 {
                     *bank = Bank::Free(slot);
@@ -483,7 +516,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                         released: u8::try_from(freed.iter().count()).unwrap_or(u8::MAX),
                         missing: 0,
                     });
-                    Bank::Ending(running)
+                    Bank::Ending { running, tid }
                 }
                 Bank::Adding { slot, .. } => Bank::Free(slot),
                 other => other,
@@ -510,7 +543,8 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     pub fn next_command(&mut self) -> Option<BankCommand<T>> {
         let (index, bank) = (0_u8..)
             .zip(self.banks.iter_mut())
-            .find(|(_, bank)| matches!(bank, Bank::Adding { .. } | Bank::Ending(_)))?;
+            .find(|(_, bank)| matches!(bank, Bank::Adding { .. } | Bank::Ending { .. }))?;
+        let ticket = BankTicket { bank: index };
         match core::mem::replace(bank, Bank::InTransition) {
             Bank::Adding {
                 slot,
@@ -519,17 +553,14 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             } => {
                 *bank = Bank::AddCommand { negotiation };
                 Some(BankCommand::Add {
-                    bank: index,
+                    ticket,
                     slot,
                     agreement,
                 })
             }
-            Bank::Ending(running) => {
-                *bank = Bank::EndCommand;
-                Some(BankCommand::End {
-                    bank: index,
-                    running,
-                })
+            Bank::Ending { running, tid } => {
+                *bank = Bank::EndCommand { tid };
+                Some(BankCommand::End { ticket, running })
             }
             // Found adding or ending above: this does not happen. Should
             // it, the bank keeps what it was.
@@ -545,16 +576,20 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
     /// waits to be removed, and the request is declined.
     pub fn added(
         &mut self,
-        bank: u8,
+        ticket: BankTicket,
         running: T::Running,
         events: &mut impl EventSink<RxBlockAckEvent>,
     ) {
+        let BankTicket { bank } = ticket;
         let Some(place) = self.banks.get_mut(usize::from(bank)) else {
             return;
         };
         let Bank::AddCommand { negotiation } = core::mem::replace(place, Bank::InTransition) else {
-            // The engine ends only the command it began on this bank.
-            *place = Bank::Ending(running);
+            // The ticket was this bank's addition's: this does not happen.
+            // Should it, the agreement waits to be removed; its TID is the
+            // one the bank was for.
+            let tid = place.tid().unwrap_or(0);
+            *place = Bank::Ending { running, tid };
             return;
         };
         let response = negotiation.response();
@@ -568,7 +603,10 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
                 };
             }
             Err((running, _)) => {
-                *place = Bank::Ending(running);
+                *place = Bank::Ending {
+                    running,
+                    tid: response.tid,
+                };
                 let _queued = self.queue_response(AddbaResponse {
                     status: AddbaStatus::RequestDeclined,
                     ..response
@@ -579,15 +617,18 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
 
     /// `running` waits again to be removed: the end [`Self::next_command`]
     /// gave could not begin.
-    pub fn owe_end(&mut self, bank: u8, running: T::Running) {
+    pub fn owe_end(&mut self, ticket: BankTicket, running: T::Running) {
+        let BankTicket { bank } = ticket;
         if let Some(place) = self.banks.get_mut(usize::from(bank)) {
-            *place = Bank::Ending(running);
+            let tid = place.tid().unwrap_or(0);
+            *place = Bank::Ending { running, tid };
         }
     }
 
-    /// The command of `bank` ended with its slot empty: an addition that
-    /// expired, or a removal.
-    pub fn emptied(&mut self, bank: u8, slot: T::Slot) {
+    /// The command of the ticket's bank ended with its slot empty: an
+    /// addition that expired, or a removal.
+    pub fn emptied(&mut self, ticket: BankTicket, slot: T::Slot) {
+        let BankTicket { bank } = ticket;
         if let Some(place) = self.banks.get_mut(usize::from(bank)) {
             *place = Bank::Free(slot);
         }
@@ -671,14 +712,26 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
             }
             return self.queue_response(response);
         }
+        // A TID has at most one bank that is not free: a request for a TID
+        // being added is that agreement's own (its response follows the
+        // addition); one being ended, or running and asked anew, is
+        // unanswered until its bank is free.
         let tid = parsed.tid();
-        if let Some(existing) = self
-            .banks
-            .iter()
-            .position(|bank| bank.active().is_some_and(|active| active.tid() == tid))
-        {
-            self.stop(existing, AgreementStop::Replaced, events);
-            return Err(RxBlockAckCapacity);
+        if let Some(existing) = self.banks.iter().position(|bank| bank.tid() == Some(tid)) {
+            {
+                return match self.banks.get(existing) {
+                    Some(Bank::Adding { negotiation, .. } | Bank::AddCommand { negotiation }) => {
+                        Ok(AddbaOutcome::Repeated {
+                            window: negotiation.response().window,
+                        })
+                    }
+                    Some(Bank::Active { .. }) => {
+                        self.stop(existing, AgreementStop::Replaced, events);
+                        Err(RxBlockAckCapacity)
+                    }
+                    _ => Err(RxBlockAckCapacity),
+                };
+            }
         }
         let available = self
             .banks
@@ -689,7 +742,10 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let freeing = self.banks.iter().any(|bank| {
             matches!(
                 bank,
-                Bank::Adding { .. } | Bank::AddCommand { .. } | Bank::Ending(_) | Bank::EndCommand
+                Bank::Adding { .. }
+                    | Bank::AddCommand { .. }
+                    | Bank::Ending { .. }
+                    | Bank::EndCommand { .. }
             )
         });
         if available.is_none() && freeing && agreements == RxAgreements::Admitted {
@@ -785,7 +841,7 @@ impl<T: RxBlockAckTypes, E: Copy + Eq> RxBlockAckView<'_, T, E> {
         let tid = session.tid();
         report(events, || RxBlockAckEvent::Stopped { tid, reason });
         let (running, released) = session.stop();
-        *bank = Bank::Ending(running);
+        *bank = Bank::Ending { running, tid };
         self.released(released, tid, ReorderCause::Stop, events);
     }
 

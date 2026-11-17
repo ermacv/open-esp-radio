@@ -56,13 +56,18 @@ fn protected(sequence: u16, tag: u8) -> Vec<u8> {
     frame
 }
 
-/// A QoS data MPDU carrying an A-MSDU of one subframe a tag.
+/// A QoS data MPDU of number 0 carrying an A-MSDU of one subframe a tag.
 fn amsdu(tags: &[u8]) -> Vec<u8> {
+    amsdu_numbered(0, tags)
+}
+
+/// A QoS data MPDU of `sequence` carrying an A-MSDU of one subframe a tag.
+pub(super) fn amsdu_numbered(sequence: u16, tags: &[u8]) -> Vec<u8> {
     let mut frame = std::vec![0x88, 0x02, 0, 0];
     frame.extend_from_slice(&STATION);
     frame.extend_from_slice(&ACCESS_POINT_ADDRESS);
     frame.extend_from_slice(&SOURCE);
-    frame.extend_from_slice(&[0, 0]);
+    frame.extend_from_slice(&(sequence << 4).to_le_bytes());
     // QoS Control: TID 0, A-MSDU Present.
     frame.extend_from_slice(&[0x80, 0]);
     for (index, tag) in tags.iter().enumerate() {
@@ -540,7 +545,7 @@ fn an_addba_request_adds_its_agreement_by_a_command_and_owes_its_response() {
 fn key_busy<const POOL: usize>(engine: &mut StationEngine<'_, POOL>) -> bool {
     let mut busy = false;
     linked(engine, |peer| {
-        busy = matches!(peer.key(), KeyPlace::Busy(_))
+        busy = matches!(peer.key(), KeyPlace::Agreeing(_))
     });
     busy
 }
@@ -706,6 +711,157 @@ fn a_stop_ends_the_agreements_and_their_slots_come_home() {
         assert!(
             stopped,
             "the agreement's end, the gate's closing, the rights"
+        );
+    });
+}
+
+// The architect's cases of the review of #1324 (tasks/145).
+
+/// EAPOL sent as QoS data of the agreement's TID takes a number of its
+/// window: the frame after it must not wait for the gap.
+#[test]
+fn architect_eapol_of_the_agreements_tid_leaves_no_hole() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        around.port.land(&qos_data(100, 1), meta());
+        let mut eapol = qos_data(101, 2);
+        eapol[32] = 0x88;
+        eapol[33] = 0x8e;
+        around.port.land(&eapol, meta());
+        around.port.land(&qos_data(102, 3), meta());
+        let _ = engine.received(&mut around.turn());
+        assert_eq!(
+            around.told.frames.len(),
+            1,
+            "the EAPOL frame is the controller's"
+        );
+        assert_eq!(tags(&around), [1, 3], "102 follows 101 at once");
+    });
+}
+
+/// A unit that waits is not overtaken by a later one the network can borrow.
+#[test]
+fn architect_a_later_unit_does_not_overtake_one_that_waits() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        around.net.lend_limit = 1;
+        around.net.copy_room = 0;
+        around.port.land(&amsdu(&[1, 2]), meta());
+        around.port.land(&data(2, IPV4, 3), meta());
+        let _ = engine.received(&mut around.turn());
+        assert!(
+            around.net.received.is_empty(),
+            "the A-MSDU waits (no room to copy), and 3 went ahead of it: {:?}",
+            around.net.received
+        );
+    });
+}
+
+/// The same under an agreement: what the reorder releases behind a unit that
+/// waits does not overtake it.
+#[test]
+fn architect_a_released_unit_does_not_overtake_one_that_waits() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 0);
+        around.net.lend_limit = 1;
+        around.net.copy_room = 0;
+        // An A-MSDU of TID 0, number 0 (the helper's), then number 1.
+        around.port.land(&amsdu(&[1, 2]), meta());
+        around.port.land(&qos_data(1, 3), meta());
+        let _ = engine.received(&mut around.turn());
+        assert!(
+            around.net.received.is_empty(),
+            "the A-MSDU waits, and 3 went ahead of it: {:?}",
+            around.net.received
+        );
+    });
+}
+
+/// The peer's ADDBA Request again while its agreement's addition runs
+/// starts no second agreement of the TID.
+#[test]
+fn architect_a_request_repeated_during_its_addition_adds_one_agreement() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        around.port.land(&addba(100), meta());
+        let _ = engine.received(&mut around.turn());
+        assert!(key_busy(&mut engine), "the addition runs");
+        around.port.land(&addba(100), meta());
+        let _ = engine.received(&mut around.turn());
+        let mut replies = 0;
+        for _ in 0..8 {
+            let _ = engine.round(&mut around.turn());
+            linked(&mut engine, |peer| {
+                while let Some(reply) = peer.rx_reply() {
+                    assert_eq!(reply.body()[1], 1, "an ADDBA Response");
+                    replies += 1;
+                    reply.sent();
+                }
+            });
+        }
+        assert_eq!(replies, 1, "one agreement of TID 0, one response");
+    });
+}
+
+/// The controller that finds the gate's closing or a key's change refused
+/// for an agreement's command is told when that command ends.
+#[test]
+fn architect_the_end_of_an_agreements_command_is_told() {
+    running::<STATION_SINGLES, 0, _>(|run| {
+        let mut engine = StationEngine::<'_, 8>::new(8, POLICY);
+        let mut around = station(run, &mut engine, 2, HOUR);
+        agreed(&mut engine, &mut around, 100);
+        // The peer's DELBA ends the agreement: its removal's command runs.
+        let mut delba = std::vec![0xd0, 0x00, 0, 0];
+        delba.extend_from_slice(&STATION);
+        delba.extend_from_slice(&ACCESS_POINT_ADDRESS);
+        delba.extend_from_slice(&ACCESS_POINT_ADDRESS);
+        delba.extend_from_slice(&[0, 0]);
+        delba.extend_from_slice(
+            &oer_protocols_ieee80211_wire::block_ack::frame::encode_delba(
+                0,
+                oer_protocols_ieee80211_wire::block_ack::frame::DelbaInitiator::Originator,
+                1,
+            )
+            .unwrap(),
+        );
+        around.port.land(&delba, meta());
+        let _ = engine.received(&mut around.turn());
+        assert!(key_busy(&mut engine), "the removal runs");
+        {
+            let mut data = station_flowing(&mut engine);
+            assert!(
+                matches!(data.gate(), GatePlace::OpenAgreeing(_)),
+                "the gate offers no closing now, and names the agreement's command"
+            );
+        }
+        let before = (
+            around.told.agreements_ended,
+            around.told.replies,
+            around.told.keys.len(),
+            around.told.frames.len(),
+            around.told.named.len(),
+        );
+        for _ in 0..8 {
+            let _ = engine.round(&mut around.turn());
+        }
+        assert!(!key_busy(&mut engine), "the removal ended");
+        let after = (
+            around.told.agreements_ended,
+            around.told.replies,
+            around.told.keys.len(),
+            around.told.frames.len(),
+            around.told.named.len(),
+        );
+        assert_ne!(
+            before, after,
+            "the controller was told nothing of the command's end"
         );
     });
 }

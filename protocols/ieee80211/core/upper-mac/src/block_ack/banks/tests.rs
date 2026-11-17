@@ -170,7 +170,7 @@ fn drive<E: Copy + Eq>(
     while let Some(command) = view.next_command() {
         match command {
             BankCommand::Add {
-                bank,
+                ticket,
                 slot,
                 agreement,
             } => {
@@ -179,11 +179,11 @@ fn drive<E: Copy + Eq>(
                     tid: agreement.get().1.get(),
                     window: agreement.get().3,
                 });
-                view.added(bank, (slot, agreement.get().1.get()), events);
+                view.added(ticket, (slot, agreement.get().1.get()), events);
             }
-            BankCommand::End { bank, running } => {
+            BankCommand::End { ticket, running } => {
                 port.0.push(Call::Remove(running.0));
-                view.emptied(bank, running.0);
+                view.emptied(ticket, running.0);
             }
         }
     }
@@ -1032,14 +1032,176 @@ fn an_expired_addition_frees_its_bank() {
         |_| {},
     )
     .unwrap();
-    let Some(BankCommand::Add { bank, slot, .. }) = view.next_command() else {
+    let Some(BankCommand::Add { ticket, slot, .. }) = view.next_command() else {
         panic!("the addition is owed");
     };
     assert!(
         view.next_command().is_none(),
         "one command at a time a bank"
     );
-    view.emptied(bank, slot);
+    view.emptied(ticket, slot);
     assert!(view.next_reply().is_none(), "nothing started: no response");
     assert!(storage.is_free());
+}
+
+/// Offer `action` to `view`, admitted, without carrying out any command.
+fn asked(view: &mut RxBlockAckView<'_, Types, u32>, action: BlockAckAction) {
+    tried(view, action).unwrap();
+}
+
+/// Offer `action` to `view`, admitted: a request left unanswered is the
+/// refusal of its capacity.
+fn tried(
+    view: &mut RxBlockAckView<'_, Types, u32>,
+    action: BlockAckAction,
+) -> Result<(), RxBlockAckRefused> {
+    view.offer(
+        now(1),
+        7,
+        bssid(),
+        action,
+        RxAgreements::Admitted,
+        &mut (),
+        |_| {},
+    )
+}
+
+/// The responses `view` owes, each taken as sent.
+fn replies(view: &mut RxBlockAckView<'_, Types, u32>) -> usize {
+    let mut count = 0;
+    while let Some(reply) = view.next_reply() {
+        view.sent(reply.place);
+        count += 1;
+    }
+    count
+}
+
+/// A request repeated while its TID's addition waits or runs is that
+/// agreement's own: one bank, one addition, one response after it.
+#[test]
+fn a_request_repeated_during_its_addition_takes_no_second_bank() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut view = storage.view();
+    asked(&mut view, request_for(5, 0, 8));
+    // While the addition waits for its command.
+    asked(&mut view, request_for(6, 0, 8));
+    let Some(BankCommand::Add { ticket, slot, .. }) = view.next_command() else {
+        panic!("the addition is owed");
+    };
+    // While the addition runs in the port.
+    asked(&mut view, request_for(7, 0, 8));
+    assert!(view.next_command().is_none(), "no second bank for TID 0");
+    assert_eq!(replies(&mut view), 0, "the response follows the addition");
+    view.added(ticket, (slot, 0), &mut ());
+    assert_eq!(replies(&mut view), 1, "one response, after the addition");
+    assert!(view.next_command().is_none());
+}
+
+/// A request for a TID whose agreement ends goes unanswered and takes no
+/// bank: the peer asks again once the bank is free.
+#[test]
+fn a_request_during_its_tids_end_is_unanswered() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 16>::new([10, 11], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offered(
+        now(1),
+        7,
+        bssid(),
+        request_for(5, 0, 8),
+        RxAgreements::Admitted,
+        &mut port,
+        &mut (),
+    )
+    .unwrap();
+    assert_eq!(replies(&mut view), 1);
+    // Asked anew with other parameters: the running agreement ends.
+    assert_eq!(
+        tried(&mut view, request_for(6, 0, 4)),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    // While its end waits for its command.
+    assert_eq!(
+        tried(&mut view, request_for(7, 0, 4)),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    let Some(BankCommand::End { ticket, running }) = view.next_command() else {
+        panic!("the end is owed");
+    };
+    // While its end runs in the port.
+    assert_eq!(
+        tried(&mut view, request_for(8, 0, 4)),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    assert!(view.next_command().is_none(), "no bank for an ending TID");
+    view.emptied(ticket, running.0);
+    assert_eq!(replies(&mut view), 0, "unanswered while it ended");
+    assert!(storage.is_free());
+}
+
+/// With every bank busy and one freeing, a request the station declines is
+/// still answered: only an admitted one waits for the bank.
+#[test]
+fn a_declined_request_is_answered_while_a_bank_frees() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut view = storage.view();
+    asked(&mut view, request_for(5, 0, 8));
+    view.offer(
+        now(1),
+        7,
+        bssid(),
+        request_for(6, 1, 8),
+        RxAgreements::Declined,
+        &mut (),
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(replies(&mut view), 1, "the decline is queued");
+}
+
+/// An end that could not begin is owed again, to the same bank.
+#[test]
+fn an_end_owed_again_is_given_again() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 1, 8>::new([10], GAP);
+    let mut view = storage.view();
+    let mut port = Recording::default();
+    view.offered(
+        now(1),
+        7,
+        bssid(),
+        request_for(5, 0, 8),
+        RxAgreements::Admitted,
+        &mut port,
+        &mut (),
+    )
+    .unwrap();
+    assert_eq!(
+        tried(&mut view, request_for(6, 0, 4)),
+        Err(RxBlockAckRefused::Capacity(RxBlockAckCapacity))
+    );
+    let Some(BankCommand::End { ticket, running }) = view.next_command() else {
+        panic!("the end is owed");
+    };
+    view.owe_end(ticket, running);
+    let Some(BankCommand::End { ticket, running }) = view.next_command() else {
+        panic!("the end is owed again");
+    };
+    view.emptied(ticket, running.0);
+    assert!(storage.is_free());
+}
+
+/// The slots that went home come back, and the banks serve again.
+#[test]
+fn the_slots_back_serve_again() {
+    let mut storage = RxBlockAckStorage::<Types, u32, 2, 8>::new([10, 11], GAP);
+    let slots = storage.slots_home().unwrap();
+    assert!(!storage.is_free(), "away, the banks serve nothing");
+    storage.slots_back(slots);
+    assert!(storage.is_free());
+    let mut view = storage.view();
+    asked(&mut view, request_for(5, 0, 8));
+    assert!(matches!(
+        view.next_command(),
+        Some(BankCommand::Add { slot: 10, .. })
+    ));
 }

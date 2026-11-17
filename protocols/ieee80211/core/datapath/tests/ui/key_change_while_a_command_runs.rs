@@ -9,7 +9,8 @@ pub type Station<'id, T> =
     Engine<'id, ModelPort<'id, 8, 0>, Arenas, T, 1, 8, 8, MODEL_GROUPS, MODEL_AGREEMENTS>;
 
 // A key's place offers its change only while no command runs: not while a
-// key changes, nor while the gate closes.
+// key changes, nor while the gate closes, nor while a receive agreement's
+// command runs.
 pub fn changing<T: TxKey>(engine: &mut Station<'_, T>, change: KeyChange<T>) {
     if let DataPlace::Flowing(mut data) = engine.data()
         && let PeerPlace::Linked(mut peer) = data.peer(ACCESS_POINT)
@@ -21,6 +22,11 @@ pub fn changing<T: TxKey>(engine: &mut Station<'_, T>, change: KeyChange<T>) {
                 key.change(change); // ui-error: E0599
             }
             KeyPlace::Busy(key) => {
+                let _ = &key;
+                #[cfg(ui_reject)]
+                key.change(change); // ui-error: E0599
+            }
+            KeyPlace::Agreeing(key) => {
                 let _ = &key;
                 #[cfg(ui_reject)]
                 key.change(change); // ui-error: E0599

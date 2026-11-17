@@ -65,7 +65,8 @@ use oer_protocols_ieee80211_contracts_port::{
 use oer_protocols_ieee80211_contracts_security::Ccmp128Key;
 use oer_protocols_ieee80211_core_installation::{DataStop, Rest};
 use oer_protocols_ieee80211_core_upper_mac::block_ack::{
-    BankCommand, RX_BLOCK_ACK_WINDOW, ReplyPlace, RxAgreements, RxBlockAckStorage, RxBlockAckTypes,
+    BankCommand, BankTicket, RX_BLOCK_ACK_WINDOW, ReplyPlace, RxAgreements, RxBlockAckStorage,
+    RxBlockAckTypes,
 };
 use oer_protocols_ieee80211_wire::address::{Bssid, IndividualAddress};
 use oer_protocols_ieee80211_wire::block_ack::frame::ADDBA_ACTION_BODY_LEN;
@@ -165,6 +166,10 @@ pub trait Told<'id> {
     /// The receive agreements owe a reply (an ADDBA Response or a DELBA):
     /// the station's linked peer's `rx_reply` holds it.
     fn reply_owed(&mut self);
+
+    /// A receive agreement's command ended: the command place is free, and
+    /// a closing of the gate or a key's change may begin.
+    fn agreement_ended(&mut self);
 
     /// A received management frame or EAPOL of `peer` (`None`: of no linked
     /// peer), read in place inside the round: it goes back to the ring
@@ -395,7 +400,7 @@ enum Interface<'id, T> {
     Agreeing {
         gate: Gate<'id>,
         command: InCommand<'id, AgreementHeld<'id>>,
-        bank: u8,
+        ticket: BankTicket,
         key: StationKey<'id, T>,
     },
     /// The gate's closing runs: the gate is the port's.
@@ -997,21 +1002,21 @@ impl<
             Interface::Agreeing {
                 gate,
                 command,
-                bank,
+                ticket,
                 key,
             } => match port.poll_agreement(command, now, sink) {
                 CommandPoll::Pending(command) => (
                     Interface::Agreeing {
                         gate,
                         command,
-                        bank,
+                        ticket,
                         key,
                     },
                     None,
                 ),
                 CommandPoll::Ended(place, end) => (
                     Interface::Idle { gate, place, key },
-                    Some(Ending::Agreement { bank, end }),
+                    Some(Ending::Agreement { ticket, end }),
                 ),
             },
             idle @ (Interface::Idle { .. } | Interface::InTransition) => (idle, None),
@@ -1036,7 +1041,7 @@ pub enum Ending<'id, T> {
     GateClosed(GateClosed<'id>),
     /// A receive agreement's command ended, for the reorder's `bank`.
     Agreement {
-        bank: u8,
+        ticket: BankTicket,
         end: AgreementEnd<'id>,
     },
     Key {
@@ -1276,7 +1281,7 @@ where
         if let Some(ending) = self.poll_command(Seal(()), turn) {
             match ending {
                 Ending::GateClosed(closed) => turn.told.gate_closed(closed),
-                Ending::Agreement { bank, end } => self.agreement_ended(bank, end, turn),
+                Ending::Agreement { ticket, end } => self.agreement_ended(ticket, end, turn),
                 Ending::Key { end, then } => {
                     self.keyed(Seal(()), turn.port, turn.network, turn.events);
                     // A rekey's removal is followed by its installation at
@@ -1307,7 +1312,7 @@ where
     /// a reply it now owes is told the controller.
     fn agreement_ended<N, R, E, C: Told<'id>>(
         &mut self,
-        bank: u8,
+        ticket: BankTicket,
         end: AgreementEnd<'id>,
         turn: &mut Turn<'_, P, N, R, E, C>,
     ) {
@@ -1316,12 +1321,13 @@ where
         };
         let mut agreements = running.agreements.view();
         match end {
-            AgreementEnd::Added(agreement) => agreements.added(bank, agreement, &mut ()),
-            AgreementEnd::Empty(slot) => agreements.emptied(bank, slot),
+            AgreementEnd::Added(agreement) => agreements.added(ticket, agreement, &mut ()),
+            AgreementEnd::Empty(slot) => agreements.emptied(ticket, slot),
         }
         if agreements.next_reply().is_some() {
             turn.told.reply_owed();
         }
+        turn.told.agreement_ended();
     }
 
     /// Begin the command a receive agreement's bank owes, when no command
@@ -1343,18 +1349,20 @@ where
         };
         *interface = match core::mem::replace(interface, Interface::InTransition) {
             Interface::Idle { gate, place, key } => {
-                let (bank, command) = match owed {
+                let (ticket, command) = match owed {
                     BankCommand::Add {
-                        bank,
+                        ticket,
                         slot,
                         agreement,
-                    } => (bank, AgreementCommand::Add { slot, agreement }),
-                    BankCommand::End { bank, running } => (bank, AgreementCommand::End(running)),
+                    } => (ticket, AgreementCommand::Add { slot, agreement }),
+                    BankCommand::End { ticket, running } => {
+                        (ticket, AgreementCommand::End(running))
+                    }
                 };
                 Interface::Agreeing {
                     gate,
                     command: turn.port.begin_agreement(place, command, turn.now),
-                    bank,
+                    ticket,
                     key,
                 }
             }
@@ -1363,9 +1371,11 @@ where
             // goes back to it.
             other => {
                 match owed {
-                    BankCommand::Add { bank, slot, .. } => agreements.view().emptied(bank, slot),
-                    BankCommand::End { bank, running } => {
-                        agreements.view().owe_end(bank, running);
+                    BankCommand::Add { ticket, slot, .. } => {
+                        agreements.view().emptied(ticket, slot);
+                    }
+                    BankCommand::End { ticket, running } => {
+                        agreements.view().owe_end(ticket, running);
                     }
                 }
                 other
@@ -1525,10 +1535,13 @@ pub enum GatePlace<'a, E> {
     Shut(ShutGate<'a, E>),
     /// The engine holds it open.
     Open(OpenGate<'a, E>),
-    /// Open while a command runs (a key's, or a receive agreement's): it
-    /// offers no closing until the command's end. While a key's runs
-    /// nothing goes ([`Told::key_ended`]); an agreement's stops nothing.
+    /// Open while a key's command runs: nothing goes, and it offers no
+    /// closing until the key's end ([`Told::key_ended`]).
     OpenKeying(KeyingGate<'a, E>),
+    /// Open while a receive agreement's command runs: the data goes on,
+    /// and it offers no closing until the command's end
+    /// ([`Told::agreement_ended`]).
+    OpenAgreeing(AgreeingGate<'a, E>),
     /// Its closing runs in the port; it ends in [`Told::gate_closed`].
     Closing(ClosingGate<'a, E>),
 }
@@ -1542,6 +1555,10 @@ pub struct OpenGate<'a, E>(&'a mut E);
 /// A closing gate's handle: it offers no transition.
 pub struct ClosingGate<'a, E>(PhantomData<&'a mut E>);
 
+/// An open gate's handle while a receive agreement's command runs: it
+/// offers no transition.
+pub struct AgreeingGate<'a, E>(PhantomData<&'a mut E>);
+
 /// An open gate's handle while a key's command runs: it offers no
 /// transition.
 pub struct KeyingGate<'a, E>(PhantomData<&'a mut E>);
@@ -1552,6 +1569,9 @@ pub enum KeyPlace<'a, E> {
     Idle(IdleKey<'a, E>),
     /// A key's command runs; it ends in [`Told::key_ended`].
     Changing(ChangingKey<'a, E>),
+    /// A receive agreement's command runs; it ends in
+    /// [`Told::agreement_ended`].
+    Agreeing(AgreeingKey<'a, E>),
     /// Another command runs (the gate's closing).
     Busy(BusyKey<'a, E>),
 }
@@ -1561,6 +1581,10 @@ pub struct IdleKey<'a, E>(&'a mut E);
 
 /// A changing key's handle: it offers no transition.
 pub struct ChangingKey<'a, E>(PhantomData<&'a mut E>);
+
+/// A key place's handle while a receive agreement's command runs: it offers
+/// no transition.
+pub struct AgreeingKey<'a, E>(PhantomData<&'a mut E>);
 
 /// A busy key place's handle: it offers no transition.
 pub struct BusyKey<'a, E>(PhantomData<&'a mut E>);
@@ -1614,16 +1638,14 @@ where
                 gate: Gate::Open(_),
                 ..
             }) => GatePlace::Open(OpenGate(engine)),
-            Some(
-                Interface::Keying {
-                    gate: Gate::Open(_),
-                    ..
-                }
-                | Interface::Agreeing {
-                    gate: Gate::Open(_),
-                    ..
-                },
-            ) => GatePlace::OpenKeying(KeyingGate(PhantomData)),
+            Some(Interface::Keying {
+                gate: Gate::Open(_),
+                ..
+            }) => GatePlace::OpenKeying(KeyingGate(PhantomData)),
+            Some(Interface::Agreeing {
+                gate: Gate::Open(_),
+                ..
+            }) => GatePlace::OpenAgreeing(AgreeingGate(PhantomData)),
             Some(Interface::Closing { .. } | Interface::InTransition) => {
                 GatePlace::Closing(ClosingGate(PhantomData))
             }
@@ -2218,10 +2240,10 @@ where
         match engine.interface_mut() {
             Some(Interface::Idle { .. }) => KeyPlace::Idle(IdleKey(engine)),
             Some(Interface::Keying { .. }) => KeyPlace::Changing(ChangingKey(PhantomData)),
-            Some(
-                Interface::Closing { .. } | Interface::Agreeing { .. } | Interface::InTransition,
-            )
-            | None => KeyPlace::Busy(BusyKey(PhantomData)),
+            Some(Interface::Agreeing { .. }) => KeyPlace::Agreeing(AgreeingKey(PhantomData)),
+            Some(Interface::Closing { .. } | Interface::InTransition) | None => {
+                KeyPlace::Busy(BusyKey(PhantomData))
+            }
         }
     }
 }
@@ -3745,9 +3767,9 @@ where
                         Interface::Agreeing {
                             gate: g,
                             key: k,
-                            bank,
+                            ticket,
                             ..
-                        } => std::format!("agreeing {bank} {} {}", gate(g), key(k)),
+                        } => std::format!("agreeing {ticket:?} {} {}", gate(g), key(k)),
                         Interface::InTransition => std::string::String::from("moving"),
                     },
                     running.form.key()

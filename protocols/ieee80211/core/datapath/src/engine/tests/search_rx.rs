@@ -25,7 +25,7 @@ const DEPTH: usize = 24;
 /// What the search may still do.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub(super) struct Bounds {
-    /// Frames that arrive, of the kinds in [`KINDS`]' order of counts.
+    /// Frames that arrive, of the mode's list ([`PLAIN`], [`AGREED`]).
     pub units: usize,
     /// Lent units the network gives back.
     pub returns: usize,
@@ -45,32 +45,48 @@ pub(super) enum Agreement {
     Tid0,
 }
 
-/// The frames that may arrive, the first `units` of them, in any order: a
-/// kind and, for data under an agreement, its sequence number (the model's
-/// list, the retry brought forward so that the ordinary bounds reach it:
-/// two out of order before the first, a retry of a number sent, the first,
-/// then a gap).
-const KINDS: [(Kind, u16); 8] = [
-    (Kind::Data, 1),
-    (Kind::Data, 2),
-    (Kind::Data, 2),
+/// The frames that may arrive without an agreement, the first `units` of
+/// them, a kind at a time in their order: the list C1 searched, with an
+/// A-MSDU (which the network cannot borrow) second.
+const PLAIN: [(Kind, u16); 8] = [
+    (Kind::Data, 0),
+    (Kind::Amsdu, 0),
     (Kind::Data, 0),
     (Kind::Management, 0),
+    (Kind::Data, 0),
+    (Kind::Data, 0),
+    (Kind::Management, 0),
+    (Kind::Data, 0),
+];
+
+/// The frames that may arrive under an agreement, the first `units` of
+/// them, in any order, each with its number: one before the first, an
+/// A-MSDU, the first, a management frame, a retry of a number sent, then
+/// a gap (the model's list, ordered so that each kind is within the
+/// ordinary bounds).
+const AGREED: [(Kind, u16); 8] = [
+    (Kind::Data, 1),
+    (Kind::Amsdu, 2),
+    (Kind::Data, 0),
+    (Kind::Management, 0),
+    (Kind::Data, 1),
     (Kind::Data, 3),
     (Kind::Data, 5),
-    (Kind::Management, 1),
+    (Kind::Management, 0),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 enum Kind {
     Data,
+    /// A data frame carrying an A-MSDU of two MSDUs: copied, never lent.
+    Amsdu,
     Management,
 }
 
 /// One step of the search.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Move {
-    /// The frame of this index of [`KINDS`] arrives: the ring's signal.
+    /// The frame of this index of the mode's list arrives: the ring's signal.
     Arrives(usize),
     /// A reorder gap times out.
     Gap,
@@ -92,8 +108,12 @@ struct World<'id> {
     around: Around<'id, STATION_SINGLES, 0>,
     left: Bounds,
     agreement: Agreement,
-    /// Each arrived frame's index of [`KINDS`], by its id less one.
+    /// Each arrived frame's index of its mode's list, by its id less one.
     arrived: Vec<usize>,
+    /// Under an agreement, the number the world expects the reorder to let
+    /// go next: its own arithmetic of what arrived, what went and what a
+    /// gap gave up.
+    start: u16,
     /// The data ids the network got, in order.
     delivered: Vec<u8>,
     /// What of the network's and the controller's the world read so far.
@@ -132,6 +152,7 @@ impl<'id> World<'id> {
             around,
             left: bounds,
             agreement,
+            start: 0,
             arrived: Vec::new(),
             delivered: Vec::new(),
             received_read: 0,
@@ -149,7 +170,8 @@ impl<'id> World<'id> {
     /// without an agreement differ only in their order).
     fn sends(&self) -> Vec<usize> {
         let limit = self.arrived.len() + self.left.units;
-        let left = (0..limit.min(KINDS.len())).filter(|index| !self.arrived.contains(index));
+        let kinds = self.kinds();
+        let left = (0..limit.min(kinds.len())).filter(|index| !self.arrived.contains(index));
         match self.agreement {
             Agreement::Tid0 => left.collect(),
             Agreement::None => {
@@ -157,7 +179,7 @@ impl<'id> World<'id> {
                 for index in left {
                     if !sends
                         .iter()
-                        .any(|seen: &usize| KINDS[*seen].0 == KINDS[index].0)
+                        .any(|seen: &usize| kinds[*seen].0 == kinds[index].0)
                     {
                         sends.push(index);
                     }
@@ -165,6 +187,26 @@ impl<'id> World<'id> {
                 sends
             }
         }
+    }
+
+    /// The mode's list of frames.
+    const fn kinds(&self) -> &'static [(Kind, u16); 8] {
+        match self.agreement {
+            Agreement::None => &PLAIN,
+            Agreement::Tid0 => &AGREED,
+        }
+    }
+
+    /// The numbers of the units the engine holds in a place and has not
+    /// lent.
+    fn held_units(&self) -> Vec<u16> {
+        self.waiting_places()
+            .iter()
+            .filter_map(|place| {
+                let bytes = self.around.port.place_bytes(*place)?;
+                (bytes.len() > 24).then(|| u16::from_le_bytes([bytes[22], bytes[23]]) >> 4)
+            })
+            .collect()
     }
 
     /// The places of the units that wait for the network: held, not lent.
@@ -184,17 +226,29 @@ impl<'id> World<'id> {
             .collect()
     }
 
-    /// The units that wait for the network, as the engine holds them.
-    fn waiting(&mut self) -> usize {
-        self.engine.rx_held().0
+    /// The units that wait for the network, by the world's own count:
+    /// without an agreement every unit held and not lent; under one, the
+    /// run of numbers from the next the reorder lets go (released in order,
+    /// not yet taken by the network).
+    fn waiting(&self) -> usize {
+        match self.agreement {
+            Agreement::None => self.waiting_places().len(),
+            Agreement::Tid0 => {
+                let held = self.held_units();
+                (0_u16..)
+                    .take_while(|n| held.contains(&self.start.wrapping_add(*n)))
+                    .count()
+            }
+        }
     }
 
-    /// The units the reorder retains.
-    fn retained(&mut self) -> usize {
-        self.engine.rx_held().1
+    /// The units the reorder retains, by the world's own count: the held
+    /// ones beyond the waiting run.
+    fn retained(&self) -> usize {
+        self.waiting_places().len().saturating_sub(self.waiting())
     }
 
-    fn moves(&mut self) -> Vec<Move> {
+    fn moves(&self) -> Vec<Move> {
         let mut moves = Vec::new();
         if self.left.units > 0 {
             moves.extend(self.sends().into_iter().map(Move::Arrives));
@@ -222,6 +276,9 @@ impl<'id> World<'id> {
 
     fn apply(&mut self, action: Move) {
         let pressure = self.refusals().pressure;
+        let held_before = self.held_units();
+        let waiting_before = u16::try_from(self.waiting()).unwrap_or(u16::MAX);
+        let delivered_before = self.delivered.len();
         let waited = if self.retained() == 0 {
             self.waiting_places()
         } else {
@@ -233,12 +290,13 @@ impl<'id> World<'id> {
                 self.left.units -= 1;
                 self.arrived.push(index);
                 let id = self.arrived.len() as u8;
-                let (kind, sequence) = KINDS[index];
+                let (kind, sequence) = self.kinds()[index];
                 let frame = match (kind, self.agreement) {
                     (Kind::Data, Agreement::Tid0) => receive::qos_data(sequence, id),
                     (Kind::Data, Agreement::None) => {
                         receive::data(u16::from(id), receive::IPV4, id)
                     }
+                    (Kind::Amsdu, _) => receive::amsdu_numbered(sequence, &[id, id]),
                     (Kind::Management, _) => receive::beacon(u16::from(id)),
                 };
                 self.around.port.land(&frame, receive::meta());
@@ -257,6 +315,17 @@ impl<'id> World<'id> {
             }
             Move::Gap => {
                 self.left.gaps -= 1;
+                // The gap gives the hole up: the reorder lets the first
+                // retained run go.
+                let waiting = u16::try_from(self.waiting()).unwrap_or(u16::MAX);
+                if let Some(first) = self
+                    .held_units()
+                    .into_iter()
+                    .filter(|n| n.wrapping_sub(self.start) >= waiting)
+                    .min()
+                {
+                    self.start = first;
+                }
                 self.around.micros += POLICY.gap.as_micros();
                 Some(self.engine.due(&mut self.around.turn()))
             }
@@ -277,6 +346,9 @@ impl<'id> World<'id> {
         };
         self.owed = rest.unwrap_or(Rest::Wake(None));
         self.read(action);
+        if self.agreement == Agreement::Tid0 {
+            self.advance_start(&held_before, waiting_before, delivered_before);
+        }
         // While a unit waits for the network, the ring is not serviced: a
         // unit that waited before the step and still waits after it says
         // the round was held back.
@@ -295,6 +367,29 @@ impl<'id> World<'id> {
         match self.engine.data() {
             DataPlace::Flowing(flowing) => flowing.refusals(),
             _ => RxRefusals::default(),
+        }
+    }
+
+    /// The number the reorder lets go next, by the world's arithmetic: past
+    /// each number delivered, and past each that waited and left without
+    /// being delivered (refused for pressure).
+    fn advance_start(&mut self, held_before: &[u16], waiting_before: u16, delivered_before: usize) {
+        let numbers: Vec<u16> = self.delivered[delivered_before..]
+            .iter()
+            .filter_map(|id| self.arrived.get(usize::from(*id).checked_sub(1)?))
+            .map(|index| AGREED[*index].1)
+            .collect();
+        let held_now = self.held_units();
+        let start = self.start;
+        let left: Vec<u16> = held_before
+            .iter()
+            .copied()
+            .filter(|n| n.wrapping_sub(start) < waiting_before && !held_now.contains(n))
+            .collect();
+        for number in numbers.into_iter().chain(left) {
+            if number >= self.start {
+                self.start = number.wrapping_add(1);
+            }
         }
     }
 
@@ -341,10 +436,13 @@ impl<'id> World<'id> {
                 .delivered
                 .iter()
                 .filter_map(|id| self.arrived.get(usize::from(*id).checked_sub(1)?))
-                .map(|index| KINDS[*index].1)
+                .map(|index| AGREED[*index].1)
                 .collect(),
             Agreement::None => self.delivered.iter().map(|id| u16::from(*id)).collect(),
         };
+        // An A-MSDU's MSDUs go one after another under one unit's id.
+        let mut order = order;
+        order.dedup();
         if order.windows(2).any(|pair| pair[0] >= pair[1]) {
             self.problems.push("data left out of its order");
         }
@@ -429,8 +527,35 @@ impl<'id> World<'id> {
                     .problems
                     .push("a unit waits for the network and no bound is armed"),
             }
-            let room = usize::from(LEND).saturating_sub(self.around.net.lent.len());
-            if room > 0 || self.around.net.copy_room > 0 {
+            // The first unit that waits: without an agreement the earliest
+            // held (its tag is its id), under one the held unit of the
+            // number the reorder lets go next. A single frame needs room to
+            // lend or one copy, an A-MSDU a copy of each of its two MSDUs.
+            let lend = usize::from(LEND).saturating_sub(self.around.net.lent.len());
+            let start = self.start;
+            let agreement = self.agreement;
+            let first = self
+                .waiting_places()
+                .iter()
+                .filter_map(|place| {
+                    let bytes = self.around.port.place_bytes(*place)?;
+                    let number =
+                        (bytes.len() > 24).then(|| u16::from_le_bytes([bytes[22], bytes[23]]) >> 4);
+                    let id = bytes.last().copied()?;
+                    match agreement {
+                        Agreement::Tid0 if number != Some(start) => None,
+                        _ => Some(id),
+                    }
+                })
+                .min()
+                .and_then(|id| self.arrived.get(usize::from(id).checked_sub(1)?))
+                .map(|index| self.kinds()[*index].0);
+            let copies = usize::from(self.around.net.copy_room);
+            let room = match first {
+                Some(Kind::Amsdu) => copies >= 2,
+                _ => lend > 0 || copies > 0,
+            };
+            if room {
                 self.problems
                     .push("a unit waits for a network with room to lend or to copy");
             }
@@ -447,13 +572,20 @@ impl<'id> World<'id> {
                 + usize::from(r.reorder)
                 + usize::from(r.place)
         };
-        let copied = self
+        // Units copied, an A-MSDU's MSDUs (each with its unit's tag) once.
+        let mut copied: Vec<u8> = self
             .around
             .net
             .received
             .iter()
-            .filter(|got| matches!(got, Got::Copied(_)))
-            .count();
+            .filter_map(|got| match got {
+                Got::Copied(frame) => frame.last().copied(),
+                Got::Lent(_) => None,
+            })
+            .collect();
+        copied.sort_unstable();
+        copied.dedup();
+        let copied = copied.len();
         let accounted = self.around.port.ring_len()
             + self.around.port.places_held()
             + copied
@@ -617,7 +749,7 @@ fn every_order_of_the_receive_sections_keeps_its_properties() {
 fn every_order_under_a_receive_agreement_keeps_its_properties() {
     run(
         Bounds {
-            units: 4,
+            units: 5,
             returns: 2,
             stops: 1,
             frees: 1,
