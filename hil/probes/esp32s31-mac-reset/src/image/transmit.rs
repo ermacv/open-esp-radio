@@ -119,10 +119,11 @@ fn read_placed_word(start: u32, len: u32, offset: u32) -> Option<u32> {
     Some(unsafe { core::ptr::read_volatile(pointer) })
 }
 
-/// The frame byte at `offset`: a header to the peer, LLC/SNAP with the
-/// local experimental EtherType, then a pattern of the chain.
+/// The frame byte at `offset`: a header to the peer, a vendor-specific
+/// action's category and Espressif's OUI (an ESP-NOW frame's start), then
+/// a pattern of the chain.
 fn frame_byte(header: &[u8; 24], chain: u32, offset: usize) -> u8 {
-    const SNAP: [u8; 8] = [0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0xb5];
+    const SNAP: [u8; 8] = [0x7f, 0x18, 0xfe, 0x34, 0, 0, 0, 0];
     if let Some(byte) = header.get(offset) {
         return *byte;
     }
@@ -132,15 +133,20 @@ fn frame_byte(header: &[u8; 24], chain: u32, offset: usize) -> u8 {
     (chain as u8) ^ (offset as u8) ^ 0x5a
 }
 
-/// A non-QoS data frame from the station to the peer, the peer as BSSID.
+/// An action frame from the station to the peer with the wildcard BSSID,
+/// as ESP-NOW sends one: an unassociated ESP-IDF station takes it and its
+/// MAC acknowledges it, where it drops a data frame of another BSS.
 fn header(station: [u8; 6], peer: [u8; 6]) -> [u8; 24] {
-    let mut header = [0_u8; 24];
-    // Frame control: data, no flags; duration: an ACK at 6 Mb/s and SIFS.
-    header[..4].copy_from_slice(&[0x08, 0x00, 44, 0]);
-    header[4..10].copy_from_slice(&peer);
-    header[10..16].copy_from_slice(&station);
-    header[16..22].copy_from_slice(&peer);
-    header
+    // Frame control: management, action; duration: an ACK at 6 Mb/s and SIFS.
+    let start = [0xd0, 0x00, 44, 0];
+    let bssid = [0xff; 6];
+    core::array::from_fn(|at| match at {
+        0..4 => start.get(at).copied().unwrap_or(0),
+        4..10 => peer.get(at - 4).copied().unwrap_or(0),
+        10..16 => station.get(at - 10).copied().unwrap_or(0),
+        16..22 => bssid.get(at - 16).copied().unwrap_or(0),
+        _ => 0,
+    })
 }
 
 /// The guard pattern of slot `slot`'s word `word`.
