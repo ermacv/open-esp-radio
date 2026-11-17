@@ -222,7 +222,7 @@ const fn guard_word(slot: usize, word: usize) -> u32 {
 
 /// The legacy program of one frame: the backend's direct-MPDU profile
 /// (`LegacyTxConfig::management`) at 6 Mb/s, answered by an ACK.
-pub(super) fn parameters(length: usize, power: u8, timeout: u16) -> MacLegacyTxParameters {
+fn parameters(length: usize, power: u8, timeout: u16) -> MacLegacyTxParameters {
     MacLegacyTxParameters {
         control: MacTxControlFrame {
             protection: MacTxProtection::None,
@@ -351,23 +351,6 @@ pub(super) fn start(
     power: u8,
     timeout: u16,
 ) -> Result<(), Failure> {
-    start_with(
-        access,
-        descriptor,
-        lease,
-        length,
-        parameters(length, power, timeout),
-    )
-}
-
-/// [`start`] with the program's parameters given whole.
-pub(super) fn start_with(
-    access: &mut RadioAccess,
-    descriptor: &mut Descriptor,
-    lease: Lease,
-    length: usize,
-    parameters: MacLegacyTxParameters,
-) -> Result<(), Failure> {
     descriptor.attach(lease).map_err(|_| (tx_phase::START, 1))?;
     let TxDmaAccess::Free(free) = descriptor.access() else {
         return Err((tx_phase::START, 2));
@@ -377,7 +360,8 @@ pub(super) fn start_with(
     free.reserve(total.next_multiple_of(4) as u32, total as u32)
         .map_err(|_| (tx_phase::START, 3))?;
     let publication = descriptor.publication().map_err(|_| (tx_phase::START, 4))?;
-    let program = MacLegacyTxProgram::new(&publication, parameters).ok_or((tx_phase::START, 5))?;
+    let program = MacLegacyTxProgram::new(&publication, parameters(length, power, timeout))
+        .ok_or((tx_phase::START, 5))?;
     let mut hal = access.wifi_mac_hal();
     hal.prepare_bound_legacy_tx(&publication, QUEUE, program)
         .map_err(|_| (tx_phase::START, 6))?;
@@ -769,7 +753,6 @@ pub(super) async fn series(
             station,
             peer,
             journal,
-            power_24m: sources.tx_power.pair(MacLegacyRate::Ofdm24M.code()).primary as u8,
         },
         &mut access,
     )

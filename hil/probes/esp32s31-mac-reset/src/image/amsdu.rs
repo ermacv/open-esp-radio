@@ -2,11 +2,8 @@
 //! board to the receiving probe, in rounds, one frame of each of
 //! [`case_c`](crate::case_c)'s cases a round, each awaited, in the round's
 //! drawn order; counted per case and per the frame before it.
-use super::transmit::{Descriptor, Frames};
-#[cfg(not(feature = "gap"))]
-use super::transmit::{ORDINARY_SLOT, TIMEOUT, await_completion, start};
+use super::transmit::{Descriptor, Frames, ORDINARY_SLOT, TIMEOUT, await_completion, start};
 use super::*;
-#[cfg(not(feature = "gap"))]
 use crate::case_c::{CASES, ROUNDS, before_index, byte, order};
 
 /// What case C borrows from part two's series.
@@ -16,33 +13,17 @@ pub(super) struct AmsduParts<'a> {
     pub(super) station: [u8; 6],
     pub(super) peer: [u8; 6],
     pub(super) journal: &'a mut Journal,
-    /// The calibrated power code at 24 Mb/s (`tasks/163`'s other rate).
-    pub(super) power_24m: u8,
 }
 
 /// The rounds, each frame awaited; per case: sent, acknowledged (status
 /// 0), ACK timeouts (status 5), other ends.
 pub(super) async fn series(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
-    #[cfg(feature = "gap")]
-    {
-        super::gap::series(parts, access).await
-    }
-    #[cfg(not(feature = "gap"))]
-    {
-        rounds(parts, access).await
-    }
-}
-
-/// Case C's rounds.
-#[cfg(not(feature = "gap"))]
-async fn rounds(parts: AmsduParts<'_>, access: &mut RadioAccess) -> Result<(), Failure> {
     let AmsduParts {
         frames,
         ordinary,
         station,
         peer,
         journal,
-        power_24m: _,
     } = parts;
     mark(90);
     // Per case, by the frame before it (or none): acknowledged, ACK

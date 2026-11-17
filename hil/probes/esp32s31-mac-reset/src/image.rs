@@ -377,9 +377,6 @@ enum Kind {
     /// Case C's sender: one case's frames and how they ended.
     #[cfg(feature = "amsdu")]
     AmsduSent = 15,
-    /// The gap run's sender: one setting's pairs and how they ended.
-    #[cfg(feature = "gap")]
-    GapSent = 16,
 }
 
 const WIDTH: usize = 22;
@@ -553,8 +550,6 @@ macro_rules! apart {
 }
 #[cfg(feature = "amsdu")]
 mod amsdu;
-#[cfg(feature = "gap")]
-mod gap;
 #[cfg(feature = "receiver")]
 mod receiver;
 #[cfg(feature = "transmit")]
