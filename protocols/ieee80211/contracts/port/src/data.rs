@@ -145,6 +145,11 @@ impl FrameSet {
         self.0.count_ones()
     }
 
+    /// The number of frames, which a byte holds: a set names at most 64.
+    pub const fn count(self) -> u8 {
+        self.0.count_ones() as u8
+    }
+
     /// Whether the set holds no frame.
     pub const fn is_empty(self) -> bool {
         self.0 == 0

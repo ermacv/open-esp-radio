@@ -272,7 +272,7 @@ impl<'id> World<'id> {
     }
 
     /// The holes of the aggregate that ended, as its settlement reports them.
-    fn settled_holes(&mut self) -> Option<u32> {
+    fn settled_holes(&mut self) -> Option<u64> {
         let mut holes = Holes(Some(None));
         self.settle_with(&mut holes);
         holes.0.flatten()
@@ -288,7 +288,7 @@ impl<'id> World<'id> {
 }
 
 /// The holes of the settlement it saw.
-struct Holes(Option<Option<u32>>);
+struct Holes(Option<Option<u64>>);
 
 impl EventSink<DataEvent> for Holes {
     const ENABLED: bool = true;

@@ -29,7 +29,7 @@ pub struct AggregateSettled {
     pub refused: bool,
     /// The positions its BlockAck left unacknowledged, bit 0 the first
     /// subframe on air: of a first transmission that got an answer.
-    pub holes: Option<u32>,
+    pub holes: Option<u64>,
     /// The rate its last transmission went at; `None` when none reached
     /// the air.
     pub rate: Option<oer_protocols_ieee80211_contracts_port::PhyRate>,
