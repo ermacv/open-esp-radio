@@ -564,13 +564,13 @@ pub use rx::{
 };
 pub use tsf::StaTbttSchedule;
 pub use tx::{
-    MacHeFecCoding, MacHeGuardIntervalAndLtf, MacHeMcs, MacHeRate, MacHeTxFormat,
-    MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation, MacHtChannelWidth,
-    MacHtGuardInterval, MacHtMcs, MacHtProtectionSpacing, MacHtRate, MacHtTxFormat,
-    MacHtTxParameters, MacHtTxProgram, MacLegacyRate, MacLegacyTxParameters, MacLegacyTxProgram,
-    MacLegacyTxResponse, MacOrdinaryTxQueueSnapshot, MacTxAbortCause, MacTxCompletionObservation,
-    MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason, MacTxPrepareFault,
-    MacTxPrepareRefused, MacTxProtection, MacTxPtiProgram, MacTxQueueDetached,
+    MAC_TX_TIMEOUT_MAX, MacHeFecCoding, MacHeGuardIntervalAndLtf, MacHeMcs, MacHeRate,
+    MacHeTxFormat, MacHeTxParameters, MacHeTxProgram, MacHtAmpduCompletionObservation,
+    MacHtChannelWidth, MacHtGuardInterval, MacHtMcs, MacHtProtectionSpacing, MacHtRate,
+    MacHtTxFormat, MacHtTxParameters, MacHtTxProgram, MacLegacyRate, MacLegacyTxParameters,
+    MacLegacyTxProgram, MacLegacyTxResponse, MacOrdinaryTxQueueSnapshot, MacTxAbortCause,
+    MacTxCompletionObservation, MacTxControlFrame, MacTxDetachOutcome, MacTxDetachReason,
+    MacTxPrepareFault, MacTxPrepareRefused, MacTxProtection, MacTxPtiProgram, MacTxQueueDetached,
     power_init::{
         MAC_TX_POWER_RATE_COUNT, MacPartialRuPowerSelector, MacTxPowerIndex, MacTxPowerPair,
         MacTxPowerTable,

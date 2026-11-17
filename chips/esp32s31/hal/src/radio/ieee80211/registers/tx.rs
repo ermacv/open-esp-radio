@@ -233,6 +233,16 @@ impl MacLegacyTxResponse {
     }
 }
 
+/// The largest `timeout` a queue program accepts: the queue configuration's
+/// `TIMEOUT` field (`WIFI_MAC.CONFIG.TIMEOUT`, generated `TIMEOUT_MAX`).
+pub const MAC_TX_TIMEOUT_MAX: u16 = {
+    const MAX: u32 = oer_chips_esp32s31_pac::wifi_mac::config::TIMEOUT_MAX;
+    if MAX > u16::MAX as u32 {
+        panic!("the queue timeout field fits a u16");
+    }
+    MAX as u16
+};
+
 /// Semantic inputs for one bounded legacy queue publication.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MacLegacyTxParameters {

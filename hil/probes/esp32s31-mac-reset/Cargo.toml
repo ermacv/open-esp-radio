@@ -40,6 +40,16 @@ oer-portable-diagnostics = { path = "../../../portable/diagnostics" }
 [build-dependencies]
 oer-chips-esp32s31-platform-layout = { workspace = true, features = ["build"] }
 
+[features]
+# Part two's transmit series (`tasks/144` A) in place of part one's.
+transmit = []
+# Part two's receiver (`tasks/158`, A2): listens and acknowledges the
+# transmitting probe's frames to its station, counting them.
+receiver = []
+# Part A on a quiet air (`tasks/168`): the medium observed with the peer
+# silent only, since nothing else transmits.
+quiet = ["transmit"]
+
 [lints]
 workspace = true
 
