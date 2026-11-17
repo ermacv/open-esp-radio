@@ -93,26 +93,16 @@ fn memory_mismatches(profile: &Facts, layout: &Layout) -> Vec<String> {
         .interrupts
         .as_ref()
         .expect("a staged chip has [interrupts]");
-    if interrupts.irq_stack_bytes != layout.irq_stack_bytes {
-        found.push(format!(
-            "irq stack: chip.toml [interrupts] {}, LAYOUT {}",
-            interrupts.irq_stack_bytes, layout.irq_stack_bytes
-        ));
-    }
+    // An interrupt stack is sized at link time: SRAM, no size fixed.
     for hart in &interrupts.harts {
         let names = [
             format!("__runtime_cpu{hart}_irq_stack_bottom"),
             format!("__runtime_cpu{hart}_irq_stack_top"),
         ];
-        let maximum = placement
-            .range
-            .iter()
-            .find(|rule| rule.range == names)
-            .and_then(|rule| rule.maximum_bytes);
-        if maximum != Some(u64::from(layout.irq_stack_bytes)) {
+        let rule = placement.range.iter().find(|rule| rule.range == names);
+        if rule.is_none_or(|rule| rule.region != "sram" || rule.bytes.is_some()) {
             found.push(format!(
-                "irq stack of hart {hart}: chip.toml [placement] {maximum:?}, LAYOUT {}",
-                layout.irq_stack_bytes
+                "irq stack of hart {hart}: chip.toml [placement] {rule:?}, not SRAM sized at link time"
             ));
         }
     }
@@ -173,7 +163,6 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
         assert!(moved(&|p| p.memory.as_mut().unwrap().runtime_psram = None).len() == 1);
         assert!(moved(&|p| p.memory.as_mut().unwrap().retained = None).len() == 1);
         assert!(moved(&|p| p.staged.as_mut().unwrap().bootstrap_psram_bytes += 4).len() == 1);
-        assert!(!moved(&|p| p.interrupts.as_mut().unwrap().irq_stack_bytes += 16).is_empty());
 
         let mut other = layout;
         other.sram = LayoutRegion::new(layout.sram.origin(), layout.sram.length() + 16)
@@ -181,8 +170,7 @@ fn a_changed_memory_fact_on_either_side_is_reported() {
         let mut defaults = layout.task_stack_bytes.to_vec();
         *defaults.first_mut().unwrap() += 16;
         other.task_stack_bytes = Box::leak(defaults.into_boxed_slice());
-        other.irq_stack_bytes += 16;
-        assert!(memory_mismatches(&base, &other).len() >= 3, "{id}");
+        assert!(memory_mismatches(&base, &other).len() >= 2, "{id}");
     }
 }
 

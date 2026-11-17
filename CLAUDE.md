@@ -359,10 +359,11 @@ A page never relaxes a rule above: where they differ, the rule above holds.
   metric, stop and report the reason and question.
 - **Sizes.** CI reports memory growth (code, `.rodata`, SRAM and PSRAM
   sections, a type, future or frame, an allocated task or interrupt stack);
-  growth is not a stop. Stack guards are reported, never a gate; the proven
-  IRQ bound plus margin must fit the contract maximum without guard bytes.
-  A physical IRQ guard is omitted when it does not fit beside that bound and
-  margin. A limit the owner sets for an image is its own gate.
+  growth is not a stop. An interrupt stack is sized from its proven bound
+  plus the image's margin (the stack policy's unless the image sets its
+  own, zero included); an image without the proof declares its size. What
+  limits it is the memory it is placed in. Stack guards are reported, never
+  a gate. A limit the owner sets for an image is its own gate.
 - **Stand.** Runs only when they answer a real question. Hardware runs hold
   the board's lease from the LAB service; never preempt another holder,
   wait. The owner's limits on secrets, eFuse writes, protected boards and hub

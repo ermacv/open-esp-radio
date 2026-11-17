@@ -22,11 +22,11 @@
 //! interrupt or exception code raises an illegal-instruction exception instead
 //! of silently corrupting the interrupted task's registers (on a core without
 //! the F extension the field reads zero and the writes do nothing). A debug
-//! trigger watches each linked IRQ guard when it fits beside the bound plus
-//! margin. Guard coverage is reported and does not guarantee overflow capture.
+//! trigger watches each linked IRQ guard. Guard coverage is reported and does
+//! not guarantee overflow capture.
 //!
 //! The runtime linker script reserves every hart's task stack and sizes each
-//! interrupt stack from its bound or contract maximum; this module finds them by
+//! interrupt stack from its bound or its image's declared size; this module finds them by
 //! their bounding symbols.
 
 #[cfg(all(target_arch = "riscv32", oer_trace))]

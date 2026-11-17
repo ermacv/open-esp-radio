@@ -664,9 +664,9 @@ entry's line and hart, come from `[interrupt-layout]` in the chip's facts.
   The frame/move limit (4 KiB) is a reporting threshold: larger frames and
   moves produce messages without failing the build. Stack guards are reported,
   never a gate: frame coverage, unknown guard-window frames and guard storage
-  cannot fail build, run or analysis. The IRQ bound plus margin must fit the
-  contract maximum excluding guard bytes; a physical guard is omitted when it
-  does not fit beside that bound and margin. Proven task, interrupt
+  cannot fail build, run or analysis. An interrupt stack is sized from its
+  proven bound plus the image's margin, or from the size an image without
+  the proof declares; the SRAM it is placed in limits it. Proven task, interrupt
   and bootstrap stack bounds, unresolved-path restrictions and placement
   remain gates. Code and stacks run from PSRAM after
   the staged bootstrap. Details: [memory and stacks](memory.md).

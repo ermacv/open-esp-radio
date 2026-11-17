@@ -1,4 +1,4 @@
-//! Actual linked allocations; the contract's `irq-stack-bytes` is a ceiling.
+//! Actual linked allocations, read from the ELF.
 
 use super::{InterruptStacks, Result};
 use oer_chips_family_facts::{InterruptContract, Memory};
@@ -41,16 +41,16 @@ pub(crate) fn read(
 }
 
 impl InterruptStacks {
-    pub fn allocated_bytes(&self, hart: u32) -> u32 {
+    /// The bytes the ELF allocates to `hart`'s interrupt stack.
+    pub fn allocated_bytes(&self, hart: u32) -> Result<u32> {
         self.allocations
             .get(&hart)
-            .map_or(self.contract.interrupts.irq_stack_bytes, |stack| {
-                stack.bytes
-            })
+            .map(|stack| stack.bytes)
+            .ok_or_else(|| format!("hart {hart} has no linked interrupt stack").into())
     }
 
     pub fn usable_bytes(&self, hart: u32) -> Result<u32> {
-        self.allocated_bytes(hart)
+        self.allocated_bytes(hart)?
             .checked_sub(self.guard_bytes(hart)?)
             .ok_or_else(|| format!("hart {hart}'s IRQ guard exceeds its allocation").into())
     }
@@ -81,14 +81,10 @@ impl InterruptStacks {
             };
             let bytes = hart.bytes.unwrap_or(hart.partial);
             let partial = if hart.bytes.is_some() { "" } else { " + ?" };
-            let margin = self
-                .contract
-                .interrupts
-                .irq_stack_with_margin(bytes)
-                .map_or_else(
-                    |_| "overflow".to_owned(),
-                    |total| (total - bytes).to_string(),
-                );
+            let margin = self.contract.irq_stack_with_margin(bytes).map_or_else(
+                |_| "overflow".to_owned(),
+                |total| (total - bytes).to_string(),
+            );
             let source = if self
                 .allocations
                 .get(&hart.core)
@@ -100,29 +96,17 @@ impl InterruptStacks {
                     Some(conditions) => format!("conditional bound ({conditions})"),
                 }
             } else {
-                "contract maximum".to_owned()
+                "declared size".to_owned()
             };
             let _ = writeln!(
                 out,
                 "{}\t{bytes}{partial}\t{margin} ({}%)\t{}\t{}\t{source}",
                 hart.core,
-                self.contract.interrupts.irq_stack_margin_percent,
+                self.contract.irq_margin_percent,
                 guard,
                 self.allocated_bytes(hart.core)
+                    .map_or_else(|error| error.to_string(), |bytes| bytes.to_string())
             );
-            if guard == 0 {
-                let requested = self
-                    .contract
-                    .interrupts
-                    .irq_stack_guard_bytes
-                    .get(&hart.core)
-                    .map_or_else(|| "missing".to_owned(), ToString::to_string);
-                let _ = writeln!(
-                    out,
-                    "  hart {} guard omitted (reported only): requested {} bytes do not fit beside the bound plus margin with NAPOT alignment within the contract maximum {} bytes",
-                    hart.core, requested, self.contract.interrupts.irq_stack_bytes
-                );
-            }
         }
         out
     }

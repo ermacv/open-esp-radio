@@ -407,16 +407,10 @@ mod tests {
     }
 
     #[test]
-    fn each_hart_has_its_own_guard_and_usable_capacity() {
+    fn each_hart_has_its_own_guard() {
         for (chip, guards) in [("esp32s31", BTreeMap::from([(0, 4096), (1, 1024)]))] {
             let contract = Profile::tracked(chip).unwrap().facts.interrupts.unwrap();
             assert_eq!(contract.irq_stack_guard_bytes, guards);
-            for (hart, guard) in guards {
-                assert_eq!(
-                    contract.irq_stack_usable_bytes(hart).unwrap(),
-                    contract.irq_stack_bytes - guard
-                );
-            }
         }
     }
 
@@ -432,7 +426,6 @@ mod tests {
             "{ \"0\" = 4096, \"1\" = 1024, \"2\" = 1024 }",
             "{ \"0\" = 0, \"1\" = 1024 }",
             "{ \"0\" = 4095, \"1\" = 1024 }",
-            "{ \"0\" = 32768, \"1\" = 1024 }",
         ] {
             std::fs::write(
                 &path,

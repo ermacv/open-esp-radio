@@ -72,9 +72,9 @@ uses the same check. The origin, length and cached end are private, so all range
 queries use a checked range. Invalid ranges return `RegionOverflow` with both
 input values. Stack capacity and vector generation return the existing `Error`
 for missing guards, invalid alignment or arithmetic overflow. IRQ allocation
-returns both storage and the physical guard size. The bound plus margin gates
-against the contract maximum; a full guard that cannot fit is omitted and
-reported by the image checks.
+returns both storage and the physical guard size for the bytes a stack must
+hold (its bound with the stack policy's or the image's margin, or the size
+the image declares); the guard is always placed and no maximum applies.
 
 ## Generated
 

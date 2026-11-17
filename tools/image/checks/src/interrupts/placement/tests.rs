@@ -51,6 +51,9 @@ fn inventory() -> (InterruptStacks, Analysis) {
     other.exception.bound.reached.clear();
     stacks.harts.push(other);
     stacks.contract.interrupts.harts.push(1);
+    let mut linked = stacks.allocations[&0].clone();
+    linked.guard_bytes = 1024;
+    stacks.allocations.insert(1, linked);
     stacks
         .contract
         .interrupts

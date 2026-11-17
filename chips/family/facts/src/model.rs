@@ -537,12 +537,9 @@ pub struct InterruptContract {
     /// The hart that owns reset and primary image initialization.
     pub boot_hart: u32,
     pub level_writers: Vec<LevelWriter>,
-    /// Maximum allocation of each hart's dedicated SRAM interrupt stack.
-    pub irq_stack_bytes: u32,
     /// Guard bytes keyed by hart, with exactly one entry for every `harts` member.
     #[serde(deserialize_with = "by_hart")]
     pub irq_stack_guard_bytes: BTreeMap<u32, u32>,
-    pub irq_stack_margin_percent: u32,
 }
 
 /// CLIC arbitration after comparing level and priority.
@@ -572,18 +569,6 @@ impl InterruptContract {
     pub fn levels(&self) -> Result<u32> {
         1u32.checked_shl(u32::from(self.level_bits))
             .ok_or_else(|| "CLIC level bits overflow the level count".into())
-    }
-
-    /// Maximum usable bytes; final checks read the actual allocation from ELF.
-    pub fn irq_stack_usable_bytes(&self, hart: u32) -> Result<u32> {
-        let guard = self.irq_stack_guard(hart)?;
-        self.irq_stack_bytes.checked_sub(guard).ok_or_else(|| {
-            format!(
-                "hart {hart}'s interrupt guard {guard} exceeds its stack {}",
-                self.irq_stack_bytes
-            )
-            .into()
-        })
     }
 
     pub(crate) fn irq_stack_guard(&self, hart: u32) -> Result<u32> {
@@ -629,8 +614,11 @@ impl InterruptContract {
             return Err("interrupt guards must name every hart exactly once".into());
         }
         for (&hart, &bytes) in &self.irq_stack_guard_bytes {
-            if bytes < 16 || !bytes.is_power_of_two() || bytes >= self.irq_stack_bytes {
-                return Err(format!("hart {hart}'s interrupt guard must be a power of two of at least 16 bytes, smaller than its stack").into());
+            if bytes < 16 || !bytes.is_power_of_two() {
+                return Err(format!(
+                    "hart {hart}'s interrupt guard must be a power of two of at least 16 bytes"
+                )
+                .into());
             }
         }
         Ok(())
@@ -828,12 +816,10 @@ pub struct Entry {
 pub struct RangeRule {
     pub range: [String; 2],
     pub region: String,
-    /// The range's exact size, where the contract fixes one.
+    /// The range's exact size, where the contract fixes one; a range sized
+    /// at link time has none, and its region limits it.
     #[serde(default)]
     pub bytes: Option<u64>,
-    /// Maximum size for a range whose allocation is chosen at link time.
-    #[serde(default)]
-    pub maximum_bytes: Option<u64>,
 }
 
 /// Symbols whose `bytes` from their address lie in `region`.

@@ -158,7 +158,7 @@ pub fn runtime(
             variable,
             "IRQ",
             hart,
-            irq_default(task, layout.irq_stack_bytes),
+            irq_default(task, layout.analysis_irq_stack_bytes),
             layout.sram.length(),
         )?;
         out.defsym(&std::format!("TASK_STACK_HART{hart}_BYTES"), task);
@@ -208,11 +208,12 @@ pub fn runtime(
     Ok(out)
 }
 
-/// A hart's interrupt allocation without an explicit one: the contract
-/// `maximum` for a hart with a task stack (the resolved `task` allocation,
-/// the image's included), none for a hart without.
-fn irq_default(task: u32, maximum: u32) -> u32 {
-    if task == 0 { 0 } else { maximum }
+/// A hart's interrupt allocation without an explicit one: the stack
+/// policy's analysis `placeholder` for a hart with a task stack (the resolved
+/// `task` allocation, the image's included), none for a hart without. The
+/// image linker's second link supplies the sized allocation.
+fn irq_default(task: u32, placeholder: u32) -> u32 {
+    if task == 0 { 0 } else { placeholder }
 }
 
 fn stack_allocation(

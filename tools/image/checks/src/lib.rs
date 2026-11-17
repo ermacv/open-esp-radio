@@ -312,7 +312,10 @@ impl Gates {
         }
         {
             // One analysis serves the frame, task-stack and interrupt checks.
-            match crate::stack::Image::read(input.root, profile, input.elf) {
+            match crate::stack::Image::read(input.root, profile, input.elf).and_then(|mut image| {
+                image.hold_irq_stacks_to(input.policy)?;
+                Ok(image)
+            }) {
                 Ok(image) => {
                     // These are memory-safety prerequisites, independent of optional
                     // product/diagnostic checks and their reporting policy.

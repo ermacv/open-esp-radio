@@ -272,6 +272,7 @@ fn build_refuses_a_cached_bootstrap_even_with_no_or_reported_gates() {
             false,
             profile.facts.interrupts.as_ref().unwrap().boot_hart,
             &[profile.facts.interrupts.as_ref().unwrap().boot_hart],
+            &crate::irq_stack::IrqStackChoices::default(),
             &oer_tools_image_checks::panics::Contract::default(),
             |input, _bundle| {
                 let bootstrap_elf = input.output.join(files::BOOTSTRAP_ELF);
