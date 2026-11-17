@@ -423,4 +423,30 @@ mod tests {
         );
         Ok(())
     }
+
+    /// The final check holds a proven bound with the margin against the
+    /// linked allocation on its own: a plan too small for its bound fails
+    /// with the figures, whatever `select` would have planned.
+    #[test]
+    fn a_plan_too_small_for_its_bound_fails_the_final_check_with_figures() {
+        let mut stacks = partial(1000);
+        stacks.harts[0].bytes = Some(1000);
+        let small = [Allocation {
+            hart: 0,
+            bytes: 4096 + 512,
+            guard_bytes: 4096,
+            first_bound: Some(1000),
+            from_bound: true,
+        }];
+        link(&mut stacks, &small);
+        let error = verify(&stacks, &small).unwrap_err().to_string();
+        for figure in [
+            "bound 1000",
+            "10% margin",
+            "requires 1100 usable bytes",
+            "4608 - guard 4096 = 512 usable bytes",
+        ] {
+            assert!(error.contains(figure), "{error}");
+        }
+    }
 }

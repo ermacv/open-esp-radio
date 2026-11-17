@@ -13,18 +13,5 @@
  * test in this crate holds each name to a function in the sources. Rare work
  * (association, teardown, settings) stays in PSRAM.
  */
-*(.text.*31oer_protocols_ieee80211_runtime8datapath*5Actor*4poll*)
 *(.text.*34oer_chips_family_platform_executor4task9poll_task*8datapath*)
-*(.text.*31oer_protocols_ieee80211_runtime8datapath4turn*15collect_sources*)
-*(.text.*31oer_protocols_ieee80211_runtime8datapath4turn*6staged*)
-*(.text.*31oer_protocols_ieee80211_runtime8datapath4data*6settle*)
-*(.text.*31oer_protocols_ieee80211_runtime8datapath4data*6intake*)
-*(.text.*42oer_chips_esp32s31_radio_ieee80211_backend4port6driver*13service_arena*)
-*(.text.*42oer_chips_esp32s31_radio_ieee80211_backend4port6driver*5group*)
-*(.text.*42oer_chips_esp32s31_radio_ieee80211_backend4port6driver*7collect*)
-*(.text.*42oer_chips_esp32s31_radio_ieee80211_backend4port6driver*7publish*)
 *(.text.*42oer_chips_esp32s31_radio_ieee80211_backend2rx7session*12port_service*)
-*(.text.*42oer_chips_esp32s31_radio_ieee80211_backend4port7engines*6intake*)
-*(.text.*42oer_chips_esp32s31_radio_ieee80211_backend4port7engines*9with_port*7publish*)
-*(.text.*42oer_chips_esp32s31_radio_ieee80211_backend9lower_mac*14submit_planned*)
-*(.text.*38oer_protocols_ieee80211_core_roles_sta4data*14publication_of*)
