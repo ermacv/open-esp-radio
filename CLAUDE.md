@@ -80,7 +80,10 @@ subsystem live in its page or README, listed under **Subsystem contracts**.
   existing move of state is debt to remove, never a precedent to repeat.
   The measure is the image's copy and frame reports
   ([image checks](tools/image/checks/README.md)), not the source's shape:
-  the compiler elides no move by contract.
+  the compiler elides no move by contract. Where this rule and "A state
+  is a sum" cannot both hold, the sum holds: the copy is recorded for the
+  audit of copies and frames and is removed where the image's reports
+  show its cost.
 - **A state is a sum.** A state is an enum whose variant holds
   exactly what exists in it: two fields that are not independent are one
   enum, and a fact that can be derived is not stored. An `Option` is a
